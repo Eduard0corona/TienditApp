@@ -424,6 +424,6 @@ public class SpecialDaysMenuTests
         var phones = new PhoneNormalizationService();
         var lookup = new CustomerLookupService(fixture.Context, phones, NullLogger<CustomerLookupService>.Instance);
         return new PlacePublicOrderCommandHandler(
-            fixture.Context, fixture.TenantService, lookup, phones, fixture.Clock, NoOpOrderInventoryService.Instance, new FolioGenerator(fixture.Context));
+            fixture.Context, fixture.TenantService, lookup, phones, fixture.Clock, NoOpOrderInventoryService.Instance, new FolioGenerator(fixture.Context), fixture.CurrentUser);
     }
 }

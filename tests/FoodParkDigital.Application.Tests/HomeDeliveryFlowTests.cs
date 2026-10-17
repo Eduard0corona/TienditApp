@@ -510,7 +510,7 @@ public class HomeDeliveryFlowTests
         var lookup = new CustomerLookupService(fixture.Context, phones, NullLogger<CustomerLookupService>.Instance);
         var result = await new PlacePublicOrderCommandHandler(
                 fixture.Context, fixture.TenantService, lookup, phones, fixture.Clock, NoOpOrderInventoryService.Instance,
-                new FolioGenerator(fixture.Context))
+                new FolioGenerator(fixture.Context), fixture.CurrentUser)
             .Handle(command, CancellationToken.None);
         fixture.Context.ChangeTracker.Clear();
         return result;

@@ -102,6 +102,57 @@ public class PublicDirectoryTests
     }
 
     [Fact]
+    public async Task PostalCode_ShouldSayWhoDeliversThereAndWhatItCosts_WithoutChangingTheList()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var reaches = await BusinessAsync(fixture, "a-llega", OnlineMenuMode.Orders, drawer: true);
+        fixture.Context.DeliveryZones.Add(new DeliveryZone(reaches.Id, new DeliveryZoneFields("Zona interna", 30m, 100m, 300m, ["72000", "72001"])));
+        var elsewhere = await BusinessAsync(fixture, "b-lejos", OnlineMenuMode.Orders, drawer: true);
+        fixture.Context.DeliveryZones.Add(new DeliveryZone(elsewhere.Id, new DeliveryZoneFields("Norte", 45m, 0m, null, ["72100"])));
+        var paused = await BusinessAsync(fixture, "c-inactiva", OnlineMenuMode.Orders, drawer: true);
+        fixture.Context.DeliveryZones.Add(new DeliveryZone(paused.Id, new DeliveryZoneFields("Centro", 20m, 0m, null, ["72000"], IsActive: false)));
+        fixture.Context.DeliveryZones.Add(new DeliveryZone(paused.Id, new DeliveryZoneFields("Sur", 25m, 0m, null, ["72200"])));
+        var menuOnly = await BusinessAsync(fixture, "d-solo-menu", OnlineMenuMode.MenuOnly);
+        fixture.Context.DeliveryZones.Add(new DeliveryZone(menuOnly.Id, new DeliveryZoneFields("Centro", 20m, 0m, null, ["72000"])));
+        await BusinessAsync(fixture, "e-recoger", OnlineMenuMode.Orders, drawer: true);
+        await fixture.Context.SaveChangesAsync();
+        var handler = Handler(fixture);
+
+        var at72000 = await handler.Handle(new GetPublicDirectoryQuery(PostalCode: " 72000 "), CancellationToken.None);
+
+        Assert.Equal("72000", at72000.PostalCode);
+        var cards = at72000.Businesses.Items.ToDictionary(b => b.Slug);
+        Assert.Equal((true, 30m, 100m, 300m),
+            (cards["a-llega"].DeliversToPostalCode, cards["a-llega"].DeliveryFee, cards["a-llega"].MinimumOrder, cards["a-llega"].FreeDeliveryFrom));
+        // A zone that does not reach it, or that is inactive, does not deliver there: nothing about the zone shows.
+        Assert.Equal((false, (decimal?)null, (decimal?)null), (cards["b-lejos"].DeliversToPostalCode, cards["b-lejos"].DeliveryFee, cards["b-lejos"].MinimumOrder));
+        Assert.Equal((false, (decimal?)null), (cards["c-inactiva"].DeliversToPostalCode, cards["c-inactiva"].DeliveryFee));
+        // A menu that takes no orders, or a business without zones, says nothing about delivery.
+        Assert.Null(cards["d-solo-menu"].DeliversToPostalCode);
+        Assert.Null(cards["e-recoger"].DeliversToPostalCode);
+        // The same list, in the same order, as without a postal code; the shared snapshot keeps no answer of a request.
+        var without = await handler.Handle(new GetPublicDirectoryQuery(), CancellationToken.None);
+        Assert.Equal(without.Businesses.Items.Select(b => b.Slug), at72000.Businesses.Items.Select(b => b.Slug));
+        Assert.All(without.Businesses.Items, card => Assert.Null(card.DeliversToPostalCode));
+        Assert.All(without.Businesses.Items, card => Assert.Null(card.DeliveryFee));
+        Assert.Null(without.PostalCode);
+        Assert.Equal(false, (await handler.Handle(new GetPublicDirectoryQuery(PostalCode: "72100"), CancellationToken.None))
+            .Businesses.Items.Single(b => b.Slug == "a-llega").DeliversToPostalCode);
+    }
+
+    [Theory]
+    [InlineData("7200")]
+    [InlineData("72a00")]
+    [InlineData("720000")]
+    public void PostalCode_ShouldBeFiveDigits_WithoutRepeatingWhatWasWritten(string postalCode)
+    {
+        var result = new GetPublicDirectoryQueryValidator().Validate(new GetPublicDirectoryQuery(PostalCode: postalCode));
+
+        Assert.Equal(GetPublicDeliveryQuoteQueryValidator.PostalCodeMessage, Assert.Single(result.Errors).ErrorMessage);
+        Assert.True(new GetPublicDirectoryQueryValidator().Validate(new GetPublicDirectoryQuery(PostalCode: "  ")).IsValid);
+    }
+
+    [Fact]
     public async Task Search_ShouldMatchEveryWordWithoutAccentsOrCapitals_WithinTheCategory_ByPages()
     {
         await using var fixture = SalesTestFixture.Create();

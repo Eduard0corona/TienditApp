@@ -9,7 +9,8 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
 /// The public menu of a business (/m/{slug} in the app): no sign-in, only what the business published, and
-/// orders only when it turned them on. Rate limited per IP.
+/// orders only when it turned them on. Rate limited per IP. A customer account that sends its session orders with it
+/// (Fase 24B).
 /// </summary>
 [ApiController]
 [Route("api/v1/public/menu/{slug}")]
@@ -60,7 +61,10 @@ public class PublicMenuController : ControllerBase
             TableLabel = request.TableLabel,
             Items = request.Items,
             ExpectedTotal = request.ExpectedTotal,
-            Delivery = request.Delivery
+            Delivery = request.Delivery,
+            IdempotencyKey = request.IdempotencyKey,
+            SaveAddress = request.SaveAddress,
+            AddressLabel = request.AddressLabel
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -78,4 +82,9 @@ public class PlacePublicOrderRequest
     public decimal? ExpectedTotal { get; init; }
     /// <summary>Where the order goes (Fase 22C); none to pick it up or for a table.</summary>
     public FoodParkDigital.Application.Orders.OrderDeliveryInput? Delivery { get; init; }
+    /// <summary>The store's key for this order (Fase 24B): sent again, it answers the order already placed.</summary>
+    public Guid? IdempotencyKey { get; init; }
+    /// <summary>Keep the delivery address in the signed-in customer account, named <see cref="AddressLabel"/> (Fase 24B).</summary>
+    public bool SaveAddress { get; init; }
+    public string? AddressLabel { get; init; }
 }

@@ -58,6 +58,7 @@ public sealed class CrossTenantDirectorySqlServerTests
             (await TwoBusinessesApi.ReadAsync(await empty.Client.GetAsync(Directory))).GetProperty("visibility").GetInt32());
 
         // A customer without a session finds only mine, taking orders, without its contact.
+        _api.ForgetDirectorySnapshot();
         using var customer = _api.AnonymousClient();
         var response = await customer.GetAsync("/api/v1/public/directory?q=explorar");
         var body = await response.Content.ReadAsStringAsync();

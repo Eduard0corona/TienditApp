@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Application.Finance;
@@ -15,10 +16,12 @@ using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -443,9 +446,16 @@ public class PublicOrderReceiptDto
     public bool Confirmed { get; set; }
     public string BusinessName { get; set; } = null!;
     public string? ContactPhone { get; set; }
+    /// <summary>
+    /// Placed with a customer session (Fase 24B): the order is in the account's orders, whatever phone it carries.
+    /// </summary>
+    public bool LinkedToAccount { get; set; }
 }
 
-/// <summary>An order placed from the public menu. It arrives in Pedidos with the Online channel.</summary>
+/// <summary>
+/// An order placed from the public menu. It arrives in Pedidos with the Online channel. With a customer session the order
+/// is the account's, without confirming the phone by SMS (Fase 24B); a session of a business's team orders as a guest.
+/// </summary>
 [AllowAnonymousRequest("Pedido del menú público: el negocio activó los pedidos en línea y el cliente se identifica con su teléfono.")]
 public record PlacePublicOrderCommand : IRequest<Result<PublicOrderReceiptDto>>, ITransactionalRequest
 {
@@ -463,6 +473,17 @@ public record PlacePublicOrderCommand : IRequest<Result<PublicOrderReceiptDto>>,
     /// its fee is in the total. Never with a table.
     /// </summary>
     public OrderDeliveryInput? Delivery { get; init; }
+    /// <summary>
+    /// Key the store generates for this order (Fase 24B). Sent again, by a retry after a lost answer, it answers the order
+    /// already placed with it instead of placing a second one.
+    /// </summary>
+    public Guid? IdempotencyKey { get; init; }
+    /// <summary>
+    /// Keeps the delivery address in the signed-in customer account while it has room (Fase 24B), with
+    /// <see cref="AddressLabel"/> as its name. Without a customer session, or without a delivery, nothing is kept.
+    /// </summary>
+    public bool SaveAddress { get; init; }
+    public string? AddressLabel { get; init; }
 }
 
 public class PlacePublicOrderCommandValidator : AbstractValidator<PlacePublicOrderCommand>
@@ -488,6 +509,10 @@ public class PlacePublicOrderCommandValidator : AbstractValidator<PlacePublicOrd
             RuleFor(x => x.Delivery!).SetValidator(new OrderDeliveryInputValidator());
             RuleFor(x => x.TableLabel).Empty().WithMessage(PlacePublicOrderCommandHandler.TableNotDeliveredMessage);
         });
+        RuleFor(x => x.IdempotencyKey).NotEqual(Guid.Empty).When(x => x.IdempotencyKey.HasValue)
+            .WithMessage("La clave del pedido no es válida.");
+        RuleFor(x => x.AddressLabel).MaximumLength(AccountAddressRules.MaxLabelInputLength)
+            .WithMessage(AccountAddressRules.LabelTooLongMessage);
     }
 }
 
@@ -498,6 +523,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
     public const string OrdersPausedMessage = "Por ahora este negocio no está recibiendo pedidos en línea. Intenta más tarde.";
     public const string TableNotDeliveredMessage = "Un pedido para tu mesa no se manda a domicilio.";
     public const string DeliveryRequiredMessage = "Este negocio solo entrega a domicilio: escribe a dónde te lo llevamos.";
+    public const string AlreadySentMessage = "Ese pedido ya se envió.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -506,6 +532,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IOrderInventoryService _orderInventoryService;
     private readonly IFolioGenerator _folios;
+    private readonly ICurrentUserService _currentUser;
 
     public PlacePublicOrderCommandHandler(
         IApplicationDbContext context,
@@ -514,7 +541,8 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         IPhoneNormalizationService phoneNormalizationService,
         IDateTimeProvider dateTimeProvider,
         IOrderInventoryService orderInventoryService,
-        IFolioGenerator folios)
+        IFolioGenerator folios,
+        ICurrentUserService currentUser)
     {
         _context = context;
         _tenantService = tenantService;
@@ -523,6 +551,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         _dateTimeProvider = dateTimeProvider;
         _orderInventoryService = orderInventoryService;
         _folios = folios;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<PublicOrderReceiptDto>> Handle(PlacePublicOrderCommand request, CancellationToken cancellationToken)
@@ -536,6 +565,12 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
 
         // A public request has no tenant: everything below is scoped to the business of the slug.
         _tenantService.SetTenant(tenant.Id);
+
+        // The same key again: a retry of an order already placed, whose answer was lost. Before any rule of now: the business
+        // may have closed since.
+        var account = await CustomerAccounts.FindSignedInAsync(_context, _currentUser, cancellationToken);
+        if (request.IdempotencyKey is { } key && await PlacedAsync(key, phone, tenant, account, cancellationToken) is { } placed)
+            return placed;
 
         // Closed, the business takes no pickup or delivery orders; a customer at one of its tables is already there,
         // except on a closed special day. Online orders arrive at the default branch of the business, and only while a
@@ -573,8 +608,12 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
 
         var settings = await TenantSalesSettings.ReadAsync(_context, tenant.Id, cancellationToken);
         var localTimeOfDay = TenantDateTimeResolver.LocalNow(now, settings.TimeZone).TimeOfDay;
-        var customer = await _customerLookupService.ResolveForOrderAsync(
-            tenant.Id, phone, request.CustomerName.Trim(), CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
+        // With a customer session the session says whose order it is: the account sees it in its orders without confirming
+        // the phone by SMS, and nobody who confirms the phone later claims it. Without one, the phone decides.
+        var customer = account is not null
+            ? new CustomerLookupResult(phone, account.Id, null, request.CustomerName.Trim())
+            : await _customerLookupService.ResolveForOrderAsync(
+                tenant.Id, phone, request.CustomerName.Trim(), CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
 
         var order = new Order(
             tenantId: tenant.Id,
@@ -636,19 +675,80 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
 
         // The customer's order is never refused for recipe stock: the business sees it and decides.
         await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, StockShortageHandling.Allow);
+        if (account is not null && request.Delivery is not null)
+            await RememberAddressAsync(account.Id, request, now, cancellationToken);
+        if (request.IdempotencyKey is { } requestKey)
+            order.IdentifyClientRequest(requestKey, capturedOfflineAt: null);
         order.MarkAsCreated();
         _context.Orders.Add(order);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        return Result.Success(new PublicOrderReceiptDto
+        try
         {
-            OrderNumber = order.OrderNumber,
-            Total = order.Total,
-            DeliveryFee = order.Delivery?.Fee,
-            Confirmed = accepted,
-            BusinessName = tenant.Name,
-            ContactPhone = tenant.ContactPhone
-        });
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (request.IdempotencyKey is { } racedKey)
+        {
+            // The same order arrived twice at once and the other request stored it first (IX_Orders_TenantId_ClientRequestId).
+            // This copy is undone whole, its folio, supplies and address included, and the stored one is the answer.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
+            if (await PlacedAsync(racedKey, phone, tenant, account, cancellationToken) is { } stored)
+                return stored;
+            throw;
+        }
+
+        return Result.Success(Receipt(order, tenant, accepted, account));
+    }
+
+    private static PublicOrderReceiptDto Receipt(
+        Order order, Domain.Tenants.Entities.Tenant tenant, bool confirmed, Domain.Identity.Entities.ApplicationUser? account) => new()
+    {
+        OrderNumber = order.OrderNumber,
+        Total = order.Total,
+        DeliveryFee = order.Delivery?.Fee,
+        Confirmed = confirmed,
+        BusinessName = tenant.Name,
+        ContactPhone = tenant.ContactPhone,
+        LinkedToAccount = account is not null && order.CustomerUserId == account.Id
+    };
+
+    /// <summary>
+    /// The answer for an order of the business already placed with <paramref name="key"/>, or null. Only the same
+    /// customer's online order answers, by its phone: a key is not a way to read another order.
+    /// </summary>
+    private async Task<Result<PublicOrderReceiptDto>?> PlacedAsync(
+        Guid key,
+        string phone,
+        Domain.Tenants.Entities.Tenant tenant,
+        Domain.Identity.Entities.ApplicationUser? account,
+        CancellationToken cancellationToken)
+    {
+        var order = await _context.Orders
+            .AsNoTracking()
+            .Include(o => o.Delivery)
+            .FirstOrDefaultAsync(o => o.TenantId == tenant.Id && o.ClientRequestId == key, cancellationToken);
+        if (order is null)
+            return null;
+        if (order.Channel != OrderChannel.Online || order.CustomerPhone != phone)
+            return Result.Failure<PublicOrderReceiptDto>(AlreadySentMessage);
+        return Result.Success(Receipt(order, tenant, order.Status is not (OrderStatus.Pending or OrderStatus.Cancelled), account));
+    }
+
+    /// <summary>
+    /// The account offers this address first from now on: the one it keeps for the same place, or a new one when the
+    /// customer asked to keep it and the account has room. A full account still orders: the address only stays out.
+    /// </summary>
+    private async Task RememberAddressAsync(Guid accountId, PlacePublicOrderCommand request, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var delivery = request.Delivery!;
+        var address = DeliveryAddress.From(delivery.PostalCode, delivery.AddressLine, delivery.References);
+        var kept = await AccountAddresses.OfAsync(_context, accountId, cancellationToken, tracking: true);
+        var saved = kept.FirstOrDefault(existing => existing.IsSamePlaceAs(address));
+        if (saved is null && request.SaveAddress && kept.Count < AccountAddress.MaxPerAccount)
+        {
+            saved = AccountAddress.Create(accountId, request.AddressLabel, address.PostalCode, address.AddressLine, address.References, kept.Count);
+            _context.AccountAddresses.Add(saved);
+        }
+
+        saved?.MarkUsed(address, now);
     }
 }
 

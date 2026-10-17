@@ -47,8 +47,12 @@ public class MyOrderDto
 
 public class MyOrderItemDto
 {
+    /// <summary>For «Pedir otra vez» (Fase 24B): the store puts it back in the cart while its menu still has it.</summary>
+    public Guid ProductId { get; set; }
     public string ProductName { get; set; } = null!;
     public decimal Quantity { get; set; }
+    /// <summary>The options chosen for it («Sin cebolla»), by their id in the business's catalog.</summary>
+    public List<Guid> OptionIds { get; set; } = [];
 }
 
 public class GetMyOrdersQueryHandler : IRequestHandler<GetMyOrdersQuery, PaginatedList<MyOrderDto>>
@@ -87,7 +91,13 @@ public class GetMyOrdersQueryHandler : IRequestHandler<GetMyOrdersQuery, Paginat
                 // Dishes cancelled from a tab were never served.
                 Items = order.Items
                     .Where(i => i.CancelledQuantity < i.Quantity)
-                    .Select(i => new MyOrderItemDto { ProductName = i.ProductName, Quantity = i.Quantity - i.CancelledQuantity })
+                    .Select(i => new MyOrderItemDto
+                    {
+                        ProductId = i.ProductId,
+                        ProductName = i.ProductName,
+                        Quantity = i.Quantity - i.CancelledQuantity,
+                        OptionIds = i.Options.Select(o => o.OptionId).ToList()
+                    })
                     .ToList()
             };
 
