@@ -413,7 +413,7 @@ Comprar con tu cuenta (Fase 24B, [ADR 0022](../adr/0022-shopping-with-an-account
 - **Escenas:**
   - `mocks/routes-p10.mjs` contesta las direcciones de la cuenta: Casa (Roma Norte, la última usada) y Oficina (Condesa). `mocks/routes-p9.mjs` responde el directorio con `postalCode` (las zonas de Café La Esquina: 06700 y 06140), y `mocks/routes-p4.mjs`, Mis pedidos con el producto y las opciones de cada línea.
   - `scenes/cuenta-cliente.spec.ts` tiene Cuenta en tres vistas, agregar y borrar una dirección, sin direcciones, Explorar con código postal (escritorio y teléfono) y su formulario, la tienda con la cuenta (a domicilio, otra dirección y pedido enviado) y «Pedir otra vez» con un producto agotado.
-- **Primera visita:** suma 127 B (de 177,136 a 177,263 B, contra `master` en `d7e54f5`): la ruta `/cuenta` y el ícono del marco. La tienda, Explorar, Mis pedidos y Cuenta bajan aparte. El presupuesto sube de 177,200 a 177,400 B.
+- **Primera visita:** suma 125 B (de 177,136 a 177,261 B, contra `master` en `d7e54f5`): la ruta `/cuenta` y el ícono del marco. La tienda, Explorar, Mis pedidos y Cuenta bajan aparte. El presupuesto sube de 177,200 a 177,400 B.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

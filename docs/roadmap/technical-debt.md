@@ -54,7 +54,7 @@ Actualizada el 2026-10-17 con la Fase 24B y antes con la 24A, la 23A y con las F
   - La tarjeta de Explorar da el envío de la zona, no el total: el pedido mínimo y el envío gratis los aplica el menú al pedir.
   - «Pedir otra vez» solo regresa cantidades enteras: un producto por kilo o en fracciones no regresa, porque la tienda pide por pieza.
   - Un cliente anterior, sin llave del pedido, todavía puede registrar dos veces el mismo pedido.
-  - La 24B suma 127 B a la primera visita (de 177,136 a 177,263 B, contra `master` en `d7e54f5`) y sube el presupuesto a 177,400 B.
+  - La 24B suma 125 B a la primera visita (de 177,136 a 177,261 B, contra `master` en `d7e54f5`) y sube el presupuesto a 177,400 B.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.
