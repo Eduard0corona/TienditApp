@@ -317,6 +317,12 @@ export const ServiceOrderPieceStatus = {
 } as const;
 export type ServiceOrderPieceStatus = (typeof ServiceOrderPieceStatus)[keyof typeof ServiceOrderPieceStatus];
 
+export const ServicePhotoStage = {
+  Before: 0,
+  After: 1,
+} as const;
+export type ServicePhotoStage = (typeof ServicePhotoStage)[keyof typeof ServicePhotoStage];
+
 export const SpecialDayKind = {
   Closed: 0,
   SpecialHours: 1,

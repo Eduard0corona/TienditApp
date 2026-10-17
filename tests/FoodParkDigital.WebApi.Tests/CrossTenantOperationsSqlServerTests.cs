@@ -8,7 +8,7 @@ using static FoodParkDigital.WebApi.Tests.CrossTenantManagementSqlServerTests;
 namespace FoodParkDigital.WebApi.Tests;
 
 /// <summary>
-/// What a business works with day to day: Inicio, the kitchen, the service board and the automatic replies. One
+/// What a business works with day to day: Inicio, the kitchen, the service board and its photos, and the automatic replies. One
 /// business tries to read, move and change the other's by their ids: every attempt fails as if they did not exist,
 /// nothing of the other business changes, and none of it shows or counts on its own screens. Each case also does the
 /// same with its own records, so the refusals are about the business and not about the request. Runs where
@@ -141,6 +141,39 @@ public sealed class CrossTenantOperationsSqlServerTests
         var stillThere = await PieceAsync(mine.Client, piece);
         foreach (var field in new[] { "status", "assignedToUserId", "assignedToName", "assignedAt" })
             Assert.Equal(before.GetProperty(field).GetRawText(), stillThere.GetProperty(field).GetRawText());
+    }
+
+    [SqlServerFact]
+    public async Task ServicePhotos_OfAnotherBusiness_ShouldBeInvisibleAndUntouchable()
+    {
+        var mine = await _api.SignUpAsync("fotos-a");
+        var theirs = await _api.SignUpAsync("fotos-b");
+        var order = (await ServiceOrderAsync(
+            mine.Client, await ProductAsync(mine.Client, "Lavado de A"), "Saco de A", promisedAt: DateTimeOffset.UtcNow.AddDays(1)))
+            .GetProperty("id").GetGuid();
+        var myFile = await UploadServicePhotoAsync(mine.Client);
+        var photo = (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/orders/{order}/service-photos", new { stage = 0, fileUrl = myFile, note = "Mancha de A" })))
+            .GetProperty("id").GetGuid();
+        var before = await mine.Client.GetStringAsync($"/api/v1/orders/{order}/service-photos");
+
+        AssertRefused(await theirs.Client.GetAsync($"/api/v1/orders/{order}/service-photos"));
+        AssertRefused(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{order}/service-photos", new { stage = 1, fileUrl = myFile }));
+        AssertRefused(await theirs.Client.DeleteAsync($"/api/v1/orders/{order}/service-photos/{photo}"));
+        AssertRefused(await theirs.Client.GetAsync(myFile.Replace("/files/", "/api/v1/files/")));
+
+        // Their own order takes their own photos, and not the file of another business.
+        var theirOrder = (await ServiceOrderAsync(
+            theirs.Client, await ProductAsync(theirs.Client, "Lavado de B"), "Saco de B", promisedAt: DateTimeOffset.UtcNow.AddDays(1)))
+            .GetProperty("id").GetGuid();
+        AssertRefused(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{theirOrder}/service-photos", new { stage = 0, fileUrl = myFile }));
+        var theirPhoto = (await TwoBusinessesApi.ReadAsync(await theirs.Client.PostAsJsonAsync(
+            $"/api/v1/orders/{theirOrder}/service-photos", new { stage = 0, fileUrl = await UploadServicePhotoAsync(theirs.Client) })))
+            .GetProperty("id").GetGuid();
+        await AssertNoContentAsync(theirs.Client.DeleteAsync($"/api/v1/orders/{theirOrder}/service-photos/{theirPhoto}"));
+
+        Assert.Equal(before, await mine.Client.GetStringAsync($"/api/v1/orders/{order}/service-photos"));
+        Assert.Contains("Mancha de A", before);
     }
 
     [SqlServerFact]
@@ -290,6 +323,17 @@ public sealed class CrossTenantOperationsSqlServerTests
         useConversationMemory = false,
         strictMode = true
     };
+
+    /// <summary>A photo of a service uploaded by the business: the "/files/{key}" it keeps.</summary>
+    private static async Task<string> UploadServicePhotoAsync(HttpClient client)
+    {
+        using var form = new MultipartFormDataContent();
+        var png = new ByteArrayContent(TwoBusinessesApi.TinyPng);
+        png.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+        form.Add(png, "file", "saco.png");
+        return (await TwoBusinessesApi.ReadAsync(await client.PostAsync("/api/v1/orders/uploads/service-photo", form)))
+            .GetProperty("url").GetString()!;
+    }
 
     private static async Task AssertNoContentAsync(Task<HttpResponseMessage> request)
     {

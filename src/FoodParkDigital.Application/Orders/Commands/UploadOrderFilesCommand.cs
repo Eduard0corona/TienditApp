@@ -10,7 +10,11 @@ using MediatR;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
-[RequiresPermission(TenantPermission.ManageOrders)]
+/// <summary>
+/// A photo of a service: with the order when it is received, or added later (Fase 25) by whoever sees the orders or
+/// works the service board.
+/// </summary>
+[RequiresPermission(TenantPermission.ManageOrders, TenantPermission.ManageServiceBoard)]
 public record UploadServiceIntakePhotoCommand : IRequest<Result<UploadedFileDto>>
 {
     public Stream FileStream { get; init; } = null!;

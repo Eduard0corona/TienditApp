@@ -303,6 +303,46 @@ public class OrdersController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>The photos of a service order for its team (Fase 25): the ones of when it was received and the added ones.</summary>
+    [HttpGet("{id:guid}/service-photos")]
+    public async Task<ActionResult<ServiceOrderPhotosDto>> GetServicePhotos(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetServiceOrderPhotosQuery(id), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Adds a photo, before or after, of a file uploaded with <c>uploads/service-photo</c>.</summary>
+    [HttpPost("{id:guid}/service-photos")]
+    public async Task<ActionResult<ServiceOrderPhotoDto>> AddServicePhoto(
+        Guid id,
+        [FromBody] AddServiceOrderPhotoRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new AddServiceOrderPhotoCommand
+        {
+            OrderId = id,
+            Stage = request.Stage,
+            FileUrl = request.FileUrl,
+            FileName = request.FileName,
+            Note = request.Note
+        }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Removes a photo added by mistake, while the order is open.</summary>
+    [HttpDelete("{id:guid}/service-photos/{photoId:guid}")]
+    public async Task<IActionResult> RemoveServicePhoto(Guid id, Guid photoId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new RemoveServiceOrderPhotoCommand(id, photoId), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return NoContent();
+    }
+
     [HttpPost("uploads/service-photo")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<UploadedFileDto>> UploadServicePhoto(IFormFile file, CancellationToken cancellationToken)
@@ -377,6 +417,15 @@ public record AddOrderPaymentRequest
 public record UpdateServiceOrderPieceStatusRequest
 {
     public ServiceOrderPieceStatus NewStatus { get; init; }
+}
+
+public record AddServiceOrderPhotoRequest
+{
+    public ServicePhotoStage Stage { get; init; }
+    /// <summary>What <c>uploads/service-photo</c> returned.</summary>
+    public string FileUrl { get; init; } = string.Empty;
+    public string? FileName { get; init; }
+    public string? Note { get; init; }
 }
 
 public class RefundOrderRequest

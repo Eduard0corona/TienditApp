@@ -16,6 +16,8 @@ public sealed class OrderAuditHandlers :
     IOutboxEventHandler<OrderStatusChangedEvent>,
     IOutboxEventHandler<OrderCancelledEvent>,
     IOutboxEventHandler<ServiceOrderPieceStatusChangedEvent>,
+    IOutboxEventHandler<ServiceOrderPhotoAddedEvent>,
+    IOutboxEventHandler<ServiceOrderPhotoRemovedEvent>,
     IOutboxEventHandler<OrderRefundedEvent>,
     IOutboxEventHandler<TabItemCancelledEvent>
 {
@@ -63,6 +65,26 @@ public sealed class OrderAuditHandlers :
             domainEvent.OrderId,
             domainEvent.PreviousStatus,
             domainEvent.NewStatus
+        });
+
+    // The photos of a service (Fase 25): which one and of what stage, never its note.
+    public Task HandleAsync(ServiceOrderPhotoAddedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
+        => AddAsync(domainEvent.TenantId, nameof(Order), domainEvent.OrderId, "ServiceOrderPhotoAdded", context, new
+        {
+            domainEvent.PhotoId,
+            domainEvent.Stage,
+            domainEvent.FileName
+        });
+
+    // Who took the removed photo and when, so the activity of the order keeps what was there.
+    public Task HandleAsync(ServiceOrderPhotoRemovedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
+        => AddAsync(domainEvent.TenantId, nameof(Order), domainEvent.OrderId, "ServiceOrderPhotoRemoved", context, new
+        {
+            domainEvent.PhotoId,
+            domainEvent.Stage,
+            domainEvent.FileName,
+            domainEvent.TakenAt,
+            domainEvent.TakenBy
         });
 
     public Task HandleAsync(OrderRefundedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)

@@ -167,6 +167,50 @@ public static class OrderUploadRules
 
     private sealed record ServicePhoto(string Url, string? FileName);
 
+    /// <summary>
+    /// The photos a service order kept when it was received (<see cref="NormalizeServicePhotos"/>), each as the private
+    /// path of its file. A reference that is not one of the business's uploads, or a JSON that cannot be read, is
+    /// left out: a record written before these rules shows what it can.
+    /// </summary>
+    public static IReadOnlyList<(string Url, string? FileName)> ReadServicePhotos(string? json, Guid tenantId)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                return [];
+
+            var photos = new List<(string Url, string? FileName)>();
+            foreach (var photo in document.RootElement.EnumerateArray().Take(MaxServicePhotos))
+            {
+                var url = photo.ValueKind switch
+                {
+                    JsonValueKind.String => photo.GetString(),
+                    JsonValueKind.Object when photo.TryGetProperty("url", out var value) && value.ValueKind == JsonValueKind.String
+                        => value.GetString(),
+                    _ => null
+                };
+                if (!TryGetOwnFileKey(url, tenantId, ServiceIntakeArea, out var key))
+                    continue;
+
+                var fileName = photo.ValueKind == JsonValueKind.Object
+                    && photo.TryGetProperty("fileName", out var name)
+                    && name.ValueKind == JsonValueKind.String
+                        ? name.GetString()?.Trim()
+                        : null;
+                photos.Add((ToPrivateFilePath(key), string.IsNullOrEmpty(fileName) ? null : fileName));
+            }
+            return photos;
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
     public static string ContentTypeOf(string key) => Path.GetExtension(key).ToLowerInvariant() switch
     {
         ".pdf" => "application/pdf",
