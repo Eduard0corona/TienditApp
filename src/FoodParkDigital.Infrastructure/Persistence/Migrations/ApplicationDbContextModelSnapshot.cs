@@ -910,6 +910,59 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.AccountAddress", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AddressLine")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<DateTimeOffset?>("LastUsedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PostalCode")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(5)");
+
+                    b.Property<string>("References")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "LastUsedAt");
+
+                    b.ToTable("AccountAddresses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AccountAddresses_PostalCode", "LEN([PostalCode]) = 5 AND [PostalCode] NOT LIKE '%[^0-9]%'");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.Customer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1178,6 +1231,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DeliveryZoneId");
+
+                    b.HasIndex("PostalCode");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("PostalCode"), new[] { "TenantId", "DeliveryZoneId" });
 
                     b.HasIndex("TenantId", "PostalCode")
                         .IsUnique();
@@ -4840,6 +4897,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasOne("FoodParkDigital.Domain.Catalog.Entities.Product", null)
                         .WithMany("PlatformPrices")
                         .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.AccountAddress", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
