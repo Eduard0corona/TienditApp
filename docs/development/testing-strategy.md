@@ -420,11 +420,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Domain:** `AccountAddressTests` (10 pruebas): la dirección con las reglas de la de un pedido y lo que falta o está mal; el nombre por omisión y en un renglón corto; la undécima y una sin cuenta se rechazan; cambiarla sigue las mismas reglas y un rechazo no cambia nada; el mismo lugar sin mayúsculas ni espacios de más; y marcarla usada guarda las referencias del pedido, solo para el mismo lugar.
   - **Application:** `CustomerAccountShoppingTests` (8 pruebas):
     - el pedido con la sesión de una cuenta de cliente es de la cuenta sin confirmar el teléfono, y nadie lo reclama; con la del equipo o de una cuenta inactiva es de invitado;
-    - la misma llave registra el pedido una vez, responde aunque el negocio ya cerró su caja y no responde a otro teléfono (una llave nueva sin caja se rechaza, como antes); el validador rechaza una llave vacía y un nombre de dirección largo;
+    - la misma llave registra el pedido una vez, responde aunque el negocio ya cerró su caja, no responde a otro teléfono (una llave nueva sin caja se rechaza, como antes) y, cancelado el pedido, dice que el negocio lo canceló; el validador rechaza una llave vacía y un nombre de dirección largo;
     - a domicilio con sesión, guarda la dirección cuando se pide y la ofrece primero; sin sesión no guarda nada;
     - las direcciones son solo de su cuenta, una por lugar y hasta 10, con los límites de la dirección de un pedido.
 
-    `PublicDirectoryTests` (+2): con el código postal, cada tarjeta de un negocio que entrega dice si llega y cuánto cobra, con la zona activa y sin cambiar la lista ni la foto compartida; el código postal lleva 5 dígitos. Las pruebas del menú en línea pasan la sesión (`fixture.CurrentUser`). `AuthorizationBehaviorTests` cuenta los cuatro casos de uso de las direcciones (254).
+    `PublicDirectoryTests` (+2): con el código postal, cada tarjeta de un negocio que entrega dice si llega y cuánto cobra, con la zona activa y sin cambiar la lista ni la foto compartida; el código postal lleva 5 dígitos.
+
+    `DeliveryZonesSqlServerTests` cuenta el índice nuevo `IX_DeliveryZonePostalCodes_PostalCode` (no único). Las pruebas del menú en línea pasan la sesión (`fixture.CurrentUser`). `AuthorizationBehaviorTests` cuenta los cuatro casos de uso de las direcciones (254).
   - **SQL Server:** `AccountAddressesMigrationSqlServerTests` (2 pruebas): la CHECK del código postal y que las direcciones se van con la cuenta; revertir se detiene con el error 50017 sin cambiar nada mientras haya una dirección, y después quita solo la tabla y el índice, otra vez no hace nada y hacia adelante vuelven. `rollback.sql` es el que genera EF desde el `Down` de la migración.
   - **WebApi:** `CrossTenantCustomerAccountsSqlServerTests` (3 pruebas), sobre la API real con dos negocios:
     - una cuenta no lee, cambia ni borra las direcciones de otra; el equipo de un negocio no guarda direcciones y sin sesión responde 401;
@@ -433,10 +435,11 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 
     `TenantFilterBypassAllowlistTests` cuenta el tercer `IgnoreQueryFilters()` de `PublicDirectoryFeature.cs`; `ArchitectureTests` lista `AccountAddress` entre las entidades sin negocio.
   - **Cliente:**
-    - `savedCart.test.ts` (4): un carrito por tienda hasta enviarlo o vaciarlo, 7 días, lo que no se lee, las líneas de un pedido en piezas enteras, y lo que el menú de ahora puede tomar.
-    - `PublicMenuPage.test.tsx` (+4): el carrito guardado con el menú de ahora; la llave igual al reenviar y el carrito olvidado al registrar; los datos y la última dirección de la cuenta, y guardar una nueva; el equipo pide como invitado.
-    - `ExplorePage.test.tsx` (+2): el código postal se pide una vez y cada tarjeta dice si llega; el aviso del carrito sin enviar.
-    - `AccountPage.test.tsx` (3), `MyOrders.test.tsx` (1), `phones.test.ts` (1) y `businessCategories.test.ts` (+1, el envío como los precios del negocio). `CustomerLayout.test.tsx` pide el ícono «Mi cuenta».
+    - `savedCart.test.ts` (4): un carrito por tienda hasta enviarlo o vaciarlo, 7 días, lo que no se lee, las líneas de un pedido en piezas enteras (y cuántas se piden por peso), y lo que el menú de ahora puede tomar.
+    - `PublicMenuPage.test.tsx` (+4): el carrito guardado con el menú de ahora y lo que quedó fuera (lo que ya no está y lo que se pide por peso); la llave igual al reenviar y el carrito olvidado al registrar; los datos y la última dirección de la cuenta, y guardar una nueva; el equipo pide como invitado.
+    - `ExplorePage.test.tsx` (+2): el código postal se pide una vez, con el foco en el campo y de vuelta en el botón, y cada tarjeta dice si llega; el aviso del carrito sin enviar.
+    - `MyOrders.test.tsx` (2): «Pedir otra vez» llena el carrito y abre la tienda; un pedido todo por peso abre la tienda sin tocar el carrito que había.
+    - `AccountPage.test.tsx` (3), `phones.test.ts` (1) y `businessCategories.test.ts` (+1, el envío como los precios del negocio). `CustomerLayout.test.tsx` pide el ícono «Mi cuenta».
   - **Escenas visuales** (contra `master` en `d7e54f5`):
     - **Nuevas (14, `cuenta-cliente.spec.ts`):** Cuenta en escritorio, teléfono y oscuro; agregar y borrar una dirección; sin direcciones; Explorar con código postal y un carrito sin enviar (escritorio y teléfono), el formulario del código postal y «Seguir con el pedido»; la tienda con la cuenta a domicilio, con otra dirección y con el pedido enviado; y «Pedir otra vez» con un producto agotado. Los datos simulados son `mocks/routes-p10.mjs` (direcciones), el directorio con `postalCode` (`mocks/routes-p9.mjs`) y Mis pedidos con el producto de cada línea (`mocks/routes-p4.mjs`). No salen de la línea base de `master` hasta que la fase entre a `master`.
 - Escenas estables, después de la 24A:

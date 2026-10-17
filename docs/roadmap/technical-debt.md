@@ -50,6 +50,7 @@ Actualizada el 2026-10-17 con la Fase 24B y antes con la 24A, la 23A y con las F
 - Comprar con tu cuenta (Fase 24B, [ADR 0022](../adr/0022-shopping-with-an-account.md)):
   - El carrito guardado y el código postal de Explorar viven en el dispositivo (`localStorage`): no siguen a la cuenta a otro teléfono ni a otra computadora, y un navegador que bloquea el almacenamiento los pierde al recargar.
   - Las direcciones de la cuenta (hasta 10) no se validan contra un mapa: el código postal decide la zona, como en la 22B. No hay una dirección predeterminada: la tienda ofrece primero la última usada.
+  - El tope de 10 y «una por lugar» se revisan antes de guardar, sin restricción en la base: dos guardados a la vez de la misma cuenta pueden dejar una de más o repetida. Se borra en Cuenta.
   - La tarjeta de Explorar da el envío de la zona, no el total: el pedido mínimo y el envío gratis los aplica el menú al pedir.
   - «Pedir otra vez» solo regresa cantidades enteras: un producto por kilo o en fracciones no regresa, porque la tienda pide por pieza.
   - Un cliente anterior, sin llave del pedido, todavía puede registrar dos veces el mismo pedido.

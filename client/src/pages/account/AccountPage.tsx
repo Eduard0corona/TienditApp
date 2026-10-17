@@ -47,9 +47,14 @@ function AddressDialog({ address, onClose }: { address: AccountAddress | 'new' |
   });
   const postalCodeProblem = form.postalCode && !isPostalCode(form.postalCode) ? 'El código postal lleva 5 dígitos.' : '';
   const ready = isPostalCode(form.postalCode) && form.addressLine.trim() !== '';
+  // The dialog stays mounted: an error of a save that failed does not come back the next time it opens.
+  const close = () => {
+    save.reset();
+    onClose();
+  };
 
   return (
-    <Modal show={address !== null} onHide={onClose} centered fullscreen="sm-down" aria-labelledby={titleId}>
+    <Modal show={address !== null} onHide={close} centered fullscreen="sm-down" aria-labelledby={titleId}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -122,7 +127,7 @@ function AddressDialog({ address, onClose }: { address: AccountAddress | 'new' |
           {save.isError && <div className="alert alert-danger mt-3 mb-0">{getApiErrorMessage(save.error, 'No se pudo guardar la dirección.')}</div>}
         </Modal.Body>
         <Modal.Footer>
-          <button type="button" className="btn btn-light" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-light" onClick={close}>Cancelar</button>
           <button type="submit" className="btn btn-primary" disabled={!ready || save.isPending}>
             {save.isPending ? 'Guardando…' : 'Guardar'}
           </button>
@@ -213,29 +218,32 @@ export default function AccountPage() {
           {kept.length > 0 && (
             <ul className="list-unstyled mb-0">
               {kept.map((address) => (
-                <li key={address.id} className="d-flex flex-wrap align-items-start gap-2 py-2 border-top">
+                <li key={address.id} className="d-flex flex-column flex-sm-row align-items-sm-start gap-2 py-2 border-top">
                   <div className="flex-grow-1 min-w-0">
                     <div className="fw-semibold">{address.label}</div>
                     <div className="small">{describeAccountAddress(address)}</div>
                     {address.references && <div className="small text-muted">{address.references}</div>}
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-light"
-                    onClick={() => setEditing(address)}
-                    aria-label={`Cambiar ${address.label}`}
-                  >
-                    Cambiar
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-light"
-                    disabled={remove.isPending}
-                    onClick={() => void askToRemove(address)}
-                    aria-label={`Borrar ${address.label}`}
-                  >
-                    Borrar
-                  </button>
+                  {/* Together, under the address on a phone and beside it from a tablet. */}
+                  <div className="d-flex gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-light"
+                      onClick={() => setEditing(address)}
+                      aria-label={`Cambiar ${address.label}`}
+                    >
+                      Cambiar
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-light"
+                      disabled={remove.isPending}
+                      onClick={() => void askToRemove(address)}
+                      aria-label={`Borrar ${address.label}`}
+                    >
+                      Borrar
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

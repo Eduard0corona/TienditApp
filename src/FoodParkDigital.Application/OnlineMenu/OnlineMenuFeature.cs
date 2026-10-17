@@ -524,6 +524,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
     public const string TableNotDeliveredMessage = "Un pedido para tu mesa no se manda a domicilio.";
     public const string DeliveryRequiredMessage = "Este negocio solo entrega a domicilio: escribe a dónde te lo llevamos.";
     public const string AlreadySentMessage = "Ese pedido ya se envió.";
+    public const string AlreadyCancelledMessage = "Ese pedido ya se envió y el negocio lo canceló.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -729,7 +730,10 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             return null;
         if (order.Channel != OrderChannel.Online || order.CustomerPhone != phone)
             return Result.Failure<PublicOrderReceiptDto>(AlreadySentMessage);
-        return Result.Success(Receipt(order, tenant, order.Status is not (OrderStatus.Pending or OrderStatus.Cancelled), account));
+        // The business cancelled it meanwhile: «lo confirmará en unos minutos» would not be true.
+        if (order.Status == OrderStatus.Cancelled)
+            return Result.Failure<PublicOrderReceiptDto>(AlreadyCancelledMessage);
+        return Result.Success(Receipt(order, tenant, order.Status != OrderStatus.Pending, account));
     }
 
     /// <summary>

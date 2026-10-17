@@ -14,8 +14,10 @@ export interface SavedCart {
   /** When it last changed (ISO). */
   savedAt: string;
   lines: SavedCartLine[];
-  /** Filled by «Pedir otra vez»: how many products the order had, to say which ones the menu no longer has. */
+  /** Filled by «Pedir otra vez»: how many products the order had. The store then words what did not come back. */
   reorderOf?: number;
+  /** Filled by «Pedir otra vez»: the products of the order sold by weight or in fractions, which the cart does not take. */
+  skipped?: number;
 }
 
 /** A product of a store's menu, as much as a cart needs of it. */
@@ -87,7 +89,8 @@ export function readCart(slug: string, now = new Date()): SavedCart | null {
   const cart = readAll()[slug];
   if (!cart || typeof cart.businessName !== 'string' || !Array.isArray(cart.lines)) return null;
   const lines = cart.lines.filter(isLine);
-  return fresh({ ...cart, lines }, now) ? { ...cart, lines } : null;
+  const skipped = typeof cart.skipped === 'number' && Number.isInteger(cart.skipped) && cart.skipped > 0 ? cart.skipped : undefined;
+  return fresh({ ...cart, lines }, now) ? { ...cart, lines, skipped } : null;
 }
 
 /** Keeps the cart of a store; an empty one is forgotten. */
@@ -122,12 +125,18 @@ export function latestCart(now = new Date()): { slug: string; businessName: stri
 
 /**
  * The lines of a past order, as «Pedir otra vez» puts them in the cart: the menu takes whole units, so a product sold
- * by weight or in fractions (0.5 kg) does not come back.
+ * by weight or in fractions (0.5 kg) does not come back, and `skipped` counts them.
  */
-export function linesOfOrder(items: Array<{ productId: string; quantity: number; optionIds?: string[] | null }>): SavedCartLine[] {
+export function linesOfOrder(
+  items: Array<{ productId: string; quantity: number; optionIds?: string[] | null }>,
+): { lines: SavedCartLine[]; skipped: number } {
   const lines = new Map<string, SavedCartLine>();
+  let skipped = 0;
   for (const item of items) {
-    if (!Number.isInteger(item.quantity) || item.quantity <= 0) continue;
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+      skipped += 1;
+      continue;
+    }
     const optionIds = [...(item.optionIds ?? [])];
     const key = getLineKey(item.productId, optionIds);
     const current = lines.get(key);
@@ -137,7 +146,7 @@ export function linesOfOrder(items: Array<{ productId: string; quantity: number;
       quantity: Math.min((current?.quantity ?? 0) + item.quantity, MAX_LINE_QUANTITY),
     });
   }
-  return [...lines.values()].slice(0, MAX_CART_LINES);
+  return { lines: [...lines.values()].slice(0, MAX_CART_LINES), skipped };
 }
 
 /**

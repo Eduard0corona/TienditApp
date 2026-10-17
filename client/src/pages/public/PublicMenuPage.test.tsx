@@ -447,18 +447,22 @@ describe('PublicMenuPage', () => {
       saveCart('cafe-luna', {
         businessName: 'Café Luna',
         lines: [{ productId: 'p1', optionIds: [], quantity: 2 }, { productId: 'ya-no', optionIds: [], quantity: 1 }],
-        reorderOf: 2,
+        reorderOf: 3,
+        skipped: 1,
       });
       api.getMenu.mockResolvedValue(menu());
 
       renderPage();
 
       expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toHaveTextContent('$110.00');
-      expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora.');
+      expect(screen.getByRole('status', { name: '' })).toHaveTextContent(
+        'Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora; 1 producto se pide por peso: agrégalo con su cantidad.',
+      );
       // What is in the cart now replaces what came back, without the notice of «Pedir otra vez».
       await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
       expect(readCart('cafe-luna')).toEqual(expect.objectContaining({ lines: [{ productId: 'p1', optionIds: [], quantity: 3 }] }));
       expect(readCart('cafe-luna')?.reorderOf).toBeUndefined();
+      expect(readCart('cafe-luna')?.skipped).toBeUndefined();
     });
 
     it('sends the order with a key, the same one when it is sent again, and forgets the cart once it is placed', async () => {

@@ -71,17 +71,24 @@ function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
 
 const NO_ADDRESS: PublicDeliveryAddress = { postalCode: '', addressLine: '', references: '', paysWith: '' };
 
-/** What came back of a saved cart, or of «Pedir otra vez»; '' when everything did. */
-function restoredMessage(kept: number, dropped: number, reorder: boolean): string {
-  if (dropped === 0) return '';
+/**
+ * What came back of a saved cart, or of «Pedir otra vez»; '' when everything did. `skipped` are the products of the
+ * order sold by weight, which the cart does not take.
+ */
+function restoredMessage(kept: number, dropped: number, skipped: number, reorder: boolean): string {
+  if (dropped === 0 && skipped === 0) return '';
   if (kept === 0) {
     return reorder
       ? 'Los productos de ese pedido ya no están disponibles ahora. Mira el menú de hoy.'
       : 'Los productos que dejaste en tu pedido ya no están disponibles ahora.';
   }
-  return dropped === 1
-    ? 'Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora.'
-    : `Agregamos lo que sigue disponible; ${dropped} productos ya no están en el menú de ahora.`;
+  const missing = [
+    dropped === 1 ? '1 producto ya no está en el menú de ahora' : '',
+    dropped > 1 ? `${dropped} productos ya no están en el menú de ahora` : '',
+    skipped === 1 ? '1 producto se pide por peso: agrégalo con su cantidad' : '',
+    skipped > 1 ? `${skipped} productos se piden por peso: agrégalos con su cantidad` : '',
+  ].filter(Boolean);
+  return `Agregamos lo que sigue disponible; ${missing.join('; ')}.`;
 }
 
 /**
@@ -164,7 +171,7 @@ export default function PublicMenuPage() {
     if (saved) {
       const restored = restoreLines(saved.lines, data.categories.flatMap((item) => item.products));
       setLines(restored.lines);
-      setRestoredNotice(restoredMessage(restored.lines.length, restored.dropped, saved.reorderOf !== undefined));
+      setRestoredNotice(restoredMessage(restored.lines.length, restored.dropped, saved.skipped ?? 0, saved.reorderOf !== undefined));
     }
   }
 
@@ -176,7 +183,8 @@ export default function PublicMenuPage() {
       : { ...current, postalCode: readPostalCode(), addressLine: '', references: '' }));
   };
   if (delivering && addressChoice === undefined && (!customer || !addresses.isPending)) {
-    if (savedAddresses[0]) {
+    // Not over an address the customer started writing while the account's ones loaded.
+    if (savedAddresses[0] && address.addressLine.trim() === '') {
       chooseAddress(savedAddresses[0]);
     } else {
       setAddressChoice(null);

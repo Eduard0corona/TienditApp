@@ -21,8 +21,11 @@ export default function MyOrders() {
   const [page, setPage] = useState(1);
   const navigate = useNavigate();
   const orderAgain = (order: MyOrder) => {
-    const lines = linesOfOrder(order.items);
-    saveCart(order.businessSlug, { businessName: order.businessName, lines, reorderOf: order.items.length });
+    const { lines, skipped } = linesOfOrder(order.items);
+    // An order all by weight has nothing to put back: the menu opens as it is, and a cart left there stays.
+    if (lines.length > 0) {
+      saveCart(order.businessSlug, { businessName: order.businessName, lines, reorderOf: order.items.length, skipped });
+    }
     navigate(`/m/${order.businessSlug}`);
   };
   const ordersQuery = useQuery({

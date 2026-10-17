@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
@@ -60,13 +60,24 @@ function PostalCodeChip({ postalCode, onChange }: { postalCode: string; onChange
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(postalCode);
   const typed = draft.trim();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  // The focus follows the form: to its field when it opens, back to the button when it closes (never on loading).
+  const toggled = useRef(false);
+  useEffect(() => {
+    if (toggled.current) (editing ? inputRef.current : toggleRef.current)?.focus();
+  }, [editing]);
+  const toggle = (open: boolean) => {
+    toggled.current = true;
+    setEditing(open);
+  };
 
   if (!editing) {
     return (
       <p className="ex-postal">
         <i className="ri-e-bike-2-line" aria-hidden="true"></i>
         {postalCode ? <span>Entregar en <strong>{postalCode}</strong></span> : <span>¿Te lo llevan a domicilio?</span>}
-        <button type="button" className="btn btn-link btn-sm p-0" onClick={() => { setDraft(postalCode); setEditing(true); }}>
+        <button ref={toggleRef} type="button" className="btn btn-link btn-sm p-0" onClick={() => { setDraft(postalCode); toggle(true); }}>
           {postalCode ? 'Cambiar' : 'Escribe tu código postal'}
         </button>
       </p>
@@ -79,11 +90,12 @@ function PostalCodeChip({ postalCode, onChange }: { postalCode: string; onChange
         event.preventDefault();
         if (typed && !isPostalCode(typed)) return;
         onChange(typed);
-        setEditing(false);
+        toggle(false);
       }}
     >
       <label className="small" htmlFor={inputId}>Código postal</label>
       <input
+        ref={inputRef}
         id={inputId}
         className={`form-control form-control-sm ex-postal-input ${typed && !isPostalCode(typed) ? 'is-invalid' : ''}`}
         inputMode="numeric"
@@ -96,7 +108,7 @@ function PostalCodeChip({ postalCode, onChange }: { postalCode: string; onChange
       />
       <button type="submit" className="btn btn-sm btn-primary" disabled={!!typed && !isPostalCode(typed)}>Listo</button>
       {postalCode && (
-        <button type="button" className="btn btn-sm btn-light" onClick={() => { onChange(''); setEditing(false); }}>Quitar</button>
+        <button type="button" className="btn btn-sm btn-light" onClick={() => { onChange(''); toggle(false); }}>Quitar</button>
       )}
       <span id={`${inputId}-help`} className="small text-muted w-100">Cada negocio te dice si llega y cuánto cobra.</span>
     </form>
@@ -205,8 +217,8 @@ export default function ExplorePage() {
 
       {pendingCart && (
         <p className="ex-pending" role="status">
-          <i className="ri-shopping-bag-3-line" aria-hidden="true"></i>
           <span className="flex-grow-1">
+            <i className="ri-shopping-bag-3-line me-1" aria-hidden="true"></i>
             Tienes un pedido sin enviar en <strong>{pendingCart.businessName}</strong>
             {pendingCart.itemCount === 1 ? ' (1 producto)' : ` (${pendingCart.itemCount} productos)`}.
           </span>

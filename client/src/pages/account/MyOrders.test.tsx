@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../../api/typedClient';
 import { OrderStatus, OrderType } from '../../types';
-import { readCart } from '../../utils/savedCart';
+import { readCart, saveCart } from '../../utils/savedCart';
 import MyOrders from './MyOrders';
 
 // The title of the customer's frame only: its section tabs read the business, which a customer has none of.
@@ -18,6 +18,44 @@ function Store() {
   return <output data-testid="store">{useLocation().pathname}</output>;
 }
 
+/** The account's orders: one order of Café Luna with these lines. */
+function page(items: Array<{ productId: string; productName: string; quantity: number; optionIds: string[] }>) {
+  return {
+    items: [{
+      id: 'o1',
+      orderNumber: 'T-1042',
+      businessName: 'Café Luna',
+      businessSlug: 'cafe-luna',
+      canOrderAgain: true,
+      status: OrderStatus.Delivered,
+      orderType: OrderType.Retail,
+      total: 118,
+      paidAmount: 118,
+      createdAt: '2026-10-12T19:00:00Z',
+      items,
+    }],
+    pageNumber: 1,
+    totalPages: 1,
+    totalCount: 1,
+    hasPreviousPage: false,
+    hasNextPage: false,
+  };
+}
+
+function renderOrders() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/mis-pedidos']}>
+        <Routes>
+          <Route path="/mis-pedidos" element={<MyOrders />} />
+          <Route path="/m/:slug" element={<Store />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
 describe('MyOrders', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -25,42 +63,12 @@ describe('MyOrders', () => {
   });
 
   it('fills the cart of the store with the order on «Pedir otra vez», and opens the store', async () => {
-    request.mockResolvedValue({
-      items: [{
-        id: 'o1',
-        orderNumber: 'T-1042',
-        businessName: 'Café Luna',
-        businessSlug: 'cafe-luna',
-        canOrderAgain: true,
-        status: OrderStatus.Delivered,
-        orderType: OrderType.Retail,
-        total: 118,
-        paidAmount: 118,
-        createdAt: '2026-10-12T19:00:00Z',
-        items: [
-          { productId: 'latte', productName: 'Latte', quantity: 2, optionIds: ['grande'] },
-          { productId: 'queso', productName: 'Queso', quantity: 0.25, optionIds: [] },
-        ],
-      }],
-      pageNumber: 1,
-      totalPages: 1,
-      totalCount: 1,
-      hasPreviousPage: false,
-      hasNextPage: false,
-    } as never);
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    request.mockResolvedValue(page([
+      { productId: 'latte', productName: 'Latte', quantity: 2, optionIds: ['grande'] },
+      { productId: 'queso', productName: 'Queso', quantity: 0.25, optionIds: [] },
+    ]) as never);
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/mis-pedidos']}>
-          <Routes>
-            <Route path="/mis-pedidos" element={<MyOrders />} />
-            <Route path="/m/:slug" element={<Store />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-
+    renderOrders();
     await userEvent.click(await screen.findByRole('button', { name: 'Pedir otra vez T-1042 de Café Luna' }));
 
     expect(screen.getByTestId('store')).toHaveTextContent('/m/cafe-luna');
@@ -69,6 +77,18 @@ describe('MyOrders', () => {
       businessName: 'Café Luna',
       lines: [{ productId: 'latte', optionIds: ['grande'], quantity: 2 }],
       reorderOf: 2,
+      skipped: 1,
     }));
+  });
+
+  it('opens the store as it is for an order all by weight, keeping the cart left there', async () => {
+    saveCart('cafe-luna', { businessName: 'Café Luna', lines: [{ productId: 'concha', optionIds: [], quantity: 3 }] });
+    request.mockResolvedValue(page([{ productId: 'queso', productName: 'Queso', quantity: 0.25, optionIds: [] }]) as never);
+
+    renderOrders();
+    await userEvent.click(await screen.findByRole('button', { name: 'Pedir otra vez T-1042 de Café Luna' }));
+
+    expect(screen.getByTestId('store')).toHaveTextContent('/m/cafe-luna');
+    expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'concha', optionIds: [], quantity: 3 }]);
   });
 });

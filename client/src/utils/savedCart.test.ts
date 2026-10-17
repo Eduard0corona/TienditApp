@@ -56,7 +56,7 @@ describe('savedCart', () => {
   });
 
   it('turns a past order into whole units, joining the same product with the same options', () => {
-    const lines = linesOfOrder([
+    const { lines, skipped } = linesOfOrder([
       { productId: 'latte', quantity: 1, optionIds: ['grande'] },
       { productId: 'latte', quantity: 2, optionIds: ['grande'] },
       { productId: 'queso', quantity: 0.25, optionIds: [] },
@@ -67,6 +67,7 @@ describe('savedCart', () => {
       { productId: 'latte', optionIds: ['grande'], quantity: 3 },
       { productId: 'concha', optionIds: [], quantity: 99 },
     ]);
+    expect(skipped).toBe(1);
   });
 
   it('puts back only what the menu of now can take, at its prices of now', () => {

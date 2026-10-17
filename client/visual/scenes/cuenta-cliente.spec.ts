@@ -199,6 +199,7 @@ test.describe('Pedir otra vez', () => {
     // The large latte comes back at today's price; the croissant is sold out.
     await expect(page.getByRole('status').filter({ hasText: '1 producto ya no está en el menú de ahora' })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Ver pedido · 1 · / })).toBeVisible();
-    await snap(page, 'pedir-otra-vez-telefono');
+    // As the screen shows it: the bar of the cart stays at its bottom.
+    await snapScreen(page, 'pedir-otra-vez-telefono');
   });
 });

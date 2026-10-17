@@ -35,7 +35,6 @@ export function categoryBySlug(slug: string | null | undefined): BusinessCategor
   return BUSINESS_CATEGORIES.find((category) => category.slug === wanted);
 }
 
-/** What the card says about orders: the answer its menu gives, in the words of the menu. */
 /**
  * What a card says about delivery (Fase 24B): with the customer's postal code, whether the business delivers there and
  * what it costs (written like its prices: «más IVA» when they do not include it); without it, only that it delivers.
@@ -49,6 +48,7 @@ export function deliveryToPostalCode(business: DirectoryBusiness): { reaches: bo
   return { reaches: true, text: fee > 0 ? `Envío ${formatMoney(fee)}${business.pricesIncludeTax ? '' : ' más IVA'}` : 'Envío gratis' };
 }
 
+/** What the card says about orders: the answer its menu gives, in the words of the menu. */
 export function orderStatus(business: DirectoryBusiness): { tone: 'taking' | 'paused' | 'closed' | 'menu'; text: string } {
   const { closed } = business;
   const hours = business.statusLabel

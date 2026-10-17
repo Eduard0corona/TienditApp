@@ -39,7 +39,9 @@ public class DeliveryZonesSqlServerTests
         Assert.True(Assert.Single(indexes, index => index.Name == "IX_DeliveryZonePostalCodes_TenantId_PostalCode").IsUnique);
         Assert.False(Assert.Single(indexes, index => index.Name == "IX_DeliveryZonePostalCodes_DeliveryZoneId").IsUnique);
         Assert.True(Assert.Single(indexes, index => index.Name == "IX_DeliveryZones_TenantId_Name").IsUnique);
-        Assert.Equal(5, indexes.Count);
+        // Explorar asks which businesses reach a postal code, in all of them at once (Fase 24B).
+        Assert.False(Assert.Single(indexes, index => index.Name == "IX_DeliveryZonePostalCodes_PostalCode").IsUnique);
+        Assert.Equal(6, indexes.Count);
 
         var onDelete = await context.Database.SqlQuery<string>($"""
             SELECT [delete_referential_action_desc] AS [Value] FROM sys.foreign_keys

@@ -11,6 +11,7 @@ using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
@@ -98,6 +99,14 @@ public class CustomerAccountShoppingTests
         // Without the drawer, an order with a new key is refused as before.
         var paused = await PlaceAsync(fixture, Pickup(tacos) with { IdempotencyKey = Guid.NewGuid() });
         Assert.Equal(PlacePublicOrderCommandHandler.OrdersPausedMessage, paused.Error);
+
+        // Once the business cancels it, sending it again says so instead of «lo confirmará».
+        var stored = await fixture.Context.Orders.SingleAsync();
+        stored.Cancel(OrderStateMachineFactory.Create(stored.BusinessType, stored.OrderType), "duena@demo.com", "Sin existencias");
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        var cancelled = await PlaceAsync(fixture, Pickup(tacos) with { IdempotencyKey = key });
+        Assert.Equal(PlacePublicOrderCommandHandler.AlreadyCancelledMessage, cancelled.Error);
     }
 
     [Fact]

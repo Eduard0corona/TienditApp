@@ -92,8 +92,11 @@ describe('ExplorePage', () => {
     const { unmount } = renderPage();
     expect(within(await screen.findByRole('link', { name: /Taquería El Güero/ })).getByText('Envío a domicilio')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Escribe tu código postal' }));
+    // The focus goes to the field, and back to the button once it is written.
+    expect(screen.getByLabelText('Código postal')).toHaveFocus();
     await userEvent.type(screen.getByLabelText('Código postal'), '72a000');
     await userEvent.click(screen.getByRole('button', { name: 'Listo' }));
+    expect(screen.getByRole('button', { name: 'Cambiar' })).toHaveFocus();
 
     expect(await within(screen.getByRole('link', { name: /Taquería El Güero/ })).findByText('Envío $30.00')).toBeInTheDocument();
     expect(within(screen.getByRole('link', { name: /Café Luna/ })).getByText('No llega a tu código postal')).toBeInTheDocument();

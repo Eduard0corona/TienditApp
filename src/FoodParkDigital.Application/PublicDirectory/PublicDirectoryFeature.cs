@@ -183,12 +183,17 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
     private async Task<List<PublicDirectoryBusinessDto>> WithDeliveryToAsync(
         IReadOnlyList<PublicDirectorySnapshot.Entry> page, string postalCode, CancellationToken cancellationToken)
     {
-        // A public request has no business: the active zones that reach the postal code, in every business at once (each
-        // read with its own business, IX_DeliveryZonePostalCodes_PostalCode); a business has one at most.
+        // Only the businesses of the page that deliver ask; a page without one reads nothing.
+        var delivering = page.Where(entry => entry.Business.DeliveryAvailable).Select(entry => entry.TenantId).ToList();
+        if (delivering.Count == 0)
+            return page.Select(entry => entry.Business).ToList();
+
+        // A public request has no business: the active zones of those businesses that reach the postal code, in one read
+        // (each zone with its own business, IX_DeliveryZonePostalCodes_PostalCode); a business has one at most.
         var zones = await _context.DeliveryZonePostalCodes
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(code => code.PostalCode == postalCode)
+            .Where(code => code.PostalCode == postalCode && delivering.Contains(code.TenantId))
             .Join(_context.DeliveryZones, code => code.DeliveryZoneId, zone => zone.Id, (code, zone) => new { code.TenantId, Zone = zone })
             .Where(row => row.Zone.IsActive && row.Zone.TenantId == row.TenantId)
             .Select(row => new { row.TenantId, row.Zone.Fee, row.Zone.MinimumOrder, row.Zone.FreeDeliveryFrom })

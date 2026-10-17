@@ -28,23 +28,23 @@ La Fase 24B, «Comprar con tu cuenta», del informe «TienditApp para clientes»
    - Cada una tiene un nombre (hasta 60 caracteres; «Dirección» si no se escribe), código postal, dirección y referencias, con las reglas de `DeliveryAddress`.
    - La misma dirección (código postal y renglón, sin mayúsculas ni espacios de más) no se guarda dos veces: guardarla otra vez solo cambia su nombre y sus referencias.
    - Se agregan, cambian y borran en Cuenta (`/cuenta`, `GET/POST/PUT/DELETE /api/v1/me/addresses`, `[RequiresAuthentication]`; solo una cuenta de cliente las guarda). Borrar una no cambia los pedidos que ya se enviaron ahí: el pedido guarda su propia dirección (`OrderDelivery`).
-   - Al pedir a domicilio, la tienda ofrece primero la última usada. Al enviar, el pedido marca como usada la dirección guardada del mismo lugar, o guarda una nueva si el cliente lo pidió y le queda lugar. Se escribe en el mismo guardado del pedido: si el pedido falla, la dirección tampoco cambia. Con 10 direcciones el pedido se envía igual, sin guardarla.
+   - Al pedir a domicilio, la tienda ofrece primero la última usada (salvo que el cliente ya esté escribiendo otra). Al enviar, el pedido marca como usada la dirección guardada del mismo lugar, o guarda una nueva si el cliente deja marcado «Guardar esta dirección en mi cuenta» (empieza marcado) y le queda lugar. Se escribe en el mismo guardado del pedido: si el pedido falla, la dirección tampoco cambia. Con 10 direcciones el pedido se envía igual, sin guardarla.
 3. **Llave del pedido.** La tienda manda una llave por pedido (`IdempotencyKey`), la misma en cada reintento del mismo carrito, y nueva cuando cambia el carrito, la entrega o los datos del cliente.
    - Se guarda en `Order.ClientRequestId`, con el índice único filtrado `IX_Orders_TenantId_ClientRequestId` que ya usaba la venta sin conexión.
    - La misma llave otra vez responde el recibo del pedido ya registrado, antes de revisar el horario o la caja: el negocio pudo cerrar desde el primer intento.
-   - Solo responde el pedido en línea del mismo teléfono. Con otro teléfono, o si la llave es de otro pedido, responde «Ese pedido ya se envió.»: la llave no sirve para leer el pedido de otro.
+   - Solo responde el pedido en línea del mismo teléfono. Con otro teléfono, o si la llave es de otro pedido, responde «Ese pedido ya se envió.»: la llave no sirve para leer el pedido de otro. Si el negocio ya lo canceló, responde «Ese pedido ya se envió y el negocio lo canceló.» en lugar de un recibo que diga que lo confirmará.
    - Dos envíos a la vez: el segundo choca con el índice, descarta todo su trabajo (folio, insumos y dirección) y responde el recibo del primero.
 4. **Explorar por código postal.** El cliente escribe su código postal («Entregar en…») y cada tarjeta de un negocio que entrega dice si llega y cuánto cobra: «Envío $35.00», «Envío gratis», «… más IVA» si sus precios no lo incluyen, o «No llega a tu código postal».
    - El código postal vive en el dispositivo (`localStorage`) y solo viaja como filtro de Explorar (`GET /api/v1/public/directory?postalCode=`). El servidor no lo guarda.
    - Se responde con la zona activa del negocio que lo incluye, sin su nombre: la misma que cobra el menú ([ADR 0017](0017-delivery-zones.md)). Un código postal está en una zona por negocio como mucho.
-   - La foto de 30 segundos no cambia. La tarjeta se copia por petición y la zona se lee en una consulta por todos los negocios de la página. Usa un `IgnoreQueryFilters` revisado más (`TenantFilterBypassAllowlistTests`), que une cada código postal con la zona de su mismo negocio, y el índice nuevo `IX_DeliveryZonePostalCodes_PostalCode`.
+   - La foto de 30 segundos no cambia. La tarjeta se copia por petición, y las zonas de los negocios de la página que entregan se leen en una consulta (ninguna si ninguno entrega). Usa un `IgnoreQueryFilters` revisado más (`TenantFilterBypassAllowlistTests`), que une cada código postal con la zona de su mismo negocio, y el índice nuevo `IX_DeliveryZonePostalCodes_PostalCode`.
    - La tienda toma ese código postal la primera vez que el pedido va a domicilio, si la cuenta no tiene direcciones.
 5. **Carrito guardado en el dispositivo.** El carrito de cada tienda se guarda en el dispositivo (`savedCart.ts`) hasta que se envía o se vacía, por 7 días y en 10 tiendas como mucho.
    - Guarda lo elegido (producto, opciones y cantidad), nunca el precio. Al volver, la tienda lo arma con el menú de ahora, a sus precios. Deja fuera lo que no está disponible ahora y las opciones que ya no existen o no forman una elección válida, y dice cuántos productos quedaron fuera.
    - Explorar ofrece seguir con el último carrito sin enviar.
 6. **«Pedir otra vez» llena el carrito.** En Mis pedidos, «Pedir otra vez» guarda las líneas del pedido como carrito de esa tienda y la abre, con la misma regla del punto 5.
    - Mis pedidos manda el producto y las opciones de cada línea (`MyOrderItemDto.ProductId` y `OptionIds`).
-   - Solo regresan cantidades enteras, porque la tienda pide por pieza: un producto por kilo o en fracciones no regresa.
+   - Solo regresan cantidades enteras, porque la tienda pide por pieza: un producto por kilo o en fracciones no regresa, y la tienda dice cuántos se piden por peso. Un pedido todo por peso abre el menú sin tocar el carrito que haya.
 
 ## Consecuencias
 
