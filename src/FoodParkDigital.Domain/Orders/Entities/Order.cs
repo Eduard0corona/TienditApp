@@ -122,6 +122,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// later, or a request repeated after a timeout) returns this order instead of creating another one.
     /// </summary>
     public Guid? ClientRequestId { get; private set; }
+    /// <summary>
+    /// The link a customer follows the order with, without signing in (Fase 24C): 32 random bytes in URL-safe Base64,
+    /// given once to an order placed from the online menu. Whoever has it sees the order's progress, nothing else.
+    /// </summary>
+    public string? TrackingToken { get; private set; }
     /// <summary>When the device captured the sale without connection (its own clock; payments keep the server time).</summary>
     public DateTimeOffset? CapturedOfflineAt { get; private set; }
     /// <summary>Taxable base: item amounts without IVA.</summary>
@@ -191,6 +196,25 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         ClientRequestId = clientRequestId;
         CapturedOfflineAt = capturedOfflineAt;
     }
+    /// <summary>
+    /// Gives the order its tracking link (<see cref="TrackingToken"/>): once, and only a value that looks like one
+    /// (<see cref="TrackingTokenLength"/> URL-safe Base64 characters), so a mistake never leaves a guessable link.
+    /// </summary>
+    public void IssueTrackingToken(string token)
+    {
+        if (TrackingToken is not null)
+            throw new DomainException("El pedido ya tiene su enlace de seguimiento.");
+        if (!IsTrackingToken(token))
+            throw new DomainException("El enlace de seguimiento no es válido.");
+        TrackingToken = token;
+    }
+
+    public const int TrackingTokenLength = 43;
+
+    /// <summary>Whether <paramref name="token"/> has the shape of a tracking token; it says nothing of whether one exists.</summary>
+    public static bool IsTrackingToken(string? token)
+        => token is { Length: TrackingTokenLength } && token.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+
     public int CurrentRound => _items.Count == 0 ? 0 : _items.Max(item => item.Round);
 
     /// <param name="unitPrice">Price of one unit with the chosen options.</param>

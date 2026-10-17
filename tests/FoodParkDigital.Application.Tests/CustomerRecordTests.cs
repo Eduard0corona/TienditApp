@@ -112,7 +112,7 @@ public class CustomerRecordTests
         await AddOrderAsync(fixture, shop, Guid.NewGuid(), "ORD-000002", SalesTestFixture.Now);
         fixture.CurrentUser.UserId = me.ToString();
 
-        var mine = await new GetMyOrdersQueryHandler(fixture.Context, fixture.CurrentUser)
+        var mine = await new GetMyOrdersQueryHandler(fixture.Context, fixture.CurrentUser, fixture.Clock)
             .Handle(new GetMyOrdersQuery(), CancellationToken.None);
 
         Assert.Equal(["Negocio tienda", "Negocio cafe"], mine.Items.Select(o => o.BusinessName));

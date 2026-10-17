@@ -18,6 +18,17 @@ public record GetMyOrdersQuery : IRequest<PaginatedList<MyOrderDto>>
 {
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 10;
+    /// <summary>The orders in progress, the ones before, or all of them (Fase 24C).</summary>
+    public MyOrdersScope Scope { get; init; } = MyOrdersScope.All;
+}
+
+public enum MyOrdersScope
+{
+    All = 0,
+    /// <summary>Open and placed in the last <see cref="OrderTracking.Days"/> days: the client follows them.</summary>
+    InProgress = 1,
+    /// <summary>Delivered, finished, cancelled, or left open by the business for longer than that.</summary>
+    Past = 2
 }
 
 public class GetMyOrdersQueryValidator : AbstractValidator<GetMyOrdersQuery>
@@ -26,6 +37,7 @@ public class GetMyOrdersQueryValidator : AbstractValidator<GetMyOrdersQuery>
     {
         RuleFor(x => x.PageNumber).GreaterThanOrEqualTo(1);
         RuleFor(x => x.PageSize).InclusiveBetween(1, 50);
+        RuleFor(x => x.Scope).IsInEnum();
     }
 }
 
@@ -39,6 +51,9 @@ public class MyOrderDto
     public bool CanOrderAgain { get; set; }
     public OrderStatus Status { get; set; }
     public OrderType OrderType { get; set; }
+    /// <summary>Where it is, as the customer reads it («En preparación», «En camino», Fase 24C).</summary>
+    public OrderTrackingStep Step { get; set; }
+    public string StepLabel { get; set; } = null!;
     public decimal Total { get; set; }
     public decimal PaidAmount { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -59,11 +74,13 @@ public class GetMyOrdersQueryHandler : IRequestHandler<GetMyOrdersQuery, Paginat
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUser;
+    private readonly IDateTimeProvider _clock;
 
-    public GetMyOrdersQueryHandler(IApplicationDbContext context, ICurrentUserService currentUser)
+    public GetMyOrdersQueryHandler(IApplicationDbContext context, ICurrentUserService currentUser, IDateTimeProvider clock)
     {
         _context = context;
         _currentUser = currentUser;
+        _clock = clock;
     }
 
     public async Task<PaginatedList<MyOrderDto>> Handle(GetMyOrdersQuery request, CancellationToken cancellationToken)
@@ -71,12 +88,23 @@ public class GetMyOrdersQueryHandler : IRequestHandler<GetMyOrdersQuery, Paginat
         if (!Guid.TryParse(_currentUser.UserId, out var userId))
             return new PaginatedList<MyOrderDto>([], 0, request.PageNumber, request.PageSize);
 
+        var orders = _context.Orders.IgnoreQueryFilters().AsNoTracking().Where(o => o.CustomerUserId == userId);
+        // OrderTracking.IsInProgress, in SQL.
+        var since = _clock.UtcNow.AddDays(-OrderTracking.Days);
+        orders = request.Scope switch
+        {
+            MyOrdersScope.InProgress => orders.Where(o => o.Status != OrderStatus.Delivered && o.Status != OrderStatus.Completed
+                && o.Status != OrderStatus.Cancelled && o.CreatedAt >= since),
+            MyOrdersScope.Past => orders.Where(o => o.Status == OrderStatus.Delivered || o.Status == OrderStatus.Completed
+                || o.Status == OrderStatus.Cancelled || o.CreatedAt < since),
+            _ => orders
+        };
+
         var query =
-            from order in _context.Orders.IgnoreQueryFilters().AsNoTracking()
+            from order in orders
             join tenant in _context.Tenants.AsNoTracking() on order.TenantId equals tenant.Id
-            where order.CustomerUserId == userId
             orderby order.CreatedAt descending
-            select new MyOrderDto
+            select new MyOrderRow(new MyOrderDto
             {
                 Id = order.Id,
                 OrderNumber = order.OrderNumber,
@@ -99,8 +127,16 @@ public class GetMyOrdersQueryHandler : IRequestHandler<GetMyOrdersQuery, Paginat
                         OptionIds = i.Options.Select(o => o.OptionId).ToList()
                     })
                     .ToList()
-            };
+            }, order.BusinessType, order.Delivery != null, order.Delivery != null ? order.Delivery.DispatchedAt : null);
 
-        return await PaginatedList<MyOrderDto>.CreateAsync(query, request.PageNumber, request.PageSize, cancellationToken);
+        var page = await PaginatedList<MyOrderRow>.CreateAsync(query, request.PageNumber, request.PageSize, cancellationToken);
+        foreach (var row in page.Items)
+            (row.Order.Step, row.Order.StepLabel) = OrderTracking.Current(
+                row.BusinessType, row.Order.OrderType, row.Order.Status, row.HasDelivery, row.DispatchedAt);
+        return new PaginatedList<MyOrderDto>(
+            page.Items.Select(row => row.Order).ToList(), page.TotalCount, request.PageNumber, request.PageSize);
     }
+
+    /// <summary>An order of the list with what its step is told by.</summary>
+    private sealed record MyOrderRow(MyOrderDto Order, BusinessType BusinessType, bool HasDelivery, DateTimeOffset? DispatchedAt);
 }

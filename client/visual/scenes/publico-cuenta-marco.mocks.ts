@@ -12,6 +12,9 @@ const SUBSCRIPTION_SUSPENDED = 3;
 // The fixed clock of the scenes in the business's time (Sunday 2026-10-04).
 const NOW_LOCAL = '13:25:00';
 
+/** The link of an online order's receipt (Fase 24C): 43 characters, as the API gives it. */
+export const TRACKING_LINK = 'q7Vw3kLp9XbN2mZr8TfYc4HsJd6Ga1Eu5Ki0Oo-_RtX';
+
 interface OpeningInterval {
   day: number;
   opens: string;
@@ -222,7 +225,9 @@ export const publicRoutes: ExtraRoutes = (data, { ok }) => [
   ['POST', /^\/public\/menu\/([^/]+)\/orders$/, (_match, _query, body: { expectedTotal?: number; delivery?: { postalCode: string } }) => (body?.delivery
     ? ok({
       orderNumber: 'ORD-000360', total: body.expectedTotal ?? 0, deliveryFee: deliveryQuote(body.delivery.postalCode).fee,
-      confirmed: false, businessName: data.tenant.name, contactPhone: '5512345678',
+      confirmed: false, businessName: data.tenant.name, contactPhone: '5512345678', linkedToAccount: false,
+      // Its link to follow it (Fase 24C).
+      trackingToken: TRACKING_LINK,
     })
     : undefined)],
   ['POST', /^\/auth\/login$/, () => (data.twoFactor

@@ -171,6 +171,13 @@ export const MessagePurpose = {
 } as const;
 export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
 
+export const MyOrdersScope = {
+  All: 0,
+  InProgress: 1,
+  Past: 2,
+} as const;
+export type MyOrdersScope = (typeof MyOrdersScope)[keyof typeof MyOrdersScope];
+
 export const OnlineMenuMode = {
   Off: 0,
   MenuOnly: 1,
@@ -223,6 +230,24 @@ export const OrderStatus = {
   Cancelled: 99,
 } as const;
 export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
+
+export const OrderTrackingStep = {
+  Received: 0,
+  Confirmed: 1,
+  Preparing: 2,
+  Ready: 3,
+  OnTheWay: 4,
+  Delivered: 5,
+  Cancelled: 6,
+} as const;
+export type OrderTrackingStep = (typeof OrderTrackingStep)[keyof typeof OrderTrackingStep];
+
+export const OrderTrackingStepState = {
+  Done: 0,
+  Current: 1,
+  Upcoming: 2,
+} as const;
+export type OrderTrackingStepState = (typeof OrderTrackingStepState)[keyof typeof OrderTrackingStepState];
 
 export const OrderType = {
   Retail: 0,

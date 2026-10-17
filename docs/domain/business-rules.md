@@ -196,6 +196,29 @@ Una cuenta de cliente compra sin escribir sus datos cada vez ([ADR 0022](../adr/
 - **Carrito guardado:** el carrito de cada tienda se guarda en el dispositivo hasta que se envía o se vacía, por 7 días y en 10 tiendas como mucho. Guarda productos, opciones y cantidades, nunca precios: al volver se arma con el menú y los precios de ahora. Lo que no está disponible ahora, o tiene opciones que ya no existen o no forman una elección válida, se queda fuera, y la tienda dice cuántos productos («Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora.»). Explorar ofrece «Seguir con el pedido».
 - **«Pedir otra vez»:** en Mis pedidos, llena el carrito de esa tienda con el pedido, con la misma regla del carrito guardado. Solo regresan cantidades enteras: un producto por kilo o en fracciones no regresa, y la tienda lo dice («1 producto se pide por peso: agrégalo con su cantidad»). Un pedido todo por peso abre el menú sin tocar el carrito que haya.
 
+## Seguimiento del pedido (Fase 24C)
+
+El cliente ve en qué paso va su pedido, con o sin cuenta ([ADR 0023](../adr/0023-order-tracking.md)).
+
+- **Pasos:** los de su tipo de pedido, con los textos que da el servidor:
+  - una cocina: Recibido, Confirmado, En preparación, Listo, En camino (solo a domicilio) y Entregado;
+  - una tienda: Recibido, Confirmado, En camino (solo a domicilio) y Entregado;
+  - un servicio: Recibido, Aceptado, En proceso y Terminado.
+- **Horas:** cada paso lleva la primera hora en que el pedido llegó a él. Recibido es la hora del pedido, y En camino, la de su salida con el repartidor. Un paso que el negocio se saltó queda hecho, sin hora. Un pedido entregado o terminado tiene todos sus pasos hechos.
+- **En camino:** es el paso actual mientras el pedido salió con el repartidor y no se entregó ni se canceló. No es un estado del pedido (Fase 22D).
+- **Cancelado:** el pedido muestra los pasos hasta donde llegó y después «Cancelado» con su hora y el motivo que dio el negocio, el mismo que el cliente recibió por WhatsApp.
+- **Detalle en la cuenta** (`/mis-pedidos/:id`): solo un pedido de la cuenta. Muestra los pasos, lo que se pidió con sus opciones y notas, el envío o la visita a domicilio, el total, lo pagado o lo que falta («Por pagar»), la dirección, el enlace de la paquetería si el negocio lo registró, «Pedir otra vez» y «Escribir al negocio». Cualquier otro pedido responde «No encontramos ese pedido en tu cuenta.».
+- **Enlace de seguimiento** (`/seguimiento#enlace`):
+  - Cada pedido del menú en línea lo recibe al crearse, y el recibo ofrece «Seguir tu pedido» y, a quien compra sin cuenta, «Copiar enlace de seguimiento» («Enlace copiado»; si el navegador no deja copiar, muestra el enlace para copiarlo a mano).
+  - Vale 30 días desde el pedido, mientras el negocio está activo.
+  - No muestra el nombre, el teléfono, la dirección ni las notas del cliente: solo si va a domicilio.
+  - Un enlace desconocido, cambiado o vencido responde «No encontramos ese pedido. El enlace pudo haber vencido.».
+  - Los pedidos de antes de la 24C, los del mostrador y los de WhatsApp no tienen enlace.
+- **Mis pedidos:**
+  - En curso: los pedidos abiertos de los últimos 30 días, cada uno con su paso. Un pedido que el negocio dejó abierto más tiempo pasa a Anteriores.
+  - Anteriores: los entregados, terminados y cancelados, por páginas.
+- **Se actualiza sola:** el detalle, el seguimiento y En curso se piden otra vez cada 20 segundos mientras el pedido está en curso. Si el enlace vence o el pedido deja de encontrarse con la página abierta, deja de preguntar, dice el mensaje y agrega «Lo de abajo es lo último que vimos.».
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

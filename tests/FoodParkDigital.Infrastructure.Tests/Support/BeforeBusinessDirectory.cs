@@ -8,7 +8,7 @@ namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 /// <summary>
 /// The model without what Fase 24A added (the category and the description of a business, and whether it shows in
-/// Explorar): the app as deployed before it, and what a test needs to seed or read businesses on a database migrated to an
+/// Explorar) nor what came after it (<see cref="BeforeOrderTracking"/>): the app as deployed before it, and what a test needs to seed or read businesses on a database migrated to an
 /// earlier migration, where those columns do not exist yet.
 /// </summary>
 internal static class BeforeBusinessDirectory
@@ -22,6 +22,7 @@ internal static class BeforeBusinessDirectory
         modelBuilder.Entity<Tenant>().Ignore(t => t.DirectoryCategory);
         modelBuilder.Entity<Tenant>().Ignore(t => t.PublicDescription);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.ListedInDirectory);
+        BeforeOrderTracking.Ignore(modelBuilder);
     }
 
     private sealed class Context(

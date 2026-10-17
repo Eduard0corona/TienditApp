@@ -35,10 +35,22 @@ public class MeController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>The customer account's orders in every business, newest first.</summary>
+    /// <summary>The customer account's orders in every business, newest first: in progress, the ones before, or all (Fase 24C).</summary>
     [HttpGet("orders")]
-    public async Task<ActionResult<PaginatedList<MyOrderDto>>> GetMyOrders([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, CancellationToken cancellationToken = default)
-        => Ok(await _mediator.Send(new GetMyOrdersQuery { PageNumber = pageNumber, PageSize = pageSize }, cancellationToken));
+    public async Task<ActionResult<PaginatedList<MyOrderDto>>> GetMyOrders(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] MyOrdersScope scope = MyOrdersScope.All,
+        CancellationToken cancellationToken = default)
+        => Ok(await _mediator.Send(new GetMyOrdersQuery { PageNumber = pageNumber, PageSize = pageSize, Scope = scope }, cancellationToken));
+
+    /// <summary>One order of the account, step by step with the time of each one (Fase 24C); any other is not found.</summary>
+    [HttpGet("orders/{id:guid}")]
+    public async Task<ActionResult<MyOrderDetailDto>> GetMyOrder(Guid id, CancellationToken cancellationToken)
+    {
+        var order = await _mediator.Send(new GetMyOrderQuery(id), cancellationToken);
+        return order is null ? this.ApiError(StatusCodes.Status404NotFound, "No encontramos ese pedido en tu cuenta.") : Ok(order);
+    }
 
     /// <summary>The addresses the customer account keeps for its orders (Fase 24B), the last one used first.</summary>
     [HttpGet("addresses")]

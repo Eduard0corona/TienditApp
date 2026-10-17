@@ -51,6 +51,8 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Cómo se ve el negocio en Explorar: leerlo y cambiar su categoría, su descripción y «Aparecer en Explorar» (`GetDirectoryProfileQuery`, `UpdateDirectoryProfileCommand`, Fase 24A) | dueño o admin (`Manager`), como el menú en línea | — |
 | Las direcciones de la cuenta: leerlas, guardarlas, cambiarlas y borrarlas (`GetMyAddressesQuery`, `SaveMyAddressCommand`, `UpdateMyAddressCommand`, `DeleteMyAddressCommand`, Fase 24B) | sesión (`[RequiresAuthentication]`); solo las de la cuenta de la sesión, y solo una cuenta de cliente activa las guarda (otra lee una lista vacía) | — |
 | Enviar un pedido del menú en línea con la sesión de una cuenta de cliente (`PlacePublicOrderCommand`, Fase 24B) | anónimo, como siempre (`[AllowAnonymousRequest]`, límite `public-order`); con la sesión de una cuenta de cliente activa el pedido queda en esa cuenta y guarda su dirección. La sesión del equipo de un negocio compra como invitado | — |
+| Mis pedidos en curso o anteriores y el detalle de uno, paso a paso (`GetMyOrdersQuery` con `Scope`, `GetMyOrderQuery`, Fase 24C) | sesión (`[RequiresAuthentication]`); solo los pedidos de la cuenta de la sesión, en todos los negocios. Cualquier otro pedido responde 404 | — |
+| Seguir un pedido en línea con el enlace de su recibo (`GetPublicOrderTrackingQuery`, Fase 24C) | anónimo (`[AllowAnonymousRequest]`), con el límite `public-menu`; el enlace va en el cuerpo de un POST, abre un solo pedido durante 30 días y no responde nada del cliente ([ADR 0023](../adr/0023-order-tracking.md)) | — |
 | Cobrar una cita, con su cargo por visita (`CreateOrderCommand` con `AppointmentId`, Fase 22E) | `ManageOrders` (y `ChargeOrders` si trae pagos), y además `ManageAppointments` por contenido (`IRequiresContentPermissions`): la venta completa la cita en la agenda, y Vender la lee como la agenda | — |
 
 Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
@@ -116,7 +118,7 @@ La regla vive en cada caso de uso: todo `Command`/`Query` declara exactamente un
 | `[AllowAnonymousRequest("motivo")]` | Flujos públicos (inicio de sesión, registro, confirmaciones) y lo que envía el sistema sin usuario (webhook). |
 
 - `[RequiresCapability(X)]` se combina con la regla anterior y aplica a todos, también al administrador de plataforma: un módulo apagado está apagado.
-- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (254 con la Fase 24B) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
+- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (256 con la Fase 24C) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
 - `CurrentAccessContext` lee una vez por petición la membresía, permisos y módulos; `TenantResolutionMiddleware` le pasa lo que ya consultó.
 - `ForbiddenAccessException` responde 403 con un mensaje en español.
 - `GET /api/v1/me/access` devuelve rol, permisos efectivos y módulos según el servidor. El cliente lo usa al cargar el perfil, así un cambio de permisos aplica sin volver a iniciar sesión (el token anterior conserva sus claims hasta expirar, pero la API ya decide con los permisos actuales).

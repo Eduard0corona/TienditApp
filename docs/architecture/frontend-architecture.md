@@ -415,6 +415,31 @@ Comprar con tu cuenta (Fase 24B, [ADR 0022](../adr/0022-shopping-with-an-account
   - `scenes/cuenta-cliente.spec.ts` tiene Cuenta en tres vistas, agregar y borrar una dirección, sin direcciones, Explorar con código postal (escritorio y teléfono) y su formulario, la tienda con la cuenta (a domicilio, otra dirección y pedido enviado) y «Pedir otra vez» con un producto agotado.
 - **Primera visita:** suma 125 B (de 177,136 a 177,261 B, contra `master` en `d7e54f5`): la ruta `/cuenta` y el ícono del marco. La tienda, Explorar, Mis pedidos y Cuenta bajan aparte. El presupuesto sube de 177,200 a 177,400 B.
 
+Seguimiento (Fase 24C, [ADR 0023](../adr/0023-order-tracking.md)):
+
+- **Pasos del pedido (`components/tracking/OrderTimeline`):**
+  - Pinta los pasos que da el servidor (`OrderTrackingStepDto`), sin calcular ninguno: una lista ordenada «Seguimiento del pedido» con la hora de cada paso (su fecha si es de otro día) y `aria-current="step"` en el actual. Cada paso dice para un lector de pantalla si está hecho, es el de ahora o está pendiente.
+  - Usa colores de estado, nunca el acento (`OrderTimeline.css`): verde lo hecho, azul de «confirmada» lo de ahora, gris lo que falta y rojo un cancelado.
+  - `OrderStepChip` pone el paso actual en un chip con la paleta de los estados de un pedido (`StatusChip`).
+  - `OrderItemsSummary` muestra lo que se pidió con sus opciones y notas, el envío o la visita a domicilio, el IVA si los precios no lo incluyen, el total y «Por pagar» o «Pagado», con los importes del servidor.
+  - `utils/orderTracking.trackingRefresh` decide cuándo volver a preguntar: cada 20 segundos mientras haya algo en curso, nunca después de un 404, y otra vez después de un error sin respuesta (sin conexión). Un error con datos ya leídos se muestra arriba, con «Lo de abajo es lo último que vimos.».
+- **Detalle de la cuenta (`/mis-pedidos/:id`, `pages/account/MyOrderPage`):** dentro de `CustomerLayout` (`ProtectedRoute` y `AccessRoute` `myOrders`), con migas a Mis pedidos. Pide `accountApi.getOrder` y lo vuelve a pedir cada 20 segundos mientras `inProgress` (`trackingRefresh`). Muestra la dirección, el enlace de la paquetería, el motivo de una cancelación, «Pedir otra vez» (`hooks/useOrderAgain`, que ahora comparte con Mis pedidos) y «Escribir al negocio» (`utils/whatsApp.businessWhatsAppUrl`, que sale de la tienda).
+- **Seguimiento con enlace (`/seguimiento`, `pages/public/OrderTrackingPage`):** dentro de `CustomerLayout`, sin sesión.
+  - Lee el enlace del fragmento (`location.hash`), que el navegador nunca manda al servidor, y lo envía en el cuerpo de `publicMenuApi.trackOrder`.
+  - Se actualiza cada 20 segundos mientras el pedido está en curso.
+  - Sin enlace pide abrir el del recibo, sin preguntar al servidor; con uno desconocido o vencido, muestra el mensaje de la API.
+- **Mis pedidos:** dos secciones con su encabezado:
+  - «En curso» (`scope` `InProgress`, hasta 50, se vuelve a pedir cada 20 segundos mientras haya alguno);
+  - «Anteriores» (`Past`, por páginas de 10).
+
+  Cada pedido dice su paso con `OrderStepChip` y tiene «Ver pedido». Cuando un pedido sale de En curso, Anteriores se vuelve a pedir.
+- **Recibo de la tienda:** con `trackingToken`, «Seguir tu pedido» (`/seguimiento#enlace`, la acción principal) y, a un visitante, «Guarda el enlace de seguimiento para ver cómo va tu pedido.» con «Copiar enlace de seguimiento» (`components/tracking/CopyTrackingLink`, con `navigator.clipboard`; si el navegador no deja, muestra el enlace). «Avisar por WhatsApp» pasa a `btn-soft-success`: la pantalla tiene una sola acción principal.
+- **Escenas:**
+  - `mocks/routes-p4.mjs` responde Mis pedidos por `scope`, con el paso de cada pedido.
+  - `scenes/seguimiento.mocks.ts` responde el detalle de dos pedidos de la cuenta (las tortas en camino y un latte cancelado) y el seguimiento del enlace de un invitado. Los recibos simulados de la tienda llevan su enlace (`TRACKING_LINK`).
+  - `scenes/seguimiento.spec.ts` tiene el detalle en tres vistas, cancelado y de otra cuenta, «Ver pedido» desde Mis pedidos, el seguimiento en tres vistas, sin enlace y con uno vencido.
+- **Primera visita:** suma 311 B (de 177,261 a 177,572 B, contra `master` en `29a81a8`): las dos rutas y los enums `OrderTrackingStep`, `OrderTrackingStepState` y `MyOrdersScope`, que viven con los demás enums del contrato en el primer chunk. El detalle y el seguimiento bajan aparte. El presupuesto sube de 177,400 a 177,800 B.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.

@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-17 con la Fase 24B y antes con la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-17 con la Fase 24C y antes con la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -55,6 +55,16 @@ Actualizada el 2026-10-17 con la Fase 24B y antes con la 24A, la 23A y con las F
   - «Pedir otra vez» solo regresa cantidades enteras: un producto por kilo o en fracciones no regresa, porque la tienda pide por pieza.
   - Un cliente anterior, sin llave del pedido, todavía puede registrar dos veces el mismo pedido.
   - La 24B suma 125 B a la primera visita (de 177,136 a 177,261 B, contra `master` en `d7e54f5`) y sube el presupuesto a 177,400 B.
+- Seguimiento (Fase 24C, [ADR 0023](../adr/0023-order-tracking.md)):
+  - El cliente se entera de un cambio con hasta 20 segundos de retraso: las pantallas vuelven a preguntar, no hay SignalR para clientes ni avisos en el navegador.
+  - El enlace de seguimiento es el secreto: quien lo tenga ve el pedido durante 30 días, y no se puede revocar ni volver a emitir. Se guarda tal cual; guardarlo como hash quitaría además la nota de las mayúsculas.
+  - El enlace no llega por WhatsApp: un invitado que cierra el recibo sin abrirlo, copiarlo ni guardarlo lo pierde.
+  - `rollback.sql` no se detiene si hay enlaces emitidos: los quita y dejan de abrir (está en su encabezado).
+  - La base compara el enlace sin mayúsculas (la intercalación de la columna); el servidor exige el exacto. El índice único también es sin mayúsculas: dos enlaces que solo difieren en mayúsculas chocarían, algo que con 32 bytes aleatorios no se espera.
+  - El motivo de una cancelación lo escribe el negocio, y el enlace lo muestra como lo mostró WhatsApp.
+  - Los pedidos anteriores a la 24C, los del mostrador y los de WhatsApp no tienen enlace; los de una cuenta se siguen en Mis pedidos.
+  - En curso trae hasta 50 pedidos, sin páginas: los que pasen de 50 no salen en ninguna sección hasta que terminen o cumplan 30 días.
+  - La 24C suma 311 B a la primera visita (de 177,261 a 177,572 B, contra `master` en `29a81a8`) y sube el presupuesto a 177,800 B. Como en la 24A, una parte son los enums del contrato, que viven en el primer chunk.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

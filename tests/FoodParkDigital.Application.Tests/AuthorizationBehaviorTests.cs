@@ -46,7 +46,7 @@ public class AuthorizationBehaviorTests
         [
             "AcceptInvitationCommand", "ApplyWhatsAppStatusesCommand", "ChangeUnconfirmedPhoneCommand", "ConfirmEmailCommand", "ConfirmPhoneCommand",
             "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicDeliveryQuoteQuery", "GetPublicDirectoryQuery",
-            "GetPublicMenuQuery",
+            "GetPublicMenuQuery", "GetPublicOrderTrackingQuery",
             "Login2FACommand", "LoginCommand", "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand", "RefreshTokenCommand",
             "RegisterBusinessCommand", "RegisterCustomerCommand", "ResendConfirmationEmailCommand", "ResendPhoneConfirmationCommand",
             "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand", "VerifyWhatsAppWebhookTokenQuery"
