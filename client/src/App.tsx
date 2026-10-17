@@ -17,6 +17,8 @@ const AcceptInvitation = lazy(() => import('./pages/auth/AcceptInvitation'));
 const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
 const Profile = lazy(() => import('./pages/profile/Profile'));
 const MyOrders = lazy(() => import('./pages/account/MyOrders'));
+const MyOrderPage = lazy(() => import('./pages/account/MyOrderPage'));
+const OrderTrackingPage = lazy(() => import('./pages/public/OrderTrackingPage'));
 const AccountPage = lazy(() => import('./pages/account/AccountPage'));
 const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
 const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
@@ -87,12 +89,24 @@ export default function App() {
             <Route element={<CustomerLayout />}>
               <Route path="/explorar" element={<ExplorePage />} />
               <Route path="/explorar/:categoria" element={<ExplorePage />} />
+              {/* The link of an online order's receipt (/seguimiento#link): no sign-in, the link is in the fragment. */}
+              <Route path="/seguimiento" element={<OrderTrackingPage />} />
               <Route
                 path="/mis-pedidos"
                 element={(
                   <ProtectedRoute>
                     <AccessRoute area="myOrders">
                       <MyOrders />
+                    </AccessRoute>
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
+                path="/mis-pedidos/:id"
+                element={(
+                  <ProtectedRoute>
+                    <AccessRoute area="myOrders">
+                      <MyOrderPage />
                     </AccessRoute>
                   </ProtectedRoute>
                 )}

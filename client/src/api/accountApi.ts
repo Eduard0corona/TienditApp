@@ -3,6 +3,8 @@ import { apiRequest, type Schemas } from './typedClient';
 export type AccountAddress = Schemas['AccountAddressDto'];
 export type AccountAddressInput = Schemas['AccountAddressRequest'];
 export type MyOrder = Schemas['MyOrderDto'];
+export type MyOrderDetail = Schemas['MyOrderDetailDto'];
+export type MyOrdersScope = Schemas['MyOrdersScope'];
 
 /** The addresses a customer account keeps for its orders (Fase 24B): ten at most. */
 export const MAX_ACCOUNT_ADDRESSES = 10;
@@ -18,4 +20,11 @@ export const accountApi = {
     apiRequest('put', '/api/v1/me/addresses/{id}', { path: { id }, body }),
 
   deleteAddress: (id: string) => apiRequest('delete', '/api/v1/me/addresses/{id}', { path: { id } }),
+
+  /** The account's orders in every business, newest first: in progress, the ones before, or all (Fase 24C). */
+  getOrders: (scope: MyOrdersScope, pageNumber: number, pageSize: number, signal?: AbortSignal) =>
+    apiRequest('get', '/api/v1/me/orders', { query: { scope, pageNumber, pageSize }, signal }),
+
+  /** One order of the account, step by step; any other is not found (404). */
+  getOrder: (id: string, signal?: AbortSignal) => apiRequest('get', '/api/v1/me/orders/{id}', { path: { id }, signal }),
 };

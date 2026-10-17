@@ -1,0 +1,89 @@
+/*
+ * The steps a customer follows the order by (Fase 24C): done in green, where it is now in the blue of a confirmed order,
+ * the rest in gray, and a cancelled order in red. State colors, never the accent of the page.
+ */
+.ot-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ot-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+}
+
+.ot-step:last-child {
+  padding-bottom: 0;
+}
+
+/* The line between one step and the next. */
+.ot-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 1.75rem;
+  bottom: 0.25rem;
+  left: calc(0.875rem - 1px);
+  width: 2px;
+  background: var(--ct-border-color);
+}
+
+.ot-step.ot-done:not(:last-child)::before {
+  background: var(--ct-success);
+}
+
+.ot-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 2px solid var(--ct-border-color);
+  border-radius: 50%;
+  background: var(--ct-secondary-bg);
+  color: var(--ct-secondary-color);
+  font-size: 1rem;
+}
+
+.ot-done .ot-mark {
+  border-color: var(--ct-success);
+  background: var(--ct-success-bg-subtle);
+  color: var(--ct-success-text-emphasis);
+}
+
+.ot-current .ot-mark {
+  border-color: var(--ta-chip-confirmed-fg);
+  background: var(--ta-chip-confirmed-bg);
+  color: var(--ta-chip-confirmed-fg);
+}
+
+.ot-cancelled .ot-mark {
+  border-color: var(--ta-danger-fg);
+  background: var(--ta-danger-bg);
+  color: var(--ta-danger-fg);
+}
+
+.ot-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.5rem;
+  padding-top: 0.2rem;
+}
+
+.ot-current .ot-label {
+  font-weight: 600;
+}
+
+.ot-upcoming .ot-label,
+.ot-time {
+  color: var(--ct-secondary-color);
+}
+
+.ot-time {
+  font-size: 0.875rem;
+}

@@ -440,7 +440,7 @@ describe('PublicMenuPage', () => {
   describe('con cuenta y carrito guardado (Fase 24B)', () => {
     const receipt = (overrides = {}) => ({
       orderNumber: 'ORD-9', total: 110, deliveryFee: null, confirmed: false, businessName: 'Café Luna', contactPhone: null,
-      linkedToAccount: false, ...overrides,
+      linkedToAccount: false, trackingToken: null, ...overrides,
     });
 
     it('keeps the cart on the device, and brings back only what the menu has now', async () => {
@@ -467,7 +467,8 @@ describe('PublicMenuPage', () => {
 
     it('sends the order with a key, the same one when it is sent again, and forgets the cart once it is placed', async () => {
       api.getMenu.mockResolvedValue(menu());
-      api.placeOrder.mockRejectedValueOnce(new Error('Network Error')).mockResolvedValue(receipt() as never);
+      api.placeOrder.mockRejectedValueOnce(new Error('Network Error'))
+        .mockResolvedValue(receipt({ trackingToken: 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE' }) as never);
 
       renderPage();
       await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
@@ -487,6 +488,10 @@ describe('PublicMenuPage', () => {
       // A visitor is invited to create an account; nothing is said about «Mis pedidos».
       expect(screen.getByRole('link', { name: 'Crea tu cuenta' })).toHaveAttribute('href', '/register?cuenta=cliente');
       expect(screen.queryByRole('link', { name: 'Ver mis pedidos' })).not.toBeInTheDocument();
+      // The link to follow it, in the fragment: it never reaches a server log (Fase 24C).
+      expect(screen.getByRole('link', { name: 'Seguir tu pedido' }))
+        .toHaveAttribute('href', '/seguimiento#AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE');
+      expect(screen.getByText('Guarda el enlace de seguimiento para ver cómo va tu pedido.')).toBeInTheDocument();
     });
 
     it('writes the account\'s name and phone, offers its last address and keeps a new one when asked', async () => {

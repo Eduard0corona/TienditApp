@@ -4942,6 +4942,7 @@ export interface paths {
                 query?: {
                     pageNumber?: number;
                     pageSize?: number;
+                    scope?: components["schemas"]["MyOrdersScope"];
                 };
                 header?: never;
                 path?: never;
@@ -4958,6 +4959,45 @@ export interface paths {
                         "text/plain": components["schemas"]["MyOrderDtoPaginatedList"];
                         "application/json": components["schemas"]["MyOrderDtoPaginatedList"];
                         "text/json": components["schemas"]["MyOrderDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/orders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyOrderDetailDto"];
+                        "application/json": components["schemas"]["MyOrderDetailDto"];
+                        "text/json": components["schemas"]["MyOrderDetailDto"];
                     };
                 };
             };
@@ -7614,6 +7654,49 @@ export interface paths {
                         "text/plain": components["schemas"]["PublicOrderReceiptDto"];
                         "application/json": components["schemas"]["PublicOrderReceiptDto"];
                         "text/json": components["schemas"]["PublicOrderReceiptDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/orders/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PublicOrderTrackingRequest"];
+                    "text/json": components["schemas"]["PublicOrderTrackingRequest"];
+                    "application/*+json": components["schemas"]["PublicOrderTrackingRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicOrderTrackingDto"];
+                        "application/json": components["schemas"]["PublicOrderTrackingDto"];
+                        "text/json": components["schemas"]["PublicOrderTrackingDto"];
                     };
                 };
             };
@@ -10725,6 +10808,18 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        CustomerOrderItemDto: {
+            /** Format: uuid */
+            productId: string;
+            productName: string;
+            /** Format: double */
+            quantity: number;
+            /** Format: double */
+            amount: number;
+            notes?: string | null;
+            options: string[];
+            optionIds: string[];
+        };
         DailyCashCutByBranchDto: {
             /** Format: uuid */
             branchId?: string | null;
@@ -11422,6 +11517,42 @@ export interface components {
             /** Format: int32 */
             capabilities: number;
         };
+        MyOrderDeliveryDto: {
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+        };
+        MyOrderDetailDto: {
+            /** Format: uuid */
+            id: string;
+            orderNumber: string;
+            businessName: string;
+            businessSlug: string;
+            businessContactPhone?: string | null;
+            canOrderAgain: boolean;
+            status: components["schemas"]["OrderStatus"];
+            orderType: components["schemas"]["OrderType"];
+            /** Format: date-time */
+            createdAt: string;
+            step: components["schemas"]["OrderTrackingStep"];
+            stepLabel: string;
+            steps: components["schemas"]["OrderTrackingStepDto"][];
+            inProgress: boolean;
+            courierTrackingUrl?: string | null;
+            items: components["schemas"]["CustomerOrderItemDto"][];
+            /** Format: double */
+            deliveryFee?: number | null;
+            pricesIncludeTax: boolean;
+            /** Format: double */
+            tax: number;
+            /** Format: double */
+            total: number;
+            /** Format: double */
+            paidAmount: number;
+            cancellationReason?: string | null;
+            tableNumber?: string | null;
+            delivery?: components["schemas"]["MyOrderDeliveryDto"];
+        };
         MyOrderDto: {
             /** Format: uuid */
             id: string;
@@ -11431,6 +11562,8 @@ export interface components {
             canOrderAgain: boolean;
             status: components["schemas"]["OrderStatus"];
             orderType: components["schemas"]["OrderType"];
+            step: components["schemas"]["OrderTrackingStep"];
+            stepLabel: string;
             /** Format: double */
             total: number;
             /** Format: double */
@@ -11458,6 +11591,11 @@ export interface components {
             quantity: number;
             optionIds: string[];
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        MyOrdersScope: 0 | 1 | 2;
         MyTenantDto: {
             /** Format: uuid */
             tenantId: string;
@@ -11790,6 +11928,23 @@ export interface components {
             /** Format: double */
             total: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OrderTrackingStep: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        OrderTrackingStepDto: {
+            step: components["schemas"]["OrderTrackingStep"];
+            label: string;
+            state: components["schemas"]["OrderTrackingStepState"];
+            /** Format: date-time */
+            at?: string | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OrderTrackingStepState: 0 | 1 | 2;
         /**
          * Format: int32
          * @enum {integer}
@@ -12470,6 +12625,36 @@ export interface components {
             businessName: string;
             contactPhone?: string | null;
             linkedToAccount: boolean;
+            trackingToken?: string | null;
+        };
+        PublicOrderTrackingDto: {
+            orderNumber: string;
+            businessName: string;
+            businessSlug: string;
+            businessContactPhone?: string | null;
+            orderType: components["schemas"]["OrderType"];
+            /** Format: date-time */
+            createdAt: string;
+            step: components["schemas"]["OrderTrackingStep"];
+            stepLabel: string;
+            steps: components["schemas"]["OrderTrackingStepDto"][];
+            inProgress: boolean;
+            toAddress: boolean;
+            courierTrackingUrl?: string | null;
+            items: components["schemas"]["CustomerOrderItemDto"][];
+            /** Format: double */
+            deliveryFee?: number | null;
+            pricesIncludeTax: boolean;
+            /** Format: double */
+            tax: number;
+            /** Format: double */
+            total: number;
+            /** Format: double */
+            paidAmount: number;
+            cancellationReason?: string | null;
+        };
+        PublicOrderTrackingRequest: {
+            token: string;
         };
         PublicSpecialDayDto: {
             /** Format: date */
