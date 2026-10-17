@@ -3355,6 +3355,55 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("ServiceOrderDetails", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.ServiceOrderPhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Stage")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("TakenAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("TakenBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid?>("TakenByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("TenantId", "OrderId", "TakenAt");
+
+                    b.ToTable("ServiceOrderPhotos", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ServiceOrderPhotos_Stage", "[Stage] IN (0, 1)");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.ServiceOrderPiece", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5287,6 +5336,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.ServiceOrderPhoto", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany("ServicePhotos")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.ServiceOrderPiece", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
@@ -5645,6 +5703,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("Refunds");
 
                     b.Navigation("ServiceDetail");
+
+                    b.Navigation("ServicePhotos");
 
                     b.Navigation("ServicePieces");
 
