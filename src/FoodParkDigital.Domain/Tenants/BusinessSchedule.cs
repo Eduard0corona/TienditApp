@@ -79,6 +79,17 @@ public sealed class BusinessSchedule
         var rule => rule.Openings
     };
 
+    /// <summary>
+    /// The openings that start on a date as instants in the business's time zone, by opening time; an opening the clocks
+    /// skip whole is left out. Without weekly hours a date with no special day is open all day.
+    /// </summary>
+    public IReadOnlyList<(DateTimeOffset Opens, DateTimeOffset Closes)> OpeningInstantsOn(DateOnly date, TimeZoneInfo zone)
+        => OpeningsOn(date)
+            .OrderBy(opening => opening.Opens)
+            .Select(opening => (Opens: ToInstant(date.ToDateTime(opening.Opens), zone), Closes: ToInstant(ClosingOf(date, opening), zone)))
+            .Where(opening => opening.Closes > opening.Opens)
+            .ToList();
+
     /// <summary>At an instant, in the business's time zone.</summary>
     public ScheduleStatus StatusAt(DateTimeOffset utcNow, TimeZoneInfo zone)
     {

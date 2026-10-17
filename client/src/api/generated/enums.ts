@@ -7,6 +7,7 @@ export const AppointmentStatus = {
   InService: 2,
   Completed: 3,
   NoShow: 4,
+  Requested: 5,
   Cancelled: 99,
 } as const;
 export type AppointmentStatus = (typeof AppointmentStatus)[keyof typeof AppointmentStatus];

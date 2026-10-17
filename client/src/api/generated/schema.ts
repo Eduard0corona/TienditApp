@@ -9850,7 +9850,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        AppointmentStatus: 0 | 1 | 2 | 3 | 4 | 99;
+        AppointmentStatus: 0 | 1 | 2 | 3 | 4 | 5 | 99;
         AppointmentVisitDto: {
             postalCode: string;
             addressLine: string;

@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 /// <summary>
-/// The model without what Fase 25 added (the photos of a service order): the app as deployed before it, over a database
-/// where the table already exists.
+/// The model without what Fase 25 added (the photos of a service order), nor what came after it: the app as deployed
+/// before it, over a database where the table already exists.
 /// </summary>
 internal static class BeforeServicePhotos
 {
@@ -19,6 +19,7 @@ internal static class BeforeServicePhotos
     {
         modelBuilder.Entity<Order>().Ignore(o => o.ServicePhotos);
         modelBuilder.Ignore<ServiceOrderPhoto>();
+        BeforeOnlineBooking.Ignore(modelBuilder);
     }
 
     private sealed class Context(

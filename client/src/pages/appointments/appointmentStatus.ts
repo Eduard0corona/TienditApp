@@ -4,6 +4,7 @@ import { AppointmentStatus as AppointmentStatusConst } from '../../types';
 
 export const statusLabel = (status: AppointmentStatus) => {
   switch (status) {
+    case AppointmentStatusConst.Requested: return 'Por confirmar';
     case AppointmentStatusConst.Scheduled: return 'Programada';
     case AppointmentStatusConst.Confirmed: return 'Confirmada';
     case AppointmentStatusConst.InService: return 'En servicio';
@@ -19,6 +20,7 @@ export const statusBadge = (status: AppointmentStatus) => {
     case AppointmentStatusConst.Completed: return 'bg-success';
     case AppointmentStatusConst.Confirmed: return 'ta-chip-confirmed';
     case AppointmentStatusConst.InService: return 'bg-info';
+    case AppointmentStatusConst.Requested:
     case AppointmentStatusConst.NoShow: return 'bg-warning text-dark';
     case AppointmentStatusConst.Cancelled: return 'bg-danger';
     default: return 'bg-secondary';

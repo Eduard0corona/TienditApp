@@ -12307,6 +12307,7 @@
           2,
           3,
           4,
+          5,
           99
         ],
         "type": "integer",
@@ -12317,6 +12318,7 @@
           "InService",
           "Completed",
           "NoShow",
+          "Requested",
           "Cancelled"
         ]
       },
