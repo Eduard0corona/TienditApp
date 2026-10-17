@@ -23,7 +23,7 @@ interface ServicePhotosPanelProps {
  * The photos of a service for the business's team (Fase 25, ADR 0024): before and after, the ones taken when the order
  * was received and the ones added later, each with its note and who took it. The customer does not see them.
  */
-export default function ServicePhotosPanel({ orderId, thumbnailSize = 88 }: ServicePhotosPanelProps) {
+export default function ServicePhotosPanel({ orderId, thumbnailSize = 72 }: ServicePhotosPanelProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -114,31 +114,33 @@ export default function ServicePhotosPanel({ orderId, thumbnailSize = 88 }: Serv
             {ofStage.length === 0 ? (
               <div className="text-muted small">Sin fotos.</div>
             ) : (
-              <ul className="list-unstyled d-flex flex-wrap gap-3 mb-0">
+              <ul className="list-unstyled row row-cols-1 row-cols-sm-2 g-2 mb-0">
                 {ofStage.map((photo, index) => {
                   const name = photo.note || photo.fileName || `Foto de ${title.toLowerCase()} ${index + 1}`;
                   return (
-                    <li key={photo.id ?? `${photo.url}-${index}`} style={{ width: thumbnailSize }}>
+                    <li key={photo.id ?? `${photo.url}-${index}`} className="col d-flex gap-2 align-items-start">
                       <PrivatePhoto
                         path={photo.url}
                         alt={name}
                         linked
-                        className="border rounded"
+                        className="border rounded flex-shrink-0"
                         style={{ width: thumbnailSize, height: thumbnailSize }}
                       />
-                      {photo.note && <div className="small text-break mt-1">{photo.note}</div>}
-                      <div className="small text-muted text-break">{describeServicePhoto(photo)}</div>
-                      {photo.canRemove && photo.id && (
-                        <button
-                          type="button"
-                          className="btn btn-link btn-sm text-danger p-0"
-                          aria-label={`Quitar la foto ${name}`}
-                          disabled={remove.isPending}
-                          onClick={() => void askToRemove(photo)}
-                        >
-                          Quitar
-                        </button>
-                      )}
+                      <div className="small text-break" style={{ minWidth: 0 }}>
+                        {photo.note && <div>{photo.note}</div>}
+                        <div className="text-muted">{describeServicePhoto(photo)}</div>
+                        {photo.canRemove && photo.id && (
+                          <button
+                            type="button"
+                            className="btn btn-link btn-sm text-danger p-0"
+                            aria-label={`Quitar la foto ${name}`}
+                            disabled={remove.isPending}
+                            onClick={() => void askToRemove(photo)}
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
                     </li>
                   );
                 })}

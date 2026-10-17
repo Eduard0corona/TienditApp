@@ -260,10 +260,10 @@ Actualizada el 2026-10-17 con la Fase 24C y antes con la 24B, la 24A, la 23A y c
 - Resuelto en la Fase 14: cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina, con la política del negocio como una venta (se rechaza nombrando lo que falta o pasa con aviso); cerrar la cuenta solo descuenta las rondas sin movimiento propio, y cancelarla devuelve lo de todas. Pendiente: volver a la Fase 13 con cuentas abiertas haría que, al cerrarlas, se descuenten otra vez las rondas mandadas con la Fase 14, y que cancelarlas no las devuelva ([despliegue](../development/deploy-azure.md#inicio-authcontroller-y-rondas-fase-14)).
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
 - Los medios de WhatsApp se guardan como marcador: falta descargar y mostrar la foto o el audio (requiere guardar el archivo por negocio).
-- Evidencia de servicios (lavanderías, talleres): `ServiceOrderDetail` guarda fotos del antes y del después (`BeforePhotosJson` y `AfterPhotosJson`, hasta 20 de cada una, privadas desde la Fase 8A), pero solo se adjuntan al crear la orden en «Recibir servicio con piezas» (`/orders/cart`): `Order.SetServiceDetail` solo lo llama `OrderPlacement`. Vender cobra los servicios sin detalle, Pedidos y el tablero de servicios solo muestran las fotos y ninguna ruta las agrega a una orden existente, así que las del después, que se toman al terminar o entregar, no tienen dónde capturarse. Pendiente:
-  - subir fotos del antes y del después a una orden existente desde Pedidos y el tablero de servicios, con un caso de uso en Application que las valide por negocio y por permiso, y que pase por el agregado (rowversion de la orden);
-  - guardar quién y cuándo tomó cada foto (hoy son una lista JSON sin autor) y no borrar las de una orden entregada o cancelada;
-  - pruebas del caso de uso y del acceso entre negocios en `CrossTenantOperationsSqlServerTests`.
+- Resuelto en la Fase 25 ([ADR 0024](../adr/0024-service-photos.md)): Pedidos y el tablero de servicios agregan fotos del antes y del después a una orden existente (`ServiceOrderPhoto`, una fila por foto con nota, quién y cuándo), por el agregado y su `rowversion`, validadas por negocio y permiso, con pruebas del acceso entre negocios. Se quitan solo mientras la orden está abierta, por quien las tomó o un administrador. Pendiente:
+  - el archivo de una foto quitada, o subida y nunca agregada, se queda en el almacenamiento privado sin uso: no hay limpieza;
+  - las fotos de la recepción siguen en `BeforePhotosJson` y `AfterPhotosJson`, sin autor;
+  - van por orden, no por pieza, y no tienen plazo de retención.
 - Teléfonos de clientes capturados antes de la Fase 4 quedan como se escribieron; la ficha y el alta los comparan en sus formas comunes, pero no se normalizaron en la base.
 - Las conversaciones partidas antes de la Fase 4 (`+52` y `+521` del mismo número) siguen como dos hilos; cada mensaje nuevo va al hilo con la misma forma del número.
 - No hay lealtad: es por negocio y queda fuera de alcance hasta tener reglas ([ADR 0009](../adr/0009-loyalty-per-business.md)). Las columnas `CustomerProfile.LoyaltyPoints` y `LoyaltyTier`, globales y sin uso, se borraron en la Fase 13.
@@ -491,4 +491,4 @@ Pendientes detectados en la Fase 3:
 - Cuándo activar el slot de staging (plan Standard) y quién aprueba los despliegues a producción.
 - Cantidades fraccionarias y control de stock por producto.
 - Capabilities ligadas al plan contratado.
-- Evidencia de servicios: si las fotos van por orden o por pieza (una lavandería recibe varias prendas en una orden), si el cliente las recibe (WhatsApp o ticket) y cuánto tiempo se guardan.
+- Evidencia de servicios: si el cliente recibe las fotos (WhatsApp, ticket o seguimiento) y si se guardan con un plazo; la Fase 25 decidió fotos por orden, solo para el negocio, mientras exista la orden ([ADR 0024](../adr/0024-service-photos.md)).

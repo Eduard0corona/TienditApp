@@ -387,6 +387,19 @@ La Fase 24A trae una migración, [`database/production/20261016162347_AddBusines
 - **Volver a la versión anterior:** funciona sin tocar la base, pero no hay Explorar: `/` vuelve a pedir iniciar sesión, y lo que decidieron los dueños queda guardado sin usarse.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50016, sin cambiar nada, en cuanto un dueño decidió cómo se ve su negocio: lo ocultó, escribió su descripción o cambió su categoría (`DirectoryProfileUpdated` en la bitácora). Volver a aplicar perdería esa decisión y listaría otra vez al que se ocultó. Si nadie decidió nada, quita lo que agregó, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Fotos del servicio (Fase 25)
+
+La Fase 25 trae una migración, [`database/production/20261017183622_AddServiceOrderPhotos`](../../database/production/20261017183622_AddServiceOrderPhotos). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0024](../adr/0024-service-photos.md)).
+
+- **La migración:**
+  - **Qué agrega:** la tabla `ServiceOrderPhotos`, nueva y vacía: una fila por foto agregada a una orden de servicio, con la CHECK de su etapa (`CK_ServiceOrderPhotos_Stage`), la llave a `Orders` con borrado en cascada y dos índices. No toca `Orders` ni las fotos que ya guardan las órdenes al recibirse.
+  - **Cuándo cambia algo:** cuando alguien agrega una foto desde Pedidos o desde el tablero. Sin eso, todo sigue como antes.
+  - **Después de aplicarla:** el `verify.sql` muestra la tabla con sus 10 columnas, la CHECK, la llave y los índices. Su consulta 3 cuenta las fotos por etapa, órdenes y negocios (nada hasta desplegar); la 4 (consistencia) debe quedar vacía siempre.
+- **Mientras se publica:** la versión de `master` (Fase 24C) no conoce la tabla y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `GET` y `POST /api/v1/orders/{id}/service-photos`, `DELETE /api/v1/orders/{id}/service-photos/{photoId}` y el enum `ServicePhotoStage`. `POST /api/v1/orders/uploads/service-photo` acepta también `ManageServiceBoard`. Nada se quita ni cambia de nombre.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla, y las fotos agregadas quedan guardadas sin mostrarse hasta volver a la nueva. Pedidos y el tablero vuelven a mostrar solo las fotos de la recepción.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50018, sin cambiar nada, en cuanto un negocio agregó una foto: se perdería la evidencia de lo que recibió y entregó. Sin fotos, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

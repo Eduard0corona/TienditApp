@@ -983,7 +983,7 @@ export default function OrdersList() {
               {selectedOrder.orderType === OrderTypeConst.Service && (
                 <div className="mt-3">
                   <h5 className="mb-2">Fotos del servicio</h5>
-                  <ServicePhotosPanel orderId={selectedOrder.id} thumbnailSize={72} />
+                  <ServicePhotosPanel orderId={selectedOrder.id} />
                 </div>
               )}
 

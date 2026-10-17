@@ -219,6 +219,18 @@ El cliente ve en qué paso va su pedido, con o sin cuenta ([ADR 0023](../adr/002
   - Anteriores: los entregados, terminados y cancelados, por páginas.
 - **Se actualiza sola:** el detalle, el seguimiento y En curso se piden otra vez cada 20 segundos mientras el pedido está en curso. Si el enlace vence o el pedido deja de encontrarse con la página abierta, deja de preguntar, dice el mensaje y agrega «Lo de abajo es lo último que vimos.».
 
+## Fotos del servicio (Fase 25)
+
+El negocio guarda fotos del antes y del después de cada servicio ([ADR 0024](../adr/0024-service-photos.md)).
+
+- **Dónde:** en el detalle de una orden de servicio en Pedidos y en el detalle de una pieza en el tablero (Taller). Se agrega una foto con su etapa (antes o después), una nota opcional de hasta 300 caracteres («Mancha en la manga») y la foto, que en el teléfono abre la cámara.
+- **Quién y cuándo:** cada foto agregada guarda quién la tomó (el nombre de la sesión y su cuenta) y cuándo (el reloj del servidor). Las que se tomaron al recibir la orden se ven primero, «Al recibir la orden», sin nota ni autor.
+- **Cuántas:** hasta 20 fotos agregadas del antes y 20 del después, además de las de la recepción.
+- **Cuándo:** cualquier orden de servicio que no esté cancelada recibe fotos; una entregada o terminada también (la de la entrega).
+- **Quitar:** solo mientras la orden está abierta, y solo quien tomó la foto o un dueño o administrador, después de confirmar. Las fotos de una orden entregada, terminada o cancelada se conservan. Una foto quitada queda en la actividad de la orden.
+- **Quién las ve:** quien ve los pedidos (`ManageOrders`) o trabaja el tablero (`ManageServiceBoard`), con el módulo de servicios. El cliente no las recibe.
+- **Qué archivo:** solo una foto subida desde la app para el mismo negocio («Cada foto del servicio debe subirse desde TienditApp para este negocio.»).
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.
