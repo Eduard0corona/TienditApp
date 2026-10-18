@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { NEAR_DECIMALS, roundTo, type MapPoint } from '../utils/geo';
 
-export type NearMeStatus = 'off' | 'locating' | 'on' | 'denied' | 'unavailable';
+/**
+ * - `ask`: opened with «Cerca de mí» (a shared link, a reload) and the browser has not allowed it yet: it waits for a tap
+ *   instead of asking on its own.
+ * - `unsupported`: this browser cannot tell where it is.
+ */
+export type NearMeStatus = 'off' | 'ask' | 'locating' | 'on' | 'denied' | 'unavailable' | 'unsupported';
 
 export interface NearMe {
   status: NearMeStatus;
@@ -11,29 +16,37 @@ export interface NearMe {
 
 interface Answer {
   attempt: number;
-  status: 'on' | 'denied' | 'unavailable';
+  status: 'ask' | 'on' | 'denied' | 'unavailable';
   position: MapPoint | null;
 }
 
-const OPTIONS: PositionOptions = { enableHighAccuracy: false, timeout: 10_000, maximumAge: 5 * 60_000 };
+const OPTIONS: PositionOptions = { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 };
+
+/** Whether the browser already allows the position: then asking does not open its prompt. */
+async function allowed(): Promise<boolean> {
+  try {
+    return (await navigator.permissions?.query({ name: 'geolocation' }))?.state === 'granted';
+  } catch {
+    return false;
+  }
+}
 
 /**
- * «Cerca de mí» (Fase 24G): the customer's position, asked of the browser while it is on, once per attempt (another
- * attempt asks again, after the customer allowed it). It lives in memory: never kept on the device nor sent anywhere
- * but Explorar's own search, and only to about 110 m (three decimals).
+ * «Cerca de mí» (Fase 24G): the customer's position, asked of the browser while it is on, once per attempt (each tap is
+ * one; another asks again, after the customer allowed it). Attempt 0 is a page opened with «Cerca de mí» on: it asks
+ * only if the browser already allows it, so a shared link never opens the prompt by itself. The position lives in
+ * memory: never kept on the device nor sent anywhere but Explorar's own search, and only to about 110 m.
  */
 export function useNearMe(on: boolean, attempt: number): NearMe {
   const [answer, setAnswer] = useState<Answer | null>(null);
+  const supported = typeof navigator !== 'undefined' && 'geolocation' in navigator;
 
   useEffect(() => {
-    if (!on) return;
+    if (!on || !supported) return;
+    let current = true;
     // An answer for an older attempt never replaces a newer one.
-    const keep = (next: Answer) => setAnswer((current) => (current && current.attempt > next.attempt ? current : next));
-    if (!('geolocation' in navigator)) {
-      queueMicrotask(() => keep({ attempt, status: 'unavailable', position: null }));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
+    const keep = (next: Answer) => setAnswer((previous) => (previous && previous.attempt > next.attempt ? previous : next));
+    const locate = () => navigator.geolocation.getCurrentPosition(
       ({ coords }) => keep({
         attempt,
         status: 'on',
@@ -42,9 +55,22 @@ export function useNearMe(on: boolean, attempt: number): NearMe {
       (error) => keep({ attempt, status: error.code === error.PERMISSION_DENIED ? 'denied' : 'unavailable', position: null }),
       OPTIONS,
     );
-  }, [on, attempt]);
+    if (attempt > 0) {
+      locate();
+    } else {
+      void allowed().then((granted) => {
+        if (!current) return;
+        if (granted) locate();
+        else keep({ attempt, status: 'ask', position: null });
+      });
+    }
+    return () => {
+      current = false;
+    };
+  }, [on, attempt, supported]);
 
   if (!on) return { status: 'off', position: null };
+  if (!supported) return { status: 'unsupported', position: null };
   if (answer?.attempt !== attempt) return { status: 'locating', position: null };
   return { status: answer.status, position: answer.position };
 }

@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
 import { publicDirectoryApi, type DirectoryBusiness, type DirectoryProduct, type PublicDirectory } from '../../api/publicDirectoryApi';
 import { BusinessCategory } from '../../api/generated/enums';
@@ -124,6 +124,14 @@ function mockGeolocation(answer: { latitude: number; longitude: number } | { cod
   return getCurrentPosition;
 }
 
+/** The browser already allows this site its position: asking does not open its prompt. */
+function allowLocation() {
+  Object.defineProperty(navigator, 'permissions', {
+    value: { query: vi.fn().mockResolvedValue({ state: 'granted' }) },
+    configurable: true,
+  });
+}
+
 describe('ExplorePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -131,6 +139,12 @@ describe('ExplorePage', () => {
     vi.mocked(useCustomerAccount).mockReturnValue({ customer: null, signedIn: false });
     // The postal code and the carts stay on the device (Fase 24B): each test starts without them.
     window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    // jsdom has neither: what a test put on the browser leaves with it.
+    Reflect.deleteProperty(navigator, 'geolocation');
+    Reflect.deleteProperty(navigator, 'permissions');
   });
 
   it('asks the postal code once, remembers it, and each card says whether it delivers there', async () => {
@@ -446,7 +460,6 @@ describe('ExplorePage', () => {
     expect(cards[0]).toHaveTextContent('Comida · Puebla · a 300 m');
     expect(cards[1]).toHaveTextContent('a 12 km');
     expect(cards[2]).toHaveTextContent('Solo a domicilio');
-    expect(cards[2]).not.toHaveTextContent(/ a \d/);
     expect(screen.getByRole('link', { name: /Orden de pastor/ })).toHaveTextContent('Café Cerca · a 300 m');
     expect(screen.getByTestId('address')).toHaveTextContent('/explorar?q=caf&cerca=1');
     // Another category keeps the search and «Cerca de mí».
@@ -454,28 +467,57 @@ describe('ExplorePage', () => {
     expect(within(categories).getByRole('link', { name: /Comida/ })).toHaveAttribute('href', '/explorar/comida?q=caf&cerca=1');
     expect(window.localStorage.length).toBe(0);
 
-    await user.click(screen.getByRole('button', { name: 'Cerca de mí', pressed: true }));
+    // Typing keeps it on: the new search is near the customer too.
+    await user.type(screen.getByRole('searchbox'), 'e');
     await waitFor(() => expect(api.getDirectory).toHaveBeenLastCalledWith(
-      expect.objectContaining({ latitude: undefined, longitude: undefined }), expect.anything()));
-    expect(screen.getByTestId('address')).toHaveTextContent(/^\/explorar\?q=caf$/);
+      expect.objectContaining({ q: 'cafe', latitude: 19.044, longitude: -98.199 }), expect.anything()));
+    expect(screen.getByTestId('address')).toHaveTextContent('/explorar?q=cafe&cerca=1');
+
+    // Off, Explorar goes back to its own order, without distances, and the address forgets it.
+    await user.click(screen.getByRole('button', { name: 'Cerca de mí', pressed: true }));
+    expect(await screen.findByRole('button', { name: 'Cerca de mí', pressed: false })).toBeInTheDocument();
+    expect(screen.getByTestId('address')).toHaveTextContent(/^\/explorar\?q=cafe$/);
+    await waitFor(() => expect(screen.getAllByRole('link', { name: /Café Cerca|Taquería Lejos/ })
+      .filter((link) => link.classList.contains('dc-card')).map((card) => card.getAttribute('href'))).toEqual(['/m/lejos', '/m/cerca']));
+    expect(screen.queryByText(/a 300 m|a 12 km/)).not.toBeInTheDocument();
     expect(geolocation).toHaveBeenCalledTimes(1);
   });
 
-  it('opened with «Cerca de mí» asks where the customer is, and says what to do when the browser does not tell (Fase 24G)', async () => {
+  it('opened with «Cerca de mí» waits for a tap before asking, and says what to do when the browser does not tell (Fase 24G)', async () => {
     const denied = mockGeolocation({ code: 1 });
     api.getDirectory.mockResolvedValue(directory([business({ slug: 'cerca', name: 'Café Cerca' })]));
     const user = userEvent.setup();
     renderPage('/explorar?cerca=1');
 
+    // A shared link never opens the browser's prompt by itself: the list shows as always meanwhile.
+    expect(await screen.findByText('Usa tu ubicación para ver primero lo más cercano.')).toHaveAttribute('role', 'status');
+    expect(await screen.findByRole('link', { name: /^Café Cerca/ })).toHaveAttribute('href', '/m/cerca');
+    expect(denied).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Usar mi ubicación' }));
     expect(await screen.findByText('Permite tu ubicación en el navegador para ver primero lo más cercano.')).toBeInTheDocument();
     expect(denied).toHaveBeenCalledTimes(1);
     expect(api.getDirectory).not.toHaveBeenCalledWith(expect.objectContaining({ latitude: expect.any(Number) }), expect.anything());
 
-    // Allowed now, «Intentar de nuevo» asks again.
+    // Allowed now, «Intentar de nuevo» asks again; the focus waits on the chip.
     mockGeolocation({ latitude: 19.0436, longitude: -98.1986 });
     await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }));
     await waitFor(() => expect(api.getDirectory).toHaveBeenLastCalledWith(
       expect.objectContaining({ latitude: 19.044, longitude: -98.199 }), expect.anything()));
     expect(screen.queryByRole('button', { name: 'Intentar de nuevo' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cerca de mí', pressed: true })).toHaveFocus();
+  });
+
+  it('opened with «Cerca de mí» asks at once when the browser already allows it (Fase 24G)', async () => {
+    allowLocation();
+    const geolocation = mockGeolocation({ latitude: 19.0436, longitude: -98.1986 });
+    api.getDirectory.mockResolvedValue(directory([business({ slug: 'cerca', name: 'Café Cerca', distanceKm: 0.3 })]));
+    renderPage('/explorar?cerca=1');
+
+    await waitFor(() => expect(api.getDirectory).toHaveBeenLastCalledWith(
+      expect.objectContaining({ latitude: 19.044, longitude: -98.199 }), expect.anything()));
+    expect(await screen.findByText('Primero lo más cercano a ti.')).toBeInTheDocument();
+    expect(geolocation).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Usar mi ubicación' })).not.toBeInTheDocument();
   });
 });

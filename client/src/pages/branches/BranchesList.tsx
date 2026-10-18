@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
@@ -9,7 +9,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import { activeBranchesKey } from '../../hooks/useWorkingBranch';
 import { BranchServiceMode } from '../../types';
-import { formatCoordinates, mapPointUrl, parseCoordinates, type MapPoint } from '../../utils/geo';
+import { coordinatesError, formatCoordinates, mapPointUrl, parseCoordinates, type MapPoint } from '../../utils/geo';
 
 const COLUMNS = [
   { header: 'Sucursal' },
@@ -53,8 +53,6 @@ const EMPTY_FORM: BranchForm = {
   serviceMode: BranchServiceMode.Premises,
   coordinates: '',
 };
-
-const COORDINATES_ERROR = 'No entendemos esas coordenadas. Pega las que copiaste de Google Maps, por ejemplo 19.043577, -98.198626.';
 
 /** How a branch serves its customers; one that only delivers keeps its address for the team. */
 const SERVICE_MODES = [
@@ -114,37 +112,45 @@ const blankToNull = (value: string) => value.trim() || null;
 /**
  * Where the branch is on the map (Fase 24G): the coordinates Google Maps copies (or a link with them), or this device's
  * position when the owner is at the branch. «Revisar en el mapa» opens what was written, so a mistake shows before
- * customers see it.
+ * customers see it. What was pasted is checked when the owner leaves the field (or saves), not while typing.
  */
-function CoordinatesField({ value, onChange, locating, locateError, onLocate }: {
+function CoordinatesField({ value, onChange, onBlur, checked, inputRef, locating, locateError, located, onLocate }: {
   value: string;
   onChange: (value: string) => void;
+  onBlur: () => void;
+  /** The owner left the field or tried to save: a text that is not a point says so. */
+  checked: boolean;
+  inputRef: React.Ref<HTMLInputElement>;
   locating: boolean;
   locateError: string;
+  /** What «Usar mi ubicación» filled in, for a screen reader. */
+  located: string;
   onLocate: () => void;
 }) {
   const point = parseCoordinates(value);
+  const invalid = checked && point === 'invalid';
   return (
     <div className="col-12">
       <label className="form-label" htmlFor="branch-coordinates">Ubicación en el mapa (opcional)</label>
       <div className="input-group">
-        <input id="branch-coordinates" className={`form-control ${point === 'invalid' ? 'is-invalid' : ''}`}
+        <input id="branch-coordinates" ref={inputRef} className={`form-control ${invalid ? 'is-invalid' : ''}`}
           placeholder="19.043577, -98.198626" autoComplete="off" spellCheck={false} maxLength={2000}
-          aria-describedby="branch-coordinates-help" aria-invalid={point === 'invalid'}
-          value={value} onChange={(event) => onChange(event.target.value)} />
-        <button type="button" className="btn btn-light" onClick={onLocate} disabled={locating}>
+          aria-describedby="branch-coordinates-help" aria-invalid={invalid}
+          value={value} onChange={(event) => onChange(event.target.value)} onBlur={onBlur} />
+        {/* aria-disabled, not disabled: the button keeps its focus while the browser answers. */}
+        <button type="button" className="btn btn-light" onClick={onLocate} aria-disabled={locating}>
           <i className="ri-focus-3-line me-1" aria-hidden="true"></i>{locating ? 'Buscando…' : 'Usar mi ubicación'}
         </button>
       </div>
       <div id="branch-coordinates-help" className="form-text">
-        {point !== 'invalid'
-          ? 'En Google Maps, mantén presionado el punto de tu local y copia las coordenadas, o pega el enlace del lugar.'
-          // A short link (maps.app.goo.gl) only points to Google: the point is not in it.
-          : /goo\.gl/i.test(value) ? 'Ese enlace corto no trae el punto. Abre el lugar en Google Maps y copia sus coordenadas.' : COORDINATES_ERROR}
+        {invalid
+          ? coordinatesError(value)
+          : 'En Google Maps, mantén presionado el punto de tu local y copia las coordenadas, o pega el enlace del lugar.'}
         {point && point !== 'invalid' && (
           <> <a href={mapPointUrl(point)} target="_blank" rel="noopener noreferrer">Revisar en el mapa</a></>
         )}
       </div>
+      <span className="visually-hidden" role="status">{located}</span>
       {locateError && <div className="small text-danger mt-1" role="alert">{locateError}</div>}
     </div>
   );
@@ -168,13 +174,27 @@ export default function BranchesList() {
   const [form, setForm] = useState<BranchForm | null>(null);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
-  // «Usar mi ubicación»: the browser is asked; what it said when it could not tell.
+  // «Usar mi ubicación»: the browser is asked; what it said when it could not tell; what it filled in. Each request has
+  // its number: an answer that arrives after the form was closed or another one opened is dropped.
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
+  const [located, setLocated] = useState('');
+  const locateRequest = useRef(0);
+  const [coordinatesChecked, setCoordinatesChecked] = useState(false);
+  const coordinatesInput = useRef<HTMLInputElement>(null);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['branches'] });
     await queryClient.invalidateQueries({ queryKey: activeBranchesKey });
+  };
+
+  /** A form opened or closed: forgets the last «Usar mi ubicación», and drops its answer if it is still coming. */
+  const resetLocation = () => {
+    locateRequest.current += 1;
+    setLocating(false);
+    setLocateError('');
+    setLocated('');
+    setCoordinatesChecked(false);
   };
 
   const openCreate = () => {
@@ -183,31 +203,52 @@ export default function BranchesList() {
     setEditing(null);
     setForm({ ...EMPTY_FORM, serviceMode: main?.serviceMode ?? BranchServiceMode.Premises });
     setFormError('');
-    setLocateError('');
+    resetLocation();
   };
 
   const openEdit = (branch: Branch) => {
     setEditing(branch);
     setForm(toForm(branch));
     setFormError('');
-    setLocateError('');
+    resetLocation();
+  };
+
+  const close = () => {
+    setForm(null);
+    resetLocation();
+  };
+
+  /** The owner left the field: a point pasted any way (a link, without a comma) reads as Google Maps copies it. */
+  const checkCoordinates = () => {
+    setCoordinatesChecked(true);
+    setForm((current) => {
+      const point = current && parseCoordinates(current.coordinates);
+      return current && point && point !== 'invalid' ? { ...current, coordinates: formatCoordinates(point) } : current;
+    });
   };
 
   /** Fills the point with where this device is: for the owner standing at the branch. */
-  const useMyLocation = () => {
+  const fillMyLocation = () => {
+    if (locating) return;
     if (!('geolocation' in navigator)) {
       setLocateError('Este navegador no sabe dónde estás. Pega las coordenadas desde Google Maps.');
       return;
     }
+    const request = ++locateRequest.current;
     setLocating(true);
     setLocateError('');
+    setLocated('');
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
+        if (request !== locateRequest.current) return;
         setLocating(false);
-        const point = parseCoordinates(`${coords.latitude}, ${coords.longitude}`);
-        if (point && point !== 'invalid') setForm((current) => current && { ...current, coordinates: formatCoordinates(point) });
+        const coordinates = formatCoordinates(coords);
+        setForm((current) => current && { ...current, coordinates });
+        setCoordinatesChecked(true);
+        setLocated(`Listo: ${coordinates}. Revísalo en el mapa.`);
       },
       (error) => {
+        if (request !== locateRequest.current) return;
         setLocating(false);
         setLocateError(error.code === error.PERMISSION_DENIED
           ? 'Permite tu ubicación en el navegador, o pega las coordenadas desde Google Maps.'
@@ -226,7 +267,9 @@ export default function BranchesList() {
     }
     const point = parseCoordinates(form.coordinates);
     if (point === 'invalid') {
-      setFormError(COORDINATES_ERROR);
+      setCoordinatesChecked(true);
+      setFormError(coordinatesError(form.coordinates));
+      coordinatesInput.current?.focus();
       return;
     }
     const fields = {
@@ -261,7 +304,7 @@ export default function BranchesList() {
         await branchesApi.create({ ...fields, isDefault: form.isDefault, serviceMode, location });
         toast.success('Sucursal creada.');
       }
-      setForm(null);
+      close();
       await refresh();
     } catch (err: unknown) {
       setFormError(getApiErrorMessage(err, 'No se pudo guardar la sucursal.'));
@@ -396,7 +439,7 @@ export default function BranchesList() {
         </div>
       </div>
 
-      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered aria-labelledby={titleId}>
+      <Modal show={form !== null} onHide={close} size="lg" centered aria-labelledby={titleId}>
         {form && (
           <form onSubmit={(event) => void save(event)}>
             <Modal.Header closeButton>
@@ -450,10 +493,17 @@ export default function BranchesList() {
                 ))}
                 <CoordinatesField
                   value={form.coordinates}
-                  onChange={(coordinates) => setForm({ ...form, coordinates })}
+                  onChange={(coordinates) => {
+                    setForm({ ...form, coordinates });
+                    setLocated('');
+                  }}
+                  onBlur={checkCoordinates}
+                  checked={coordinatesChecked}
+                  inputRef={coordinatesInput}
                   locating={locating}
                   locateError={locateError}
-                  onLocate={useMyLocation}
+                  located={located}
+                  onLocate={fillMyLocation}
                 />
               </div>
               {(editing ? editing.isDefault : form.isDefault) && (form.serviceMode === BranchServiceMode.DeliveryOnly ? (
@@ -476,7 +526,7 @@ export default function BranchesList() {
               {formError && <div className="alert alert-danger mt-3 mb-0">{formError}</div>}
             </Modal.Body>
             <Modal.Footer>
-              <button type="button" className="btn btn-light" onClick={() => setForm(null)}>Cancelar</button>
+              <button type="button" className="btn btn-light" onClick={close}>Cancelar</button>
               <button type="submit" className="btn btn-primary" disabled={saving}>
                 {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear sucursal'}
               </button>

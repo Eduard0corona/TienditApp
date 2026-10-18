@@ -22,6 +22,11 @@ const PAGE_SIZE = 24;
 const MAX_SEARCH = 60;
 const SEARCH_DELAY_MS = 300;
 
+/** The same search but for where the customer is: what changes when «Cerca de mí» answers. */
+function samePlaceSearch(a: DirectorySearch, b: DirectorySearch): boolean {
+  return JSON.stringify({ ...a, latitude: undefined, longitude: undefined }) === JSON.stringify({ ...b, latitude: undefined, longitude: undefined });
+}
+
 function countLabel(count: number): string {
   return count === 1 ? '1 negocio' : `${count.toLocaleString('es-MX')} negocios`;
 }
@@ -126,23 +131,33 @@ function PostalCodeChip({ postalCode, onChange }: { postalCode: string; onChange
 
 /**
  * «Cerca de mí» (Fase 24G): asks the browser where the customer is and orders Explorar by distance while it is on. Says
- * what it is doing, and what to do when the browser does not tell.
+ * what it is doing, and what to do when the browser does not tell. The status stays in the page, empty when there is
+ * nothing to say, so what it says next is read aloud.
  */
 function NearMeChip({ near, onToggle, onRetry }: { near: NearMe; onToggle: () => void; onRetry: () => void }) {
+  const chip = useRef<HTMLButtonElement>(null);
   const on = near.status !== 'off';
-  const failed = near.status === 'denied' || near.status === 'unavailable';
+  const canAsk = near.status === 'ask' || near.status === 'denied' || near.status === 'unavailable';
+  const messages: Partial<Record<NearMe['status'], string>> = {
+    ask: 'Usa tu ubicación para ver primero lo más cercano.',
+    locating: 'Buscando dónde estás…',
+    on: 'Primero lo más cercano a ti.',
+    denied: 'Permite tu ubicación en el navegador para ver primero lo más cercano.',
+    unavailable: 'No pudimos saber dónde estás.',
+    unsupported: 'Este navegador no puede decir dónde estás.',
+  };
   return (
     <div className="ex-near">
-      <button type="button" className={`ex-chip ${on ? 'active' : ''}`} aria-pressed={on} onClick={onToggle}>
+      <button ref={chip} type="button" className={`ex-chip ${on ? 'active' : ''}`} aria-pressed={on} onClick={onToggle}>
         <i className="ri-map-pin-user-line" aria-hidden="true"></i>Cerca de mí
       </button>
-      <span className="ex-near-status" role="status">
-        {near.status === 'locating' && 'Buscando dónde estás…'}
-        {near.status === 'on' && 'Primero lo más cercano a ti.'}
-        {near.status === 'denied' && 'Permite tu ubicación en el navegador para ver primero lo más cercano.'}
-        {near.status === 'unavailable' && 'No pudimos saber dónde estás.'}
-      </span>
-      {failed && <button type="button" className="btn btn-link btn-sm p-0" onClick={onRetry}>Intentar de nuevo</button>}
+      <span className="ex-near-status" role="status">{messages[near.status] ?? ''}</span>
+      {canAsk && (
+        // The button leaves while the browser answers: the focus waits on the chip.
+        <button type="button" className="btn btn-link btn-sm p-0" onClick={() => { chip.current?.focus(); onRetry(); }}>
+          {near.status === 'ask' ? 'Usar mi ubicación' : 'Intentar de nuevo'}
+        </button>
+      )}
     </div>
   );
 }
@@ -165,7 +180,7 @@ export default function ExplorePage() {
   const category = categoryBySlug(categoria);
   const query = (params.get('q') ?? '').slice(0, MAX_SEARCH);
   const nearOn = params.get('cerca') === '1';
-  // Each tap asks the browser again: after the customer allowed it, or moved.
+  // Each tap is an attempt that asks the browser again (after the customer allowed it); 0 is the page as it opened.
   const [nearAttempt, setNearAttempt] = useState(0);
   const near = useNearMe(nearOn, nearAttempt);
   const [draft, setDraft] = useState(query);
@@ -218,6 +233,9 @@ export default function ExplorePage() {
     queryKey: ['directory', search, 1],
     queryFn: ({ signal }) => publicDirectoryApi.getDirectory({ ...search, pageNumber: 1 }, signal),
     enabled: !categoria || !!category,
+    // The same list near the customer reorders where it is, without going back to the skeleton.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery && samePlaceSearch(previousQuery.queryKey[1] as DirectorySearch, search) ? previous : undefined,
   });
   // The categories slide sideways on a phone: the edge that hides more fades.
   const { ref, fadeClass } = useScrollFade<HTMLElement>(directory.data?.categories);
@@ -311,7 +329,11 @@ export default function ExplorePage() {
 
       {/* Products found and no business: the products are the results. */}
       {!(directory.isSuccess && total === 0 && products.length > 0) && (
-        <section className="ex-results" aria-labelledby="explore-results" aria-busy={directory.isLoading}>
+        <section
+          className="ex-results"
+          aria-labelledby="explore-results"
+          aria-busy={directory.isLoading || (directory.isPlaceholderData && directory.isFetching)}
+        >
           <h2 id="explore-results" className={products.length > 0 ? 'ex-section-title' : 'visually-hidden'}>Negocios</h2>
           <p className="ex-count" aria-live="polite">{directory.isSuccess && total > 0 ? countLabel(total) : ''}</p>
 
@@ -346,7 +368,7 @@ export default function ExplorePage() {
                 <>
                   <h3 className="h5">Aún no hay negocios de {category.label.toLowerCase()}</h3>
                   <p>Mira los de otras categorías mientras llegan.</p>
-                  <Link className="btn btn-light" to="/explorar">Ver todos los negocios</Link>
+                  <Link className="btn btn-light" to={`/explorar${searchSuffix}`}>Ver todos los negocios</Link>
                 </>
               ) : (
                 <>
