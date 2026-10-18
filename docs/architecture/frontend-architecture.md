@@ -381,7 +381,7 @@ Explorar (Fase 24A, [ADR 0021](../adr/0021-business-directory.md)):
   - La búsqueda escribe `?q=` 300 ms después de la última tecla y se lee otra vez al ir atrás o adelante. Las categorías con negocios salen como enlaces con su número (`aria-current` en la actual).
   - Las tarjetas (`components/explore/DirectoryBusinessCard`) llevan el logo o la inicial en los colores del tema de cada negocio (`--dc-tint`, claro y oscuro), nombre, descripción, categoría y ciudad o «Solo a domicilio», y lo que responde su menú (`orderStatus`, con `closed` del servidor: «Pide en línea», en pausa, cerrado y cuándo abre, solo menú). La tarjeta entera abre `/m/{slug}`.
   - La fila de categorías se desliza en el teléfono con `useScrollFade` y `.ta-scroll-fade`. El chip activo usa `--ta-on-accent`.
-  - El título de la pestaña dice la categoría y vuelve al anterior al salir.
+  - El título de la pestaña dice la categoría y vuelve a «TienditApp» al salir.
   - «Ver más negocios (n)» suma la página siguiente con su propio `useQuery`, para no traer `useInfiniteQuery` a la primera visita. Otra categoría u otra búsqueda vuelven a la primera.
   - Tiene estados vacíos (sin negocios todavía, una categoría vacía, una búsqueda sin resultados) y de error con «Reintentar».
 - **`utils/businessCategories.ts`:** etiqueta, ruta e ícono de las once categorías (con `BusinessCategory` del contrato) y `orderStatus`.
@@ -493,9 +493,9 @@ El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../
 Buscadores y vistas previas (Fase 24D-2, [ADR 0027](../adr/0027-search-engines-and-link-previews.md)):
 
 - **El encabezado lo escribe el servidor** (`WebApi/Http/PublicPages.cs`): para una tienda, su página de citas, Explorar y sus categorías, el `index.html` llega con su `<title>`, descripción, canónica, Open Graph y, en una tienda, los datos estructurados. El `index.html` del cliente no cambia: el servidor reemplaza su `<title>` y agrega lo demás antes de `</head>`.
-- **En la app:** `hooks/useDocumentTitle` pone en la pestaña el mismo título mientras la página está abierta y regresa el anterior al cerrarla. Lo usan el menú (`utils/storeMenu.storePageTitle`: «pide en línea», «agenda tu cita» o «menú en línea»), la página de citas («Agenda tu cita en …») y Explorar, que ya lo hacía con su propio efecto. Así el título no cambia al llegar y es el correcto al entrar desde Explorar sin recargar.
+- **En la app:** `hooks/useDocumentTitle` pone en la pestaña el mismo título mientras la página está abierta y regresa «TienditApp» (`APP_TITLE`) al cerrarla: el título que había era el que escribió el servidor para esa misma página. `HomeRedirect` lo pone también, porque `/` llega con el encabezado de Explorar y el equipo de un negocio va de ahí a su pantalla. Lo usan el menú (`utils/storeMenu.storePageTitle`: «pide en línea», «agenda tu cita» o «menú en línea»), la página de citas («Agenda tu cita en …») y Explorar, que ya lo hacía con su propio efecto. Así el título no cambia al llegar y es el correcto al entrar desde Explorar sin recargar.
 - `ExploreCategories` del servidor repite las direcciones de `utils/businessCategories` (`/explorar/{slug}`); `PublicPagesTests` compara las dos listas.
-- **Primera visita:** suma 17 B (de 178,009 a 178,026 B, dentro del presupuesto de 178,200 B).
+- **Primera visita:** suma 51 B (de 178,009 a 178,060 B, dentro del presupuesto de 178,200 B): `HomeRedirect`, que va en ella, pone el título de la app con `useDocumentTitle`.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

@@ -73,7 +73,15 @@ builder.Services.AddRateLimiter(options =>
 
     options.OnRejected = async (context, _) =>
     {
-        var message = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+        var hasRetryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter);
+        // A store's page is a page, not API: it still opens the app (Fase 24D-2).
+        if (PublicPages.IsStorePage(context.HttpContext))
+        {
+            await PublicPages.WriteTooManyRequestsAsync(context.HttpContext, hasRetryAfter ? retryAfter : null);
+            return;
+        }
+
+        var message = hasRetryAfter
             ? $"Demasiadas solicitudes. Intente de nuevo en {retryAfter.TotalSeconds} segundos."
             : "Demasiadas solicitudes. Por favor, espere antes de intentar de nuevo.";
         await ApiProblem.WriteAsync(context.HttpContext, StatusCodes.Status429TooManyRequests, message, ApiErrorCodes.TooManyRequests);
@@ -95,6 +103,17 @@ builder.Services.AddRateLimiter(options =>
 
     // Public menu (anonymous): browsing is generous, placing orders is tight, both per IP.
     options.AddPolicy("public-menu", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 600 : 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+    // The public pages that read the database (a store, its booking page, the sitemap): as generous, in a bucket of their
+    // own, so opening a store does not spend the limit of the menu it reads next.
+    options.AddPolicy(PublicPages.RateLimitPolicy, httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
             factory: _ => new FixedWindowRateLimiterOptions

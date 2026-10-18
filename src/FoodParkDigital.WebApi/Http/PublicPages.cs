@@ -32,6 +32,12 @@ public static class PublicPages
     /// <summary>The header that keeps a page out of search engines, also one they read without its HTML.</summary>
     public const string RobotsHeader = "X-Robots-Tag";
 
+    /// <summary>
+    /// The limit per IP of these pages: its own, so a page and the API of its menu (which the page reads next) do not
+    /// spend the same one.
+    /// </summary>
+    public const string RateLimitPolicy = "public-page";
+
     private const string NoIndex = "noindex";
     private const string ExploreDescription =
         "Compra en los negocios de tu ciudad: mira su menú, pide en línea o agenda tu cita.";
@@ -48,12 +54,26 @@ public static class PublicPages
         string[] read = [HttpMethods.Get, HttpMethods.Head];
         // Pages, not API: none of them goes in the contract.
         app.MapMethods("/robots.txt", read, RobotsAsync).ExcludeFromDescription();
-        // These read the database: they share the limit of the public menu.
-        app.MapMethods("/sitemap.xml", read, SitemapAsync).RequireRateLimiting("public-menu").ExcludeFromDescription();
+        // These read the database: they have a limit per IP.
+        app.MapMethods("/sitemap.xml", read, SitemapAsync).RequireRateLimiting(RateLimitPolicy).ExcludeFromDescription();
         app.MapMethods("/m/{slug}", read, (HttpContext context, string slug) => StorePageAsync(context, slug, booking: false))
-            .RequireRateLimiting("public-menu").ExcludeFromDescription();
+            .RequireRateLimiting(RateLimitPolicy).WithMetadata(StorePage.Instance).ExcludeFromDescription();
         app.MapMethods("/m/{slug}/agendar", read, (HttpContext context, string slug) => StorePageAsync(context, slug, booking: true))
-            .RequireRateLimiting("public-menu").ExcludeFromDescription();
+            .RequireRateLimiting(RateLimitPolicy).WithMetadata(StorePage.Instance).ExcludeFromDescription();
+    }
+
+    /// <summary>The request is for the page of a store or its booking page.</summary>
+    public static bool IsStorePage(HttpContext context) => context.GetEndpoint()?.Metadata.GetMetadata<StorePage>() is not null;
+
+    /// <summary>
+    /// A store's page over its limit: the app still opens (it reads its menu with a limit of its own), without the head of
+    /// the store, and search engines are asked to come back.
+    /// </summary>
+    public static Task WriteTooManyRequestsAsync(HttpContext context, TimeSpan? retryAfter)
+    {
+        context.Response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling((retryAfter ?? TimeSpan.FromMinutes(1)).TotalSeconds))
+            .ToString(CultureInfo.InvariantCulture);
+        return WriteIndexAsync(context, context.RequestServices.GetRequiredService<IWebHostEnvironment>(), null, StatusCodes.Status429TooManyRequests);
     }
 
     /// <summary>
@@ -76,7 +96,9 @@ public static class PublicPages
             return new PageHead($"Explorar · {SiteName}", ExploreDescription, "/explorar", null, false, false, null);
         return new PageHead(
             $"{category.Label} · Explorar · {SiteName}",
-            $"Negocios de {category.Label.ToLower(Spanish)} en {SiteName}: mira su menú, pide en línea o agenda tu cita.",
+            category.Value == BusinessCategory.Other
+                ? $"Más negocios en {SiteName}: mira su menú, pide en línea o agenda tu cita."
+                : $"Negocios de {category.Label.ToLower(Spanish)} en {SiteName}: mira su menú, pide en línea o agenda tu cita.",
             $"/explorar/{category.Slug}",
             null, false, true, null);
     }
@@ -104,7 +126,7 @@ public static class PublicPages
             { BooksOnline: true } => ("agenda tu cita", $"Mira los servicios de {store.BusinessName} y agenda tu cita en línea."),
             _ => ("menú en línea", $"Mira el menú de {store.BusinessName} en línea.")
         };
-        var description = string.IsNullOrWhiteSpace(store.Description) ? fallback : store.Description.Trim().TrimEnd('.') + ".";
+        var description = string.IsNullOrWhiteSpace(store.Description) ? fallback : Sentence(store.Description);
         return new PageHead(
             $"{store.BusinessName}: {title} · {SiteName}",
             description + place,
@@ -134,17 +156,20 @@ public static class PublicPages
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "text/html; charset=utf-8";
         context.Response.Headers.CacheControl = ClientDelivery.PageCacheControl;
+        // An outage (503) or a page over its limit (429) leaves search engines to come back; any other page of the app
+        // without a head, or one not to list, stays out of them.
+        var retried = statusCode is StatusCodes.Status503ServiceUnavailable or StatusCodes.Status429TooManyRequests;
+        if (head is null ? !retried : !head.Indexable)
+            context.Response.Headers[RobotsHeader] = NoIndex;
+        // HEAD asks for the headers only.
+        if (HttpMethods.IsHead(context.Request.Method))
+            return;
         if (head is null)
         {
-            // An outage (503) leaves search engines to come back; any other page of the app stays out of them.
-            if (statusCode != StatusCodes.Status503ServiceUnavailable)
-                context.Response.Headers[RobotsHeader] = NoIndex;
             await context.Response.SendFileAsync(indexPath, context.RequestAborted);
             return;
         }
 
-        if (!head.Indexable)
-            context.Response.Headers[RobotsHeader] = NoIndex;
         var html = await File.ReadAllTextAsync(indexPath, context.RequestAborted);
         await context.Response.WriteAsync(WithHead(html, head.Render(BaseUrl(context))), context.RequestAborted);
     }
@@ -226,7 +251,25 @@ public static class PublicPages
 
     private static async Task SitemapAsync(HttpContext context)
     {
-        var sitemap = await context.RequestServices.GetRequiredService<ISender>().Send(new GetPublicSitemapQuery(), context.RequestAborted);
+        PublicSitemapDto sitemap;
+        try
+        {
+            sitemap = await context.RequestServices.GetRequiredService<ISender>().Send(new GetPublicSitemapQuery(), context.RequestAborted);
+        }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // Search engines come back for it, as for a store that cannot be read.
+            context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(PublicPages))
+                .LogWarning(exception, "The sitemap could not be read.");
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            context.Response.Headers.RetryAfter = "120";
+            return;
+        }
+
         var baseUrl = BaseUrl(context);
         var paths = new List<string> { "/explorar" };
         paths.AddRange(sitemap.Categories.Select(ExploreCategories.Of).Where(category => category is not null).Select(category => $"/explorar/{category!.Slug}"));
@@ -325,14 +368,14 @@ public static class PublicPages
         if (store.Category == BusinessCategory.Food)
             data["hasMenu"] = url;
         if (store.ContactPhone is not null)
-            data["telephone"] = store.ContactPhone;
+            data["telephone"] = Telephone(store.ContactPhone);
         if (store.Address is { } address)
         {
             var postal = new Dictionary<string, object?>
             {
                 ["@type"] = "PostalAddress",
                 ["streetAddress"] = address.Street,
-                ["addressCountry"] = address.Country ?? "MX"
+                ["addressCountry"] = CountryCode(address.Country)
             };
             if (address.City is not null)
                 postal["addressLocality"] = address.City;
@@ -348,11 +391,35 @@ public static class PublicPages
             {
                 ["@type"] = "OpeningHoursSpecification",
                 ["dayOfWeek"] = $"https://schema.org/{opening.Day}",
-                // Open the whole day: from midnight to the last minute, as search engines read it.
                 ["opens"] = opening.Opens.ToString("HH:mm", CultureInfo.InvariantCulture),
-                ["closes"] = (opening.Opens == opening.Closes ? new TimeOnly(23, 59) : opening.Closes).ToString("HH:mm", CultureInfo.InvariantCulture)
+                ["closes"] = ClosesFor(opening).ToString("HH:mm", CultureInfo.InvariantCulture)
             }).ToList();
         return data;
+    }
+
+    /// <summary>
+    /// When an opening closes, as search engines read it. The same time as it opens is 24 hours: from midnight, to the last
+    /// minute of the day; from any other time, to the minute before it opens the next day (a closing past midnight).
+    /// </summary>
+    private static TimeOnly ClosesFor(StoreOpeningDto opening)
+        => opening.Opens != opening.Closes ? opening.Closes
+            : opening.Opens == TimeOnly.MinValue ? new TimeOnly(23, 59)
+            : opening.Opens.AddMinutes(-1);
+
+    /// <summary>The 10 digits of a Mexican number with its country code; anything else as the owner wrote it.</summary>
+    private static string Telephone(string phone)
+        => phone.Length == 10 && phone.All(char.IsAsciiDigit) ? "+52" + phone : phone;
+
+    /// <summary>The country as a two-letter code, as search engines prefer it: Mexico unless the owner wrote another.</summary>
+    private static string CountryCode(string? country)
+    {
+        var name = (country ?? string.Empty).Trim().TrimEnd('.');
+        return name.Length == 0
+            || string.Compare(name, "México", Spanish, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) == 0
+            || name.Equals("MX", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("MEX", StringComparison.OrdinalIgnoreCase)
+            ? "MX"
+            : name;
     }
 
     private static string SchemaTypeOf(BusinessCategory category) => category switch
@@ -374,22 +441,44 @@ public static class PublicPages
             ? url
             : baseUrl + (url.StartsWith('/') ? url : "/" + url);
 
-    /// <summary>On one line and within what search engines show.</summary>
+    /// <summary>On one line and within what search engines show, never cutting a character in two (an emoji).</summary>
     private static string Shorten(string text)
     {
         var line = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        return line.Length <= MaxDescriptionLength ? line : line[..(MaxDescriptionLength - 1)].TrimEnd() + "…";
+        if (line.Length <= MaxDescriptionLength)
+            return line;
+        var cut = MaxDescriptionLength - 1;
+        if (char.IsHighSurrogate(line[cut - 1]))
+            cut--;
+        return line[..cut].TrimEnd() + "…";
+    }
+
+    /// <summary>The owner's line ending as a sentence: a period unless it already ends with one, or with ! ? or ….</summary>
+    private static string Sentence(string text)
+    {
+        var line = text.Trim();
+        return line.EndsWith('.') || line.EndsWith('!') || line.EndsWith('?') || line.EndsWith('…') ? line : line + ".";
     }
 
     // Escapes <, >, &, and both quotes, and leaves accents as they are: «Café» stays readable in the page.
     private static readonly HtmlEncoder HtmlText = HtmlEncoder.Create(UnicodeRanges.All);
 
     private static string Html(string value) => HtmlText.Encode(value);
+
+    /// <summary>Marks the page of a store and its booking page: over their limit they still open the app.</summary>
+    public sealed class StorePage
+    {
+        public static readonly StorePage Instance = new();
+
+        private StorePage()
+        {
+        }
+    }
 }
 
 /// <summary>
 /// The categories of Explorar and the address of their pages (/explorar/{slug}), as the client names them
-/// (client/src/utils/businessCategories.ts, compared by <c>ExploreCategoriesTests</c>).
+/// (client/src/utils/businessCategories.ts, compared by <c>PublicPagesTests</c>).
 /// </summary>
 public static class ExploreCategories
 {

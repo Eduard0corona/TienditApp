@@ -59,7 +59,8 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Equal("Restaurant", store.GetProperty("@type").GetString());
         Assert.Equal("Café Luna", store.GetProperty("name").GetString());
         Assert.Equal("https://app.tienditapp.mx/m/cafe-luna", store.GetProperty("hasMenu").GetString());
-        Assert.Equal("2221234567", store.GetProperty("telephone").GetString());
+        // A Mexican number with its country code.
+        Assert.Equal("+522221234567", store.GetProperty("telephone").GetString());
         Assert.Equal(
             ["https://app.tienditapp.mx/uploads/covers/luna/portada_lg.webp", "https://cdn.tienditapp.mx/logos/luna/logo_md.webp"],
             store.GetProperty("image").EnumerateArray().Select(image => image.GetString()));
@@ -69,13 +70,52 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Equal("72000", address.GetProperty("postalCode").GetString());
         Assert.Equal("MX", address.GetProperty("addressCountry").GetString());
         var hours = store.GetProperty("openingHoursSpecification").EnumerateArray().ToList();
-        Assert.Equal(3, hours.Count);
+        Assert.Equal(4, hours.Count);
         Assert.Equal("https://schema.org/Monday", hours[0].GetProperty("dayOfWeek").GetString());
         Assert.Equal("09:00", hours[0].GetProperty("opens").GetString());
-        // Past midnight it closes before it opens; open the whole day, to the last minute.
+        // Past midnight it closes before it opens.
         Assert.Equal("02:00", hours[1].GetProperty("closes").GetString());
+        // 24 hours from midnight: the whole day, to the last minute.
         Assert.Equal("00:00", hours[2].GetProperty("opens").GetString());
         Assert.Equal("23:59", hours[2].GetProperty("closes").GetString());
+        // 24 hours from 08:00: to the minute before it opens the next day, none of its hours lost.
+        Assert.Equal("https://schema.org/Sunday", hours[3].GetProperty("dayOfWeek").GetString());
+        Assert.Equal("08:00", hours[3].GetProperty("opens").GetString());
+        Assert.Equal("07:59", hours[3].GetProperty("closes").GetString());
+    }
+
+    [Fact]
+    public async Task WhatTheOwnerWrote_ShouldReadAsSearchEnginesExpectIt()
+    {
+        _api.Sender.Store = Store(store =>
+        {
+            store.Description = "¡Tacos al pastor!";
+            store.Address!.Country = "Mexico";
+            store.ContactPhone = "+52 222 123 4567";
+        });
+
+        using var response = await _api.Http.GetAsync("/m/cafe-luna");
+        var html = await response.Content.ReadAsStringAsync();
+
+        // A line that already ends a sentence keeps its own mark.
+        Assert.Equal("¡Tacos al pastor! En Puebla.", Meta(html, "name", "description"));
+        using var data = StructuredData(html);
+        Assert.Equal("MX", data.RootElement.GetProperty("address").GetProperty("addressCountry").GetString());
+        // A phone already written with its country code stays as the owner wrote it.
+        Assert.Equal("+52 222 123 4567", data.RootElement.GetProperty("telephone").GetString());
+
+        _api.Sender.Store = Store(store =>
+        {
+            // Over what search engines show, cut right where an emoji (two characters) begins.
+            store.Description = new string('a', 158) + "🌮🌮";
+            store.Address!.Country = "Guatemala";
+        });
+        using var longer = await _api.Http.GetAsync("/m/cafe-luna");
+        html = await longer.Content.ReadAsStringAsync();
+
+        Assert.Equal(new string('a', 158) + "…", Meta(html, "name", "description"));
+        using var other = StructuredData(html);
+        Assert.Equal("Guatemala", other.RootElement.GetProperty("address").GetProperty("addressCountry").GetString());
     }
 
     [Fact]
@@ -170,6 +210,19 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
     }
 
     [Fact]
+    public async Task AStoreAskedWithHead_ShouldAnswerAsItsPage_WithoutTheBody()
+    {
+        _api.Sender.Store = Store(store => store.ListedInDirectory = false);
+
+        using var response = await _api.Http.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/m/cafe-luna"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("noindex", Assert.Single(response.Headers.GetValues("X-Robots-Tag")));
+        Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+        Assert.Empty(await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
     public async Task AnUnknownStore_ShouldBeNotFound_WithThePageThatSaysSo()
     {
         _api.Sender.Store = null;
@@ -223,6 +276,16 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Contains(title, html);
         Assert.Contains($"<link rel=\"canonical\" href=\"{canonical}\">", html);
         Assert.Empty(_api.Sender.Requests);
+    }
+
+    [Fact]
+    public async Task TheCategoryOfOtherBusinesses_ShouldSayItInWords()
+    {
+        using var response = await _api.Http.GetAsync("/explorar/otros");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Contains("<title>Otros · Explorar · TienditApp</title>", html);
+        Assert.Equal("Más negocios en TienditApp: mira su menú, pide en línea o agenda tu cita.", Meta(html, "name", "description"));
     }
 
     [Fact]
@@ -288,6 +351,66 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
     }
 
     [Fact]
+    public async Task ASitemapThatCannotBeRead_ShouldAskSearchEnginesToComeBack()
+    {
+        _api.Sender.Failure = new TimeoutException("Simulated database outage.");
+
+        using var response = await _api.Http.GetAsync("/sitemap.xml");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("120", response.Headers.RetryAfter?.ToString());
+    }
+
+    [Fact]
+    public async Task AStoreOverItsLimit_ShouldStillOpenTheApp_AndAskSearchEnginesToComeBack()
+    {
+        // A limiter of its own, so the other tests keep theirs; Development allows 600 a minute per IP.
+        await using var factory = PagesApi.CreateFactory(_api.WebRoot, _api.Sender, "https://app.tienditapp.mx/");
+        using var http = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        _api.Sender.Store = Store();
+
+        HttpResponseMessage? rejected = null;
+        for (var request = 0; request < 601 && rejected is null; request++)
+        {
+            var response = await http.GetAsync("/m/cafe-luna");
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                rejected = response;
+            else
+                response.Dispose();
+        }
+
+        Assert.NotNull(rejected);
+        using (rejected)
+        {
+            var html = await rejected.Content.ReadAsStringAsync();
+            Assert.Equal("text/html", rejected.Content.Headers.ContentType?.MediaType);
+            Assert.NotNull(rejected.Headers.RetryAfter);
+            // Not a page to forget, and the app itself still loads (its menu has a limit of its own).
+            Assert.False(rejected.Headers.Contains("X-Robots-Tag"));
+            Assert.Contains("<title>TienditApp</title>", html);
+            Assert.Contains("/assets/index-abc123.js", html);
+        }
+    }
+
+    [Fact]
+    public void TheHeadOfAPage_ShouldReplaceTheTitleOfTheAppsOwnIndex_AndGoInItsHead()
+    {
+        var index = File.ReadAllText(Path.Combine(RepositoryRoot(), "client", "index.html"));
+        var head = PublicPages.StoreHead(Store(), booking: false);
+
+        var html = PublicPages.WithHead(index, head.Render("https://app.tienditapp.mx"));
+
+        Assert.Single(Regex.Matches(html, "<title>"));
+        Assert.Contains("<title>Café Luna: pide en línea · TienditApp</title>", html);
+        var close = html.IndexOf("</head>", StringComparison.Ordinal);
+        Assert.InRange(html.IndexOf("<link rel=\"canonical\"", StringComparison.Ordinal), 0, close);
+        Assert.InRange(html.IndexOf("application/ld+json", StringComparison.Ordinal), 0, close);
+        // Everything else of the app stays as it is.
+        Assert.Contains("<script type=\"module\" src=\"/src/main.tsx\"></script>", html);
+        Assert.Contains("<meta name=\"theme-color\"", html);
+    }
+
+    [Fact]
     public async Task WithoutAppUrl_TheAddressesShouldBeTheOnesTheRequestCameTo()
     {
         await using var factory = PagesApi.CreateFactory(_api.WebRoot, _api.Sender, appUrl: null);
@@ -326,22 +449,23 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
     {
         var store = new StorePreviewDto
         {
-        BusinessName = "Café Luna",
-        Slug = "cafe-luna",
-        Description = "Café de olla y pan dulce",
-        Category = BusinessCategory.Food,
-        LogoUrl = "https://cdn.tienditapp.mx/logos/luna/logo_md.webp",
-        CoverImageUrl = "/uploads/covers/luna/portada_lg.webp",
-        ListedInDirectory = true,
-        TakesOrders = true,
-        Address = new StoreAddressDto { Street = "Av. Juárez 120, Local 3", City = "Puebla", State = "Puebla", PostalCode = "72000" },
-        ContactPhone = "2221234567",
-        OpeningHours =
-        [
-            new() { Day = DayOfWeek.Monday, Opens = new TimeOnly(9, 0), Closes = new TimeOnly(15, 0) },
-            new() { Day = DayOfWeek.Friday, Opens = new TimeOnly(18, 0), Closes = new TimeOnly(2, 0) },
-            new() { Day = DayOfWeek.Saturday, Opens = new TimeOnly(0, 0), Closes = new TimeOnly(0, 0) }
-        ]
+            BusinessName = "Café Luna",
+            Slug = "cafe-luna",
+            Description = "Café de olla y pan dulce",
+            Category = BusinessCategory.Food,
+            LogoUrl = "https://cdn.tienditapp.mx/logos/luna/logo_md.webp",
+            CoverImageUrl = "/uploads/covers/luna/portada_lg.webp",
+            ListedInDirectory = true,
+            TakesOrders = true,
+            Address = new StoreAddressDto { Street = "Av. Juárez 120, Local 3", City = "Puebla", State = "Puebla", PostalCode = "72000" },
+            ContactPhone = "2221234567",
+            OpeningHours =
+            [
+                new() { Day = DayOfWeek.Monday, Opens = new TimeOnly(9, 0), Closes = new TimeOnly(15, 0) },
+                new() { Day = DayOfWeek.Friday, Opens = new TimeOnly(18, 0), Closes = new TimeOnly(2, 0) },
+                new() { Day = DayOfWeek.Saturday, Opens = new TimeOnly(0, 0), Closes = new TimeOnly(0, 0) },
+                new() { Day = DayOfWeek.Sunday, Opens = new TimeOnly(8, 0), Closes = new TimeOnly(8, 0) }
+            ]
         };
         change?.Invoke(store);
         return store;

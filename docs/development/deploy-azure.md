@@ -436,16 +436,17 @@ La Fase 24E trae una migración, [`database/production/20261018032200_AddBusines
 La Fase 24D-2 no trae migración ni configuración obligatoria ([ADR 0027](../adr/0027-search-engines-and-link-previews.md)):
 
 - **Qué cambia al desplegar:**
-  - Las páginas de las tiendas (`/m/{slug}`, `/m/{slug}/agendar`) y de Explorar llegan con su título, descripción, imagen y dirección en el `index.html`.
+  - Las páginas de las tiendas (`/m/{slug}`, `/m/{slug}/agendar`) llegan con su título, descripción, imagen y dirección en el `index.html`; las de Explorar, con su título, descripción y dirección.
+  - Estas páginas tienen su propio límite por IP (`public-page`, 120 por minuto); una tienda que lo pasa abre la app igual con 429.
   - La API responde `/robots.txt` y `/sitemap.xml`.
   - Las demás pantallas de la app llevan `X-Robots-Tag: noindex`.
 - **`AppUrl`:** la dirección canónica, las vistas previas y el sitemap usan `AppUrl` (la de los correos), por ejemplo `https://app.tienditapp.mx`. Sin ella, usan la dirección con que llegó cada petición, con https. Conviene configurarla en el App Service, sobre todo con un dominio propio, para que los buscadores no reciban la de `azurewebsites.net`.
 - **Comprobarlo:**
   - `curl https://<app>/robots.txt` debe nombrar `Sitemap: <AppUrl>/sitemap.xml`.
-  - El código fuente de una tienda publicada (`view-source:`) debe traer su `<title>`, `og:title`, `og:image` y el bloque `application/ld+json`.
+  - El código fuente de una tienda publicada (`view-source:`) debe traer su `<title>`, `og:title`, `og:image` (si tiene portada o logo) y el bloque `application/ld+json`.
   - La herramienta de vista previa de enlaces de Facebook o la prueba de resultados enriquecidos de Google leen lo mismo.
 - **Google Search Console (opcional):** verificar el dominio y enviar `/sitemap.xml` acelera que Google lea las tiendas. No hace falta para que funcione.
-- **Volver a la versión anterior:** no toca la base. Regresa el `index.html` sin encabezado, y `/robots.txt` y `/sitemap.xml` vuelven a abrir la app.
+- **Volver a la versión anterior:** no toca la base. Regresa el `index.html` sin encabezado, y `/robots.txt` y `/sitemap.xml` responden 404.
 
 ## Slot de staging con swap y aprobación
 

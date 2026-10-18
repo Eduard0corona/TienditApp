@@ -39,6 +39,7 @@ public class PublicPagesTests
             AddressLine1: " Av. Juárez 120 ", AddressLine2: "Local 3", City: "Puebla", State: "Puebla", PostalCode: "72000",
             ContactPhone: "2229999999"), BranchServiceMode.Premises);
         await fixture.Context.SaveChangesAsync();
+        await fixture.AddProductAsync(tenant, "Pan de muerto", 35m);
 
         var preview = await PreviewAsync(fixture, " Cafe-Luna ");
 
@@ -86,6 +87,50 @@ public class PublicPagesTests
         Assert.Null(preview.CoverImageUrl);
         Assert.Null(preview.ContactPhone);
         Assert.Empty(preview.OpeningHours);
+    }
+
+    [Fact]
+    public async Task Preview_ShouldBeListed_OnlyAsExplorarListsIt_WithSomethingToOrderOrBook()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "menu-vacio");
+        (await SettingsAsync(fixture, tenant)).UpdateOnlineMenu(OnlineMenuMode.MenuOnly);
+        await fixture.Context.SaveChangesAsync();
+
+        // Shown in Explorar by its owner, but its menu has nothing: Explorar leaves it out, and so do search engines.
+        Assert.False((await PreviewAsync(fixture, "menu-vacio"))!.ListedInDirectory);
+
+        await fixture.AddProductAsync(tenant, "Tamal", 25m);
+
+        Assert.True((await PreviewAsync(fixture, "menu-vacio"))!.ListedInDirectory);
+    }
+
+    [Fact]
+    public async Task Preview_ShouldReadOnlyTheBusinessOfItsSlug_WhateverBusinessTheRequestHad()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var salon = await BookingBusinessAsync(fixture, "salon-sol");
+        var main = await fixture.Context.Branches.SingleAsync(b => b.TenantId == salon.Id && b.IsDefault);
+        main.Update(main.Name, main.Code, new BranchContact(AddressLine1: "Reforma 50", City: "Puebla"), BranchServiceMode.Premises);
+        var category = new Category(salon.Id, "Servicios", null);
+        fixture.Context.Categories.Add(category);
+        fixture.Context.Products.Add(new Product(salon.Id, category.Id, "Corte", null, 150m, "MXN", preparationTimeMinutes: 45, unit: UnitType.Service));
+        await fixture.Context.SaveChangesAsync();
+        // Another business that books online too, without a service to book nor an address.
+        var other = await BookingBusinessAsync(fixture, "salon-luna");
+
+        fixture.TenantService.SetTenant(other.Id);
+        var salonPreview = await PreviewAsync(fixture, "salon-sol");
+        fixture.TenantService.SetTenant(salon.Id);
+        var otherPreview = await PreviewAsync(fixture, "salon-luna");
+
+        Assert.True(salonPreview!.BooksOnline);
+        Assert.True(salonPreview.ListedInDirectory);
+        Assert.Equal("Reforma 50", salonPreview.Address!.Street);
+        // The services of the business the request had are not the ones of this slug.
+        Assert.False(otherPreview!.BooksOnline);
+        Assert.False(otherPreview.ListedInDirectory);
+        Assert.Null(otherPreview.Address);
     }
 
     [Fact]
@@ -145,6 +190,17 @@ public class PublicPagesTests
     private static Task<StorePreviewDto?> PreviewAsync(SalesTestFixture fixture, string slug)
         => new GetStorePreviewQueryHandler(fixture.Context, fixture.TenantService)
             .Handle(new GetStorePreviewQuery(slug), CancellationToken.None);
+
+    private static async Task<Tenant> BookingBusinessAsync(SalesTestFixture fixture, string slug)
+    {
+        var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, slug: slug);
+        var settings = await SettingsAsync(fixture, tenant);
+        settings.UpdateOnlineMenu(OnlineMenuMode.MenuOnly);
+        settings.UpdateOnlineBooking(true, 1);
+        settings.SetOpeningHours(OpeningHours.Create([new OpeningInterval(DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(14, 0))]));
+        await fixture.Context.SaveChangesAsync();
+        return tenant;
+    }
 
     private static async Task<Tenant> BusinessAsync(SalesTestFixture fixture, string slug, OnlineMenuMode mode, bool withProduct = true)
     {

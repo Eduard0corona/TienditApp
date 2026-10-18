@@ -4,6 +4,7 @@
  * order pays: the server prices the order.
  */
 
+import type { PublicMenu } from '../api/publicMenuApi';
 import type { ProductOptionGroupDto } from '../types';
 
 interface SearchableProduct {
@@ -63,7 +64,7 @@ export function optionGroupsOf(product: { optionGroups?: unknown[] | null }): Pr
  * The title of a store's page, the one the server writes for search engines and link previews (PublicPages.StoreHead):
  * what the customer comes to do there.
  */
-export function storePageTitle(menu: { businessName: string; acceptsOrders: boolean; ordersPaused: boolean; booksOnline?: boolean }): string {
+export function storePageTitle(menu: Pick<PublicMenu, 'businessName' | 'acceptsOrders' | 'ordersPaused' | 'booksOnline'>): string {
   const takesOrders = menu.acceptsOrders || menu.ordersPaused;
   const what = takesOrders ? 'pide en línea' : menu.booksOnline ? 'agenda tu cita' : 'menú en línea';
   return `${menu.businessName}: ${what} · TienditApp`;

@@ -28,8 +28,9 @@ public class StorePreviewDto
     /// <summary>Its cover across the menu, 1024 px wide: the preview of a shared link.</summary>
     public string? CoverImageUrl { get; set; }
     /// <summary>
-    /// The owner shows it in Explorar: search engines may list its pages. One that only shares its link (a QR, its
-    /// WhatsApp) keeps the preview of the link, but stays out of search engines and the sitemap.
+    /// Explorar lists it, by the rule of Explorar: its owner shows it there, and its menu has a product or it books online.
+    /// Search engines may list its pages. One that only shares its link (a QR, its WhatsApp) keeps the preview of the
+    /// link, but stays out of search engines and the sitemap.
     /// </summary>
     public bool ListedInDirectory { get; set; }
     /// <summary>Its menu takes orders (whether or not it is open right now); otherwise it only shows the menu.</summary>
@@ -102,6 +103,9 @@ public class GetStorePreviewQueryHandler : IRequestHandler<GetStorePreviewQuery,
                 mainBranch?.ServiceMode,
                 settings.OpeningHours is not null)
             && await OnlineBookingCalendar.BookableServices(_context).AnyAsync(cancellationToken);
+        // Listed as Explorar lists it (PublicDirectorySnapshot): shown there by its owner, with something to order or book.
+        var listed = settings.ListedInDirectory
+            && (booksOnline || await PublicDirectorySnapshot.MenuProducts(_context).AnyAsync(cancellationToken));
 
         return new StorePreviewDto
         {
@@ -111,7 +115,7 @@ public class GetStorePreviewQueryHandler : IRequestHandler<GetStorePreviewQuery,
             Category = tenant.DirectoryCategory,
             LogoUrl = string.IsNullOrEmpty(tenant.LogoUrl) ? null : $"{tenant.LogoUrl}_md.webp",
             CoverImageUrl = LogoImageUrlsDto.FromBaseUrl(tenant.CoverImageUrl)?.Large,
-            ListedInDirectory = settings.ListedInDirectory,
+            ListedInDirectory = listed,
             TakesOrders = settings.OnlineMenuMode == OnlineMenuMode.Orders,
             BooksOnline = booksOnline,
             // The address its menu shows (AddressText.ForCustomers): never the one of a branch that only delivers.
@@ -145,7 +149,7 @@ public class PublicSitemapDto
     /// <summary>The categories with at least one business in Explorar, in the order of their chips.</summary>
     public List<BusinessCategory> Categories { get; set; } = new();
 
-    /// <summary>The stores Explorar lists, by name.</summary>
+    /// <summary>The stores Explorar lists, by their address (slug).</summary>
     public List<PublicSitemapStoreDto> Stores { get; set; } = new();
 }
 

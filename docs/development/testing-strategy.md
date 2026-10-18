@@ -527,25 +527,31 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Resultado:** la comparación contra `master` dio 413 escenas iguales, las 14 nuevas sin línea base y las 51 que cambian. Con esas capturas, los seis archivos tocados (243 escenas) pasaron dos corridas seguidas contra el mismo build. Las escenas del carrito detectaron, después de la revisión, que el «+» de un producto sin foto había quedado debajo del área de la fila que abre su hoja (sin layout, Vitest no lo ve).
 - Fase 24D-2, Buscadores y vistas previas ([ADR 0027](../adr/0027-search-engines-and-link-previews.md)):
   - **Application:**
-    - `PublicPagesTests` (5): la vista previa trae lo que el menú muestra (nombre, línea, categoría, logo, portada, el teléfono del negocio y no el de la sucursal, la dirección en sus partes, el horario de la semana desde el lunes y si aparece en Explorar); una cocina sin local no da su dirección; un menú sin publicar o un negocio que no existe no tienen vista previa; agenda en línea solo con un servicio que agendar; y el sitemap lista lo que lista Explorar, con las categorías que tienen negocios.
+    - `PublicPagesTests` (7): la vista previa trae lo que el menú muestra (nombre, línea, categoría, logo, portada, el teléfono del negocio y no el de la sucursal, la dirección en sus partes, el horario de la semana desde el lunes y si aparece en Explorar); una cocina sin local no da su dirección; aparece en Explorar con la regla de Explorar (sin nada en su menú, no); con dos negocios, cada slug lee solo el suyo, sea cual sea el negocio de la petición; un menú sin publicar o un negocio que no existe no tienen vista previa; agenda en línea solo con un servicio que agendar; y el sitemap lista lo que lista Explorar, con las categorías que tienen negocios.
     - `AuthorizationBehaviorTests` agrega `GetStorePreviewQuery` y `GetPublicSitemapQuery` a los anónimos (274 casos de uso con regla).
   - **WebApi:**
-    - `PublicPagesTests` (21), sobre la API sin base y un mediador falso:
-      - una tienda con su título, descripción, canónica sin la mesa del QR, Open Graph y los datos estructurados (tipo, dirección, teléfono, imágenes, horario pasada la medianoche y todo el día);
+    - `PublicPagesTests` (27), sobre la API sin base y un mediador falso:
+      - una tienda con su título, descripción, canónica sin la mesa del QR, Open Graph y los datos estructurados (tipo, dirección, teléfono con +52, imágenes, horario pasada la medianoche, todo el día y 24 horas desde las 8:00);
+      - lo que escribe el dueño como lo esperan los buscadores: «¡…!» sin otro punto, el país como «MX», un teléfono ya con su lada como está y una descripción larga cortada sin partir un emoji;
+      - HEAD de una tienda, con sus encabezados y sin cuerpo;
       - lo que escribe el negocio no sale de su etiqueta, ni en el HTML ni en el JSON;
       - una tienda fuera de Explorar con su vista previa y `noindex`;
       - la página de citas solo listada mientras agenda;
       - una tienda que solo agenda;
       - una que no existe (404) o con un slug que ningún negocio puede tener (404 sin preguntar);
       - una base que no responde: 503 con `Retry-After` y sin `noindex`;
-      - Explorar, sus categorías y `/` sin leer las tiendas; una categoría que no existe con `noindex`;
+      - Explorar, sus categorías y `/` sin leer las tiendas; «Otros» con su propia frase; una categoría que no existe con `noindex`;
       - las demás pantallas y `/index.html` con `noindex`;
-      - `robots.txt` y `sitemap.xml`;
+      - `robots.txt` y `sitemap.xml`, y un sitemap que no se puede leer (503 con `Retry-After`);
+      - una tienda que pasa su límite (`public-page`) abre la app con 429, `Retry-After` y sin `noindex`;
+      - el encabezado aplicado al `client/index.html` real: un solo `<title>` y todo antes de `</head>`;
       - la dirección de la petición sin `AppUrl`;
       - y las categorías del servidor iguales a las del cliente.
     - `ClientDeliveryTests` revisa `/explorar` en lugar de una tienda, que ahora lee la base.
   - **Cliente:**
-    - `useDocumentTitle.test.tsx` (1): el título mientras la página está abierta, el anterior al cerrarla, y ninguno mientras carga.
+    - `useDocumentTitle.test.tsx` (2): el título mientras la página está abierta, «TienditApp» al cerrarla (también cuando el servidor ya había escrito el de la página), y ninguno mientras carga.
+    - `HomeRedirect.test.tsx` (+1): el equipo de un negocio sale de `/` con «TienditApp», no con el título de Explorar.
+    - `ExplorePage.test.tsx`: la pestaña de una categoría lleva el título que escribe el servidor.
     - `storeMenu.test.ts` (+1): el título de una tienda por lo que se hace en ella.
     - `PublicMenuPage.test.tsx` y `PublicBookingPage.test.tsx`: la pestaña lleva el título que escribe el servidor.
   - **Escenas visuales:** no cambian: la fase no toca estilos ni lo que se ve en las páginas.

@@ -90,10 +90,11 @@ Actualizada el 2026-10-18 con la Fase 24D-2 y antes con la 24E, la 24D-1, la 25,
 - Buscadores y vistas previas (Fase 24D-2, [ADR 0027](../adr/0027-search-engines-and-link-previews.md)):
   - Las imágenes de la vista previa son WebP, como todas las variantes de la app; algunas apps antiguas no las muestran.
   - Los datos estructurados de una tienda no incluyen los días especiales ni los productos (precios y fotos).
-  - El sitemap sale de la foto de Explorar: hasta 1000 negocios y sin la fecha en que cambió cada tienda.
-  - Los títulos de la tienda y de sus citas se escriben en dos lugares, el servidor (`PublicPages`) y el cliente (`storePageTitle` y la página de citas); las pruebas de los dos los fijan.
-  - Sin `AppUrl` configurada, la dirección canónica es la de la petición.
-  - La 24D-2 suma 17 B a la primera visita (de 178,009 a 178,026 B, dentro del presupuesto de 178,200 B).
+  - El sitemap sale de la foto de Explorar: hasta 1,000 negocios y sin la fecha en que cambió cada tienda.
+  - Los títulos de la tienda, de sus citas y de Explorar se escriben en dos lugares, el servidor (`PublicPages`) y el cliente (`storePageTitle`, la página de citas y Explorar); las pruebas de los dos los fijan, pero ninguna los compara entre sí (solo las categorías).
+  - Sin `AppUrl` configurada, la dirección canónica es la de la petición (su encabezado `Host`).
+  - Cada visita a una tienda lee su vista previa de la base (hasta cuatro consultas) además de lo que lee su menú; no hay caché por tienda.
+  - La 24D-2 suma 51 B a la primera visita (de 178,009 a 178,060 B, dentro del presupuesto de 178,200 B): `HomeRedirect`, que va en ella, pone el título de la app.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

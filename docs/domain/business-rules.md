@@ -285,7 +285,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 [ADR 0027](../adr/0027-search-engines-and-link-previews.md):
 
 - **El enlace de una tienda** (`/m/{slug}`), compartido por WhatsApp o en su QR, se ve con su nombre, su línea (o una frase sobre su menú) y su ciudad, y su portada o su logo. Su página de citas se ve con «Agenda tu cita en {Negocio}».
-- **En los buscadores** aparecen solo las tiendas que el dueño muestra en Explorar, y su página de citas mientras agenda en línea. Una tienda fuera de Explorar conserva la vista previa de su enlace, pero no aparece en los buscadores.
+- **En los buscadores** aparecen solo las tiendas que aparecen en Explorar (el dueño las muestra ahí y su menú tiene algo que pedir o agendan en línea), y su página de citas mientras agenda en línea. Una tienda fuera de Explorar conserva la vista previa de su enlace, pero no aparece en los buscadores.
 - **Lo que leen los buscadores es lo que el menú ya muestra:**
   - el nombre, la categoría y la línea;
   - la dirección de la sucursal principal (nunca la de una cocina sin local);
