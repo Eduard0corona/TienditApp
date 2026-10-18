@@ -42,7 +42,7 @@
   position: absolute;
   inset: 0 0 auto;
   height: 5rem;
-  background: linear-gradient(rgba(0, 0, 0, 0.35), transparent);
+  background: linear-gradient(rgba(var(--ta-shadow-rgb), 0.35), transparent);
   pointer-events: none;
 }
 
@@ -324,6 +324,11 @@ button.pm-pill:hover {
   -webkit-box-orient: vertical;
 }
 
+/* The clamp of the name cuts what goes past its box: the ring goes inside. */
+.pm-feature .pm-item-open {
+  --ta-focus-ring-offset: calc(var(--ta-focus-ring-width) * -1);
+}
+
 .pm-feature .pm-price-row {
   font-size: 0.9rem;
 }
@@ -430,6 +435,7 @@ button.pm-pill:hover {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: 1;
 }
 
 .pm-item-description {
@@ -501,7 +507,7 @@ button.pm-pill:hover {
   position: absolute;
   right: 0.4rem;
   bottom: 0.4rem;
-  z-index: 1;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1051,8 +1057,11 @@ button.pm-pill:hover {
     gap: 2rem;
   }
 
+  /* Many categories scroll inside the list, which never goes past the window. */
   .pm-tabs {
     top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
     border-bottom: 0;
     background: transparent;
   }

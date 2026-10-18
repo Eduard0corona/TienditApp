@@ -711,7 +711,8 @@ describe('PublicMenuPage', () => {
 
       expect(within(cart).queryByLabelText('Código postal')).not.toBeInTheDocument();
       expect(within(cart).queryByRole('radio', { name: 'A domicilio' })).not.toBeInTheDocument();
-      expect(screen.queryByText(/También a domicilio/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('radiogroup', { name: '¿Cómo lo quieres?' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: 'A domicilio' })).not.toBeInTheDocument();
     });
   });
 

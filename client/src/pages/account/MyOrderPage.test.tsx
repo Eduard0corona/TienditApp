@@ -126,14 +126,14 @@ describe('MyOrderPage', () => {
     expect(screen.queryByText('IVA')).not.toBeInTheDocument();
   });
 
-  it('fills the store\'s cart on «Pedir otra vez»', async () => {
+  it('fills the store\'s cart on «Pedir otra vez», each product with its note', async () => {
     request.mockResolvedValue(detail({ inProgress: false }) as never);
 
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Pedir otra vez T-1042 de Café Luna' }));
 
     expect(screen.getByTestId('store')).toHaveTextContent('/m/cafe-luna');
-    expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'latte', optionIds: ['grande'], quantity: 2 }]);
+    expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'latte', optionIds: ['grande'], quantity: 2, notes: 'Sin azúcar' }]);
   });
 
   it('says why a cancelled order was cancelled, and asks for nothing', async () => {

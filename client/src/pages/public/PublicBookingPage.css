@@ -8,16 +8,22 @@
 /* A service of the list is one button, a row of the menu with its photo on the right (Fase 24E). */
 .pb-service {
   width: 100%;
-  border-width: 0 0 1px;
-  border-style: solid;
-  border-color: var(--ct-border-color);
-  background: transparent;
   color: inherit;
   text-align: left;
 }
 
-.pb-service:last-child {
-  border-bottom-width: 0;
+/* A phone: rows with a line between them. From a tablet on they are the menu's cards (PublicMenuPage.css). */
+@media (max-width: 767.98px) {
+  .pb-service {
+    border-width: 0 0 1px;
+    border-style: solid;
+    border-color: var(--ct-border-color);
+    background: transparent;
+  }
+
+  .pb-service:last-child {
+    border-bottom-width: 0;
+  }
 }
 
 .pb-service:hover {

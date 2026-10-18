@@ -194,7 +194,7 @@ Una cuenta de cliente compra sin escribir sus datos cada vez ([ADR 0022](../adr/
 - **El mismo pedido, una vez:** la tienda manda una llave por pedido, la misma si se reintenta sin cambiar nada. Con la misma llave el servidor responde el pedido que ya registró, aunque el negocio haya cerrado desde entonces. Con otro teléfono responde «Ese pedido ya se envió.»; si el negocio ya lo canceló, «Ese pedido ya se envió y el negocio lo canceló.»; y una llave vacía, «La clave del pedido no es válida.».
 - **Explorar por código postal:** con el código postal del cliente («Entregar en…»), cada negocio que entrega dice «Envío $35.00», «Envío gratis», «… más IVA» si sus precios no lo incluyen, o «No llega a tu código postal». Es la zona activa del negocio que lo incluye, sin su nombre. El mínimo y el envío gratis los aplica el menú al pedir. El código postal se recuerda en el dispositivo y la tienda lo toma la primera vez que el pedido va a domicilio si la cuenta no tiene direcciones.
 - **Carrito guardado:** el carrito de cada tienda se guarda en el dispositivo hasta que se envía o se vacía, por 7 días y en 10 tiendas como mucho. Guarda productos, opciones y cantidades, nunca precios: al volver se arma con el menú y los precios de ahora. Lo que no está disponible ahora, o tiene opciones que ya no existen o no forman una elección válida, se queda fuera, y la tienda dice cuántos productos («Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora.»). Explorar ofrece «Seguir con el pedido».
-- **«Pedir otra vez»:** en Mis pedidos, llena el carrito de esa tienda con el pedido, con la misma regla del carrito guardado. Solo regresan cantidades enteras: un producto por kilo o en fracciones no regresa, y la tienda lo dice («1 producto se pide por peso: agrégalo con su cantidad»). Un pedido todo por peso abre el menú sin tocar el carrito que haya.
+- **«Pedir otra vez»:** en Mis pedidos, llena el carrito de esa tienda con el pedido, con la misma regla del carrito guardado. Desde la 24E, cada producto regresa con su nota. Solo regresan cantidades enteras: un producto por kilo o en fracciones no regresa, y la tienda lo dice («1 producto se pide por peso: agrégalo con su cantidad»). Un pedido todo por peso abre el menú sin tocar el carrito que haya.
 
 ## Seguimiento del pedido (Fase 24C)
 
@@ -277,7 +277,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **El pedido:**
   - Un botón flotante «Ver pedido» con cuántos productos lleva y el total.
   - La página del pedido tiene tus productos, la entrega (a domicilio, para recoger con la dirección del negocio, o la mesa), tus datos, el resumen y «Hacer pedido · $X».
-- **La portada:** la sube o la quita el dueño o un administrador en Configuración › «Portada del menú». Acepta JPG, PNG o WebP de hasta 5 MB y se ve mejor horizontal, unas tres veces más ancha que alta. Es pública, como el logo.
+- **La portada:** la sube o la quita el dueño o un administrador en Configuración › «Portada del menú». Acepta JPG, PNG, WebP o GIF (solo su primer cuadro) de hasta 5 MB y se ve mejor horizontal, unas tres veces más ancha que alta. Es pública, como el logo.
 - **Lo que no muestra:** calificaciones, tiempos de entrega ni costos de servicio, que el negocio no tiene.
 
 ## Cancelación y trazabilidad

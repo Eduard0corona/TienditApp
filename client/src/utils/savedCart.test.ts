@@ -70,6 +70,20 @@ describe('savedCart', () => {
     expect(skipped).toBe(1);
   });
 
+  it('orders again each product with its note, and never takes a note for options', () => {
+    const { lines } = linesOfOrder([
+      { productId: 'latte', quantity: 1, optionIds: ['grande'], notes: 'sin azúcar' },
+      { productId: 'latte', quantity: 1, optionIds: ['grande'], notes: '  sin azúcar ' },
+      { productId: 'latte', quantity: 1, optionIds: ['grande'], notes: null },
+    ]);
+
+    expect(lines).toEqual([
+      { productId: 'latte', optionIds: ['grande'], quantity: 2, notes: 'sin azúcar' },
+      { productId: 'latte', optionIds: ['grande'], quantity: 1 },
+    ]);
+    expect(cartLineKey('latte', [], 'grande')).not.toBe(cartLineKey('latte', ['grande']));
+  });
+
   it('puts back only what the menu of now can take, at its prices of now', () => {
     const { lines, dropped } = restoreLines(
       [
@@ -111,7 +125,7 @@ describe('savedCart', () => {
     const { lines } = restoreLines(saved.lines, [latte, concha]);
 
     expect(lines.map((line) => [line.key, line.quantity, line.notes])).toEqual([
-      ['latte|grande|sin azúcar', 1, 'sin azúcar'],
+      ['latte|grande#sin azúcar', 1, 'sin azúcar'],
       ['latte|grande', 2, undefined],
     ]);
   });

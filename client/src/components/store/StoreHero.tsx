@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { BusinessCategory } from '../../api/generated/enums';
 import type { PublicMenu } from '../../api/publicMenuApi';
 import { categoryInfo } from '../../utils/businessCategories';
 import PhotoOrInitial from '../common/PhotoOrInitial';
@@ -23,7 +24,8 @@ interface StoreHeroProps {
   /** «Hoy: 9:00 a 15:00», the hours in one line; null without hours. */
   hoursSummary: string | null;
   upcomingNotice: string | null;
-  onOpenInfo: () => void;
+  /** Opens the hours, address and contact; null when the business has none of them to show. */
+  onOpenInfo: (() => void) | null;
   delivery: StoreDeliveryChoice;
   /** The booking page, when the business books appointments online (not from a table). */
   bookingPath: string | null;
@@ -41,23 +43,35 @@ export default function StoreHero({
 }: StoreHeroProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [shared, setShared] = useState(false);
+  const [shareNotice, setShareNotice] = useState('');
   const canGoBack = location.key !== 'default';
-  const line = [categoryInfo(menu.category)?.label, menu.description].filter(Boolean).join(' · ');
+  // «Otros» says nothing about the business: its line goes alone.
+  const kind = menu.category === BusinessCategory.Other ? undefined : categoryInfo(menu.category)?.label;
+  const line = [kind, menu.description].filter(Boolean).join(' · ');
   const cover = menu.coverImageUrl;
+  const shared = shareNotice === 'Enlace copiado';
+
+  useEffect(() => {
+    if (!shareNotice) return;
+    const timer = window.setTimeout(() => setShareNotice(''), 2500);
+    return () => window.clearTimeout(timer);
+  }, [shareNotice]);
 
   const share = async () => {
     const url = `${window.location.origin}/m/${menu.slug}`;
-    try {
-      if (navigator.share) {
+    if (navigator.share) {
+      try {
         await navigator.share({ title: menu.businessName, url });
-        return;
+      } catch {
+        // Cancelled: nothing to tell.
       }
+      return;
+    }
+    try {
       await navigator.clipboard.writeText(url);
-      setShared(true);
-      window.setTimeout(() => setShared(false), 2500);
+      setShareNotice('Enlace copiado');
     } catch {
-      // Cancelled or not allowed: nothing to tell.
+      setShareNotice('No se pudo copiar el enlace');
     }
   };
 
@@ -80,9 +94,10 @@ export default function StoreHero({
             </button>
           ) : <span />}
           <div className="pm-cover-actions">
-            <button type="button" className="pm-round" onClick={() => void share()} aria-label={shared ? 'Enlace copiado' : 'Compartir menú'}>
+            <button type="button" className="pm-round" onClick={() => void share()} aria-label="Compartir menú">
               <i className={shared ? 'ri-check-line' : 'ri-share-forward-line'} aria-hidden="true"></i>
             </button>
+            <span className="visually-hidden" aria-live="polite">{shareNotice}</span>
             {contactUrl && (
               <a className="pm-round" href={contactUrl} target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">
                 <i className="ri-whatsapp-line" aria-hidden="true"></i>
@@ -111,18 +126,23 @@ export default function StoreHero({
           </p>
         )}
 
-        <div className="pm-pills">
-          <button type="button" className="pm-pill" onClick={onOpenInfo}>
-            <i className={hoursSummary ? 'ri-time-line' : 'ri-information-line'} aria-hidden="true"></i>
-            <span>{hoursSummary ?? 'Información'}</span>
-            <i className="ri-arrow-right-s-line" aria-hidden="true"></i>
-          </button>
-          {menu.deliveryOnly && (
-            <span className="pm-pill static"><i className="ri-e-bike-2-line" aria-hidden="true"></i>Solo a domicilio</span>
-          )}
-        </div>
+        {(onOpenInfo || menu.deliveryOnly) && (
+          <div className="pm-pills">
+            {onOpenInfo && (
+              <button type="button" className="pm-pill" onClick={onOpenInfo}>
+                <i className={hoursSummary ? 'ri-time-line' : 'ri-information-line'} aria-hidden="true"></i>
+                <span>{hoursSummary ?? 'Información'}</span>
+                <i className="ri-arrow-right-s-line" aria-hidden="true"></i>
+              </button>
+            )}
+            {menu.deliveryOnly && (
+              <span className="pm-pill static"><i className="ri-e-bike-2-line" aria-hidden="true"></i>Solo a domicilio</span>
+            )}
+          </div>
+        )}
 
-        {delivery.offered && !delivery.required && (
+        {/* How the customer wants it matters only while the menu takes orders. */}
+        {menu.acceptsOrders && delivery.offered && !delivery.required && (
           <div className="pm-mode" role="radiogroup" aria-label="¿Cómo lo quieres?">
             {[true, false].map((option) => (
               <button
@@ -139,7 +159,7 @@ export default function StoreHero({
             ))}
           </div>
         )}
-        {delivery.offered && delivery.hint && <p className="pm-delivery-hint" role="status">{delivery.hint}</p>}
+        {menu.acceptsOrders && delivery.offered && delivery.hint && <p className="pm-delivery-hint" role="status">{delivery.hint}</p>}
 
         {bookingPath && (
           <Link className={`btn btn-touch w-100 pm-booking ${menu.acceptsOrders ? 'btn-light' : 'btn-primary'}`} to={bookingPath}>

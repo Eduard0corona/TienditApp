@@ -206,7 +206,9 @@ public class TenantFileIsolationTests
     {
         await using var fixture = await TestFixture.CreateAsync();
         var previousFiles = fixture.SeedVariantFiles($"covers/{fixture.TenantId}/portada");
+        var logoFiles = fixture.SeedVariantFiles($"logos/{fixture.TenantId}/logo");
         await fixture.SetCoverUrlAsync($"/uploads/covers/{fixture.TenantId}/portada");
+        await fixture.SetLogoUrlAsync($"/uploads/logos/{fixture.TenantId}/logo");
 
         var result = await fixture.UploadCoverAsync();
 
@@ -217,7 +219,8 @@ public class TenantFileIsolationTests
         AssertAllExist(fixture.VariantPathsOfUrl(tenant.CoverImageUrl!));
         AssertNoneExist(previousFiles);
         // The logo is another picture: a cover never touches it.
-        Assert.Null(tenant.LogoUrl);
+        AssertAllExist(logoFiles);
+        Assert.Equal($"/uploads/logos/{fixture.TenantId}/logo", tenant.LogoUrl);
     }
 
     [Fact]

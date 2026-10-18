@@ -82,7 +82,9 @@ function ProductSheetContent({ product, titleId, canOrder, onClose, onAdd }: Pro
   const [quantity, setQuantity] = useState(1);
   const selectionError = getSelectionError(groups, optionIds);
   const unitPrice = getPriceWithOptions(product.price, groups, optionIds);
-  const photo = product.imageLargeUrl ?? product.imageUrl;
+  // A photo that fails to load leaves the sheet as one without a photo, never a broken image.
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const photo = photoFailed ? null : product.imageLargeUrl ?? product.imageUrl;
 
   const toggleOption = (group: ProductOptionGroupDto, optionId: string) => {
     const inGroup = new Set(group.options.map((option) => option.id));
@@ -103,7 +105,7 @@ function ProductSheetContent({ product, titleId, canOrder, onClose, onAdd }: Pro
         <i className="ri-close-line" aria-hidden="true"></i>
       </button>
       <Modal.Body className="pm-product-body">
-        {photo && <img className="pm-product-photo" src={photo} alt="" />}
+        {photo && <img className="pm-product-photo" src={photo} alt="" onError={() => setPhotoFailed(true)} />}
         <div className={`pm-product-info ${photo ? '' : 'no-photo'}`}>
           <h2 id={titleId} className="pm-product-title">{product.name}</h2>
           <ProductPrice price={product.price} compareAtPrice={product.compareAtPrice} />

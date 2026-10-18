@@ -230,6 +230,52 @@ public sealed class CrossTenantHttpSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task MenuCover_WithTheHeaderOfAnother_ShouldChangeAndRemoveOnlyTheirOwn()
+    {
+        const string path = "/api/v1/auth/my-tenant/cover";
+        var aCover = (await TwoBusinessesApi.ReadAsync(await A.Client.PostAsync(path, CoverForm()))).GetProperty("large").GetString();
+        try
+        {
+            using var upload = InBusiness(A.TenantId, HttpMethod.Post, path);
+            upload.Content = CoverForm();
+            var bCover = (await TwoBusinessesApi.ReadAsync(await B.Client.SendAsync(upload))).GetProperty("large").GetString();
+
+            Assert.NotEqual(aCover, bCover);
+            Assert.Equal(aCover, await CoverOfAsync(A.Client));
+            Assert.Equal(bCover, await CoverOfAsync(B.Client));
+
+            using var remove = InBusiness(A.TenantId, HttpMethod.Delete, path);
+            Assert.Equal(HttpStatusCode.NoContent, (await B.Client.SendAsync(remove)).StatusCode);
+
+            Assert.Equal(aCover, await CoverOfAsync(A.Client));
+            Assert.Null(await CoverOfAsync(B.Client));
+            Assert.Equal(HttpStatusCode.OK, (await A.Client.GetAsync(aCover)).StatusCode);
+        }
+        finally
+        {
+            // The pictures go to the API's public folder: the suite leaves nothing behind.
+            Assert.Equal(HttpStatusCode.NoContent, (await A.Client.DeleteAsync(path)).StatusCode);
+        }
+
+        static MultipartFormDataContent CoverForm()
+        {
+            var form = new MultipartFormDataContent();
+            var png = new ByteArrayContent(TwoBusinessesApi.TinyPng);
+            png.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+            form.Add(png, "file", "portada.png");
+            return form;
+        }
+
+        static async Task<string?> CoverOfAsync(HttpClient client)
+        {
+            var profile = await client.GetFromJsonAsync<JsonElement>("/api/v1/auth/my-tenant");
+            return profile.GetProperty("coverImages") is { ValueKind: JsonValueKind.Object } cover
+                ? cover.GetProperty("large").GetString()
+                : null;
+        }
+    }
+
+    [SqlServerFact]
     public async Task SpecialDays_WithTheHeaderOfAnother_ShouldReadAndChangeOnlyTheirOwn()
     {
         const string path = "/api/v1/auth/my-tenant/special-days";

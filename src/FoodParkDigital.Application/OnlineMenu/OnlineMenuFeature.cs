@@ -403,13 +403,14 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
                 settings.OpeningHours is not null)
             && await OnlineBookingCalendar.BookableServices(_context).AnyAsync(cancellationToken);
 
+        var cover = LogoImageUrlsDto.FromBaseUrl(tenant.CoverImageUrl);
         return new PublicMenuDto
         {
             BusinessName = tenant.Name,
             Slug = tenant.Slug,
             LogoUrl = string.IsNullOrEmpty(tenant.LogoUrl) ? null : $"{tenant.LogoUrl}_md.webp",
-            CoverImageUrl = LogoImageUrlsDto.FromBaseUrl(tenant.CoverImageUrl)?.Large,
-            CoverImageWideUrl = LogoImageUrlsDto.FromBaseUrl(tenant.CoverImageUrl)?.Original,
+            CoverImageUrl = cover?.Large,
+            CoverImageWideUrl = cover?.Original,
             Description = tenant.PublicDescription,
             Category = tenant.DirectoryCategory,
             ContactPhone = tenant.ContactPhone,

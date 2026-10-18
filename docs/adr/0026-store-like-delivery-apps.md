@@ -26,7 +26,7 @@ El servidor ya mandaba cosas que la página no usaba:
 
 1. **La página de la tienda**, como abren una tienda las apps:
    - **Portada:** la foto del negocio a todo lo ancho (nueva, ver 5) o, sin ella, los colores de su tema. El logo va encima.
-   - **El negocio:** su nombre, su categoría y su línea de Explorar, y si está abierto.
+   - **El negocio:** su nombre, su categoría y su línea de Explorar, y si está abierto. La línea sale aunque el negocio no aparezca en Explorar: es texto público del dueño, y su tarjeta en Configuración lo dice.
    - **Botones bajo el nombre:** uno abre su información (horario de la semana, días especiales, dirección con mapa y WhatsApp) y otro elige «A domicilio | Para recoger». Con un código postal conocido, la tienda dice lo que cuesta el envío o que no llega.
    - Compartir el menú. La flecha de regreso aparece solo cuando el cliente llegó desde la app (Explorar, Mis pedidos): un menú abierto desde un QR o un enlace nunca lleva a otros negocios.
 2. **Encontrar el producto:**
@@ -37,7 +37,7 @@ El servidor ya mandaba cosas que la página no usaba:
    - **La fila:** nombre, precio (con el precio anterior tachado y el porcentaje de descuento) y descripción a la izquierda; la foto a la derecha con el «+» encima, que dice cuántos lleva el pedido.
    - **El «+»:** agrega el producto de una vez; si el producto tiene opciones, abre su hoja.
    - **La hoja:** se abre al tocar cualquier producto. Tiene su foto grande, descripción y alérgenos, y sus opciones con lo que pide cada grupo («Elige 1», «Elige hasta 2», «Obligatorio»). También tiene instrucciones especiales (la nota del producto, hasta 300 caracteres, la misma regla del servidor) y la cantidad, con «Agregar 2 · $134.00».
-   - **La nota:** el mismo producto con otra nota es otra línea, porque la cocina lee cada una. El carrito guardado en el dispositivo la conserva.
+   - **La nota:** el mismo producto con otra nota es otra línea, porque la cocina lee cada una. El carrito guardado en el dispositivo la conserva, y «Pedir otra vez» trae cada producto con la suya.
 4. **El pedido:**
    - Un botón flotante «Ver pedido» con cuántos productos lleva y el total.
    - El pedido se abre como página de pago, de lado en escritorio y a toda la pantalla en un teléfono. Tiene cuatro secciones: tus productos (con su nota), entrega (domicilio, recoger con la dirección, o la mesa), tus datos y el resumen. Abajo va «Hacer pedido · $X».

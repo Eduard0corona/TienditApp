@@ -121,7 +121,7 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
             aria-describedby={`${ids}-description-help`}
           />
           <div id={`${ids}-description-help`} className="form-text">
-            Lo que vendes, en un renglón. {description.trim().length}/{MAX_DESCRIPTION}
+            Lo que vendes, en un renglón. También sale con tu categoría bajo tu nombre en tu menú. {description.trim().length}/{MAX_DESCRIPTION}
           </div>
         </div>
       </div>

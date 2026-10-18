@@ -223,7 +223,8 @@ export default function PublicBookingPage() {
   return (
     <div className="pm-page">
       <header className="pm-bar">
-        <Link className="pm-round" to={`/m/${slug}`} aria-label="Ver menú">
+        {/* In place of this page: back on the menu, its arrow goes where the customer came from, not here. */}
+        <Link className="pm-round" to={`/m/${slug}`} replace aria-label="Ver menú">
           <i className="ri-arrow-left-line" aria-hidden="true"></i>
         </Link>
         <PhotoOrInitial src={data.logoUrl} name={data.businessName} className="pm-bar-logo" loading="eager" />

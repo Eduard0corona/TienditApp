@@ -59,7 +59,8 @@ export const MAX_LINE_NOTES = 300;
  */
 export function cartLineKey(productId: string, optionIds: readonly string[] = [], notes?: string): string {
   const key = getLineKey(productId, optionIds);
-  return notes ? `${key}|${notes}` : key;
+  // «#» never appears in the ids of a product or its options: a note never reads as options.
+  return notes ? `${key}#${notes}` : key;
 }
 
 /** A note as the cart keeps it: trimmed, within its limit, and absent when empty. */
@@ -146,11 +147,11 @@ export function latestCart(now = new Date()): { slug: string; businessName: stri
 }
 
 /**
- * The lines of a past order, as «Pedir otra vez» puts them in the cart: the menu takes whole units, so a product sold
- * by weight or in fractions (0.5 kg) does not come back, and `skipped` counts them.
+ * The lines of a past order, as «Pedir otra vez» puts them in the cart, each with its note: the menu takes whole units,
+ * so a product sold by weight or in fractions (0.5 kg) does not come back, and `skipped` counts them.
  */
 export function linesOfOrder(
-  items: Array<{ productId: string; quantity: number; optionIds?: string[] | null }>,
+  items: Array<{ productId: string; quantity: number; optionIds?: string[] | null; notes?: string | null }>,
 ): { lines: SavedCartLine[]; skipped: number } {
   const lines = new Map<string, SavedCartLine>();
   let skipped = 0;
@@ -160,12 +161,14 @@ export function linesOfOrder(
       continue;
     }
     const optionIds = [...(item.optionIds ?? [])];
-    const key = getLineKey(item.productId, optionIds);
+    const notes = lineNotes(item.notes);
+    const key = cartLineKey(item.productId, optionIds, notes);
     const current = lines.get(key);
     lines.set(key, {
       productId: item.productId,
       optionIds,
       quantity: Math.min((current?.quantity ?? 0) + item.quantity, MAX_LINE_QUANTITY),
+      ...(notes ? { notes } : {}),
     });
   }
   return { lines: [...lines.values()].slice(0, MAX_CART_LINES), skipped };

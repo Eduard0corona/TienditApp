@@ -53,9 +53,6 @@ import './PublicMenuPage.css';
 
 type MenuLine = CartLine<PublicMenuProduct>;
 
-/** The sticky bar of categories covers this much of the top while browsing: a section starts below it. */
-const TABS_OFFSET = 64;
-
 /** The element of a category's section, for its tab. */
 const sectionId = (categoryId: string) => `pm-cat-${categoryId}`;
 
@@ -234,7 +231,8 @@ export default function PublicMenuPage() {
   const results = useMemo(() => searchMenu(categories, query), [categories, query]);
   const searching = query.trim() !== '';
   const sectionIds = useMemo(() => categories.map((item) => sectionId(item.id)), [categories]);
-  const activeSection = useActiveSection(sectionIds, TABS_OFFSET);
+  // While searching the sections are gone; back from a search, the tabs measure them again.
+  const activeSection = useActiveSection(searching ? [] : sectionIds);
   const { ref: tabsRef, element: tabsRow, fadeClass: tabsFade } = useScrollFade<HTMLDivElement>(categories.length);
 
   // The tab of the section being read stays in sight in its row.
@@ -382,6 +380,8 @@ export default function PublicMenuPage() {
   const hoursSummary = !hours ? null
     : !fromServer ? `Hoy: ${describeDay(hours.intervals, hours.today)}`
     : today ? `Hoy: ${describeTodayHours(today)}` : 'Días especiales';
+  // What the information of the store shows (StoreInfoModal): without any of it, no button opens it empty.
+  const hasInfo = !!(data.description || hours || data.address || data.deliveryOnly || deliveryOffered || contact);
   // Once a product has a photo, the others show their initial so the names line up; without photos, only text.
   const withPhotos = categories.some((item) => item.products.some((product) => product.imageUrl));
   const deliveryHint = !delivering || !isPostalCode(postalCode) ? null
@@ -463,7 +463,7 @@ export default function PublicMenuPage() {
           tableLabel={tableLabel}
           hoursSummary={hoursSummary}
           upcomingNotice={hours?.upcomingNotice ?? null}
-          onOpenInfo={() => setInfoOpen(true)}
+          onOpenInfo={hasInfo ? () => setInfoOpen(true) : null}
           delivery={{ offered: deliveryOffered, required: deliveryRequired, toAddress, onChange: setToAddress, hint: deliveryHint }}
           bookingPath={data.booksOnline && !atTable ? bookingPath(slug) : null}
           contactUrl={contact}
@@ -606,7 +606,8 @@ export default function PublicMenuPage() {
                       <div className="small ta-money">{formatMoney(lineAmount(line.unitPrice, line.quantity))}</div>
                     </div>
                     <div className="pm-stepper small" role="group" aria-label={`Cantidad de ${line.product.name}`}>
-                      <button type="button" onClick={() => changeQuantity(line.key, -1)} aria-label="Uno menos">
+                      <button type="button" onClick={() => changeQuantity(line.key, -1)}
+                        aria-label={line.quantity === 1 ? `Quitar ${line.product.name}` : 'Uno menos'}>
                         <i className={line.quantity === 1 ? 'ri-delete-bin-line' : 'ri-subtract-line'} aria-hidden="true"></i>
                       </button>
                       <span className="ta-money">{line.quantity}</span>
@@ -652,7 +653,9 @@ export default function PublicMenuPage() {
                     <span className="flex-grow-1">Lo recoges en {data.address}</span>
                     <a className="text-nowrap" href={mapsUrl(data.address)} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
                   </p>
-                ) : <p className="text-muted mb-0">Lo recoges en el negocio.</p>
+                ) : data.deliveryOnly
+                  ? <p className="text-muted mb-0">El negocio se pone de acuerdo contigo para la entrega.</p>
+                  : <p className="text-muted mb-0">Lo recoges en el negocio.</p>
               )}
             </section>
 

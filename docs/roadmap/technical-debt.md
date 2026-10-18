@@ -86,7 +86,7 @@ Actualizada el 2026-10-18 con la Fase 24E y antes con la 24D-1, la 25, la 24C, l
   - La flecha de regreso depende del historial de la app: un menú abierto en una pestaña nueva desde Explorar no la ve.
   - Una línea del pedido no se edita: se cambia su cantidad, o se quita y se agrega con otras opciones o instrucciones.
   - La portada se guarda en las mismas variantes que el logo (hasta 2048 px de ancho): no hay recorte ni enfoque elegido por el dueño, el menú la recorta al centro.
-  - La 24E suma 48 B a la primera visita (de 177,960 a 178,008 B, dentro del presupuesto de 178,200 B).
+  - La 24E suma 60 B a la primera visita (de 177,960 a 178,020 B, dentro del presupuesto de 178,200 B).
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.
