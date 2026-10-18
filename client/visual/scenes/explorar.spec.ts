@@ -24,7 +24,7 @@ test.describe('Explorar', () => {
 
       test(`explorar ${look.suffix}`, async ({ page }) => {
         await open(page, '/explorar');
-        await expect(page.getByRole('link', { name: /Café La Esquina/ })).toBeVisible();
+        await expect(page.getByRole('link', { name: /^Café La Esquina/ })).toBeVisible();
         await snap(page, `explorar-${look.suffix}`);
       });
     });

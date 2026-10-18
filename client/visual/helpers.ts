@@ -23,7 +23,9 @@ export async function settle(page: Page) {
     const spinning = [...document.querySelectorAll('.spinner-border, .spinner-grow')].some(visible);
     const loading = [...document.querySelectorAll('body *')].some((element) =>
       element.childElementCount === 0 && visible(element) && /^Cargando…?\.{0,3}$/.test(element.textContent?.trim() ?? ''));
-    const pictures = [...document.images].every((image) => image.complete);
+    // An image not drawn at all (display: none, as the favorites past «Ver todos») never loads while lazy: it does not
+    // count. One drawn has its box even before it loads.
+    const pictures = [...document.images].every((image) => image.complete || image.getClientRects().length === 0);
     return !spinning && !loading && pictures;
   }, null, { timeout: 20_000 });
   await page.evaluate(() => document.fonts.ready);

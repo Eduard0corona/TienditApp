@@ -138,7 +138,7 @@ test.describe('La tienda de un favorito', () => {
   test('tienda favorita teléfono', async ({ page }) => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/m/cafe-la-esquina');
-    await expect(page.getByRole('button', { name: 'Quitar Café La Esquina de tus favoritos' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Guardar Café La Esquina en tus favoritos', pressed: true })).toBeVisible();
     await snap(page, 'tienda-favorita-telefono', { fullPage: false });
   });
 });

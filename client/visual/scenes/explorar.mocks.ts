@@ -1,4 +1,5 @@
 import { asOption, type DemoData } from '../fixtures';
+import { demoDirectory } from '../mocks/routes-p9.mjs';
 
 // OnlineMenuMode as the contract numbers it.
 const ORDERS = 2;
@@ -31,6 +32,8 @@ function withFavorites(data: DemoData) {
 /** She keeps every business of the demo city and the bakery: a wide screen shows two rows and «Ver todos». */
 function withManyFavorites(data: DemoData) {
   withFavorites(data);
+  // The directory is filled by its routes after this runs: the same demo city.
+  data.directory ??= demoDirectory();
   const kept = new Set(data.favorites.map((favorite: { slug: string }) => favorite.slug));
   data.favorites = [
     ...data.directory
