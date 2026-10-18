@@ -257,6 +257,29 @@ El cliente agenda una cita desde el menú en línea del negocio, y el negocio la
   - Lo que lee: Por confirmar, Confirmada, En curso, Terminada, No asististe, La cancelaste o Cancelada; «No se confirmó» si nadie decidió la solicitud y su hora ya empezó.
 - **Sin anticipo:** se cobra en Vender después de aceptarla, como cualquier cita.
 
+## El menú en línea con la forma de las apps de entrega (Fase 24E)
+
+El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 0026](../adr/0026-store-like-delivery-apps.md)). Lo que el pedido cobra, a dónde llega y quién lo recibe no cambia: lo decide el servidor como antes.
+
+- **La tienda:**
+  - **Arriba:** la portada que subió el dueño o, sin ella, los colores de su negocio. Encima van el logo, el nombre, la categoría y la línea de Explorar, y si está abierto.
+  - **Información:** un botón abre el horario de la semana, los días especiales, la dirección con «Cómo llegar» y el WhatsApp.
+  - **Entrega:** con zonas de entrega, la tienda elige «A domicilio» o «Para recoger». Con el código postal de Explorar o de la cuenta dice lo que cuesta el envío o «Por ahora no llegamos al…».
+  - **Regresar:** la flecha solo aparece si el cliente llegó desde la app. Un menú abierto desde un QR o un enlace nunca lleva a otros negocios.
+- **Encontrar:**
+  - Un buscador que compara cada palabra, sin acentos, con el nombre y la descripción.
+  - «Destacados», con los productos que el dueño marcó como destacados, hasta 10, si alguno tiene foto.
+  - Pestañas de categorías que llevan a su sección.
+- **Un producto:**
+  - **En la lista:** nombre, precio (con el precio de antes y «−13%» cuando tiene descuento), descripción y foto. El «+» lo agrega de una vez, y si tiene opciones abre su hoja.
+  - **En su hoja:** sus opciones con lo que pide cada grupo («Elige 1», «Obligatorio»), sus alérgenos, instrucciones especiales de hasta 300 caracteres y cuántos.
+  - **Las instrucciones:** llegan a la cocina con el producto. El mismo producto con otras instrucciones es otra línea del pedido.
+- **El pedido:**
+  - Un botón flotante «Ver pedido» con cuántos productos lleva y el total.
+  - La página del pedido tiene tus productos, la entrega (a domicilio, para recoger con la dirección del negocio, o la mesa), tus datos, el resumen y «Hacer pedido · $X».
+- **La portada:** la sube o la quita el dueño o un administrador en Configuración › «Portada del menú». Acepta JPG, PNG o WebP de hasta 5 MB y se ve mejor horizontal, unas tres veces más ancha que alta. Es pública, como el logo.
+- **Lo que no muestra:** calificaciones, tiempos de entrega ni costos de servicio, que el negocio no tiene.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

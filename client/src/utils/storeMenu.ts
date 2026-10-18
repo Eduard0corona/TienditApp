@@ -31,9 +31,15 @@ export function searchMenu<P extends SearchableProduct>(categories: ReadonlyArra
 /** The carousel of «Destacados» shows at most this many. */
 export const MAX_FEATURED = 10;
 
-/** The products the business marked as featured, in the order of the menu. */
-export function featuredProducts<P extends { isFeatured?: boolean }>(categories: ReadonlyArray<{ products: P[] }>): P[] {
-  return categories.flatMap((category) => category.products).filter((product) => product.isFeatured).slice(0, MAX_FEATURED);
+/**
+ * The products the business marked as featured, in the order of the menu. The carousel shows large photos: while none
+ * of them has one there is none (the server already puts them first in their categories).
+ */
+export function featuredProducts<P extends { isFeatured?: boolean; imageUrl?: string | null }>(
+  categories: ReadonlyArray<{ products: P[] }>,
+): P[] {
+  const featured = categories.flatMap((category) => category.products).filter((product) => product.isFeatured).slice(0, MAX_FEATURED);
+  return featured.some((product) => product.imageUrl) ? featured : [];
 }
 
 /** How much less a product costs than its compare-at price, in whole percent; null without a discount of at least 1%. */

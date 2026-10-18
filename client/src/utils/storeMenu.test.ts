@@ -5,7 +5,7 @@ const categories = [
   {
     products: [
       { name: 'Café americano', description: 'Café de Chiapas, 12 oz', isFeatured: false },
-      { name: 'Latte', description: 'Espresso con leche vaporizada', isFeatured: true },
+      { name: 'Latte', description: 'Espresso con leche vaporizada', isFeatured: true, imageUrl: '/latte.webp' },
     ],
   },
   {
@@ -29,10 +29,12 @@ describe('storeMenu', () => {
     expect(searchMenu(categories, '   ')).toEqual([]);
   });
 
-  it('features what the business marked, in the order of the menu and up to its limit', () => {
+  it('features what the business marked, in the order of the menu and up to its limit, once one has a photo', () => {
     expect(featuredProducts(categories).map((product) => product.name)).toEqual(['Latte', 'Chilaquiles verdes']);
-    const many = [{ products: Array.from({ length: 15 }, (_, index) => ({ name: `P${index}`, isFeatured: true })) }];
+    const many = [{ products: Array.from({ length: 15 }, (_, index) => ({ name: `P${index}`, isFeatured: true, imageUrl: '/p.webp' })) }];
     expect(featuredProducts(many)).toHaveLength(MAX_FEATURED);
+    // Big tiles of initials say nothing: without photos the featured products stay first in their categories.
+    expect(featuredProducts([{ products: [{ name: 'Latte', isFeatured: true, imageUrl: null }] }])).toEqual([]);
   });
 
   it('says how much less a discounted product costs, only when it really costs less', () => {

@@ -40,7 +40,7 @@ async function addLatte(page: Page) {
   const options = await dialog(page, 'Latte');
   await options.getByLabel('Grande').check();
   await options.getByLabel('Almendra').check();
-  await options.getByRole('button', { name: /^Agregar · / }).click();
+  await options.getByRole('button', { name: /^Agregar (\d+ )?· / }).click();
   await expect(options).toBeHidden();
 }
 
@@ -181,7 +181,7 @@ test.describe('Tienda con tu cuenta', () => {
 
   test('tienda con tu cuenta pedido enviado', async ({ page }) => {
     const cart = await cartToAnAddress(page);
-    await cart.getByRole('button', { name: /^Enviar pedido · / }).click();
+    await cart.getByRole('button', { name: /^(Enviar|Hacer) pedido · / }).click();
     await expect(page.getByRole('heading', { name: '¡Pedido enviado!' })).toBeVisible();
     await expect(page.getByText('Lo encuentras en tus pedidos.')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Ver mis pedidos' })).toBeVisible();

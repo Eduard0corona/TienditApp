@@ -632,20 +632,21 @@ button.pm-pill:hover {
   font-size: 0.85rem;
 }
 
+/* Each group of options apart, as the apps band them; a shadow and not a border: a legend would cut the border. */
 .pm-group {
   min-width: 0;
   margin: 0;
-  padding: 0.75rem 1rem;
+  padding: 1.25rem 1rem 0.75rem;
   border: 0;
-  border-top: 8px solid var(--ct-tertiary-bg);
+  box-shadow: inset 0 8px 0 var(--ct-tertiary-bg);
 }
 
+/* Floated, as Bootstrap leaves a legend, so it sits in the group and not on its edge. */
 .pm-group-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem 0.5rem;
-  float: none;
   width: 100%;
   margin-bottom: 0.25rem;
   font-size: 1rem;

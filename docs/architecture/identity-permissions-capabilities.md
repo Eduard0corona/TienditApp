@@ -59,6 +59,7 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Mis citas y cancelar una (`GetMyAppointmentsQuery`, `CancelMyAppointmentCommand`, Fase 24D) | sesión (`[RequiresAuthentication]`); solo las citas de la cuenta de la sesión, en todos los negocios. Cualquier otra responde 404 | — |
 | Aceptar o rechazar una solicitud de cita (`AcceptAppointmentRequestCommand`, `DeclineAppointmentRequestCommand`, Fase 24D) | `ManageAppointments` | `Appointments` |
 | Ver si el negocio agenda en línea (`GetOnlineBookingSettingsQuery`) y prender las citas en línea con cuántas a la vez (`UpdateOnlineBookingSettingsCommand`, Fase 24D) | ver: `ManageAppointments`; cambiar: dueño o administrador del negocio (`[RequiresTenantManager]`), en la actividad del negocio | `Appointments` |
+| Subir o quitar la portada del menú en línea (`UploadTenantCoverCommand`, `DeleteTenantCoverCommand`, Fase 24E) | dueño o admin (`Manager`), como el logo; la portada es pública, como el logo, y cada negocio solo toca los archivos de su carpeta | — |
 | Cobrar una cita, con su cargo por visita (`CreateOrderCommand` con `AppointmentId`, Fase 22E) | `ManageOrders` (y `ChargeOrders` si trae pagos), y además `ManageAppointments` por contenido (`IRequiresContentPermissions`): la venta completa la cita en la agenda, y Vender la lee como la agenda | — |
 
 Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
@@ -124,7 +125,7 @@ La regla vive en cada caso de uso: todo `Command`/`Query` declara exactamente un
 | `[AllowAnonymousRequest("motivo")]` | Flujos públicos (inicio de sesión, registro, confirmaciones) y lo que envía el sistema sin usuario (webhook). |
 
 - `[RequiresCapability(X)]` se combina con la regla anterior y aplica a todos, también al administrador de plataforma: un módulo apagado está apagado.
-- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (270 con la Fase 24D) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
+- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (272 con la Fase 24E) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
 - `CurrentAccessContext` lee una vez por petición la membresía, permisos y módulos; `TenantResolutionMiddleware` le pasa lo que ya consultó.
 - `ForbiddenAccessException` responde 403 con un mensaje en español.
 - `GET /api/v1/me/access` devuelve rol, permisos efectivos y módulos según el servidor. El cliente lo usa al cargar el perfil, así un cambio de permisos aplica sin volver a iniciar sesión (el token anterior conserva sus claims hasta expirar, pero la API ya decide con los permisos actuales).
