@@ -331,6 +331,22 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - **Privacidad:** la ubicación del cliente no se guarda.
 - **«Cómo llegar»** abre el punto exacto de la sucursal principal cuando está en el mapa; si no, busca su dirección.
 
+## Reseñas de los negocios (Fase 24H)
+
+[ADR 0030](../adr/0030-business-reviews.md):
+
+- **Quién escribe:** una cuenta de cliente que recibió un pedido del negocio (entregado o completado) o asistió a una cita con él (completada). Una por cuenta y negocio: escribir otra vez la cambia. El equipo de un negocio no escribe reseñas.
+- **Qué lleva:** de 1 a 5 estrellas y un comentario opcional de hasta 500 caracteres, sin enlaces, correos ni teléfonos. Se califica desde la tienda, desde un pedido recibido en Mis pedidos o desde una cita atendida en Mis citas.
+- **El autor** la cambia o la borra. Una que la plataforma ocultó muestra el motivo, ya no se cambia y se puede borrar. Borrar la cuenta borra sus reseñas.
+- **Lo que ve cualquiera:** el nombre y la inicial del apellido del autor («Mariana O.»), sus estrellas, su comentario, cuándo la escribió, si la editó y la respuesta del negocio, de la más nueva a la más antigua y diez a la vez. Nunca su correo, su teléfono ni su cuenta.
+- **La calificación:** el promedio con un decimal, desde tres reseñas publicadas, en el encabezado de la tienda, en su tarjeta de Explorar y en Clientes › Reseñas. Con menos se dice cuántas hay. Las ocultas no cuentan.
+- **El negocio** (dueño o administrador, en Clientes › Reseñas):
+  - responde una vez cada reseña publicada; la respuesta se cambia o se quita, con las mismas reglas que el comentario;
+  - reporta una reseña con un motivo de la lista (insultos, datos personales, publicidad, no habla de una compra o cita, otro). **Reportar no la oculta:** sigue publicada hasta que la plataforma decide. Una que la plataforma mantuvo se reporta otra vez solo si su autor la cambió después;
+  - nunca borra ni oculta una reseña.
+- **La plataforma** (Plataforma › Reseñas) revisa las reportadas, la del reporte más antiguo primero: la oculta con un motivo de la lista, o la mantiene (el reporte se cierra). Una oculta se restaura. Cada decisión queda en la actividad del negocio con su motivo.
+- **Los buscadores** no reciben las reseñas en los datos estructurados de la tienda.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

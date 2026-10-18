@@ -678,6 +678,43 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - Sucursales (8): la insignia «En el mapa» en la lista y «Ubicación en el mapa (opcional)» con «Usar mi ubicación» y «Revisar en el mapa» en el formulario.
     - **Resultado:** la comparación contra `master` dio 462 escenas iguales, 5 nuevas y 23 que cambian. Con esas capturas, los tres archivos tocados (125 escenas) pasaron dos corridas seguidas contra el mismo build.
     - **Lo que encontraron las escenas:** con una altura de fila fraccionaria, el chip dejaba una diferencia de suavizado en escenas de abajo (la agenda de citas): su margen ahora es de 0.625rem (10 px exactos).
+- Fase 24H, reseñas de los negocios ([ADR 0030](../adr/0030-business-reviews.md)):
+  - **Domain:** `BusinessReviewTests` (23):
+    - escribir con 1 a 5 estrellas, el comentario recortado y vacío como ninguno, hasta 500 caracteres, sin enlaces, correos ni teléfonos (y sí con lo que solo lo parece: un precio, una fecha, «10 de 10» o «rico.Me encantó»);
+    - el nombre corto del autor («Mariana O.», «María Fernanda L.», «Beto», «Cliente»);
+    - cambiarla (con su fecha de edición) y no cambiar una oculta;
+    - responder, cambiar y quitar la respuesta, con las mismas reglas, y no responder una oculta;
+    - reportar con motivo, no dos veces, no una oculta, ni una mantenida que su autor no cambió después; sí después de que la cambió;
+    - ocultar con motivo (cierra el reporte), mantener solo con reporte, restaurar solo una oculta.
+  - **Application:** `BusinessReviewsFlowTests` (6):
+    - solo después de recibir un pedido: antes es `NotACustomerYetMessage`; luego la escribe, la cambia y la borra;
+    - con una cita atendida;
+    - el equipo, una tienda sin publicar y un comentario con enlace se rechazan;
+    - la tienda y Explorar muestran la calificación desde tres, la más nueva primero y diez por página;
+    - el negocio responde y reporta las suyas, y la de otro no existe (`NotFound`);
+    - la plataforma oculta, mantiene y restaura, con su registro en la actividad del negocio.
+  - **SQL Server:** `BusinessReviewsMigrationSqlServerTests` (3):
+    - una por cuenta y negocio (2601), un negocio con reseñas no se borra (547) y borrar la cuenta se lleva sus reseñas;
+    - las restricciones rechazan estrellas fuera de rango, un reporte sin motivo o en una oculta, una oculta sin motivo y una respuesta sin fecha (con los `NULL` que `BETWEEN` dejaba pasar);
+    - revertir se detiene con 50023 mientras haya una reseña y, sin ellas, quita solo la tabla.
+  - **WebApi:** `CrossTenantCustomerAccountsSqlServerTests.Reviews_ShouldBeOfCustomersWhoBought_AnsweredOnlyByTheirBusiness_AndHiddenOnlyByThePlatform` (1), sobre la API real:
+    - sin compra es 403, el equipo 400 y sin sesión 401;
+    - el otro negocio no responde ni reporta (404);
+    - lo público dice «Cliente R.», sin correo ni id de la cuenta;
+    - el dueño no entra a la consola (403); la plataforma la oculta, queda `ReviewHidden` en la actividad, el autor ve el motivo, ya no la cambia (400) y la borra (204).
+    - `CrossTenantSuiteCoverageTests`: `PlatformController` sale de los controllers fuera de la suite, porque la suite ya llama `/api/v1/platform/reviews`.
+    - `AuthorizationBehaviorTests` suma `GetPublicReviewsQuery` a la lista exacta de anónimos, y `TenantFilterBypassAllowlistTests` los `IgnoreQueryFilters` de la calificación de Explorar, las reseñas de la cuenta y la cola de la plataforma.
+  - **Ensayo de los scripts:** sobre una copia de la base de la 24G, `apply.sql` dos veces, cada restricción rechaza lo que debe (547), `rollback.sql` se detiene con 50023 con una reseña y, sin ella, corre dos veces, y `apply.sql` otra vez.
+  - **Cliente:**
+    - `reviews.test.ts` (4): la calificación desde tres, el promedio con un decimal, las estrellas en palabras, los motivos de la lista y cuándo el negocio puede reportar.
+    - `ReviewDialog.test.tsx` (5): cambiar la propia desde lo que guarda (un comentario vacío es ninguno), borrar preguntando en el mismo diálogo, la oculta con su motivo y solo borrar, sin derecho dice cuándo, y sin estrellas no publica y un rechazo de la API conserva lo escrito.
+    - `PublicMenuPage.test.tsx` (37, +2): la calificación del encabezado lleva a las reseñas con la respuesta del negocio; la primera reseña para quien compró y nada para un visitante sin reseñas.
+    - `MyOrders.test.tsx` (6, +1) y `MyAppointments.test.tsx` (4, +1): «Calificar» solo en un pedido recibido o una cita atendida, y «Tu reseña» donde ya calificó.
+    - `BusinessReviewsPage.test.tsx` (3) y `PlatformReviewsPage.test.tsx` (3): responder, reportar con motivo (sin ofrecerlo a una reportada, mantenida u oculta), el filtro desde su primera página; ocultar con el motivo del reporte ya elegido, mantener y restaurar.
+    - `DirectoryBusinessCard.test.tsx` (2): «4.6 (23)» con la frase completa en el enlace, y nada con menos de tres.
+    - `access.test.ts`: Reseñas para dueños y administradores, no para el equipo con todos los permisos.
+  - **Primera visita:** 178,509 B de 178,600 B (+393 B): las dos rutas, su menú, el área de acceso y los enums de reseñas.
+  - **Escenas visuales:** PENDIENTE
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

@@ -476,6 +476,23 @@ La Fase 24G trae una migración, [`database/production/20261018114538_AddBranchL
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las columnas, y Explorar deja de ordenar por distancia.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50022, sin cambiar nada, en cuanto una sucursal está en el mapa: quitar las columnas olvidaría dónde está. Sin ninguna, quita la restricción y las columnas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Reseñas de los negocios (Fase 24H)
+
+La Fase 24H trae una migración, [`database/production/20261018141704_AddBusinessReviews`](../../database/production/20261018141704_AddBusinessReviews). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0030](../adr/0030-business-reviews.md)).
+
+- **La migración:** crea la tabla `BusinessReviews` (la cuenta, el negocio, las estrellas, el comentario, la respuesta, el reporte y la moderación) con un índice único por cuenta y negocio, el de la lista de cada negocio y uno filtrado para los reportes. Sus restricciones (`CK_BusinessReviews_Rating`, `_Status`, `_Report`, `_Hidden` y `_Reply`) guardan las reglas del dominio. Su llave hacia `AspNetUsers` borra en cascada; la de `Tenants` no deja borrar un negocio con reseñas. No toca ninguna tabla existente. Después de aplicarla, el `verify.sql` muestra la tabla con sus índices y restricciones, y su consulta 3 cuenta las reseñas, las ocultas, las reportadas y las respondidas (ninguna hasta desplegar).
+- **Mientras se publica:** la versión de `master` (Fase 24G) no conoce la tabla y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - `GET /api/v1/public/menu/{slug}/reviews` (anónimo, con el límite de peticiones del menú público) y `rating` en el menú público y en cada negocio de Explorar;
+  - `GET /api/v1/me/reviews`, `GET`, `PUT` y `DELETE /api/v1/me/reviews/{slug}`;
+  - `GET /api/v1/reviews`, `PUT` y `DELETE /api/v1/reviews/{id}/reply`, `POST /api/v1/reviews/{id}/report`;
+  - `GET /api/v1/platform/reviews` y `POST /api/v1/platform/reviews/{id}/hide`, `keep` y `restore`.
+
+  Nada se quita ni cambia de nombre.
+- **Sin configuración ni servicios externos.**
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla, y la tienda, Explorar y las cuentas responden como antes.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50023, sin cambiar nada, en cuanto un cliente reseñó un negocio: borrar la tabla perdería lo que escribieron. Sin reseñas, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

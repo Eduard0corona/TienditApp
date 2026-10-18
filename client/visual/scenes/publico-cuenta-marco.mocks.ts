@@ -1,4 +1,5 @@
 import { asOption, type DemoData, type SceneOptions } from '../fixtures';
+import { ratingOf } from '../mocks/routes-p14.mjs';
 
 type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 type PrepareData = NonNullable<SceneOptions['prepareData']>;
@@ -167,6 +168,8 @@ function publicMenu(data: DemoData, slug: string, table: string | null) {
       deliveryAvailable: acceptsOrders && !!data.menuDelivery,
       // Its booking page (Fase 24D), when a scene turns online booking on.
       booksOnline: !!data.menuBooksOnline,
+      // Its rating (Fase 24H), from the reviews a scene gives it.
+      rating: ratingOf((data.reviews ?? []).filter((review: { slug: string }) => review.slug === slug)),
     },
   };
 }
