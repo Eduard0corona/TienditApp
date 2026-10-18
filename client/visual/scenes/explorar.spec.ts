@@ -1,12 +1,13 @@
 import { expect, test } from '../fixtures';
 import { SIZES, open, snap, snapElement } from '../helpers';
-import { MENU_CON_PEDIDOS, SIN_NEGOCIOS } from './explorar.mocks';
+import { CON_FAVORITOS, MENU_CON_PEDIDOS, SIN_NEGOCIOS } from './explorar.mocks';
 import { CUSTOMER_PROFILE } from './vender-pedidos.mocks';
 
 // Explorar (Fase 24A): the businesses of the city by category, as a visitor and a customer see them, and the card of
 // the owner's settings that says how its business shows there. The directory of the scenes has seven businesses: two
 // take orders now (one delivers), one has them paused, a kitchen that only delivers, a shop with its menu only and two
-// closed.
+// closed. Since the 24F each card has its cover (Café La Esquina's photo, the colors of the others), a search shows the
+// products it found first, and a customer keeps favorites with a heart.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -36,6 +37,16 @@ test.describe('Explorar', () => {
     await snap(page, 'explorar-categoria-telefono');
   });
 
+  // «chilaquiles»: two products of two businesses (one with its photo and discount), and the business whose line says it.
+  for (const look of [LOOKS[0], LOOKS[1]]) {
+    test(`explorar productos ${look.suffix}`, async ({ page }) => {
+      await page.setViewportSize(look.viewport);
+      await open(page, '/explorar?q=chilaquiles');
+      await expect(page.getByRole('link', { name: /^Chilaquiles rojos con huevo/ })).toBeVisible();
+      await snap(page, `explorar-productos-${look.suffix}`);
+    });
+  }
+
   test('explorar una búsqueda sin resultados', async ({ page }) => {
     await open(page, '/explorar?q=sushi');
     await expect(page.getByText('No encontramos «sushi»')).toBeVisible();
@@ -62,6 +73,19 @@ test.describe('Explorar como cliente', () => {
     await open(page, '/explorar');
     await expect(page.getByRole('link', { name: /Mis pedidos/ })).toBeVisible();
     await snap(page, 'explorar-cliente-telefono');
+  });
+
+  test.describe('con favoritos', () => {
+    test.use({ prepareData: CON_FAVORITOS });
+
+    for (const look of [LOOKS[0], LOOKS[1]]) {
+      test(`explorar favoritos ${look.suffix}`, async ({ page }) => {
+        await page.setViewportSize(look.viewport);
+        await open(page, '/explorar');
+        await expect(page.getByRole('region', { name: 'Tus favoritos' }).getByText('Panadería San Juan')).toBeVisible();
+        await snap(page, `explorar-favoritos-${look.suffix}`);
+      });
+    }
   });
 });
 

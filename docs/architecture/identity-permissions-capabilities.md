@@ -60,6 +60,7 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Aceptar o rechazar una solicitud de cita (`AcceptAppointmentRequestCommand`, `DeclineAppointmentRequestCommand`, Fase 24D) | `ManageAppointments` | `Appointments` |
 | Ver si el negocio agenda en línea (`GetOnlineBookingSettingsQuery`) y prender las citas en línea con cuántas a la vez (`UpdateOnlineBookingSettingsCommand`, Fase 24D) | ver: `ManageAppointments`; cambiar: dueño o administrador del negocio (`[RequiresTenantManager]`), en la actividad del negocio | `Appointments` |
 | Subir o quitar la portada del menú en línea (`UploadTenantCoverCommand`, `DeleteTenantCoverCommand`, Fase 24E) | dueño o admin (`Manager`), como el logo; la portada es pública, como el logo, y cada negocio solo toca los archivos de su carpeta | — |
+| Los negocios favoritos de la cuenta: leerlos, guardar uno y quitarlo (`GetMyFavoritesQuery`, `SaveMyFavoriteCommand`, `RemoveMyFavoriteCommand`, Fase 24F) | sesión (`[RequiresAuthentication]`); solo los de la cuenta de la sesión, y solo una cuenta de cliente activa los guarda (otra lee una lista vacía y al guardar o quitar recibe 400). Se guarda solo una tienda con su menú publicado; ningún negocio lee quién lo guardó | — |
 | Cobrar una cita, con su cargo por visita (`CreateOrderCommand` con `AppointmentId`, Fase 22E) | `ManageOrders` (y `ChargeOrders` si trae pagos), y además `ManageAppointments` por contenido (`IRequiresContentPermissions`): la venta completa la cita en la agenda, y Vender la lee como la agenda | — |
 
 Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
@@ -125,7 +126,7 @@ La regla vive en cada caso de uso: todo `Command`/`Query` declara exactamente un
 | `[AllowAnonymousRequest("motivo")]` | Flujos públicos (inicio de sesión, registro, confirmaciones) y lo que envía el sistema sin usuario (webhook). |
 
 - `[RequiresCapability(X)]` se combina con la regla anterior y aplica a todos, también al administrador de plataforma: un módulo apagado está apagado.
-- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (274 con la Fase 24D-2) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
+- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (277 con la Fase 24F) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
 - `CurrentAccessContext` lee una vez por petición la membresía, permisos y módulos; `TenantResolutionMiddleware` le pasa lo que ya consultó.
 - `ForbiddenAccessException` responde 403 con un mensaje en español.
 - `GET /api/v1/me/access` devuelve rol, permisos efectivos y módulos según el servidor. El cliente lo usa al cargar el perfil, así un cambio de permisos aplica sin volver a iniciar sesión (el token anterior conserva sus claims hasta expirar, pero la API ya decide con los permisos actuales).

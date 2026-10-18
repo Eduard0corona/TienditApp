@@ -293,6 +293,27 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - el horario de la semana.
 - **El resto de la app** (Vender, Caja, Configuración, la cuenta del cliente, el seguimiento) no aparece en los buscadores.
 
+## Productos y favoritos en Explorar (Fase 24F)
+
+[ADR 0028](../adr/0028-product-search-and-favorites.md):
+
+- **Buscar productos:** una búsqueda en Explorar también muestra los productos de todos sus negocios.
+  - **Qué compara:** cada palabra, sin acentos, con el nombre y la descripción de lo que cada menú ya muestra. Con categoría, solo los productos de sus negocios.
+  - **En qué orden:** primero los que la tienen en el nombre; luego los de los negocios que reciben pedidos ahora.
+  - **Cuántos:** 3 de un negocio y 12 en total.
+  - **Qué dice cada uno:** su foto (o la inicial en los colores del negocio), su negocio, «Pide en línea» si recibe pedidos ahora, su precio (con el de antes si tiene descuento) y «más IVA» si sus precios no lo incluyen.
+  - **A dónde lleva:** abre la tienda en la hoja del producto, con lo que el menú diga en ese momento. Si el menú ya no lo muestra, abre solo el menú.
+- **Favoritos:**
+  - **Quién:** solo una cuenta de cliente guarda negocios, con el corazón de su tarjeta en Explorar o el de la portada de su tienda (no en una mesa). Un visitante va a entrar y regresa; el equipo de un negocio no ve el corazón.
+  - **Cuántos:** hasta 100. Para agregar otro hay que quitar uno.
+  - **Qué se guarda:** solo una tienda con su menú publicado.
+  - **Dónde se ven:** «Tus favoritos», arriba de Explorar cuando no hay búsqueda ni categoría, del último guardado al primero.
+    - Cada uno lleva su tarjeta mientras aparece en Explorar.
+    - Si su dueño lo sacó de Explorar o su menú no tiene qué pedir, queda con su nombre y «No aparece en Explorar ahora».
+    - Un negocio suspendido o con el menú apagado no aparece hasta que vuelve.
+  - **Privacidad:** ningún negocio sabe quién lo guardó.
+- **La portada en Explorar:** cada tarjeta lleva arriba la portada de su tienda (o sus colores), con el logo encima del borde. La vista previa de Configuración la muestra igual.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

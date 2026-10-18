@@ -18,5 +18,12 @@ function withCover(data: DemoData) {
   data.tenant.logoUrl = '/visual-img/logo.svg';
 }
 
+/** The store dressed, and María Fernanda keeps it among her favorites (Fase 24F): its heart is full. */
+function favoriteStore(data: DemoData) {
+  dressedStore(data);
+  data.favorites = [{ slug: 'cafe-la-esquina', name: 'Café La Esquina', logoUrl: '/visual-img/logo.svg', savedAt: '2026-09-28T16:00:00.000Z' }];
+}
+
 export const TIENDA = asOption(dressedStore);
+export const TIENDA_FAVORITA = asOption(favoriteStore);
 export const CON_PORTADA = asOption(withCover);
