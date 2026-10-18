@@ -147,7 +147,7 @@
 }
 
 .ex-skeleton {
-  height: 8.5rem;
+  height: 13rem;
   border-radius: 0.75rem;
   background: var(--ct-tertiary-bg);
   animation: ex-pulse 1.4s ease-in-out infinite;
@@ -180,4 +180,85 @@
 
 .ex-empty p {
   color: var(--ct-secondary-color);
+}
+
+/* A heading of a part of the results: the customer's favorites, the products found (Fase 24F). */
+.ex-section-title {
+  margin: 0 0 0.6rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* «Tus favoritos»: sideways on a phone, as many as fit on a wide screen. */
+.ex-favorites {
+  margin-top: 1.25rem;
+}
+
+.ex-favorites-row {
+  display: flex;
+  gap: 0.85rem;
+  margin: 0 -1rem;
+  padding: 0 1rem 0.25rem;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.ex-favorites-row::-webkit-scrollbar {
+  display: none;
+}
+
+.ex-favorites-row > li {
+  flex: 0 0 min(85%, 20rem);
+}
+
+@media (min-width: 768px) {
+  .ex-favorites-row {
+    margin: 0;
+    padding: 0 0 0.25rem;
+  }
+}
+
+/* A favorite that does not show in Explorar now: its logo and name, without its card. */
+.ex-favorite-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  height: 100%;
+  min-height: 9rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--ct-border-color);
+  border-radius: 0.75rem;
+  background: var(--ct-secondary-bg);
+  color: var(--ct-body-color);
+  text-decoration: none;
+}
+
+.ex-favorite-tile:hover {
+  border-color: var(--ct-primary-border-subtle);
+  color: var(--ct-body-color);
+}
+
+.ex-favorite-logo {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  object-fit: cover;
+}
+
+.ex-favorite-logo.photo-initial {
+  background: var(--ct-tertiary-bg);
+  color: var(--ct-body-color);
+}
+
+.ex-favorite-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.ex-favorite-note {
+  color: var(--ct-secondary-color);
+  font-size: 0.85rem;
 }

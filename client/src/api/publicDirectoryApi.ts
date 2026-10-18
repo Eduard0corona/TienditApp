@@ -3,6 +3,8 @@ import { apiRequest, type Schemas } from './typedClient';
 
 export type PublicDirectory = Schemas['PublicDirectoryDto'];
 export type DirectoryBusiness = Schemas['PublicDirectoryBusinessDto'];
+/** A product a search of Explorar found (Fase 24F), with the business it is at. */
+export type DirectoryProduct = Schemas['PublicDirectoryProductDto'];
 export type DirectoryProfile = Schemas['DirectoryProfileDto'];
 export type UpdateDirectoryProfile = Schemas['UpdateDirectoryProfileRequest'];
 

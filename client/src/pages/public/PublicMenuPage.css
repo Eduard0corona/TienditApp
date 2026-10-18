@@ -83,6 +83,12 @@
   background: var(--ct-tertiary-bg);
 }
 
+/* The heart of a business the customer keeps among their favorites (Fase 24F). */
+.pm-round.is-favorite,
+.pm-round.is-favorite:hover {
+  color: var(--ct-danger);
+}
+
 .pm-store {
   position: relative;
   padding: 0 1rem 1rem;

@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
 import { publicMenuApi, type PublicMenu } from '../../api/publicMenuApi';
@@ -22,7 +22,10 @@ vi.mock('../../api/publicMenuApi', () => ({
 
 vi.mock('../../api/accountApi', () => ({
   MAX_ACCOUNT_ADDRESSES: 10,
-  accountApi: { getAddresses: vi.fn(), saveAddress: vi.fn(), updateAddress: vi.fn(), deleteAddress: vi.fn() },
+  accountApi: {
+    getAddresses: vi.fn(), saveAddress: vi.fn(), updateAddress: vi.fn(), deleteAddress: vi.fn(),
+    getFavorites: vi.fn(), saveFavorite: vi.fn(), removeFavorite: vi.fn(),
+  },
 }));
 
 const api = vi.mocked(publicMenuApi);
@@ -89,11 +92,18 @@ const christmasDay = {
   ],
 };
 
+/** The address the page is at, for what it keeps in it or takes out. */
+function Address() {
+  const location = useLocation();
+  return <div hidden data-testid="address">{`${location.pathname}${location.search}`}</div>;
+}
+
 function renderPage(path = '/m/cafe-luna', auth?: Partial<AuthContextType>, from?: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // `from`: the page of the app the customer came from (Explorar), one step back in the history.
   const page = (
     <MemoryRouter initialEntries={from ? [from, path] : [path]} initialIndex={from ? 1 : 0}>
+      <Address />
       <Routes>
         <Route path="/m/:slug" element={<PublicMenuPage />} />
       </Routes>
@@ -872,6 +882,77 @@ describe('PublicMenuPage', () => {
       const sheet = screen.getByRole('dialog', { name: 'Café americano' });
       expect(within(sheet).queryByRole('button', { name: /^Agregar/ })).not.toBeInTheDocument();
       expect(within(sheet).queryByLabelText('Instrucciones especiales')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('from Explorar (Fase 24F)', () => {
+    const favorite = { slug: 'cafe-luna', name: 'Café Luna', logoUrl: null, savedAt: '2026-10-18T08:00:00Z' };
+
+    it('opens the product a search found on its sheet, and closing it leaves the address of the store', async () => {
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna?mesa=5&producto=p1');
+
+      expect(await screen.findByRole('dialog', { name: 'Latte' })).toBeInTheDocument();
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Latte' })).getByRole('button', { name: 'Cerrar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Latte' })).not.toBeInTheDocument());
+      // The table stays: only the product leaves the address, so going back or reloading does not open it again.
+      expect(screen.getByTestId('address')).toHaveTextContent(/^\/m\/cafe-luna\?mesa=5$/);
+    });
+
+    it('opens just the menu when the product of the link is no longer on it', async () => {
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage('/m/cafe-luna?producto=gone');
+
+      expect(await screen.findByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('keeps the business among the favorites of a customer account from its cover, and takes it out', async () => {
+      api.getMenu.mockResolvedValue(menu());
+      account.getAddresses.mockResolvedValue([]);
+      account.getFavorites.mockResolvedValue([]);
+      account.saveFavorite.mockImplementation(async () => {
+        account.getFavorites.mockResolvedValue([favorite]);
+      });
+      account.removeFavorite.mockImplementation(async () => {
+        account.getFavorites.mockResolvedValue([]);
+      });
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+      const save = await screen.findByRole('button', { name: 'Guardar Café Luna en tus favoritos' });
+      expect(save).toHaveAttribute('aria-pressed', 'false');
+      await userEvent.click(save);
+
+      expect(account.saveFavorite).toHaveBeenCalledWith('cafe-luna');
+      const saved = await screen.findByRole('button', { name: 'Quitar Café Luna de tus favoritos' });
+      expect(saved).toHaveAttribute('aria-pressed', 'true');
+      await waitFor(() => expect(saved).toBeEnabled());
+      await userEvent.click(saved);
+
+      expect(account.removeFavorite).toHaveBeenCalledWith('cafe-luna');
+      expect(await screen.findByRole('button', { name: 'Guardar Café Luna en tus favoritos' })).toBeInTheDocument();
+    });
+
+    it('invites a visitor to sign in to keep it, and shows no heart to a business\'s team or at a table', async () => {
+      api.getMenu.mockResolvedValue(menu());
+      account.getAddresses.mockResolvedValue([]);
+      account.getFavorites.mockResolvedValue([]);
+
+      const visitor = renderPage();
+      expect(await screen.findByRole('link', { name: 'Entra para guardar Café Luna en tus favoritos' })).toHaveAttribute('href', '/login');
+      visitor.unmount();
+
+      const team = renderPage('/m/cafe-luna', signedInAs('TenantAdmin'));
+      await screen.findByRole('button', { name: 'Agregar Latte' });
+      expect(screen.queryByRole('button', { name: /favoritos/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /favoritos/ })).not.toBeInTheDocument();
+      team.unmount();
+
+      renderPage('/m/cafe-luna?mesa=5', signedInAs('Customer'));
+      await screen.findByRole('button', { name: 'Agregar Latte' });
+      expect(screen.queryByRole('button', { name: /favoritos/ })).not.toBeInTheDocument();
     });
   });
 });

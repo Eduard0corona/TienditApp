@@ -4,7 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicDirectoryApi, type DirectoryBusiness, type DirectorySearch } from '../../api/publicDirectoryApi';
 import DirectoryBusinessCard from '../../components/explore/DirectoryBusinessCard';
+import DirectoryProducts from '../../components/explore/DirectoryProducts';
+import FavoriteBusinesses from '../../components/explore/FavoriteBusinesses';
+import FavoriteButton from '../../components/explore/FavoriteButton';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { useFavoriteBusinesses, type FavoriteBusinesses as Favorites } from '../../hooks/useFavoriteBusinesses';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { BUSINESS_CATEGORIES, categoryBySlug } from '../../utils/businessCategories';
 import { readPostalCode, savePostalCode } from '../../utils/postalCodePreference';
@@ -21,12 +25,15 @@ function countLabel(count: number): string {
   return count === 1 ? '1 negocio' : `${count.toLocaleString('es-MX')} negocios`;
 }
 
-function BusinessList({ businesses }: { businesses: DirectoryBusiness[] }) {
+function BusinessList({ businesses, favorites }: { businesses: DirectoryBusiness[]; favorites: Favorites }) {
   return (
     <ul className="ex-grid">
       {businesses.map((business) => (
         <li key={business.slug}>
-          <DirectoryBusinessCard business={business} />
+          <DirectoryBusinessCard
+            business={business}
+            action={<FavoriteButton slug={business.slug} name={business.name} favorites={favorites} className="dc-favorite" />}
+          />
         </li>
       ))}
     </ul>
@@ -34,7 +41,7 @@ function BusinessList({ businesses }: { businesses: DirectoryBusiness[] }) {
 }
 
 /** A page after the first, asked when the customer wants more. */
-function MoreBusinesses({ search, pageNumber }: { search: DirectorySearch; pageNumber: number }) {
+function MoreBusinesses({ search, pageNumber, favorites }: { search: DirectorySearch; pageNumber: number; favorites: Favorites }) {
   const page = useQuery({
     queryKey: ['directory', search, pageNumber],
     queryFn: ({ signal }) => publicDirectoryApi.getDirectory({ ...search, pageNumber }, signal),
@@ -49,7 +56,7 @@ function MoreBusinesses({ search, pageNumber }: { search: DirectorySearch; pageN
     );
   }
   const businesses = page.data?.businesses.items ?? [];
-  return businesses.length > 0 ? <div className="mt-3"><BusinessList businesses={businesses} /></div> : null;
+  return businesses.length > 0 ? <div className="mt-3"><BusinessList businesses={businesses} favorites={favorites} /></div> : null;
 }
 
 /**
@@ -120,11 +127,14 @@ function PostalCodeChip({ postalCode, onChange }: { postalCode: string; onChange
  * Explorar (/explorar and /explorar/:categoria): the businesses that published their menu, those that take orders now
  * first. A customer finds one by category or by words of its name or what it sells, and the card opens its menu, where
  * it orders as it always did. The search lives in the address (?q=), so a search can be shared. With the customer's
- * postal code each card says whether it delivers there, and a cart left without sending is a tap away (Fase 24B).
+ * postal code each card says whether it delivers there, and a cart left without sending is a tap away (Fase 24B). A
+ * search also finds the products of the menus, and a customer keeps the businesses they like, first on the page
+ * (Fase 24F).
  */
 export default function ExplorePage() {
   const searchId = useId();
   const [postalCode, setPostalCode] = useState(readPostalCode);
+  const favorites = useFavoriteBusinesses(postalCode || undefined);
   const [pendingCart] = useState(() => latestCart());
   const { categoria } = useParams();
   const [params, setParams] = useSearchParams();
@@ -174,6 +184,7 @@ export default function ExplorePage() {
 
   const first = directory.data;
   const firstItems = first?.businesses.items ?? [];
+  const products = first?.products ?? [];
   const total = first?.businesses.totalCount ?? 0;
   const counts = new Map((first?.categories ?? []).map((item) => [item.category, item.count]));
   const anyListed = [...counts.values()].some((count) => count > 0);
@@ -242,8 +253,11 @@ export default function ExplorePage() {
         </nav>
       )}
 
+      {!query.trim() && !category && <FavoriteBusinesses favorites={favorites} />}
+
       <section className="ex-results" aria-labelledby="explore-results" aria-busy={directory.isLoading}>
-        <h2 id="explore-results" className="visually-hidden">Negocios</h2>
+        {products.length > 0 && <DirectoryProducts products={products} />}
+        <h2 id="explore-results" className={products.length > 0 && total > 0 ? 'ex-section-title' : 'visually-hidden'}>Negocios</h2>
         <p className="ex-count" aria-live="polite">{directory.isSuccess && total > 0 ? countLabel(total) : ''}</p>
 
         {directory.isLoading && (
@@ -261,7 +275,7 @@ export default function ExplorePage() {
           </div>
         )}
 
-        {directory.isSuccess && total === 0 && (
+        {directory.isSuccess && total === 0 && products.length === 0 && (
           <div className="ex-empty">
             <i className="ri-store-2-line" aria-hidden="true"></i>
             {query.trim() ? (
@@ -288,9 +302,9 @@ export default function ExplorePage() {
           </div>
         )}
 
-        {firstItems.length > 0 && <BusinessList businesses={firstItems} />}
+        {firstItems.length > 0 && <BusinessList businesses={firstItems} favorites={favorites} />}
         {Array.from({ length: pagesShown - 1 }, (_, index) => (
-          <MoreBusinesses key={index + 2} search={search} pageNumber={index + 2} />
+          <MoreBusinesses key={index + 2} search={search} pageNumber={index + 2} favorites={favorites} />
         ))}
 
         {hasMore && (

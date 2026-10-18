@@ -3,16 +3,43 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { publicDirectoryApi, type DirectoryBusiness, type PublicDirectory } from '../../api/publicDirectoryApi';
+import { accountApi } from '../../api/accountApi';
+import { publicDirectoryApi, type DirectoryBusiness, type DirectoryProduct, type PublicDirectory } from '../../api/publicDirectoryApi';
 import { BusinessCategory } from '../../api/generated/enums';
+import { useCustomerAccount } from '../../hooks/useCustomerAccount';
+import type { UserProfileDto } from '../../types';
 import { saveCart } from '../../utils/savedCart';
 import ExplorePage from './ExplorePage';
 
 vi.mock('../../api/publicDirectoryApi', () => ({
   publicDirectoryApi: { getDirectory: vi.fn(), getProfile: vi.fn(), updateProfile: vi.fn() },
 }));
+vi.mock('../../api/accountApi', () => ({
+  accountApi: { getFavorites: vi.fn(), saveFavorite: vi.fn(), removeFavorite: vi.fn() },
+}));
+vi.mock('../../hooks/useCustomerAccount', () => ({ useCustomerAccount: vi.fn() }));
 
 const api = vi.mocked(publicDirectoryApi);
+const account = vi.mocked(accountApi);
+
+/** Signed in with a customer account: it keeps favorites (Fase 24F). */
+function signInAsCustomer() {
+  vi.mocked(useCustomerAccount).mockReturnValue({ customer: { id: 'u1', firstName: 'Mariana' } as UserProfileDto, signedIn: true });
+}
+
+function product(overrides: Partial<DirectoryProduct>): DirectoryProduct {
+  return {
+    id: 'p1',
+    name: 'Orden de pastor',
+    price: 85,
+    businessName: 'Taquería El Güero',
+    businessSlug: 'el-guero',
+    theme: 0,
+    acceptsOrders: true,
+    pricesIncludeTax: true,
+    ...overrides,
+  };
+}
 
 function business(overrides: Partial<DirectoryBusiness>): DirectoryBusiness {
   return {
@@ -31,7 +58,10 @@ function business(overrides: Partial<DirectoryBusiness>): DirectoryBusiness {
   };
 }
 
-function directory(items: DirectoryBusiness[], options: { total?: number; hasNextPage?: boolean; counts?: Partial<Record<BusinessCategory, number>> } = {}): PublicDirectory {
+function directory(
+  items: DirectoryBusiness[],
+  options: { total?: number; hasNextPage?: boolean; counts?: Partial<Record<BusinessCategory, number>>; products?: PublicDirectory['products'] } = {},
+): PublicDirectory {
   const counts = options.counts ?? { [BusinessCategory.Food]: 2, [BusinessCategory.Hardware]: 1 };
   return {
     categories: Object.values(BusinessCategory).map((category) => ({ category, count: counts[category] ?? 0 })),
@@ -43,6 +73,7 @@ function directory(items: DirectoryBusiness[], options: { total?: number; hasNex
       hasPreviousPage: false,
       hasNextPage: options.hasNextPage ?? false,
     },
+    products: options.products ?? [],
   };
 }
 
@@ -68,6 +99,8 @@ function renderPage(path = '/explorar') {
 describe('ExplorePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // A visitor unless a test signs in.
+    vi.mocked(useCustomerAccount).mockReturnValue({ customer: null, signedIn: false });
     // The postal code and the carts stay on the device (Fase 24B): each test starts without them.
     window.localStorage.clear();
   });
@@ -91,7 +124,7 @@ describe('ExplorePage', () => {
     ]));
 
     const { unmount } = renderPage();
-    expect(within(await screen.findByRole('link', { name: /Taquería El Güero/ })).getByText('Envío a domicilio')).toBeInTheDocument();
+    expect(within(await screen.findByRole('link', { name: /^Taquería El Güero/ })).getByText('Envío a domicilio')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Escribe tu código postal' }));
     // The focus goes to the field, and back to the button once it is written.
     expect(screen.getByLabelText('Código postal')).toHaveFocus();
@@ -99,8 +132,8 @@ describe('ExplorePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Listo' }));
     expect(screen.getByRole('button', { name: 'Cambiar' })).toHaveFocus();
 
-    expect(await within(screen.getByRole('link', { name: /Taquería El Güero/ })).findByText('Envío $30.00')).toBeInTheDocument();
-    expect(within(screen.getByRole('link', { name: /Café Luna/ })).getByText('No llega a tu código postal')).toBeInTheDocument();
+    expect(await within(screen.getByRole('link', { name: /^Taquería El Güero/ })).findByText('Envío $30.00')).toBeInTheDocument();
+    expect(within(screen.getByRole('link', { name: /^Café Luna/ })).getByText('No llega a tu código postal')).toBeInTheDocument();
     expect(screen.getByText('72000')).toBeInTheDocument();
     expect(api.getDirectory).toHaveBeenLastCalledWith(expect.objectContaining({ postalCode: '72000' }), expect.anything());
 
@@ -133,13 +166,13 @@ describe('ExplorePage', () => {
 
     renderPage();
 
-    const taqueria = await screen.findByRole('link', { name: /Taquería El Güero/ });
+    const taqueria = await screen.findByRole('link', { name: /^Taquería El Güero/ });
     expect(taqueria).toHaveAttribute('href', '/m/el-guero');
     expect(within(taqueria).getByText('Pide en línea')).toBeInTheDocument();
     expect(within(taqueria).getByText('Envío a domicilio')).toBeInTheDocument();
     expect(within(taqueria).getByText('Comida · Puebla')).toBeInTheDocument();
-    expect(within(screen.getByRole('link', { name: /Café Luna/ })).getByText('Cerrado · abre mañana a las 9:00')).toBeInTheDocument();
-    expect(within(screen.getByRole('link', { name: /Ferretería Don Beto/ })).getByText('Ferretería y hogar · Solo a domicilio')).toBeInTheDocument();
+    expect(within(screen.getByRole('link', { name: /^Café Luna/ })).getByText('Cerrado · abre mañana a las 9:00')).toBeInTheDocument();
+    expect(within(screen.getByRole('link', { name: /^Ferretería Don Beto/ })).getByText('Ferretería y hogar · Solo a domicilio')).toBeInTheDocument();
     expect(screen.getByText('3 negocios')).toBeInTheDocument();
     expect(api.getDirectory).toHaveBeenCalledWith({ category: undefined, q: undefined, pageNumber: 1, pageSize: 24 }, expect.anything());
   });
@@ -152,10 +185,10 @@ describe('ExplorePage', () => {
 
     renderPage();
 
-    const barbershop = await screen.findByRole('link', { name: /Barbería Luis/ });
+    const barbershop = await screen.findByRole('link', { name: /^Barbería Luis/ });
     expect(within(barbershop).getByText('Agenda en línea')).toBeInTheDocument();
     expect(within(barbershop).getByText('Abierto')).toBeInTheDocument();
-    expect(within(screen.getByRole('link', { name: /Café Luna/ })).queryByText('Agenda en línea')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('link', { name: /^Café Luna/ })).queryByText('Agenda en línea')).not.toBeInTheDocument();
   });
 
   it('shows only the categories with businesses, and the page of one asks for it', async () => {
@@ -163,7 +196,7 @@ describe('ExplorePage', () => {
 
     renderPage('/explorar/comida');
 
-    expect(await screen.findByRole('link', { name: /Taquería El Güero/ })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /^Taquería El Güero/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Comida' })).toBeInTheDocument();
     const chips = within(screen.getByRole('navigation', { name: 'Categorías' }));
     expect(chips.getAllByRole('link').map((link) => link.textContent)).toEqual(['Todos', 'Comida2', 'Ferretería y hogar1']);
@@ -212,8 +245,8 @@ describe('ExplorePage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Ver más negocios (1)' }));
 
-    expect(await screen.findByRole('link', { name: /Café Luna/ })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Taquería El Güero/ })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /^Café Luna/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Taquería El Güero/ })).toBeInTheDocument();
     expect(api.getDirectory).toHaveBeenLastCalledWith(expect.objectContaining({ pageNumber: 2 }), expect.anything());
     expect(screen.queryByRole('button', { name: /Ver más/ })).not.toBeInTheDocument();
   });
@@ -224,5 +257,84 @@ describe('ExplorePage', () => {
     renderPage('/explorar/no-existe');
 
     expect(await screen.findByTestId('address')).toHaveTextContent(/^\/explorar$/);
+  });
+  it('finds the products of the menus, and each opens on its sheet in its store (Fase 24F)', async () => {
+    api.getDirectory.mockResolvedValue(directory([], {
+      products: [
+        product({ compareAtPrice: 100 }),
+        product({ id: 'p2', name: 'Gringa de pastor', price: 70, businessName: 'Café Luna', businessSlug: 'cafe-luna', acceptsOrders: false, pricesIncludeTax: false }),
+      ],
+    }));
+
+    renderPage('/explorar?q=pastor');
+
+    const products = within(await screen.findByRole('region', { name: 'Productos' }));
+    const orden = products.getByRole('link', { name: /^Orden de pastor/ });
+    expect(orden).toHaveAttribute('href', '/m/el-guero?producto=p1');
+    expect(within(orden).getByText(/Pide en línea/)).toBeInTheDocument();
+    expect(within(orden).getByText('$85.00')).toBeInTheDocument();
+    expect(within(orden).getByText('$100.00')).toBeInTheDocument();
+    const gringa = products.getByRole('link', { name: /^Gringa de pastor/ });
+    expect(gringa).toHaveAttribute('href', '/m/cafe-luna?producto=p2');
+    expect(within(gringa).queryByText(/Pide en línea/)).not.toBeInTheDocument();
+    expect(within(gringa).getByText('más IVA')).toBeInTheDocument();
+    // No business by that name, but products: not the page that says nothing was found.
+    expect(screen.queryByText(/No encontramos/)).not.toBeInTheDocument();
+    expect(api.getDirectory).toHaveBeenCalledWith(expect.objectContaining({ q: 'pastor' }), expect.anything());
+  });
+
+  it('puts the cover of each business across its card', async () => {
+    api.getDirectory.mockResolvedValue(directory([business({ coverImageUrl: '/uploads/covers/guero/portada_md.webp' })]));
+
+    const { container } = renderPage();
+
+    await screen.findByRole('link', { name: /^Taquería El Güero/ });
+    expect(container.querySelector('.dc-cover-photo')).toHaveAttribute('src', '/uploads/covers/guero/portada_md.webp');
+  });
+
+  it('invites a visitor to sign in to keep a business among their favorites', async () => {
+    api.getDirectory.mockResolvedValue(directory([business({})]));
+
+    renderPage();
+
+    expect(await screen.findByRole('link', { name: 'Entra para guardar Taquería El Güero en tus favoritos' })).toHaveAttribute('href', '/login');
+    expect(account.getFavorites).not.toHaveBeenCalled();
+  });
+
+  it('shows the favorites of a customer first, and keeps or takes out a business with its heart', async () => {
+    signInAsCustomer();
+    account.getFavorites.mockResolvedValue([
+      { slug: 'el-guero', name: 'Taquería El Güero', savedAt: '2026-10-18T08:00:00Z', card: business({}) },
+      // Out of Explorar now: the API writes its card as null (the contract calls it optional).
+      { slug: 'oculto', name: 'Café Oculto', savedAt: '2026-10-17T08:00:00Z', card: null as never },
+    ]);
+    account.removeFavorite.mockResolvedValue(undefined as never);
+    account.saveFavorite.mockResolvedValue(undefined as never);
+    api.getDirectory.mockResolvedValue(directory([business({}), business({ name: 'Café Luna', slug: 'cafe-luna' })]));
+    const user = userEvent.setup();
+
+    renderPage();
+
+    const favorites = within(await screen.findByRole('region', { name: 'Tus favoritos' }));
+    expect(favorites.getByRole('link', { name: /^Taquería El Güero/ })).toBeInTheDocument();
+    // One out of Explorar keeps its name and opens its menu.
+    expect(favorites.getByRole('link', { name: /Café Oculto/ })).toHaveAttribute('href', '/m/oculto');
+    expect(favorites.getByText('No aparece en Explorar ahora')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Guardar Café Luna en tus favoritos' }));
+    expect(account.saveFavorite).toHaveBeenCalledWith('cafe-luna');
+    await user.click(favorites.getByRole('button', { name: 'Quitar Taquería El Güero de tus favoritos' }));
+    expect(account.removeFavorite).toHaveBeenCalledWith('el-guero');
+  });
+
+  it('shows no favorites while searching or in a category', async () => {
+    signInAsCustomer();
+    account.getFavorites.mockResolvedValue([{ slug: 'el-guero', name: 'Taquería El Güero', savedAt: '2026-10-18T08:00:00Z', card: business({}) }]);
+    api.getDirectory.mockResolvedValue(directory([business({})]));
+
+    renderPage('/explorar/comida');
+
+    await screen.findByRole('link', { name: /^Taquería El Güero/ });
+    expect(screen.queryByRole('region', { name: 'Tus favoritos' })).not.toBeInTheDocument();
   });
 });

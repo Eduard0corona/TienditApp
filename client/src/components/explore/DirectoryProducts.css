@@ -1,0 +1,89 @@
+/* The products a search of Explorar found (Fase 24F): rows on a phone, two or three columns on a wide screen. */
+.dp-section {
+  margin-bottom: 1.5rem;
+}
+
+.dp-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dp-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: 0.75rem;
+  background: var(--ct-secondary-bg);
+  color: var(--ct-body-color);
+  text-decoration: none;
+}
+
+.dp-row:hover {
+  border-color: var(--ct-primary-border-subtle);
+  color: var(--ct-body-color);
+}
+
+.dp-photo {
+  flex: 0 0 auto;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 0.6rem;
+  object-fit: cover;
+}
+
+/* Without a photo, the initial in the colors of its business. */
+.dp-photo.photo-initial {
+  background: var(--dp-tint);
+  color: var(--dp-ink);
+}
+
+[data-bs-theme='dark'] .dp-photo.photo-initial {
+  background: var(--dp-tint-dark);
+  color: var(--dp-ink-dark);
+}
+
+.dp-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dp-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.dp-business {
+  color: var(--ct-secondary-color);
+  font-size: 0.85rem;
+}
+
+.dp-taking {
+  color: var(--ct-success-text-emphasis);
+  font-weight: 600;
+}
+
+.dp-price-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.45rem;
+  margin-top: 0.15rem;
+}
+
+.dp-price {
+  font-weight: 700;
+}
+
+.dp-compare,
+.dp-tax {
+  color: var(--ct-secondary-color);
+  font-size: 0.85rem;
+}

@@ -6,6 +6,7 @@ export type MyOrder = Schemas['MyOrderDto'];
 export type MyOrderDetail = Schemas['MyOrderDetailDto'];
 export type MyOrdersScope = Schemas['MyOrdersScope'];
 export type MyAppointmentsScope = Schemas['MyAppointmentsScope'];
+export type MyFavoriteBusiness = Schemas['MyFavoriteBusinessDto'];
 
 /** The addresses a customer account keeps for its orders (Fase 24B): ten at most. */
 export const MAX_ACCOUNT_ADDRESSES = 10;
@@ -35,4 +36,17 @@ export const accountApi = {
 
   /** Cancels one of them before it starts; any other is not found (404). */
   cancelAppointment: (id: string) => apiRequest('post', '/api/v1/me/appointments/{id}/cancel', { path: { id } }),
+
+  /**
+   * The businesses the account keeps among its favorites (Fase 24F), the last one first: each with its card in Explorar
+   * while it shows there, answering for the postal code given.
+   */
+  getFavorites: (postalCode: string | undefined, signal?: AbortSignal) =>
+    apiRequest('get', '/api/v1/me/favorites', { query: { postalCode }, signal }),
+
+  /** Keeps a business by the slug of its store; keeping it again changes nothing. A store not published is not found. */
+  saveFavorite: (slug: string) => apiRequest('put', '/api/v1/me/favorites/{slug}', { path: { slug } }),
+
+  /** Takes it out; one that was not there changes nothing. */
+  removeFavorite: (slug: string) => apiRequest('delete', '/api/v1/me/favorites/{slug}', { path: { slug } }),
 };
