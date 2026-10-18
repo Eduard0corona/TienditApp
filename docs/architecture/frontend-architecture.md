@@ -490,6 +490,12 @@ El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../
   - El menú simulado (`publico-cuenta-marco.mocks.ts`) contesta la portada y el logo con `data.menuStore`, las fotos de `withProductPhotos`, y la línea y la categoría del negocio.
 - **Primera visita:** suma 49 B (de 177,960 a 178,009 B, dentro del presupuesto de 178,200 B). La tienda baja con su ruta.
 
+Buscadores y vistas previas (Fase 24D-2, [ADR 0027](../adr/0027-search-engines-and-link-previews.md)):
+
+- **El encabezado lo escribe el servidor** (`WebApi/Http/PublicPages.cs`): para una tienda, su página de citas, Explorar y sus categorías, el `index.html` llega con su `<title>`, descripción, canónica, Open Graph y, en una tienda, los datos estructurados. El `index.html` del cliente no cambia: el servidor reemplaza su `<title>` y agrega lo demás antes de `</head>`.
+- **En la app:** `hooks/useDocumentTitle` pone en la pestaña el mismo título mientras la página está abierta y regresa el anterior al cerrarla. Lo usan el menú (`utils/storeMenu.storePageTitle`: «pide en línea», «agenda tu cita» o «menú en línea»), la página de citas («Agenda tu cita en …») y Explorar, que ya lo hacía con su propio efecto. Así el título no cambia al llegar y es el correcto al entrar desde Explorar sin recargar.
+- `ExploreCategories` del servidor repite las direcciones de `utils/businessCategories` (`/explorar/{slug}`); `PublicPagesTests` compara las dos listas.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.

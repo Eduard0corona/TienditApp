@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicDirectoryApi, type DirectoryBusiness, type DirectorySearch } from '../../api/publicDirectoryApi';
 import DirectoryBusinessCard from '../../components/explore/DirectoryBusinessCard';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { BUSINESS_CATEGORIES, categoryBySlug } from '../../utils/businessCategories';
 import { readPostalCode, savePostalCode } from '../../utils/postalCodePreference';
@@ -147,13 +148,8 @@ export default function ExplorePage() {
     return () => window.clearTimeout(timer);
   }, [draft, query, setParams]);
 
-  useEffect(() => {
-    const previous = document.title;
-    document.title = category ? `${category.label} · Explorar · TienditApp` : 'Explorar · TienditApp';
-    return () => {
-      document.title = previous;
-    };
-  }, [category]);
+  // The title the server wrote for search engines (PublicPages.cs).
+  useDocumentTitle(category ? `${category.label} · Explorar · TienditApp` : 'Explorar · TienditApp');
 
   const search: DirectorySearch = {
     category: category?.value,

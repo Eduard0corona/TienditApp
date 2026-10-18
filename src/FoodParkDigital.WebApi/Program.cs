@@ -256,6 +256,8 @@ app.MapControllers();
 // tenant membership and permissions.
 app.MapHub<OrderHub>("/hubs/orders", options => options.CloseOnAuthenticationExpiration = true);
 app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true);
+// The store pages, robots.txt and sitemap.xml for search engines and link previews (Fase 24D-2, ADR 0027).
+app.MapPublicPages();
 app.MapClientFallback();
 
 if (usesEphemeralJwtSecret)

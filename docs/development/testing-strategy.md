@@ -525,6 +525,30 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - La página de citas (8), con la barra, las filas y el botón de la tienda.
       - Configuración del negocio (13): la tarjeta «Portada del menú» y la línea nueva de la tarjeta de Explorar.
     - **Resultado:** la comparación contra `master` dio 413 escenas iguales, las 14 nuevas sin línea base y las 51 que cambian. Con esas capturas, los seis archivos tocados (243 escenas) pasaron dos corridas seguidas contra el mismo build. Las escenas del carrito detectaron, después de la revisión, que el «+» de un producto sin foto había quedado debajo del área de la fila que abre su hoja (sin layout, Vitest no lo ve).
+- Fase 24D-2, Buscadores y vistas previas ([ADR 0027](../adr/0027-search-engines-and-link-previews.md)):
+  - **Application:**
+    - `PublicPagesTests` (5): la vista previa trae lo que el menú muestra (nombre, línea, categoría, logo, portada, el teléfono del negocio y no el de la sucursal, la dirección en sus partes, el horario de la semana desde el lunes y si aparece en Explorar); una cocina sin local no da su dirección; un menú sin publicar o un negocio que no existe no tienen vista previa; agenda en línea solo con un servicio que agendar; y el sitemap lista lo que lista Explorar, con las categorías que tienen negocios.
+    - `AuthorizationBehaviorTests` agrega `GetStorePreviewQuery` y `GetPublicSitemapQuery` a los anónimos (274 casos de uso con regla).
+  - **WebApi:**
+    - `PublicPagesTests` (21), sobre la API sin base y un mediador falso:
+      - una tienda con su título, descripción, canónica sin la mesa del QR, Open Graph y los datos estructurados (tipo, dirección, teléfono, imágenes, horario pasada la medianoche y todo el día);
+      - lo que escribe el negocio no sale de su etiqueta, ni en el HTML ni en el JSON;
+      - una tienda fuera de Explorar con su vista previa y `noindex`;
+      - la página de citas solo listada mientras agenda;
+      - una tienda que solo agenda;
+      - una que no existe (404) o con un slug que ningún negocio puede tener (404 sin preguntar);
+      - una base que no responde: 503 con `Retry-After` y sin `noindex`;
+      - Explorar, sus categorías y `/` sin leer las tiendas; una categoría que no existe con `noindex`;
+      - las demás pantallas y `/index.html` con `noindex`;
+      - `robots.txt` y `sitemap.xml`;
+      - la dirección de la petición sin `AppUrl`;
+      - y las categorías del servidor iguales a las del cliente.
+    - `ClientDeliveryTests` revisa `/explorar` en lugar de una tienda, que ahora lee la base.
+  - **Cliente:**
+    - `useDocumentTitle.test.tsx` (1): el título mientras la página está abierta, el anterior al cerrarla, y ninguno mientras carga.
+    - `storeMenu.test.ts` (+1): el título de una tienda por lo que se hace en ella.
+    - `PublicMenuPage.test.tsx` y `PublicBookingPage.test.tsx`: la pestaña lleva el título que escribe el servidor.
+  - **Escenas visuales:** no cambian: la fase no toca estilos ni lo que se ve en las páginas.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

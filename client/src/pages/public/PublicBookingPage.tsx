@@ -12,6 +12,7 @@ import {
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
 import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { formatMoney } from '../../utils/money';
 import { describeDuration, shortDayLabel, upperFirst } from '../../utils/onlineBooking';
@@ -56,6 +57,8 @@ export default function PublicBookingPage() {
     staleTime: 60_000,
   });
   const data = booking.data;
+  // The title the server wrote for search engines (PublicPages.cs).
+  useDocumentTitle(data ? `Agenda tu cita en ${data.businessName} · TienditApp` : null);
   const theme = data?.theme;
   useEffect(() => {
     // The page in the colors its business picked, like its menu.

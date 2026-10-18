@@ -58,3 +58,13 @@ export function mapsUrl(address: string): string {
 export function optionGroupsOf(product: { optionGroups?: unknown[] | null }): ProductOptionGroupDto[] {
   return (product.optionGroups ?? []) as ProductOptionGroupDto[];
 }
+
+/**
+ * The title of a store's page, the one the server writes for search engines and link previews (PublicPages.StoreHead):
+ * what the customer comes to do there.
+ */
+export function storePageTitle(menu: { businessName: string; acceptsOrders: boolean; ordersPaused: boolean; booksOnline?: boolean }): string {
+  const takesOrders = menu.acceptsOrders || menu.ordersPaused;
+  const what = takesOrders ? 'pide en línea' : menu.booksOnline ? 'agenda tu cita' : 'menú en línea';
+  return `${menu.businessName}: ${what} · TienditApp`;
+}

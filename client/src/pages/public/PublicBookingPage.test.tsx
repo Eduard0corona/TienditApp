@@ -129,6 +129,8 @@ describe('PublicBookingPage', () => {
 
     expect(await screen.findByRole('button', { name: /Corte de cabello.*45 min.*\$150\.00/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Barba.*1 h 30 min/ })).toBeInTheDocument();
+    // The title the server writes for search engines (Fase 24D-2).
+    expect(document.title).toBe('Agenda tu cita en Barbería Luis · TienditApp');
     await user.click(screen.getByRole('button', { name: /Corte de cabello/ }));
 
     // A day without free times cannot be picked; the first one with them opens.

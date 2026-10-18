@@ -11,7 +11,7 @@ Después de desplegar, `.github/scripts/smoke-test.sh` consulta la app hasta 30 
 - desde la Fase 21, esa respuesta debe decir `"business-time-zones":"Healthy"`: las zonas horarias que un negocio puede elegir existen en el servidor. Si una cae en UTC, el chequeo queda Degraded (200, la app sigue atendiendo) y el workflow falla diciéndolo; el log stream nombra las zonas ([observabilidad](../architecture/observability.md));
 - desde la Fase 23A, si esa respuesta no dice `"email-provider":"Healthy"` el workflow pasa con un aviso, sin fallar: no hay proveedor de correo o tiene los valores de ejemplo de `appsettings.json`, así que nadie que se registre puede activar su cuenta y no salen la recuperación de contraseña ni las invitaciones por correo. Se configura en el App Service con `EmailSettings__Provider` (`Smtp`), `EmailSettings__FromEmail`, `EmailSettings__FromName` y `EmailSettings__Smtp__Host`, `__Port`, `__Username`, `__Password` y `__EnableSsl`; el log del chequeo dice qué falta, sin valores;
 - `GET /health/schema` debe decir `Healthy`: la base tiene todas las migraciones de esta versión. Si falta un `apply.sql`, dice `Unhealthy` (503) y el workflow falla pidiendo aplicarlo; la app sigue atendiendo, porque ese chequeo no forma parte de `/health/ready`;
-- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build del cliente, que solo cambia si cambió el cliente);
+- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build del cliente, que solo cambia si cambió el cliente); desde la Fase 24D-2 lo sirve con el encabezado de Explorar;
 - desde la Fase 20, ese script, pedido como lo pide un navegador (`Accept-Encoding: br, gzip`), debe llegar con `Content-Encoding: br` y `Cache-Control: ... immutable` (ver [entrega del cliente](#entrega-del-cliente-comprimida-y-en-caché)).
 
 Si en 10 minutos no se cumplen las seis, el workflow falla con el último estado de cada consulta y el commit que respondió. Si respondió otro commit, la versión nueva no arrancó; el aviso de migraciones faltantes solo sale cuando lo dice la versión nueva, porque la anterior no conoce sus migraciones. Sin slot, la versión ya quedó publicada: revisa el log stream del App Service (arranque, cadena de conexión, secretos; el chequeo del esquema escribe ahí qué migración falta) y aplica el `apply.sql` pendiente. La variable de repositorio `SMOKE_TEST_URL` cambia la dirección de producción consultada (un dominio propio); sin ella se usa la que devuelve el despliegue (`https://<app>.azurewebsites.net`).
@@ -430,6 +430,22 @@ La Fase 24E trae una migración, [`database/production/20261018032200_AddBusines
 - **El menú cambia de forma** (portada, pestañas, filas con foto, la hoja del producto, el botón flotante y el pedido como página de pago), pero el pedido que llega al negocio es el mismo. Lo único nuevo es la nota de cada producto, que la cocina y Pedidos ya mostraban.
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce la portada y vuelve el menú de antes.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50020, sin cambiar nada, en cuanto un dueño subió una portada: se perdería y sus archivos quedarían sin nada que los use. Sin portadas, quita la columna, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
+## Buscadores y vistas previas (Fase 24D-2)
+
+La Fase 24D-2 no trae migración ni configuración obligatoria ([ADR 0027](../adr/0027-search-engines-and-link-previews.md)):
+
+- **Qué cambia al desplegar:**
+  - Las páginas de las tiendas (`/m/{slug}`, `/m/{slug}/agendar`) y de Explorar llegan con su título, descripción, imagen y dirección en el `index.html`.
+  - La API responde `/robots.txt` y `/sitemap.xml`.
+  - Las demás pantallas de la app llevan `X-Robots-Tag: noindex`.
+- **`AppUrl`:** la dirección canónica, las vistas previas y el sitemap usan `AppUrl` (la de los correos), por ejemplo `https://app.tienditapp.mx`. Sin ella, usan la dirección con que llegó cada petición, con https. Conviene configurarla en el App Service, sobre todo con un dominio propio, para que los buscadores no reciban la de `azurewebsites.net`.
+- **Comprobarlo:**
+  - `curl https://<app>/robots.txt` debe nombrar `Sitemap: <AppUrl>/sitemap.xml`.
+  - El código fuente de una tienda publicada (`view-source:`) debe traer su `<title>`, `og:title`, `og:image` y el bloque `application/ld+json`.
+  - La herramienta de vista previa de enlaces de Facebook o la prueba de resultados enriquecidos de Google leen lo mismo.
+- **Google Search Console (opcional):** verificar el dominio y enviar `/sitemap.xml` acelera que Google lea las tiendas. No hace falta para que funcione.
+- **Volver a la versión anterior:** no toca la base. Regresa el `index.html` sin encabezado, y `/robots.txt` y `/sitemap.xml` vuelven a abrir la app.
 
 ## Slot de staging con swap y aprobación
 
