@@ -5421,6 +5421,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    postalCode?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyFavoriteBusinessDto"][];
+                        "application/json": components["schemas"]["MyFavoriteBusinessDto"][];
+                        "text/json": components["schemas"]["MyFavoriteBusinessDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/favorites/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/messaging/templates": {
         parameters: {
             query?: never;
@@ -12163,6 +12256,14 @@ export interface components {
          * @enum {integer}
          */
         MyAppointmentsScope: 0 | 1;
+        MyFavoriteBusinessDto: {
+            slug: string;
+            name: string;
+            logoUrl?: string | null;
+            /** Format: date-time */
+            savedAt: string;
+            card?: components["schemas"]["PublicDirectoryBusinessDto"];
+        };
         MyOrderDeliveryDto: {
             postalCode: string;
             addressLine: string;
@@ -13223,6 +13324,7 @@ export interface components {
             name: string;
             slug: string;
             logoUrl?: string | null;
+            coverImageUrl?: string | null;
             category: components["schemas"]["BusinessCategory"];
             description?: string | null;
             theme: components["schemas"]["BusinessTheme"];
@@ -13264,6 +13366,22 @@ export interface components {
             categories: components["schemas"]["PublicDirectoryCategoryDto"][];
             businesses: components["schemas"]["PublicDirectoryBusinessDtoPaginatedList"];
             postalCode?: string | null;
+            products: components["schemas"]["PublicDirectoryProductDto"][];
+        };
+        PublicDirectoryProductDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: double */
+            price: number;
+            /** Format: double */
+            compareAtPrice?: number | null;
+            imageUrl?: string | null;
+            businessName: string;
+            businessSlug: string;
+            theme: components["schemas"]["BusinessTheme"];
+            acceptsOrders: boolean;
+            addsTax: boolean;
         };
         PublicMenuCategoryDto: {
             /** Format: uuid */

@@ -106,6 +106,24 @@ public class MeController : ControllerBase
         return result.IsFailure ? AddressError(result.Error!) : NoContent();
     }
 
+    /// <summary>
+    /// The businesses the customer account keeps among its favorites (Fase 24F), the last one kept first: each with its card
+    /// in Explorar when it shows there, and with the delivery to the postal code given.
+    /// </summary>
+    [HttpGet("favorites")]
+    public async Task<ActionResult<List<MyFavoriteBusinessDto>>> GetMyFavorites([FromQuery] string? postalCode, CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetMyFavoritesQuery(postalCode), cancellationToken));
+
+    /// <summary>Keeps a business among the account's favorites, by the slug of its store; keeping it again changes nothing.</summary>
+    [HttpPut("favorites/{slug}")]
+    public async Task<IActionResult> SaveMyFavorite(string slug, CancellationToken cancellationToken)
+        => FavoriteResult(await _mediator.Send(new SaveMyFavoriteCommand(slug), cancellationToken));
+
+    /// <summary>Takes a business out of the account's favorites; one that was not there changes nothing.</summary>
+    [HttpDelete("favorites/{slug}")]
+    public async Task<IActionResult> RemoveMyFavorite(string slug, CancellationToken cancellationToken)
+        => FavoriteResult(await _mediator.Send(new RemoveMyFavoriteCommand(slug), cancellationToken));
+
     /// <summary>Opens another business with this account, as its owner. Switch to it to finish its setup.</summary>
     [HttpPost("tenants")]
     public async Task<ActionResult<MyTenantDto>> CreateBusiness([FromBody] CreateBusinessCommand command, CancellationToken cancellationToken)
@@ -118,6 +136,12 @@ public class MeController : ControllerBase
 
     private ActionResult<AccountAddressDto> ToResult(Result<AccountAddressDto> result)
         => result.IsFailure ? AddressError(result.Error!) : Ok(result.Value);
+
+    // A store that is not published is not found.
+    private IActionResult FavoriteResult(Result result)
+        => result.IsSuccess
+            ? NoContent()
+            : this.ApiError(result.Error == FavoriteBusinessRules.NotFoundMessage ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest, result.Error!);
 
     // Another account's address, or one already deleted, is not found.
     private ObjectResult AddressError(string error)

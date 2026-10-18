@@ -134,6 +134,8 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
             name: tenant.name,
             slug: tenant.slug,
             logoUrl: tenant.logoImages?.small ?? tenant.logoUrl ?? null,
+            // Its cover across the top, as Explorar shows it (Fase 24F).
+            coverImageUrl: tenant.coverImages?.medium ?? null,
             category,
             description: description.trim() || null,
             theme: tenant.theme ?? 0,

@@ -22,6 +22,7 @@ using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.Application.Tests.Support;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
@@ -489,11 +490,20 @@ public class OrderInventoryRegressionTests
         new(context, tenant, new InventoryLedger(context, new FolioGenerator(context)));
 
 
+    /// <summary>
+    /// The models of this class's contexts, in a cache of their own without a size limit. EF's shared cache has one: full
+    /// (the whole suite compiles thousands of queries), it stops keeping a model, and the second context of a test built
+    /// another one, with which the in-memory tables of the first did not match («belongs to the type FolioSequence, but
+    /// is being used with an instance of type FolioSequence»).
+    /// </summary>
+    private static readonly IMemoryCache Models = new MemoryCache(new MemoryCacheOptions());
+
     private static (TestDbContext Context, TestCurrentTenantService Tenant, DbContextOptions<ApplicationDbContext> Options) CreateContext()
     {
         var tenant = new TestCurrentTenantService();
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseMemoryCache(Models)
             .Options;
         return (new TestDbContext(options, tenant), tenant, options);
     }

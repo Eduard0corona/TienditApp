@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
@@ -34,6 +35,13 @@ public class PublicDirectoryDto
 
     /// <summary>The customer's postal code the cards answer for (Fase 24B), as read; null without one.</summary>
     public string? PostalCode { get; set; }
+
+    /// <summary>
+    /// With a search, on its first page (Fase 24F): the products of the businesses of the category whose name or
+    /// description has every word, at most <see cref="PublicProductIndex.MaxResults"/> and
+    /// <see cref="PublicProductIndex.MaxPerBusiness"/> of one business. Empty without a search or on another page.
+    /// </summary>
+    public List<PublicDirectoryProductDto> Products { get; set; } = new();
 }
 
 public class PublicDirectoryCategoryDto
@@ -52,6 +60,8 @@ public class PublicDirectoryBusinessDto
     /// <summary>Its public menu: /m/{slug}.</summary>
     public string Slug { get; set; } = null!;
     public string? LogoUrl { get; set; }
+    /// <summary>Its cover (Fase 24E), 512 px wide, across the top of its card (Fase 24F); none without one.</summary>
+    public string? CoverImageUrl { get; set; }
     public BusinessCategory Category { get; set; }
     /// <summary>What it sells, in one line written by its owner.</summary>
     public string? Description { get; set; }
@@ -139,17 +149,20 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly PublicDirectoryCache _cache;
+    private readonly PublicProductIndexCache _products;
     private readonly ILogger<GetPublicDirectoryQueryHandler> _logger;
 
     public GetPublicDirectoryQueryHandler(
         IApplicationDbContext context,
         IDateTimeProvider dateTimeProvider,
         PublicDirectoryCache cache,
+        PublicProductIndexCache products,
         ILogger<GetPublicDirectoryQueryHandler> logger)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
         _cache = cache;
+        _products = products;
         _logger = logger;
     }
 
@@ -168,25 +181,51 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
         var pageNumber = Math.Max(1, request.PageNumber);
         var page = found.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
         var postalCode = DeliveryZone.NormalizePostalCode(request.PostalCode);
-        var businesses = postalCode is null
-            ? page.Select(entry => entry.Business).ToList()
-            : await WithDeliveryToAsync(page, postalCode, cancellationToken);
+        var businesses = await PublicDirectoryCards.WithDeliveryToAsync(_context, page, postalCode, cancellationToken);
+        // The products of a search come with its first page; the index of the snapshot is read only when there is one.
+        var products = words.Length == 0 || pageNumber > 1 ? [] : await SearchProductsAsync(snapshot, words, request.Category, cancellationToken);
 
         return new PublicDirectoryDto
         {
             Categories = snapshot.Categories.ToList(),
             Businesses = new PaginatedList<PublicDirectoryBusinessDto>(businesses, found.Count, pageNumber, pageSize),
-            PostalCode = postalCode
+            PostalCode = postalCode,
+            Products = products
         };
     }
 
-    /// <summary>
-    /// The cards of the page, each saying whether the business delivers to <paramref name="postalCode"/> and what it costs:
-    /// copies, because the snapshot is shared by every request. A business without delivery says nothing about it.
-    /// </summary>
-    private async Task<List<PublicDirectoryBusinessDto>> WithDeliveryToAsync(
-        IReadOnlyList<PublicDirectorySnapshot.Entry> page, string postalCode, CancellationToken cancellationToken)
+    /// <summary>The products of a search; none when their index could not be built: the businesses still answer.</summary>
+    private async Task<List<PublicDirectoryProductDto>> SearchProductsAsync(
+        PublicDirectorySnapshot snapshot, string[] words, BusinessCategory? category, CancellationToken cancellationToken)
     {
+        try
+        {
+            var index = await _products.GetAsync(
+                snapshot, (current, ct) => PublicProductIndex.BuildAsync(_context, current, ct, _logger), cancellationToken);
+            return index?.Search(words, category) ?? [];
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Explorar could not read the products of its businesses: this search answers with the businesses only.");
+            return [];
+        }
+    }
+}
+
+/// <summary>The cards of Explorar as a customer reads them: with the delivery to their postal code (Fase 24B).</summary>
+internal static class PublicDirectoryCards
+{
+    /// <summary>
+    /// The cards of <paramref name="page"/>, each saying whether the business delivers to <paramref name="postalCode"/>
+    /// and what it costs: copies, because the snapshot is shared by every request. A business without delivery says
+    /// nothing about it; without a postal code, the cards of the snapshot as they are.
+    /// </summary>
+    public static async Task<List<PublicDirectoryBusinessDto>> WithDeliveryToAsync(
+        IApplicationDbContext context, IReadOnlyList<PublicDirectorySnapshot.Entry> page, string? postalCode, CancellationToken cancellationToken)
+    {
+        if (postalCode is null)
+            return page.Select(entry => entry.Business).ToList();
+
         // Only the businesses of the page that deliver ask; a page without one reads nothing.
         var delivering = page.Where(entry => entry.Business.DeliveryAvailable).Select(entry => entry.TenantId).ToList();
         if (delivering.Count == 0)
@@ -194,11 +233,11 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
 
         // A public request has no business: the active zones of those businesses that reach the postal code, in one read
         // (each zone with its own business, IX_DeliveryZonePostalCodes_PostalCode); a business has one at most.
-        var zones = await _context.DeliveryZonePostalCodes
+        var zones = await context.DeliveryZonePostalCodes
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(code => code.PostalCode == postalCode && delivering.Contains(code.TenantId))
-            .Join(_context.DeliveryZones, code => code.DeliveryZoneId, zone => zone.Id, (code, zone) => new { code.TenantId, Zone = zone })
+            .Join(context.DeliveryZones, code => code.DeliveryZoneId, zone => zone.Id, (code, zone) => new { code.TenantId, Zone = zone })
             .Where(row => row.Zone.IsActive && row.Zone.TenantId == row.TenantId)
             .Select(row => new { row.TenantId, row.Zone.Fee, row.Zone.MinimumOrder, row.Zone.FreeDeliveryFrom })
             .ToListAsync(cancellationToken);
@@ -283,6 +322,7 @@ public sealed class PublicDirectorySnapshot
                 t.Name,
                 t.Slug,
                 t.LogoUrl,
+                t.CoverImageUrl,
                 t.DirectoryCategory,
                 t.PublicDescription,
                 t.Settings!.OnlineMenuMode,
@@ -345,6 +385,17 @@ public sealed class PublicDirectorySnapshot
             && p.Unit != UnitType.Hour && p.Unit != UnitType.Session && p.Unit != UnitType.Service
             && context.Categories.Any(c => c.Id == p.CategoryId && c.TenantId == p.TenantId && c.IsActive));
 
+    /// <summary>
+    /// The order of a public menu: its featured products first, then as its business sorts them, by name. The menu shows
+    /// the first <see cref="GetPublicMenuQueryHandler.MaxProducts"/> in it, and Explorar searches the same ones.
+    /// </summary>
+    internal static IOrderedQueryable<Product> InMenuOrder(IQueryable<Product> products)
+        => products.OrderByDescending(p => p.IsFeatured).ThenBy(p => p.SortOrder).ThenBy(p => p.Name).ThenBy(p => p.Id);
+
+    /// <summary>The products already ordered by something else (their business), each group in <see cref="InMenuOrder"/>.</summary>
+    internal static IOrderedQueryable<Product> ThenInMenuOrder(IOrderedQueryable<Product> products)
+        => products.ThenByDescending(p => p.IsFeatured).ThenBy(p => p.SortOrder).ThenBy(p => p.Name).ThenBy(p => p.Id);
+
     /// <summary>The card of a business; null for one listed for its services that does not book them online after all.</summary>
     private static Entry? ToEntry(Row row, IEnumerable<SpecialDay> specialDays, DateTimeOffset utcNow)
     {
@@ -372,6 +423,7 @@ public sealed class PublicDirectorySnapshot
             Name = row.Name,
             Slug = row.Slug,
             LogoUrl = string.IsNullOrEmpty(row.LogoUrl) ? null : $"{row.LogoUrl}_sm.webp",
+            CoverImageUrl = LogoImageUrlsDto.FromBaseUrl(row.CoverImageUrl)?.Medium,
             Category = row.Category,
             Description = row.Description,
             Theme = row.Theme,
@@ -408,6 +460,7 @@ public sealed class PublicDirectorySnapshot
         string Name,
         string Slug,
         string? LogoUrl,
+        string? CoverImageUrl,
         BusinessCategory Category,
         string? Description,
         OnlineMenuMode Mode,

@@ -30,6 +30,8 @@ interface StoreHeroProps {
   /** The booking page, when the business books appointments online (not from a table). */
   bookingPath: string | null;
   contactUrl: string | null;
+  /** The heart of the business over its cover (Fase 24F); none where it does not apply. */
+  favorite?: ReactNode;
 }
 
 /**
@@ -39,7 +41,7 @@ interface StoreHeroProps {
  * app: a menu opened from a QR or a link never leads to other businesses.
  */
 export default function StoreHero({
-  menu, status, tableLabel, hoursSummary, upcomingNotice, onOpenInfo, delivery, bookingPath, contactUrl,
+  menu, status, tableLabel, hoursSummary, upcomingNotice, onOpenInfo, delivery, bookingPath, contactUrl, favorite,
 }: StoreHeroProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -94,6 +96,7 @@ export default function StoreHero({
             </button>
           ) : <span />}
           <div className="pm-cover-actions">
+            {favorite}
             <button type="button" className="pm-round" onClick={() => void share()} aria-label="Compartir menú">
               <i className={shared ? 'ri-check-line' : 'ri-share-forward-line'} aria-hidden="true"></i>
             </button>

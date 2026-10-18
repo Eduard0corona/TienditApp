@@ -448,6 +448,17 @@ La Fase 24D-2 no trae migración ni configuración obligatoria ([ADR 0027](../ad
 - **Google Search Console (opcional):** verificar el dominio y enviar `/sitemap.xml` acelera que Google lea las tiendas. No hace falta para que funcione.
 - **Volver a la versión anterior:** no toca la base. Regresa el `index.html` sin encabezado, y `/robots.txt` y `/sitemap.xml` responden 404.
 
+## Productos y favoritos en Explorar (Fase 24F)
+
+La Fase 24F trae una migración, [`database/production/20261018081803_AddFavoriteBusinesses`](../../database/production/20261018081803_AddFavoriteBusinesses). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0028](../adr/0028-product-search-and-favorites.md)).
+
+- **La migración:** crea la tabla `FavoriteBusinesses` (la cuenta, el negocio y cuándo lo guardó), con un índice único por cuenta y negocio. Su llave hacia `AspNetUsers` borra en cascada; la de `Tenants` no deja borrar un negocio con favoritos. No toca ninguna tabla existente. Después de aplicarla, el `verify.sql` muestra la tabla con sus índices, y su consulta 3 cuenta los favoritos (ninguno hasta desplegar).
+- **Mientras se publica:** la versión de `master` (Fase 24D-2) no conoce la tabla y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `GET /api/v1/me/favorites`, `PUT` y `DELETE /api/v1/me/favorites/{slug}`, `products` en la respuesta de `GET /api/v1/public/directory` y `coverImageUrl` en cada negocio de Explorar. Nada se quita ni cambia de nombre.
+- **La búsqueda de productos** no necesita configuración: arma su índice en la memoria de cada instancia con la foto de Explorar, la primera vez que alguien busca.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla, y Explorar vuelve a buscar solo negocios, sin portada ni favoritos.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50021, sin cambiar nada, en cuanto una cuenta guardó un favorito: borrar la tabla los perdería. Sin favoritos, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

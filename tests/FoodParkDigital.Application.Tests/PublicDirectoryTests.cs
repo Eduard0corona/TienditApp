@@ -325,7 +325,7 @@ public class PublicDirectoryTests
             weekly, specialDays, TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City"), SalesTestFixture.Now);
 
     private static GetPublicDirectoryQueryHandler Handler(SalesTestFixture fixture)
-        => new(fixture.Context, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance);
+        => new(fixture.Context, fixture.Clock, new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance);
 
     private static Task<PublicDirectoryDto> DirectoryAsync(SalesTestFixture fixture)
         => Handler(fixture).Handle(new GetPublicDirectoryQuery(), CancellationToken.None);

@@ -4,7 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicDirectoryApi, type DirectoryBusiness, type DirectorySearch } from '../../api/publicDirectoryApi';
 import DirectoryBusinessCard from '../../components/explore/DirectoryBusinessCard';
+import DirectoryProducts from '../../components/explore/DirectoryProducts';
+import FavoriteBusinesses from '../../components/explore/FavoriteBusinesses';
+import FavoriteButton from '../../components/explore/FavoriteButton';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { useFavoriteBusinesses, type FavoriteBusinesses as Favorites } from '../../hooks/useFavoriteBusinesses';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { BUSINESS_CATEGORIES, categoryBySlug } from '../../utils/businessCategories';
 import { readPostalCode, savePostalCode } from '../../utils/postalCodePreference';
@@ -21,12 +25,15 @@ function countLabel(count: number): string {
   return count === 1 ? '1 negocio' : `${count.toLocaleString('es-MX')} negocios`;
 }
 
-function BusinessList({ businesses }: { businesses: DirectoryBusiness[] }) {
+function BusinessList({ businesses, favorites }: { businesses: DirectoryBusiness[]; favorites: Favorites }) {
   return (
     <ul className="ex-grid">
       {businesses.map((business) => (
         <li key={business.slug}>
-          <DirectoryBusinessCard business={business} />
+          <DirectoryBusinessCard
+            business={business}
+            action={<FavoriteButton slug={business.slug} name={business.name} favorites={favorites} className="dc-favorite" />}
+          />
         </li>
       ))}
     </ul>
@@ -34,7 +41,7 @@ function BusinessList({ businesses }: { businesses: DirectoryBusiness[] }) {
 }
 
 /** A page after the first, asked when the customer wants more. */
-function MoreBusinesses({ search, pageNumber }: { search: DirectorySearch; pageNumber: number }) {
+function MoreBusinesses({ search, pageNumber, favorites }: { search: DirectorySearch; pageNumber: number; favorites: Favorites }) {
   const page = useQuery({
     queryKey: ['directory', search, pageNumber],
     queryFn: ({ signal }) => publicDirectoryApi.getDirectory({ ...search, pageNumber }, signal),
@@ -49,7 +56,7 @@ function MoreBusinesses({ search, pageNumber }: { search: DirectorySearch; pageN
     );
   }
   const businesses = page.data?.businesses.items ?? [];
-  return businesses.length > 0 ? <div className="mt-3"><BusinessList businesses={businesses} /></div> : null;
+  return businesses.length > 0 ? <div className="mt-3"><BusinessList businesses={businesses} favorites={favorites} /></div> : null;
 }
 
 /**
@@ -120,11 +127,14 @@ function PostalCodeChip({ postalCode, onChange }: { postalCode: string; onChange
  * Explorar (/explorar and /explorar/:categoria): the businesses that published their menu, those that take orders now
  * first. A customer finds one by category or by words of its name or what it sells, and the card opens its menu, where
  * it orders as it always did. The search lives in the address (?q=), so a search can be shared. With the customer's
- * postal code each card says whether it delivers there, and a cart left without sending is a tap away (Fase 24B).
+ * postal code each card says whether it delivers there, and a cart left without sending is a tap away (Fase 24B). A
+ * search also finds the products of the menus, and a customer keeps the businesses they like, first on the page
+ * (Fase 24F).
  */
 export default function ExplorePage() {
   const searchId = useId();
   const [postalCode, setPostalCode] = useState(readPostalCode);
+  const favorites = useFavoriteBusinesses(postalCode || undefined);
   const [pendingCart] = useState(() => latestCart());
   const { categoria } = useParams();
   const [params, setParams] = useSearchParams();
@@ -174,6 +184,7 @@ export default function ExplorePage() {
 
   const first = directory.data;
   const firstItems = first?.businesses.items ?? [];
+  const products = first?.products ?? [];
   const total = first?.businesses.totalCount ?? 0;
   const counts = new Map((first?.categories ?? []).map((item) => [item.category, item.count]));
   const anyListed = [...counts.values()].some((count) => count > 0);
@@ -188,13 +199,13 @@ export default function ExplorePage() {
         <h1 id="explore-title" className="ex-title">{category ? category.label : 'Compra en los negocios de tu ciudad'}</h1>
         <p className="ex-lead">Pide en línea a los que reciben pedidos ahora, o mira el menú de los demás.</p>
         <form className="ex-search" role="search" onSubmit={(event) => event.preventDefault()}>
-          <label className="visually-hidden" htmlFor={searchId}>Buscar negocios</label>
+          <label className="visually-hidden" htmlFor={searchId}>Buscar negocios y productos</label>
           <i className="ri-search-line ex-search-icon" aria-hidden="true"></i>
           <input
             id={searchId}
             type="search"
             className="form-control"
-            placeholder="Busca por nombre o por lo que vende"
+            placeholder="Busca un negocio o un producto"
             maxLength={MAX_SEARCH}
             autoComplete="off"
             enterKeyHint="search"
@@ -242,65 +253,72 @@ export default function ExplorePage() {
         </nav>
       )}
 
-      <section className="ex-results" aria-labelledby="explore-results" aria-busy={directory.isLoading}>
-        <h2 id="explore-results" className="visually-hidden">Negocios</h2>
-        <p className="ex-count" aria-live="polite">{directory.isSuccess && total > 0 ? countLabel(total) : ''}</p>
+      {!query.trim() && !category && <FavoriteBusinesses favorites={favorites} />}
 
-        {directory.isLoading && (
-          <ul className="ex-grid" aria-hidden="true">
-            {Array.from({ length: 6 }, (_, index) => (
-              <li key={index} className="ex-skeleton" />
-            ))}
-          </ul>
-        )}
+      {products.length > 0 && <DirectoryProducts products={products} />}
 
-        {directory.isError && (
-          <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
-            <span className="me-auto">{getApiErrorMessage(directory.error, 'No se pudieron cargar los negocios.')}</span>
-            <button type="button" className="btn btn-sm btn-light" onClick={() => void directory.refetch()}>Reintentar</button>
-          </div>
-        )}
+      {/* Products found and no business: the products are the results. */}
+      {!(directory.isSuccess && total === 0 && products.length > 0) && (
+        <section className="ex-results" aria-labelledby="explore-results" aria-busy={directory.isLoading}>
+          <h2 id="explore-results" className={products.length > 0 ? 'ex-section-title' : 'visually-hidden'}>Negocios</h2>
+          <p className="ex-count" aria-live="polite">{directory.isSuccess && total > 0 ? countLabel(total) : ''}</p>
 
-        {directory.isSuccess && total === 0 && (
-          <div className="ex-empty">
-            <i className="ri-store-2-line" aria-hidden="true"></i>
-            {query.trim() ? (
-              <>
-                <h3 className="h5">No encontramos «{query.trim()}»</h3>
-                <p>Prueba con otra palabra{category ? ' o busca en todas las categorías' : ''}.</p>
-                <div className="d-flex flex-wrap justify-content-center gap-2">
-                  <button type="button" className="btn btn-light" onClick={() => setDraft('')}>Borrar la búsqueda</button>
-                  {category && <Link className="btn btn-light" to={`/explorar${searchSuffix}`}>Buscar en todas</Link>}
-                </div>
-              </>
-            ) : category && anyListed ? (
-              <>
-                <h3 className="h5">Aún no hay negocios de {category.label.toLowerCase()}</h3>
-                <p>Mira los de otras categorías mientras llegan.</p>
-                <Link className="btn btn-light" to="/explorar">Ver todos los negocios</Link>
-              </>
-            ) : (
-              <>
-                <h3 className="h5">Pronto verás aquí los negocios de tu ciudad</h3>
-                <p>Cuando publiquen su menú en línea, aparecerán en Explorar.</p>
-              </>
-            )}
-          </div>
-        )}
+          {directory.isLoading && (
+            <ul className="ex-grid" aria-hidden="true">
+              {Array.from({ length: 6 }, (_, index) => (
+                <li key={index} className="ex-skeleton" />
+              ))}
+            </ul>
+          )}
 
-        {firstItems.length > 0 && <BusinessList businesses={firstItems} />}
-        {Array.from({ length: pagesShown - 1 }, (_, index) => (
-          <MoreBusinesses key={index + 2} search={search} pageNumber={index + 2} />
-        ))}
+          {directory.isError && (
+            <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+              <span className="me-auto">{getApiErrorMessage(directory.error, 'No se pudieron cargar los negocios.')}</span>
+              <button type="button" className="btn btn-sm btn-light" onClick={() => void directory.refetch()}>Reintentar</button>
+            </div>
+          )}
 
-        {hasMore && (
-          <div className="text-center mt-3">
-            <button type="button" className="btn btn-light" onClick={() => setMore({ searchKey, pages: pagesShown + 1 })}>
-              Ver más negocios ({remaining.toLocaleString('es-MX')})
-            </button>
-          </div>
-        )}
-      </section>
+          {directory.isSuccess && total === 0 && products.length === 0 && (
+            <div className="ex-empty">
+              <i className="ri-store-2-line" aria-hidden="true"></i>
+              {query.trim() ? (
+                <>
+                  <h3 className="h5">No encontramos «{query.trim()}»</h3>
+                  <p>Prueba con otra palabra{category ? ' o busca en todas las categorías' : ''}.</p>
+                  <div className="d-flex flex-wrap justify-content-center gap-2">
+                    <button type="button" className="btn btn-light" onClick={() => setDraft('')}>Borrar la búsqueda</button>
+                    {category && <Link className="btn btn-light" to={`/explorar${searchSuffix}`}>Buscar en todas</Link>}
+                  </div>
+                </>
+              ) : category && anyListed ? (
+                <>
+                  <h3 className="h5">Aún no hay negocios de {category.label.toLowerCase()}</h3>
+                  <p>Mira los de otras categorías mientras llegan.</p>
+                  <Link className="btn btn-light" to="/explorar">Ver todos los negocios</Link>
+                </>
+              ) : (
+                <>
+                  <h3 className="h5">Pronto verás aquí los negocios de tu ciudad</h3>
+                  <p>Cuando publiquen su menú en línea, aparecerán en Explorar.</p>
+                </>
+              )}
+            </div>
+          )}
+
+          {firstItems.length > 0 && <BusinessList businesses={firstItems} favorites={favorites} />}
+          {Array.from({ length: pagesShown - 1 }, (_, index) => (
+            <MoreBusinesses key={index + 2} search={search} pageNumber={index + 2} favorites={favorites} />
+          ))}
+
+          {hasMore && (
+            <div className="text-center mt-3">
+              <button type="button" className="btn btn-light" onClick={() => setMore({ searchKey, pages: pagesShown + 1 })}>
+                Ver más negocios ({remaining.toLocaleString('es-MX')})
+              </button>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

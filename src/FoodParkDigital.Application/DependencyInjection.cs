@@ -65,6 +65,7 @@ public static class DependencyInjection
 
         // Explorar: one snapshot of the businesses it lists per instance, rebuilt at most every 30 seconds.
         services.AddSingleton<PublicDirectoryCache>();
+        services.AddSingleton<PublicProductIndexCache>();
 
         // Durable handlers of domain events, run by the outbox dispatcher (one registration per event type).
         foreach (var type in assembly.GetTypes().Where(t => t is { IsClass: true, IsAbstract: false }))

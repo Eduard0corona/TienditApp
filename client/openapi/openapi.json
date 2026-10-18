@@ -6470,6 +6470,95 @@
         }
       }
     },
+    "/api/v1/me/favorites": {
+      "get": {
+        "tags": [
+          "Me"
+        ],
+        "parameters": [
+          {
+            "name": "postalCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyFavoriteBusinessDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyFavoriteBusinessDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyFavoriteBusinessDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/favorites/{slug}": {
+      "put": {
+        "tags": [
+          "Me"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Me"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/messaging/templates": {
       "get": {
         "tags": [
@@ -19067,6 +19156,34 @@
           "Past"
         ]
       },
+      "MyFavoriteBusinessDto": {
+        "required": [
+          "name",
+          "savedAt",
+          "slug"
+        ],
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "savedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "card": {
+            "$ref": "#/components/schemas/PublicDirectoryBusinessDto"
+          }
+        },
+        "additionalProperties": false
+      },
       "MyOrderDeliveryDto": {
         "required": [
           "addressLine",
@@ -22612,6 +22729,10 @@
             "type": "string",
             "nullable": true
           },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
           "category": {
             "$ref": "#/components/schemas/BusinessCategory"
           },
@@ -22739,7 +22860,8 @@
       "PublicDirectoryDto": {
         "required": [
           "businesses",
-          "categories"
+          "categories",
+          "products"
         ],
         "type": "object",
         "properties": {
@@ -22755,6 +22877,63 @@
           "postalCode": {
             "type": "string",
             "nullable": true
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicDirectoryProductDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicDirectoryProductDto": {
+        "required": [
+          "acceptsOrders",
+          "addsTax",
+          "businessName",
+          "businessSlug",
+          "id",
+          "name",
+          "price",
+          "theme"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "compareAtPrice": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "businessName": {
+            "type": "string"
+          },
+          "businessSlug": {
+            "type": "string"
+          },
+          "theme": {
+            "$ref": "#/components/schemas/BusinessTheme"
+          },
+          "acceptsOrders": {
+            "type": "boolean"
+          },
+          "addsTax": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

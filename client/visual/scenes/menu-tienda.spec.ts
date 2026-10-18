@@ -2,7 +2,8 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, settle, snap, snapElement } from '../helpers';
 import { PUBLICO_ROUTES } from './publico-cuenta-marco.mocks';
-import { CON_PORTADA, TIENDA } from './menu-tienda.mocks';
+import { CON_PORTADA, TIENDA, TIENDA_FAVORITA } from './menu-tienda.mocks';
+import { CUSTOMER_PROFILE } from './vender-pedidos.mocks';
 
 // The online menu with the shape of the delivery apps (Fase 24E, ADR 0026): Café La Esquina with its cover, logo and the
 // photos of its products; a product's sheet, the search, the tabs that follow the scroll, the store's information, the
@@ -127,6 +128,18 @@ test.describe('La tienda', () => {
     await page.getByRole('button', { name: /^Ver pedido · 4 · / }).click();
     await dialog(page, 'Tu pedido');
     await snap(page, 'tienda-pedido-escritorio', { fullPage: false });
+  });
+});
+
+// The heart over the cover (Fase 24F): a visitor's goes to sign in (the scenes above); a customer's keeps the store.
+test.describe('La tienda de un favorito', () => {
+  test.use({ profile: CUSTOMER_PROFILE, extraRoutes: PUBLICO_ROUTES, prepareData: TIENDA_FAVORITA });
+
+  test('tienda favorita teléfono', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/m/cafe-la-esquina');
+    await expect(page.getByRole('button', { name: 'Guardar Café La Esquina en tus favoritos', pressed: true })).toBeVisible();
+    await snap(page, 'tienda-favorita-telefono', { fullPage: false });
   });
 });
 

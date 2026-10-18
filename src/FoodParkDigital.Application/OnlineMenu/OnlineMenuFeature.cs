@@ -13,6 +13,7 @@ using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Audit.Entities;
@@ -367,11 +368,11 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
             .Select(c => new { c.Id, c.Name })
             .ToListAsync(cancellationToken);
-        var products = await _context.Products
+        // The products a menu shows (the rule Explorar searches, Fase 24F), the first MaxProducts of them in its order: a
+        // service or a product of an inactive category does not take the place of one it shows.
+        var products = await PublicDirectorySnapshot.InMenuOrder(PublicDirectorySnapshot.MenuProducts(_context))
             .AsNoTracking()
             .Include(p => p.OptionGroups).ThenInclude(g => g.Options)
-            .Where(p => p.IsAvailable)
-            .OrderByDescending(p => p.IsFeatured).ThenBy(p => p.SortOrder).ThenBy(p => p.Name)
             .Take(MaxProducts)
             .ToListAsync(cancellationToken);
 
@@ -830,5 +831,25 @@ internal static class PublicMenuTenant
             .Include(t => t.Settings)
             .FirstOrDefaultAsync(t => t.Slug == normalized && t.Status == TenantStatus.Active, cancellationToken);
         return tenant?.Settings is null ? null : tenant;
+    }
+
+    /// <summary>
+    /// Of <paramref name="businessIds"/>, the businesses whose menu is published (to be seen or with orders): read before
+    /// any business is in context, only that setting of each (the favorites of a customer account, Fase 24F).
+    /// </summary>
+    public static async Task<HashSet<Guid>> PublishedAsync(
+        IApplicationDbContext context,
+        IReadOnlyCollection<Guid> businessIds,
+        CancellationToken cancellationToken)
+    {
+        if (businessIds.Count == 0)
+            return [];
+        var published = await context.TenantSettings
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(s => businessIds.Contains(s.TenantId) && s.OnlineMenuMode != OnlineMenuMode.Off)
+            .Select(s => s.TenantId)
+            .ToListAsync(cancellationToken);
+        return published.ToHashSet();
     }
 }

@@ -118,7 +118,7 @@ test.describe('Agenda tu cita en el menú y en Explorar', () => {
     test('explorar agenda en linea', async ({ page }) => {
       await page.setViewportSize(SIZES.phone);
       await open(page, '/explorar');
-      const card = page.getByRole('link', { name: /Estética Bella/ });
+      const card = page.getByRole('link', { name: /^Estética Bella/ });
       await expect(card.getByText('Agenda en línea')).toBeVisible();
       await snapElement(card, 'explorar-agenda-en-linea-telefono');
     });

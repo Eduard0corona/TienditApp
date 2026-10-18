@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Offcanvas } from 'react-bootstrap';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,12 +8,14 @@ import { publicMenuApi, type PlacePublicOrder, type PublicMenuProduct, type Publ
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
 import FeaturedProducts from '../../components/store/FeaturedProducts';
 import MenuProductRow from '../../components/store/MenuProductRow';
+import FavoriteButton from '../../components/explore/FavoriteButton';
 import ProductSheet from '../../components/store/ProductSheet';
 import StoreHero from '../../components/store/StoreHero';
 import StoreInfoModal from '../../components/store/StoreInfoModal';
 import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useActiveSection } from '../../hooks/useActiveSection';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
+import { useFavoriteBusinesses } from '../../hooks/useFavoriteBusinesses';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { formatMoney } from '../../utils/money';
@@ -96,8 +98,10 @@ function restoredMessage(kept: number, dropped: number, skipped: number, reorder
 export default function PublicMenuPage() {
   const cartTitleId = useId();
   const { slug = '' } = useParams<{ slug: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tableLabel = searchParams.get('mesa')?.trim().slice(0, 50) || '';
+  // A product found in Explorar opens on its sheet (Fase 24F): ?producto={id}.
+  const linkedProductId = searchParams.get('producto');
   const atTable = tableLabel !== '';
   const menu = useQuery({
     queryKey: ['public-menu', slug, tableLabel],
@@ -117,6 +121,7 @@ export default function PublicMenuPage() {
   }, [menuTheme]);
   const [lines, setLines] = useState<MenuLine[]>([]);
   const [viewing, setViewing] = useState<PublicMenuProduct | null>(null);
+  const [linkedOpened, setLinkedOpened] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
@@ -130,6 +135,31 @@ export default function PublicMenuPage() {
   const [address, setAddress] = useState<PublicDeliveryAddress>(NO_ADDRESS);
   const queryClient = useQueryClient();
   const { customer, signedIn } = useCustomerAccount();
+  // At a table there is no heart: the favorites are not asked for.
+  const favorites = useFavoriteBusinesses(undefined, { enabled: !atTable });
+  // The product of the link, once its menu is fresh (a copy kept from a moment ago may not have it yet, or still have it).
+  if (data && !menu.isFetching && linkedProductId && linkedOpened !== linkedProductId) {
+    setLinkedOpened(linkedProductId);
+    const linked = data.categories.flatMap((category) => category.products).find((product) => product.id === linkedProductId);
+    if (linked) setViewing(linked);
+  }
+  // Closed (or not on the menu), the address is the store's again: going back or reloading does not look for it again.
+  const leaveLinkedProduct = useCallback(() => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('producto');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const closeSheet = () => {
+    setViewing(null);
+    if (linkedProductId) leaveLinkedProduct();
+  };
+  // One the menu no longer shows opens just the menu.
+  const linkedNotOnMenu = linkedProductId !== null && linkedOpened === linkedProductId && viewing === null;
+  useEffect(() => {
+    if (linkedNotOnMenu) leaveLinkedProduct();
+  }, [linkedNotOnMenu, leaveLinkedProduct]);
   // The saved address chosen; null while another one is written; undefined until the cart first goes to an address.
   const [addressChoice, setAddressChoice] = useState<string | null | undefined>(undefined);
   const [keepAddress, setKeepAddress] = useState(true);
@@ -470,6 +500,7 @@ export default function PublicMenuPage() {
           delivery={{ offered: deliveryOffered, required: deliveryRequired, toAddress, onChange: setToAddress, hint: deliveryHint }}
           bookingPath={data.booksOnline && !atTable ? bookingPath(slug) : null}
           contactUrl={contact}
+          favorite={atTable ? null : <FavoriteButton slug={data.slug} name={data.businessName} favorites={favorites} className="pm-round" />}
         />
 
         {restoredNotice && (
@@ -571,10 +602,10 @@ export default function PublicMenuPage() {
       <ProductSheet
         product={viewing}
         acceptsOrders={data.acceptsOrders}
-        onClose={() => setViewing(null)}
+        onClose={closeSheet}
         onAdd={(product, optionIds, note, quantity) => {
           add(product, optionIds, note, quantity);
-          setViewing(null);
+          closeSheet();
         }}
       />
 

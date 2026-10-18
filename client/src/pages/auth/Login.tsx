@@ -18,7 +18,9 @@ export default function Login() {
   const [twoFactorChallengeToken, setTwoFactorChallengeToken] = useState<string | null>(null);
 
   // Without a page to return to, '/' picks the start: the guided setup for a new business, or the screen of each role.
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  // With one, back to it as it was: a search of Explorar comes back with its words.
+  const returnTo = (location.state as { from?: { pathname: string; search?: string; hash?: string } })?.from;
+  const from = returnTo?.pathname ? `${returnTo.pathname}${returnTo.search ?? ''}${returnTo.hash ?? ''}` : '/';
   // Arriving from the link of the confirmation email, which just activated the account.
   const accountActivated = Boolean((location.state as Partial<AccountActivatedState> | null)?.accountActivated);
 

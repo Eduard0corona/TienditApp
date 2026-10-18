@@ -61,12 +61,16 @@ public class TenantFilterBypassAllowlistTests
         // Verification codes by WhatsApp: the platform's account, owned by an active platform admin.
         ["src/FoodParkDigital.Infrastructure/Services/SmsService.cs"] = 2,
         // The online menu finds its business by slug, with its settings, before any business is in context; it then
-        // enters that business.
-        ["src/FoodParkDigital.Application/OnlineMenu/OnlineMenuFeature.cs"] = 1,
+        // enters that business. The favorites of a customer account read only whether each kept business still has its
+        // menu published (Fase 24F).
+        ["src/FoodParkDigital.Application/OnlineMenu/OnlineMenuFeature.cs"] = 2,
         // Explorar lists the businesses that published their menu and show in it, before any business is in context:
         // each read filtered by its own business, only for what its menu already shows (ADR 0021); with the customer's
         // postal code, the active zones of every business that reach it, never their names (Fase 24B).
         ["src/FoodParkDigital.Application/PublicDirectory/PublicDirectoryFeature.cs"] = 3,
+        // Its search reads the products the menus of those businesses show, each with its own business and only what its
+        // menu already shows (Fase 24F).
+        ["src/FoodParkDigital.Application/PublicDirectory/PublicProductSearch.cs"] = 1,
         // The memberships of the account itself (by its user id), in every business: its old avatars live in their folders.
         ["src/FoodParkDigital.Application/Identity/AvatarFiles.cs"] = 1,
         // Customers shared by businesses (registered accounts and temporary customers looked up by phone).

@@ -39,7 +39,7 @@ public class PublicDirectorySqlServerTests
         await SeedAsync(database, "i-apagado", OnlineMenuMode.Off, drawer: Drawer.MainBranch);
 
         await using var context = database.CreateContext();
-        var directory = await new GetPublicDirectoryQueryHandler(context, new FixedClock(), new PublicDirectoryCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance)
+        var directory = await new GetPublicDirectoryQueryHandler(context, new FixedClock(), new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance)
             .Handle(new GetPublicDirectoryQuery(), CancellationToken.None);
 
         var cards = directory.Businesses.Items;

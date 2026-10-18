@@ -555,6 +555,73 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `storeMenu.test.ts` (+1): el título de una tienda por lo que se hace en ella.
     - `PublicMenuPage.test.tsx` y `PublicBookingPage.test.tsx`: la pestaña lleva el título que escribe el servidor.
   - **Escenas visuales:** no cambian: la fase no toca estilos ni lo que se ve en las páginas.
+- Fase 24F, Productos y favoritos en Explorar ([ADR 0028](../adr/0028-product-search-and-favorites.md)):
+  - **Domain:** `FavoriteBusinessTests` (3): un favorito es de una cuenta y un negocio, pide los dos y se detiene en 100.
+  - **Application:**
+    - `ExploreProductsAndFavoritesTests` (13):
+      - **La búsqueda de productos:**
+        - por cualquier palabra del nombre o la descripción, sin acentos, con el nombre primero aunque otro negocio vaya antes en Explorar;
+        - 3 por negocio con los que reciben pedidos primero, y 12 en total;
+        - solo lo que el menú muestra (ni no disponibles, ni servicios, ni categorías apagadas, ni negocios fuera de Explorar) y en la categoría pedida;
+        - con más de 500 productos, solo los primeros 500 de su menú, sin que un servicio ocupe el lugar de un producto, igual que el menú;
+        - «más IVA» solo cuando el pedido se lo suma (ni exento ni al 0 %);
+        - sin productos y con los negocios cuando su índice no se puede armar;
+        - solo con palabras y en la primera página.
+      - **La portada:** la de la tarjeta (512 px).
+      - **Los favoritos:**
+        - se guardan una vez, del último al primero, con su tarjeta mientras aparecen en Explorar;
+        - solo una tienda publicada y solo una cuenta de cliente;
+        - cada cuenta ve solo los suyos;
+        - un negocio suspendido o con el menú apagado no aparece hasta que vuelve, y se puede quitar.
+    - `PublicProductIndexCacheTests` (4):
+      - el índice se arma una vez por foto y otra con la siguiente;
+      - una búsqueda con la foto anterior usa el índice nuevo;
+      - búsquedas al mismo tiempo lo arman una sola vez;
+      - quien deja de esperar no cancela a quien lo arma;
+      - si falla, no se intenta otra vez hasta la foto siguiente.
+    - `AuthorizationBehaviorTests`: 277 casos de uso con regla.
+  - **SQL Server:** `FavoriteBusinessesMigrationSqlServerTests` (3):
+    - un favorito por cuenta y negocio (2601); borrar la cuenta borra sus favoritos y un negocio con favoritos no se borra (547);
+    - revertir se detiene con 50021 sin cambiar nada mientras haya favoritos y, sin ellos, quita solo la tabla;
+    - el mismo negocio guardado al mismo tiempo desde otra pestaña deja uno y las dos responden que quedó guardado (`SavedMeanwhile`).
+  - **WebApi:**
+    - `CrossTenantCustomerAccountsSqlServerTests.FavoritesAndProducts_ShouldBeOnlyTheAccounts_AndOnlyOfPublishedMenus` (1), sobre la API real:
+      - la búsqueda no encuentra los productos de un menú sin publicar, ni se guarda esa tienda;
+      - cada cuenta ve y quita solo los suyos;
+      - el equipo de un negocio recibe 400 y sin sesión, 401.
+    - `TenantFilterBypassAllowlistTests`: `PublicProductSearch.cs` (1) y `OnlineMenuFeature.cs` (2) con su razón.
+    - `ArchitectureTests` conoce `FavoriteBusiness` como entidad sin negocio.
+  - **Cliente:**
+    - `ExplorePage.test.tsx` (16, +7):
+      - los productos con su enlace a la hoja, «Pide en línea», el precio de antes y «más IVA»;
+      - la portada de la tarjeta;
+      - el corazón del visitante;
+      - los favoritos del cliente: guardar al momento con `aria-pressed` y nombre fijo, quitar desde «Tus favoritos» con el foco en su título, y los dos corazones del mismo negocio de acuerdo;
+      - dos corazones a la vez, y uno que el servidor rechaza vuelve con su aviso;
+      - ningún corazón mientras vuelve la sesión;
+      - sin favoritos al buscar o en una categoría.
+    - `PublicMenuPage.test.tsx` (34, +4):
+      - `?producto=` abre la hoja y al cerrarla queda la dirección de la tienda con su mesa;
+      - un producto que ya no está abre solo el menú y sale de la dirección;
+      - guardar y quitar desde la portada con el foco en el corazón;
+      - el visitante va a entrar y regresa a la tienda;
+      - ni corazón ni petición de favoritos para el equipo ni en una mesa.
+    - `Login.test.tsx` (1): regresa a la página de la que vino con su búsqueda.
+  - **Escenas visuales** (contra `master` en `3b51118`):
+    - **Nuevas (7):**
+      - Explorar con productos («chilaquiles») en escritorio y teléfono;
+      - Explorar con favoritos en escritorio, teléfono y oscuro, y con muchos favoritos y «Ver todos»;
+      - la tienda de un favorito.
+
+      Los datos simulados son `mocks/routes-p13.mjs` (favoritos), los productos de `mocks/routes-p9.mjs`, `scenes/explorar.mocks.ts` y `scenes/menu-tienda.mocks.ts`. Estas escenas no salen de la línea base de `master` hasta que la fase entre a `master`.
+    - **Cambian a propósito (46):**
+      - Explorar (9): las tarjetas con su portada (la foto de Café La Esquina, los colores de los demás), el corazón y el buscador «Busca un negocio o un producto».
+      - La tienda (24): el corazón sobre la portada, en cada tema, vista y estado del menú, «Pedir otra vez» y «Agenda tu cita».
+      - Configuración del negocio (13): «Así se ve tu tarjeta» con la portada arriba. La tarjeta de plataformas de reparto solo baja con ella (sus letras caen en otra fracción de píxel).
+    - **Resultado:** la comparación contra `master` dio 432 escenas iguales, 7 nuevas y 46 que cambian. Con esas capturas, los seis archivos tocados (250 escenas) pasaron dos corridas seguidas contra el mismo build.
+    - **Lo que encontraron las escenas:**
+      - el corazón del visitante también nombra al negocio, así que ahora buscan la tarjeta por el inicio de su nombre;
+      - una imagen perezosa detrás de «Ver todos» no carga, así que `settle` ya no espera las imágenes que no se dibujan.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
@@ -562,7 +629,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 
 `ClientDeliveryTests` (Fase 20) arranca la API real sin base sobre una carpeta como la que deja el publish (`UseWebRoot`, sin el manifiesto de static web assets para que Development no le sume `client/dist`): la copia Brotli o gzip según `Accept-Encoding` (con `q=0` y `*`), HEAD igual que GET, `immutable` en `/assets` solo para lo que se envía (un 412 o 416 sin caché ni codificación), `no-cache` en `/`, en las rutas de la app y en `/index.html`, 404 para un archivo viejo o cualquier copia pedida por su nombre (también `/index.html.gz`), el contrato de la API sin comprimir y las subidas con sus encabezados. `PrivateUploadsGuardMiddlewareTests` bloquea también `/uploads//orders`, `//uploads/orders` y las barras invertidas. En el cliente, `useNewVersion.test.tsx` prueba cada momento en que se pregunta por una versión nueva (pestaña visible, foco, conexión, cada 10 minutos, nunca con la pestaña oculta ni justo al cargar) y `NewVersionNotice.test.tsx`, que sin conexión no ofrece recargar; `BranchesList.test.tsx`, el aviso de que el menú muestra la dirección de la sucursal principal.
 
-Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 478 pruebas, contando el muestrario, en estos grupos: Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, Reportes › Liquidaciones (desde la 22G), la Agenda a domicilio (desde la 22E), Explorar (desde la 24A), Cuenta y comprar con la cuenta (desde la 24B), el seguimiento del pedido (desde la 24C), las citas en línea (desde la 24D), la tienda del menú en línea (desde la 24E), las pantallas públicas y de cuenta con el marco, el marco en cada tamaño y el anillo de foco. Salen iguales en cada corrida: sin transiciones, animaciones CSS ni desplazamiento suave, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).
+Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 485 pruebas, contando el muestrario, en estos grupos: Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, Reportes › Liquidaciones (desde la 22G), la Agenda a domicilio (desde la 22E), Explorar (desde la 24A), Cuenta y comprar con la cuenta (desde la 24B), el seguimiento del pedido (desde la 24C), las citas en línea (desde la 24D), la tienda del menú en línea (desde la 24E), las pantallas públicas y de cuenta con el marco, el marco en cada tamaño y el anillo de foco. Salen iguales en cada corrida: sin transiciones, animaciones CSS ni desplazamiento suave, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).
 
 El pipeline HTTP completo solo se prueba en la suite de aislamiento entre negocios (Fases 8 a 15, con hubs, webhook y el acceso de soporte), en las rondas de una cuenta con existencias (Fase 14) y sus platillos cancelados (Fase 15), en el controller de sondeo de `RequestCancellationTests` y en la entrega del cliente (`ClientDeliveryTests`, Fase 20); la integración con SQL Server real cubre folios, proyecciones, ventas, sesiones y aislamiento. El workflow `CI` compila y ejecuta las pruebas, valida migraciones pendientes, aplica las migraciones en SQL Server 2022 con el script y el `sqlcmd` de producción (job `Migrations`, ver [migraciones](database-migrations.md)) y corre lint, pruebas, build y `npm audit` del cliente en cada PR; el despliegue repite build, pruebas y lint antes de publicar. Producción y pruebas apuntan a .NET 10.
 

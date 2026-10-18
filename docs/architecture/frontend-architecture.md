@@ -497,6 +497,45 @@ Buscadores y vistas previas (Fase 24D-2, [ADR 0027](../adr/0027-search-engines-a
 - `ExploreCategories` del servidor repite las direcciones de `utils/businessCategories` (`/explorar/{slug}`); `PublicPagesTests` compara las dos listas.
 - **Primera visita:** suma 51 B (de 178,009 a 178,060 B, dentro del presupuesto de 178,200 B): `HomeRedirect`, que va en ella, pone el título de la app con `useDocumentTitle`.
 
+Productos y favoritos en Explorar (Fase 24F, [ADR 0028](../adr/0028-product-search-and-favorites.md)):
+
+- **La tarjeta de Explorar** (`components/explore/DirectoryBusinessCard`):
+  - lleva arriba la portada de su tienda (`coverImageUrl`, la variante de 512 px; `.dc-cover` con los colores del tema sin ella) y el logo sobre el borde;
+  - con `action`, envuelve la tarjeta-enlace y la acción en `.dc-wrap`, así el corazón no queda dentro del enlace;
+  - la vista previa de Configuración (`components/settings/DirectoryCard`) pasa la portada del negocio (`coverImages.medium`).
+- **Los productos encontrados** (`components/explore/DirectoryProducts`):
+  - una región «Productos» antes de los negocios;
+  - cada fila enlaza a `/m/{slug}?producto={id}`, con foto o inicial (los colores del negocio), «· Pide en línea», el precio con el de antes tachado y «más IVA» cuando `addsTax`;
+  - con productos y sin negocios, no se muestra la región «Negocios» ni la página que dice que no se encontró nada;
+  - el buscador se llama «Buscar negocios y productos».
+- **El corazón** (`components/explore/FavoriteButton` con `hooks/useFavoriteBusinesses`):
+  - **Según quién lo ve:**
+    - cliente: un botón con nombre fijo («Guardar {negocio} en tus favoritos») y `aria-pressed`;
+    - visitante: un enlace a `/login` con `state.from`; `Login` regresa a la ruta con su búsqueda y su `hash`;
+    - equipo de un negocio, o mientras la sesión vuelve (`isLoading`): nada.
+  - **Cuándo espera:** mientras llega la primera lista o mientras su cambio va en camino, queda `aria-disabled` (no `disabled`, para que el foco se quede en él).
+  - **La lista:** `useQuery(['me','favorites', código postal])` con `keepPreviousData`, para que otro código postal no vacíe los corazones.
+  - **Los cambios:**
+    - `useMutation` con `mutationKey` y `useMutationState` para los pendientes: varios corazones cambian a la vez, cada uno con su estado, también entre pantallas;
+    - quitar uno lo saca de todas las listas guardadas (`setQueriesData`);
+    - al terminar se vuelven a pedir las listas, y el cambio sigue pendiente hasta que llegan, así ningún corazón parpadea;
+    - un error vuelve el corazón atrás y lo dice en un toast.
+- **«Tus favoritos»** (`components/explore/FavoriteBusinesses`):
+  - se muestra arriba de Explorar sin búsqueda ni categoría;
+  - en un teléfono es una fila que se desliza (`useScrollFade`); desde 768 px, una cuadrícula con las primeras 6 y «Ver todos tus favoritos (N)»;
+  - un negocio que ya no aparece en Explorar queda como una ficha con su nombre y «No aparece en Explorar ahora»;
+  - quitar uno desde aquí lleva el foco al título.
+- **La tienda** (`pages/public/PublicMenuPage`, `components/store/StoreHero`):
+  - el corazón va sobre la portada (`pm-round`), salvo en una mesa, donde tampoco se piden los favoritos;
+  - `?producto=` abre la hoja del producto una vez, con el menú ya al día (`!isFetching`);
+  - al cerrarla, o si el menú ya no tiene ese producto, la dirección pierde `producto` (`replace`) y conserva la mesa.
+- **El rojo del corazón guardado** es `--ct-danger-text-emphasis`: el rojo de los botones de peligro no se lee sobre la superficie oscura.
+- **Escenas:**
+  - `scenes/explorar.spec.ts`: productos (escritorio y teléfono), favoritos en tres vistas (oscuro incluido) y muchos favoritos con «Ver todos»;
+  - `scenes/menu-tienda.spec.ts`: la tienda de un favorito;
+  - la API simulada: `mocks/routes-p13.mjs` (favoritos) y los productos de `mocks/routes-p9.mjs`.
+- **Primera visita:** suma 41 B (de 178,060 a 178,101 B, dentro del presupuesto de 178,200 B): `keepPreviousData` de TanStack Query y la vuelta de `Login` con la búsqueda, que van en ella. Explorar, la tienda y sus piezas nuevas bajan con su ruta. Los pendientes de cada corazón van en el estado del hook y no en `useMutationState`, que sumaba 118 B a la primera visita.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.

@@ -234,6 +234,9 @@ public class ArchitectureTests
             "IdentityRoleClaim`1", "IdentityUserToken`1", "RefreshToken", "CustomerProfile",
             // The addresses a customer account keeps for its orders (Fase 24B): read only by the account's own id.
             "AccountAddress",
+            // The businesses a customer account keeps among its favorites (Fase 24F): read only by the account's own id; the
+            // business it points to (BusinessId) is not its owner.
+            "FavoriteBusiness",
             // A child of a tenant-scoped aggregate, filtered through it (its conversation's business).
             "WhatsAppMessage"
         };
