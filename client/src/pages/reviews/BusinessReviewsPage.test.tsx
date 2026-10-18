@@ -61,7 +61,9 @@ describe('BusinessReviewsPage', () => {
 
     expect(await screen.findByText('23 reseñas')).toBeInTheDocument();
     expect(screen.getByText('Responder ayuda a que te elijan')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: '4.6 de 5 estrellas' })).toBeInTheDocument();
+    // The number says it; its stars are only for the eyes.
+    expect(screen.getByText('4.6')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: '4.6 de 5 estrellas' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Responder a Mariana O.' }));
     const dialog = await screen.findByRole('dialog', { name: 'Responder a Mariana O.' });
     expect(dialog).toHaveTextContent('Llegó frío.');
@@ -69,7 +71,7 @@ describe('BusinessReviewsPage', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Publicar respuesta' }));
 
     await waitFor(() => expect(api.reply).toHaveBeenCalledWith('r1', 'Lo sentimos, ya revisamos el envío.'));
-    expect(toast.success).toHaveBeenCalledWith('Publicamos tu respuesta a Mariana O..');
+    expect(toast.success).toHaveBeenCalledWith('Publicamos tu respuesta.');
   });
 
   it('reports a review with a reason from the list, and offers it no more once reported or kept', async () => {
@@ -112,5 +114,21 @@ describe('BusinessReviewsPage', () => {
 
     await waitFor(() => expect(api.getBusinessReviews).toHaveBeenLastCalledWith(BusinessReviewsFilter.Unanswered, 1, 20, expect.anything()));
     expect(await screen.findByText('No hay reseñas con este filtro.')).toBeInTheDocument();
+  });
+
+  it('takes an answer down after asking, and says so when the API refuses it', async () => {
+    answer([review({ reply: 'Lo sentimos.', repliedAt: '2026-10-11T10:00:00Z' })]);
+    api.removeReply.mockResolvedValueOnce(review()).mockRejectedValueOnce(new Error('sin red'));
+
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Quitar respuesta a Mariana O.' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Quitar respuesta' })).getByRole('button', { name: 'Quitar respuesta' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Quitaste tu respuesta.'));
+    expect(api.removeReply).toHaveBeenCalledWith('r1');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar respuesta a Mariana O.' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Quitar respuesta' })).getByRole('button', { name: 'Quitar respuesta' }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
   });
 });

@@ -4,7 +4,7 @@ import { BusinessCategory } from '../../api/generated/enums';
 import type { PublicMenu } from '../../api/publicMenuApi';
 import type { RatingSummary } from '../../api/reviewsApi';
 import { categoryInfo } from '../../utils/businessCategories';
-import { formatAverage, ratingDescription, reviewCountLabel } from '../../utils/reviews';
+import { formatAverage, reviewCountLabel, storeRatingName } from '../../utils/reviews';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 
 export interface StoreDeliveryChoice {
@@ -140,7 +140,7 @@ export default function StoreHero({
                 type="button"
                 className="pm-pill"
                 onClick={rating.onOpen}
-                aria-label={`${ratingDescription(rating.summary)}. Ver reseñas`}
+                aria-label={`${storeRatingName(rating.summary)}. Ver reseñas`}
               >
                 <i className={rating.summary.average != null ? 'ri-star-fill pm-pill-star' : 'ri-star-line'} aria-hidden="true"></i>
                 {rating.summary.average != null ? (

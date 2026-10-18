@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FoodParkDigital.Application.Customers;
@@ -264,6 +265,12 @@ public sealed class CrossTenantCustomerAccountsSqlServerTests
         await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"{BusinessReviews}/{id}/reply", new { text = "¡Gracias, Ana!" }));
         await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"{BusinessReviews}/{id}/report", new { reason = 4 }));
 
+        // Its team, even with every permission, does not answer for the business: its owner and admins do.
+        var cashier = await EmployeeAsync(mine, "ManageOrders", "ManageCustomers", "ManageCampaigns", "ViewReports");
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync(BusinessReviews)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.DeleteAsync($"{BusinessReviews}/{id}/reply")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync($"/api/v1/platform/reviews/{id}/keep", new { })).StatusCode);
+
         // The store shows it, reported or not, with «Cliente R.» and the answer: nothing of the account.
         var published = await anonymous.GetAsync($"/api/v1/public/menu/{mySlug}/reviews");
         var raw = await published.Content.ReadAsStringAsync();
@@ -306,6 +313,27 @@ public sealed class CrossTenantCustomerAccountsSqlServerTests
     /// <returns>The slug of the menu, now taking orders.</returns>
     private static async Task<string> MenuWithOrdersAsync(HttpClient owner)
         => (await TwoBusinessesApi.ReadAsync(await owner.PutAsJsonAsync(OnlineMenu, new { mode = 2 }))).GetProperty("slug").GetString()!;
+
+    /// <summary>A member of the owner's team with the permissions given, signed in with its own password.</summary>
+    private async Task<HttpClient> EmployeeAsync(SignedUp owner, params string[] permissions)
+    {
+        const string password = "Secreto1";
+        var email = $"equipo-{Guid.NewGuid():N}@demo.com";
+        await TwoBusinessesApi.ReadAsync(await owner.Client.PostAsJsonAsync("/api/v1/employees", new
+        {
+            email,
+            password,
+            firstName = "Empleado",
+            lastName = "De prueba",
+            appRole = 3,
+            tenantRole = 2,
+            permissions
+        }));
+        var client = _api.AnonymousClient();
+        var signedIn = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password }));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", signedIn.GetProperty("accessToken").GetString());
+        return client;
+    }
 
     private static async Task<string?> DetailAsync(HttpResponseMessage response)
         => JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString();

@@ -4,7 +4,7 @@ import { SIZES, dialog, open, snap } from '../helpers';
 import { SUPER_ADMIN_PROFILE } from './caja-config.mocks';
 import { ACCOUNT_PROFILE, TIENDA_CON_CUENTA_ROUTES } from './cuenta-cliente.mocks';
 import { PUBLICO_ROUTES } from './publico-cuenta-marco.mocks';
-import { EXPLORAR_CON_CALIFICACION, PUEDE_CALIFICAR, RESENA_OCULTA, TIENDA_CON_RESENAS } from './resenas.mocks';
+import { EXPLORAR_CON_CALIFICACION, PLATAFORMA_ROUTES, PUEDE_CALIFICAR, RESENA_OCULTA, TIENDA_CON_RESENAS } from './resenas.mocks';
 
 // The reviews of the businesses (Fase 24H, ADR 0030): the store's rating and its reviews after the menu, the card of
 // Explorar with its rating, rating a business from the store and from Mis pedidos (and one the platform hid), the
@@ -30,7 +30,7 @@ test.describe('La tienda con reseñas', () => {
 
       test(`tienda con reseñas ${look.suffix}`, async ({ page }) => {
         await open(page, '/m/cafe-la-esquina');
-        await expect(page.getByRole('button', { name: 'Calificación 3.9 de 5, 7 reseñas. Ver reseñas' })).toBeVisible();
+        await expect(page.getByRole('button', { name: '3.9 de 5 (7 reseñas). Ver reseñas' })).toBeVisible();
         const reviews = page.getByRole('region', { name: 'Reseñas' });
         await expect(reviews.getByText('Lucía R.')).toBeVisible();
         await expect(reviews.getByText('Miguel A.')).toBeVisible();
@@ -47,7 +47,8 @@ test.describe('Calificar', () => {
     await open(page, '/m/cafe-la-esquina');
     await page.getByRole('region', { name: 'Reseñas' }).getByRole('button', { name: 'Calificar' }).click();
     const rate = await dialog(page, 'Califica a Café La Esquina');
-    await rate.getByRole('radio', { name: '4 estrellas' }).check();
+    // The radio is hidden behind its star (the label): the star is what a person taps.
+    await rate.getByRole('radio', { name: '4 estrellas' }).check({ force: true });
     await rate.getByLabel('Cuéntanos cómo te fue (opcional)').fill('El americano, muy bueno. La concha llegó un poco aplastada.');
     await expect(rate.getByRole('button', { name: 'Publicar' })).toBeEnabled();
     await snapDialog(page, 'tienda-calificar');
@@ -109,7 +110,7 @@ test.describe('Reseñas del negocio', () => {
 
   test('reseñas reportadas', async ({ page }) => {
     await open(page, '/reviews');
-    await page.getByLabel('Mostrar').selectOption({ label: 'Reportadas' });
+    await page.getByLabel('Mostrar', { exact: true }).selectOption({ label: 'Reportadas' });
     await expect(page.getByText('En revisión')).toBeVisible();
     await expect(page.getByText('Lucía R.')).toBeHidden();
     await snap(page, 'resenas-reportadas');
@@ -117,7 +118,7 @@ test.describe('Reseñas del negocio', () => {
 });
 
 test.describe('Reseñas en la plataforma', () => {
-  test.use({ profile: SUPER_ADMIN_PROFILE, prepareData: TIENDA_CON_RESENAS });
+  test.use({ profile: SUPER_ADMIN_PROFILE, extraRoutes: PLATAFORMA_ROUTES, prepareData: TIENDA_CON_RESENAS });
 
   test('plataforma reseñas', async ({ page }) => {
     await open(page, '/platform/reviews');
@@ -135,7 +136,7 @@ test.describe('Reseñas en la plataforma', () => {
 
   test('plataforma reseñas ocultas', async ({ page }) => {
     await open(page, '/platform/reviews');
-    await page.getByLabel('Mostrar').selectOption({ label: 'Ocultas' });
+    await page.getByLabel('Mostrar', { exact: true }).selectOption({ label: 'Ocultas' });
     await expect(page.getByRole('button', { name: 'Restaurar la reseña de Pedro G. en Café La Esquina' })).toBeVisible();
     await snap(page, 'plataforma-resenas-ocultas');
   });

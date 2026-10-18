@@ -40,6 +40,16 @@ export function ratingDescription(summary: RatingSummary | null | undefined): st
 }
 
 /**
+ * The name of the store's rating button: it starts with what it shows («4.6 (23)»), so a voice command with the number
+ * finds it: «4.6 de 5 (23 reseñas)», or only how many there are with fewer than three.
+ */
+export function storeRatingName(summary: RatingSummary): string {
+  return summary.average != null
+    ? `${formatAverage(summary.average)} de 5 (${reviewCountLabel(summary.count)})`
+    : reviewCountLabel(summary.count);
+}
+
+/**
  * Whether the business can still report a review, as the API decides it: a published one without a report waiting, and
  * not one the platform already kept unless its author changed it after that. A navigation aid: the API still decides.
  */

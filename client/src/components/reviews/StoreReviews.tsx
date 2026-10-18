@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { reviewsApi, type PublicReview, type RatingSummary } from '../../api/reviewsApi';
@@ -11,9 +11,13 @@ import './Reviews.css';
 /** The element of the reviews of a store, where its rating in the header takes. */
 export const STORE_REVIEWS_ID = 'pm-reviews';
 
-function ReviewItem({ review, businessName }: { review: PublicReview; businessName: string }) {
+function ReviewItem({ review, businessName, itemRef }: {
+  review: PublicReview;
+  businessName: string;
+  itemRef?: Ref<HTMLLIElement>;
+}) {
   return (
-    <li className="rv-item">
+    <li className="rv-item" ref={itemRef} tabIndex={itemRef ? -1 : undefined}>
       <div className="rv-item-head">
         <span className="rv-author">{review.authorName}</span>
         <Stars rating={review.rating} />
@@ -46,6 +50,14 @@ function ReviewsPage({ slug, businessName, page, last, onMore }: {
     queryFn: ({ signal }) => reviewsApi.getStoreReviews(slug, page, signal),
     staleTime: 60_000,
   });
+  // A page asked for with «Ver más» takes the focus to its first review once it arrives (its button is gone): once.
+  const first = useRef<HTMLLIElement>(null);
+  const focused = useRef(page === 1);
+  useEffect(() => {
+    if (focused.current || !reviews.data) return;
+    focused.current = true;
+    first.current?.focus();
+  }, [reviews.data]);
   if (reviews.isPending) return <li className="rv-item text-muted" aria-busy="true">Cargando reseñas…</li>;
   if (reviews.isError) {
     return (
@@ -56,7 +68,9 @@ function ReviewsPage({ slug, businessName, page, last, onMore }: {
   }
   return (
     <>
-      {reviews.data.items.map((item) => <ReviewItem key={item.id} review={item} businessName={businessName} />)}
+      {reviews.data.items.map((item, index) => (
+        <ReviewItem key={item.id} review={item} businessName={businessName} itemRef={index === 0 && page > 1 ? first : undefined} />
+      ))}
       {last && reviews.data.hasNextPage && (
         <li className="rv-item">
           <button type="button" className="btn btn-light w-100" onClick={onMore}>Ver más reseñas</button>
@@ -97,7 +111,8 @@ export default function StoreReviews({ business, summary, customer }: StoreRevie
       <div className="rv-summary">
         {summary?.average != null ? (
           <div className="rv-average">
-            <span className="rv-average-number ta-money">{formatAverage(summary.average)}</span>
+            {/* The stars say it in words: the number is for the eyes. */}
+            <span className="rv-average-number ta-money" aria-hidden="true">{formatAverage(summary.average)}</span>
             <span>
               <Stars rating={summary.average} />
               <span className="d-block small text-muted">{reviewCountLabel(count)}</span>
@@ -105,7 +120,7 @@ export default function StoreReviews({ business, summary, customer }: StoreRevie
           </div>
         ) : (
           <p className="text-muted mb-0">
-            {count === 0 ? 'Todavía no hay reseñas: la tuya puede ser la primera.' : `${reviewCountLabel(count)}. La calificación aparece desde 3.`}
+            {count === 0 ? 'Todavía no hay reseñas: la tuya puede ser la primera.' : `${reviewCountLabel(count)}. La calificación aparece desde 3 reseñas.`}
           </p>
         )}
         {canWrite && (

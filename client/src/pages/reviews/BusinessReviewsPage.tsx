@@ -31,14 +31,18 @@ const PAGE_SIZES = [20, 50];
 /** The business answers a review once; answering again changes its answer. */
 function ReplyDialog({ review, onClose }: { review: BusinessReview | null; onClose: () => void }) {
   const titleId = useId();
+  // While it fades out it keeps showing the review it was opened for.
+  const [shown, setShown] = useState(review);
+  if (review && review !== shown) setShown(review);
+  const current = review ?? shown;
   return (
     <Modal show={review !== null} onHide={onClose} centered fullscreen="sm-down" aria-labelledby={titleId}>
       <Modal.Header closeButton>
         <Modal.Title id={titleId} as="h2" className="h5">
-          {review?.reply ? 'Cambiar la respuesta' : 'Responder'} a {review?.authorName}
+          {current?.reply ? 'Cambiar respuesta' : 'Responder'} a {current?.authorName}
         </Modal.Title>
       </Modal.Header>
-      {review && <ReplyForm key={review.id} review={review} onClose={onClose} />}
+      {current && <ReplyForm key={current.id} review={current} onClose={onClose} />}
     </Modal>
   );
 }
@@ -52,7 +56,8 @@ function ReplyForm({ review, onClose }: { review: BusinessReview; onClose: () =>
     mutationFn: () => reviewsApi.reply(review.id, text.trim()),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['business-reviews'] });
-      toast.success(`Publicamos tu respuesta a ${review.authorName}.`);
+      // Not «a Mariana O.»: the name already ends in a period.
+      toast.success('Publicamos tu respuesta.');
       onClose();
     },
   });
@@ -114,6 +119,8 @@ export default function BusinessReviewsPage() {
   });
   const data = reviews.data;
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['business-reviews'] });
+  // A filter whose last row of a page went (answered, reported) goes back to the page before.
+  if (data && !reviews.isPlaceholderData && data.reviews.items.length === 0 && page > 1) setPage(page - 1);
 
   const removeReply = async (review: BusinessReview) => {
     const accepted = await confirm({
@@ -139,7 +146,9 @@ export default function BusinessReviewsPage() {
     {
       label: 'Calificación',
       value: summary?.average != null ? formatAverage(summary.average) : '—',
-      hint: summary?.average != null ? reviewCountLabel(summary.count) : `${reviewCountLabel(summary?.count ?? 0)}: aparece desde 3`,
+      hint: summary?.average != null
+        ? reviewCountLabel(summary.count)
+        : `${reviewCountLabel(summary?.count ?? 0)}: aparece desde 3 reseñas`,
       stars: summary?.average ?? null,
     },
     { label: 'Sin responder', value: String(data.unanswered), hint: 'Responder ayuda a que te elijan' },
@@ -159,7 +168,7 @@ export default function BusinessReviewsPage() {
                   <div className="text-muted small">{card.label}</div>
                   <div className="h4 mb-0 d-flex align-items-center gap-2">
                     <span className="ta-money">{card.value}</span>
-                    {'stars' in card && card.stars != null && <Stars rating={card.stars} className="fs-6" />}
+                    {'stars' in card && card.stars != null && <Stars rating={card.stars} className="fs-6" decorative />}
                   </div>
                   <div className="text-muted small">{card.hint}</div>
                 </div>

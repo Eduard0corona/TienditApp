@@ -38,8 +38,9 @@
   color: var(--ta-warning-fg);
 }
 
-/* The radio is hidden: its star shows where the keyboard is. */
-.rv-star-input label:has(:focus-visible) {
+/* The radio is hidden: its star, right after it, shows where the keyboard is. */
+.rv-star-input input:focus-visible + i {
+  border-radius: var(--ta-radius-sm);
   outline: var(--ta-focus-ring-width) solid var(--ta-focus-ring);
   outline-offset: var(--ta-focus-ring-offset);
 }

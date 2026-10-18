@@ -48,6 +48,7 @@ public class BusinessReviewTests
     [InlineData("Escríbanme a mariana@correo.com")]
     [InlineData("Llámenme al 55 1234 5678")]
     [InlineData("whats (222) 123-45-67")]
+    [InlineData("al +52 1 222 123 4567")]
     public void Write_ShouldRefuse_LinksEmailsAndPhones(string comment)
     {
         var error = Assert.Throws<DomainException>(() => Review(comment: comment));
@@ -59,6 +60,8 @@ public class BusinessReviewTests
     [InlineData("Muy rico.Me encantó, volveré.")]
     [InlineData("Pedí 2 tacos y 3 quesadillas por $185.50 el 18/10/2026")]
     [InlineData("10 de 10, el pedido 1234 llegó a tiempo")]
+    [InlineData("Fui el 18-10-2026 y regresé el 2026.10.25")]
+    [InlineData("Mi folio era 12345678 y llegó completo")]
     public void Write_ShouldKeep_WhatOnlyLooksLikeAContact(string comment)
     {
         Assert.Equal(comment, Review(comment: comment).Comment);
@@ -70,10 +73,31 @@ public class BusinessReviewTests
     [InlineData("Beto", null, "Beto")]
     [InlineData(null, "Ortiz", "Cliente")]
     [InlineData("   ", "   ", "Cliente")]
+    // The name is published with every review: a link or a phone in it is not.
+    [InlineData("Pidan en tacos.com", "Ortiz", "Cliente")]
+    [InlineData("Ana 5512345678", null, "Cliente")]
+    [InlineData("Ana", "www.otra.mx", "Ana")]
+    [InlineData("Óscar", "ñúñez", "Óscar Ñ.")]
     public void AuthorName_ShouldBeTheFirstNameAndTheInitialOfTheLast(string? first, string? last, string expected)
     {
         Assert.Equal(expected, BusinessReview.AuthorNameFrom(first, last));
         Assert.True(BusinessReview.AuthorNameFrom(new string('a', 80), "Ortiz").Length <= BusinessReview.MaxAuthorNameLength);
+    }
+
+    [Fact]
+    public void AuthorName_ShouldCutALongNameWholeCharactersAtATime_AndKeepAnEmojiInitialWhole()
+    {
+        // 56 letters and an emoji (two UTF-16 units) where the cut falls: the emoji goes whole, not in halves.
+        var name = BusinessReview.AuthorNameFrom(new string('a', 56) + "😀😀", "Ortiz");
+        Assert.Equal(new string('a', 56) + " O.", name);
+        Assert.Equal("Ana 😀.", BusinessReview.AuthorNameFrom("Ana", "😀 Ortiz"));
+    }
+
+    [Fact]
+    public void Write_ShouldNotKeepAnAuthorNameWithAContact()
+    {
+        var review = BusinessReview.Write(Guid.NewGuid(), Guid.NewGuid(), "Visiten tacos.com", 5, null, DateTimeOffset.UtcNow);
+        Assert.Equal("Cliente", review.AuthorName);
     }
 
     [Fact]

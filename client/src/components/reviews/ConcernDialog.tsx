@@ -69,13 +69,17 @@ function ConcernForm({ description, confirmLabel, initial, onSubmit, onClose }: 
  */
 export default function ConcernDialog({ title, ...form }: ConcernDialogProps) {
   const titleId = useId();
+  // While it fades out it keeps its title and its form.
+  const [shown, setShown] = useState(title);
+  if (title !== null && title !== shown) setShown(title);
+  const current = title ?? shown;
   return (
     <Modal show={title !== null} onHide={form.onClose} centered aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title id={titleId} as="h2" className="h5">{title}</Modal.Title>
+        <Modal.Title id={titleId} as="h2" className="h5">{current}</Modal.Title>
       </Modal.Header>
       {/* A new key for another review starts from its own reason. */}
-      {title !== null && <ConcernForm key={title} {...form} />}
+      {current !== null && <ConcernForm key={current} {...form} />}
     </Modal>
   );
 }

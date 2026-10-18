@@ -123,7 +123,10 @@ public class PlatformReviewsHandlers :
             return Result.Failure(ReviewRules.NotFoundMessage);
 
         _tenantService.SetTenant(tenantId.Value);
-        var review = await _context.BusinessReviews.FirstAsync(r => r.Id == id, cancellationToken);
+        // Its author may have deleted it between the two reads.
+        var review = await _context.BusinessReviews.FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+        if (review is null)
+            return Result.Failure(ReviewRules.NotFoundMessage);
         try
         {
             decide(review);

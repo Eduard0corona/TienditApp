@@ -30,6 +30,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     ReportReason = table.Column<int>(type: "int", nullable: true),
                     HiddenReason = table.Column<int>(type: "int", nullable: true),
                     ModeratedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    Version = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),

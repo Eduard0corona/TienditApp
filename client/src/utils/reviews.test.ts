@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ReviewConcern, ReviewStatus } from '../api/generated/enums';
 import type { BusinessReview } from '../api/reviewsApi';
-import { canReportReview, formatAverage, ratingDescription, REVIEW_CONCERN_LABELS, REVIEW_CONCERNS, starsLabel } from './reviews';
+import { canReportReview, formatAverage, ratingDescription, REVIEW_CONCERN_LABELS, REVIEW_CONCERNS, starsLabel, storeRatingName } from './reviews';
 
 function review(overrides: Partial<BusinessReview> = {}): BusinessReview {
   return {
@@ -22,6 +22,11 @@ describe('reviews', () => {
     expect(ratingDescription({ count: 2, average: null })).toBe('2 reseñas');
     expect(ratingDescription({ count: 1234, average: 4.6 })).toBe('Calificación 4.6 de 5, 1,234 reseñas');
     expect(ratingDescription({ count: 3, average: 5 })).toBe('Calificación 5.0 de 5, 3 reseñas');
+  });
+
+  it('names the store\'s rating starting with what it shows', () => {
+    expect(storeRatingName({ count: 23, average: 4.6 })).toBe('4.6 de 5 (23 reseñas)');
+    expect(storeRatingName({ count: 2 })).toBe('2 reseñas');
   });
 
   it('writes the average with one decimal and the stars in words', () => {

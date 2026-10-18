@@ -35,8 +35,7 @@ function problem(detail: string) {
   });
 }
 
-function renderDialog(onClose = vi.fn()) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderDialog(onClose = vi.fn(), queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   render(
     <QueryClientProvider client={queryClient}>
       <ReviewDialog business={CAFE} onClose={onClose} />
@@ -53,8 +52,10 @@ describe('ReviewDialog', () => {
   it('changes the review the account wrote, starting from what it keeps', async () => {
     api.getMyReview.mockResolvedValue({ canReview: true, review: review({ reply: 'Gracias, ya mejoramos los tiempos.' }) });
     api.saveMyReview.mockResolvedValue(review({ rating: 5 }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidated = vi.spyOn(queryClient, 'invalidateQueries');
 
-    const onClose = renderDialog();
+    const onClose = renderDialog(vi.fn(), queryClient);
 
     const dialog = await screen.findByRole('dialog', { name: 'Tu reseña de Café Luna' });
     expect(within(dialog).getByRole('radio', { name: '3 estrellas' })).toBeChecked();
@@ -69,6 +70,10 @@ describe('ReviewDialog', () => {
     // An empty comment is no comment.
     expect(api.saveMyReview).toHaveBeenCalledWith('cafe-luna', { rating: 5, comment: null });
     expect(toast.success).toHaveBeenCalledWith('Guardamos los cambios de tu reseña.');
+    // What shows the review asks for it again: the account's reviews (Mis pedidos, Mis citas), the store's and its rating.
+    expect(invalidated.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+      ['me', 'reviews'], ['public-reviews', 'cafe-luna'], ['public-menu', 'cafe-luna'],
+    ]);
   });
 
   it('deletes it after asking in the same dialog', async () => {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Exceptions;
@@ -31,7 +32,7 @@ public partial class BusinessReview : AuditableEntity, IAggregateRoot, ITenantSc
     public const string HiddenForAuthorMessage = "La plataforma ocultó tu reseña: ya no se puede editar. Puedes borrarla.";
     public const string HiddenMessage = "Esta reseña está oculta.";
     public const string AlreadyReportedMessage = "Ya reportaste esta reseña: la plataforma la está revisando.";
-    public const string AlreadyKeptMessage = "La plataforma ya revisó esta reseña y la mantuvo. Puedes reportarla de nuevo si su autor la cambia.";
+    public const string AlreadyKeptMessage = "La plataforma ya revisó esta reseña y la dejó publicada. Puedes reportarla de nuevo si su autor la cambia.";
     public const string NotReportedMessage = "Esta reseña no tiene un reporte pendiente.";
     public const string NotHiddenMessage = "Esta reseña no está oculta.";
     public const string ConcernMessage = "Elige el motivo.";
@@ -70,6 +71,12 @@ public partial class BusinessReview : AuditableEntity, IAggregateRoot, ITenantSc
 
     /// <summary>When the platform last decided on it (kept, hid or restored it).</summary>
     public DateTimeOffset? ModeratedAt { get; private set; }
+
+    /// <summary>
+    /// Its author, its business and the platform change it: a change saved on what someone else changed meanwhile is a
+    /// conflict (409), not a hidden review edited or answered.
+    /// </summary>
+    public byte[] Version { get; private set; } = null!;
 
     public bool IsPublished => Status == ReviewStatus.Published;
 
@@ -175,15 +182,20 @@ public partial class BusinessReview : AuditableEntity, IAggregateRoot, ITenantSc
         ModeratedAt = now;
     }
 
-    /// <summary>«Mariana O.»: the first name and the initial of the last one; «Cliente» without a name.</summary>
+    /// <summary>
+    /// «Mariana O.»: the first name and the initial of the last one. «Cliente» without a first name, or with one that
+    /// carries a link, an email or a phone (the name is published with every review, so it follows the comment's rule).
+    /// A name too long is cut whole characters at a time: an emoji never comes out in halves.
+    /// </summary>
     public static string AuthorNameFrom(string? firstName, string? lastName)
     {
         var first = Clean(firstName);
-        if (first is null)
+        if (first is null || HasContactOrLink(first))
             return "Cliente";
-        var initial = Clean(lastName) is { } last ? $" {char.ToUpperInvariant(last[0])}." : string.Empty;
-        var maxFirst = MaxAuthorNameLength - initial.Length;
-        return (first.Length > maxFirst ? first[..maxFirst].TrimEnd() : first) + initial;
+        var initial = Clean(lastName) is { } last && !HasContactOrLink(last)
+            ? $" {StringInfo.GetNextTextElement(last).ToUpperInvariant()}."
+            : string.Empty;
+        return WholeCharacters(first, MaxAuthorNameLength - initial.Length).TrimEnd() + initial;
     }
 
     /// <summary>
@@ -202,18 +214,32 @@ public partial class BusinessReview : AuditableEntity, IAggregateRoot, ITenantSc
         if (cleaned is not null && HasContactOrLink(cleaned))
             throw new DomainException(CommentContactMessage);
 
-        AuthorName = Clean(authorName) is { } name && name.Length <= MaxAuthorNameLength ? name : AuthorNameFrom(authorName, null);
+        AuthorName = Clean(authorName) is { } name && name.Length <= MaxAuthorNameLength && !HasContactOrLink(name)
+            ? name
+            : AuthorNameFrom(authorName, null);
         Rating = rating;
         Comment = cleaned;
     }
 
     private static string? Clean(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
-    // A link (http://, www., or a name ending in a common domain), an email, or eight digits or more written as a phone
-    // (spaces, dashes, dots or parentheses between them). Endings that are also Spanish words after a missing space
-    // («rico.Me encantó») are left out.
+    /// <summary>The text up to <paramref name="length"/> UTF-16 units, without splitting a character (an emoji).</summary>
+    private static string WholeCharacters(string text, int length)
+    {
+        if (text.Length <= length)
+            return text;
+        var end = 0;
+        var elements = StringInfo.GetTextElementEnumerator(text);
+        while (elements.MoveNext() && elements.ElementIndex + elements.GetTextElement().Length <= length)
+            end = elements.ElementIndex + elements.GetTextElement().Length;
+        return text[..end];
+    }
+
+    // A link (http://, www., or a name ending in a common domain), an email, or ten digits or more written as a phone (a
+    // Mexican number, with spaces, dashes, dots or parentheses between them): a date (18-10-2026) or a folio of eight
+    // digits is not one. Endings that are also Spanish words after a missing space («rico.Me encantó») are left out.
     [GeneratedRegex(
-        @"https?://|\bwww\.|\b[\p{L}\d-]{2,}\.(?:com|net|org|mx|app|info|biz|link|site|online|store|shop)\b|[^\s@]+@[^\s@]+\.[^\s@]+|(?:\d[\s\-.()]*){8,}",
+        @"https?://|\bwww\.|\b[\p{L}\d-]{2,}\.(?:com|net|org|mx|app|info|biz|link|site|online|store|shop)\b|[^\s@]+@[^\s@]+\.[^\s@]+|(?:\d[\s\-.()]*){10,}",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ContactOrLink();
 }

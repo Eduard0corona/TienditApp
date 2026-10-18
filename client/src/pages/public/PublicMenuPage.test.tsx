@@ -1011,7 +1011,7 @@ describe('PublicMenuPage', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Calificación 4.6 de 5, 23 reseñas. Ver reseñas' }));
+    await userEvent.click(await screen.findByRole('button', { name: '4.6 de 5 (23 reseñas). Ver reseñas' }));
     const section = await screen.findByRole('region', { name: 'Reseñas' });
     expect(section).toHaveTextContent('4.6');
     expect(within(section).getByText('Mariana O.')).toBeInTheDocument();

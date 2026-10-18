@@ -1,8 +1,11 @@
-import { asOption, type DemoData } from '../fixtures';
+import { asOption, type DemoData, type SceneOptions } from '../fixtures';
 import { uuid } from '../mocks/data.mjs';
 import { demoDirectory } from '../mocks/routes-p9.mjs';
 import { ratingOf } from '../mocks/routes-p14.mjs';
+import { SUPER_ADMIN_PROFILE } from './caja-config.mocks';
 import { withProductPhotos } from './catalogo-inventario.mocks';
+
+type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 
 // The reviews of Café La Esquina (Fase 24H, ADR 0030): seven published, one with the owner's answer and one edited, one
 // the owner reported and one the platform hid. The store, Explorar, the owner's Reseñas and the platform's console read
@@ -106,7 +109,16 @@ function directoryWithRatings(data: DemoData) {
     : business.slug === 'taqueria-el-guero' ? { ...business, rating: { count: 2, average: null } } : business));
 }
 
+/** The platform admin belongs to no business (as in caja-config.mocks.ts): the console's guard lets them in. */
+const platformAdminRoutes: ExtraRoutes = (data, { ok }) => [
+  ['GET', /^\/me\/access$/, () => (data.profile.role === SUPER_ADMIN_PROFILE.role
+    ? ok({ userId: data.USER_ID, role: 'SUPER_ADMIN', tenantRole: null, tenantId: data.TENANT_ID, isMember: false, isTenantManager: true,
+      isPlatformAdmin: true, permissions: [], capabilities: data.tenant.capabilities })
+    : undefined)],
+];
+
 export const TIENDA_CON_RESENAS = asOption(storeWithReviews);
+export const PLATAFORMA_ROUTES = asOption(platformAdminRoutes);
 export const PUEDE_CALIFICAR = asOption(customerMayReview);
 export const RESENA_OCULTA = asOption(customerReviewHidden);
 export const EXPLORAR_CON_CALIFICACION = asOption(directoryWithRatings);

@@ -28,23 +28,23 @@ function ReviewForm({ business, review, onClose }: { business: ReviewedBusiness;
   const hidden = !!review?.hidden;
   const refresh = () => Promise.all(reviewQueryKeys(business.slug).map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 
+  // The dialog closes at once, and what shows the review asks for it again behind it.
   const save = useMutation({
     mutationFn: () => reviewsApi.saveMyReview(business.slug, { rating, comment: comment.trim() || null }),
-    onSuccess: async () => {
-      await refresh();
+    onSuccess: () => {
       toast.success(review ? 'Guardamos los cambios de tu reseña.' : `Publicamos tu reseña de ${business.name}.`);
       onClose();
+      void refresh();
     },
   });
   const remove = useMutation({
     mutationFn: () => reviewsApi.deleteMyReview(business.slug),
-    onSuccess: async () => {
-      await refresh();
+    onSuccess: () => {
       toast.success('Borraste tu reseña.');
       onClose();
+      void refresh();
     },
   });
-  const error = save.error ?? remove.error;
   const busy = save.isPending || remove.isPending;
 
   return (
@@ -86,7 +86,8 @@ function ReviewForm({ business, review, onClose }: { business: ReviewedBusiness;
                   </label>
                 ))}
               </div>
-              <div className="small text-muted" aria-live="polite">{rating ? starsLabel(rating) : 'Elige de 1 a 5 estrellas.'}</div>
+              {/* Each radio says its stars itself: this line is for the eyes. */}
+              <div className="small text-muted">{rating ? starsLabel(rating) : 'Elige de 1 a 5 estrellas.'}</div>
             </fieldset>
             <label className="form-label small mb-1" htmlFor={`${ids}-comment`}>Cuéntanos cómo te fue (opcional)</label>
             <textarea
@@ -110,7 +111,8 @@ function ReviewForm({ business, review, onClose }: { business: ReviewedBusiness;
             <p className="mb-0">{review.reply}</p>
           </div>
         )}
-        {error && <div className="alert alert-danger mt-3 mb-0" role="alert">{getApiErrorMessage(error, 'No se pudo guardar tu reseña.')}</div>}
+        {save.error && <div className="alert alert-danger mt-3 mb-0" role="alert">{getApiErrorMessage(save.error, 'No se pudo guardar tu reseña.')}</div>}
+        {remove.error && <div className="alert alert-danger mt-3 mb-0" role="alert">{getApiErrorMessage(remove.error, 'No se pudo borrar tu reseña.')}</div>}
       </Modal.Body>
       <Modal.Footer className="rv-dialog-footer">
         {deleting ? (
@@ -148,9 +150,13 @@ function ReviewForm({ business, review, onClose }: { business: ReviewedBusiness;
  */
 export default function ReviewDialog({ business, onClose }: { business: ReviewedBusiness | null; onClose: () => void }) {
   const titleId = useId();
+  // While it fades out it keeps showing the business it was opened for.
+  const [shown, setShown] = useState(business);
+  if (business && business !== shown) setShown(business);
+  const current = business ?? shown;
   const mine = useQuery({
-    queryKey: ['me', 'reviews', business?.slug],
-    queryFn: ({ signal }) => reviewsApi.getMyReview(business?.slug ?? '', signal),
+    queryKey: ['me', 'reviews', current?.slug],
+    queryFn: ({ signal }) => reviewsApi.getMyReview(current?.slug ?? '', signal),
     enabled: business !== null,
   });
   const review = mine.data?.review ?? null;
@@ -159,7 +165,7 @@ export default function ReviewDialog({ business, onClose }: { business: Reviewed
     <Modal show={business !== null} onHide={onClose} centered fullscreen="sm-down" aria-labelledby={titleId}>
       <Modal.Header closeButton>
         <Modal.Title id={titleId} as="h2" className="h5">
-          {review ? `Tu reseña de ${business?.name}` : `Califica a ${business?.name}`}
+          {review ? `Tu reseña de ${current?.name}` : `Califica a ${current?.name}`}
         </Modal.Title>
       </Modal.Header>
       {mine.isPending ? (
@@ -168,17 +174,13 @@ export default function ReviewDialog({ business, onClose }: { business: Reviewed
         <Modal.Body>
           <div className="alert alert-danger mb-0" role="alert">{getApiErrorMessage(mine.error, 'No se pudo abrir tu reseña.')}</div>
         </Modal.Body>
-      ) : business && (review || mine.data?.canReview) ? (
-        // A new key for another business or another review starts the form from what it keeps.
-        <ReviewForm
-          key={`${business.slug}-${review?.writtenAt ?? 'new'}-${review?.editedAt ?? ''}-${review?.hidden ?? ''}`}
-          business={business}
-          review={review}
-          onClose={onClose}
-        />
+      ) : current && (review || mine.data?.canReview) ? (
+        // Another business starts the form from what it keeps; the same one keeps what is being written, also while the
+        // review is asked for again after a save (the dialog is gone by then).
+        <ReviewForm key={current.slug} business={current} review={review} onClose={onClose} />
       ) : (
         <Modal.Body>
-          <p className="mb-0">Podrás calificar a {business?.name} cuando recibas un pedido o vayas a una cita con tu cuenta.</p>
+          <p className="mb-0">Podrás calificar a {current?.name} cuando recibas un pedido o vayas a una cita con tu cuenta.</p>
         </Modal.Body>
       )}
     </Modal>

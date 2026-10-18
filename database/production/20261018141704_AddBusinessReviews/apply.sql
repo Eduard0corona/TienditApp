@@ -6805,6 +6805,7 @@ BEGIN
         [ReportReason] int NULL,
         [HiddenReason] int NULL,
         [ModeratedAt] datetimeoffset NULL,
+        [Version] rowversion NOT NULL,
         [CreatedAt] datetimeoffset NOT NULL,
         [CreatedBy] nvarchar(max) NULL,
         [UpdatedAt] datetimeoffset NULL,

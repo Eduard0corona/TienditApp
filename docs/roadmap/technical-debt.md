@@ -124,12 +124,13 @@ Actualizada el 2026-10-18 con la Fase 24H y antes con la 24G, la 24F, la 24D-2, 
 - Reseñas de los negocios (Fase 24H, [ADR 0030](../adr/0030-business-reviews.md)):
   - **La reseña es del negocio, no de un pedido:** quien compró una vez puede reseñar mucho después. Ligarla a un pedido o una cita permitiría decir «compró tal día» y una reseña por compra.
   - **Sin avisos:** el negocio no sabe que llegó una reseña ni la plataforma que hay un reporte hasta que abren sus pantallas. Un aviso por la cola de mensajes (WhatsApp al dueño, correo a la plataforma) es lo siguiente natural.
-  - **El filtro de contacto** reconoce enlaces, correos y números de ocho dígitos o más; un teléfono escrito con palabras pasa y queda para el reporte.
+  - **El filtro de contacto** reconoce enlaces, correos y números de diez dígitos o más (un teléfono de México); un teléfono escrito con palabras o partido en dos pasa y queda para el reporte.
+  - **Autorreseñas:** un dueño puede abrir una cuenta de cliente con otro correo, comprarse y reseñarse. Solo el negocio reporta, así que nadie más lo señala. Faltan el reporte del cliente o marcar para la plataforma las reseñas de cuentas que coinciden con el equipo (correo o teléfono).
   - **El nombre del autor** se guarda en la reseña y se actualiza cuando la cambia, no cuando cambia el nombre de su cuenta.
   - **Explorar** lee la calificación de su foto de 30 segundos; con muchos negocios, el `GroupBy` de las reseñas publicadas de los negocios listados cada vez que se arma la foto podría pasar a un resumen guardado por negocio.
   - **El contrato pierde que una referencia puede ser null** (`review` de `MyReviewOfBusinessDto`): el cliente lo corrige a mano en `reviewsApi.ts`, como `card` de los favoritos.
   - **Sin fotos ni calificación por producto.**
-  - La 24H suma 393 B a la primera visita (de 178,116 a 178,509 B) y sube el presupuesto a 178,600 B: las dos rutas, su menú, el área de acceso y los enums de reseñas.
+  - La 24H suma 406 B a la primera visita (de 178,116 a 178,522 B) y sube el presupuesto a 178,600 B: las dos rutas, su menú, el área de acceso y los enums de reseñas.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

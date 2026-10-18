@@ -38,6 +38,10 @@ public class BusinessReviewsFlowTests
         Assert.Equal((false, (MyReviewDto?)null), Of(await MineAsync(fixture, "cafe")));
         Assert.Equal(ReviewRules.NotACustomerYetMessage, (await SaveAsync(fixture, "cafe", 5, "Muy rico")).Error);
 
+        // An order with her phone that is not the account's (taken at the counter) does not count: only the account's do.
+        await OrderAsync(fixture, store, mariana, OrderStatus.Delivered, asGuest: true);
+        Assert.False((await MineAsync(fixture, "cafe"))!.CanReview);
+
         // An order on its way is not yet an experience; a cancelled one never is.
         var order = await OrderAsync(fixture, store, mariana, OrderStatus.InPreparation);
         await OrderAsync(fixture, store, mariana, OrderStatus.Cancelled);
@@ -279,12 +283,16 @@ public class BusinessReviewsFlowTests
         fixture.CurrentUser.Role = account.Role == UserRole.Customer ? "CUSTOMER" : "TENANT_ADMIN";
     }
 
-    /// <summary>An order of the account at the business, already in <paramref name="status"/>.</summary>
-    private static async Task<Order> OrderAsync(SalesTestFixture fixture, Tenant business, ApplicationUser account, OrderStatus status)
+    /// <summary>
+    /// An order of the account at the business, already in <paramref name="status"/>; <paramref name="asGuest"/> is one the
+    /// business took with the account's name and phone, not linked to the account.
+    /// </summary>
+    private static async Task<Order> OrderAsync(
+        SalesTestFixture fixture, Tenant business, ApplicationUser account, OrderStatus status, bool asGuest = false)
     {
         fixture.TenantService.SetTenant(business.Id);
         var order = new Order(
-            business.Id, account.Id, temporaryCustomerId: null, createdByBusiness: false, $"F-{Guid.NewGuid():N}"[..10],
+            business.Id, asGuest ? null : account.Id, temporaryCustomerId: null, createdByBusiness: asGuest, $"F-{Guid.NewGuid():N}"[..10],
             BusinessType.Food, OrderType.Retail, "Mariana Ortiz", "5512345678", null, null, channel: OrderChannel.Online);
         fixture.Context.Orders.Add(order);
         await fixture.Context.SaveChangesAsync();

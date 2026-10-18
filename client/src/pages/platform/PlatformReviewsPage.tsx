@@ -41,6 +41,8 @@ export default function PlatformReviewsPage() {
   });
   const data = reviews.data;
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['platform', 'reviews'] });
+  // The last row of a page decided (hidden, kept, restored): the queue goes back to the page before.
+  if (data && !reviews.isPlaceholderData && data.items.length === 0 && page > 1) setPage(page - 1);
 
   const decide = async (review: PlatformReview, keep: boolean) => {
     const accepted = await confirm(keep

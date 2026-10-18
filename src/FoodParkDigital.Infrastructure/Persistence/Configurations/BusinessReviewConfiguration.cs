@@ -41,6 +41,7 @@ public class BusinessReviewConfiguration : IEntityTypeConfiguration<BusinessRevi
         builder.Property(x => x.Status).HasConversion<int>();
         builder.Property(x => x.ReportReason).HasConversion<int?>();
         builder.Property(x => x.HiddenReason).HasConversion<int?>();
+        builder.Property(x => x.Version).IsRowVersion();
         builder.Ignore(x => x.IsPublished);
 
         builder.HasOne<ApplicationUser>()
