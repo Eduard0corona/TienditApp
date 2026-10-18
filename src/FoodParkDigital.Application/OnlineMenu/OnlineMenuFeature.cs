@@ -831,4 +831,24 @@ internal static class PublicMenuTenant
             .FirstOrDefaultAsync(t => t.Slug == normalized && t.Status == TenantStatus.Active, cancellationToken);
         return tenant?.Settings is null ? null : tenant;
     }
+
+    /// <summary>
+    /// Of <paramref name="businessIds"/>, the businesses whose menu is published (to be seen or with orders): read before
+    /// any business is in context, only that setting of each (the favorites of a customer account, Fase 24F).
+    /// </summary>
+    public static async Task<HashSet<Guid>> PublishedAsync(
+        IApplicationDbContext context,
+        IReadOnlyCollection<Guid> businessIds,
+        CancellationToken cancellationToken)
+    {
+        if (businessIds.Count == 0)
+            return [];
+        var published = await context.TenantSettings
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(s => businessIds.Contains(s.TenantId) && s.OnlineMenuMode != OnlineMenuMode.Off)
+            .Select(s => s.TenantId)
+            .ToListAsync(cancellationToken);
+        return published.ToHashSet();
+    }
 }

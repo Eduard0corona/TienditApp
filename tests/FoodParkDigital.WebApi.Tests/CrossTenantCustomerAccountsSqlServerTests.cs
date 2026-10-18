@@ -18,6 +18,7 @@ namespace FoodParkDigital.WebApi.Tests;
 public sealed class CrossTenantCustomerAccountsSqlServerTests
 {
     private const string Addresses = "/api/v1/me/addresses";
+    private const string Favorites = "/api/v1/me/favorites";
     private const string OnlineMenu = "/api/v1/auth/my-tenant/online-menu";
     private const string Address = "Av. Reforma 123, Centro";
 
@@ -159,6 +160,51 @@ public sealed class CrossTenantCustomerAccountsSqlServerTests
         Assert.DoesNotContain("Ruta interna", body);
         Assert.DoesNotContain("Norte", body);
         Assert.Equal(HttpStatusCode.BadRequest, (await customer.GetAsync("/api/v1/public/directory?postalCode=7200")).StatusCode);
+    }
+
+    [SqlServerFact]
+    public async Task FavoritesAndProducts_ShouldBeOnlyTheAccounts_AndOnlyOfPublishedMenus()
+    {
+        var published = await _api.SignUpAsync("favoritos-a", TwoBusinessesApi.FoodBusiness);
+        var unpublished = await _api.SignUpAsync("favoritos-b", TwoBusinessesApi.FoodBusiness);
+        await ProductAsync(published.Client, "Tlayuda favoritos24f de tasajo");
+        await ProductAsync(unpublished.Client, "Tlayuda favoritos24f de cecina");
+        var slug = await MenuWithOrdersAsync(published.Client);
+        var hiddenSlug = (await TwoBusinessesApi.ReadAsync(await unpublished.Client.PutAsJsonAsync(OnlineMenu, new { mode = 0 })))
+            .GetProperty("slug").GetString()!;
+        _api.ForgetDirectorySnapshot();
+        var ana = await _api.SignUpCustomerAsync("favoritos-ana");
+        var beto = await _api.SignUpCustomerAsync("favoritos-beto");
+        using var anonymous = _api.AnonymousClient();
+
+        // A search finds the products of the published menu, never those of a menu nobody outside the business sees.
+        var found = await TwoBusinessesApi.ReadAsync(await anonymous.GetAsync("/api/v1/public/directory?q=favoritos24f"));
+        var product = Assert.Single(found.GetProperty("products").EnumerateArray());
+        Assert.Equal(("Tlayuda favoritos24f de tasajo", slug),
+            (product.GetProperty("name").GetString(), product.GetProperty("businessSlug").GetString()));
+
+        // Ana keeps the published store; one not published is not found.
+        Assert.Equal(HttpStatusCode.NoContent, (await ana.Client.PutAsync($"{Favorites}/{slug}", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await ana.Client.PutAsync($"{Favorites}/{hiddenSlug}", null)).StatusCode);
+        var anas = await TwoBusinessesApi.ReadAsync(await ana.Client.GetAsync(Favorites));
+        var favorite = Assert.Single(anas.EnumerateArray());
+        Assert.Equal(slug, favorite.GetProperty("slug").GetString());
+        Assert.Equal(slug, favorite.GetProperty("card").GetProperty("slug").GetString());
+
+        // Beto neither sees nor takes out Ana's; the team of a business keeps none; without a session there is no account.
+        Assert.Empty((await TwoBusinessesApi.ReadAsync(await beto.Client.GetAsync(Favorites))).EnumerateArray());
+        Assert.Equal(HttpStatusCode.NoContent, (await beto.Client.DeleteAsync($"{Favorites}/{slug}")).StatusCode);
+        Assert.Single((await TwoBusinessesApi.ReadAsync(await ana.Client.GetAsync(Favorites))).EnumerateArray());
+        var byTheTeam = await published.Client.PutAsync($"{Favorites}/{slug}", null);
+        Assert.Equal(HttpStatusCode.BadRequest, byTheTeam.StatusCode);
+        Assert.Equal(FavoriteBusinessRules.CustomersOnlyMessage, await DetailAsync(byTheTeam));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(Favorites)).StatusCode);
+        var kept = await _api.QueryAsync(Guid.Empty, db => db.FavoriteBusinesses.ToListAsync());
+        Assert.Equal(published.TenantId, Assert.Single(kept, f => f.UserId == ana.UserId).BusinessId);
+        Assert.DoesNotContain(kept, f => f.UserId == beto.UserId);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await ana.Client.DeleteAsync($"{Favorites}/{slug}")).StatusCode);
+        Assert.Empty((await TwoBusinessesApi.ReadAsync(await ana.Client.GetAsync(Favorites))).EnumerateArray());
     }
 
     private static async Task ZoneAsync(HttpClient owner, string name, decimal fee, params string[] postalCodes)
