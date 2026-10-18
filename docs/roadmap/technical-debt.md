@@ -93,6 +93,7 @@ Actualizada el 2026-10-18 con la Fase 24D-2 y antes con la 24E, la 24D-1, la 25,
   - El sitemap sale de la foto de Explorar: hasta 1000 negocios y sin la fecha en que cambió cada tienda.
   - Los títulos de la tienda y de sus citas se escriben en dos lugares, el servidor (`PublicPages`) y el cliente (`storePageTitle` y la página de citas); las pruebas de los dos los fijan.
   - Sin `AppUrl` configurada, la dirección canónica es la de la petición.
+  - La 24D-2 suma 17 B a la primera visita (de 178,009 a 178,026 B, dentro del presupuesto de 178,200 B).
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

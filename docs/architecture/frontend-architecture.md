@@ -495,6 +495,7 @@ Buscadores y vistas previas (Fase 24D-2, [ADR 0027](../adr/0027-search-engines-a
 - **El encabezado lo escribe el servidor** (`WebApi/Http/PublicPages.cs`): para una tienda, su página de citas, Explorar y sus categorías, el `index.html` llega con su `<title>`, descripción, canónica, Open Graph y, en una tienda, los datos estructurados. El `index.html` del cliente no cambia: el servidor reemplaza su `<title>` y agrega lo demás antes de `</head>`.
 - **En la app:** `hooks/useDocumentTitle` pone en la pestaña el mismo título mientras la página está abierta y regresa el anterior al cerrarla. Lo usan el menú (`utils/storeMenu.storePageTitle`: «pide en línea», «agenda tu cita» o «menú en línea»), la página de citas («Agenda tu cita en …») y Explorar, que ya lo hacía con su propio efecto. Así el título no cambia al llegar y es el correcto al entrar desde Explorar sin recargar.
 - `ExploreCategories` del servidor repite las direcciones de `utils/businessCategories` (`/explorar/{slug}`); `PublicPagesTests` compara las dos listas.
+- **Primera visita:** suma 17 B (de 178,009 a 178,026 B, dentro del presupuesto de 178,200 B).
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
