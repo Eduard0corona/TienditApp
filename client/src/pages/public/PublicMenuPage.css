@@ -529,8 +529,10 @@ button.pm-pill:hover {
   font-size: 1rem;
 }
 
+/* Without a photo the «+» sits in the row; it stays positioned so it stays above what opens the sheet. */
 .pm-item-media.no-photo .pm-add {
-  position: static;
+  position: relative;
+  inset: auto;
   min-width: var(--ta-touch);
   height: var(--ta-touch);
   border: 1px solid var(--ct-border-color);

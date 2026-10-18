@@ -11,8 +11,8 @@
 --     las variantes de la foto, como [LogoUrl]. Todos los negocios quedan sin portada (NULL) y su
 --     menú muestra los colores del negocio hasta que el dueño suba una.
 -- No cambia otros datos ni otras tablas.
--- Si a la base le faltan migraciones anteriores, también las aplica: revisa antes el verify.sql
--- de database/production/20261017225015_AddOnlineBooking.
+-- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
+-- vacía): revisa antes el verify.sql de database/production/20261017225015_AddOnlineBooking.
 --
 -- Compatible con la versión desplegada (master con la Fase 24D-1): no conoce la columna, guarda
 -- los negocios como siempre sin tocarla y /health/schema sigue sano. Volver a ella (redespliegue,

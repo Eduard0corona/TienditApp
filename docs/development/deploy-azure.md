@@ -421,7 +421,7 @@ La Fase 24D-1 trae una migración, [`database/production/20261017225015_AddOnlin
 
 ## Portada del menú (Fase 24E)
 
-La Fase 24E trae una migración, [`database/production/20261018032200_AddBusinessCover`](../../database/production/20261018032200_AddBusinessCover). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0026](../adr/0026-store-like-delivery-apps.md)).
+La Fase 24E trae una migración, [`database/production/20261018032200_AddBusinessCover`](../../database/production/20261018032200_AddBusinessCover). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0026](../adr/0026-store-like-delivery-apps.md)).
 
 - **La migración:** agrega a `Tenants` la columna `CoverImageUrl` (`nvarchar(500)` con nulos), vacía en todos los negocios. Cambia algo cuando un dueño sube su portada en Configuración: el menú la muestra arriba, y sin ella sigue con los colores del negocio. Después de aplicarla, el `verify.sql` muestra la columna, y su consulta 3 cuenta los negocios con y sin portada (todos sin portada hasta desplegar).
 - **Los archivos:** la portada se guarda en el mismo almacenamiento que el logo y las fotos de los productos, en la carpeta pública `covers/{tenantId}`, en las mismas cinco variantes. No hay que configurar nada nuevo.
