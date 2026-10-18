@@ -562,9 +562,9 @@ Productos y favoritos en Explorar (Fase 24F, [ADR 0028](../adr/0028-product-sear
   - la lista marca «En el mapa».
 - **La tienda:** `utils/storeMenu.mapsUrl(dirección, mapPoint)` abre el punto exacto cuando el menú lo trae; si no, busca la dirección. Lo usan la información de la tienda (`StoreInfoModal`, que muestra «Cómo llegar» también sin calle) y el «Lo recoges en» del pedido.
 - **Escenas:**
-  - `scenes/explorar.spec.ts`: «Cerca de mí» con permiso (escritorio, teléfono y una búsqueda de productos) y sin permiso, con `permissions` y `geolocation` de Playwright;
+  - `scenes/explorar.spec.ts`: «Cerca de mí» con permiso (escritorio, teléfono y una búsqueda de productos) y, sin permiso, un enlace que espera el toque y el mismo después del toque, con `permissions` y `geolocation` de Playwright;
   - la API simulada ordena por las distancias de `data.directoryDistances` (`mocks/routes-p9.mjs`), y la sucursal principal de la demo está en el mapa (`mocks/data.mjs`).
-- **Primera visita:** no cambia (178,101 B): Explorar, Sucursales y la tienda bajan con su ruta.
+- **Primera visita:** 178,116 B (+15 B): `utils/geo` es un trozo compartido por Explorar, Sucursales y la tienda, y la entrada lleva su nombre en el mapa de precarga; su código baja con esas rutas.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

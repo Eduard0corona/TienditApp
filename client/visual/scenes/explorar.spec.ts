@@ -91,10 +91,22 @@ test.describe('Cerca de mí', () => {
     });
   });
 
+  // A shared link with «Cerca de mí» never opens the browser's prompt by itself: it waits for a tap.
+  test('explorar cerca de mí desde un enlace en el teléfono', async ({ page, context }) => {
+    await context.clearPermissions();
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/explorar?cerca=1');
+    await expect(page.getByRole('button', { name: 'Usar mi ubicación' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Café La Esquina/ })).toBeVisible();
+    await snap(page, 'explorar-cerca-enlace-telefono');
+  });
+
+  // Tapped, the browser does not tell (Playwright refuses what was not allowed): the chip says what to do.
   test('explorar cerca de mí sin permiso en el teléfono', async ({ page, context }) => {
     await context.clearPermissions();
     await page.setViewportSize(SIZES.phone);
     await open(page, '/explorar?cerca=1');
+    await page.getByRole('button', { name: 'Usar mi ubicación' }).click();
     await expect(page.getByText('Permite tu ubicación en el navegador para ver primero lo más cercano.')).toBeVisible();
     await snap(page, 'explorar-cerca-sin-permiso-telefono');
   });
