@@ -14,6 +14,7 @@ using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.PublicDirectory;
+using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Audit.Entities;
@@ -161,6 +162,8 @@ public class PublicMenuDto
     public PublicOpeningHoursDto? OpeningHours { get; set; }
     /// <summary>Customers book appointments online with the business now (Fase 24D): /m/{slug}/agendar.</summary>
     public bool BooksOnline { get; set; }
+    /// <summary>How its customers rate it (Fase 24H): its published reviews and their average; null without reviews.</summary>
+    public RatingSummaryDto? Rating { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
 }
 
@@ -432,6 +435,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             DeliveryAvailable = ordersOn && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken),
             OpeningHours = hours is null ? null : PublicOpeningHoursDto.From(hours, seatedOverride: acceptsOrders && closed),
             BooksOnline = booksOnline,
+            Rating = await ReviewRules.SummaryAsync(_context, cancellationToken),
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto

@@ -66,8 +66,14 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Application/OnlineMenu/OnlineMenuFeature.cs"] = 2,
         // Explorar lists the businesses that published their menu and show in it, before any business is in context:
         // each read filtered by its own business, only for what its menu already shows (ADR 0021); with the customer's
-        // postal code, the active zones of every business that reach it, never their names (Fase 24B).
-        ["src/FoodParkDigital.Application/PublicDirectory/PublicDirectoryFeature.cs"] = 3,
+        // postal code, the active zones of every business that reach it, never their names (Fase 24B); and how customers
+        // rate each one listed, from its published reviews only (Fase 24H).
+        ["src/FoodParkDigital.Application/PublicDirectory/PublicDirectoryFeature.cs"] = 4,
+        // The reviews a customer account wrote, in every business, by its own user id (Fase 24H).
+        ["src/FoodParkDigital.Application/Reviews/CustomerReviewsFeature.cs"] = 1,
+        // The platform's moderation of reviews (a platform admin only): the reported or hidden ones of every business, and
+        // the business of the one it decides on, which it then enters to write the change and its audit entry (Fase 24H).
+        ["src/FoodParkDigital.Application/Reviews/PlatformReviewsFeature.cs"] = 2,
         // Its search reads the products the menus of those businesses show, each with its own business and only what its
         // menu already shows (Fase 24F).
         ["src/FoodParkDigital.Application/PublicDirectory/PublicProductSearch.cs"] = 1,

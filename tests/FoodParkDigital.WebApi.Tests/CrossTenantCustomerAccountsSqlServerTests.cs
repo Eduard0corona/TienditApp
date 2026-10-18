@@ -3,6 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Application.Reviews;
+using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Reviews.Entities;
+using FoodParkDigital.Domain.Reviews.Enums;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using static FoodParkDigital.WebApi.Tests.CrossTenantManagementSqlServerTests;
@@ -13,12 +17,16 @@ namespace FoodParkDigital.WebApi.Tests;
 /// Buying with a customer account (Fase 24B) through the API: each account keeps and sees only its own addresses, an
 /// order placed with its session is in its orders and in no other account's, the key of an order places it once in its
 /// business, and Explorar says with the customer's postal code who delivers there and what it costs, never the zone.
+/// Reviews (Fase 24H): only a customer who received an order of a business reviews it, each business answers and reports
+/// only its own, and only the platform hides one, audited in its business.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantCustomerAccountsSqlServerTests
 {
     private const string Addresses = "/api/v1/me/addresses";
     private const string Favorites = "/api/v1/me/favorites";
+    private const string MyReviews = "/api/v1/me/reviews";
+    private const string BusinessReviews = "/api/v1/reviews";
     private const string OnlineMenu = "/api/v1/auth/my-tenant/online-menu";
     private const string Address = "Av. Reforma 123, Centro";
 
@@ -205,6 +213,82 @@ public sealed class CrossTenantCustomerAccountsSqlServerTests
 
         Assert.Equal(HttpStatusCode.NoContent, (await ana.Client.DeleteAsync($"{Favorites}/{slug}")).StatusCode);
         Assert.Empty((await TwoBusinessesApi.ReadAsync(await ana.Client.GetAsync(Favorites))).EnumerateArray());
+    }
+
+    [SqlServerFact]
+    public async Task Reviews_ShouldBeOfCustomersWhoBought_AnsweredOnlyByTheirBusiness_AndHiddenOnlyByThePlatform()
+    {
+        var mine = await _api.SignUpAsync("resenas-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("resenas-b", TwoBusinessesApi.FoodBusiness);
+        var tacos = await ProductAsync(mine.Client, "Tacos de reseña");
+        await ProductAsync(theirs.Client, "Tortas de reseña");
+        await TwoBusinessesApi.IdAsync(mine.Client, "/api/v1/cash/open", new { openingAmount = 100m });
+        var mySlug = await MenuWithOrdersAsync(mine.Client);
+        var theirSlug = await MenuWithOrdersAsync(theirs.Client);
+        var ana = await _api.SignUpCustomerAsync("resenas-ana");
+        var beto = await _api.SignUpCustomerAsync("resenas-beto");
+        using var anonymous = _api.AnonymousClient();
+
+        // Ana orders at my business with her session and receives it.
+        var placed = await TwoBusinessesApi.ReadAsync(await ana.Client.PostAsJsonAsync($"/api/v1/public/menu/{mySlug}/orders", new
+        {
+            customerName = "Ana Cliente",
+            customerPhone = "5512345678",
+            items = new[] { new { productId = tacos, quantity = 1 } },
+            idempotencyKey = Guid.NewGuid()
+        }));
+        Assert.True(placed.GetProperty("linkedToAccount").GetBoolean());
+        await _api.QueryAsync(mine.TenantId, db => db.Orders.Where(o => o.CustomerUserId == ana.UserId)
+            .ExecuteUpdateAsync(o => o.SetProperty(x => x.Status, OrderStatus.Delivered)));
+
+        Assert.True((await TwoBusinessesApi.ReadAsync(await ana.Client.GetAsync($"{MyReviews}/{mySlug}"))).GetProperty("canReview").GetBoolean());
+        var written = await TwoBusinessesApi.ReadAsync(await ana.Client.PutAsJsonAsync($"{MyReviews}/{mySlug}", new { rating = 5, comment = "Tacos ricos" }));
+        Assert.Equal((5, "Tacos ricos"), (written.GetProperty("rating").GetInt32(), written.GetProperty("comment").GetString()));
+
+        // Nobody reviews a business before buying there; the team of a business writes none; without a session there is no account.
+        Assert.Equal(HttpStatusCode.Forbidden, (await ana.Client.PutAsJsonAsync($"{MyReviews}/{theirSlug}", new { rating = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await beto.Client.PutAsJsonAsync($"{MyReviews}/{mySlug}", new { rating = 1 })).StatusCode);
+        var byTheTeam = await mine.Client.PutAsJsonAsync($"{MyReviews}/{mySlug}", new { rating = 5 });
+        Assert.Equal(HttpStatusCode.BadRequest, byTheTeam.StatusCode);
+        Assert.Equal(ReviewRules.CustomersOnlyMessage, await DetailAsync(byTheTeam));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(MyReviews)).StatusCode);
+        Assert.Empty((await TwoBusinessesApi.ReadAsync(await beto.Client.GetAsync(MyReviews))).EnumerateArray());
+
+        // Each business reads, answers and reports only its own reviews.
+        var mineListed = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(BusinessReviews));
+        var id = Assert.Single(mineListed.GetProperty("reviews").GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid();
+        Assert.Empty((await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync(BusinessReviews))).GetProperty("reviews").GetProperty("items").EnumerateArray());
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PutAsJsonAsync($"{BusinessReviews}/{id}/reply", new { text = "No fuimos nosotros" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsJsonAsync($"{BusinessReviews}/{id}/report", new { reason = 3 })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.DeleteAsync($"{BusinessReviews}/{id}/reply")).StatusCode);
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"{BusinessReviews}/{id}/reply", new { text = "¡Gracias, Ana!" }));
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"{BusinessReviews}/{id}/report", new { reason = 4 }));
+
+        // The store shows it, reported or not, with «Cliente R.» and the answer: nothing of the account.
+        var published = await anonymous.GetAsync($"/api/v1/public/menu/{mySlug}/reviews");
+        var raw = await published.Content.ReadAsStringAsync();
+        var shown = Assert.Single(JsonDocument.Parse(raw).RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal(("Cliente R.", "¡Gracias, Ana!"), (shown.GetProperty("authorName").GetString(), shown.GetProperty("reply").GetString()));
+        Assert.DoesNotContain(ana.Email, raw);
+        Assert.DoesNotContain(ana.UserId.ToString(), raw);
+
+        // Only the platform hides it, audited in its business; a business owner is not the platform.
+        Assert.Equal(HttpStatusCode.Forbidden, (await mine.Client.GetAsync("/api/v1/platform/reviews")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await mine.Client.PostAsJsonAsync($"/api/v1/platform/reviews/{id}/hide", new { reason = 1 })).StatusCode);
+        var platform = await _api.SignInAsPlatformAdminAsync(await _api.SignUpAsync("resenas-plataforma"));
+        var reported = await TwoBusinessesApi.ReadAsync(await platform.GetAsync("/api/v1/platform/reviews?pageSize=50"));
+        Assert.Contains(reported.GetProperty("items").EnumerateArray(), r => r.GetProperty("id").GetGuid() == id);
+        Assert.Equal(HttpStatusCode.NoContent, (await platform.PostAsJsonAsync($"/api/v1/platform/reviews/{id}/hide", new { reason = 4 })).StatusCode);
+        Assert.Empty((await TwoBusinessesApi.ReadAsync(await anonymous.GetAsync($"/api/v1/public/menu/{mySlug}/reviews"))).GetProperty("items").EnumerateArray());
+        var audit = await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.Where(a => a.EntityName == nameof(BusinessReview)).ToListAsync());
+        Assert.Equal(("ReviewHidden", id.ToString()), (Assert.Single(audit).Action, audit[0].EntityId));
+
+        // Its author sees why, may not change it and may delete it.
+        var anas = Assert.Single((await TwoBusinessesApi.ReadAsync(await ana.Client.GetAsync(MyReviews))).EnumerateArray());
+        Assert.Equal((true, (int)ReviewConcern.NotAnExperience), (anas.GetProperty("hidden").GetBoolean(), anas.GetProperty("hiddenReason").GetInt32()));
+        Assert.Equal(HttpStatusCode.BadRequest, (await ana.Client.PutAsJsonAsync($"{MyReviews}/{mySlug}", new { rating = 5 })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await ana.Client.DeleteAsync($"{MyReviews}/{mySlug}")).StatusCode);
+        Assert.Empty(await _api.QueryAsync(Guid.Empty, db => db.BusinessReviews.IgnoreQueryFilters().Where(r => r.UserId == ana.UserId).ToListAsync()));
     }
 
     private static async Task ZoneAsync(HttpClient owner, string name, decimal fee, params string[] postalCodes)

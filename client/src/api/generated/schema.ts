@@ -5514,6 +5514,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyReviewDto"][];
+                        "application/json": components["schemas"]["MyReviewDto"][];
+                        "text/json": components["schemas"]["MyReviewDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/reviews/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyReviewOfBusinessDto"];
+                        "application/json": components["schemas"]["MyReviewOfBusinessDto"];
+                        "text/json": components["schemas"]["MyReviewOfBusinessDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["MyReviewRequest"];
+                    "text/json": components["schemas"]["MyReviewRequest"];
+                    "application/*+json": components["schemas"]["MyReviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyReviewDto"];
+                        "application/json": components["schemas"]["MyReviewDto"];
+                        "text/json": components["schemas"]["MyReviewDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/messaging/templates": {
         parameters: {
             query?: never;
@@ -7372,6 +7496,158 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    filter?: components["schemas"]["PlatformReviewsFilter"];
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformReviewDtoPaginatedList"];
+                        "application/json": components["schemas"]["PlatformReviewDtoPaginatedList"];
+                        "text/json": components["schemas"]["PlatformReviewDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/reviews/{id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["HideReviewRequest"];
+                    "text/json": components["schemas"]["HideReviewRequest"];
+                    "application/*+json": components["schemas"]["HideReviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/reviews/{id}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/reviews/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform-settlements": {
         parameters: {
             query?: never;
@@ -8146,6 +8422,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/menu/{slug}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                };
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicReviewsDto"];
+                        "application/json": components["schemas"]["PublicReviewsDto"];
+                        "text/json": components["schemas"]["PublicReviewsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/menu/{slug}/delivery-quote": {
         parameters: {
             query?: never;
@@ -8841,6 +9158,160 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    filter?: components["schemas"]["BusinessReviewsFilter"];
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BusinessReviewsDto"];
+                        "application/json": components["schemas"]["BusinessReviewsDto"];
+                        "text/json": components["schemas"]["BusinessReviewsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{id}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ReviewReplyRequest"];
+                    "text/json": components["schemas"]["ReviewReplyRequest"];
+                    "application/*+json": components["schemas"]["ReviewReplyRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BusinessReviewDto"];
+                        "application/json": components["schemas"]["BusinessReviewDto"];
+                        "text/json": components["schemas"]["BusinessReviewDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BusinessReviewDto"];
+                        "application/json": components["schemas"]["BusinessReviewDto"];
+                        "text/json": components["schemas"]["BusinessReviewDto"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ReviewReportRequest"];
+                    "text/json": components["schemas"]["ReviewReportRequest"];
+                    "application/*+json": components["schemas"]["ReviewReportRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BusinessReviewDto"];
+                        "application/json": components["schemas"]["BusinessReviewDto"];
+                        "text/json": components["schemas"]["BusinessReviewDto"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -10564,6 +11035,52 @@ export interface components {
          * @enum {integer}
          */
         BusinessCategory: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+        BusinessReviewDto: {
+            /** Format: uuid */
+            id: string;
+            authorName: string;
+            /** Format: int32 */
+            rating: number;
+            comment?: string | null;
+            /** Format: date-time */
+            writtenAt: string;
+            /** Format: date-time */
+            editedAt?: string | null;
+            reply?: string | null;
+            /** Format: date-time */
+            repliedAt?: string | null;
+            status: components["schemas"]["ReviewStatus"];
+            /** Format: date-time */
+            reportedAt?: string | null;
+            reportReason?: components["schemas"]["ReviewConcern"];
+            hiddenReason?: components["schemas"]["ReviewConcern"];
+            /** Format: date-time */
+            moderatedAt?: string | null;
+        };
+        BusinessReviewDtoPaginatedList: {
+            items: components["schemas"]["BusinessReviewDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        BusinessReviewsDto: {
+            summary: components["schemas"]["RatingSummaryDto"];
+            /** Format: int32 */
+            unanswered: number;
+            /** Format: int32 */
+            reported: number;
+            reviews: components["schemas"]["BusinessReviewDtoPaginatedList"];
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        BusinessReviewsFilter: 0 | 1 | 2 | 3;
         /**
          * Format: int32
          * @enum {integer}
@@ -11872,6 +12389,9 @@ export interface components {
         ForgotPasswordCommand: {
             email: string;
         };
+        HideReviewRequest: {
+            reason: components["schemas"]["ReviewConcern"];
+        };
         HolidaySuggestionDto: {
             /** Format: date */
             date: string;
@@ -12364,6 +12884,32 @@ export interface components {
          * @enum {integer}
          */
         MyOrdersScope: 0 | 1 | 2;
+        MyReviewDto: {
+            slug: string;
+            businessName: string;
+            logoUrl?: string | null;
+            /** Format: int32 */
+            rating: number;
+            comment?: string | null;
+            /** Format: date-time */
+            writtenAt: string;
+            /** Format: date-time */
+            editedAt?: string | null;
+            reply?: string | null;
+            /** Format: date-time */
+            repliedAt?: string | null;
+            hidden: boolean;
+            hiddenReason?: components["schemas"]["ReviewConcern"];
+        };
+        MyReviewOfBusinessDto: {
+            canReview: boolean;
+            review?: components["schemas"]["MyReviewDto"];
+        };
+        MyReviewRequest: {
+            /** Format: int32 */
+            rating: number;
+            comment?: string | null;
+        };
         MyTenantDto: {
             /** Format: uuid */
             tenantId: string;
@@ -12951,6 +13497,48 @@ export interface components {
             /** Format: date */
             settledThrough?: string | null;
         };
+        PlatformReviewDto: {
+            /** Format: uuid */
+            id: string;
+            authorName: string;
+            /** Format: int32 */
+            rating: number;
+            comment?: string | null;
+            /** Format: date-time */
+            writtenAt: string;
+            /** Format: date-time */
+            editedAt?: string | null;
+            reply?: string | null;
+            /** Format: date-time */
+            repliedAt?: string | null;
+            status: components["schemas"]["ReviewStatus"];
+            /** Format: date-time */
+            reportedAt?: string | null;
+            reportReason?: components["schemas"]["ReviewConcern"];
+            hiddenReason?: components["schemas"]["ReviewConcern"];
+            /** Format: date-time */
+            moderatedAt?: string | null;
+            /** Format: uuid */
+            tenantId: string;
+            businessName: string;
+            businessSlug: string;
+        };
+        PlatformReviewDtoPaginatedList: {
+            items: components["schemas"]["PlatformReviewDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformReviewsFilter: 0 | 1;
         PlatformSettlementAdjustmentDto: {
             kind: components["schemas"]["PlatformSettlementAdjustmentKind"];
             description?: string | null;
@@ -13366,6 +13954,7 @@ export interface components {
             freeDeliveryFrom?: number | null;
             /** Format: double */
             distanceKm?: number | null;
+            rating?: components["schemas"]["RatingSummaryDto"];
         };
         PublicDirectoryBusinessDtoPaginatedList: {
             items: components["schemas"]["PublicDirectoryBusinessDto"][];
@@ -13434,6 +14023,7 @@ export interface components {
             deliveryAvailable: boolean;
             openingHours?: components["schemas"]["PublicOpeningHoursDto"];
             booksOnline: boolean;
+            rating?: components["schemas"]["RatingSummaryDto"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
         PublicMenuProductDto: {
@@ -13524,6 +14114,27 @@ export interface components {
         PublicOrderTrackingRequest: {
             token: string;
         };
+        PublicReviewDto: {
+            /** Format: uuid */
+            id: string;
+            authorName: string;
+            /** Format: int32 */
+            rating: number;
+            comment?: string | null;
+            /** Format: date-time */
+            writtenAt: string;
+            edited: boolean;
+            reply?: string | null;
+            /** Format: date-time */
+            repliedAt?: string | null;
+        };
+        PublicReviewsDto: {
+            summary: components["schemas"]["RatingSummaryDto"];
+            items: components["schemas"]["PublicReviewDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            hasNextPage: boolean;
+        };
         PublicSpecialDayDto: {
             /** Format: date */
             from: string;
@@ -13605,6 +14216,12 @@ export interface components {
          * @enum {integer}
          */
         PurchaseOrderStatus: 0 | 1 | 2 | 3 | 4 | 99;
+        RatingSummaryDto: {
+            /** Format: int32 */
+            count: number;
+            /** Format: double */
+            average?: number | null;
+        };
         ReceivePurchaseOrderLineItemRequest: {
             /** Format: uuid */
             purchaseOrderLineId: string;
@@ -13711,6 +14328,22 @@ export interface components {
             code: string;
             newPassword: string;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        ReviewConcern: 1 | 2 | 3 | 4 | 5;
+        ReviewReplyRequest: {
+            text?: string | null;
+        };
+        ReviewReportRequest: {
+            reason: components["schemas"]["ReviewConcern"];
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        ReviewStatus: 0 | 1;
         SalesByBranchReportDto: {
             /** Format: date */
             from: string;
