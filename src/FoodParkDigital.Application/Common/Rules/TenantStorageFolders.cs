@@ -8,6 +8,9 @@ public static class TenantStorageFolders
 
     public static string Logos(Guid tenantId) => $"logos/{tenantId}";
 
+    /// <summary>The cover of the online menu (Fase 24E): public, like the logo and the product photos.</summary>
+    public static string Covers(Guid tenantId) => $"covers/{tenantId}";
+
     /// <summary>The avatar of an account: the person is the same in every business, and so is their folder.</summary>
     public static string UserAvatars(Guid userId) => $"avatars/users/{userId}";
 

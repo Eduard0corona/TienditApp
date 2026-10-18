@@ -30,6 +30,12 @@ public class Tenant : AuditableEntity
     public string? ContactPhone { get; private set; }
     public string? LogoUrl { get; private set; }
 
+    /// <summary>
+    /// The wide photo across the top of its online menu (Fase 24E, ADR 0026): the base URL of its stored variants, like
+    /// <see cref="LogoUrl"/>; null without one, and the menu shows the colors of the business instead.
+    /// </summary>
+    public string? CoverImageUrl { get; private set; }
+
     // MX Business fields
     public string? Rfc { get; private set; }
     public string? LegalName { get; private set; }
@@ -103,6 +109,9 @@ public class Tenant : AuditableEntity
         TaxRegime = taxRegime;
         Address = address;
     }
+
+    /// <summary>The cover of its online menu: the base URL of the variants just stored, or null to remove it.</summary>
+    public void SetCoverImage(string? baseUrl) => CoverImageUrl = string.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl;
 
     public void SetStatus(TenantStatus status) => Status = status;
 }

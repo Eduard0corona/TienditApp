@@ -111,6 +111,8 @@ public class UseCaseRulesTests
         { typeof(UpdateHomeVisitSettingsCommand), "Manager Module(Appointments)" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
+        { typeof(UploadTenantCoverCommand), "Manager" },
+        { typeof(DeleteTenantCoverCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },
         { typeof(CreateBranchCommand), "Manager" },
         { typeof(GetBranchesQuery), "Member" },

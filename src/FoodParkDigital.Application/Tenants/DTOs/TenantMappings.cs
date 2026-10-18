@@ -21,6 +21,7 @@ public static class TenantMappings
         ContactPhone = tenant.ContactPhone,
         LogoUrl = string.IsNullOrEmpty(tenant.LogoUrl) ? null : $"{tenant.LogoUrl}_md.webp",
         LogoImages = LogoImageUrlsDto.FromBaseUrl(tenant.LogoUrl),
+        CoverImages = LogoImageUrlsDto.FromBaseUrl(tenant.CoverImageUrl),
         Capabilities = tenant.Settings?.Capabilities ?? TenantCapability.None,
         CreatedAt = tenant.CreatedAt,
         PricesIncludeTax = tenant.Settings?.PricesIncludeTax ?? false,

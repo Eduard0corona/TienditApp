@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tenants.Commands;
+using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
@@ -198,6 +199,74 @@ public class TenantFileIsolationTests
 
         Assert.True(result.IsSuccess, result.Error);
         AssertNoneExist(ownFiles);
+    }
+
+    [Fact]
+    public async Task UploadTenantCover_ShouldStoreInOwnCoversFolder_AndReplaceTheOwnPreviousCover()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var previousFiles = fixture.SeedVariantFiles($"covers/{fixture.TenantId}/portada");
+        await fixture.SetCoverUrlAsync($"/uploads/covers/{fixture.TenantId}/portada");
+
+        var result = await fixture.UploadCoverAsync();
+
+        Assert.True(result.IsSuccess, result.Error);
+        var tenant = await fixture.Context.Tenants.AsNoTracking().SingleAsync(t => t.Id == fixture.TenantId);
+        Assert.StartsWith($"/uploads/covers/{fixture.TenantId}/", tenant.CoverImageUrl);
+        Assert.Equal($"{tenant.CoverImageUrl}_lg.webp", result.Value.Large);
+        AssertAllExist(fixture.VariantPathsOfUrl(tenant.CoverImageUrl!));
+        AssertNoneExist(previousFiles);
+        // The logo is another picture: a cover never touches it.
+        Assert.Null(tenant.LogoUrl);
+    }
+
+    [Fact]
+    public async Task UploadTenantCover_ShouldKeepOtherTenantFiles_WhenCoverUrlPointsToTheirFolder()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var otherTenantFiles = fixture.SeedVariantFiles($"covers/{fixture.OtherTenantId}/portada");
+        await fixture.SetCoverUrlAsync($"/uploads/covers/{fixture.OtherTenantId}/portada");
+
+        var result = await fixture.UploadCoverAsync();
+
+        Assert.True(result.IsSuccess, result.Error);
+        AssertAllExist(otherTenantFiles);
+    }
+
+    [Fact]
+    public async Task DeleteTenantCover_ShouldDeleteOwnCoverVariants_AndKeepTheLogo()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var ownFiles = fixture.SeedVariantFiles($"covers/{fixture.TenantId}/portada");
+        var logoFiles = fixture.SeedVariantFiles($"logos/{fixture.TenantId}/logo");
+        await fixture.SetCoverUrlAsync($"/uploads/covers/{fixture.TenantId}/portada");
+        await fixture.SetLogoUrlAsync($"/uploads/logos/{fixture.TenantId}/logo");
+
+        var result = await fixture.CreateDeleteTenantCoverHandler()
+            .Handle(new DeleteTenantCoverCommand(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        AssertNoneExist(ownFiles);
+        AssertAllExist(logoFiles);
+        var tenant = await fixture.Context.Tenants.AsNoTracking().SingleAsync(t => t.Id == fixture.TenantId);
+        Assert.Null(tenant.CoverImageUrl);
+        Assert.Equal($"/uploads/logos/{fixture.TenantId}/logo", tenant.LogoUrl);
+    }
+
+    [Fact]
+    public async Task DeleteTenantCover_ShouldKeepOtherTenantFiles_WhenCoverUrlPointsToTheirFolder()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var otherTenantFiles = fixture.SeedVariantFiles($"covers/{fixture.OtherTenantId}/portada");
+        await fixture.SetCoverUrlAsync($"/uploads/covers/{fixture.OtherTenantId}/portada");
+
+        var result = await fixture.CreateDeleteTenantCoverHandler()
+            .Handle(new DeleteTenantCoverCommand(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        AssertAllExist(otherTenantFiles);
+        var tenant = await fixture.Context.Tenants.AsNoTracking().SingleAsync(t => t.Id == fixture.TenantId);
+        Assert.Null(tenant.CoverImageUrl);
     }
 
     [Fact]
@@ -434,6 +503,12 @@ public class TenantFileIsolationTests
             await Context.SaveChangesAsync();
         }
 
+        public async Task SetCoverUrlAsync(string coverUrl)
+        {
+            Tenant.SetCoverImage(coverUrl);
+            await Context.SaveChangesAsync();
+        }
+
         public async Task SetAvatarUrlAsync(string avatarUrl)
         {
             User.AvatarUrl = avatarUrl;
@@ -450,6 +525,23 @@ public class TenantFileIsolationTests
             Context,
             _tenantService,
             Storage);
+
+        public DeleteTenantCoverCommandHandler CreateDeleteTenantCoverHandler() => new(
+            Context,
+            _tenantService,
+            Storage);
+
+        public Task<Result<LogoImageUrlsDto>> UploadCoverAsync() =>
+            new UploadTenantCoverCommandHandler(Context, _tenantService, Storage, new FakeImageProcessingService())
+                .Handle(
+                    new UploadTenantCoverCommand
+                    {
+                        FileStream = new MemoryStream([0x89, 0x50, 0x4E, 0x47]),
+                        FileName = "portada.png",
+                        ContentType = "image/png",
+                        FileSize = 4
+                    },
+                    CancellationToken.None);
 
         public DeleteAvatarCommandHandler CreateDeleteAvatarHandler() => new(
             UserManager,

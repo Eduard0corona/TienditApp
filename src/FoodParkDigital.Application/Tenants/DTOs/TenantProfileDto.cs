@@ -37,6 +37,8 @@ public class TenantProfileDto
     public string? ContactPhone { get; set; }
     public string? LogoUrl { get; set; }
     public LogoImageUrlsDto? LogoImages { get; set; }
+    /// <summary>The cover of the online menu (Fase 24E), in the same variants as the logo; null without one.</summary>
+    public LogoImageUrlsDto? CoverImages { get; set; }
     public TenantCapability Capabilities { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
