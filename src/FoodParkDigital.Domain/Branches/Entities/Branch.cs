@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Common;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
 
 namespace FoodParkDigital.Domain.Branches.Entities;
@@ -52,6 +53,19 @@ public class Branch : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>Delivery only: its address is the team's, never the customers'.</summary>
     public bool KeepsAddressPrivate => ServiceMode == BranchServiceMode.DeliveryOnly;
 
+    /// <summary>Its latitude on the map (Fase 24G), with <see cref="Longitude"/>; both or neither.</summary>
+    public decimal? Latitude { get; private set; }
+    public decimal? Longitude { get; private set; }
+
+    /// <summary>Where it is on the map; none until its owner sets it.</summary>
+    public GeoPoint? Location => Latitude is { } latitude && Longitude is { } longitude ? new GeoPoint(latitude, longitude) : null;
+
+    /// <summary>
+    /// The point customers may see (the distance in Explorar, «Cómo llegar»): the one of a branch they come to, never of
+    /// one that only delivers. Kept when it changes how it serves, it shows again if it opens its premises.
+    /// </summary>
+    public GeoPoint? PublicLocation => KeepsAddressPrivate ? null : Location;
+
     public const string DefaultBranchName = "Sucursal principal";
     public const string DefaultBranchCode = "PRINCIPAL";
 
@@ -86,6 +100,13 @@ public class Branch : AuditableEntity, ITenantScoped, IAggregateRoot
         ContactName = contact.ContactName;
         ContactPhone = contact.ContactPhone;
         ServiceMode = serviceMode;
+    }
+
+    /// <summary>Puts the branch on the map, or takes it off with null.</summary>
+    public void SetLocation(GeoPoint? location)
+    {
+        Latitude = location?.Latitude;
+        Longitude = location?.Longitude;
     }
 
     /// <summary>Makes this the branch of sales and drawers that name none. The caller unmarks the previous one.</summary>
