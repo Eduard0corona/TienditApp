@@ -488,7 +488,7 @@ El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../
 - **Escenas:**
   - `scenes/menu-tienda.spec.ts` toma la tienda con portada, logo y fotos en cuatro vistas, más la hoja del producto en teléfono y escritorio, la búsqueda, las pestañas, la información, el botón flotante, el pedido en teléfono y escritorio, y la tarjeta de la portada con y sin foto.
   - El menú simulado (`publico-cuenta-marco.mocks.ts`) contesta la portada y el logo con `data.menuStore`, las fotos de `withProductPhotos`, y la línea y la categoría del negocio.
-- **Primera visita:** suma 60 B (de 177,960 a 178,020 B, dentro del presupuesto de 178,200 B). La tienda baja con su ruta.
+- **Primera visita:** suma 49 B (de 177,960 a 178,009 B, dentro del presupuesto de 178,200 B). La tienda baja con su ruta.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
