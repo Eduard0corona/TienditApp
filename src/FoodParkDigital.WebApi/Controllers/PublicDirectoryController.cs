@@ -28,6 +28,11 @@ public class PublicDirectoryController : ControllerBase
     /// <param name="pageNumber">From 1.</param>
     /// <param name="pageSize">Up to 48.</param>
     /// <param name="postalCode">The customer's postal code: each card says whether the business delivers there and what it costs.</param>
+    /// <param name="latitude">
+    /// The customer's position, with <paramref name="longitude"/> («Cerca de mí»): the nearest businesses first, each card
+    /// with how far it is. Read to three decimals; never kept or logged.
+    /// </param>
+    /// <param name="longitude">The other half of the customer's position.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     [HttpGet]
     [EnableRateLimiting("public-menu")]
@@ -35,8 +40,11 @@ public class PublicDirectoryController : ControllerBase
         [FromQuery] BusinessCategory? category,
         [FromQuery] string? q,
         [FromQuery] string? postalCode,
+        [FromQuery] decimal? latitude,
+        [FromQuery] decimal? longitude,
         CancellationToken cancellationToken,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = GetPublicDirectoryQuery.DefaultPageSize)
-        => Ok(await _mediator.Send(new GetPublicDirectoryQuery(category, q, pageNumber, pageSize, postalCode), cancellationToken));
+        => Ok(await _mediator.Send(
+            new GetPublicDirectoryQuery(category, q, pageNumber, pageSize, postalCode, latitude, longitude), cancellationToken));
 }

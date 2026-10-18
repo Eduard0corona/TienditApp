@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.Commands;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FluentValidation;
@@ -33,9 +34,24 @@ public abstract record BranchFields
     /// premises and a saved one keeps what it had: a screen that does not know the field never publishes an address.
     /// </summary>
     public BranchServiceMode? ServiceMode { get; init; }
+    /// <summary>
+    /// Where it is on the map (Fase 24G): both halves put it there, neither takes it off. Left out, a new branch is not on
+    /// the map and a saved one keeps its point: a screen that does not know the field never takes a branch off the map.
+    /// </summary>
+    public BranchLocationFields? Location { get; init; }
 
     public BranchContact ToContact() => new(
         Description, AddressLine1, AddressLine2, City, State, Country, PostalCode, ContactName, ContactPhone);
+}
+
+/// <summary>A point on the map in degrees, as Google Maps copies it: latitude first, then longitude; both null for none.</summary>
+public sealed record BranchLocationFields
+{
+    public decimal? Latitude { get; init; }
+    public decimal? Longitude { get; init; }
+
+    /// <summary>The point; null when both halves are empty (the validator refuses one without the other).</summary>
+    public GeoPoint? ToPoint() => Latitude is { } latitude && Longitude is { } longitude ? new GeoPoint(latitude, longitude) : null;
 }
 
 internal static class BranchFieldRules
@@ -54,7 +70,18 @@ internal static class BranchFieldRules
         validator.RuleFor(x => x.ContactName).MaximumLength(120);
         validator.RuleFor(x => x.ContactPhone).MaximumLength(30);
         validator.RuleFor(x => x.ServiceMode).IsInEnum().WithMessage(Branch.ServiceModeMessage);
+        validator.RuleFor(x => x.Location!)
+            .Must(location => location.Latitude.HasValue == location.Longitude.HasValue)
+            .WithMessage(HalfAPointMessage)
+            .Must(location => location.Latitude is not { } latitude || location.Longitude is not { } longitude
+                || (latitude is >= -90m and <= 90m && longitude is >= -180m and <= 180m))
+            .WithMessage(GeoPoint.InvalidMessage)
+            .Must(location => location.Latitude != 0m || location.Longitude != 0m)
+            .WithMessage(GeoPoint.NullIslandMessage)
+            .When(x => x.Location is not null);
     }
+
+    public const string HalfAPointMessage = "Escribe la latitud y la longitud de la sucursal, o ninguna para quitarla del mapa.";
 
     public static Task<bool> CodeTakenAsync(IApplicationDbContext context, string code, Guid? exceptId, CancellationToken cancellationToken)
     {
@@ -127,6 +154,7 @@ public class CreateBranchCommandHandler : IRequestHandler<CreateBranchCommand, R
             var branch = new Branch(
                 tenantId, request.Name, request.Code, request.ToContact(),
                 serviceMode: request.ServiceMode ?? BranchServiceMode.Premises);
+            branch.SetLocation(request.Location?.ToPoint());
             _context.Branches.Add(branch);
             if (withWarehouse)
                 _context.InventoryLocations.Add(await NewStockLocationAsync(branch, ct));
@@ -197,6 +225,8 @@ public class UpdateBranchCommandHandler : IRequestHandler<UpdateBranchCommand, R
             return Result.Failure<BranchDto>("Ya existe una sucursal con esa clave.");
 
         branch.Update(request.Name, request.Code, request.ToContact(), request.ServiceMode ?? branch.ServiceMode);
+        if (request.Location is { } location)
+            branch.SetLocation(location.ToPoint());
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(BranchDto.FromEntity(branch));
     }

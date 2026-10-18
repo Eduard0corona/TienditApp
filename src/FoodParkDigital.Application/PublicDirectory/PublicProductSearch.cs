@@ -34,6 +34,11 @@ public class PublicDirectoryProductDto
     /// card writes «más IVA».
     /// </summary>
     public bool AddsTax { get; set; }
+    /// <summary>
+    /// With the customer's position (Fase 24G): how far its business is, as its card says. Null without a position or
+    /// when its business is not measured.
+    /// </summary>
+    public decimal? DistanceKm { get; set; }
 }
 
 /// <summary>
@@ -160,7 +165,11 @@ public sealed class PublicProductIndex
     /// Explorar (taking orders now first) and by name; at most <see cref="MaxPerBusiness"/> of one business and
     /// <see cref="MaxResults"/> in all.
     /// </summary>
-    public List<PublicDirectoryProductDto> Search(IReadOnlyCollection<string> words, BusinessCategory? category)
+    /// <param name="near">
+    /// With the customer's position (Fase 24G): after the products named so, those of the nearest businesses first, each
+    /// with how far its business is.
+    /// </param>
+    public List<PublicDirectoryProductDto> Search(IReadOnlyCollection<string> words, BusinessCategory? category, PublicDirectoryNearby? near = null)
     {
         if (words.Count == 0)
             return [];
@@ -169,7 +178,8 @@ public sealed class PublicProductIndex
             .Where(entry => category is null || entry.Business.Business.Category == category)
             .Where(entry => words.All(entry.SearchText.Contains))
             .OrderBy(entry => words.All(entry.NameText.Contains) ? 0 : 1)
-            .ThenBy(entry => entry.Position)
+            // A business of an older snapshot that the newer one left out goes last.
+            .ThenBy(entry => near is null ? entry.Position : near.Position.GetValueOrDefault(entry.Business.TenantId, int.MaxValue))
             .ThenBy(entry => entry.NameText, StringComparer.Ordinal);
         var perBusiness = new Dictionary<Guid, int>();
         var products = new List<PublicDirectoryProductDto>();
@@ -191,7 +201,8 @@ public sealed class PublicProductIndex
                 BusinessSlug = business.Business.Slug,
                 Theme = business.Business.Theme,
                 AcceptsOrders = business.Business.AcceptsOrders,
-                AddsTax = entry.AddsTax
+                AddsTax = entry.AddsTax,
+                DistanceKm = near is not null && near.DistanceKm.TryGetValue(business.TenantId, out var km) ? km : null
             });
             if (products.Count == MaxResults)
                 break;

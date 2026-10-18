@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.WebApi.Http;
@@ -69,6 +70,10 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Equal("Puebla", address.GetProperty("addressLocality").GetString());
         Assert.Equal("72000", address.GetProperty("postalCode").GetString());
         Assert.Equal("MX", address.GetProperty("addressCountry").GetString());
+        // Where its owner put it on the map (Fase 24G), as numbers.
+        var geo = store.GetProperty("geo");
+        Assert.Equal("GeoCoordinates", geo.GetProperty("@type").GetString());
+        Assert.Equal((19.043577m, -98.198626m), (geo.GetProperty("latitude").GetDecimal(), geo.GetProperty("longitude").GetDecimal()));
         var hours = store.GetProperty("openingHoursSpecification").EnumerateArray().ToList();
         Assert.Equal(4, hours.Count);
         Assert.Equal("https://schema.org/Monday", hours[0].GetProperty("dayOfWeek").GetString());
@@ -126,6 +131,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
             store.BusinessName = "Luna\"><script>alert(1)</script>";
             store.Description = "Pan </script><img src=x onerror=alert(2)> & café";
             store.Address = null;
+            store.Geo = null;
             store.ContactPhone = "</script>";
         });
 
@@ -142,6 +148,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Equal("Luna\"><script>alert(1)</script>", data.RootElement.GetProperty("name").GetString());
         Assert.Equal("</script>", data.RootElement.GetProperty("telephone").GetString());
         Assert.False(data.RootElement.TryGetProperty("address", out _));
+        Assert.False(data.RootElement.TryGetProperty("geo", out _));
     }
 
     [Fact]
@@ -458,6 +465,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
             ListedInDirectory = true,
             TakesOrders = true,
             Address = new StoreAddressDto { Street = "Av. Juárez 120, Local 3", City = "Puebla", State = "Puebla", PostalCode = "72000" },
+            Geo = new MapPointDto { Latitude = 19.043577m, Longitude = -98.198626m },
             ContactPhone = "2221234567",
             OpeningHours =
             [
