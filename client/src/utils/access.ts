@@ -44,6 +44,8 @@ export interface Access {
   refunds: boolean;
   /** WhatsApp campaigns, templates, appointment reminders and opt-outs: ManageCampaigns. */
   campaigns: boolean;
+  /** The business's reviews, to answer and report them (Fase 24H): owners and admins, as the API asks. */
+  reviews: boolean;
   /** Platform console (businesses, plans and billing): the platform admin only. */
   platform: boolean;
   /** A customer account's own orders in every business (GET /me/orders). */
@@ -99,6 +101,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     businessSettings: isAdmin,
     refunds: commerce && can('ManageOrders') && can('ProcessRefunds'),
     campaigns: commerce && can('ManageCampaigns'),
+    reviews: isAdmin,
     platform: role === 'superadmin',
     myOrders: role === 'customer',
   };

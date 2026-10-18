@@ -62,6 +62,7 @@ describe('getAccess', () => {
 
     expect(owner.employees).toBe(true);
     expect(owner.audit).toBe(true);
+    expect(owner.reviews).toBe(true);
     expect(owner.charge).toBe(true);
     expect(owner.refunds).toBe(true);
     expect(owner.appointments).toBe(false);
@@ -72,6 +73,7 @@ describe('getAccess', () => {
 
     expect(everyPermission.employees).toBe(false);
     expect(everyPermission.audit).toBe(false);
+    expect(everyPermission.reviews).toBe(false);
     expect(everyPermission.dashboard).toBe(true);
   });
 

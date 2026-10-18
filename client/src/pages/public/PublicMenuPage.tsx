@@ -9,6 +9,7 @@ import PhotoOrInitial from '../../components/common/PhotoOrInitial';
 import FeaturedProducts from '../../components/store/FeaturedProducts';
 import MenuProductRow from '../../components/store/MenuProductRow';
 import FavoriteButton from '../../components/explore/FavoriteButton';
+import StoreReviews, { STORE_REVIEWS_ID } from '../../components/reviews/StoreReviews';
 import ProductSheet from '../../components/store/ProductSheet';
 import StoreHero from '../../components/store/StoreHero';
 import StoreInfoModal from '../../components/store/StoreInfoModal';
@@ -94,6 +95,7 @@ function restoredMessage(kept: number, dropped: number, skipped: number, reorder
  * Since Fase 24E (ADR 0026) it has the shape of the delivery apps: the business's cover, a search, its featured products,
  * tabs of categories that follow the scroll, rows with the photo on the right and the «+» on it, a sheet for each product
  * with its options, instructions and how many, a floating button with the order, and the order as a checkout page.
+ * Since Fase 24H (ADR 0030) its header shows its rating, and its reviews follow the menu.
  */
 export default function PublicMenuPage() {
   const cartTitleId = useId();
@@ -321,9 +323,15 @@ export default function PublicMenuPage() {
     .reduce((sum, line) => sum + line.quantity, 0);
   const canAdd = (product: PublicMenuProduct) => !!data?.acceptsOrders && product.availableNow;
 
-  const goToSection = (categoryId: string) => {
+  const scrollToElement = (id: string) => {
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    document.getElementById(sectionId(categoryId))?.scrollIntoView?.({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    document.getElementById(id)?.scrollIntoView?.({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  };
+  const goToSection = (categoryId: string) => scrollToElement(sectionId(categoryId));
+  // The reviews follow the menu, which a search hides: the search goes, and then the page takes there.
+  const goToReviews = () => {
+    setQuery('');
+    window.requestAnimationFrame(() => scrollToElement(STORE_REVIEWS_ID));
   };
 
   const changeQuantity = (key: string, delta: number) => setLines((current) => current
@@ -501,6 +509,7 @@ export default function PublicMenuPage() {
           bookingPath={data.booksOnline && !atTable ? bookingPath(slug) : null}
           contactUrl={contact}
           favorite={atTable ? null : <FavoriteButton slug={data.slug} name={data.businessName} favorites={favorites} className="pm-round" />}
+          rating={data.rating && data.rating.count > 0 ? { summary: data.rating, onOpen: goToReviews } : null}
         />
 
         {restoredNotice && (
@@ -580,6 +589,7 @@ export default function PublicMenuPage() {
                 {categories.length === 0 && <p className="text-muted text-center py-5">El menú todavía no tiene productos.</p>}
               </main>
             </div>
+            <StoreReviews business={{ slug: data.slug, name: data.businessName }} summary={data.rating} customer={!!customer} />
           </>
         )}
       </div>

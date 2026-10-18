@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
+import { reviewsApi } from '../../api/reviewsApi';
 import type { CustomerAppointment } from '../../api/publicMenuApi';
 import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { AppointmentStatus, MyAppointmentsScope } from '../../types';
@@ -11,6 +12,7 @@ import MyAppointments from './MyAppointments';
 
 vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
 vi.mock('../../api/accountApi', () => ({ accountApi: { getAppointments: vi.fn(), cancelAppointment: vi.fn() } }));
+vi.mock('../../api/reviewsApi', () => ({ reviewsApi: { getMyReviews: vi.fn(), getMyReview: vi.fn() } }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: () => toast }));
 
@@ -55,6 +57,7 @@ function renderPage() {
 describe('MyAppointments', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(reviewsApi.getMyReviews).mockResolvedValue([]);
   });
 
   it('shows the upcoming ones and the ones before, and cancels one after asking', async () => {
@@ -105,5 +108,21 @@ describe('MyAppointments', () => {
     await user.click(screen.getByRole('button', { name: 'Más antiguas' }));
     expect(await screen.findByText('Servicio 2')).toBeInTheDocument();
     expect(screen.getByText('Página 2 de 2')).toBeInTheDocument();
+  });
+
+  it('rates the business of an appointment attended, and only of that one', async () => {
+    api.getAppointments.mockImplementation(((scope: number) => Promise.resolve(scope === MyAppointmentsScope.Upcoming
+      ? page([appointment({ id: 'a2', serviceName: 'Barba' })])
+      : page([appointment({ status: AppointmentStatus.Completed, statusLabel: 'Atendida', canCancel: false })]))) as never);
+    vi.mocked(reviewsApi.getMyReview).mockResolvedValue({ canReview: true, review: null });
+
+    renderPage();
+
+    const before = await screen.findByRole('region', { name: 'Anteriores' });
+    expect(within(screen.getByRole('region', { name: 'Próximas' })).queryByRole('button', { name: /Calificar/ })).not.toBeInTheDocument();
+    await userEvent.click(within(before).getByRole('button', { name: 'Calificar a Barbería Luis' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Califica a Barbería Luis' })).toBeInTheDocument();
+    expect(reviewsApi.getMyReview).toHaveBeenCalledWith('barberia-luis', expect.anything());
   });
 });

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { CustomerAppointment } from '../../api/publicMenuApi';
+import ReviewButton from '../reviews/ReviewButton';
 import { AppointmentStatus } from '../../types';
 import { addressMapUrl, bookingPath, customerAppointmentChip, upperFirst } from '../../utils/onlineBooking';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
@@ -11,14 +12,18 @@ interface CustomerAppointmentCardProps {
   cancelling?: boolean;
   /** The level of its title: h2 alone on its page, h3 inside a list with its heading. */
   titleAs?: 'h2' | 'h3';
+  /** Rating its business once the appointment was attended (Fase 24H): only for a customer account. */
+  review?: { reviewed: boolean; onReview: () => void };
 }
 
 /**
  * An appointment booked online, as its customer sees it (Fase 24D): the service, the business, when, where, its status in
- * the business's words, and what the customer can do with it: cancel it while it has not started, write to the business
- * or book another one.
+ * the business's words, and what the customer can do with it: cancel it while it has not started, write to the business,
+ * book another one, or rate the business once it was attended (Fase 24H).
  */
-export default function CustomerAppointmentCard({ appointment, onCancel, cancelling = false, titleAs: Title = 'h3' }: CustomerAppointmentCardProps) {
+export default function CustomerAppointmentCard({
+  appointment, onCancel, cancelling = false, titleAs: Title = 'h3', review,
+}: CustomerAppointmentCardProps) {
   const contact = businessWhatsAppUrl(
     appointment.businessContactPhone,
     `Hola, les escribo por mi cita de ${appointment.serviceName} del ${appointment.dateLabel} a las ${appointment.timeLabel}.`,
@@ -49,6 +54,9 @@ export default function CustomerAppointmentCard({ appointment, onCancel, cancell
           <p className="small text-muted mb-1">{appointment.businessName} te confirma por WhatsApp.</p>
         )}
         <div className="d-flex flex-wrap gap-2 mt-3">
+          {review && appointment.status === AppointmentStatus.Completed && (
+            <ReviewButton businessName={appointment.businessName} reviewed={review.reviewed} onClick={review.onReview} />
+          )}
           {onCancel && appointment.canCancel && (
             <button
               type="button"

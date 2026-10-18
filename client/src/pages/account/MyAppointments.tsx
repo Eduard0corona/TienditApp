@@ -6,7 +6,9 @@ import { getApiErrorMessage } from '../../api/errors';
 import type { CustomerAppointment } from '../../api/publicMenuApi';
 import CustomerAppointmentCard from '../../components/booking/CustomerAppointmentCard';
 import PageTitle from '../../components/common/PageTitle';
+import ReviewDialog, { type ReviewedBusiness } from '../../components/reviews/ReviewDialog';
 import { useConfirm } from '../../hooks/useConfirm';
+import { useMyReviews } from '../../hooks/useMyReviews';
 import { useToast } from '../../hooks/useToast';
 import { MyAppointmentsScope } from '../../types';
 import { cancelAppointmentMessage } from '../../utils/onlineBooking';
@@ -17,11 +19,14 @@ const UPCOMING_PAGE_SIZE = 50;
 
 /**
  * The appointments a customer account booked online, in every business (Fase 24D): the upcoming ones first, soonest
- * first, and the ones before by pages. One that has not started is cancelled from here.
+ * first, and the ones before by pages. One that has not started is cancelled from here, and one attended rates its
+ * business (Fase 24H).
  */
 export default function MyAppointments() {
   const [page, setPage] = useState(1);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [reviewing, setReviewing] = useState<ReviewedBusiness | null>(null);
+  const myReviews = useMyReviews();
   const queryClient = useQueryClient();
   const { confirm } = useConfirm();
   const toast = useToast();
@@ -66,6 +71,10 @@ export default function MyAppointments() {
         appointment={appointment}
         onCancel={() => void cancel(appointment)}
         cancelling={cancellingId === appointment.id}
+        review={{
+          reviewed: myReviews.has(appointment.businessSlug),
+          onReview: () => setReviewing({ slug: appointment.businessSlug, name: appointment.businessName }),
+        }}
       />
     </div>
   );
@@ -123,6 +132,8 @@ export default function MyAppointments() {
           )}
         </section>
       )}
+
+      <ReviewDialog business={reviewing} onClose={() => setReviewing(null)} />
     </div>
   );
 }

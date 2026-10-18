@@ -4,6 +4,7 @@ import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
 import { categoryInfo, deliveryToPostalCode, orderStatus } from '../../utils/businessCategories';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import { formatDistance } from '../../utils/geo';
+import { formatAverage, ratingDescription } from '../../utils/reviews';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 import './DirectoryBusinessCard.css';
 
@@ -19,7 +20,7 @@ interface DirectoryBusinessCardProps {
  * A business in Explorar: its cover across the top (its colors without one, Fase 24F), its logo (or its initial in its
  * colors), name, what it sells, its category and city, and whether it takes orders now. With the customer's postal code
  * (Fase 24B) it says whether it delivers there and what it costs, and a business that books appointments online says so
- * (Fase 24D), and with the customer's position how far it is (Fase 24G). The whole card opens its menu; an action (the
+ * (Fase 24D), with the customer's position how far it is (Fase 24G), and its rating from three reviews (Fase 24H). The whole card opens its menu; an action (the
  * heart) sits over its corner, outside the link.
  */
 export default function DirectoryBusinessCard({ business, preview = false, action }: DirectoryBusinessCardProps) {
@@ -31,6 +32,7 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
     '--dc-ink-dark': theme.dark.accentText,
   } as CSSProperties;
   const status = orderStatus(business);
+  const average = business.rating?.average;
   const delivery = deliveryToPostalCode(business);
   const place = [
     categoryInfo(business.category)?.label,
@@ -52,6 +54,13 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
           {business.description && <p className="dc-description">{business.description}</p>}
           <p className="dc-place">{place}</p>
           <p className="dc-status">
+            {average != null && (
+              <span className="dc-badge dc-badge-rating">
+                <i className="ri-star-fill" aria-hidden="true"></i>
+                <span aria-hidden="true">{formatAverage(average)} ({business.rating?.count.toLocaleString('es-MX')})</span>
+                <span className="visually-hidden">{ratingDescription(business.rating)}</span>
+              </span>
+            )}
             <span className={`dc-badge dc-badge-${status.tone}`}>
               {status.tone === 'taking' && <i className="ri-shopping-bag-3-line" aria-hidden="true"></i>}
               {status.text}
