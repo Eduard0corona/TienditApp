@@ -37,6 +37,7 @@ npx playwright show-report visual/.work/report   # las diferencias, con la image
   - no hay transiciones ni animaciones CSS (`fixtures.ts`). Un menú que se desliza o un diálogo que aparece poco a poco se dibujaba a medio camino, y lo que quedaba en pantalla dependía de qué tan ocupada estaba la máquina. Cambia el camino, nunca a dónde llega;
   - tampoco hay desplazamiento suave (`scroll-behavior`, que Bootstrap enciende). Al escribir en un campo de la parte de abajo, la página seguía bajando hacia él después de que `snap` la regresaba arriba, y la captura salía unos píxeles abajo: la barra superior y el menú, que son fijos, quedaban corridos sobre el contenido;
   - `settle` espera además a que terminen las animaciones finitas que queden (las de JavaScript);
+  - `settle` espera cada imagen que se dibuja, pero no una que no se dibuja (`display: none`, como los favoritos después de «Ver todos»). Esas, si son perezosas, no cargan mientras no se ven;
   - Chromium repinta mosaicos completos (`--disable-partial-raster` en `playwright.config.ts`): al repintar solo la parte que cambió, los bordes de esa parte salían un tono distinto de una captura a otra;
   - el texto se suaviza en gris (`--disable-lcd-text`): con subpíxeles de color, Chromium elige uno u otro según la capa en que cae el texto, y las capas cambian con marcado que no dibuja nada (un contenedor de más o de menos), no con el diseño;
   - lo que depende de dónde se sirven las escenas (el puerto en una URL) va enmascarado (`snap(page, nombre, { mask: [...] })`).
