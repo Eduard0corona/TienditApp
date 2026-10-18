@@ -9,6 +9,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import { activeBranchesKey } from '../../hooks/useWorkingBranch';
 import { BranchServiceMode } from '../../types';
+import { formatCoordinates, mapPointUrl, parseCoordinates, type MapPoint } from '../../utils/geo';
 
 const COLUMNS = [
   { header: 'Sucursal' },
@@ -32,6 +33,8 @@ interface BranchForm {
   contactPhone: string;
   isDefault: boolean;
   serviceMode: BranchServiceMode;
+  /** Its point on the map as the owner pasted it from Google Maps (Fase 24G); empty for none. */
+  coordinates: string;
 }
 
 const EMPTY_FORM: BranchForm = {
@@ -48,7 +51,10 @@ const EMPTY_FORM: BranchForm = {
   contactPhone: '',
   isDefault: false,
   serviceMode: BranchServiceMode.Premises,
+  coordinates: '',
 };
+
+const COORDINATES_ERROR = 'No entendemos esas coordenadas. Pega las que copiaste de Google Maps, por ejemplo 19.043577, -98.198626.';
 
 /** How a branch serves its customers; one that only delivers keeps its address for the team. */
 const SERVICE_MODES = [
@@ -64,7 +70,7 @@ const SERVICE_MODES = [
   },
 ];
 
-const TEXT_FIELDS: Array<{ key: keyof Omit<BranchForm, 'isDefault' | 'name' | 'code' | 'serviceMode'>; label: string; col: string; maxLength: number }> = [
+const TEXT_FIELDS: Array<{ key: keyof Omit<BranchForm, 'isDefault' | 'name' | 'code' | 'serviceMode' | 'coordinates'>; label: string; col: string; maxLength: number }> = [
   { key: 'addressLine1', label: 'Calle y número', col: 'col-md-6', maxLength: 250 },
   { key: 'addressLine2', label: 'Colonia o referencia', col: 'col-md-6', maxLength: 250 },
   { key: 'city', label: 'Ciudad', col: 'col-md-4', maxLength: 120 },
@@ -76,6 +82,7 @@ const TEXT_FIELDS: Array<{ key: keyof Omit<BranchForm, 'isDefault' | 'name' | 'c
 ];
 
 function toForm(branch: Branch): BranchForm {
+  const point = pointOf(branch);
   return {
     name: branch.name,
     code: branch.code,
@@ -90,10 +97,58 @@ function toForm(branch: Branch): BranchForm {
     contactPhone: branch.contactPhone ?? '',
     isDefault: branch.isDefault,
     serviceMode: branch.serviceMode ?? BranchServiceMode.Premises,
+    coordinates: point ? formatCoordinates(point) : '',
   };
 }
 
+/** Where the branch is on the map, as the server keeps it; null when it is not there. */
+function pointOf(branch: Branch): MapPoint | null {
+  return branch.latitude != null && branch.longitude != null ? { latitude: branch.latitude, longitude: branch.longitude } : null;
+}
+
+const samePoint = (a: MapPoint | null, b: MapPoint | null) =>
+  a?.latitude === b?.latitude && a?.longitude === b?.longitude;
+
 const blankToNull = (value: string) => value.trim() || null;
+
+/**
+ * Where the branch is on the map (Fase 24G): the coordinates Google Maps copies (or a link with them), or this device's
+ * position when the owner is at the branch. «Revisar en el mapa» opens what was written, so a mistake shows before
+ * customers see it.
+ */
+function CoordinatesField({ value, onChange, locating, locateError, onLocate }: {
+  value: string;
+  onChange: (value: string) => void;
+  locating: boolean;
+  locateError: string;
+  onLocate: () => void;
+}) {
+  const point = parseCoordinates(value);
+  return (
+    <div className="col-12">
+      <label className="form-label" htmlFor="branch-coordinates">Ubicación en el mapa (opcional)</label>
+      <div className="input-group">
+        <input id="branch-coordinates" className={`form-control ${point === 'invalid' ? 'is-invalid' : ''}`}
+          placeholder="19.043577, -98.198626" autoComplete="off" spellCheck={false} maxLength={2000}
+          aria-describedby="branch-coordinates-help" aria-invalid={point === 'invalid'}
+          value={value} onChange={(event) => onChange(event.target.value)} />
+        <button type="button" className="btn btn-light" onClick={onLocate} disabled={locating}>
+          <i className="ri-focus-3-line me-1" aria-hidden="true"></i>{locating ? 'Buscando…' : 'Usar mi ubicación'}
+        </button>
+      </div>
+      <div id="branch-coordinates-help" className="form-text">
+        {point !== 'invalid'
+          ? 'En Google Maps, mantén presionado el punto de tu local y copia las coordenadas, o pega el enlace del lugar.'
+          // A short link (maps.app.goo.gl) only points to Google: the point is not in it.
+          : /goo\.gl/i.test(value) ? 'Ese enlace corto no trae el punto. Abre el lugar en Google Maps y copia sus coordenadas.' : COORDINATES_ERROR}
+        {point && point !== 'invalid' && (
+          <> <a href={mapPointUrl(point)} target="_blank" rel="noopener noreferrer">Revisar en el mapa</a></>
+        )}
+      </div>
+      {locateError && <div className="small text-danger mt-1" role="alert">{locateError}</div>}
+    </div>
+  );
+}
 
 /**
  * Branches of the business: where it sells. Each one has its drawers, its sales in the reports and, with
@@ -113,6 +168,9 @@ export default function BranchesList() {
   const [form, setForm] = useState<BranchForm | null>(null);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  // «Usar mi ubicación»: the browser is asked; what it said when it could not tell.
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState('');
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['branches'] });
@@ -125,12 +183,38 @@ export default function BranchesList() {
     setEditing(null);
     setForm({ ...EMPTY_FORM, serviceMode: main?.serviceMode ?? BranchServiceMode.Premises });
     setFormError('');
+    setLocateError('');
   };
 
   const openEdit = (branch: Branch) => {
     setEditing(branch);
     setForm(toForm(branch));
     setFormError('');
+    setLocateError('');
+  };
+
+  /** Fills the point with where this device is: for the owner standing at the branch. */
+  const useMyLocation = () => {
+    if (!('geolocation' in navigator)) {
+      setLocateError('Este navegador no sabe dónde estás. Pega las coordenadas desde Google Maps.');
+      return;
+    }
+    setLocating(true);
+    setLocateError('');
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setLocating(false);
+        const point = parseCoordinates(`${coords.latitude}, ${coords.longitude}`);
+        if (point && point !== 'invalid') setForm((current) => current && { ...current, coordinates: formatCoordinates(point) });
+      },
+      (error) => {
+        setLocating(false);
+        setLocateError(error.code === error.PERMISSION_DENIED
+          ? 'Permite tu ubicación en el navegador, o pega las coordenadas desde Google Maps.'
+          : 'No pudimos saber dónde estás. Pega las coordenadas desde Google Maps.');
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
+    );
   };
 
   const save = async (event: React.FormEvent) => {
@@ -138,6 +222,11 @@ export default function BranchesList() {
     if (!form) return;
     if (!form.name.trim() || !form.code.trim()) {
       setFormError('Escribe el nombre y la clave de la sucursal.');
+      return;
+    }
+    const point = parseCoordinates(form.coordinates);
+    if (point === 'invalid') {
+      setFormError(COORDINATES_ERROR);
       return;
     }
     const fields = {
@@ -158,14 +247,18 @@ export default function BranchesList() {
     const serviceMode = !editing || form.serviceMode !== (editing.serviceMode ?? BranchServiceMode.Premises)
       ? form.serviceMode
       : undefined;
+    // Its point goes the same way: only when it was set or changed here (none at all takes it off the map).
+    const location = editing
+      ? samePoint(point, pointOf(editing)) ? undefined : point ?? { latitude: null, longitude: null }
+      : point ?? undefined;
     setSaving(true);
     setFormError('');
     try {
       if (editing) {
-        await branchesApi.update(editing.id, { ...fields, id: editing.id, serviceMode });
+        await branchesApi.update(editing.id, { ...fields, id: editing.id, serviceMode, location });
         toast.success('Sucursal actualizada.');
       } else {
-        await branchesApi.create({ ...fields, isDefault: form.isDefault, serviceMode });
+        await branchesApi.create({ ...fields, isDefault: form.isDefault, serviceMode, location });
         toast.success('Sucursal creada.');
       }
       setForm(null);
@@ -263,6 +356,7 @@ export default function BranchesList() {
                     {item.serviceMode === BranchServiceMode.DeliveryOnly && (
                       <span className="badge text-bg-light border ms-2">Solo a domicilio</span>
                     )}
+                    {pointOf(item) && <span className="badge text-bg-light border ms-2">En el mapa</span>}
                   </div>
                 </td>
                 <td>
@@ -354,16 +448,24 @@ export default function BranchesList() {
                       value={form[field.key]} onChange={(event) => setForm({ ...form, [field.key]: event.target.value })} />
                   </div>
                 ))}
+                <CoordinatesField
+                  value={form.coordinates}
+                  onChange={(coordinates) => setForm({ ...form, coordinates })}
+                  locating={locating}
+                  locateError={locateError}
+                  onLocate={useMyLocation}
+                />
               </div>
               {(editing ? editing.isDefault : form.isDefault) && (form.serviceMode === BranchServiceMode.DeliveryOnly ? (
                 <p className="text-muted small mt-3 mb-0">
                   <i className="ri-lock-line me-1" aria-hidden="true"></i>
-                  Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección. Solo la ve tu equipo.
+                  Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección ni su ubicación. Solo las ve tu equipo.
                 </p>
               ) : (
                 <p className="text-muted small mt-3 mb-0">
                   <i className="ri-map-pin-line me-1" aria-hidden="true"></i>
-                  La dirección de la sucursal principal se muestra en tu menú en línea, con un enlace al mapa.
+                  La dirección de la sucursal principal se muestra en tu menú en línea. Con su ubicación en el mapa, «Cómo llegar»
+                  abre ese punto y Explorar les dice a tus clientes qué tan cerca están.
                 </p>
               ))}
               {!editing && (

@@ -13,6 +13,9 @@ export interface DirectorySearch {
   q?: string;
   /** The customer's postal code: each card says whether the business delivers there and what it costs (Fase 24B). */
   postalCode?: string;
+  /** «Cerca de mí» (Fase 24G): where the customer is, to about 110 m; the nearest come first, each with its distance. */
+  latitude?: number;
+  longitude?: number;
   pageNumber?: number;
   pageSize?: number;
 }

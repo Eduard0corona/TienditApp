@@ -61,17 +61,19 @@ export default function StoreInfoModal({ show, onHide, menu, status, deliveryOff
             )}
           </section>
         )}
-        {(menu.address || menu.deliveryOnly || deliveryOffered) && (
+        {(menu.address || menu.mapPoint || menu.deliveryOnly || deliveryOffered) && (
           <section className="pm-info-section" aria-label="Ubicación">
             <h3 className="pm-info-title"><i className="ri-map-pin-line" aria-hidden="true"></i>Ubicación</h3>
             {menu.deliveryOnly && <p className="mb-1">Solo a domicilio: no tenemos local para visitar.</p>}
             {deliveryOffered && !menu.deliveryOnly && (
               <p className="mb-1">También a domicilio: al pedir te decimos si llegamos a tu código postal.</p>
             )}
-            {menu.address && !menu.deliveryOnly && (
+            {(menu.address || menu.mapPoint) && !menu.deliveryOnly && (
               <p className="pm-info-address mb-0">
-                <span>{menu.address}</span>
-                <a className="text-nowrap" href={mapsUrl(menu.address)} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
+                {menu.address && <span>{menu.address}</span>}
+                <a className="text-nowrap" href={mapsUrl(menu.address ?? '', menu.mapPoint)} target="_blank" rel="noopener noreferrer">
+                  Cómo llegar
+                </a>
               </p>
             )}
           </section>

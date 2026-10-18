@@ -2,13 +2,15 @@ import { useId, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import type { DirectoryProduct } from '../../api/publicDirectoryApi';
 import { getBusinessTheme } from '../../utils/businessThemes';
+import { formatDistance } from '../../utils/geo';
 import { formatMoney } from '../../utils/money';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 import './DirectoryProducts.css';
 
 /**
  * The products a search of Explorar found (Fase 24F): each with its photo (its initial in the colors of its business
- * without one), its price as its menu writes it and the business it is at. A product opens on its own sheet in its store.
+ * without one), its price as its menu writes it and the business it is at, with how far it is near the customer (Fase
+ * 24G). A product opens on its own sheet in its store.
  */
 export default function DirectoryProducts({ products }: { products: DirectoryProduct[] }) {
   const titleId = useId();
@@ -32,6 +34,7 @@ export default function DirectoryProducts({ products }: { products: DirectoryPro
                   <span className="dp-name">{product.name}</span>
                   <span className="dp-business">
                     {product.businessName}
+                    {product.distanceKm != null && ` · ${formatDistance(product.distanceKm)}`}
                     {product.acceptsOrders && <span className="dp-taking"> · Pide en línea</span>}
                   </span>
                   <span className="dp-price-row">

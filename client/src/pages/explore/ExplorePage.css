@@ -281,3 +281,25 @@
   color: var(--ct-secondary-color);
   font-size: 0.85rem;
 }
+
+/* «Cerca de mí» (Fase 24G): the chip and what it is doing. */
+.ex-near {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+}
+
+.ex-near .ex-chip {
+  cursor: pointer;
+}
+
+.ex-near-status {
+  color: var(--ct-secondary-color);
+}
+
+.ex-near-status:empty {
+  display: none;
+}

@@ -262,6 +262,21 @@ describe('PublicMenuPage', () => {
     expect(screen.getByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
   });
 
+  it('opens the exact point of its branch in «Cómo llegar» when its owner put it on the map (Fase 24G)', async () => {
+    api.getMenu.mockResolvedValue(menu({
+      address: 'Av. Juárez 123, Centro, 72000 Puebla, Puebla',
+      mapPoint: { latitude: 19.043577, longitude: -98.198626 },
+    }));
+
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Información' }));
+    const info = screen.getByRole('dialog', { name: 'Café Luna' });
+    expect(within(info).getByText('Av. Juárez 123, Centro, 72000 Puebla, Puebla')).toBeInTheDocument();
+    expect(within(info).getByRole('link', { name: /Cómo llegar/ }))
+      .toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=19.043577,-98.198626');
+  });
+
   it('says when it opens while closed and takes no orders for pickup', async () => {
     api.getMenu.mockResolvedValue(menu({
       acceptsOrders: false,

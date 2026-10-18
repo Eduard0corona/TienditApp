@@ -6,6 +6,7 @@
 
 import type { PublicMenu } from '../api/publicMenuApi';
 import type { ProductOptionGroupDto } from '../types';
+import { mapPointUrl, type MapPoint } from './geo';
 
 interface SearchableProduct {
   name: string;
@@ -50,9 +51,12 @@ export function discountPercent(price: number, compareAtPrice?: number | null): 
   return percent >= 1 ? percent : null;
 }
 
-/** A map search of an address: opens the maps app on a phone. */
-export function mapsUrl(address: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+/**
+ * «Cómo llegar»: the exact point of the branch when its owner put it on the map (Fase 24G), otherwise a search of its
+ * address. Opens the maps app on a phone.
+ */
+export function mapsUrl(address: string, point?: MapPoint | null): string {
+  return point ? mapPointUrl(point) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
 /** The groups of options of a product of the menu, typed as the cart reads them. */

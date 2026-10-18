@@ -16,7 +16,7 @@ const confirm = vi.fn();
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm }) }));
 
 const MENU_HINT = /dirección de la sucursal principal se muestra en tu menú en línea/i;
-const PRIVATE_HINT = 'Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección. Solo la ve tu equipo.';
+const PRIVATE_HINT = 'Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección ni su ubicación. Solo las ve tu equipo.';
 
 function branch(overrides: Partial<Branch>): Branch {
   return {
@@ -117,6 +117,64 @@ describe('BranchesList', () => {
     const [, body] = vi.mocked(branchesApi.update).mock.calls[0];
     expect(body).toMatchObject({ id: 'b1', contactPhone: '222 123 4567' });
     expect(body.serviceMode).toBeUndefined();
+    expect(body.location).toBeUndefined();
+  });
+
+  it('puts a branch on the map with what Google Maps copies, opens it to check, and takes it off (Fase 24G)', async () => {
+    vi.mocked(branchesApi.getAll).mockResolvedValue([
+      branch({ latitude: 19.043577, longitude: -98.198626 }),
+      branch({ id: 'b2', name: 'Centro', code: 'CENTRO', isDefault: false }),
+    ] as Awaited<ReturnType<typeof branchesApi.getAll>>);
+    vi.mocked(branchesApi.update).mockResolvedValue(branch({}) as never);
+    renderBranches();
+
+    // In the list, the branch on the map says so.
+    const main = (await screen.findByText('Sucursal principal')).closest('tr') as HTMLElement;
+    expect(within(main).getByText('En el mapa')).toBeInTheDocument();
+    expect(within(screen.getByText('Centro').closest('tr') as HTMLElement).queryByText('En el mapa')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Centro' }));
+    let dialog = screen.getByRole('dialog', { name: 'Editar Centro' });
+    const field = within(dialog).getByLabelText('Ubicación en el mapa (opcional)');
+    fireEvent.change(field, { target: { value: 'por el parque' } });
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    expect(await within(dialog).findByText(/No entendemos esas coordenadas/, { selector: '.alert' })).toBeInTheDocument();
+    expect(branchesApi.update).not.toHaveBeenCalled();
+
+    // A link of the place works too: its point is in it.
+    fireEvent.change(field, { target: { value: 'https://www.google.com/maps/place/Z%C3%B3calo/@19.04,-98.19,17z/data=!3m1!4b1!4m6!3m5!8m2!3d19.0435774!4d-98.1986262' } });
+    expect(within(dialog).getByRole('link', { name: 'Revisar en el mapa' }))
+      .toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=19.043577,-98.198626');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    await vi.waitFor(() => expect(branchesApi.update).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(branchesApi.update).mock.calls[0][1].location).toEqual({ latitude: 19.043577, longitude: -98.198626 });
+
+    // The main branch shows its point; emptied, it leaves the map.
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Sucursal principal' }));
+    dialog = screen.getByRole('dialog', { name: 'Editar Sucursal principal' });
+    expect(within(dialog).getByLabelText('Ubicación en el mapa (opcional)')).toHaveValue('19.043577, -98.198626');
+    fireEvent.change(within(dialog).getByLabelText('Ubicación en el mapa (opcional)'), { target: { value: '' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    await vi.waitFor(() => expect(branchesApi.update).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(branchesApi.update).mock.calls[1][1].location).toEqual({ latitude: null, longitude: null });
+  });
+
+  it('fills the point with where the owner stands, and says what to do when the browser does not tell (Fase 24G)', async () => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) =>
+      success({ coords: { latitude: 19.04357749, longitude: -98.19862651 } } as GeolocationPosition));
+    Object.defineProperty(navigator, 'geolocation', { value: { getCurrentPosition }, configurable: true });
+    renderBranches();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Centro' }));
+    const dialog = screen.getByRole('dialog', { name: 'Editar Centro' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Usar mi ubicación' }));
+    expect(within(dialog).getByLabelText('Ubicación en el mapa (opcional)')).toHaveValue('19.043577, -98.198627');
+
+    getCurrentPosition.mockImplementation(((_: PositionCallback, failure: PositionErrorCallback) =>
+      failure({ code: 1, PERMISSION_DENIED: 1 } as GeolocationPositionError)) as never);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Usar mi ubicación' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Permite tu ubicación en el navegador, o pega las coordenadas desde Google Maps.');
   });
 
   it('starts a new branch serving like the main one, and sends it', async () => {

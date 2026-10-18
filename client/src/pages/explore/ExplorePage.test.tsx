@@ -114,6 +114,16 @@ function renderPage(path = '/explorar', { auth, toast }: { auth?: Partial<AuthCo
   );
 }
 
+/** The browser's geolocation: answers with that position, or fails with that code (1 is «denied»). */
+function mockGeolocation(answer: { latitude: number; longitude: number } | { code: number }) {
+  const getCurrentPosition = vi.fn((success: PositionCallback, failure?: PositionErrorCallback | null) => {
+    if ('code' in answer) failure?.({ code: answer.code, PERMISSION_DENIED: 1 } as GeolocationPositionError);
+    else success({ coords: { latitude: answer.latitude, longitude: answer.longitude } } as GeolocationPosition);
+  });
+  Object.defineProperty(navigator, 'geolocation', { value: { getCurrentPosition }, configurable: true });
+  return getCurrentPosition;
+}
+
 describe('ExplorePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -408,5 +418,64 @@ describe('ExplorePage', () => {
 
     await screen.findByRole('link', { name: /^Taquería El Güero/ });
     expect(screen.queryByRole('region', { name: 'Tus favoritos' })).not.toBeInTheDocument();
+  });
+
+  it('shows the nearest first with «Cerca de mí», each card saying how far it is, and keeps it in the address (Fase 24G)', async () => {
+    const geolocation = mockGeolocation({ latitude: 19.0435774, longitude: -98.1986262 });
+    api.getDirectory.mockImplementation(async (search) => directory(search.latitude == null
+      ? [business({ slug: 'lejos', name: 'Taquería Lejos' }), business({ slug: 'cerca', name: 'Café Cerca' })]
+      : [
+          business({ slug: 'cerca', name: 'Café Cerca', city: 'Puebla', distanceKm: 0.3 }),
+          business({ slug: 'lejos', name: 'Taquería Lejos', distanceKm: 12.4 }),
+          business({ slug: 'cocina', name: 'Cocina Oculta', deliveryOnly: true }),
+        ], {
+      products: search.latitude == null ? [] : [product({ businessName: 'Café Cerca', businessSlug: 'cerca', distanceKm: 0.3 })],
+    }));
+    const user = userEvent.setup();
+    renderPage('/explorar?q=caf');
+
+    await user.click(await screen.findByRole('button', { name: 'Cerca de mí', pressed: false }));
+
+    // The position travels to about 110 m, and only to Explorar's own search.
+    await waitFor(() => expect(api.getDirectory).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: 'caf', latitude: 19.044, longitude: -98.199 }), expect.anything()));
+    expect(screen.getByRole('button', { name: 'Cerca de mí', pressed: true })).toBeInTheDocument();
+    expect(screen.getByText('Primero lo más cercano a ti.')).toHaveAttribute('role', 'status');
+    const cards = screen.getAllByRole('link', { name: /Café Cerca|Taquería Lejos|Cocina Oculta/ }).filter((link) => link.classList.contains('dc-card'));
+    expect(cards.map((card) => card.getAttribute('href'))).toEqual(['/m/cerca', '/m/lejos', '/m/cocina']);
+    expect(cards[0]).toHaveTextContent('Comida · Puebla · a 300 m');
+    expect(cards[1]).toHaveTextContent('a 12 km');
+    expect(cards[2]).toHaveTextContent('Solo a domicilio');
+    expect(cards[2]).not.toHaveTextContent(/ a \d/);
+    expect(screen.getByRole('link', { name: /Orden de pastor/ })).toHaveTextContent('Café Cerca · a 300 m');
+    expect(screen.getByTestId('address')).toHaveTextContent('/explorar?q=caf&cerca=1');
+    // Another category keeps the search and «Cerca de mí».
+    const categories = screen.getByRole('navigation', { name: 'Categorías' });
+    expect(within(categories).getByRole('link', { name: /Comida/ })).toHaveAttribute('href', '/explorar/comida?q=caf&cerca=1');
+    expect(window.localStorage.length).toBe(0);
+
+    await user.click(screen.getByRole('button', { name: 'Cerca de mí', pressed: true }));
+    await waitFor(() => expect(api.getDirectory).toHaveBeenLastCalledWith(
+      expect.objectContaining({ latitude: undefined, longitude: undefined }), expect.anything()));
+    expect(screen.getByTestId('address')).toHaveTextContent(/^\/explorar\?q=caf$/);
+    expect(geolocation).toHaveBeenCalledTimes(1);
+  });
+
+  it('opened with «Cerca de mí» asks where the customer is, and says what to do when the browser does not tell (Fase 24G)', async () => {
+    const denied = mockGeolocation({ code: 1 });
+    api.getDirectory.mockResolvedValue(directory([business({ slug: 'cerca', name: 'Café Cerca' })]));
+    const user = userEvent.setup();
+    renderPage('/explorar?cerca=1');
+
+    expect(await screen.findByText('Permite tu ubicación en el navegador para ver primero lo más cercano.')).toBeInTheDocument();
+    expect(denied).toHaveBeenCalledTimes(1);
+    expect(api.getDirectory).not.toHaveBeenCalledWith(expect.objectContaining({ latitude: expect.any(Number) }), expect.anything());
+
+    // Allowed now, «Intentar de nuevo» asks again.
+    mockGeolocation({ latitude: 19.0436, longitude: -98.1986 });
+    await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }));
+    await waitFor(() => expect(api.getDirectory).toHaveBeenLastCalledWith(
+      expect.objectContaining({ latitude: 19.044, longitude: -98.199 }), expect.anything()));
+    expect(screen.queryByRole('button', { name: 'Intentar de nuevo' })).not.toBeInTheDocument();
   });
 });

@@ -685,7 +685,7 @@ export default function PublicMenuPage() {
                   <p className="pm-pickup mb-0">
                     <i className="ri-store-2-line" aria-hidden="true"></i>
                     <span className="flex-grow-1">Lo recoges en {data.address}</span>
-                    <a className="text-nowrap" href={mapsUrl(data.address)} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
+                    <a className="text-nowrap" href={mapsUrl(data.address, data.mapPoint)} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
                   </p>
                 ) : data.deliveryOnly
                   ? <p className="text-muted mb-0">El negocio se pone de acuerdo contigo para la entrega.</p>
