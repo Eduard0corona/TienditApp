@@ -4235,6 +4235,95 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("DailySalesSnapshots", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Reviews.Entities.BusinessReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AuthorName")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("EditedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("HiddenReason")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("ModeratedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("RepliedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Reply")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("ReportReason")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("ReportedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("WrittenAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportedAt")
+                        .HasFilter("[ReportedAt] IS NOT NULL");
+
+                    b.HasIndex("UserId", "TenantId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Status", "WrittenAt");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("TenantId", "Status", "WrittenAt"), new[] { "Rating" });
+
+                    b.ToTable("BusinessReviews", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BusinessReviews_Hidden", "([Status] = 0 AND [HiddenReason] IS NULL) OR ([Status] = 1 AND [HiddenReason] IS NOT NULL AND [HiddenReason] BETWEEN 1 AND 5)");
+
+                            t.HasCheckConstraint("CK_BusinessReviews_Rating", "[Rating] BETWEEN 1 AND 5");
+
+                            t.HasCheckConstraint("CK_BusinessReviews_Reply", "([Reply] IS NULL AND [RepliedAt] IS NULL) OR ([Reply] IS NOT NULL AND [RepliedAt] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_BusinessReviews_Report", "([ReportedAt] IS NULL AND [ReportReason] IS NULL) OR ([ReportedAt] IS NOT NULL AND [ReportReason] IS NOT NULL AND [ReportReason] BETWEEN 1 AND 5 AND [Status] = 0)");
+
+                            t.HasCheckConstraint("CK_BusinessReviews_Status", "[Status] IN (0, 1)");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.FolioSequence", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -5563,6 +5652,21 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("PurchaseOrder");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Reviews.Entities.BusinessReview", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.FolioSequence", b =>
