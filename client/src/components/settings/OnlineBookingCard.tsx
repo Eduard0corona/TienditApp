@@ -83,11 +83,12 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
         <div className="form-text">Cada solicitud llega a la Agenda como «Por confirmar» hasta que la aceptas o la rechazas.</div>
       </div>
 
-      <div className="mb-3" style={{ maxWidth: '16rem' }}>
+      <div className="mb-3">
         <label className="form-label" htmlFor={`${ids}-capacity`}>Citas a la vez</label>
         <input
           id={`${ids}-capacity`}
           className={`form-control ${capacityValid ? '' : 'is-invalid'}`}
+          style={{ maxWidth: '8rem' }}
           type="number"
           inputMode="numeric"
           min={1}

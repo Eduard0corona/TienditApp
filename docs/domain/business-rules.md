@@ -231,6 +231,31 @@ El negocio guarda fotos del antes y del después de cada servicio ([ADR 0024](..
 - **Quién las ve:** quien ve los pedidos (`ManageOrders`) o trabaja el tablero (`ManageServiceBoard`), con el módulo de servicios. El cliente no las recibe.
 - **Qué archivo:** solo una foto subida desde la app para el mismo negocio y que esté guardada («Cada foto del servicio debe subirse desde TienditApp para este negocio.»). La misma foto entra una vez («Esa foto ya está en la orden.»).
 
+## Citas en línea (Fase 24D)
+
+El cliente agenda una cita desde el menú en línea del negocio, y el negocio la acepta o la rechaza ([ADR 0025](../adr/0025-online-booking.md)).
+
+- **Cuándo se ofrece:** el dueño prendió «Recibir citas en línea» en Configuración, y el negocio tiene el módulo de agenda, su menú en línea publicado, horario semanal y su sucursal principal con local. Sin uno de ellos, la tarjeta dice cuál falta y el menú no ofrece «Agenda tu cita».
+- **Qué se agenda:** los servicios disponibles del catálogo que se venden por hora, por sesión o por servicio, en una categoría activa. Cada uno dura lo que dice su «Duración (min)» (de 5 a 720), o una hora.
+- **Horas libres** (`/m/:slug/agendar`):
+  - cada media hora desde que abre, y el servicio termina antes de cerrar, en la hora del negocio; los días especiales cuentan;
+  - la primera, una hora después de ahora; hasta 30 días adelante, por semanas;
+  - una hora está libre mientras las citas que se cruzan con ella (sin contar canceladas ni las que no llegaron, y con las que esperan confirmación) son menos que las «Citas a la vez» del negocio (de 1 a 20, 1 por omisión).
+- **Pedir la cita:** nombre, teléfono (WhatsApp) y notas opcionales; con la cuenta de cliente ya escritos. Un teléfono deja hasta 3 solicitudes esperando en un negocio («Ya tienes citas esperando confirmación. Espera a que el negocio las confirme.»). Si la hora se ocupó mientras, «Esa hora ya no está libre. Elige otra.», y la página vuelve a leer las horas. La misma solicitud enviada dos veces es una cita.
+- **Por confirmar:** la cita ocupa su hora desde que se pide. El cliente recibe por WhatsApp «recibimos tu solicitud de cita… Te avisamos en cuanto la confirmen.».
+- **El negocio decide** en la Agenda, donde la solicitud dice «Por confirmar» y «En línea»:
+  - Aceptar la programa y avisa «quedó agendada tu cita…»; una cuya hora ya pasó se mueve antes («La hora de esta cita ya pasó: muévela a otra hora antes de aceptarla.»);
+  - Rechazar, después de confirmar, la cancela, libera su hora y avisa «no pudimos confirmar tu cita… Elige otro horario en su menú en línea o respóndenos.»;
+  - Editar la mueve de hora; el aviso dice que sigue por confirmar;
+  - no se cobra hasta aceptarla («Acepta la cita antes de cobrarla.»).
+- **Cuántas esperan:** un aviso arriba de la agenda, la campana y «Requiere atención» en Inicio cuentan las solicitudes de ahora en adelante (las de hoy, urgentes) y llevan a la agenda filtrada en «Por confirmar».
+- **El cliente sigue su cita:**
+  - con el enlace del recibo (`/cita#enlace`), hasta 30 días después de su hora, sin datos del cliente; uno desconocido o vencido responde «No encontramos esa cita. El enlace pudo haber vencido.»;
+  - con su cuenta, en Mis citas (`/mis-citas`): Próximas y Anteriores, en todos los negocios;
+  - la cancela antes de que empiece, si la agendó en línea, después de confirmar; la agenda dice «La canceló el cliente». Ya empezada: «Tu cita ya empezó o ya pasó: para cambiarla, escríbele al negocio.».
+  - Lo que lee: Por confirmar, Confirmada, En curso, Terminada, No asististe, La cancelaste o Cancelada.
+- **Sin anticipo:** se cobra en Vender después de aceptarla, como cualquier cita.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.
@@ -241,7 +266,7 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 - Una pieza completada/cancelada no puede asignarse.
 - El caso de uso sincroniza estado de la orden desde las piezas trackeables. Los cambios de pieza pasan por `Order.ChangeServicePieceStatus` para que el rowversion de la orden detecte cambios simultáneos.
 - Completar una pieza consume su receta en el mismo guardado; si falta stock y el negocio bloquea (por defecto), la pieza no se completa y el mensaje nombra el insumo; con "vender y avisar" se completa y el insumo queda en negativo.
-- Las citas tienen su propio enum y método de cambio de estado; deben mantener reglas en el agregado.
+- Las citas tienen su propio enum y método de cambio de estado; deben mantener reglas en el agregado. «Por confirmar» (una cita agendada en línea, Fase 24D) solo sale aceptada, rechazada o cancelada por su cliente.
 - Una cita puede ligarse a un servicio del catálogo y a una persona activa del equipo del mismo negocio (sus nombres se toman de ahí); una misma persona no tiene dos citas que se traslapen. Una cita cerrada (completada, cancelada o no presentada) ya no se edita ni se reprograma; reprogramar avisa al cliente por WhatsApp. La agenda abre con las citas de hoy, la más próxima primero; el historial se lee de la más reciente hacia atrás.
 
 ## Inventario, compras y caja

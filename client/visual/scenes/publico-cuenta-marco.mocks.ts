@@ -156,6 +156,8 @@ function publicMenu(data: DemoData, slug: string, table: string | null) {
       acceptsOrders, ordersPaused: !acceptsOrders, theme: data.tenant.theme, address: mainBranchAddress(data),
       deliveryOnly: mainBranch(data).serviceMode === DELIVERY_ONLY, openingHours: hours, categories,
       deliveryAvailable: acceptsOrders && !!data.menuDelivery,
+      // Its booking page (Fase 24D), when a scene turns online booking on.
+      booksOnline: !!data.menuBooksOnline,
     },
   };
 }

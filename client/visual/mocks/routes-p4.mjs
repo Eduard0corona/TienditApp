@@ -105,6 +105,8 @@ export function phase4Routes(data, { ok, notFound, paginate, createMockOrder }) 
       if (to) rows = rows.filter((a) => a.startAt <= to);
       // Where they happen (Fase 22E): at the customer's address or at the business.
       if (q.has('homeVisit')) rows = rows.filter((a) => Boolean(a.visit) === (q.get('homeVisit') === 'true'));
+      // By status: the agenda counts the requests booked online that wait (Fase 24D).
+      if (q.has('status')) rows = rows.filter((a) => a.status === Number(q.get('status')));
       const history = !from && to;
       rows = [...rows].sort((a, b) => (history ? b.startAt.localeCompare(a.startAt) : a.startAt.localeCompare(b.startAt)));
       return ok(paginate(rows, q, 10));

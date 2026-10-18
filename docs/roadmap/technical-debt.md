@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-17 con la Fase 24C y antes con la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-18 con la Fase 24D-1 y antes con la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -65,6 +65,17 @@ Actualizada el 2026-10-17 con la Fase 24C y antes con la 24B, la 24A, la 23A y c
   - Los pedidos anteriores a la 24C, los del mostrador y los de WhatsApp no tienen enlace; los de una cuenta se siguen en Mis pedidos.
   - En curso trae hasta 50 pedidos, sin páginas: los que pasen de 50 no salen en ninguna sección hasta que terminen o cumplan 30 días.
   - La 24C suma 311 B a la primera visita (de 177,261 a 177,572 B, contra `master` en `29a81a8`) y sube el presupuesto a 177,800 B. Como en la 24A, una parte son los enums del contrato, que viven en el primer chunk.
+- Citas en línea (Fase 24D-1, [ADR 0025](../adr/0025-online-booking.md)):
+  - Son en el negocio: no se agenda a domicilio en línea, aunque el negocio haga visitas (Fase 22E).
+  - El cliente no elige quién lo atiende: «Citas a la vez» es del negocio, no por persona, y la solicitud llega sin persona asignada.
+  - El paso de 30 minutos, la hora de anticipación, los 30 días y las 3 solicitudes por teléfono son fijos, no por negocio.
+  - Una solicitud que nadie decide ocupa su hora hasta que pasa; no vence sola ni avisa al cliente que no se decidió.
+  - El candado de las solicitudes (`sp_getapplock`) solo existe en SQL Server: en otro proveedor dos clientes distintos podrían tomar la última hora. La llave de la solicitud sí evita la doble petición en cualquiera.
+  - El enlace de la cita, como el de un pedido, no se puede revocar ni volver a emitir, y no llega por WhatsApp: el aviso de la solicitud no lo lleva.
+  - Sin anticipo ni recordatorio de que confirme: quien no llega deja la hora vacía.
+  - Sin tiempo real: la agenda abierta ve una solicitud nueva al volver a cargar.
+  - Mis citas trae solo las citas agendadas en línea con la cuenta: no las que el negocio registró con el teléfono del cliente.
+  - La 24D-1 suma 296 B a la primera visita (de 177,674 a 177,970 B, contra `master` en `d21f0f2`) y sube el presupuesto a 178,200 B.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.
@@ -127,7 +138,7 @@ Actualizada el 2026-10-17 con la Fase 24C y antes con la 24B, la 24A, la 23A y c
   - Citas a domicilio con la dirección del cliente y el cargo por visita de su zona de entrega, tiempo de traslado por negocio, ruta del día por persona con Maps, y «Cobrar» en la Agenda, que abre Vender con la cita y cobra el cargo como concepto propio con su IVA, una vez por cita.
   - Queda:
     - La ruta va en orden de hora, sin optimizar, y el traslado es un tiempo fijo: no hay mapa propio, geocodificación ni distancia real.
-    - No se agenda desde el menú en línea, y las direcciones guardadas del cliente no tienen código postal: la dirección se escribe en la cita.
+    - No se agenda a domicilio desde el menú en línea (las citas en línea de la 24D-1 son en el negocio), y las direcciones guardadas del cliente no tienen código postal: la dirección se escribe en la cita.
     - Dos citas guardadas al mismo tiempo para la misma persona pueden traslaparse (la revisión del traslape y del traslado es en Application, sin restricción en la base), como antes.
     - Editar una cita sin `visit` la deja en el negocio: un cliente abierto antes del despliegue que edita una visita la quitaría hasta recargarse (`deploy-azure.md`).
     - Dos ediciones simultáneas de una cita ahora dan 409 en lugar de quedarse con la última.

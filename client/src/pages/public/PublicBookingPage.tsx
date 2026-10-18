@@ -253,7 +253,9 @@ export default function PublicBookingPage() {
                 {describeDuration(service.durationMinutes)} · <span className="ta-money">{formatMoney(service.price)}</span>
               </div>
             </div>
-            <button type="button" className="btn btn-sm btn-light" onClick={() => chooseService(null)}>Cambiar servicio</button>
+            <button type="button" className="btn btn-sm btn-light text-nowrap" onClick={() => chooseService(null)} aria-label="Cambiar servicio">
+              Cambiar
+            </button>
           </div>
 
           {notice && (
@@ -263,22 +265,7 @@ export default function PublicBookingPage() {
             </div>
           )}
 
-          <div className="d-flex align-items-center justify-content-between gap-2">
-            <h2 className="pm-category">Elige el día</h2>
-            <div className="d-flex gap-1">
-              <button type="button" className="btn btn-sm btn-light" disabled={weeks.length === 0 || slots.isFetching} onClick={() => changeWeek(null)}>
-                <i className="ri-arrow-left-s-line" aria-hidden="true"></i>Semana anterior
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-light"
-                disabled={!slots.data?.nextFrom || slots.isFetching}
-                onClick={() => changeWeek(slots.data?.nextFrom ?? null)}
-              >
-                Semana siguiente<i className="ri-arrow-right-s-line" aria-hidden="true"></i>
-              </button>
-            </div>
-          </div>
+          <h2 className="pm-category">Elige el día</h2>
 
           {slots.isPending && <p className="text-muted" aria-busy="true">Buscando horarios libres…</p>}
           {slots.isError && (
@@ -308,6 +295,19 @@ export default function PublicBookingPage() {
                     </button>
                   );
                 })}
+              </div>
+              <div className="pb-weeks">
+                <button type="button" className="btn btn-sm btn-light" disabled={weeks.length === 0 || slots.isFetching} onClick={() => changeWeek(null)}>
+                  <i className="ri-arrow-left-s-line" aria-hidden="true"></i>Semana anterior
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light"
+                  disabled={!slots.data?.nextFrom || slots.isFetching}
+                  onClick={() => changeWeek(slots.data?.nextFrom ?? null)}
+                >
+                  Semana siguiente<i className="ri-arrow-right-s-line" aria-hidden="true"></i>
+                </button>
               </div>
 
               {shownDay ? (
