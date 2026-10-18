@@ -51,13 +51,34 @@ public class BranchLocationTests
         Assert.InRange(Puebla.KilometersTo(new GeoPoint(19.044577m, -98.198626m)), 0.105, 0.116);
     }
 
-    [Fact]
-    public void RoundedTo_ShouldKeepThePointInACoarserGrid()
+    [Theory]
+    // Rounded to six decimals, as it would be kept: 0, 0.
+    [InlineData(0.0000001, 0.0000002)]
+    [InlineData(-0.0000004, 0.0000004)]
+    public void GeoPoint_ShouldCheckWhatItKeeps_SoATinyPointIsTheZeroZeroItBecomes(decimal latitude, decimal longitude)
     {
-        var rounded = new GeoPoint(19.043577m, -98.198626m).RoundedTo(3);
+        var error = Assert.Throws<DomainException>(() => new GeoPoint(latitude, longitude));
+        Assert.Equal(GeoPoint.NullIslandMessage, error.Message);
+        Assert.Equal(GeoPoint.NullIslandMessage, GeoPoint.Problem(latitude, longitude));
+    }
 
-        Assert.Equal((19.044m, -98.199m), (rounded.Latitude, rounded.Longitude));
-        Assert.InRange(Puebla.KilometersTo(rounded), 0, 0.08);
+    [Fact]
+    public void GeoPoint_ShouldTakeAPointThatRoundsIntoRange()
+    {
+        // 90.0000004 is kept as 90: the pole.
+        Assert.Equal(90m, new GeoPoint(90.0000004m, -180.0000004m).Latitude);
+        Assert.Null(GeoPoint.Problem(90.0000004m, -180.0000004m));
+        Assert.Equal(GeoPoint.InvalidMessage, GeoPoint.Problem(90.0000006m, 0m));
+    }
+
+    [Fact]
+    public void FromStored_ShouldLeaveABadRowOffTheMap_InsteadOfBreakingWhatReadsIt()
+    {
+        Assert.Equal(Puebla, GeoPoint.FromStored(19.043577m, -98.198626m));
+        Assert.Null(GeoPoint.FromStored(null, null));
+        Assert.Null(GeoPoint.FromStored(19.043577m, null));
+        Assert.Null(GeoPoint.FromStored(0m, 0m));
+        Assert.Null(GeoPoint.FromStored(91m, -98.198626m));
     }
 
     [Fact]

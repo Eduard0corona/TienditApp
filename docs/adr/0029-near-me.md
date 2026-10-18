@@ -14,9 +14,12 @@ Faltaban tres decisiones: de dónde sale el punto de cada sucursal, de dónde sa
 ## Decisión
 
 1. **Cada sucursal puede tener su punto en el mapa.**
-   - **Qué se guarda:** latitud y longitud en grados, como las escribe Google Maps (`GeoPoint`, seis decimales, unos 11 cm). Las dos o ninguna, en rango; la base lo garantiza con `CK_Branches_Location`. Un punto 0, 0 no se acepta: es lo que escribe un dispositivo que no sabe dónde está.
+   - **Qué se guarda:** latitud y longitud en grados, como las escribe Google Maps (`GeoPoint`, seis decimales, unos 11 cm). Las dos o ninguna, en rango, y nunca 0, 0: es lo que escribe un dispositivo que no sabe dónde está.
+     - **Una sola regla** (`GeoPoint.Problem`) para el validador, el dominio y lo que se lee de la base. Revisa el punto ya redondeado, como se guardaría: 0.0000001, 0.0000002 es el 0, 0 en que se convierte.
+     - **La base también lo garantiza** con `CK_Branches_Location`, 0, 0 incluido.
+     - **Una fila con un punto que no lo es** (escrita a mano) queda fuera del mapa (`GeoPoint.FromStored`): Explorar, el menú y sus datos estructurados siguen respondiendo.
    - **De dónde sale (Configuración › Sucursales):** sin mapa dentro de la app, sin servicio de geocodificación y sin llaves:
-     - **Pegado de Google Maps:** el dueño mantiene presionado su local y copia las coordenadas que aparecen. También sirve el enlace de un lugar, que trae el punto dentro; un enlace corto no lo trae, y el campo lo dice.
+     - **Pegado de Google Maps:** el dueño mantiene presionado su local y copia las coordenadas que aparecen. También sirve el enlace de un lugar, que trae el punto dentro. Un enlace corto no lo trae, y el `@` de un mapa es hacia dónde miraba, no el lugar: el campo los rechaza y dice qué copiar.
      - **Desde el dispositivo:** «Usar mi ubicación» la toma del dispositivo, para quien está en la sucursal.
      - **Para comprobarlo:** «Revisar en el mapa» abre en Google Maps lo escrito, antes de guardar.
    - **Cómo se guarda:**
@@ -30,11 +33,12 @@ Faltaban tres decisiones: de dónde sale el punto de cada sucursal, de dónde sa
 3. **La ubicación del cliente sale de su navegador, solo cuando toca «Cerca de mí».**
    - **Cuándo se pide:**
      - El chip «Cerca de mí» de Explorar la pide al navegador, que pregunta al cliente la primera vez.
-     - Queda en la dirección (`?cerca=1`), así que una búsqueda compartida o un regreso con el botón de atrás la vuelven a pedir.
-     - Si el navegador no la da, el chip dice qué hacer y ofrece «Intentar de nuevo».
+     - Queda en la dirección (`?cerca=1`). Una página que abre así (un enlace compartido, una recarga) la pide sola solo si el navegador ya la permite; si no, espera a que el cliente toque «Usar mi ubicación»: un enlace nunca abre la pregunta del navegador por su cuenta.
+     - Si el navegador no la da, el chip dice qué hacer y ofrece «Intentar de nuevo». Una respuesta de un intento anterior nunca reemplaza la de uno nuevo.
    - **Qué viaja:** solo a la búsqueda de Explorar (`latitude` y `longitude` en `GET /api/v1/public/directory`), redondeada a tres decimales, unos 110 m. El servidor también la lee así, por si otro cliente manda más.
    - **Qué se guarda:** nada.
-     - El servidor no la guarda ni la escribe en un mensaje de error; el rastreo oculta los valores de la URL.
+     - El servidor no la guarda ni la escribe en sus mensajes de error; el rastreo oculta los valores de la URL.
+     - Un valor que ni siquiera es un número (`latitude=abc`) lo rechaza ASP.NET antes de leerlo, y su respuesta 400 lo repite, como con cualquier parámetro mal escrito. Solo lo recibe quien lo mandó, y no se registra.
      - El cliente la tiene en memoria mientras la página está abierta, nunca en el dispositivo.
    - **Sin «Cerca de mí»,** Explorar se ve y se ordena como antes.
 4. **Con «Cerca de mí», Explorar ordena por distancia.**
@@ -61,7 +65,8 @@ Faltaban tres decisiones: de dónde sale el punto de cada sucursal, de dónde sa
   - **Las distancias:**
     - son en línea recta, no por calles ni en tiempo;
     - con unos 110 m de error por el redondeo, una distancia corta («a 300 m») es aproximada;
-    - no hay radio: con «Cerca de mí», un negocio a 500 km sale al final, pero sale.
+    - no hay radio: con «Cerca de mí», un negocio a 500 km sale al final, pero sale;
+    - Explorar lee los negocios de una copia que renueva cada 30 segundos (ADR 0021): una sucursal que el dueño acaba de poner en el mapa tarda hasta eso en medirse.
   - **Sin mapa dentro de la app:** el dueño comprueba su punto en Google Maps, fuera de la app, y un punto mal pegado se ve hasta que lo revisa.
   - **Sin ubicación del navegador,** no hay «Cerca de mí»: no se calcula desde el código postal (no hay un catálogo de coordenadas por código postal con licencia clara).
   - **Lo que todavía busca la dirección como texto:** la tarjeta de una cita en Mis citas, la ruta de servicios a domicilio y la de los repartidores.

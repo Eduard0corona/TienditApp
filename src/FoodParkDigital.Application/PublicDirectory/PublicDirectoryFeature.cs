@@ -14,7 +14,6 @@ using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
-using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -149,14 +148,10 @@ public record GetPublicDirectoryQuery(
     {
         if (Latitude is not { } latitude || Longitude is not { } longitude)
             return null;
-        try
-        {
-            return new GeoPoint(latitude, longitude).RoundedTo(NearDecimals);
-        }
-        catch (DomainException)
-        {
-            return null;
-        }
+        // Read to three decimals before it is checked: 0.0001, 0.0002 is the 0, 0 it becomes.
+        var lat = Math.Round(latitude, NearDecimals, MidpointRounding.AwayFromZero);
+        var lng = Math.Round(longitude, NearDecimals, MidpointRounding.AwayFromZero);
+        return GeoPoint.Problem(lat, lng) is null ? new GeoPoint(lat, lng) : null;
     }
 }
 
@@ -547,9 +542,7 @@ public sealed class PublicDirectorySnapshot
         };
         var rank = acceptsOrders || booksOnline ? 0 : business.Closed ? ClosedRank : 1;
         // Measured only while customers come to it: the point of a kitchen that only delivers stays with its team.
-        var location = deliveryOnly || row.MainBranch is not { Latitude: { } latitude, Longitude: { } longitude }
-            ? null
-            : new GeoPoint(latitude, longitude);
+        var location = deliveryOnly ? null : GeoPoint.FromStored(row.MainBranch?.Latitude, row.MainBranch?.Longitude);
         // Its city too, when the card shows it: never the one of a kitchen that only delivers.
         return new Entry(row.Id, business, Comparable($"{row.Name} {row.Description} {business.City}"), rank, location);
     }

@@ -29,7 +29,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "CK_Branches_Location",
                 table: "Branches",
-                sql: "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] IS NOT NULL AND [Longitude] IS NOT NULL AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180)");
+                sql: "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] IS NOT NULL AND [Longitude] IS NOT NULL AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180 AND NOT ([Latitude] = 0 AND [Longitude] = 0))");
         }
 
         /// <inheritdoc />

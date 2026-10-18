@@ -73,15 +73,16 @@ internal static class BranchFieldRules
         validator.RuleFor(x => x.Location!)
             .Must(location => location.Latitude.HasValue == location.Longitude.HasValue)
             .WithMessage(HalfAPointMessage)
-            .Must(location => location.Latitude is not { } latitude || location.Longitude is not { } longitude
-                || (latitude is >= -90m and <= 90m && longitude is >= -180m and <= 180m))
-            .WithMessage(GeoPoint.InvalidMessage)
-            .Must(location => location.Latitude != 0m || location.Longitude != 0m)
-            .WithMessage(GeoPoint.NullIslandMessage)
+            // The rule of GeoPoint, on the point as it would be kept (six decimals): out of range, or 0, 0.
+            .Must(location => LocationProblem(location) is null)
+            .WithMessage((_, location) => LocationProblem(location))
             .When(x => x.Location is not null);
     }
 
     public const string HalfAPointMessage = "Escribe la latitud y la longitud de la sucursal, o ninguna para quitarla del mapa.";
+
+    private static string? LocationProblem(BranchLocationFields location)
+        => location.Latitude is { } latitude && location.Longitude is { } longitude ? GeoPoint.Problem(latitude, longitude) : null;
 
     public static Task<bool> CodeTakenAsync(IApplicationDbContext context, string code, Guid? exceptId, CancellationToken cancellationToken)
     {

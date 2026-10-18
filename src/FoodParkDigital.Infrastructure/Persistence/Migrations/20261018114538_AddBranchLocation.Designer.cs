@@ -638,7 +638,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Branches", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Branches_Location", "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] IS NOT NULL AND [Longitude] IS NOT NULL AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180)");
+                            t.HasCheckConstraint("CK_Branches_Location", "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] IS NOT NULL AND [Longitude] IS NOT NULL AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180 AND NOT ([Latitude] = 0 AND [Longitude] = 0))");
 
                             t.HasCheckConstraint("CK_Branches_ServiceMode", "[ServiceMode] IN (0, 1)");
                         });

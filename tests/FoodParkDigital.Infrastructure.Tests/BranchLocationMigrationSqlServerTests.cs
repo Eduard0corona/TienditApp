@@ -13,7 +13,7 @@ namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
 /// AddBranchLocation (Fase 24G, ADR 0029): the branches that exist are not on the map and the version deployed before keeps
-/// saving them over the new columns; the database keeps both halves of a point or neither, in range; and rolling back
+/// saving them over the new columns; the database keeps both halves of a point or neither, in range and never 0, 0; and rolling back
 /// stops with error 50022 once an owner put a branch on the map, and otherwise drops only the columns.
 /// </summary>
 public class BranchLocationMigrationSqlServerTests
@@ -61,7 +61,7 @@ public class BranchLocationMigrationSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task Database_ShouldRefuse_AnythingButBothHalvesOfAPointInRange()
+    public async Task Database_ShouldRefuse_HalfAPoint_APointOffTheMap_AndZeroZero()
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
@@ -73,20 +73,25 @@ public class BranchLocationMigrationSqlServerTests
             await seed.SaveChangesAsync();
         }
 
-        // Half a point, a latitude past the pole and a longitude past the antimeridian.
-        foreach (var assignment in new[]
+        // Half a point, a latitude past the pole, a longitude past the antimeridian, and the 0, 0 of a device without a
+        // position.
+        foreach (var update in new[]
                  {
-                     "[Latitude] = 19.043577",
-                     "[Latitude] = 91, [Longitude] = -98.198626",
-                     "[Latitude] = 19.043577, [Longitude] = -181"
+                     "UPDATE [Branches] SET [Latitude] = 19.043577 WHERE [Id] = {0}",
+                     "UPDATE [Branches] SET [Latitude] = 91, [Longitude] = -98.198626 WHERE [Id] = {0}",
+                     "UPDATE [Branches] SET [Latitude] = 19.043577, [Longitude] = -181 WHERE [Id] = {0}",
+                     "UPDATE [Branches] SET [Latitude] = 0, [Longitude] = 0 WHERE [Id] = {0}"
                  })
         {
             await using var context = database.CreateContext();
-            var error = await Assert.ThrowsAsync<SqlException>(() =>
-                context.Database.ExecuteSqlRawAsync("UPDATE [Branches] SET " + assignment + " WHERE [Id] = {0}", branch.Id));
+            var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(update, branch.Id));
             Assert.Equal(547, error.Number);
             Assert.Contains("CK_Branches_Location", error.Message);
         }
+
+        // Either half alone may be 0: the equator and the meridian of Greenwich have places.
+        await using var check = database.CreateContext();
+        await check.Database.ExecuteSqlRawAsync("UPDATE [Branches] SET [Latitude] = 0, [Longitude] = -78.45 WHERE [Id] = {0}", branch.Id);
     }
 
     [SqlServerFact]

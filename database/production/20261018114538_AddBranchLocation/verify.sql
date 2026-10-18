@@ -13,7 +13,8 @@ FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;
 
 -- 2. Después: las columnas nuevas ([Branches].[Latitude] y [Longitude], decimal(9,6) con nulos) y
---    la restricción [CK_Branches_Location]. Antes de aplicar y después de rollback.sql: ninguna fila.
+--    la restricción [CK_Branches_Location], cuya definición termina en
+--    NOT ([Latitude]=(0) AND [Longitude]=(0)). Antes de aplicar y después de rollback.sql: ninguna fila.
 SELECT
     OBJECT_NAME(c.[object_id]) AS [Tabla],
     c.[name] AS [Columna],

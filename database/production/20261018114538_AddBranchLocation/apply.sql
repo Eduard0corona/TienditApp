@@ -10,8 +10,8 @@
 --   - agrega a [Branches] las columnas [Latitude] y [Longitude], decimal(9,6) con nulos. Todas las
 --     sucursales quedan sin ubicación (NULL) hasta que el dueño la ponga, y Explorar las muestra
 --     como hoy;
---   - agrega la restricción [CK_Branches_Location]: las dos o ninguna, la latitud de -90 a 90 y la
---     longitud de -180 a 180.
+--   - agrega la restricción [CK_Branches_Location]: las dos o ninguna, la latitud de -90 a 90, la
+--     longitud de -180 a 180 y nunca 0, 0 (lo que escribe un dispositivo que no sabe dónde está).
 -- No cambia otros datos ni otras tablas.
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
 -- vacía): revisa antes el verify.sql de database/production/20261018081803_AddFavoriteBusinesses.
@@ -6767,7 +6767,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261018114538_AddBranchLocation'
 )
 BEGIN
-    EXEC(N'ALTER TABLE [Branches] ADD CONSTRAINT [CK_Branches_Location] CHECK (([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] IS NOT NULL AND [Longitude] IS NOT NULL AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180))');
+    EXEC(N'ALTER TABLE [Branches] ADD CONSTRAINT [CK_Branches_Location] CHECK (([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] IS NOT NULL AND [Longitude] IS NOT NULL AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180 AND NOT ([Latitude] = 0 AND [Longitude] = 0)))');
 END;
 
 IF NOT EXISTS (

@@ -146,6 +146,8 @@ public class BranchesTests
     [InlineData(91.0, -98.19, GeoPoint.InvalidMessage)]
     [InlineData(19.04, -180.5, GeoPoint.InvalidMessage)]
     [InlineData(0.0, 0.0, GeoPoint.NullIslandMessage)]
+    // Kept to six decimals it is 0, 0: what is checked is what would be kept.
+    [InlineData(0.0000001, 0.0000002, GeoPoint.NullIslandMessage)]
     public void BranchCommands_ShouldRefuse_HalfAPoint_APointOffTheMap_OrZeroZero(double? latitude, double? longitude, string message)
     {
         var location = new BranchLocationFields { Latitude = (decimal?)latitude, Longitude = (decimal?)longitude };

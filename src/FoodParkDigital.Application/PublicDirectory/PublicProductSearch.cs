@@ -178,7 +178,8 @@ public sealed class PublicProductIndex
             .Where(entry => category is null || entry.Business.Business.Category == category)
             .Where(entry => words.All(entry.SearchText.Contains))
             .OrderBy(entry => words.All(entry.NameText.Contains) ? 0 : 1)
-            // A business of an older snapshot that the newer one left out goes last.
+            // The index may be of a newer snapshot than the one this search read (PublicProductIndexCache): a business it
+            // has that the older snapshot lacks has no place in that order, and goes last.
             .ThenBy(entry => near is null ? entry.Position : near.Position.GetValueOrDefault(entry.Business.TenantId, int.MaxValue))
             .ThenBy(entry => entry.NameText, StringComparer.Ordinal);
         var perBusiness = new Dictionary<Guid, int>();

@@ -14,11 +14,12 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
         builder.ToTable("Branches", table =>
         {
             table.HasCheckConstraint("CK_Branches_ServiceMode", "[ServiceMode] IN (0, 1)");
-            // A point on the map has both halves, in range (GeoPoint): never one without the other.
+            // A point on the map has both halves, in range, and is never 0, 0 (GeoPoint): never one without the other.
             table.HasCheckConstraint(
                 "CK_Branches_Location",
                 "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] IS NOT NULL AND [Longitude] IS NOT NULL"
-                + " AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180)");
+                + " AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180"
+                + " AND NOT ([Latitude] = 0 AND [Longitude] = 0))");
         });
         builder.HasKey(x => x.Id);
 

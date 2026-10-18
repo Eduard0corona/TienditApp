@@ -16,22 +16,39 @@ public sealed record GeoPoint
 
     public GeoPoint(decimal latitude, decimal longitude)
     {
-        if (latitude is < -90m or > 90m || longitude is < -180m or > 180m)
-            throw new DomainException(InvalidMessage);
-        // A device or a form that had no position writes 0, 0: no business is there.
-        if (latitude == 0m && longitude == 0m)
-            throw new DomainException(NullIslandMessage);
+        // Rounded first: what is checked is what is kept, so 0.0000001, 0.0000002 is the 0, 0 it becomes.
+        latitude = Round(latitude);
+        longitude = Round(longitude);
+        if (Problem(latitude, longitude) is { } problem)
+            throw new DomainException(problem);
 
-        Latitude = Math.Round(latitude, Decimals, MidpointRounding.AwayFromZero);
-        Longitude = Math.Round(longitude, Decimals, MidpointRounding.AwayFromZero);
+        Latitude = latitude;
+        Longitude = longitude;
     }
+
+    /// <summary>
+    /// Why those degrees, rounded to <see cref="Decimals"/> decimals as a point keeps them, are not a point on the map;
+    /// null when they are. The one rule of the validators, of a new point and of a row read back.
+    /// </summary>
+    public static string? Problem(decimal latitude, decimal longitude)
+    {
+        latitude = Round(latitude);
+        longitude = Round(longitude);
+        if (latitude is < -90m or > 90m || longitude is < -180m or > 180m)
+            return InvalidMessage;
+        // A device or a form that had no position writes 0, 0: no business is there.
+        return latitude == 0m && longitude == 0m ? NullIslandMessage : null;
+    }
+
+    /// <summary>
+    /// The point a row keeps; null when it has none, or when what it has is not a point (written before the database
+    /// refused it, or by hand): a bad row is left off the map instead of breaking the page that reads it.
+    /// </summary>
+    public static GeoPoint? FromStored(decimal? latitude, decimal? longitude)
+        => latitude is { } lat && longitude is { } lng && Problem(lat, lng) is null ? new GeoPoint(lat, lng) : null;
 
     public decimal Latitude { get; }
     public decimal Longitude { get; }
-
-    /// <summary>The point with fewer decimals: 3 is about 110 m, the grid a customer's position travels in (Fase 24G).</summary>
-    public GeoPoint RoundedTo(int decimals)
-        => new(Math.Round(Latitude, decimals, MidpointRounding.AwayFromZero), Math.Round(Longitude, decimals, MidpointRounding.AwayFromZero));
 
     /// <summary>
     /// The distance in a straight line over the Earth, in kilometers (haversine on its mean radius): within a few meters
@@ -46,6 +63,8 @@ public sealed record GeoPoint
         var h = Math.Pow(Math.Sin(dLat / 2), 2) + Math.Cos(lat1) * Math.Cos(lat2) * Math.Pow(Math.Sin(dLon / 2), 2);
         return 2 * EarthRadiusKm * Math.Asin(Math.Min(1, Math.Sqrt(h)));
     }
+
+    private static decimal Round(decimal degrees) => Math.Round(degrees, Decimals, MidpointRounding.AwayFromZero);
 
     private static double Radians(decimal degrees) => (double)degrees * Math.PI / 180;
 }

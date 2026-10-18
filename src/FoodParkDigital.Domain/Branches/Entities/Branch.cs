@@ -58,7 +58,7 @@ public class Branch : AuditableEntity, ITenantScoped, IAggregateRoot
     public decimal? Longitude { get; private set; }
 
     /// <summary>Where it is on the map; none until its owner sets it.</summary>
-    public GeoPoint? Location => Latitude is { } latitude && Longitude is { } longitude ? new GeoPoint(latitude, longitude) : null;
+    public GeoPoint? Location => GeoPoint.FromStored(Latitude, Longitude);
 
     /// <summary>
     /// The point customers may see (the distance in Explorar, «Cómo llegar»): the one of a branch they come to, never of

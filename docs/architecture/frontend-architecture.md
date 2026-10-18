@@ -539,22 +539,25 @@ Productos y favoritos en Explorar (Fase 24F, [ADR 0028](../adr/0028-product-sear
 «Cerca de mí» (Fase 24G, [ADR 0029](../adr/0029-near-me.md)):
 
 - **`utils/geo`:**
-  - `parseCoordinates` lee lo que pega el dueño: las coordenadas que copia Google Maps («19.043577, -98.198626», con coma o espacio) o el enlace de un lugar con el punto dentro (`!3d…!4d…`, `?q=`, `@lat,lng`). Un texto vacío es `null`; lo demás que no es un punto, un 0, 0 o un enlace corto (`maps.app.goo.gl`, que no trae el punto) es `'invalid'`;
+  - `parseCoordinates` lee lo que pega el dueño: las coordenadas que copia Google Maps («19.043577, -98.198626», con coma o espacio) o el enlace de un lugar con el punto dentro (`!3d…!4d…`, `?q=`, `?query=`, con su coma como `%2C` si la trae). Un texto vacío es `null`; lo demás es `'invalid'`: lo que no es un punto, un 0, 0, un enlace corto (`maps.app.goo.gl`) y el `@lat,lng` de un mapa, que es hacia dónde miraba y no el lugar;
+  - `coordinatesError` dice por qué: un enlace sin el punto («Ese enlace no trae el punto exacto…») o un texto que no entiende;
   - `formatCoordinates` y `mapPointUrl` lo escriben y lo abren en Google Maps;
-  - `formatDistance` escribe los kilómetros que manda el servidor: «a menos de 100 m», «a 300 m», «a 2.5 km», «a 12 km».
+  - `formatDistance` escribe los kilómetros que manda el servidor: «a menos de 100 m», «a 300 m», «a 1 km», «a 2.5 km», «a 12 km».
 - **`hooks/useNearMe(on, attempt)`:**
-  - pide la ubicación al navegador mientras `on`, una vez por intento, y la redondea a tres decimales (`NEAR_DECIMALS`);
-  - devuelve `off`, `locating`, `on`, `denied` o `unavailable`;
+  - pide la ubicación al navegador mientras `on`, una vez por intento, y la redondea a tres decimales (`NEAR_DECIMALS`). El intento 0 es la página tal como abrió (`?cerca=1` de un enlace o una recarga): pide solo si `navigator.permissions` dice que el navegador ya la permite; si no, queda en `ask` y espera un toque;
+  - devuelve `off`, `ask`, `locating`, `on`, `denied`, `unavailable` o `unsupported`;
   - el estado solo cambia en las respuestas del navegador; lo demás se deriva (sin `setState` dentro del efecto, por `react-hooks` v7). Una respuesta de un intento anterior nunca reemplaza la de uno nuevo;
   - la ubicación vive en memoria: ni en el dispositivo ni en la dirección.
 - **Explorar** (`pages/explore/ExplorePage`):
-  - el chip «Cerca de mí» (`NearMeChip`, un `.ex-chip` con `aria-pressed`) pone o quita `?cerca=1`, y un texto en `role="status"` dice qué hace o qué hacer si el navegador no la da, con «Intentar de nuevo»;
-  - la búsqueda manda `latitude` y `longitude` solo cuando el navegador ya respondió: mientras tanto, Explorar sigue en su orden;
+  - el chip «Cerca de mí» (`NearMeChip`, un `.ex-chip` con `aria-pressed`) pone o quita `?cerca=1`. Un texto en `role="status"`, siempre en la página y vacío cuando no hay nada que decir, dice qué hace o qué hacer, con «Usar mi ubicación» (en `ask`) o «Intentar de nuevo»; al tocarlo, el foco espera en el chip;
+  - la búsqueda manda `latitude` y `longitude` solo cuando el navegador ya respondió: mientras tanto, Explorar sigue en su orden. Cuando llega la ubicación, la misma búsqueda se reordena sin volver al esqueleto (`placeholderData` solo entre búsquedas que difieren en la ubicación);
   - escribir en el buscador conserva `cerca`, y los enlaces de las categorías conservan la búsqueda y `cerca`;
   - solo encenderlo sube el intento: apagarlo no le pregunta nada al navegador.
 - **La distancia:** `DirectoryBusinessCard` la suma a su línea de categoría y ciudad, y `DirectoryProducts` a la del negocio.
 - **Sucursales** (`pages/branches/BranchesList`):
   - `CoordinatesField` («Ubicación en el mapa (opcional)»), con «Usar mi ubicación» (alta precisión) y «Revisar en el mapa»;
+  - el campo se revisa al salir de él o al guardar, no mientras se escribe; al salir, un punto pegado de cualquier forma se escribe como lo copia Google Maps, y al guardar con un texto que no es un punto el foco vuelve al campo;
+  - «Usar mi ubicación» usa `aria-disabled` mientras el navegador responde (conserva el foco), anuncia lo que llenó en un `role="status"` oculto y descarta una respuesta que llega con el formulario cerrado u otro abierto;
   - el punto se manda como `serviceMode`: solo si la sucursal es nueva o cambió aquí; vacío manda `{ latitude: null, longitude: null }`. Una lista leída antes nunca la quita del mapa;
   - la lista marca «En el mapa».
 - **La tienda:** `utils/storeMenu.mapsUrl(dirección, mapPoint)` abre el punto exacto cuando el menú lo trae; si no, busca la dirección. Lo usan la información de la tienda (`StoreInfoModal`, que muestra «Cómo llegar» también sin calle) y el «Lo recoges en» del pedido.

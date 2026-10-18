@@ -29,9 +29,11 @@ public class ExploreNearbyTests
     {
         await using var fixture = SalesTestFixture.Create();
         await SeedAroundTheZocaloAsync(fixture);
+        // One cache, as the app has: both searches read the same snapshot.
+        var cache = new PublicDirectoryCache();
 
-        var usual = await DirectoryAsync(fixture);
-        var near = await DirectoryAsync(fixture, Latitude, Longitude);
+        var usual = await DirectoryAsync(fixture, cache: cache);
+        var near = await DirectoryAsync(fixture, Latitude, Longitude, cache: cache);
 
         // Without a position, the order of Explorar: taking orders, then open, then closed; by name. No card says a distance.
         Assert.Equal(["a-lejos", "c-medio", "e-sin-mapa", "f-cocina", "b-cerca-menu", "d-cerrado"], usual.Businesses.Items.Select(b => b.Slug));
@@ -43,7 +45,42 @@ public class ExploreNearbyTests
             [0.3m, 2.0m, 12.0m, null, null, 1.0m],
             near.Businesses.Items.Select(b => b.DistanceKm));
         // The cards are copies: the snapshot every request shares keeps no distance.
-        Assert.All((await DirectoryAsync(fixture)).Businesses.Items, card => Assert.Null(card.DistanceKm));
+        Assert.All((await DirectoryAsync(fixture, cache: cache)).Businesses.Items, card => Assert.Null(card.DistanceKm));
+    }
+
+    [Fact]
+    public async Task NearMe_ShouldPageTheListInItsOrder()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await SeedAroundTheZocaloAsync(fixture);
+
+        var second = await DirectoryAsync(fixture, Latitude, Longitude, pageNumber: 2, pageSize: 2);
+
+        // b-cerca-menu and c-medio are the first page.
+        Assert.Equal(["a-lejos", "e-sin-mapa"], second.Businesses.Items.Select(b => b.Slug));
+        Assert.Equal([12.0m, null], second.Businesses.Items.Select(b => b.DistanceKm));
+        Assert.Equal((2, 3, 6), (second.Businesses.PageNumber, second.Businesses.TotalPages, second.Businesses.TotalCount));
+    }
+
+    [Fact]
+    public async Task NearMe_ShouldLeaveABranchWithABadPointOffTheMap_AndStillAnswer()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await PutOnTheMapAsync(fixture, await BusinessAsync(fixture, "bien", drawer: true), Latitude + 0.0027m, Longitude);
+        var broken = await BusinessAsync(fixture, "mal", drawer: true);
+        await PutOnTheMapAsync(fixture, broken, Latitude, Longitude);
+        // A row the database kept before it refused 0, 0 (or one written by hand): no business is there.
+        var main = await fixture.Context.Branches.IgnoreQueryFilters().SingleAsync(b => b.TenantId == broken.Id && b.IsDefault);
+        fixture.Context.Entry(main).Property(b => b.Latitude).CurrentValue = 0m;
+        fixture.Context.Entry(main).Property(b => b.Longitude).CurrentValue = 0m;
+        await fixture.Context.SaveChangesAsync();
+
+        var near = await DirectoryAsync(fixture, Latitude, Longitude);
+
+        Assert.Equal(["bien", "mal"], near.Businesses.Items.Select(b => b.Slug));
+        Assert.Equal([0.3m, null], near.Businesses.Items.Select(b => b.DistanceKm));
+        Assert.Null((await MenuAsync(fixture, "mal"))!.MapPoint);
+        Assert.Null((await PreviewAsync(fixture, "mal"))!.Geo);
     }
 
     [Fact]
@@ -160,10 +197,13 @@ public class ExploreNearbyTests
         => fixture.Context.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == tenant.Id);
 
     private static Task<PublicDirectoryDto> DirectoryAsync(
-        SalesTestFixture fixture, decimal? latitude = null, decimal? longitude = null, string? search = null)
+        SalesTestFixture fixture, decimal? latitude = null, decimal? longitude = null, string? search = null,
+        int pageNumber = 1, int pageSize = GetPublicDirectoryQuery.DefaultPageSize, PublicDirectoryCache? cache = null)
         => new GetPublicDirectoryQueryHandler(
-                fixture.Context, fixture.Clock, new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance)
-            .Handle(new GetPublicDirectoryQuery(Search: search, Latitude: latitude, Longitude: longitude), CancellationToken.None);
+                fixture.Context, fixture.Clock, cache ?? new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance)
+            .Handle(
+                new GetPublicDirectoryQuery(Search: search, PageNumber: pageNumber, PageSize: pageSize, Latitude: latitude, Longitude: longitude),
+                CancellationToken.None);
 
     private static Task<PublicMenuDto?> MenuAsync(SalesTestFixture fixture, string slug)
         => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)

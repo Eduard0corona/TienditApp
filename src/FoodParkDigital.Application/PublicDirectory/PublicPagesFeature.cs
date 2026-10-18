@@ -40,7 +40,10 @@ public class StorePreviewDto
     public bool BooksOnline { get; set; }
     /// <summary>Where it sells, as its menu shows it; none for a kitchen that only delivers.</summary>
     public StoreAddressDto? Address { get; set; }
-    /// <summary>Where it sells on the map (Fase 24G), as its menu's «Cómo llegar» opens it; none as for its address.</summary>
+    /// <summary>
+    /// The point of its main branch on the map (Fase 24G), the one its menu's «Cómo llegar» opens. None when that branch is
+    /// off the map or only delivers; it can come without <see cref="Address"/>, for a branch on the map with no street.
+    /// </summary>
     public MapPointDto? Geo { get; set; }
     /// <summary>The phone its menu offers for WhatsApp; none without one.</summary>
     public string? ContactPhone { get; set; }
