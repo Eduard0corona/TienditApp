@@ -1,10 +1,13 @@
 import api from './axios';
+import { apiRequest, type Schemas } from './typedClient';
 import type {
   AppointmentDto,
   AppointmentStatus,
   CreateAppointmentRequest,
   PaginatedList,
 } from '../types';
+
+export type OnlineBookingSettings = Schemas['OnlineBookingSettingsDto'];
 
 export const appointmentsApi = {
   getAll: (params?: {
@@ -30,4 +33,16 @@ export const appointmentsApi = {
 
   updateStatus: (id: string, newStatus: AppointmentStatus) =>
     api.put<AppointmentDto>(`/appointments/${id}/status`, { newStatus }),
+
+  /** A request booked online (Fase 24D) becomes a scheduled appointment, and its customer is told. */
+  accept: (id: string) => apiRequest('post', '/api/v1/appointments/{id}/accept', { path: { id } }),
+
+  /** A request booked online is declined: its time is free again, and its customer is told. */
+  decline: (id: string) => apiRequest('post', '/api/v1/appointments/{id}/decline', { path: { id } }),
+
+  /** Whether customers book from the online menu, how many appointments at once, and what is missing for it. */
+  getOnlineBooking: (signal?: AbortSignal) => apiRequest('get', '/api/v1/appointments/online-booking', { signal }),
+
+  updateOnlineBooking: (enabled: boolean, capacity: number) =>
+    apiRequest('put', '/api/v1/appointments/online-booking', { body: { enabled, capacity } }),
 };

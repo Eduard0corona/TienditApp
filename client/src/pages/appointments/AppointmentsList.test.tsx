@@ -4,16 +4,19 @@ import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appointmentsApi } from '../../api/appointmentsApi';
+import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { employeesApi } from '../../api/employeesApi';
 import { quoteVisit } from '../../api/homeVisits';
 import { productsApi } from '../../api/productsApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
-import { AppointmentStatus, TenantCapability, type AppointmentDto } from '../../types';
+import { AppointmentChannel, AppointmentStatus, TenantCapability, type AppointmentDto } from '../../types';
 import AppointmentsList from './AppointmentsList';
 
 vi.mock('../../api/appointmentsApi', () => ({
-  appointmentsApi: { getAll: vi.fn(), create: vi.fn(), update: vi.fn(), updateStatus: vi.fn() },
+  appointmentsApi: {
+    getAll: vi.fn(), create: vi.fn(), update: vi.fn(), updateStatus: vi.fn(), accept: vi.fn(), decline: vi.fn(),
+  },
 }));
 vi.mock('../../api/employeesApi', () => ({ employeesApi: { getAll: vi.fn() } }));
 vi.mock('../../api/productsApi', () => ({ productsApi: { getAll: vi.fn() } }));
@@ -55,17 +58,28 @@ function Sell() {
   return <p>Vender {location.search}</p>;
 }
 
-function renderAgenda(items: AppointmentDto[]) {
-  vi.mocked(appointmentsApi.getAll).mockResolvedValue({ data: page(items) } as never);
+/** The count of requests booked online waiting from now on (the notice above the list): the one call for one row of them. */
+const countsRequests = (params?: { status?: AppointmentStatus; pageSize?: number }) =>
+  params?.status === AppointmentStatus.Requested && params.pageSize === 1;
+
+function renderAgenda(items: AppointmentDto[], { requests = 0, path = '/appointments' } = {}) {
+  vi.mocked(appointmentsApi.getAll).mockImplementation(async (params) => ({
+    data: countsRequests(params) ? { ...page([]), totalCount: requests } : page(items),
+  }) as never);
   return render(
-    <MemoryRouter initialEntries={['/appointments']}>
-      <Routes>
-        <Route path="/appointments" element={<AppointmentsList />} />
-        <Route path="/sell" element={<Sell />} />
-      </Routes>
-    </MemoryRouter>,
+    <ConfirmProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/appointments" element={<AppointmentsList />} />
+          <Route path="/sell" element={<Sell />} />
+        </Routes>
+      </MemoryRouter>
+    </ConfirmProvider>,
   );
 }
+
+/** The calls that read the list, not the count of requests. */
+const listCalls = () => vi.mocked(appointmentsApi.getAll).mock.calls.map(([params]) => params).filter((params) => !countsRequests(params));
 
 describe('AppointmentsList', () => {
   beforeEach(() => {
@@ -165,5 +179,56 @@ describe('AppointmentsList', () => {
     await user.type(form.getByLabelText('Código postal *'), '72005');
     expect(await form.findByText('Zona Sur · Cargo por visita $95.00')).toBeInTheDocument();
     expect(form.getByText('Al guardar, el cliente recibe por WhatsApp el nuevo lugar.')).toBeInTheDocument();
+  });
+
+  it('decides a request booked online: accepted, or declined after asking, and never charged before', async () => {
+    const user = userEvent.setup();
+    const request = appointment({ id: 'r1', customerName: 'Valeria', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online });
+    vi.mocked(appointmentsApi.accept).mockResolvedValue({ ...request, status: AppointmentStatus.Scheduled } as never);
+    vi.mocked(appointmentsApi.decline).mockResolvedValue({ ...request, status: AppointmentStatus.Cancelled } as never);
+    renderAgenda([request]);
+
+    const row = (await screen.findByText('Valeria')).closest('tr')!;
+    expect(within(row).getByText('En línea')).toBeInTheDocument();
+    expect(within(row).getByText('Por confirmar')).toBeInTheDocument();
+    // A request is decided first: no status to pick and nothing to charge yet.
+    expect(within(row).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /Cobrar/ })).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole('button', { name: 'Aceptar la cita de Valeria' }));
+    await waitFor(() => expect(appointmentsApi.accept).toHaveBeenCalledWith('r1'));
+    expect(toast.success).toHaveBeenCalledWith('Cita aceptada: el cliente recibe el aviso.');
+
+    await user.click(within(row).getByRole('button', { name: 'Rechazar la cita de Valeria' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Rechazar la solicitud' }));
+    expect(dialog.getByText(/el horario queda libre/)).toBeInTheDocument();
+    expect(appointmentsApi.decline).not.toHaveBeenCalled();
+    await user.click(dialog.getByRole('button', { name: 'Rechazar' }));
+    await waitFor(() => expect(appointmentsApi.decline).toHaveBeenCalledWith('r1'));
+    expect(toast.success).toHaveBeenCalledWith('Solicitud rechazada: el cliente recibe el aviso.');
+  });
+
+  it('says how many requests wait and shows them, and opens on them from the notice', async () => {
+    const user = userEvent.setup();
+    renderAgenda([AT_HOME], { requests: 2 });
+
+    expect(await screen.findByText(/Tienes 2 solicitudes de cita por confirmar/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ver solicitudes' }));
+    await waitFor(() => expect(listCalls().at(-1)).toEqual(expect.objectContaining({ status: AppointmentStatus.Requested })));
+    expect(screen.queryByText(/solicitudes de cita por confirmar/)).not.toBeInTheDocument();
+  });
+
+  it('opens on the requests from the notice of the bell', async () => {
+    renderAgenda([], { requests: 1, path: '/appointments?estado=por-confirmar' });
+
+    await waitFor(() => expect(listCalls()[0]).toEqual(expect.objectContaining({ status: AppointmentStatus.Requested })));
+    expect(screen.getByRole('combobox', { name: 'Estado' })).toHaveValue(String(AppointmentStatus.Requested));
+  });
+
+  it('says when the customer cancelled the appointment', async () => {
+    renderAgenda([appointment({ status: AppointmentStatus.Cancelled, channel: AppointmentChannel.Online, cancelledByCustomer: true })]);
+
+    const row = (await screen.findByText('Ana Ruiz')).closest('tr')!;
+    expect(within(row).getByText('La canceló el cliente')).toBeInTheDocument();
   });
 });

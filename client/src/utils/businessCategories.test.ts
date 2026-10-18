@@ -56,4 +56,10 @@ describe('businessCategories', () => {
     expect(orderStatus(business({ closed: true, statusLabel: 'Cerrado', statusDetail: 'abre el lunes a las 9:00' })))
       .toEqual({ tone: 'closed', text: 'Solo menú · Cerrado · abre el lunes a las 9:00' });
   });
+
+  it('does not call «solo menú» a business that books appointments online: its hours are enough', () => {
+    expect(orderStatus(business({ booksOnline: true, statusLabel: 'Abierto', statusDetail: 'cierra a las 20:00' })))
+      .toEqual({ tone: 'menu', text: 'Abierto · cierra a las 20:00' });
+    expect(orderStatus(business({ booksOnline: true, acceptsOrders: true }))).toEqual({ tone: 'taking', text: 'Pide en línea' });
+  });
 });

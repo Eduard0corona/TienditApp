@@ -1,5 +1,6 @@
 // The enums are generated from the API contract and re-exported where each one belongs below.
 import type {
+  AppointmentChannel,
   AppointmentStatus,
   BusinessTheme,
   BusinessType,
@@ -1104,7 +1105,7 @@ export interface AddCashTransactionRequest {
 
 // ==================== Appointments ====================
 
-export { AppointmentStatus } from '../api/generated/enums';
+export { AppointmentStatus, AppointmentChannel, MyAppointmentsScope } from '../api/generated/enums';
 
 export interface AppointmentDto {
   id: string;
@@ -1126,6 +1127,10 @@ export interface AppointmentDto {
   saleOrderId?: string | null;
   /** Its sale was cancelled: it is charged again with another one. */
   saleCancelled?: boolean;
+  /** Who booked it: the business, or its customer from the online menu (Fase 24D). */
+  channel?: AppointmentChannel;
+  /** Its customer cancelled it from its link or account (Fase 24D). */
+  cancelledByCustomer?: boolean;
 }
 
 /** The customer's address of an appointment at their home, its zone and the charge for the visit agreed then. */

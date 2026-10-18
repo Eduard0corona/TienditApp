@@ -11,8 +11,8 @@ import './CustomerLayout.css';
 const navClass = ({ isActive }: { isActive: boolean }) => `cl-link${isActive ? ' active' : ''}`;
 
 /**
- * The frame of the customer's screens (Explorar, Mis pedidos, Mi cuenta): TienditApp's own, without the business menu. Whoever has
- * no session enters or creates a customer account from here; the team of a business goes back to it.
+ * The frame of the customer's screens (Explorar, Mis pedidos, Mis citas, Mi cuenta): TienditApp's own, without the business
+ * menu. Whoever has no session enters or creates a customer account from here; the team of a business goes back to it.
  */
 export default function CustomerLayout() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -43,9 +43,14 @@ export default function CustomerLayout() {
               <i className="ri-store-2-line" aria-hidden="true"></i>Explorar
             </NavLink>
             {customer && (
-              <NavLink to="/mis-pedidos" className={navClass}>
-                <i className="ri-shopping-bag-3-line" aria-hidden="true"></i>Mis pedidos
-              </NavLink>
+              <>
+                <NavLink to="/mis-pedidos" className={navClass}>
+                  <i className="ri-shopping-bag-3-line" aria-hidden="true"></i>Mis pedidos
+                </NavLink>
+                <NavLink to="/mis-citas" className={navClass}>
+                  <i className="ri-calendar-event-line" aria-hidden="true"></i>Mis citas
+                </NavLink>
+              </>
             )}
             {isAuthenticated && !customer && (
               <Link to="/" className="cl-link">

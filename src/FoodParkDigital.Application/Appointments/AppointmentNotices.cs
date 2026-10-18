@@ -54,10 +54,18 @@ public sealed class AppointmentNotices
             $"no pudimos confirmar tu cita de {service} del {date} a las {time} {place}. "
             + "Elige otro horario en su menú en línea o respóndenos.", withVisitFee: false, cancellationToken);
 
+    /// <summary>
+    /// The appointment moved to another time or place. A request made online that the business moves before accepting it
+    /// (Fase 24D) is still waiting: the notice says so, and the one of an appointment agendada follows when it accepts.
+    /// </summary>
     /// <inheritdoc cref="QueueScheduledAsync"/>
     public Task<bool> QueueRescheduledAsync(Appointment appointment, CancellationToken cancellationToken)
-        => QueueAsync(appointment, (service, place, date, time) =>
-            $"tu cita de {service} ahora es el {date} a las {time} {place}.", withVisitFee: true, cancellationToken);
+        => appointment.IsRequest
+            ? QueueAsync(appointment, (service, place, date, time) =>
+                $"tu solicitud de cita de {service} ahora es para el {date} a las {time} {place}. Te avisamos en cuanto la confirmen.",
+                withVisitFee: false, cancellationToken)
+            : QueueAsync(appointment, (service, place, date, time) =>
+                $"tu cita de {service} ahora es el {date} a las {time} {place}.", withVisitFee: true, cancellationToken);
 
     /// <inheritdoc cref="QueueScheduledAsync"/>
     public Task<bool> QueueStatusChangedAsync(Appointment appointment, CancellationToken cancellationToken)

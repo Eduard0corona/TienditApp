@@ -144,6 +144,20 @@ describe('ExplorePage', () => {
     expect(api.getDirectory).toHaveBeenCalledWith({ category: undefined, q: undefined, pageNumber: 1, pageSize: 24 }, expect.anything());
   });
 
+  it('says which businesses book appointments online (Fase 24D)', async () => {
+    api.getDirectory.mockResolvedValue(directory([
+      business({ name: 'Barbería Luis', slug: 'barberia-luis', category: BusinessCategory.Beauty, booksOnline: true, statusLabel: 'Abierto' }),
+      business({ name: 'Café Luna', slug: 'cafe-luna' }),
+    ]));
+
+    renderPage();
+
+    const barbershop = await screen.findByRole('link', { name: /Barbería Luis/ });
+    expect(within(barbershop).getByText('Agenda en línea')).toBeInTheDocument();
+    expect(within(barbershop).getByText('Abierto')).toBeInTheDocument();
+    expect(within(screen.getByRole('link', { name: /Café Luna/ })).queryByText('Agenda en línea')).not.toBeInTheDocument();
+  });
+
   it('shows only the categories with businesses, and the page of one asks for it', async () => {
     api.getDirectory.mockResolvedValue(directory([business({})]));
 

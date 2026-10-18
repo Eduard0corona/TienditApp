@@ -285,6 +285,22 @@ describe('PublicMenuPage', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
+  it('leads to the booking page of a business that books appointments online, but not from a table', async () => {
+    api.getMenu.mockResolvedValue(menu({ acceptsOrders: false, booksOnline: true }));
+
+    const { unmount } = renderPage();
+
+    const booking = await screen.findByRole('link', { name: 'Agenda tu cita' });
+    expect(booking).toHaveAttribute('href', '/m/cafe-luna/agendar');
+    // Without orders, booking is what the page is for.
+    expect(booking).toHaveClass('btn-primary');
+    unmount();
+
+    renderPage('/m/cafe-luna?mesa=Mesa%204');
+    await screen.findByText('Latte');
+    expect(screen.queryByRole('link', { name: 'Agenda tu cita' })).not.toBeInTheDocument();
+  });
+
   it('shows the menu without taking orders while they are paused (no drawer open)', async () => {
     api.getMenu.mockResolvedValue(menu({ acceptsOrders: false, ordersPaused: true }));
 

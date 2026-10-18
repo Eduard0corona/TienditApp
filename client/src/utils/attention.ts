@@ -41,6 +41,14 @@ export function describeAttention(item: AttentionItem): AttentionNotice | null {
       return { key, text: `${plural(count, 'conversación', 'conversaciones')} sin leer`, path: '/whatsapp/chat', icon: 'ri-chat-3-line', tone: 'info' };
     case 'lateServices':
       return { key, text: `${plural(count, 'servicio atrasado', 'servicios atrasados')}`, path: '/services/board', icon: 'ri-time-line', tone: 'warning' };
+    case 'appointmentRequests':
+      return {
+        key,
+        text: `${plural(count, 'solicitud de cita', 'solicitudes de cita')} por confirmar${urgentCount > 0 ? ` (${urgentCount} de hoy)` : ''}`,
+        path: '/appointments?estado=por-confirmar',
+        icon: 'ri-calendar-todo-line',
+        tone: 'warning',
+      };
     case 'appointmentsToConfirm':
       return { key, text: `${plural(count, 'cita', 'citas')} de hoy sin confirmar`, path: '/appointments', icon: 'ri-calendar-check-line', tone: 'info' };
     default:

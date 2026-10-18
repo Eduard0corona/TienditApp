@@ -10,6 +10,8 @@ import { estimateOrderTotals, type OrderTotalsEstimate, type TotalsLine } from '
 export const CANCELLED_SALE_MESSAGE = 'La cita se canceló: ya no se cobra.';
 export const NO_SHOW_SALE_MESSAGE = 'El cliente no se presentó a la cita: no se cobra.';
 export const ALREADY_SOLD_MESSAGE = 'La cita ya tiene su venta.';
+/** The server's words (OnlineBookingRules): a request booked online is accepted before it is charged. */
+export const ACCEPT_BEFORE_CHARGING_MESSAGE = 'Acepta la cita antes de cobrarla.';
 export const VISIT_POSTAL_CODE_REQUIRED_MESSAGE = 'Escribe el código postal de la visita.';
 export const VISIT_ADDRESS_LINE_REQUIRED_MESSAGE = 'Escribe a dónde es la visita: calle, número y colonia.';
 export const TRAVEL_MINUTES_MESSAGE = 'El traslado entre visitas va de 0 a 240 minutos.';
@@ -60,6 +62,7 @@ export function appointmentSaleProblem(
 ): string | null {
   if (appointment.status === AppointmentStatus.Cancelled) return CANCELLED_SALE_MESSAGE;
   if (appointment.status === AppointmentStatus.NoShow) return NO_SHOW_SALE_MESSAGE;
+  if (appointment.status === AppointmentStatus.Requested) return ACCEPT_BEFORE_CHARGING_MESSAGE;
   if (hasLiveSale(appointment)) return ALREADY_SOLD_MESSAGE;
   return null;
 }

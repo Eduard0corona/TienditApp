@@ -19,6 +19,8 @@ const Profile = lazy(() => import('./pages/profile/Profile'));
 const MyOrders = lazy(() => import('./pages/account/MyOrders'));
 const MyOrderPage = lazy(() => import('./pages/account/MyOrderPage'));
 const OrderTrackingPage = lazy(() => import('./pages/public/OrderTrackingPage'));
+const MyAppointments = lazy(() => import('./pages/account/MyAppointments'));
+const AppointmentTrackingPage = lazy(() => import('./pages/public/AppointmentTrackingPage'));
 const AccountPage = lazy(() => import('./pages/account/AccountPage'));
 const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
 const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
@@ -47,6 +49,7 @@ const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const SellPage = lazy(() => import('./pages/sell/SellPage'));
 const TablesPage = lazy(() => import('./pages/tables/TablesPage'));
 const PublicMenuPage = lazy(() => import('./pages/public/PublicMenuPage'));
+const PublicBookingPage = lazy(() => import('./pages/public/PublicBookingPage'));
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
 const CampaignsPage = lazy(() => import('./pages/campaigns/CampaignsPage'));
@@ -84,13 +87,27 @@ export default function App() {
             <Route path="/aceptar-invitacion" element={<AcceptInvitation />} />
             {/* The public menu of a business, opened from its link or QR (no sign-in). */}
             <Route path="/m/:slug" element={<PublicMenuPage />} />
+            {/* Its booking page (Fase 24D): a service, a day and a free time, without signing in. */}
+            <Route path="/m/:slug/agendar" element={<PublicBookingPage />} />
 
-            {/* The customer's screens: Explorar (no sign-in), and the orders and the account of a customer account. */}
+            {/* The customer's screens: Explorar (no sign-in), and the orders, appointments and account of a customer account. */}
             <Route element={<CustomerLayout />}>
               <Route path="/explorar" element={<ExplorePage />} />
               <Route path="/explorar/:categoria" element={<ExplorePage />} />
               {/* The link of an online order's receipt (/seguimiento#link): no sign-in, the link is in the fragment. */}
               <Route path="/seguimiento" element={<OrderTrackingPage />} />
+              {/* The link of an appointment booked online (/cita#link, Fase 24D), the same way. */}
+              <Route path="/cita" element={<AppointmentTrackingPage />} />
+              <Route
+                path="/mis-citas"
+                element={(
+                  <ProtectedRoute>
+                    <AccessRoute area="myOrders">
+                      <MyAppointments />
+                    </AccessRoute>
+                  </ProtectedRoute>
+                )}
+              />
               <Route
                 path="/mis-pedidos"
                 element={(

@@ -15,7 +15,7 @@ interface DirectoryBusinessCardProps {
 /**
  * A business in Explorar: its logo (or its initial in its colors), name, what it sells, its category and city, and
  * whether it takes orders now. With the customer's postal code (Fase 24B) it says whether it delivers there and what it
- * costs. The whole card opens its menu.
+ * costs, and a business that books appointments online says so (Fase 24D). The whole card opens its menu.
  */
 export default function DirectoryBusinessCard({ business, preview = false }: DirectoryBusinessCardProps) {
   const theme = getBusinessTheme(business.theme);
@@ -43,6 +43,11 @@ export default function DirectoryBusinessCard({ business, preview = false }: Dir
             {status.tone === 'taking' && <i className="ri-shopping-bag-3-line" aria-hidden="true"></i>}
             {status.text}
           </span>
+          {business.booksOnline && (
+            <span className="dc-badge dc-badge-info">
+              <i className="ri-calendar-event-line" aria-hidden="true"></i>Agenda en línea
+            </span>
+          )}
           {delivery && (
             <span className={`dc-badge ${delivery.reaches ? 'dc-badge-info' : 'dc-badge-menu'}`}>
               <i className={delivery.reaches ? 'ri-e-bike-2-line' : 'ri-map-pin-line'} aria-hidden="true"></i>{delivery.text}

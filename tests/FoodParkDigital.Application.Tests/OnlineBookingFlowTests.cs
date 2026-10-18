@@ -236,6 +236,34 @@ public class OnlineBookingFlowTests
     }
 
     [Fact]
+    public async Task MovingARequest_ShouldKeepItWaiting_AndTellTheCustomerItIsStillARequest()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        await ConnectWhatsAppAsync(fixture, tenant.Id);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
+        var request = await fixture.Context.Appointments.SingleAsync();
+
+        var moved = await new UpdateAppointmentCommandHandler(fixture.Context, fixture.CurrentUser, fixture.Clock, Notices(fixture))
+            .Handle(new UpdateAppointmentCommand
+            {
+                AppointmentId = request.Id,
+                CustomerName = request.CustomerName,
+                CustomerPhone = request.CustomerPhone,
+                ServiceProductId = haircut.Id,
+                StartAt = Local(Monday, "12:00"),
+                EndAt = Local(Monday, "13:00")
+            }, CancellationToken.None);
+
+        Assert.Equal(AppointmentStatus.Requested, moved.Value!.Status);
+        var notices = await fixture.Context.OutgoingMessages.Where(m => m.Purpose == MessagePurpose.AppointmentNotice).Select(m => m.Body).ToListAsync();
+        Assert.Contains(notices, body => body.Contains(
+            "tu solicitud de cita de Corte de cabello ahora es para el lunes 5 de octubre a las 12:00 p. m.")
+            && body.Contains("Te avisamos en cuanto la confirmen."));
+    }
+
+    [Fact]
     public async Task Accept_ShouldRefuse_ARequestWhoseTimePassed()
     {
         await using var fixture = SalesTestFixture.Create();
