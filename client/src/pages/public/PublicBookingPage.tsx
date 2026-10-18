@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Offcanvas } from 'react-bootstrap';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getApiErrorMessage } from '../../api/errors';
+import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
 import {
   publicMenuApi,
   type PublicAppointmentReceipt,
@@ -22,12 +22,16 @@ import { businessWhatsAppUrl } from '../../utils/whatsApp';
 import './PublicMenuPage.css';
 import './PublicBookingPage.css';
 
-/** The time picked and the words of its day, for the summary. */
+/** The time picked: its own date, which after midnight is the day after the one it is listed under. */
 interface ChosenTime {
   slot: PublicBookingSlot;
-  date: string;
-  dayLabel: string;
 }
+
+/** No answer, or the server failed: the request may have been stored, and the same one goes again with its key. */
+const answerLost = (err: unknown) => {
+  const status = getApiErrorStatus(err);
+  return status === undefined || status >= 500;
+};
 
 const horarios = (count: number) => (count === 1 ? '1 horario' : `${count} horarios`);
 
@@ -136,6 +140,12 @@ export default function PublicBookingPage() {
       if (result.linkedToAccount) void queryClient.invalidateQueries({ queryKey: ['me', 'appointments'] });
     } catch (err: unknown) {
       const message = getApiErrorMessage(err, 'No se pudo enviar tu solicitud. Intenta de nuevo.');
+      // The answer was lost: the request may be stored and its time no longer free. The sheet stays with the same key, so
+      // sending it again answers the one stored instead of booking another.
+      if (answerLost(err)) {
+        setError(`${message} Si ya se había enviado, no se repite.`);
+        return;
+      }
       // Taken meanwhile: the times are read again, and the customer picks another one.
       const fresh = await slots.refetch();
       const stillFree = fresh.data?.days.some((item) => item.slots.some((slot) => slot.startAt === chosen.slot.startAt));
@@ -286,12 +296,13 @@ export default function PublicBookingPage() {
                       type="button"
                       className={`btn pb-day ${active ? 'btn-primary' : 'btn-light'}`}
                       aria-pressed={active}
-                      aria-label={`${upperFirst(item.label)}: ${item.slots.length > 0 ? `${horarios(item.slots.length)} libres` : 'sin horarios libres'}`}
                       disabled={item.slots.length === 0}
                       onClick={() => setDay(item.date)}
                     >
+                      {/* Its name says what shows, and the whole date for a screen reader. */}
                       <span className="d-block fw-semibold">{shortDayLabel(item.date)}</span>
                       <span className="d-block small">{item.slots.length > 0 ? horarios(item.slots.length) : 'Sin horarios'}</span>
+                      <span className="visually-hidden">, {item.label}</span>
                     </button>
                   );
                 })}
@@ -323,11 +334,13 @@ export default function PublicBookingPage() {
                           className={`btn ${active ? 'btn-primary' : 'btn-light'}`}
                           aria-pressed={active}
                           onClick={() => {
-                            setChosen({ slot, date: shownDay.date, dayLabel: shownDay.label });
+                            setChosen({ slot });
                             setNotice('');
                           }}
                         >
                           {slot.label}
+                          {/* After midnight, in the opening of the day before: it says its own day. */}
+                          {slot.date !== shownDay.date && ` · ${shortDayLabel(slot.date)}`}
                         </button>
                       );
                     })}
@@ -347,7 +360,7 @@ export default function PublicBookingPage() {
       {service && chosen && (
         <div className="pm-cart-bar">
           <button type="button" className="btn btn-primary btn-touch w-100" onClick={() => setSheetOpen(true)}>
-            Continuar · {shortDayLabel(chosen.date)} · {chosen.slot.label}
+            Continuar · {shortDayLabel(chosen.slot.date)} · {chosen.slot.label}
           </button>
         </div>
       )}
@@ -361,7 +374,7 @@ export default function PublicBookingPage() {
             <form onSubmit={(event) => void send(event)}>
               <p className="mb-3">
                 <strong>{service.name}</strong>
-                <span className="d-block">{upperFirst(chosen.dayLabel)} · {chosen.slot.label}</span>
+                <span className="d-block">{upperFirst(chosen.slot.dateLabel)} · {chosen.slot.label}</span>
                 {data.address && <span className="d-block small text-muted">{data.address}</span>}
               </p>
               <div className="row g-2">
@@ -381,7 +394,7 @@ export default function PublicBookingPage() {
                     value={notes} onChange={(event) => setNotes(event.target.value)} />
                 </div>
               </div>
-              {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
+              {error && <div className="alert alert-danger mt-3 mb-0" role="alert">{error}</div>}
               <button type="submit" className="btn btn-primary btn-touch btn-touch-lg w-100 mt-3" disabled={sending}>
                 {sending ? 'Enviando…' : 'Pedir cita'}
               </button>

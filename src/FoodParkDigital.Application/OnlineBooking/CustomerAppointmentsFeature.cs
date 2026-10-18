@@ -54,9 +54,10 @@ public static class CustomerAppointments
 
     public const string NotFoundMessage = "No encontramos esa cita. El enlace pudo haber vencido.";
 
-    public static string StatusLabel(AppointmentStatus status, bool cancelledByCustomer) => status switch
+    /// <param name="started">Its time began: a request nobody decided is no longer «Por confirmar».</param>
+    public static string StatusLabel(AppointmentStatus status, bool cancelledByCustomer, bool started = false) => status switch
     {
-        AppointmentStatus.Requested => "Por confirmar",
+        AppointmentStatus.Requested => started ? "No se confirmó" : "Por confirmar",
         AppointmentStatus.Scheduled or AppointmentStatus.Confirmed => "Confirmada",
         AppointmentStatus.InService => "En curso",
         AppointmentStatus.Completed => "Terminada",
@@ -106,7 +107,7 @@ public static class CustomerAppointments
             DateLabel = MessageValues.FormatDate(local),
             TimeLabel = MessageValues.FormatTime(local),
             Status = row.Status,
-            StatusLabel = StatusLabel(row.Status, row.CancelledByCustomer),
+            StatusLabel = StatusLabel(row.Status, row.CancelledByCustomer, row.StartAt <= now),
             CanCancel = CanCancel(row.Channel, row.Status, row.StartAt, now),
             BusinessName = row.BusinessName,
             BusinessSlug = row.BusinessSlug,

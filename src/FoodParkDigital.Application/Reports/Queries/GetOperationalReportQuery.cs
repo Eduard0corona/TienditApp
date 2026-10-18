@@ -84,7 +84,9 @@ public class GetOperationalReportQueryHandler : IRequestHandler<GetOperationalRe
             .CountAsync(x =>
                 x.StartAt >= from &&
                 x.StartAt <= to &&
-                x.Status != AppointmentStatus.Cancelled, cancellationToken);
+                // A request booked online is not scheduled until the business accepts it (Fase 24D).
+                x.Status != AppointmentStatus.Cancelled &&
+                x.Status != AppointmentStatus.Requested, cancellationToken);
 
         var appointmentsCompleted = await _context.Appointments
             .AsNoTracking()

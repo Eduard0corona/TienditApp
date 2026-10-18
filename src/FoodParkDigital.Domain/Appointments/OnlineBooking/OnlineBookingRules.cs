@@ -33,7 +33,7 @@ public static class OnlineBookingRules
 
     public const string CapacityMessage = "Las citas a la vez van de 1 a 20.";
     public const string NotRequestedMessage = "Esta cita no está por confirmar.";
-    public const string RequestTimePassedMessage = "La hora de esta cita ya pasó: muévela a otra hora antes de aceptarla.";
+    public const string RequestTimePassedMessage = "Esta cita ya terminó: muévela a otra hora antes de aceptarla.";
     public const string DecideRequestFirstMessage = "Acepta o rechaza primero la solicitud de cita.";
     public const string OnlyOnlineRequestedMessage = "Solo una cita agendada en línea queda por confirmar.";
     public const string AcceptBeforeChargingMessage = "Acepta la cita antes de cobrarla.";

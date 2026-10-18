@@ -264,18 +264,70 @@ public class OnlineBookingFlowTests
     }
 
     [Fact]
-    public async Task Accept_ShouldRefuse_ARequestWhoseTimePassed()
+    public async Task Accept_ShouldTake_ARequestWhoseTimeBegan_WithoutTellingTheCustomerItIsAgendada()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        await ConnectWhatsAppAsync(fixture, tenant.Id);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
+        fixture.Clock.UtcNow = Local(Monday, "10:30");
+
+        var accepted = await RequestHandler(fixture)
+            .Handle(new AcceptAppointmentRequestCommand(fixture.Context.Appointments.Single().Id), CancellationToken.None);
+
+        Assert.Equal(AppointmentStatus.Scheduled, accepted.Value!.Status);
+        // Only the notice of the request: the customer is already there.
+        Assert.Equal(1, await fixture.Context.OutgoingMessages.CountAsync(m => m.Purpose == MessagePurpose.AppointmentNotice));
+    }
+
+    [Fact]
+    public async Task Accept_ShouldRefuse_ARequestThatEnded()
     {
         await using var fixture = SalesTestFixture.Create();
         var tenant = await BusinessAsync(fixture);
         var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
         await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
-        fixture.Clock.UtcNow = Local(Monday, "10:30");
+        fixture.Clock.UtcNow = Local(Monday, "11:00");
 
         var error = await Assert.ThrowsAsync<DomainException>(() => RequestHandler(fixture)
             .Handle(new AcceptAppointmentRequestCommand(fixture.Context.Appointments.Single().Id), CancellationToken.None));
 
         Assert.Equal(OnlineBookingRules.RequestTimePassedMessage, error.Message);
+    }
+
+    [Fact]
+    public async Task Request_ShouldRefuse_ADayAfterTheLastOneOffered()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+
+        // The fixture's today is Sunday 4 October: the last day offered is Monday 2 November.
+        var lastDay = await RequestAsync(fixture, haircut.Id, Local(new DateOnly(2026, 11, 2), "10:00"));
+        var dayAfter = await RequestAsync(fixture, haircut.Id, Local(new DateOnly(2026, 11, 3), "10:00"), phone: "5511112222");
+
+        Assert.True(lastDay.IsSuccess, lastDay.Error);
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TooFarMessage, dayAfter.Error);
+    }
+
+    [Fact]
+    public async Task Slots_AfterMidnight_ShouldSayTheirOwnDate()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture, hours: false);
+        var settings = await fixture.Context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
+        settings.SetOpeningHours(OpeningHours.Create([new OpeningInterval(DayOfWeek.Monday, new TimeOnly(22, 0), new TimeOnly(2, 0))]));
+        await fixture.Context.SaveChangesAsync();
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+
+        var monday = (await SlotsAsync(fixture, haircut.Id))!.Days[1];
+
+        Assert.Equal(["10:00 p. m.", "10:30 p. m.", "11:00 p. m.", "11:30 p. m.", "12:00 a. m.", "12:30 a. m.", "1:00 a. m."],
+            monday.Slots.Select(s => s.Label));
+        var afterMidnight = monday.Slots[5];
+        Assert.Equal((new DateOnly(2026, 10, 6), "martes 6 de octubre"), (afterMidnight.Date, afterMidnight.DateLabel));
+        Assert.Equal((Monday, "lunes 5 de octubre"), (monday.Slots[0].Date, monday.Slots[0].DateLabel));
     }
 
     [Fact]
@@ -362,6 +414,24 @@ public class OnlineBookingFlowTests
         var past = await new GetMyAppointmentsQueryHandler(fixture.Context, fixture.CurrentUser, fixture.Clock)
             .Handle(new GetMyAppointmentsQuery { Scope = MyAppointmentsScope.Past }, CancellationToken.None);
         Assert.Equal(["La cancelaste"], past.Items.Select(a => a.StatusLabel));
+    }
+
+    [Fact]
+    public async Task Account_ShouldRead_ARequestNobodyDecided_AsNotConfirmed_OnceItsTimeBegan()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        fixture.CurrentUser.UserId = (await CustomerAsync(fixture, "Valeria")).ToString();
+        await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
+        fixture.Clock.UtcNow = Local(Monday, "10:30");
+
+        fixture.TenantService.SetTenant(Guid.Empty);
+        var past = await new GetMyAppointmentsQueryHandler(fixture.Context, fixture.CurrentUser, fixture.Clock)
+            .Handle(new GetMyAppointmentsQuery { Scope = MyAppointmentsScope.Past }, CancellationToken.None);
+
+        var request = Assert.Single(past.Items);
+        Assert.Equal(("No se confirmó", false), (request.StatusLabel, request.CanCancel));
     }
 
     [Fact]

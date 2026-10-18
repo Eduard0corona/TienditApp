@@ -240,11 +240,12 @@ El cliente agenda una cita desde el menú en línea del negocio, y el negocio la
 - **Horas libres** (`/m/:slug/agendar`):
   - cada media hora desde que abre, y el servicio termina antes de cerrar, en la hora del negocio; los días especiales cuentan;
   - la primera, una hora después de ahora; hasta 30 días adelante, por semanas;
+  - una hora después de la medianoche, de una apertura del día anterior, dice su día («12:30 a. m. · Mar 6»);
   - una hora está libre mientras las citas que se cruzan con ella (sin contar canceladas ni las que no llegaron, y con las que esperan confirmación) son menos que las «Citas a la vez» del negocio (de 1 a 20, 1 por omisión).
-- **Pedir la cita:** nombre, teléfono (WhatsApp) y notas opcionales; con la cuenta de cliente ya escritos. Un teléfono deja hasta 3 solicitudes esperando en un negocio («Ya tienes citas esperando confirmación. Espera a que el negocio las confirme.»). Si la hora se ocupó mientras, «Esa hora ya no está libre. Elige otra.», y la página vuelve a leer las horas. La misma solicitud enviada dos veces es una cita.
+- **Pedir la cita:** nombre, teléfono (WhatsApp) y notas opcionales; con la cuenta de cliente ya escritos. Un teléfono deja hasta 3 solicitudes esperando en un negocio («Ya tienes citas esperando confirmación. Espera a que el negocio las confirme.»). Si la hora se ocupó mientras, «Esa hora ya no está libre. Elige otra.», y la página vuelve a leer las horas. La misma solicitud enviada dos veces es una cita: si se pierde la respuesta, la página la deja lista para enviarla otra vez («… Si ya se había enviado, no se repite.»).
 - **Por confirmar:** la cita ocupa su hora desde que se pide. El cliente recibe por WhatsApp «recibimos tu solicitud de cita… Te avisamos en cuanto la confirmen.».
 - **El negocio decide** en la Agenda, donde la solicitud dice «Por confirmar» y «En línea»:
-  - Aceptar la programa y avisa «quedó agendada tu cita…»; una cuya hora ya pasó se mueve antes («La hora de esta cita ya pasó: muévela a otra hora antes de aceptarla.»);
+  - Aceptar la programa y avisa «quedó agendada tu cita…»; también se acepta ya empezada, con el cliente ahí, sin ese aviso; una que ya terminó se mueve antes («Esta cita ya terminó: muévela a otra hora antes de aceptarla.»);
   - Rechazar, después de confirmar, la cancela, libera su hora y avisa «no pudimos confirmar tu cita… Elige otro horario en su menú en línea o respóndenos.»;
   - Editar la mueve de hora; el aviso dice que sigue por confirmar;
   - no se cobra hasta aceptarla («Acepta la cita antes de cobrarla.»).
@@ -253,7 +254,7 @@ El cliente agenda una cita desde el menú en línea del negocio, y el negocio la
   - con el enlace del recibo (`/cita#enlace`), hasta 30 días después de su hora, sin datos del cliente; uno desconocido o vencido responde «No encontramos esa cita. El enlace pudo haber vencido.»;
   - con su cuenta, en Mis citas (`/mis-citas`): Próximas y Anteriores, en todos los negocios;
   - la cancela antes de que empiece, si la agendó en línea, después de confirmar; la agenda dice «La canceló el cliente». Ya empezada: «Tu cita ya empezó o ya pasó: para cambiarla, escríbele al negocio.».
-  - Lo que lee: Por confirmar, Confirmada, En curso, Terminada, No asististe, La cancelaste o Cancelada.
+  - Lo que lee: Por confirmar, Confirmada, En curso, Terminada, No asististe, La cancelaste o Cancelada; «No se confirmó» si nadie decidió la solicitud y su hora ya empezó.
 - **Sin anticipo:** se cobra en Vender después de aceptarla, como cualquier cita.
 
 ## Cancelación y trazabilidad

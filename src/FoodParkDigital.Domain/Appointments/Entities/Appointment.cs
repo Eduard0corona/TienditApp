@@ -182,12 +182,15 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         return appointment;
     }
 
-    /// <summary>The business accepts a request: it is agendada, while its time has not passed (move it first then).</summary>
+    /// <summary>
+    /// The business accepts a request: it is agendada. Also once its time began, with the customer already there; once it
+    /// ended, it is moved to another time first.
+    /// </summary>
     public void Accept(DateTimeOffset now)
     {
         if (Status != AppointmentStatus.Requested)
             throw new DomainException(OnlineBookingRules.NotRequestedMessage);
-        if (StartAt <= now)
+        if (EndAt <= now)
             throw new DomainException(OnlineBookingRules.RequestTimePassedMessage);
         Status = AppointmentStatus.Scheduled;
     }

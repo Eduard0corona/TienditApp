@@ -58,8 +58,10 @@ public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppoi
         if (entity.IsRequest && request.NewStatus == AppointmentStatus.Scheduled)
         {
             // A request made online (Fase 24D) is agendada by accepting it, and cancelled by declining it.
-            entity.Accept(_clock?.UtcNow ?? DateTimeOffset.UtcNow);
-            noticeQueued = await _notices.QueueScheduledAsync(entity, cancellationToken);
+            var now = _clock?.UtcNow ?? DateTimeOffset.UtcNow;
+            entity.Accept(now);
+            // Accepted once its time began, the customer is already there (AppointmentRequestCommandHandler).
+            noticeQueued = entity.StartAt > now && await _notices.QueueScheduledAsync(entity, cancellationToken);
         }
         else if (entity.IsRequest && request.NewStatus == AppointmentStatus.Cancelled)
         {

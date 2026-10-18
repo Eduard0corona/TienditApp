@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appointmentsApi } from '../../api/appointmentsApi';
@@ -66,15 +67,18 @@ function renderAgenda(items: AppointmentDto[], { requests = 0, path = '/appointm
   vi.mocked(appointmentsApi.getAll).mockImplementation(async (params) => ({
     data: countsRequests(params) ? { ...page([]), totalCount: requests } : page(items),
   }) as never);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <ConfirmProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/appointments" element={<AppointmentsList />} />
-          <Route path="/sell" element={<Sell />} />
-        </Routes>
-      </MemoryRouter>
-    </ConfirmProvider>,
+    <QueryClientProvider client={queryClient}>
+      <ConfirmProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/appointments" element={<AppointmentsList />} />
+            <Route path="/sell" element={<Sell />} />
+          </Routes>
+        </MemoryRouter>
+      </ConfirmProvider>
+    </QueryClientProvider>,
   );
 }
 

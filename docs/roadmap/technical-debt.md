@@ -74,8 +74,11 @@ Actualizada el 2026-10-18 con la Fase 24D-1 y antes con la 25, la 24C, la 24B, l
   - El enlace de la cita, como el de un pedido, no se puede revocar ni volver a emitir, y no llega por WhatsApp: el aviso de la solicitud no lo lleva.
   - Sin anticipo ni recordatorio de que confirme: quien no llega deja la hora vacía.
   - Sin tiempo real: la agenda abierta ve una solicitud nueva al volver a cargar.
+  - Cualquiera puede pedir una cita con un teléfono ajeno y hacer que el negocio le mande un WhatsApp: solo lo frenan las 3 solicitudes por teléfono y el límite por IP (compartido con los pedidos). Falta captcha o verificación del teléfono.
+  - El negocio no recibe aviso cuando el cliente cancela: lo ve en la agenda.
+  - En la agenda, una solicitud que nadie decidió sigue «Por confirmar» después de su hora (la cuenta del cliente ya dice «No se confirmó»), y Aceptar responde que ya terminó.
   - Mis citas trae solo las citas agendadas en línea con la cuenta: no las que el negocio registró con el teléfono del cliente.
-  - La 24D-1 suma 296 B a la primera visita (de 177,674 a 177,970 B, contra `master` en `d21f0f2`) y sube el presupuesto a 178,200 B.
+  - La 24D-1 suma 286 B a la primera visita (de 177,674 a 177,960 B, contra `master` en `d21f0f2`) y sube el presupuesto a 178,200 B.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

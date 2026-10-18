@@ -45,7 +45,8 @@ public static class BookingSlots
 
     /// <summary>
     /// Whether <paramref name="start"/> is one of the free starts: of the openings of its date in the business, or of the
-    /// day before (an opening that runs past midnight belongs to the day it starts).
+    /// day before (an opening that runs past midnight belongs to the day it starts), of a date up to
+    /// <paramref name="lastDate"/> when given (the last day offered).
     /// </summary>
     public static bool IsFree(
         BusinessSchedule? schedule,
@@ -54,11 +55,13 @@ public static class BookingSlots
         TimeSpan duration,
         IReadOnlyCollection<BookedInterval> booked,
         int capacity,
-        DateTimeOffset earliest)
+        DateTimeOffset earliest,
+        DateOnly? lastDate = null)
     {
         var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(start, zone).DateTime);
-        return FreeStarts(schedule, zone, date, duration, booked, capacity, earliest).Contains(start)
-            || FreeStarts(schedule, zone, date.AddDays(-1), duration, booked, capacity, earliest).Contains(start);
+        bool OffersOn(DateOnly day) => (lastDate is null || day <= lastDate)
+            && FreeStarts(schedule, zone, day, duration, booked, capacity, earliest).Contains(start);
+        return OffersOn(date) || OffersOn(date.AddDays(-1));
     }
 
     /// <summary>The most appointments running at once between <paramref name="from"/> and <paramref name="to"/>.</summary>

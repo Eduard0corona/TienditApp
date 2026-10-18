@@ -149,11 +149,10 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
             Add(AttentionKeys.AppointmentsToConfirm, await _context.Appointments.AsNoTracking()
                 .CountAsync(a => a.Status == AppointmentStatus.Scheduled && a.StartAt >= now && a.StartAt <= endOfToday, cancellationToken));
             // Every request still ahead waits for an answer; those of today are urgent.
-            var requests = await _context.Appointments.AsNoTracking()
-                .Where(a => a.Status == AppointmentStatus.Requested && a.StartAt > now)
-                .Select(a => a.StartAt)
-                .ToListAsync(cancellationToken);
-            Add(AttentionKeys.AppointmentRequests, requests.Count, requests.Count(startAt => startAt <= endOfToday));
+            var requests = _context.Appointments.AsNoTracking()
+                .Where(a => a.Status == AppointmentStatus.Requested && a.StartAt > now);
+            Add(AttentionKeys.AppointmentRequests, await requests.CountAsync(cancellationToken),
+                await requests.CountAsync(a => a.StartAt <= endOfToday, cancellationToken));
         }
 
         return new AttentionDto { Items = items };

@@ -13131,6 +13131,9 @@ export interface components {
             /** Format: date-time */
             startAt: string;
             label: string;
+            /** Format: date */
+            date: string;
+            dateLabel: string;
         };
         PublicBookingSlotsDto: {
             days: components["schemas"]["PublicBookingDayDto"][];

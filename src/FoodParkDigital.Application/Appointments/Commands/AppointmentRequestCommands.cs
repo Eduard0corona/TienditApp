@@ -63,8 +63,11 @@ public class AppointmentRequestCommandHandler :
     public async Task<Result<AppointmentDto>> Handle(AcceptAppointmentRequestCommand request, CancellationToken cancellationToken)
     {
         var appointment = await FindAsync(request.AppointmentId, cancellationToken);
-        appointment.Accept(_clock.UtcNow);
-        return await SaveAsync(appointment, await _notices.QueueScheduledAsync(appointment, cancellationToken), cancellationToken);
+        var now = _clock.UtcNow;
+        appointment.Accept(now);
+        // Accepted once its time began, the customer is already there: no notice of an appointment agendada.
+        var noticeQueued = appointment.StartAt > now && await _notices.QueueScheduledAsync(appointment, cancellationToken);
+        return await SaveAsync(appointment, noticeQueued, cancellationToken);
     }
 
     public async Task<Result<AppointmentDto>> Handle(DeclineAppointmentRequestCommand request, CancellationToken cancellationToken)

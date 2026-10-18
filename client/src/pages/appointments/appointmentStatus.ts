@@ -20,7 +20,8 @@ export const statusBadge = (status: AppointmentStatus) => {
     case AppointmentStatusConst.Completed: return 'bg-success';
     case AppointmentStatusConst.Confirmed: return 'ta-chip-confirmed';
     case AppointmentStatusConst.InService: return 'bg-info';
-    case AppointmentStatusConst.Requested:
+    // A request booked online waits, like a new order (Fase 24D); not the amber of «No asistió».
+    case AppointmentStatusConst.Requested: return 'ta-chip-new';
     case AppointmentStatusConst.NoShow: return 'bg-warning text-dark';
     case AppointmentStatusConst.Cancelled: return 'bg-danger';
     default: return 'bg-secondary';

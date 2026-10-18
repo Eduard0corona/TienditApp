@@ -19,8 +19,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
 /// Online bookings on SQL Server (Fase 24D, ADR 0025): requests that arrive at the same time for the last free time of a
-/// business wait in line on its booking lock, so only one takes it; and the same request sent twice at once is one
-/// appointment.
+/// business wait in line on its booking lock, so only one takes it; the same request sent twice at once is one
+/// appointment; and a phone at once does not pass its requests waiting.
 /// </summary>
 public class OnlineBookingSqlServerTests
 {
@@ -61,9 +61,44 @@ public class OnlineBookingSqlServerTests
         Assert.Equal(1, await check.Appointments.CountAsync());
     }
 
-    /// <summary>Asks for Monday at 10:00 through the transaction of the pipeline, with the services of production.</summary>
+    [SqlServerFact]
+    public async Task RequestsAtOnce_OfOnePhone_ShouldNotPassItsRequestsWaiting()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var business = await SeedAsync(database);
+        await RequestAsync(database, business, "5522107765", Guid.NewGuid(), MondayAtTen.AddHours(24));
+        await RequestAsync(database, business, "5522107765", Guid.NewGuid(), MondayAtTen.AddHours(25));
+        Result<PublicAppointmentReceiptDto>[] results;
+
+        // Two waiting already: three more at once, at three free times, all count two before the lock (another booking of
+        // the business holds it meanwhile) and wait their turn; only one fits under the limit of three.
+        var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
+        await using var holder = database.CreateProductionLikeContext(
+            tenant, new InMemoryApplicationDbContext.NullMediator(), new TenantSaveChangesInterceptor(tenant));
+        await using (var held = await holder.Database.BeginTransactionAsync())
+        {
+            await new AppointmentBookingLock(holder).AcquireAsync(business.TenantId, CancellationToken.None);
+            var requests = Enumerable.Range(0, 3)
+                .Select(i => RequestAsync(database, business, "5522107765", Guid.NewGuid(), MondayAtTen.AddHours(i)))
+                .ToList();
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await held.CommitAsync();
+            results = await Task.WhenAll(requests);
+        }
+
+        Assert.Single(results, result => result.IsSuccess);
+        Assert.All(results.Where(result => result.IsFailure),
+            result => Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage, result.Error));
+        await using var check = database.CreateContext(business.TenantId);
+        Assert.Equal(3, await check.Appointments.CountAsync(a => a.Status == AppointmentStatus.Requested));
+    }
+
+    /// <summary>
+    /// Asks for a time (Monday at 10:00 unless another) through the transaction of the pipeline, with the services of
+    /// production.
+    /// </summary>
     private static async Task<Result<PublicAppointmentReceiptDto>> RequestAsync(
-        SqlServerTestDatabase database, Business business, string phone, Guid key)
+        SqlServerTestDatabase database, Business business, string phone, Guid key, DateTimeOffset? startAt = null)
     {
         var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
         await using var context = database.CreateProductionLikeContext(
@@ -73,7 +108,7 @@ public class OnlineBookingSqlServerTests
         {
             Slug = business.Slug,
             ServiceProductId = business.ServiceId,
-            StartAt = MondayAtTen,
+            StartAt = startAt ?? MondayAtTen,
             CustomerName = "Valeria Ruiz",
             CustomerPhone = phone,
             IdempotencyKey = key

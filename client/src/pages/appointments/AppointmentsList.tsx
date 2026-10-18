@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { appointmentsApi } from '../../api/appointmentsApi';
@@ -17,6 +18,7 @@ import type {
 } from '../../types';
 import { AppointmentChannel, AppointmentStatus as AppointmentStatusConst } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { queryKeys } from '../../api/queries';
 import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
@@ -131,6 +133,7 @@ export default function AppointmentsList() {
   const titleId = useId();
   const toast = useToast();
   const { confirm } = useConfirm();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const linkedState = searchParams.get('estado') ?? '';
@@ -386,6 +389,8 @@ export default function AppointmentsList() {
     try {
       await appointmentsApi.accept(item.id);
       toast.success('Cita aceptada: el cliente recibe el aviso.');
+      // The bell and Inicio count the requests too.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       await Promise.all([loadData(), loadRequests()]);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo aceptar la cita.'));
@@ -406,6 +411,7 @@ export default function AppointmentsList() {
     try {
       await appointmentsApi.decline(item.id);
       toast.success('Solicitud rechazada: el cliente recibe el aviso.');
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       await Promise.all([loadData(), loadRequests()]);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo rechazar la solicitud.'));

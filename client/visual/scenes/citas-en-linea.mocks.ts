@@ -92,7 +92,12 @@ function week(data: DemoData, serviceId: string, from: string | null) {
       return starts;
     }).filter((start) => (date !== TODAY || start >= NOW_MINUTES + 60)
       && !(TAKEN[date] ?? []).some(([takenFrom, takenTo]) => start < takenTo && takenFrom < start + service.durationMinutes));
-    return { date, label: dateLabel(date), slots: slots.map((start) => ({ startAt: instant(date, start), label: timeLabel(start) })) };
+    return {
+      date,
+      label: dateLabel(date),
+      // Café La Esquina closes before midnight: every time starts on its day.
+      slots: slots.map((start) => ({ startAt: instant(date, start), label: timeLabel(start), date, dateLabel: dateLabel(date) })),
+    };
   });
   return { days, nextFrom: addDays(first, 7) };
 }

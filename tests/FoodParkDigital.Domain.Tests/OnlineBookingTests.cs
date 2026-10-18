@@ -107,11 +107,21 @@ public class OnlineBookingTests
     }
 
     [Fact]
-    public void Accept_ShouldRefuse_ARequestWhoseTimePassed()
+    public void Accept_ShouldTake_ARequestWhoseTimeBegan_WithTheCustomerThere()
     {
         var appointment = Request();
 
-        var error = Assert.Throws<DomainException>(() => appointment.Accept(Local(Monday, "10:00")));
+        appointment.Accept(Local(Monday, "10:30"));
+
+        Assert.Equal(AppointmentStatus.Scheduled, appointment.Status);
+    }
+
+    [Fact]
+    public void Accept_ShouldRefuse_ARequestThatEnded()
+    {
+        var appointment = Request();
+
+        var error = Assert.Throws<DomainException>(() => appointment.Accept(Local(Monday, "11:00")));
 
         Assert.Equal(OnlineBookingRules.RequestTimePassedMessage, error.Message);
         Assert.Equal(AppointmentStatus.Requested, appointment.Status);
@@ -366,6 +376,9 @@ public class OnlineBookingTests
 
         Assert.True(BookingSlots.IsFree(schedule, Cdmx, Local(tuesday, "00:30"), TimeSpan.FromHours(1), [], 1, Local(Monday, "12:00")));
         Assert.False(BookingSlots.IsFree(schedule, Cdmx, Local(tuesday, "01:30"), TimeSpan.FromHours(1), [], 1, Local(Monday, "12:00")));
+        // Up to the last day offered: its opening may end the day after, but one of the day after is out.
+        Assert.True(BookingSlots.IsFree(schedule, Cdmx, Local(tuesday, "00:30"), TimeSpan.FromHours(1), [], 1, Local(Monday, "12:00"), lastDate: Monday));
+        Assert.False(BookingSlots.IsFree(schedule, Cdmx, Local(tuesday, "00:30"), TimeSpan.FromHours(1), [], 1, Local(Monday, "12:00"), lastDate: Monday.AddDays(-1)));
     }
 
     [Fact]

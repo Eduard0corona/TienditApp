@@ -22420,6 +22420,8 @@
       },
       "PublicBookingSlotDto": {
         "required": [
+          "date",
+          "dateLabel",
           "label",
           "startAt"
         ],
@@ -22430,6 +22432,13 @@
             "format": "date-time"
           },
           "label": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateLabel": {
             "type": "string"
           }
         },

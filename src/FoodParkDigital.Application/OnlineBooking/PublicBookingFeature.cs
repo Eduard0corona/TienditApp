@@ -74,6 +74,13 @@ public class PublicBookingSlotDto
     public DateTimeOffset StartAt { get; set; }
     /// <summary>«10:30 a. m.», in the business.</summary>
     public string Label { get; set; } = null!;
+    /// <summary>
+    /// The date it starts in the business: the day after the one it is listed under when it starts after midnight, in an
+    /// opening of the day before.
+    /// </summary>
+    public DateOnly Date { get; set; }
+    /// <summary>«martes 20 de octubre», the date it starts.</summary>
+    public string DateLabel { get; set; } = null!;
 }
 
 /// <summary>What the customer reads once the request is sent.</summary>
@@ -214,11 +221,7 @@ public class GetPublicBookingSlotsQueryHandler : IRequestHandler<GetPublicBookin
                 Date = date,
                 Label = MessageValues.FormatDate(Midnight(date)),
                 Slots = BookingSlots.FreeStarts(hours?.Schedule, zone, date, service.Duration, booked, settings.OnlineBookingCapacity, earliest)
-                    .Select(start => new PublicBookingSlotDto
-                    {
-                        StartAt = start,
-                        Label = MessageValues.FormatTime(TimeZoneInfo.ConvertTime(start, zone))
-                    })
+                    .Select(start => Slot(start, zone))
                     .ToList()
             });
         }
@@ -227,6 +230,19 @@ public class GetPublicBookingSlotsQueryHandler : IRequestHandler<GetPublicBookin
     }
 
     private static DateTimeOffset Midnight(DateOnly date) => new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+
+    /// <summary>A free start, with the date it starts on: an opening may run past midnight into the next one.</summary>
+    private static PublicBookingSlotDto Slot(DateTimeOffset start, TimeZoneInfo zone)
+    {
+        var local = TimeZoneInfo.ConvertTime(start, zone);
+        return new PublicBookingSlotDto
+        {
+            StartAt = start,
+            Label = MessageValues.FormatTime(local),
+            Date = DateOnly.FromDateTime(local.DateTime),
+            DateLabel = MessageValues.FormatDate(local)
+        };
+    }
 }
 
 /// <summary>
@@ -325,31 +341,33 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         var tenantId = business.Tenant.Id;
         var now = _clock.UtcNow;
         // Until the business decides them, a phone cannot keep piling up requests.
-        var waiting = await _context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online
-            && a.CustomerPhone == phone
-            && a.Status == AppointmentStatus.Requested
-            && a.StartAt > now, cancellationToken);
-        if (waiting >= OnlineBookingRules.MaxPendingPerPhone)
+        if (await PendingForPhoneAsync(phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
             return Result.Failure<PublicAppointmentReceiptDto>(TooManyPendingMessage);
 
         var settings = business.Settings;
         var zone = TenantDateTimeResolver.Resolve(settings.TimeZone);
         var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(now, settings.TimeZone));
+        var lastDay = today.AddDays(OnlineBookingRules.DaysAhead - 1);
         var startAt = request.StartAt;
-        if (DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(startAt, zone).DateTime) > today.AddDays(OnlineBookingRules.DaysAhead))
+        // The last day offered may end after midnight, in the day after it.
+        var startDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(startAt, zone).DateTime);
+        if (startDate > lastDay.AddDays(1))
             return Result.Failure<PublicAppointmentReceiptDto>(TooFarMessage);
 
         // In line with the other bookings of the business: the one before this commits first, and its time is taken below.
-        // The one before may have been this same request, sent twice: then it answers that one.
+        // The one before may have been this same request, sent twice: then it answers that one; or another of the same
+        // phone, which counts.
         await _bookingLock.AcquireAsync(tenantId, cancellationToken);
         if (request.IdempotencyKey is { } lockedKey && await RequestedAsync(lockedKey, phone, business, account, cancellationToken) is { } answered)
             return answered;
+        if (await PendingForPhoneAsync(phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
+            return Result.Failure<PublicAppointmentReceiptDto>(TooManyPendingMessage);
         var hours = await BusinessHours.ReadAsync(_context, tenantId, settings.OpeningHours, settings.TimeZone, now, cancellationToken);
         var endAt = startAt + service.Duration;
         var booked = await OnlineBookingCalendar.BookedAsync(_context, tenantId, startAt.AddDays(-1), endAt.AddDays(1), cancellationToken);
         if (!BookingSlots.IsFree(hours?.Schedule, zone, startAt, service.Duration, booked, settings.OnlineBookingCapacity,
-                now.AddMinutes(OnlineBookingRules.MinNoticeMinutes)))
-            return Result.Failure<PublicAppointmentReceiptDto>(TimeTakenMessage);
+                now.AddMinutes(OnlineBookingRules.MinNoticeMinutes), lastDay))
+            return Result.Failure<PublicAppointmentReceiptDto>(startDate > lastDay ? TooFarMessage : TimeTakenMessage);
 
         var appointment = Appointment.RequestOnline(
             tenantId,
@@ -382,6 +400,13 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
 
         return Result.Success(Receipt(appointment, business, account));
     }
+
+    /// <summary>The requests of a phone in the business still waiting for an answer.</summary>
+    private Task<int> PendingForPhoneAsync(string phone, DateTimeOffset now, CancellationToken cancellationToken)
+        => _context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online
+            && a.CustomerPhone == phone
+            && a.Status == AppointmentStatus.Requested
+            && a.StartAt > now, cancellationToken);
 
     private static PublicAppointmentReceiptDto Receipt(
         Appointment appointment, PublicBookingBusiness business, Domain.Identity.Entities.ApplicationUser? account)

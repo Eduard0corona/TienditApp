@@ -25,7 +25,7 @@ const LOOKS = [
 async function openCata(page: Page) {
   await open(page, '/m/cafe-la-esquina/agendar');
   await page.getByRole('button', { name: /Cata de café de especialidad/ }).click();
-  await expect(page.getByRole('button', { name: /Lunes 5 de octubre: \d+ horarios libres/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: /^Lun 5.*lunes 5 de octubre$/ })).toHaveAttribute('aria-pressed', 'true');
 }
 
 /** Monday at 4:00 p. m., and the sheet with the customer's data. */
@@ -84,7 +84,7 @@ test.describe('Agendar en línea', () => {
     await page.setViewportSize(SIZES.phone);
     await openCata(page);
     await page.getByRole('button', { name: 'Semana siguiente' }).click();
-    await expect(page.getByRole('button', { name: /Domingo 11 de octubre/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: /^Dom 11.*domingo 11 de octubre$/ })).toHaveAttribute('aria-pressed', 'true');
     await snap(page, 'agendar-semana-siguiente-telefono');
   });
 
