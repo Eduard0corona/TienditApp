@@ -133,6 +133,9 @@ public class ExploreProductsAndFavoritesTests
         fixture.Context.Products.Add(new Product(ferre.Id, category.Id, "Tornillo de la casa", null, 2m, "MXN", isFeatured: true));
         // Past what the menu shows (with the product every business of these tests has).
         fixture.Context.Products.Add(new Product(ferre.Id, category.Id, "Tornillo de bodega", null, 2m, "MXN"));
+        // Another business read with it: the large catalog does not take its place.
+        var tlapaleria = await BusinessAsync(fixture, "tlapaleria-luz", "Tlapalería Luz");
+        await ProductAsync(fixture, tlapaleria, "Tornillo para madera", 3m);
         await fixture.Context.SaveChangesAsync();
 
         var found = await SearchAsync(fixture, "tornillo");
@@ -144,7 +147,7 @@ public class ExploreProductsAndFavoritesTests
         Assert.Contains("Tornillo de la casa", shown);
         Assert.DoesNotContain("Tornillo de bodega", shown);
         // What a search finds opens in its menu: never one the menu does not show.
-        Assert.Equal("Tornillo de la casa", Assert.Single(found.Products).Name);
+        Assert.Equal(["Tornillo de la casa", "Tornillo para madera"], found.Products.Select(p => p.Name));
     }
 
     [Fact]

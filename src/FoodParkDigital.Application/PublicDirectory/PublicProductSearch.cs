@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -46,11 +47,11 @@ public sealed class PublicProductIndex
     /// </summary>
     public const int MaxProducts = 20_000;
 
-    /// <summary>The businesses whose products one read brings: few reads, each a bounded one.</summary>
+    /// <summary>
+    /// The businesses whose products one read brings: few reads, each of at most this many menus of
+    /// <see cref="GetPublicMenuQueryHandler.MaxProducts"/> products.
+    /// </summary>
     internal const int BusinessesPerRead = 50;
-
-    /// <summary>The most rows one read brings: as many as the menus of its businesses can show.</summary>
-    private const int MaxRowsPerRead = BusinessesPerRead * GetPublicMenuQueryHandler.MaxProducts;
 
     /// <summary>The products one search returns.</summary>
     public const int MaxResults = 12;
@@ -83,39 +84,48 @@ public sealed class PublicProductIndex
         var businesses = snapshot.Entries
             .Select((entry, position) => (entry, position))
             .ToDictionary(item => item.entry.TenantId);
+        // The menus of some businesses: the products they show, read before any business is in context.
+        IQueryable<Product> Menus(IReadOnlyCollection<Guid> tenantIds) => PublicDirectorySnapshot.MenuProducts(context)
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => tenantIds.Contains(p.TenantId));
+        IQueryable<ProductRow> Rows(IQueryable<Product> products) => products.Select(p => new ProductRow(
+            p.Id,
+            p.TenantId,
+            p.Name,
+            p.Description,
+            p.PriceAmount,
+            p.CompareAtPrice,
+            p.ImageUrl,
+            p.TaxRate,
+            p.IsTaxExempt,
+            context.TenantSettings.Where(s => s.TenantId == p.TenantId).Select(s => s.DefaultTaxRate).FirstOrDefault()));
+
         var entries = new List<Entry>();
         foreach (var batch in snapshot.Entries.Select(entry => entry.TenantId).Chunk(BusinessesPerRead))
         {
-            var tenantIds = batch.ToList();
-            // Each business in the order of its menu (GetPublicMenuQuery): whatever part of it is read, it is what its
-            // menu shows first.
-            var rows = await PublicDirectorySnapshot.ThenInMenuOrder(PublicDirectorySnapshot.MenuProducts(context)
-                    .IgnoreQueryFilters()
-                    .Where(p => tenantIds.Contains(p.TenantId))
-                    .OrderBy(p => p.TenantId))
-                .AsNoTracking()
-                .Take(MaxRowsPerRead)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.TenantId,
-                    p.Name,
-                    p.Description,
-                    p.PriceAmount,
-                    p.CompareAtPrice,
-                    p.ImageUrl,
-                    p.TaxRate,
-                    p.IsTaxExempt,
-                    DefaultTaxRate = context.TenantSettings.Where(s => s.TenantId == p.TenantId).Select(s => s.DefaultTaxRate).FirstOrDefault()
-                })
+            // Each business brings at most what its menu shows: one with a larger catalog is read on its own, cut to
+            // the first ones of its menu (GetPublicMenuQuery), and never takes the place of the others of its batch.
+            var sizes = await Menus(batch)
+                .GroupBy(p => p.TenantId)
+                .Select(menu => new { TenantId = menu.Key, Products = menu.Count() })
                 .ToListAsync(cancellationToken);
-            if (rows.Count == MaxRowsPerRead)
-                logger?.LogWarning("Explorar read {MaxRowsPerRead} products of {Businesses} businesses at once: the largest menus may show fewer.", MaxRowsPerRead, tenantIds.Count);
+            var rows = new List<ProductRow>();
+            var whole = sizes.Where(menu => menu.Products <= GetPublicMenuQueryHandler.MaxProducts).Select(menu => menu.TenantId).ToList();
+            if (whole.Count > 0)
+            {
+                rows.AddRange(await Rows(PublicDirectorySnapshot.ThenInMenuOrder(Menus(whole).OrderBy(p => p.TenantId)))
+                    .ToListAsync(cancellationToken));
+            }
 
-            // The first ones the menu shows of each business, in the order of Explorar (OrderBy keeps each menu's order).
+            foreach (var large in sizes.Where(menu => menu.Products > GetPublicMenuQueryHandler.MaxProducts))
+            {
+                rows.AddRange(await Rows(PublicDirectorySnapshot.InMenuOrder(Menus([large.TenantId])).Take(GetPublicMenuQueryHandler.MaxProducts))
+                    .ToListAsync(cancellationToken));
+            }
+
+            // In the order of Explorar (OrderBy keeps the order of each menu): past the limit, the last ones are left out.
             entries.AddRange(rows
-                .GroupBy(row => row.TenantId)
-                .SelectMany(menu => menu.Take(GetPublicMenuQueryHandler.MaxProducts))
                 .OrderBy(row => businesses[row.TenantId].position)
                 .Select(row =>
                 {
@@ -189,6 +199,19 @@ public sealed class PublicProductIndex
 
         return products;
     }
+
+    /// <summary>A product as the index reads it: the columns its menu shows, and the IVA of its business.</summary>
+    private sealed record ProductRow(
+        Guid Id,
+        Guid TenantId,
+        string Name,
+        string? Description,
+        decimal PriceAmount,
+        decimal? CompareAtPrice,
+        string? ImageUrl,
+        decimal? TaxRate,
+        bool IsTaxExempt,
+        decimal DefaultTaxRate);
 
     /// <param name="Position">Its business's place in Explorar: those taking orders now first.</param>
     /// <param name="AddsTax">The order adds IVA to its price.</param>
