@@ -419,6 +419,18 @@ La Fase 24D-1 trae una migración, [`database/production/20261017225015_AddOnlin
 - **Volver a la versión anterior:** funciona sin tocar la base, pero no conoce «Por confirmar»: mostraría las solicitudes sin poder aceptarlas ni rechazarlas. La consulta 4 del `verify.sql` dice cuántas esperan; decídelas antes de volver. El menú y Explorar dejan de ofrecer «Agenda tu cita», y los enlaces de las citas dejan de abrir.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50019, sin cambiar nada, en cuanto un cliente agendó una cita en línea: se perdería de dónde vino, su cuenta y su enlace. Sin citas en línea, quita lo que agregó (también lo que eligieron los dueños, que no tiene efecto sin la versión nueva), y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Portada del menú (Fase 24E)
+
+La Fase 24E trae una migración, [`database/production/20261018032200_AddBusinessCover`](../../database/production/20261018032200_AddBusinessCover). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0026](../adr/0026-store-like-delivery-apps.md)).
+
+- **La migración:** agrega a `Tenants` la columna `CoverImageUrl` (`nvarchar(500)` con nulos), vacía en todos los negocios. Cambia algo cuando un dueño sube su portada en Configuración: el menú la muestra arriba, y sin ella sigue con los colores del negocio. Después de aplicarla, el `verify.sql` muestra la columna, y su consulta 3 cuenta los negocios con y sin portada (todos sin portada hasta desplegar).
+- **Los archivos:** la portada se guarda en el mismo almacenamiento que el logo y las fotos de los productos, en la carpeta pública `covers/{tenantId}`, en las mismas cinco variantes. No hay que configurar nada nuevo.
+- **Mientras se publica:** la versión de `master` (Fase 24D-1) no conoce la columna y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `POST`/`DELETE /api/v1/auth/my-tenant/cover`, `coverImages` en el perfil del negocio, y `coverImageUrl`, `coverImageWideUrl`, `description` y `category` en el menú público, con `imageLargeUrl` en cada producto. Nada se quita ni cambia de nombre.
+- **El menú cambia de forma** (portada, pestañas, filas con foto, la hoja del producto, el botón flotante y el pedido como página de pago), pero el pedido que llega al negocio es el mismo. Lo único nuevo es la nota de cada producto, que la cocina y Pedidos ya mostraban.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce la portada y vuelve el menú de antes.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50020, sin cambiar nada, en cuanto un dueño subió una portada: se perdería y sus archivos quedarían sin nada que los use. Sin portadas, quita la columna, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

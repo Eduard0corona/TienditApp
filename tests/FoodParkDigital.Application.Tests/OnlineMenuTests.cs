@@ -52,6 +52,38 @@ public class OnlineMenuTests
     }
 
     [Fact]
+    public async Task Menu_ShouldCarryItsStoreHeader_TheCoverTheLineAndTheCategory()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "cafe-luna");
+        await SetModeAsync(fixture, tenant, OnlineMenuMode.MenuOnly);
+        var latte = await fixture.AddProductAsync(tenant, "Latte", 55m);
+        await fixture.Context.SaveChangesAsync();
+
+        // Without a cover, a line or a photo the menu says so, and shows the colors of the business instead.
+        var plain = await MenuHandler(fixture).Handle(new GetPublicMenuQuery("cafe-luna"), CancellationToken.None);
+        Assert.Null(plain!.CoverImageUrl);
+        Assert.Null(plain.CoverImageWideUrl);
+        Assert.Null(plain.Description);
+        Assert.Null(Assert.Single(Assert.Single(plain.Categories).Products).ImageLargeUrl);
+
+        tenant.SetCoverImage("/uploads/covers/luna/portada");
+        tenant.SetDirectoryProfile(BusinessCategory.Food, "Café de olla y pan dulce");
+        latte.SetImage("/uploads/products/luna/latte");
+        await fixture.Context.SaveChangesAsync();
+
+        var menu = await MenuHandler(fixture).Handle(new GetPublicMenuQuery("cafe-luna"), CancellationToken.None);
+
+        Assert.Equal("/uploads/covers/luna/portada_lg.webp", menu!.CoverImageUrl);
+        Assert.Equal("/uploads/covers/luna/portada_original.webp", menu.CoverImageWideUrl);
+        Assert.Equal("Café de olla y pan dulce", menu.Description);
+        Assert.Equal(BusinessCategory.Food, menu.Category);
+        var product = Assert.Single(Assert.Single(menu.Categories).Products);
+        Assert.Equal("/uploads/products/luna/latte_md.webp", product.ImageUrl);
+        Assert.Equal("/uploads/products/luna/latte_lg.webp", product.ImageLargeUrl);
+    }
+
+    [Fact]
     public async Task Menu_ShouldListOnlyAvailableProductsAndNoServices()
     {
         await using var fixture = SalesTestFixture.Create();

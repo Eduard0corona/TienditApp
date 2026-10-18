@@ -23,6 +23,7 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.ContactEmail).HasMaxLength(256).IsRequired();
         builder.Property(t => t.ContactPhone).HasMaxLength(20);
         builder.Property(t => t.LogoUrl).HasMaxLength(500);
+        builder.Property(t => t.CoverImageUrl).HasMaxLength(500);
         // Fase 24A (ADR 0021): the migration gives each existing business the category of its giro or its type; the
         // database default fills the businesses the previous version opens while this one is published. EF always writes
         // the value.

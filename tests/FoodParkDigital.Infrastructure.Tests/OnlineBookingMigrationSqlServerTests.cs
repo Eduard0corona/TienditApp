@@ -15,7 +15,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// AddOnlineBooking (Fase 24D, ADR 0025): the appointments and the settings that exist stay as the team's and with online
 /// booking off; an appointment booked online keeps its account, its key and its link, one per business and request; the
 /// version deployed before keeps booking and saving settings over the new columns; and rolling back stops with error 50019
-/// once a customer booked online, and otherwise drops only the new columns.
+/// once a customer booked online, and otherwise drops only the new columns. The database stops at this migration, so the
+/// tests read it without what came after (<see cref="BeforeBusinessCover"/>).
 /// </summary>
 public class OnlineBookingMigrationSqlServerTests
 {
@@ -45,7 +46,7 @@ public class OnlineBookingMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeBusinessCover.CreateContext(database, tenantId);
         var settings = await context.TenantSettings.SingleAsync();
         Assert.Equal((false, 1), (settings.OnlineBookingEnabled, settings.OnlineBookingCapacity));
         var appointment = await context.Appointments.SingleAsync();
@@ -64,7 +65,7 @@ public class OnlineBookingMigrationSqlServerTests
         var token = new string('k', 43);
         await SeedOnlineAsync(database, tenant.Id, key, token);
 
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeBusinessCover.CreateContext(database, tenant.Id))
         {
             var stored = await context.Appointments.SingleAsync();
             Assert.Equal((AppointmentStatus.Requested, AppointmentChannel.Online, (Guid?)key, token),
@@ -105,7 +106,7 @@ public class OnlineBookingMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeBusinessCover.CreateContext(database, tenant.Id);
         Assert.Equal(AppointmentChannel.Business, (await check.Appointments.SingleAsync()).Channel);
         var saved = await check.TenantSettings.SingleAsync();
         Assert.Equal((true, 3, 45), (saved.OnlineBookingEnabled, saved.OnlineBookingCapacity, saved.HomeVisitTravelMinutes));
@@ -122,7 +123,7 @@ public class OnlineBookingMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeBooking));
         Assert.Equal(50019, error.Number);
         Assert.Contains("Customers booked appointments online", error.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeBusinessCover.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [Appointments] WHERE [Channel] = 1"));
@@ -132,7 +133,7 @@ public class OnlineBookingMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeBooking);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeBusinessCover.CreateContext(database))
         {
             Assert.Equal(BeforeBooking, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 1), (
@@ -144,7 +145,7 @@ public class OnlineBookingMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the columns are back with their defaults.
         await MigrateAsync(database, BeforeBooking);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeBusinessCover.CreateContext(database, tenant.Id);
         var settings = await forward.TenantSettings.SingleAsync();
         Assert.Equal((false, 1), (settings.OnlineBookingEnabled, settings.OnlineBookingCapacity));
         Assert.Equal(AppointmentChannel.Business, (await forward.Appointments.SingleAsync()).Channel);
@@ -152,7 +153,7 @@ public class OnlineBookingMigrationSqlServerTests
 
     private static async Task SeedOnlineAsync(SqlServerTestDatabase database, Guid tenantId, Guid key, string token)
     {
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeBusinessCover.CreateContext(database, tenantId);
         context.Appointments.Add(Appointment.RequestOnline(
             tenantId, "Valeria", "+525522107765", Guid.NewGuid(), "Corte de cabello", Monday, Monday.AddHours(1),
             null, null, key, token));
@@ -171,7 +172,7 @@ public class OnlineBookingMigrationSqlServerTests
         var settings = new TenantSettings(tenant.Id, TenantCapability.Appointments);
         if (bookingOn)
             settings.UpdateOnlineBooking(true, 3);
-        await using var seed = database.CreateContext();
+        await using var seed = BeforeBusinessCover.CreateContext(database);
         seed.AddRange(tenant, settings);
         await seed.SaveChangesAsync();
         return tenant;

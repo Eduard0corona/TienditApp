@@ -4,7 +4,7 @@ import { linesOfOrder, saveCart } from '../utils/savedCart';
 interface OrderToRepeat {
   businessSlug: string;
   businessName: string;
-  items: Array<{ productId: string; quantity: number; optionIds?: string[] | null }>;
+  items: Array<{ productId: string; quantity: number; optionIds?: string[] | null; notes?: string | null }>;
 }
 
 /**

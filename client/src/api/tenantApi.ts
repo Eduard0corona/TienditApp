@@ -44,6 +44,18 @@ export const tenantApi = {
   deleteLogo: () =>
     api.delete('/auth/my-tenant/logo'),
 
+  /** The wide photo across the top of the online menu (Fase 24E), in the same variants as the logo. */
+  uploadCover: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<LogoImageUrlsDto>('/auth/my-tenant/cover', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  deleteCover: () =>
+    api.delete('/auth/my-tenant/cover'),
+
   getWhatsAppConfig: () =>
     api.get<WhatsAppConfigDto>('/auth/my-tenant/whatsapp'),
 

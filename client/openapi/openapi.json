@@ -1144,6 +1144,65 @@
         }
       }
     },
+    "/api/v1/auth/my-tenant/cover": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoImageUrlsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoImageUrlsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoImageUrlsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/auth/my-tenant/whatsapp": {
       "get": {
         "tags": [
@@ -22730,6 +22789,7 @@
           "booksOnline",
           "businessName",
           "categories",
+          "category",
           "currency",
           "defaultTaxRate",
           "deliveryAvailable",
@@ -22750,6 +22810,21 @@
           "logoUrl": {
             "type": "string",
             "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageWideUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "$ref": "#/components/schemas/BusinessCategory"
           },
           "contactPhone": {
             "type": "string",
@@ -22840,6 +22915,10 @@
             "type": "boolean"
           },
           "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "imageLargeUrl": {
             "type": "string",
             "nullable": true
           },
@@ -25450,6 +25529,9 @@
             "nullable": true
           },
           "logoImages": {
+            "$ref": "#/components/schemas/LogoImageUrlsDto"
+          },
+          "coverImages": {
             "$ref": "#/components/schemas/LogoImageUrlsDto"
           },
           "capabilities": {

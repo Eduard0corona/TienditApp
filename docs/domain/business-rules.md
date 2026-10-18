@@ -194,7 +194,7 @@ Una cuenta de cliente compra sin escribir sus datos cada vez ([ADR 0022](../adr/
 - **El mismo pedido, una vez:** la tienda manda una llave por pedido, la misma si se reintenta sin cambiar nada. Con la misma llave el servidor responde el pedido que ya registró, aunque el negocio haya cerrado desde entonces. Con otro teléfono responde «Ese pedido ya se envió.»; si el negocio ya lo canceló, «Ese pedido ya se envió y el negocio lo canceló.»; y una llave vacía, «La clave del pedido no es válida.».
 - **Explorar por código postal:** con el código postal del cliente («Entregar en…»), cada negocio que entrega dice «Envío $35.00», «Envío gratis», «… más IVA» si sus precios no lo incluyen, o «No llega a tu código postal». Es la zona activa del negocio que lo incluye, sin su nombre. El mínimo y el envío gratis los aplica el menú al pedir. El código postal se recuerda en el dispositivo y la tienda lo toma la primera vez que el pedido va a domicilio si la cuenta no tiene direcciones.
 - **Carrito guardado:** el carrito de cada tienda se guarda en el dispositivo hasta que se envía o se vacía, por 7 días y en 10 tiendas como mucho. Guarda productos, opciones y cantidades, nunca precios: al volver se arma con el menú y los precios de ahora. Lo que no está disponible ahora, o tiene opciones que ya no existen o no forman una elección válida, se queda fuera, y la tienda dice cuántos productos («Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora.»). Explorar ofrece «Seguir con el pedido».
-- **«Pedir otra vez»:** en Mis pedidos, llena el carrito de esa tienda con el pedido, con la misma regla del carrito guardado. Solo regresan cantidades enteras: un producto por kilo o en fracciones no regresa, y la tienda lo dice («1 producto se pide por peso: agrégalo con su cantidad»). Un pedido todo por peso abre el menú sin tocar el carrito que haya.
+- **«Pedir otra vez»:** en Mis pedidos, llena el carrito de esa tienda con el pedido, con la misma regla del carrito guardado. Desde la 24E, cada producto regresa con su nota. Solo regresan cantidades enteras: un producto por kilo o en fracciones no regresa, y la tienda lo dice («1 producto se pide por peso: agrégalo con su cantidad»). Un pedido todo por peso abre el menú sin tocar el carrito que haya.
 
 ## Seguimiento del pedido (Fase 24C)
 
@@ -256,6 +256,29 @@ El cliente agenda una cita desde el menú en línea del negocio, y el negocio la
   - la cancela antes de que empiece, si la agendó en línea, después de confirmar; la agenda dice «La canceló el cliente». Ya empezada: «Tu cita ya empezó o ya pasó: para cambiarla, escríbele al negocio.».
   - Lo que lee: Por confirmar, Confirmada, En curso, Terminada, No asististe, La cancelaste o Cancelada; «No se confirmó» si nadie decidió la solicitud y su hora ya empezó.
 - **Sin anticipo:** se cobra en Vender después de aceptarla, como cualquier cita.
+
+## El menú en línea con la forma de las apps de entrega (Fase 24E)
+
+El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 0026](../adr/0026-store-like-delivery-apps.md)). Lo que el pedido cobra, a dónde llega y quién lo recibe no cambia: lo decide el servidor como antes.
+
+- **La tienda:**
+  - **Arriba:** la portada que subió el dueño o, sin ella, los colores de su negocio. Encima van el logo, el nombre, la categoría y la línea de Explorar, y si está abierto.
+  - **Información:** un botón abre el horario de la semana, los días especiales, la dirección con «Cómo llegar» y el WhatsApp.
+  - **Entrega:** con zonas de entrega, la tienda elige «A domicilio» o «Para recoger». Con el código postal de Explorar o de la cuenta dice lo que cuesta el envío o «Por ahora no llegamos al…».
+  - **Regresar:** la flecha solo aparece si el cliente llegó desde la app. Un menú abierto desde un QR o un enlace nunca lleva a otros negocios.
+- **Encontrar:**
+  - Un buscador que compara cada palabra, sin acentos, con el nombre y la descripción.
+  - «Destacados», con los productos que el dueño marcó como destacados, hasta 10, si alguno tiene foto.
+  - Pestañas de categorías que llevan a su sección.
+- **Un producto:**
+  - **En la lista:** nombre, precio (con el precio de antes y «−13%» cuando tiene descuento), descripción y foto. El «+» lo agrega de una vez, y si tiene opciones abre su hoja.
+  - **En su hoja:** sus opciones con lo que pide cada grupo («Elige 1», «Obligatorio»), sus alérgenos, instrucciones especiales de hasta 300 caracteres y cuántos.
+  - **Las instrucciones:** llegan a la cocina con el producto. El mismo producto con otras instrucciones es otra línea del pedido.
+- **El pedido:**
+  - Un botón flotante «Ver pedido» con cuántos productos lleva y el total.
+  - La página del pedido tiene tus productos, la entrega (a domicilio, para recoger con la dirección del negocio, o la mesa), tus datos, el resumen y «Hacer pedido · $X».
+- **La portada:** la sube o la quita el dueño o un administrador en Configuración › «Portada del menú». Acepta JPG, PNG, WebP o GIF (solo su primer cuadro) de hasta 5 MB y se ve mejor horizontal, unas tres veces más ancha que alta. Es pública, como el logo.
+- **Lo que no muestra:** calificaciones, tiempos de entrega ni costos de servicio, que el negocio no tiene.
 
 ## Cancelación y trazabilidad
 

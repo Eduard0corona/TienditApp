@@ -1,37 +1,122 @@
+/*
+ * The online menu with the shape of the delivery apps (Fase 24E, ADR 0026): the cover and the store, a search, the
+ * featured products, sticky tabs of categories, rows with the photo on the right, the product's sheet, the floating
+ * button and the order as a checkout page. Its booking page (PublicBookingPage.css) shares the frame: the page, the store
+ * bar, the rows, the floating button and the bottom sheet.
+ */
 .pm-page {
   min-height: 100vh;
-  max-width: 44rem;
-  margin: 0 auto;
-  padding-bottom: 6rem;
+  padding-bottom: 7rem;
   background: var(--ct-body-bg);
 }
 
-/* The header scrolls away with the hours and the address; the categories stay on top while browsing. */
-.pm-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  background: var(--ct-secondary-bg);
+.pm-shell {
+  max-width: 72rem;
+  margin: 0 auto;
 }
 
-.pm-logo {
-  flex: 0 0 auto;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
+/* ------------------------------------------------------------------ The cover and the store */
+
+/* Without a photo, the colors of the business: its tint with two soft lights of its accent. */
+.pm-cover {
+  position: relative;
+  height: 10.5rem;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(var(--ct-primary-rgb), 0.32), transparent 55%),
+    radial-gradient(circle at 12% 95%, rgba(var(--ct-primary-rgb), 0.22), transparent 50%),
+    var(--ct-primary-bg-subtle);
+}
+
+.pm-cover-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
 }
 
-.pm-header-text {
-  flex: 1 1 auto;
-  min-width: 0;
+/* Over a photo, a shade at the top keeps the round buttons apart from whatever the photo shows. */
+.pm-cover.has-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5rem;
+  background: linear-gradient(rgba(var(--ta-shadow-rgb), 0.35), transparent);
+  pointer-events: none;
+}
+
+.pm-cover-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+}
+
+.pm-cover-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* A round button over a photo, as the apps put back, share and close. */
+.pm-round {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--ta-touch);
+  height: var(--ta-touch);
+  border: 0;
+  border-radius: 50%;
+  background: var(--ta-surface);
+  color: var(--ta-ink);
+  box-shadow: 0 2px 8px rgba(var(--ta-shadow-rgb), 0.18);
+  font-size: 1.25rem;
+  text-decoration: none;
+}
+
+.pm-round:hover {
+  color: var(--ta-ink);
+  background: var(--ct-tertiary-bg);
+}
+
+.pm-store {
+  position: relative;
+  padding: 0 1rem 1rem;
+}
+
+.pm-logo {
+  position: relative;
+  display: flex;
+  width: 5rem;
+  height: 5rem;
+  margin-top: -2.5rem;
+  border: 3px solid var(--ct-body-bg);
+  border-radius: var(--ta-radius-lg);
+  background: var(--ta-surface);
+  object-fit: cover;
+  box-shadow: 0 2px 10px rgba(var(--ta-shadow-rgb), 0.12);
+}
+
+.pm-logo.photo-initial {
+  font-size: 2rem;
+}
+
+.pm-store-name {
+  margin: 0.75rem 0 0.15rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
-/* Without a logo, the initial of the business in its colors (PhotoOrInitial). */
-.pm-logo.photo-initial {
-  font-size: 1.35rem;
+.pm-store-line {
+  margin: 0 0 0.35rem;
+  color: var(--ct-secondary-color);
+  font-size: 0.95rem;
 }
 
 .pm-status {
@@ -39,51 +124,694 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem 0.5rem;
-  margin-top: 0.2rem;
-}
-
-.pm-info {
-  padding: 0 1rem 0.35rem;
-  background: var(--ct-secondary-bg);
-  border-bottom: 1px solid var(--ct-border-color);
+  margin: 0 0 0.5rem;
   font-size: 0.9rem;
 }
 
-.pm-hours summary,
-.pm-today,
-.pm-upcoming,
-.pm-address {
+.pm-table {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 600;
+}
+
+.pm-upcoming {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  color: var(--ct-secondary-color);
+  font-size: 0.9rem;
+}
+
+.pm-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.pm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--ta-touch);
+  padding: 0.35rem 0.85rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: 999px;
+  background: var(--ta-surface);
+  color: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+button.pm-pill:hover {
+  background: var(--ct-tertiary-bg);
+}
+
+/* How the customer wants the order, as the apps switch between delivery and pickup; the checkout has the same one. */
+.pm-mode {
+  display: flex;
+  max-width: 24rem;
+  margin-top: 0.75rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: var(--ct-tertiary-bg);
+}
+
+.pm-mode button {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: calc(var(--ta-touch) - 0.25rem);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-weight: 600;
+}
+
+.pm-mode button.active {
+  background: var(--ta-surface);
+  box-shadow: 0 1px 4px rgba(var(--ta-shadow-rgb), 0.15);
+}
+
+.pm-delivery-hint {
+  margin: 0.5rem 0 0;
+  color: var(--ct-secondary-color);
+  font-size: 0.9rem;
+}
+
+.pm-booking {
+  margin-top: 0.75rem;
+}
+
+/* A notice of the menu (closed, paused, a cart brought back) between the store and the products. */
+.pm-notice {
+  margin: 0 1rem 0.75rem;
+}
+
+/* The store in one line at the top of a page of its own (the booking page): back to the menu, its logo and its name. */
+.pm-bar {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0.75rem 1rem;
+}
+
+.pm-bar-logo {
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--ta-radius-sm);
+  object-fit: cover;
+}
+
+.pm-bar-logo.photo-initial {
+  font-size: 1.15rem;
+}
+
+.pm-bar-name {
+  margin: 0;
+  overflow: hidden;
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ Search and featured */
+
+.pm-search {
+  position: relative;
+  margin: 0.25rem 1rem 0.75rem;
+}
+
+.pm-search > i {
+  position: absolute;
+  top: 50%;
+  left: 1rem;
+  color: var(--ct-secondary-color);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.pm-search .form-control {
   min-height: var(--ta-touch);
+  padding-left: 2.6rem;
+  border-color: transparent;
+  border-radius: 999px;
+  background: var(--ct-tertiary-bg);
+}
+
+.pm-featured {
+  margin-bottom: 0.25rem;
+}
+
+.pm-featured .pm-section-title {
+  padding: 0 1rem;
+}
+
+/* The padding leaves room for the focus ring and the shadow of each card. */
+.pm-featured-row {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.25rem 1rem 0.75rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.pm-feature {
+  position: relative;
+  flex: 0 0 9.5rem;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.pm-feature.unavailable {
+  opacity: 0.6;
+}
+
+.pm-feature-media {
+  position: relative;
+  margin-bottom: 0.4rem;
+}
+
+.pm-feature-photo {
+  display: flex;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--ta-radius);
+  object-fit: cover;
+}
+
+.pm-feature-photo.photo-initial {
+  font-size: 2.5rem;
+}
+
+.pm-feature-name {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.95rem;
+  font-weight: 700;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* The clamp of the name cuts what goes past its box: the ring goes inside. */
+.pm-feature .pm-item-open {
+  --ta-focus-ring-offset: calc(var(--ta-focus-ring-width) * -1);
+}
+
+.pm-feature .pm-price-row {
+  font-size: 0.9rem;
+}
+
+/* ------------------------------------------------------------------ Tabs and sections */
+
+/* The tabs stay on top while browsing; each one marks the section being read and takes there. */
+.pm-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--ct-body-bg);
+  border-bottom: 1px solid var(--ct-border-color);
+}
+
+.pm-tabs-row {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* The ring goes inside: the row cuts what passes its edges. */
+.pm-tab {
+  --ta-focus-ring-offset: -3px;
+  flex: 0 0 auto;
+  min-height: 3rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--ct-secondary-color);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pm-tab.active {
+  border-bottom-color: var(--ct-primary);
+  color: var(--ct-body-color);
+}
+
+.pm-main {
+  padding: 0 1rem;
+}
+
+/* A section starts below the sticky tabs when a tab takes there. */
+.pm-section {
+  padding-top: 1rem;
+  scroll-margin-top: 3.25rem;
+}
+
+.pm-section-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.pm-results {
+  padding-top: 0.5rem;
+}
+
+.pm-items {
+  display: grid;
+}
+
+/* ------------------------------------------------------------------ A product */
+
+.pm-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--ct-border-color);
+}
+
+.pm-item:last-child {
+  border-bottom: 0;
+}
+
+.pm-item-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pm-item-name {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* The name opens the product's sheet, and so does the rest of its row or card (the «+» stays above). */
+.pm-item-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.pm-item-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.pm-item-description {
+  display: -webkit-box;
+  margin: 0.25rem 0 0;
+  overflow: hidden;
+  color: var(--ct-secondary-color);
+  font-size: 0.875rem;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.pm-item-note {
+  margin: 0.35rem 0 0;
+  color: var(--ct-secondary-color);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.pm-item.unavailable .pm-item-text,
+.pm-item.unavailable .pm-item-photo {
+  opacity: 0.55;
+}
+
+.pm-item-media {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.pm-item-photo {
+  display: flex;
+  width: 6.5rem;
+  height: 6.5rem;
+  border-radius: var(--ta-radius);
+  object-fit: cover;
+}
+
+.pm-item-photo.photo-initial {
+  font-size: 2rem;
+}
+
+.pm-item-media.no-photo {
+  align-self: center;
+}
+
+.pm-price-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
   margin: 0;
 }
 
-.pm-hours summary {
+.pm-price {
+  font-weight: 700;
+}
+
+.pm-compare {
+  color: var(--ct-secondary-color);
+  font-size: 0.85em;
+}
+
+.pm-discount {
+  font-size: 0.75rem;
+}
+
+/* The «+» on the photo; with the product in the order, how many it has, in the accent. */
+.pm-add {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.4rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ta-surface);
+  color: var(--ta-ink);
+  box-shadow: 0 2px 8px rgba(var(--ta-shadow-rgb), 0.25);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.pm-add.in-cart {
+  background: var(--ct-primary);
+  color: var(--ta-on-accent);
+  font-size: 1rem;
+}
+
+/* Without a photo the «+» sits in the row; it stays positioned so it stays above what opens the sheet. */
+.pm-item-media.no-photo .pm-add {
+  position: relative;
+  inset: auto;
+  min-width: var(--ta-touch);
+  height: var(--ta-touch);
+  border: 1px solid var(--ct-border-color);
+}
+
+/* ------------------------------------------------------------------ The floating order button */
+
+.pm-cart-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.pm-cart-button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 32rem;
+  min-height: 3.25rem;
+  margin: 0 auto;
+  padding: 0.5rem 1.25rem 0.5rem 0.6rem;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(var(--ta-shadow-rgb), 0.25);
+  font-weight: 700;
+  pointer-events: auto;
+}
+
+.pm-cart-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--ta-on-accent);
+  color: var(--ct-primary);
+}
+
+.pm-cart-label {
+  flex: 1 1 auto;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ The product's sheet */
+
+.pm-product-dialog {
+  max-width: 32rem;
+}
+
+.pm-product-sheet {
+  position: relative;
+  overflow: hidden;
+}
+
+.pm-sheet-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+}
+
+.pm-product-body {
+  padding: 0;
+}
+
+.pm-product-photo {
+  display: block;
+  width: 100%;
+  max-height: 50vh;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.pm-product-info {
+  padding: 1rem 1rem 0.75rem;
+}
+
+/* Without a photo the close button is over the text: the name starts below it. */
+.pm-product-info.no-photo {
+  padding-top: 4rem;
+}
+
+.pm-product-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+.pm-product-text {
+  margin: 0.5rem 0 0;
+  color: var(--ct-secondary-color);
+}
+
+.pm-product-allergens {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0;
+  color: var(--ct-secondary-color);
+  font-size: 0.85rem;
+}
+
+/* Each group of options apart, as the apps band them; a shadow and not a border: a legend would cut the border. */
+.pm-group {
+  min-width: 0;
+  margin: 0;
+  padding: 1.25rem 1rem 0.75rem;
+  border: 0;
+  box-shadow: inset 0 8px 0 var(--ct-tertiary-bg);
+}
+
+/* Floated, as Bootstrap leaves a legend, so it sits in the group and not on its edge. */
+.pm-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  width: 100%;
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
+}
+
+.pm-group-name {
+  font-weight: 700;
+}
+
+.pm-group-hint {
+  color: var(--ct-secondary-color);
+  font-size: 0.85rem;
+}
+
+.pm-group-badge {
+  margin-left: auto;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: var(--ct-tertiary-bg);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.pm-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: var(--ta-touch);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--ct-border-color);
   cursor: pointer;
-  list-style: none;
 }
 
-.pm-hours summary::-webkit-details-marker {
-  display: none;
+.pm-option:last-child {
+  border-bottom: 0;
 }
 
-.pm-hours[open] .pm-hours-toggle {
-  transform: rotate(180deg);
+.pm-option-name {
+  flex: 1 1 auto;
+}
+
+.pm-option.active .pm-option-name {
+  font-weight: 600;
+}
+
+.pm-option-price {
+  color: var(--ct-secondary-color);
+  font-size: 0.9rem;
+}
+
+.pm-option .form-check-input {
+  flex: 0 0 auto;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+}
+
+.pm-option.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pm-product-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+}
+
+.pm-product-footer > * {
+  margin: 0;
+}
+
+.pm-product-error {
+  flex: 1 0 100%;
+  color: var(--ta-danger-fg);
+  font-size: 0.85rem;
+}
+
+.pm-product-add {
+  flex: 1 1 auto;
+}
+
+/* How many: − n +, as the apps count a product and the lines of the order. */
+.pm-stepper {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border-radius: 999px;
+  background: var(--ct-tertiary-bg);
+}
+
+.pm-stepper button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 1.15rem;
+}
+
+.pm-stepper button:disabled {
+  opacity: 0.4;
+}
+
+.pm-stepper > span {
+  min-width: 1.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ The store's information */
+
+.pm-info-logo {
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--ta-radius-sm);
+  object-fit: cover;
+}
+
+.pm-info-logo.photo-initial {
+  font-size: 1rem;
+}
+
+.pm-info-section {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--ct-border-color);
+}
+
+.pm-info-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .pm-week,
 .pm-special-days {
-  margin: 0 0 0.5rem;
-  padding-left: 1.5rem;
+  margin: 0;
 }
 
 .pm-week li {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.15rem 0;
+  padding: 0.2rem 0;
 }
 
 .pm-week li[aria-current='date'] {
@@ -96,130 +824,79 @@
 }
 
 .pm-week + .pm-special-days {
-  padding-top: 0.35rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
   border-top: 1px solid var(--ct-border-color);
 }
 
-.pm-address + .pm-hours,
-.pm-hours + .pm-address,
-.pm-hours + .pm-upcoming,
-.pm-today + .pm-address,
-.pm-today + .pm-upcoming,
-.pm-upcoming + .pm-address {
-  border-top: 1px solid var(--ct-border-color);
-}
-
-/* The bar keeps its background while the row of chips inside scrolls and fades at the edge with more. */
-.pm-chips {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--ct-body-bg);
-}
-
-.pm-chips-row {
+.pm-info-address {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.6rem 1rem;
-  overflow-x: auto;
-  scrollbar-width: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
-.pm-chips .btn {
-  flex: 0 0 auto;
-  border-radius: 999px;
+/* ------------------------------------------------------------------ The order as a checkout page */
+
+.pm-checkout.offcanvas-end {
+  width: min(100%, 28rem);
 }
 
-.pm-list {
-  padding: 0 1rem;
+.pm-checkout .offcanvas-body {
+  padding-top: 0;
 }
 
-.pm-category {
-  margin: 1rem 0 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ct-secondary-color);
+.pm-checkout-section {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--ct-border-color);
 }
 
-.pm-product {
+.pm-checkout-section.pm-summary {
+  border-bottom: 0;
+}
+
+.pm-checkout-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.pm-line {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
-  border-radius: var(--ta-radius);
-  background: var(--ct-secondary-bg);
+  padding: 0.5rem 0;
 }
 
-.pm-product.unavailable {
-  opacity: 0.6;
-}
-
-.pm-product-image {
-  width: 4.5rem;
-  height: 4.5rem;
+.pm-line-photo {
+  flex: 0 0 auto;
+  width: 3rem;
+  height: 3rem;
   border-radius: var(--ta-radius-sm);
   object-fit: cover;
-  flex: 0 0 auto;
 }
 
-.pm-product-image.photo-initial {
-  font-size: 1.75rem;
+.pm-line-photo.photo-initial {
+  font-size: 1.1rem;
 }
 
-.pm-product-name {
-  margin: 0 0 0.15rem;
-  font-size: 1rem;
-  font-weight: 700;
+.pm-line .pm-stepper button {
+  width: 2.25rem;
+  height: 2.25rem;
 }
 
-.pm-product-description {
-  margin: 0 0 0.25rem;
-  font-size: 0.85rem;
-  color: var(--ct-secondary-color);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.pm-price {
-  font-weight: 800;
-  color: var(--ct-primary-text-emphasis);
-}
-
-.pm-add {
-  flex: 0 0 auto;
-  width: var(--ta-touch);
-  height: var(--ta-touch);
-  border-radius: 50%;
-  padding: 0;
-}
-
-.pm-option {
+.pm-pickup {
   display: flex;
-  align-items: center;
-  min-height: var(--ta-touch);
-  padding: 0.4rem 0.75rem;
-  margin-bottom: 0.35rem;
-  border: 1px solid var(--ct-border-color);
-  border-radius: var(--ta-radius-sm);
-  cursor: pointer;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
-.pm-option.active {
-  border-color: var(--ct-primary);
-  background: var(--ct-primary-bg-subtle);
+.pm-checkout-footer {
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--ct-border-color);
 }
 
-.pm-option.disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* The addresses of a customer account in the cart (Fase 24B): one per row, the chosen one marked like an option. */
+/* The addresses of a customer account in the checkout (Fase 24B): one per row, the chosen one marked like an option. */
 .pm-addresses {
   display: grid;
   gap: 0.35rem;
@@ -243,27 +920,57 @@
   background: var(--ct-primary-bg-subtle);
 }
 
-/* A cart brought back, or «Pedir otra vez»: what came back and what the menu no longer has. */
-.pm-restored {
-  margin: 0.75rem 1rem 0;
+/* ------------------------------------------------------------------ The receipt, the empty page and the bottom sheet */
+
+.pm-receipt {
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+  text-align: center;
 }
 
-.pm-cart-bar {
-  position: fixed;
-  left: 50%;
-  bottom: 0;
-  z-index: 4;
-  width: 100%;
-  max-width: 44rem;
-  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  background: var(--ct-secondary-bg);
-  border-top: 1px solid var(--ct-border-color);
+.pm-receipt-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 1rem;
+  border-radius: 50%;
+  background: var(--ta-chip-ready-bg);
+  color: var(--ta-chip-ready-fg);
+  font-size: 2.25rem;
 }
 
-.pm-sheet.offcanvas-bottom {
-  height: auto;
-  max-height: 92vh;
+.pm-receipt-card {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: var(--ta-radius);
+  background: var(--ta-surface);
+  text-align: left;
+}
+
+.pm-receipt-card > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.pm-receipt-card dt {
+  color: var(--ct-secondary-color);
+  font-weight: 400;
+}
+
+.pm-receipt-card dd {
+  margin: 0;
+}
+
+.pm-receipt-actions {
+  max-width: 20rem;
+  margin: 0 auto;
 }
 
 .pm-empty {
@@ -272,11 +979,118 @@
 }
 
 .pm-empty > i {
-  font-size: 3rem;
   color: var(--ct-secondary-color);
+  font-size: 3rem;
 }
 
-/* «Agenda tu cita» (Fase 24D), under the header, before the categories. */
-.pm-booking {
-  padding: 0.75rem 1rem 0;
+.pm-sheet.offcanvas-bottom {
+  height: auto;
+  max-height: 92vh;
+}
+
+/* ------------------------------------------------------------------ Wider screens */
+
+/* A tablet: the cover in a rounded frame and the products in two columns of cards. */
+@media (min-width: 768px) {
+  .pm-shell {
+    padding: 1rem 1.5rem 0;
+  }
+
+  .pm-cover {
+    height: 15rem;
+    border-radius: var(--ta-radius-lg);
+  }
+
+  .pm-store {
+    padding: 0 0 1rem;
+  }
+
+  .pm-logo {
+    width: 6rem;
+    height: 6rem;
+    margin: -3rem 0 0 1.5rem;
+  }
+
+  .pm-search {
+    max-width: 36rem;
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .pm-notice {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .pm-featured .pm-section-title,
+  .pm-featured-row {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .pm-feature {
+    flex-basis: 11rem;
+  }
+
+  .pm-main {
+    padding: 0;
+  }
+
+  .pm-items {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .pm-item,
+  .pm-item:last-child {
+    padding: 1rem;
+    border: 1px solid var(--ct-border-color);
+    border-radius: var(--ta-radius);
+    background: var(--ta-surface);
+  }
+}
+
+/* A computer: the categories become a list on the left that stays while the products scroll, as on the apps' web. */
+@media (min-width: 992px) {
+  .pm-body {
+    display: grid;
+    grid-template-columns: 13rem minmax(0, 1fr);
+    align-items: start;
+    gap: 2rem;
+  }
+
+  /* Many categories scroll inside the list, which never goes past the window. */
+  .pm-tabs {
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    border-bottom: 0;
+    background: transparent;
+  }
+
+  .pm-tabs-row {
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .pm-tab {
+    min-height: var(--ta-touch);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 0;
+    border-left: 3px solid transparent;
+    border-radius: 0 var(--ta-radius-sm) var(--ta-radius-sm) 0;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .pm-tab.active {
+    border-left-color: var(--ct-primary);
+    background: var(--ct-tertiary-bg);
+  }
+
+  .pm-section {
+    scroll-margin-top: 1rem;
+  }
 }

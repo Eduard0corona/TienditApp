@@ -59,7 +59,7 @@ async function addLatte(page: Page) {
   const options = await openLatteOptions(page);
   await options.getByLabel('Grande').check();
   await options.getByLabel('Almendra').check();
-  await options.getByRole('button', { name: /^Agregar · / }).click();
+  await options.getByRole('button', { name: /^Agregar (\d+ )?· / }).click();
   await expect(options).toBeHidden();
 }
 
@@ -251,7 +251,8 @@ test.describe('Menú público: pedir', () => {
     await open(page, '/m/cafe-la-esquina');
     await page.getByText('Hoy: 9:00 a 15:00').click();
     await expect(page.getByRole('list', { name: 'Horario de la semana' })).toBeVisible();
-    await snap(page, 'menu-publico-horario-telefono');
+    // Since Fase 24E the hours open in the store's information, over the menu.
+    await snapScreen(page, 'menu-publico-horario-telefono');
   });
 
   test('menú público producto con opciones', async ({ page }) => {
@@ -259,7 +260,7 @@ test.describe('Menú público: pedir', () => {
     const options = await openLatteOptions(page);
     await options.getByLabel('Grande').check();
     await options.getByLabel('Shot extra').check();
-    await expect(options.getByRole('button', { name: /^Agregar · / })).toBeEnabled();
+    await expect(options.getByRole('button', { name: /^Agregar (\d+ )?· / })).toBeEnabled();
     await snapScreen(page, 'menu-publico-opciones-telefono');
   });
 
@@ -281,7 +282,7 @@ test.describe('Menú público: pedir', () => {
     const cart = await dialog(page, 'Tu pedido');
     await cart.getByLabel('Tu nombre').fill('Valeria Morales');
     await cart.getByLabel('Teléfono (WhatsApp)').fill('55 2210 7765');
-    await cart.getByRole('button', { name: /^Enviar pedido · / }).click();
+    await cart.getByRole('button', { name: /^(Enviar|Hacer) pedido · / }).click();
     await expect(page.getByRole('heading', { name: '¡Pedido enviado!' })).toBeVisible();
     await snap(page, 'menu-publico-pedido-enviado-telefono');
   });
@@ -338,7 +339,8 @@ test.describe('Menú público a domicilio', () => {
 
   test('menú público que también entrega a domicilio', async ({ page }) => {
     await open(page, '/m/cafe-la-esquina');
-    await expect(page.getByText('También a domicilio: al pedir te decimos si llegamos a tu código postal.')).toBeVisible();
+    // Before Fase 24E a line said it; since then the store switches between delivery and pickup, as the apps do.
+    await expect(page.getByText(/^(También a domicilio: al pedir te decimos si llegamos a tu código postal\.|Para recoger)$/).first()).toBeVisible();
     await snap(page, 'menu-publico-tambien-a-domicilio-telefono');
   });
 
@@ -359,7 +361,7 @@ test.describe('Menú público a domicilio', () => {
     await full.getByLabel('Dirección').fill('Colima 145, depto. 3, Roma Norte');
     await full.getByLabel('Referencias (opcional)').fill('Portón negro, timbre 3');
     await expect(full.getByText('Envío $35.00 · gratis desde $400.00 · pedido mínimo $150.00')).toBeVisible();
-    await expect(full.getByRole('button', { name: /^Enviar pedido · / })).toBeEnabled();
+    await expect(full.getByRole('button', { name: /^(Enviar|Hacer) pedido · / })).toBeEnabled();
     await snapScreen(page, 'menu-publico-carrito-a-domicilio-telefono');
   });
 
@@ -380,9 +382,9 @@ test.describe('Menú público a domicilio', () => {
     await cart.getByLabel('Dirección').fill('Ámsterdam 210, Condesa');
     await cart.getByLabel('Tu nombre').fill('Valeria Morales');
     await cart.getByLabel('Teléfono (WhatsApp)').fill('55 2210 7765');
-    await cart.getByRole('button', { name: /^Enviar pedido · / }).click();
+    await cart.getByRole('button', { name: /^(Enviar|Hacer) pedido · / }).click();
     await expect(page.getByRole('heading', { name: '¡Pedido enviado!' })).toBeVisible();
-    await expect(page.getByText('Incluye envío de $45.00')).toBeVisible();
+    await expect(page.getByText('$45.00', { exact: true }).first()).toBeVisible();
     await snap(page, 'menu-publico-pedido-a-domicilio-enviado-telefono');
   });
 });
@@ -396,7 +398,7 @@ test.describe('Menú público de una cocina sin local', () => {
   test('menú público solo a domicilio', async ({ page }) => {
     // The main branch only delivers: no address and no «Cómo llegar», only that there are no premises to visit.
     await open(page, '/m/cafe-la-esquina');
-    await expect(page.getByText('Solo a domicilio: no tenemos local para visitar.')).toBeVisible();
+    await expect(page.getByText(/^Solo a domicilio/).first()).toBeVisible();
     await expect(page.getByRole('link', { name: /Cómo llegar/ })).toHaveCount(0);
     await snap(page, 'menu-publico-solo-a-domicilio-telefono');
   });
@@ -419,7 +421,7 @@ test.describe('Menú público en un día especial', () => {
       await expect(page.getByRole('button', { name: 'Agregar Latte' })).toHaveCount(0);
       await page.getByText('Hoy: Cerrado · Inventario').click();
       await expect(page.getByRole('list', { name: 'Días especiales' })).toContainText('Lun 2 nov · Cerrado · Día de Muertos');
-      await snap(page, 'menu-publico-cierre-especial-telefono');
+      await snapScreen(page, 'menu-publico-cierre-especial-telefono');
     });
   });
 

@@ -1,26 +1,25 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Modal, Offcanvas } from 'react-bootstrap';
+import { Offcanvas } from 'react-bootstrap';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress } from '../../api/accountApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicMenuApi, type PlacePublicOrder, type PublicMenuProduct, type PublicOrderReceipt } from '../../api/publicMenuApi';
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
+import FeaturedProducts from '../../components/store/FeaturedProducts';
+import MenuProductRow from '../../components/store/MenuProductRow';
+import ProductSheet from '../../components/store/ProductSheet';
+import StoreHero from '../../components/store/StoreHero';
+import StoreInfoModal from '../../components/store/StoreInfoModal';
 import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
+import { useActiveSection } from '../../hooks/useActiveSection';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import { useScrollFade } from '../../hooks/useScrollFade';
-import type { ProductOptionGroupDto } from '../../types';
 import { formatMoney } from '../../utils/money';
-import {
-  WEEK,
-  dayLabel,
-  describeDay,
-  describeOpeningStatus,
-  describeSpecialDay,
-  describeTodayHours,
-} from '../../utils/openingHours';
+import { describeDay, describeOpeningStatus, describeTodayHours } from '../../utils/openingHours';
 import {
   belowMinimumMessage,
+  describeDeliveryTerms,
   estimateDeliveryTotals,
   meetsMinimum,
   normalizePostalCode,
@@ -29,23 +28,21 @@ import {
 } from '../../utils/homeDelivery';
 import { estimateOrderTotals, resolveProductVat } from '../../utils/orderTotals';
 import { isPostalCode } from '../../utils/postalCodes';
-import {
-  getLineKey,
-  getOptionsLabel,
-  getPriceWithOptions,
-  getSelectionError,
-} from '../../utils/productOptions';
+import { getOptionsLabel, getPriceWithOptions } from '../../utils/productOptions';
 import { localPhone } from '../../utils/phones';
 import { readPostalCode } from '../../utils/postalCodePreference';
 import {
   MAX_CART_LINES,
   MAX_LINE_QUANTITY,
+  cartLineKey,
+  lineNotes,
   readCart,
   restoreLines,
   saveCart,
   type CartLine,
 } from '../../utils/savedCart';
 import { bookingPath } from '../../utils/onlineBooking';
+import { featuredProducts, mapsUrl, optionGroupsOf, searchMenu } from '../../utils/storeMenu';
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
 import { newUuid } from '../../utils/uuid';
@@ -56,14 +53,8 @@ import './PublicMenuPage.css';
 
 type MenuLine = CartLine<PublicMenuProduct>;
 
-/** A map search of the address: opens the maps app on a phone. */
-function mapsUrl(address: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-}
-
-function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
-  return (product.optionGroups ?? []) as ProductOptionGroupDto[];
-}
+/** The element of a category's section, for its tab. */
+const sectionId = (categoryId: string) => `pm-cat-${categoryId}`;
 
 const NO_ADDRESS: PublicDeliveryAddress = { postalCode: '', addressLine: '', references: '', paysWith: '' };
 
@@ -97,9 +88,11 @@ function restoredMessage(kept: number, dropped: number, skipped: number, reorder
  * its hours of the week, its special days ahead and its address with a map. A business with delivery zones takes the
  * order to the customer's address: the server says what it charges to their postal code, and the total adds it. A business
  * that books appointments online (Fase 24D) leads to its booking page from here.
+ * Since Fase 24E (ADR 0026) it has the shape of the delivery apps: the business's cover, a search, its featured products,
+ * tabs of categories that follow the scroll, rows with the photo on the right and the «+» on it, a sheet for each product
+ * with its options, instructions and how many, a floating button with the order, and the order as a checkout page.
  */
 export default function PublicMenuPage() {
-  const optionsTitleId = useId();
   const cartTitleId = useId();
   const { slug = '' } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
@@ -119,9 +112,10 @@ export default function PublicMenuPage() {
     previewBusinessTheme(menuTheme);
     return () => previewBusinessTheme(undefined);
   }, [menuTheme]);
-  const [category, setCategory] = useState<string>('all');
   const [lines, setLines] = useState<MenuLine[]>([]);
-  const [choosing, setChoosing] = useState<{ product: PublicMenuProduct; optionIds: string[] } | null>(null);
+  const [viewing, setViewing] = useState<PublicMenuProduct | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -216,22 +210,37 @@ export default function PublicMenuPage() {
       : { ...estimateOrderTotals(totalsLines, pricesIncludeTax), productsTotal: null, fee: null };
   }, [data, lines, terms]);
   const checkingQuote = delivering && isPostalCode(postalCode) && quote.isFetching;
-  const deliveryProblem = !delivering || checkingQuote ? ''
+  // Whether delivery reaches the postal code, whatever the order adds up to: the header says it before the cart.
+  const coverageProblem = !delivering || checkingQuote ? ''
     : !isPostalCode(postalCode) ? (postalCode ? 'El código postal lleva 5 dígitos.' : '')
     : quote.isError ? getApiErrorMessage(quote.error, 'No pudimos revisar tu código postal. Intenta de nuevo.')
     : quote.data && !quote.data.covered ? notCoveredMessage(postalCode)
-    : terms && totals.productsTotal !== null && !meetsMinimum(terms, totals.productsTotal)
+    : '';
+  const deliveryProblem = coverageProblem
+    || (delivering && !checkingQuote && terms && totals.productsTotal !== null && !meetsMinimum(terms, totals.productsTotal)
       ? belowMinimumMessage(postalCode, terms.minimumOrder)
-      : '';
+      : '');
   // «¿Con cuánto pagas?» covers the total with its delivery, once its fee is known.
   const paysWithIssue = delivering && terms ? paysWithProblem(address.paysWith, totals.total) : '';
   const paysWithTyped = parsePaysWith(address.paysWith);
   // To an address the order waits for the server's answer for the postal code.
   const deliveryBlocked = delivering && (checkingQuote || !terms || deliveryProblem !== '' || paysWithIssue !== '');
   const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
-  const categories = data?.categories ?? [];
-  const visible = category === 'all' ? categories : categories.filter((item) => item.id === category);
-  const { ref: chipsRef, fadeClass: chipsFade } = useScrollFade<HTMLDivElement>(categories.length);
+  const categories = useMemo(() => data?.categories ?? [], [data]);
+  const featured = useMemo(() => featuredProducts(categories), [categories]);
+  const results = useMemo(() => searchMenu(categories, query), [categories, query]);
+  const searching = query.trim() !== '';
+  const sectionIds = useMemo(() => categories.map((item) => sectionId(item.id)), [categories]);
+  // While searching the sections are gone; back from a search, the tabs measure them again.
+  const activeSection = useActiveSection(searching ? [] : sectionIds);
+  const { ref: tabsRef, element: tabsRow, fadeClass: tabsFade } = useScrollFade<HTMLDivElement>(categories.length);
+
+  // The tab of the section being read stays in sight in its row.
+  useEffect(() => {
+    const tab = activeSection ? tabsRow?.querySelector<HTMLElement>(`[data-section="${activeSection}"]`) : null;
+    if (!tabsRow || !tab || tabsRow.scrollWidth <= tabsRow.clientWidth) return;
+    tabsRow.scrollTo?.({ left: tab.offsetLeft - (tabsRow.clientWidth - tab.offsetWidth) / 2 });
+  }, [activeSection, tabsRow]);
 
   // The cart stays on this device until it is sent or emptied.
   const businessName = data?.businessName;
@@ -239,55 +248,49 @@ export default function PublicMenuPage() {
     if (restoredFor !== slug || !businessName) return;
     saveCart(slug, {
       businessName,
-      lines: lines.map((line) => ({ productId: line.product.id, optionIds: line.optionIds, quantity: line.quantity })),
+      lines: lines.map((line) => ({
+        productId: line.product.id,
+        optionIds: line.optionIds,
+        quantity: line.quantity,
+        ...(line.notes ? { notes: line.notes } : {}),
+      })),
     });
   }, [lines, restoredFor, slug, businessName]);
 
-  const add = (product: PublicMenuProduct, optionIds: string[]) => {
-    const key = getLineKey(product.id, optionIds);
+  const add = (product: PublicMenuProduct, optionIds: string[], note?: string, quantity = 1) => {
+    const lineNote = lineNotes(note);
+    const key = cartLineKey(product.id, optionIds, lineNote);
     setLines((current) => {
       if (current.some((line) => line.key === key)) {
-        return current.map((line) => (line.key === key ? { ...line, quantity: Math.min(line.quantity + 1, MAX_LINE_QUANTITY) } : line));
+        return current.map((line) => (line.key === key ? { ...line, quantity: Math.min(line.quantity + quantity, MAX_LINE_QUANTITY) } : line));
       }
       if (current.length >= MAX_CART_LINES) return current;
-      const groups = groupsOf(product);
+      const groups = optionGroupsOf(product);
       return [...current, {
         key,
         product,
         optionIds,
         optionsLabel: getOptionsLabel(groups, optionIds),
         unitPrice: getPriceWithOptions(product.price, groups, optionIds),
-        quantity: 1,
+        quantity: Math.min(quantity, MAX_LINE_QUANTITY),
+        ...(lineNote ? { notes: lineNote } : {}),
       }];
     });
   };
 
-  const tapProduct = (product: PublicMenuProduct) => {
-    if (groupsOf(product).length > 0) {
-      const preselected = groupsOf(product)
-        .filter((group) => group.minSelections === 1 && group.maxSelections === 1)
-        .flatMap((group) => group.options.filter((option) => option.isAvailable).slice(0, 1).map((option) => option.id));
-      setChoosing({ product, optionIds: preselected });
-      return;
-    }
-    add(product, []);
+  // The «+» adds a product at once; one with options opens its sheet to choose them.
+  const quickAdd = (product: PublicMenuProduct) => {
+    if (optionGroupsOf(product).length > 0) setViewing(product);
+    else add(product, []);
   };
+  const inCartOf = (product: PublicMenuProduct) => lines
+    .filter((line) => line.product.id === product.id)
+    .reduce((sum, line) => sum + line.quantity, 0);
+  const canAdd = (product: PublicMenuProduct) => !!data?.acceptsOrders && product.availableNow;
 
-  const toggleOption = (group: ProductOptionGroupDto, optionId: string) => {
-    if (!choosing) return;
-    const inGroup = new Set(group.options.map((option) => option.id));
-    const selected = choosing.optionIds.includes(optionId);
-    let optionIds: string[];
-    if (group.maxSelections === 1) {
-      const others = choosing.optionIds.filter((id) => !inGroup.has(id));
-      optionIds = selected && group.minSelections === 0 ? others : [...others, optionId];
-    } else if (selected) {
-      optionIds = choosing.optionIds.filter((id) => id !== optionId);
-    } else {
-      if (choosing.optionIds.filter((id) => inGroup.has(id)).length >= group.maxSelections) return;
-      optionIds = [...choosing.optionIds, optionId];
-    }
-    setChoosing({ ...choosing, optionIds });
+  const goToSection = (categoryId: string) => {
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    document.getElementById(sectionId(categoryId))?.scrollIntoView?.({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
   };
 
   const changeQuantity = (key: string, delta: number) => setLines((current) => current
@@ -317,7 +320,7 @@ export default function PublicMenuPage() {
         productId: line.product.id,
         quantity: line.quantity,
         optionIds: line.optionIds,
-        notes: null,
+        notes: line.notes ?? null,
       })),
       expectedTotal: totals.total,
       saveAddress: keeping,
@@ -374,38 +377,46 @@ export default function PublicMenuPage() {
     ? hours.closedNotice
     : `Fuera de horario no recibimos pedidos en línea${legacyStatus?.when ? `: vuelve ${legacyStatus.when}` : ''}. Mientras, puedes ver el menú.`;
   const today = hours?.todayHours;
-  const specialDays = hours?.specialDays ?? [];
   const hoursSummary = !hours ? null
     : !fromServer ? `Hoy: ${describeDay(hours.intervals, hours.today)}`
     : today ? `Hoy: ${describeTodayHours(today)}` : 'Días especiales';
-  // Without weekly hours and without special days ahead (a special day today alone) there is nothing to open.
-  const hoursOpen = !!hours && (hours.intervals.length > 0 || specialDays.length > 0);
+  // What the information of the store shows (StoreInfoModal): without any of it, no button opens it empty.
+  const hasInfo = !!(data.description || hours || data.address || data.deliveryOnly || deliveryOffered || contact);
   // Once a product has a photo, the others show their initial so the names line up; without photos, only text.
   const withPhotos = categories.some((item) => item.products.some((product) => product.imageUrl));
+  const deliveryHint = !delivering || !isPostalCode(postalCode) ? null
+    : checkingQuote ? `Revisando si llegamos a ${postalCode}…`
+    : coverageProblem ? <span className="text-danger">{coverageProblem}</span>
+    : terms ? `A ${postalCode}: ${describeDeliveryTerms(terms, data.pricesIncludeTax)}`
+    : null;
 
   if (receipt) {
     const followUp = businessWhatsAppUrl(receipt.contactPhone, `Hola, hice el pedido ${receipt.orderNumber} en su menú en línea.`);
     return (
       <div className="pm-page">
-        <div className="pm-empty">
-          <i className="ri-checkbox-circle-fill text-success" aria-hidden="true"></i>
+        <div className="pm-receipt">
+          <span className="pm-receipt-icon"><i className="ri-check-line" aria-hidden="true"></i></span>
           <h1 className="h4">¡Pedido enviado!</h1>
-          <p className="mb-1">Folio <strong>{receipt.orderNumber}</strong> · Total <strong className="ta-money">{formatMoney(receipt.total)}</strong></p>
-          {receipt.deliveryFee != null && (
-            <p className="mb-1 small">
-              {receipt.deliveryFee > 0 ? <>Incluye envío de <span className="ta-money">{formatMoney(receipt.deliveryFee)}</span></> : 'Envío gratis'}
-            </p>
-          )}
           <p className="text-muted">
             {receipt.confirmed
               ? `${receipt.businessName} ya lo está preparando.`
               : `${receipt.businessName} lo confirmará en unos minutos.`}
           </p>
+          <dl className="pm-receipt-card">
+            <div><dt>Folio</dt><dd><strong>{receipt.orderNumber}</strong></dd></div>
+            {receipt.deliveryFee != null && (
+              <div>
+                <dt>Envío</dt>
+                <dd>{receipt.deliveryFee > 0 ? <span className="ta-money">{formatMoney(receipt.deliveryFee)}</span> : 'Envío gratis'}</dd>
+              </div>
+            )}
+            <div><dt>Total</dt><dd><strong className="ta-money">{formatMoney(receipt.total)}</strong></dd></div>
+          </dl>
           {receipt.linkedToAccount && <p className="small mb-0">Lo encuentras en tus pedidos.</p>}
           {receipt.trackingToken && !receipt.linkedToAccount && (
             <p className="small mb-0">Guarda el enlace de seguimiento para ver cómo va tu pedido.</p>
           )}
-          <div className="d-grid gap-2 mt-3" style={{ maxWidth: '20rem', margin: '0 auto' }}>
+          <div className="pm-receipt-actions d-grid gap-2 mt-3">
             {receipt.trackingToken && (
               <Link className="btn btn-primary btn-touch" to={`/seguimiento#${receipt.trackingToken}`}>
                 <i className="ri-route-line me-1" aria-hidden="true"></i>Seguir tu pedido
@@ -431,310 +442,273 @@ export default function PublicMenuPage() {
     );
   }
 
+  const productRow = (product: PublicMenuProduct) => (
+    <MenuProductRow
+      key={product.id}
+      product={product}
+      inCart={inCartOf(product)}
+      withPhotos={withPhotos}
+      canAdd={canAdd(product)}
+      onOpen={() => setViewing(product)}
+      onAdd={() => quickAdd(product)}
+    />
+  );
+
   return (
     <div className="pm-page">
-      <header className="pm-header">
-        <PhotoOrInitial src={data.logoUrl} name={data.businessName} className="pm-logo" loading="eager" />
-        <div className="pm-header-text">
-          <h1 className="h5 mb-0">{data.businessName}</h1>
-          {status && (
-            <div className="pm-status small">
-              <span className={`ta-chip ${status.isOpen ? 'ta-chip-ready' : 'ta-chip-done'}`}>{status.label}</span>
-              {status.detail && <span className="text-muted">{status.detail}</span>}
-            </div>
-          )}
-          {(atTable || !status) && (
-            <div className="small text-muted">
-              {atTable ? `Pedido para ${tableLabel}` : data.acceptsOrders ? 'Pide en línea' : 'Menú'}
-            </div>
-          )}
-        </div>
-        {contact && (
-          <a className="btn btn-sm btn-success" href={contact} target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">
-            <i className="ri-whatsapp-line" aria-hidden="true"></i>
-          </a>
+      <div className="pm-shell">
+        <StoreHero
+          menu={data}
+          status={status}
+          tableLabel={tableLabel}
+          hoursSummary={hoursSummary}
+          upcomingNotice={hours?.upcomingNotice ?? null}
+          onOpenInfo={hasInfo ? () => setInfoOpen(true) : null}
+          delivery={{ offered: deliveryOffered, required: deliveryRequired, toAddress, onChange: setToAddress, hint: deliveryHint }}
+          bookingPath={data.booksOnline && !atTable ? bookingPath(slug) : null}
+          contactUrl={contact}
+        />
+
+        {restoredNotice && (
+          <div className="alert alert-info pm-notice d-flex align-items-start gap-2" role="status">
+            <span className="flex-grow-1">{restoredNotice}</span>
+            <button type="button" className="btn-close" aria-label="Cerrar aviso" onClick={() => setRestoredNotice('')}></button>
+          </div>
         )}
-      </header>
 
-      {(hours || data.address || data.deliveryOnly || deliveryOffered) && (
-        <section className="pm-info" aria-label="Horario y ubicación">
-          {hours && !hoursOpen && (
-            <p className="pm-today">
-              <i className="ri-time-line" aria-hidden="true"></i>
-              <span className="flex-grow-1">{hoursSummary}</span>
-            </p>
-          )}
-          {hours && hoursOpen && (
-            <details className="pm-hours">
-              <summary>
-                <i className="ri-time-line" aria-hidden="true"></i>
-                <span className="flex-grow-1">{hoursSummary}</span>
-                <i className="ri-arrow-down-s-line pm-hours-toggle" aria-hidden="true"></i>
-              </summary>
-              {hours.intervals.length > 0 && (
-                <ul className="pm-week list-unstyled" aria-label="Horario de la semana">
-                  {WEEK.map((day) => (
-                    <li key={day} aria-current={day === hours.today ? 'date' : undefined}>
-                      <span>{dayLabel(day)}</span>
-                      <span>{describeDay(hours.intervals, day)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {specialDays.length > 0 && (
-                <ul className="pm-special-days list-unstyled" aria-label="Días especiales">
-                  {specialDays.map((day) => <li key={day.from}>{describeSpecialDay(day)}</li>)}
-                </ul>
-              )}
-            </details>
-          )}
-          {hours?.upcomingNotice && (
-            <p className="pm-upcoming text-muted">
-              <i className="ri-calendar-event-line" aria-hidden="true"></i>
-              <span className="flex-grow-1">{hours.upcomingNotice}</span>
-            </p>
-          )}
-          {/* A kitchen without premises: the food goes to the customer, and the server sends no address. */}
-          {data.deliveryOnly && (
-            <p className="pm-address">
-              <i className="ri-e-bike-2-line" aria-hidden="true"></i>
-              <span className="flex-grow-1">Solo a domicilio: no tenemos local para visitar.</span>
-            </p>
-          )}
-          {deliveryOffered && !data.deliveryOnly && (
-            <p className="pm-address">
-              <i className="ri-e-bike-2-line" aria-hidden="true"></i>
-              <span className="flex-grow-1">También a domicilio: al pedir te decimos si llegamos a tu código postal.</span>
-            </p>
-          )}
-          {data.address && !data.deliveryOnly && (
-            <p className="pm-address">
-              <i className="ri-map-pin-line" aria-hidden="true"></i>
-              <span className="flex-grow-1">{data.address}</span>
-              <a className="text-nowrap" href={mapsUrl(data.address)} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
-            </p>
-          )}
-        </section>
-      )}
+        {closedByHours && closedNotice ? (
+          <div className="alert alert-info pm-notice" role="status">{closedNotice}</div>
+        ) : data.ordersPaused && (
+          <div className="alert alert-warning pm-notice" role="status">
+            Por ahora no estamos recibiendo pedidos en línea. Puedes ver el menú y volver más tarde.
+          </div>
+        )}
 
-      {/* A business that books appointments online (Fase 24D): its booking page, the main action when the menu takes no orders. */}
-      {data.booksOnline && !atTable && (
-        <div className="pm-booking">
-          <Link className={`btn btn-touch w-100 ${data.acceptsOrders ? 'btn-light' : 'btn-primary'}`} to={bookingPath(slug)}>
-            <i className="ri-calendar-event-line me-1" aria-hidden="true"></i>Agenda tu cita
-          </Link>
-        </div>
-      )}
+        {categories.length > 0 && (
+          <div className="pm-search">
+            <i className="ri-search-line" aria-hidden="true"></i>
+            <input
+              type="search"
+              className="form-control"
+              aria-label={`Buscar en ${data.businessName}`}
+              placeholder={`Buscar en ${data.businessName}`}
+              value={query}
+              maxLength={60}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+        )}
 
-      {restoredNotice && (
-        <div className="alert alert-info pm-restored d-flex align-items-start gap-2" role="status">
-          <span className="flex-grow-1">{restoredNotice}</span>
-          <button type="button" className="btn-close" aria-label="Cerrar aviso" onClick={() => setRestoredNotice('')}></button>
-        </div>
-      )}
-
-      {closedByHours && closedNotice ? (
-        <div className="alert alert-info mx-3 mt-3 mb-0" role="status">{closedNotice}</div>
-      ) : data.ordersPaused && (
-        <div className="alert alert-warning mx-3 mt-3 mb-0" role="status">
-          Por ahora no estamos recibiendo pedidos en línea. Puedes ver el menú y volver más tarde.
-        </div>
-      )}
-
-      <nav className="pm-chips" aria-label="Categorías">
-        <div ref={chipsRef} className={`pm-chips-row ta-scroll-fade ${chipsFade}`}>
-          <button type="button" className={`btn btn-sm ${category === 'all' ? 'btn-primary' : 'btn-light'}`} onClick={() => setCategory('all')}>
-            Todo
-          </button>
-          {categories.map((item) => (
-            <button key={item.id} type="button" className={`btn btn-sm ${category === item.id ? 'btn-primary' : 'btn-light'}`} onClick={() => setCategory(item.id)}>
-              {item.name}
-            </button>
-          ))}
-        </div>
-      </nav>
-
-      <main className="pm-list">
-        {visible.map((item) => (
-          <section key={item.id} aria-label={item.name}>
-            <h2 className="pm-category">{item.name}</h2>
-            {item.products.map((product) => {
-              const inCart = lines.filter((line) => line.product.id === product.id).reduce((sum, line) => sum + line.quantity, 0);
-              return (
-                <article key={product.id} className={`pm-product ${product.availableNow ? '' : 'unavailable'}`}>
-                  {withPhotos && <PhotoOrInitial src={product.imageUrl} name={product.name} className="pm-product-image" />}
-                  <div className="flex-grow-1 min-w-0">
-                    <h3 className="pm-product-name">{product.name}</h3>
-                    {product.description && <p className="pm-product-description">{product.description}</p>}
-                    <div className="d-flex align-items-center gap-2 flex-wrap">
-                      <span className="pm-price ta-money">{formatMoney(product.price)}</span>
-                      {product.compareAtPrice && <s className="small text-muted ta-money">{formatMoney(product.compareAtPrice)}</s>}
-                      {!product.availableNow && <span className="badge bg-light text-dark">No disponible ahora</span>}
-                    </div>
+        {searching ? (
+          <main className="pm-main pm-results">
+            <h2 className="pm-section-title" aria-live="polite">
+              {results.length === 0 ? `No encontramos «${query.trim()}» en el menú` : results.length === 1 ? '1 producto' : `${results.length} productos`}
+            </h2>
+            <div className="pm-items">{results.map(productRow)}</div>
+          </main>
+        ) : (
+          <>
+            {featured.length > 0 && (
+              <FeaturedProducts
+                products={featured}
+                inCart={inCartOf}
+                canAdd={canAdd}
+                onOpen={setViewing}
+                onAdd={quickAdd}
+              />
+            )}
+            <div className="pm-body">
+              {categories.length > 0 && (
+                <nav className="pm-tabs" aria-label="Categorías">
+                  <div ref={tabsRef} className={`pm-tabs-row ta-scroll-fade ${tabsFade}`}>
+                    {categories.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        data-section={sectionId(item.id)}
+                        className={`pm-tab ${activeSection === sectionId(item.id) ? 'active' : ''}`}
+                        aria-current={activeSection === sectionId(item.id) ? 'true' : undefined}
+                        onClick={() => goToSection(item.id)}
+                      >
+                        {item.name}
+                      </button>
+                    ))}
                   </div>
-                  {data.acceptsOrders && product.availableNow && (
-                    <button type="button" className="btn btn-primary pm-add" onClick={() => tapProduct(product)} aria-label={`Agregar ${product.name}`}>
-                      {inCart > 0 ? <span className="ta-money">{inCart}</span> : <i className="ri-add-line" aria-hidden="true"></i>}
-                    </button>
-                  )}
-                </article>
-              );
-            })}
-          </section>
-        ))}
-        {categories.length === 0 && <p className="text-muted text-center py-5">El menú todavía no tiene productos.</p>}
-      </main>
+                </nav>
+              )}
+              <main className="pm-main">
+                {categories.map((item) => (
+                  <section key={item.id} id={sectionId(item.id)} className="pm-section" aria-labelledby={`${sectionId(item.id)}-title`}>
+                    <h2 id={`${sectionId(item.id)}-title`} className="pm-section-title">{item.name}</h2>
+                    <div className="pm-items">{item.products.map(productRow)}</div>
+                  </section>
+                ))}
+                {categories.length === 0 && <p className="text-muted text-center py-5">El menú todavía no tiene productos.</p>}
+              </main>
+            </div>
+          </>
+        )}
+      </div>
 
       {data.acceptsOrders && lines.length > 0 && (
         <div className="pm-cart-bar">
-          <button type="button" className="btn btn-primary btn-touch w-100" onClick={() => setCartOpen(true)}>
-            Ver pedido · {itemCount} · <span className="ta-money">{formatMoney(totals.total)}</span>
+          <button
+            type="button"
+            className="btn btn-primary pm-cart-button"
+            onClick={() => setCartOpen(true)}
+            aria-label={`Ver pedido · ${itemCount} · ${formatMoney(totals.total)}`}
+          >
+            <span className="pm-cart-count ta-money" aria-hidden="true">{itemCount}</span>
+            <span className="pm-cart-label" aria-hidden="true">Ver pedido</span>
+            <span className="ta-money" aria-hidden="true">{formatMoney(totals.total)}</span>
           </button>
         </div>
       )}
 
-      <Modal show={!!choosing} onHide={() => setChoosing(null)} centered scrollable fullscreen="sm-down" aria-labelledby={optionsTitleId}>
-        {choosing && (
-          <>
-            <Modal.Header closeButton>
-              <Modal.Title id={optionsTitleId} as="h2" className="h5">{choosing.product.name}</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              {groupsOf(choosing.product).map((group) => (
-                <fieldset key={group.id} className="mb-3">
-                  <legend className="fs-6 fw-semibold mb-1">
-                    {group.name}{' '}
-                    <span className="small text-muted fw-normal">
-                      {group.minSelections > 0 ? '· obligatorio' : group.maxSelections > 1 ? `· hasta ${group.maxSelections}` : '· opcional'}
-                    </span>
-                  </legend>
-                  {group.options.map((option) => {
-                    const checked = choosing.optionIds.includes(option.id);
-                    return (
-                      <label key={option.id} className={`pm-option ${checked ? 'active' : ''} ${option.isAvailable ? '' : 'disabled'}`}>
-                        <input
-                          type={group.maxSelections === 1 ? 'radio' : 'checkbox'}
-                          className="form-check-input me-2"
-                          name={`pm-${group.id}`}
-                          checked={checked}
-                          disabled={!option.isAvailable}
-                          onChange={() => toggleOption(group, option.id)}
-                        />
-                        <span className="flex-grow-1">{option.name}{!option.isAvailable && ' (agotado)'}</span>
-                        {option.priceDelta !== 0 && (
-                          <span className="small ta-money">{option.priceDelta > 0 ? '+' : '−'}{formatMoney(Math.abs(option.priceDelta))}</span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </fieldset>
-              ))}
-            </Modal.Body>
-            <Modal.Footer>
-              {getSelectionError(groupsOf(choosing.product), choosing.optionIds) && (
-                <span className="text-danger small me-auto">{getSelectionError(groupsOf(choosing.product), choosing.optionIds)}</span>
-              )}
-              <button
-                type="button"
-                className="btn btn-primary btn-touch"
-                disabled={Boolean(getSelectionError(groupsOf(choosing.product), choosing.optionIds))}
-                onClick={() => {
-                  add(choosing.product, choosing.optionIds);
-                  setChoosing(null);
-                }}
-              >
-                Agregar · {formatMoney(getPriceWithOptions(choosing.product.price, groupsOf(choosing.product), choosing.optionIds))}
-              </button>
-            </Modal.Footer>
-          </>
-        )}
-      </Modal>
+      <ProductSheet
+        product={viewing}
+        acceptsOrders={data.acceptsOrders}
+        onClose={() => setViewing(null)}
+        onAdd={(product, optionIds, note, quantity) => {
+          add(product, optionIds, note, quantity);
+          setViewing(null);
+        }}
+      />
 
-      <Offcanvas show={cartOpen} onHide={() => setCartOpen(false)} placement="bottom" className="pm-sheet" aria-labelledby={cartTitleId}>
+      <StoreInfoModal
+        show={infoOpen}
+        onHide={() => setInfoOpen(false)}
+        menu={data}
+        status={status}
+        deliveryOffered={deliveryOffered}
+        contactUrl={contact}
+      />
+
+      <Offcanvas show={cartOpen} onHide={() => setCartOpen(false)} placement="end" className="pm-checkout" aria-labelledby={cartTitleId}>
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title id={cartTitleId} as="h2" className="h5">Tu pedido</Offcanvas.Title>
+          <div className="min-w-0">
+            <Offcanvas.Title id={cartTitleId} as="h2" className="h5 mb-0">Tu pedido</Offcanvas.Title>
+            <div className="small text-muted text-truncate">{data.businessName}</div>
+          </div>
         </Offcanvas.Header>
         <Offcanvas.Body>
-          <form onSubmit={(event) => void send(event)}>
-            <ul className="list-unstyled mb-3">
-              {lines.map((line) => (
-                <li key={line.key} className="d-flex align-items-center gap-2 py-2 border-bottom">
-                  <div className="flex-grow-1">
-                    <div className="fw-semibold">{line.product.name}</div>
-                    {line.optionsLabel && <div className="small text-muted">{line.optionsLabel}</div>}
-                    <div className="small ta-money">{formatMoney(lineAmount(line.unitPrice, line.quantity))}</div>
-                  </div>
-                  <div className="btn-group" role="group" aria-label={`Cantidad de ${line.product.name}`}>
-                    <button type="button" className="btn btn-light" onClick={() => changeQuantity(line.key, -1)} aria-label="Uno menos">−</button>
-                    <span className="btn btn-light disabled ta-money">{line.quantity}</span>
-                    <button type="button" className="btn btn-light" onClick={() => changeQuantity(line.key, 1)} aria-label="Uno más">+</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {deliveryOffered && (
-              <PublicDeliveryFields
-                required={deliveryRequired}
-                toAddress={toAddress}
-                onToAddressChange={setToAddress}
-                address={address}
-                onAddressChange={(changes) => setAddress((current) => ({ ...current, ...changes }))}
-                terms={terms}
-                checking={checkingQuote}
-                problem={deliveryProblem}
-                pricesIncludeTax={data.pricesIncludeTax}
-                total={terms ? totals.total : null}
-                savedAddresses={savedAddresses}
-                selectedAddressId={addressChoice ?? null}
-                onSelectAddress={chooseAddress}
-                save={canKeepAddress
-                  ? { checked: keepAddress, label: addressLabel, onCheckedChange: setKeepAddress, onLabelChange: setAddressLabel }
-                  : null}
-              />
-            )}
-            {totals.fee !== null && totals.productsTotal !== null && (
-              <>
-                {/* What the customer pays for each, with IVA, so the two add up to the total. */}
-                <div className="d-flex justify-content-between small">
-                  <span>Productos</span><span className="ta-money">{formatMoney(totals.productsTotal)}</span>
+          <form id="pm-checkout-form" onSubmit={(event) => void send(event)}>
+            <section className="pm-checkout-section" aria-labelledby={`${cartTitleId}-items`}>
+              <h3 id={`${cartTitleId}-items`} className="pm-checkout-title">Tus productos</h3>
+              <ul className="list-unstyled mb-1">
+                {lines.map((line) => (
+                  <li key={line.key} className="pm-line">
+                    {withPhotos && <PhotoOrInitial src={line.product.imageUrl} name={line.product.name} className="pm-line-photo" />}
+                    <div className="flex-grow-1 min-w-0">
+                      <div className="fw-semibold">{line.product.name}</div>
+                      {line.optionsLabel && <div className="small text-muted">{line.optionsLabel}</div>}
+                      {line.notes && <div className="small text-muted fst-italic">«{line.notes}»</div>}
+                      <div className="small ta-money">{formatMoney(lineAmount(line.unitPrice, line.quantity))}</div>
+                    </div>
+                    <div className="pm-stepper small" role="group" aria-label={`Cantidad de ${line.product.name}`}>
+                      <button type="button" onClick={() => changeQuantity(line.key, -1)}
+                        aria-label={line.quantity === 1 ? `Quitar ${line.product.name}` : 'Uno menos'}>
+                        <i className={line.quantity === 1 ? 'ri-delete-bin-line' : 'ri-subtract-line'} aria-hidden="true"></i>
+                      </button>
+                      <span className="ta-money">{line.quantity}</span>
+                      <button type="button" onClick={() => changeQuantity(line.key, 1)} aria-label="Uno más">
+                        <i className="ri-add-line" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="btn btn-link px-0" onClick={() => setCartOpen(false)}>
+                <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar más productos
+              </button>
+            </section>
+
+            <section className="pm-checkout-section" aria-labelledby={`${cartTitleId}-delivery`}>
+              <h3 id={`${cartTitleId}-delivery`} className="pm-checkout-title">Entrega</h3>
+              {deliveryOffered && (
+                <PublicDeliveryFields
+                  required={deliveryRequired}
+                  toAddress={toAddress}
+                  onToAddressChange={setToAddress}
+                  address={address}
+                  onAddressChange={(changes) => setAddress((current) => ({ ...current, ...changes }))}
+                  terms={terms}
+                  checking={checkingQuote}
+                  problem={deliveryProblem}
+                  pricesIncludeTax={data.pricesIncludeTax}
+                  total={terms ? totals.total : null}
+                  savedAddresses={savedAddresses}
+                  selectedAddressId={addressChoice ?? null}
+                  onSelectAddress={chooseAddress}
+                  save={canKeepAddress
+                    ? { checked: keepAddress, label: addressLabel, onCheckedChange: setKeepAddress, onLabelChange: setAddressLabel }
+                    : null}
+                />
+              )}
+              {atTable && <p className="mb-0"><i className="ri-restaurant-line me-1" aria-hidden="true"></i>Te lo llevamos a {tableLabel}.</p>}
+              {!atTable && !delivering && (
+                data.address ? (
+                  <p className="pm-pickup mb-0">
+                    <i className="ri-store-2-line" aria-hidden="true"></i>
+                    <span className="flex-grow-1">Lo recoges en {data.address}</span>
+                    <a className="text-nowrap" href={mapsUrl(data.address)} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
+                  </p>
+                ) : data.deliveryOnly
+                  ? <p className="text-muted mb-0">El negocio se pone de acuerdo contigo para la entrega.</p>
+                  : <p className="text-muted mb-0">Lo recoges en el negocio.</p>
+              )}
+            </section>
+
+            <section className="pm-checkout-section" aria-labelledby={`${cartTitleId}-you`}>
+              <h3 id={`${cartTitleId}-you`} className="pm-checkout-title">Tus datos</h3>
+              <div className="row g-2">
+                <div className="col-sm-6">
+                  <label className="form-label small mb-1" htmlFor="pm-name">Tu nombre</label>
+                  <input id="pm-name" className="form-control" required maxLength={100} autoComplete="name"
+                    value={name} onChange={(event) => setName(event.target.value)} />
                 </div>
-                <div className="d-flex justify-content-between small">
-                  <span>Envío a domicilio</span>
-                  <span className="ta-money">
-                    {totals.fee > 0 ? formatMoney(Math.round((totals.total - totals.productsTotal) * 100) / 100) : 'Gratis'}
-                  </span>
+                <div className="col-sm-6">
+                  <label className="form-label small mb-1" htmlFor="pm-phone">Teléfono (WhatsApp)</label>
+                  <input id="pm-phone" className="form-control" required type="tel" inputMode="tel" maxLength={30} autoComplete="tel"
+                    value={phone} onChange={(event) => setPhone(event.target.value)} />
                 </div>
-              </>
-            )}
-            <div className="d-flex justify-content-between fs-5 mb-3">
-              <span>Total</span><strong className="ta-money">{formatMoney(totals.total)}</strong>
-            </div>
-            <div className="row g-2">
-              <div className="col-sm-6">
-                <label className="form-label small mb-1" htmlFor="pm-name">Tu nombre</label>
-                <input id="pm-name" className="form-control" required maxLength={100} autoComplete="name"
-                  value={name} onChange={(event) => setName(event.target.value)} />
+                <div className="col-12">
+                  <label className="form-label small mb-1" htmlFor="pm-notes">Notas para el negocio (opcional)</label>
+                  <input id="pm-notes" className="form-control" maxLength={500} placeholder="Ej. para llevar, timbre descompuesto"
+                    value={notes} onChange={(event) => setNotes(event.target.value)} />
+                </div>
               </div>
-              <div className="col-sm-6">
-                <label className="form-label small mb-1" htmlFor="pm-phone">Teléfono (WhatsApp)</label>
-                <input id="pm-phone" className="form-control" required type="tel" inputMode="tel" maxLength={30} autoComplete="tel"
-                  value={phone} onChange={(event) => setPhone(event.target.value)} />
+            </section>
+
+            <section className="pm-checkout-section pm-summary" aria-labelledby={`${cartTitleId}-summary`}>
+              <h3 id={`${cartTitleId}-summary`} className="pm-checkout-title">Resumen</h3>
+              {totals.fee !== null && totals.productsTotal !== null && (
+                <>
+                  {/* What the customer pays for each, with IVA, so the two add up to the total. */}
+                  <div className="d-flex justify-content-between small">
+                    <span>Productos</span><span className="ta-money">{formatMoney(totals.productsTotal)}</span>
+                  </div>
+                  <div className="d-flex justify-content-between small">
+                    <span>Envío a domicilio</span>
+                    <span className="ta-money">
+                      {totals.fee > 0 ? formatMoney(Math.round((totals.total - totals.productsTotal) * 100) / 100) : 'Gratis'}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className="d-flex justify-content-between fs-5">
+                <span>Total</span><strong className="ta-money">{formatMoney(totals.total)}</strong>
               </div>
-              <div className="col-12">
-                <label className="form-label small mb-1" htmlFor="pm-notes">Notas (opcional)</label>
-                <input id="pm-notes" className="form-control" maxLength={500} placeholder="Ej. para llevar, sin cebolla"
-                  value={notes} onChange={(event) => setNotes(event.target.value)} />
-              </div>
-            </div>
-            {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
-            <button type="submit" className="btn btn-primary btn-touch btn-touch-lg w-100 mt-3" disabled={sending || lines.length === 0 || deliveryBlocked}>
-              {sending ? 'Enviando…' : `Enviar pedido · ${formatMoney(totals.total)}`}
-            </button>
-            <p className="small text-muted mt-2 mb-0">
-              Usamos tu teléfono solo para avisarte de este pedido.
-            </p>
+            </section>
+            {error && <div className="alert alert-danger mb-0" role="alert">{error}</div>}
           </form>
         </Offcanvas.Body>
+        <div className="pm-checkout-footer">
+          <button type="submit" form="pm-checkout-form" className="btn btn-primary btn-touch btn-touch-lg w-100" disabled={sending || lines.length === 0 || deliveryBlocked}>
+            {sending ? 'Enviando…' : `Hacer pedido · ${formatMoney(totals.total)}`}
+          </button>
+          <p className="small text-muted mt-2 mb-0">Usamos tu teléfono solo para avisarte de este pedido.</p>
+        </div>
       </Offcanvas>
     </div>
   );

@@ -6,6 +6,8 @@ export interface SavedCartLine {
   productId: string;
   optionIds: string[];
   quantity: number;
+  /** What the customer asked for this product («sin cebolla», Fase 24E); absent without a note. */
+  notes?: string;
 }
 
 /** The cart of one store on this device (Fase 24B), until it is sent, emptied or forgotten. */
@@ -36,6 +38,8 @@ export interface CartLine<P extends CartMenuProduct> {
   optionsLabel: string;
   unitPrice: number;
   quantity: number;
+  /** What the customer asked for this product; absent without a note. */
+  notes?: string;
 }
 
 const STORAGE_KEY = 'tienditapp.carts';
@@ -46,6 +50,24 @@ const MAX_CARTS = 10;
 // The same limits as the store and the API (PlacePublicOrderCommandValidator).
 export const MAX_CART_LINES = 50;
 export const MAX_LINE_QUANTITY = 99;
+/** The note of a product of the order (CreateOrderItemDtoValidator). */
+export const MAX_LINE_NOTES = 300;
+
+/**
+ * The line a product goes in: the same product with the same options and the same note adds up, and another note is
+ * another line (the kitchen reads each one).
+ */
+export function cartLineKey(productId: string, optionIds: readonly string[] = [], notes?: string): string {
+  const key = getLineKey(productId, optionIds);
+  // «#» never appears in the ids of a product or its options: a note never reads as options.
+  return notes ? `${key}#${notes}` : key;
+}
+
+/** A note as the cart keeps it: trimmed, within its limit, and absent when empty. */
+export function lineNotes(notes: string | null | undefined): string | undefined {
+  const trimmed = (notes ?? '').trim().slice(0, MAX_LINE_NOTES);
+  return trimmed === '' ? undefined : trimmed;
+}
 
 type Carts = Record<string, SavedCart>;
 
@@ -81,7 +103,8 @@ function isLine(line: unknown): line is SavedCartLine {
   const candidate = line as Partial<SavedCartLine>;
   return typeof candidate.productId === 'string'
     && Array.isArray(candidate.optionIds) && candidate.optionIds.every((id) => typeof id === 'string')
-    && typeof candidate.quantity === 'number' && Number.isInteger(candidate.quantity) && candidate.quantity > 0;
+    && typeof candidate.quantity === 'number' && Number.isInteger(candidate.quantity) && candidate.quantity > 0
+    && (candidate.notes === undefined || typeof candidate.notes === 'string');
 }
 
 /** The cart this device keeps for the store of `slug`, or null (none, emptied or too old). */
@@ -124,11 +147,11 @@ export function latestCart(now = new Date()): { slug: string; businessName: stri
 }
 
 /**
- * The lines of a past order, as «Pedir otra vez» puts them in the cart: the menu takes whole units, so a product sold
- * by weight or in fractions (0.5 kg) does not come back, and `skipped` counts them.
+ * The lines of a past order, as «Pedir otra vez» puts them in the cart, each with its note: the menu takes whole units,
+ * so a product sold by weight or in fractions (0.5 kg) does not come back, and `skipped` counts them.
  */
 export function linesOfOrder(
-  items: Array<{ productId: string; quantity: number; optionIds?: string[] | null }>,
+  items: Array<{ productId: string; quantity: number; optionIds?: string[] | null; notes?: string | null }>,
 ): { lines: SavedCartLine[]; skipped: number } {
   const lines = new Map<string, SavedCartLine>();
   let skipped = 0;
@@ -138,12 +161,14 @@ export function linesOfOrder(
       continue;
     }
     const optionIds = [...(item.optionIds ?? [])];
-    const key = getLineKey(item.productId, optionIds);
+    const notes = lineNotes(item.notes);
+    const key = cartLineKey(item.productId, optionIds, notes);
     const current = lines.get(key);
     lines.set(key, {
       productId: item.productId,
       optionIds,
       quantity: Math.min((current?.quantity ?? 0) + item.quantity, MAX_LINE_QUANTITY),
+      ...(notes ? { notes } : {}),
     });
   }
   return { lines: [...lines.values()].slice(0, MAX_CART_LINES), skipped };
@@ -168,7 +193,8 @@ export function restoreLines<P extends CartMenuProduct>(
       dropped += 1;
       continue;
     }
-    const key = getLineKey(product.id, line.optionIds);
+    const notes = lineNotes(line.notes);
+    const key = cartLineKey(product.id, line.optionIds, notes);
     if (lines.some((existing) => existing.key === key)) continue;
     lines.push({
       key,
@@ -177,6 +203,7 @@ export function restoreLines<P extends CartMenuProduct>(
       optionsLabel: getOptionsLabel(groups, line.optionIds),
       unitPrice: getPriceWithOptions(product.price, groups, line.optionIds),
       quantity: Math.min(line.quantity, MAX_LINE_QUANTITY),
+      ...(notes ? { notes } : {}),
     });
   }
   return { lines, dropped };

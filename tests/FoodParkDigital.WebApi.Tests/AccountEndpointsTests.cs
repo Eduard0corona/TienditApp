@@ -57,6 +57,8 @@ public class AccountEndpointsTests
         "PUT api/v1/auth/my-tenant signed-in -",
         "POST api/v1/auth/my-tenant/logo signed-in -",
         "DELETE api/v1/auth/my-tenant/logo signed-in -",
+        "POST api/v1/auth/my-tenant/cover signed-in -",
+        "DELETE api/v1/auth/my-tenant/cover signed-in -",
         "GET api/v1/auth/my-tenant/whatsapp signed-in -",
         "PUT api/v1/auth/my-tenant/whatsapp signed-in -",
         "POST api/v1/auth/my-tenant/whatsapp/send signed-in -"

@@ -38,6 +38,8 @@ interface DemoProduct {
   availableFromTime?: string;
   availableToTime?: string;
   optionGroups?: unknown[];
+  /** The demo photo a scene gives it (withProductPhotos). */
+  images?: { medium: string; large: string };
   _itemType: string;
 }
 
@@ -143,7 +145,9 @@ function publicMenu(data: DemoData, slug: string, table: string | null) {
       name: category.name,
       products: products.filter((p) => p.categoryId === category.id).map((p) => ({
         id: p.id, name: p.name, description: p.description ?? null, price: p.priceAmount, compareAtPrice: p.compareAtPrice ?? null,
-        taxRate: p.taxRate, isTaxExempt: p.isTaxExempt, imageUrl: null, unit: p.unit, isFeatured: p.isFeatured,
+        taxRate: p.taxRate, isTaxExempt: p.isTaxExempt, unit: p.unit, isFeatured: p.isFeatured,
+        // The photos a scene gives the products (withProductPhotos), as GetPublicMenuQuery sends them (Fase 24E).
+        imageUrl: p.images?.medium ?? null, imageLargeUrl: p.images?.large ?? null,
         availableNow: availableNow(p), allergens: p.allergens ?? null, optionGroups: p.optionGroups ?? [],
       })),
     }))
@@ -151,7 +155,12 @@ function publicMenu(data: DemoData, slug: string, table: string | null) {
   return {
     status: 200,
     json: {
-      businessName: data.tenant.name, slug: data.tenant.slug, logoUrl: null, contactPhone: data.tenant.contactPhone,
+      businessName: data.tenant.name, slug: data.tenant.slug, contactPhone: data.tenant.contactPhone,
+      // Its logo and cover (Fase 24E) when a scene dresses the store; its line and category as in Explorar.
+      logoUrl: data.menuStore ? '/visual-img/logo.svg' : null,
+      coverImageUrl: data.menuStore ? '/visual-img/portada.svg' : null,
+      coverImageWideUrl: data.menuStore ? '/visual-img/portada.svg' : null,
+      description: 'Café de especialidad, pan dulce y chilaquiles desde 2021.', category: 0,
       currency: 'MXN', pricesIncludeTax: data.tenant.pricesIncludeTax, defaultTaxRate: data.tenant.defaultTaxRate,
       acceptsOrders, ordersPaused: !acceptsOrders, theme: data.tenant.theme, address: mainBranchAddress(data),
       deliveryOnly: mainBranch(data).serviceMode === DELIVERY_ONLY, openingHours: hours, categories,

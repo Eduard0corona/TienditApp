@@ -106,6 +106,17 @@ public class PublicMenuDto
     public string BusinessName { get; set; } = null!;
     public string Slug { get; set; } = null!;
     public string? LogoUrl { get; set; }
+    /// <summary>
+    /// The wide photo across the top of the menu (Fase 24E, ADR 0026), 1024 px wide; null without one, and the menu
+    /// shows the colors of the business instead.
+    /// </summary>
+    public string? CoverImageUrl { get; set; }
+    /// <summary>The same cover up to 2048 px wide, for a wide screen; null without one.</summary>
+    public string? CoverImageWideUrl { get; set; }
+    /// <summary>Its line under the name, as on its card in Explorar ("Tacos al pastor desde 1998"); null without one.</summary>
+    public string? Description { get; set; }
+    /// <summary>What it is, as Explorar lists it (Comida, Abarrotes…), under its name.</summary>
+    public BusinessCategory Category { get; set; }
     /// <summary>The business phone for "Escríbenos por WhatsApp", when it has one.</summary>
     public string? ContactPhone { get; set; }
     public string Currency { get; set; } = "MXN";
@@ -300,6 +311,8 @@ public class PublicMenuProductDto
     public decimal? TaxRate { get; set; }
     public bool IsTaxExempt { get; set; }
     public string? ImageUrl { get; set; }
+    /// <summary>The same photo 1024 px wide, for the product's own sheet (Fase 24E); null without a photo.</summary>
+    public string? ImageLargeUrl { get; set; }
     public Domain.Catalog.Enums.UnitType? Unit { get; set; }
     public bool IsFeatured { get; set; }
     /// <summary>False outside its hours (it is shown but cannot be ordered now).</summary>
@@ -390,11 +403,16 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
                 settings.OpeningHours is not null)
             && await OnlineBookingCalendar.BookableServices(_context).AnyAsync(cancellationToken);
 
+        var cover = LogoImageUrlsDto.FromBaseUrl(tenant.CoverImageUrl);
         return new PublicMenuDto
         {
             BusinessName = tenant.Name,
             Slug = tenant.Slug,
             LogoUrl = string.IsNullOrEmpty(tenant.LogoUrl) ? null : $"{tenant.LogoUrl}_md.webp",
+            CoverImageUrl = cover?.Large,
+            CoverImageWideUrl = cover?.Original,
+            Description = tenant.PublicDescription,
+            Category = tenant.DirectoryCategory,
             ContactPhone = tenant.ContactPhone,
             Currency = settings.Currency,
             PricesIncludeTax = settings.PricesIncludeTax,
@@ -423,6 +441,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
                         TaxRate = p.TaxRate,
                         IsTaxExempt = p.IsTaxExempt,
                         ImageUrl = ProductImageUrlsDto.FromBaseUrl(p.ImageUrl)?.Medium,
+                        ImageLargeUrl = ProductImageUrlsDto.FromBaseUrl(p.ImageUrl)?.Large,
                         Unit = p.Unit,
                         IsFeatured = p.IsFeatured,
                         AvailableNow = p.IsAvailableAt(localTime),

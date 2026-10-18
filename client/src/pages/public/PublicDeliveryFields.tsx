@@ -76,18 +76,19 @@ export default function PublicDeliveryFields({
         </p>
       ) : (
         <>
-          <div id={`${id}-how`} className="small fw-semibold mb-1">¿Cómo lo quieres?</div>
-          <div className="d-flex gap-2 mb-2" role="radiogroup" aria-labelledby={`${id}-how`}>
+          <div id={`${id}-how`} className="visually-hidden">¿Cómo lo quieres?</div>
+          <div className="pm-mode mt-0 mb-2" role="radiogroup" aria-labelledby={`${id}-how`}>
             {[true, false].map((option) => (
               <button
                 key={String(option)}
                 type="button"
                 role="radio"
                 aria-checked={toAddress === option}
-                className={`btn btn-touch flex-fill ${toAddress === option ? 'btn-primary' : 'btn-outline-secondary'}`}
+                className={toAddress === option ? 'active' : ''}
                 onClick={() => onToAddressChange(option)}
               >
-                {option ? 'A domicilio' : 'Paso por él'}
+                <i className={option ? 'ri-e-bike-2-line' : 'ri-shopping-bag-3-line'} aria-hidden="true"></i>
+                {option ? 'A domicilio' : 'Para recoger'}
               </button>
             ))}
           </div>

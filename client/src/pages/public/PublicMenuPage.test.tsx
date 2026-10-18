@@ -89,10 +89,11 @@ const christmasDay = {
   ],
 };
 
-function renderPage(path = '/m/cafe-luna', auth?: Partial<AuthContextType>) {
+function renderPage(path = '/m/cafe-luna', auth?: Partial<AuthContextType>, from?: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // `from`: the page of the app the customer came from (Explorar), one step back in the history.
   const page = (
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={from ? [from, path] : [path]} initialIndex={from ? 1 : 0}>
       <Routes>
         <Route path="/m/:slug" element={<PublicMenuPage />} />
       </Routes>
@@ -148,8 +149,10 @@ describe('PublicMenuPage', () => {
 
     expect(await screen.findByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
     // No logo: the initial of the business. No product has a photo: no placeholders either.
-    expect(container.querySelector('.pm-header .photo-initial')).toHaveTextContent('C');
-    expect(container.querySelector('.pm-product .photo-initial')).toBeNull();
+    expect(container.querySelector('.pm-store .photo-initial')).toHaveTextContent('C');
+    expect(container.querySelector('.pm-item .photo-initial')).toBeNull();
+    // Without a cover, the colors of the business across the top.
+    expect(container.querySelector('.pm-cover')).not.toHaveClass('has-photo');
     expect(api.getMenu).toHaveBeenCalledWith('cafe-luna', undefined);
     expect(screen.queryByText(/no estamos recibiendo pedidos/)).not.toBeInTheDocument();
     // A business without hours or address shows neither.
@@ -177,8 +180,8 @@ describe('PublicMenuPage', () => {
     const { container } = renderPage();
 
     await screen.findByText('Capuchino');
-    expect(container.querySelector('.pm-header img')).toHaveAttribute('src', 'https://cdn/luna_md.webp');
-    const [latte, capuchino] = Array.from(container.querySelectorAll('.pm-product'));
+    expect(container.querySelector('img.pm-logo')).toHaveAttribute('src', 'https://cdn/luna_md.webp');
+    const [latte, capuchino] = Array.from(container.querySelectorAll('.pm-item'));
     expect(latte.querySelector('img')).toHaveAttribute('src', 'https://cdn/latte_md.webp');
     expect(capuchino.querySelector('.photo-initial')).toHaveTextContent('C');
   });
@@ -192,9 +195,9 @@ describe('PublicMenuPage', () => {
     renderPage();
 
     const categories = await screen.findByRole('navigation', { name: 'Categorías' });
-    // The bar keeps its background; only the row of chips inside fades.
+    // The bar keeps its background; only the row of tabs inside fades.
     expect(categories).not.toHaveClass('fade-end');
-    expect(within(categories).getByRole('button', { name: 'Todo' }).parentElement).toHaveClass('fade-end');
+    expect(within(categories).getByRole('button', { name: 'Bebidas' }).parentElement).toHaveClass('fade-end');
   });
 
   it('says a kitchen only delivers, with no address and no way to get there', async () => {
@@ -203,7 +206,9 @@ describe('PublicMenuPage', () => {
 
     renderPage();
 
-    const info = await screen.findByRole('region', { name: 'Horario y ubicación' });
+    expect(await screen.findByText('Solo a domicilio')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Información' }));
+    const info = screen.getByRole('dialog', { name: 'Café Luna' });
     expect(within(info).getByText('Solo a domicilio: no tenemos local para visitar.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Cómo llegar/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Los Pinos/)).not.toBeInTheDocument();
@@ -445,12 +450,12 @@ describe('PublicMenuPage', () => {
 
     const { container } = renderPage();
 
-    const today = await screen.findByText('Hoy: Cerrado · Inventario');
-    // Nothing to open: no disclosure and no arrow that promises more.
-    expect(today.closest('details')).toBeNull();
+    // Today in one line, and the store's information has neither a week nor special days to list.
+    await userEvent.click(await screen.findByRole('button', { name: 'Hoy: Cerrado · Inventario' }));
+    const info = screen.getByRole('dialog', { name: 'Café Luna' });
+    expect(within(info).getByText('Cerrado', { selector: '.ta-chip' })).toBeInTheDocument();
+    expect(within(info).queryByRole('list')).not.toBeInTheDocument();
     expect(container.querySelector('details')).toBeNull();
-    expect(container.querySelector('.pm-hours-toggle')).toBeNull();
-    expect(screen.getByRole('region', { name: 'Horario y ubicación' })).toContainElement(today);
   });
 
   describe('con cuenta y carrito guardado (Fase 24B)', () => {
@@ -492,9 +497,9 @@ describe('PublicMenuPage', () => {
       const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
       await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
       await userEvent.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
-      await userEvent.click(within(cart).getByRole('button', { name: /^Enviar pedido/ }));
+      await userEvent.click(within(cart).getByRole('button', { name: /^Hacer pedido/ }));
       expect(await within(cart).findByText(/No se pudo enviar el pedido/)).toBeInTheDocument();
-      await userEvent.click(within(cart).getByRole('button', { name: /^Enviar pedido/ }));
+      await userEvent.click(within(cart).getByRole('button', { name: /^Hacer pedido/ }));
 
       expect(await screen.findByText('¡Pedido enviado!')).toBeInTheDocument();
       const [first, second] = api.placeOrder.mock.calls.map(([, body]) => body.idempotencyKey);
@@ -541,7 +546,7 @@ describe('PublicMenuPage', () => {
       await userEvent.type(within(cart).getByLabelText('Dirección'), 'Calle Nueva 1');
       expect(within(cart).getByLabelText('Guardar esta dirección en mi cuenta')).toBeChecked();
       await userEvent.type(within(cart).getByLabelText('Nombre de la dirección'), 'Casa de mi mamá');
-      await userEvent.click(await within(cart).findByRole('button', { name: /^Enviar pedido/ }));
+      await userEvent.click(await within(cart).findByRole('button', { name: /^Hacer pedido/ }));
 
       expect(api.placeOrder).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({
         customerName: 'Mariana Ortiz',
@@ -596,12 +601,14 @@ describe('PublicMenuPage', () => {
       } as never);
 
       renderPage();
-      expect(await screen.findByText(/También a domicilio/)).toBeInTheDocument();
+      // The store offers both, as the apps do: picked up until the customer switches.
+      const how = await screen.findByRole('radiogroup', { name: '¿Cómo lo quieres?' });
+      expect(within(how).getByRole('radio', { name: 'Para recoger' })).toHaveAttribute('aria-checked', 'true');
       const cart = await openCart();
-      const send = within(cart).getByRole('button', { name: /^Enviar pedido/ });
+      const send = within(cart).getByRole('button', { name: /^Hacer pedido/ });
 
       // Picked up by default: the products alone.
-      expect(within(cart).getByRole('radio', { name: 'Paso por él' })).toHaveAttribute('aria-checked', 'true');
+      expect(within(cart).getByRole('radio', { name: 'Para recoger' })).toHaveAttribute('aria-checked', 'true');
       expect(send).toHaveTextContent('$110.00');
       await userEvent.click(within(cart).getByRole('radio', { name: 'A domicilio' }));
       expect(send).toBeDisabled();
@@ -621,7 +628,7 @@ describe('PublicMenuPage', () => {
         tableLabel: null,
         delivery: { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: null, paysWith: null },
       }));
-      expect(await screen.findByText(/Incluye envío de/)).toHaveTextContent('Incluye envío de $35.00');
+      expect((await screen.findByText('Envío')).nextSibling).toHaveTextContent('$35.00');
     });
 
     it('asks what the customer pays with, for the courier\'s change, and waits for a bill that covers the total', async () => {
@@ -633,7 +640,7 @@ describe('PublicMenuPage', () => {
 
       renderPage();
       const cart = await openCart();
-      const send = within(cart).getByRole('button', { name: /^Enviar pedido/ });
+      const send = within(cart).getByRole('button', { name: /^Hacer pedido/ });
       await userEvent.type(within(cart).getByLabelText('Código postal'), '72000');
       await within(cart).findByText('Envío $35.00 · gratis desde $400.00 · pedido mínimo $100.00');
       await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
@@ -671,12 +678,12 @@ describe('PublicMenuPage', () => {
       const postalCode = within(cart).getByLabelText('Código postal');
       await userEvent.type(postalCode, '72999');
       expect(await within(cart).findByText('Por ahora no llegamos al 72999.')).toBeInTheDocument();
-      expect(within(cart).getByRole('button', { name: /^Enviar pedido/ })).toBeDisabled();
+      expect(within(cart).getByRole('button', { name: /^Hacer pedido/ })).toBeDisabled();
 
       await userEvent.clear(postalCode);
       await userEvent.type(postalCode, '72000');
       expect(await within(cart).findByText('El pedido mínimo para el 72000 es de $100.00.')).toBeInTheDocument();
-      expect(within(cart).getByRole('button', { name: /^Enviar pedido/ })).toBeDisabled();
+      expect(within(cart).getByRole('button', { name: /^Hacer pedido/ })).toBeDisabled();
       expect(api.placeOrder).not.toHaveBeenCalled();
     });
 
@@ -693,7 +700,7 @@ describe('PublicMenuPage', () => {
       // $110 + 16 % = $127.60 in products and $35 + 16 % = $40.60 of delivery: $168.20.
       expect(within(cart).getByText('Productos').nextSibling).toHaveTextContent('$127.60');
       expect(within(cart).getByText('Envío a domicilio').nextSibling).toHaveTextContent('$40.60');
-      expect(within(cart).getByRole('button', { name: /^Enviar pedido/ })).toHaveTextContent('$168.20');
+      expect(within(cart).getByRole('button', { name: /^Hacer pedido/ })).toHaveTextContent('$168.20');
     });
 
     it('offers no delivery at a table', async () => {
@@ -704,7 +711,165 @@ describe('PublicMenuPage', () => {
 
       expect(within(cart).queryByLabelText('Código postal')).not.toBeInTheDocument();
       expect(within(cart).queryByRole('radio', { name: 'A domicilio' })).not.toBeInTheDocument();
-      expect(screen.queryByText(/También a domicilio/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('radiogroup', { name: '¿Cómo lo quieres?' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: 'A domicilio' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('con la forma de las apps de entrega (Fase 24E)', () => {
+    const size = {
+      id: 'g1', name: 'Tamaño', minSelections: 1, maxSelections: 1,
+      options: [
+        { id: 'o1', name: 'Chico', priceDelta: 0, isAvailable: true },
+        { id: 'o2', name: 'Grande', priceDelta: 12, isAvailable: true },
+      ],
+    };
+    const extras = {
+      id: 'g2', name: 'Extras', minSelections: 0, maxSelections: 2,
+      options: [{ id: 'o3', name: 'Shot extra', priceDelta: 10, isAvailable: true }],
+    };
+    const storeMenu = (overrides: Partial<PublicMenu> = {}) => menu({
+      description: 'Café de especialidad y pan dulce',
+      category: 0,
+      categories: [
+        {
+          id: 'c1',
+          name: 'Bebidas calientes',
+          products: [
+            {
+              id: 'p1', name: 'Latte', description: 'Espresso con leche vaporizada', price: 55, compareAtPrice: 65,
+              isTaxExempt: false, isFeatured: true, availableNow: true, allergens: 'Lácteos', optionGroups: [size, extras],
+              imageUrl: 'https://cdn/latte_md.webp', imageLargeUrl: 'https://cdn/latte_lg.webp',
+            },
+            { id: 'p2', name: 'Café americano', description: 'Café de Chiapas', price: 35, isTaxExempt: false, isFeatured: false, availableNow: true, optionGroups: [] },
+          ],
+        },
+        {
+          id: 'c2',
+          name: 'Panadería',
+          products: [{ id: 'p3', name: 'Concha de vainilla', price: 18, isTaxExempt: false, isFeatured: false, availableNow: true, optionGroups: [] }],
+        },
+      ],
+      ...overrides,
+    });
+
+    it('opens with the cover, the store line and its featured products, and the arrow back only from the app', async () => {
+      api.getMenu.mockResolvedValue(storeMenu({
+        coverImageUrl: 'https://cdn/portada_lg.webp',
+        coverImageWideUrl: 'https://cdn/portada_original.webp',
+      }));
+
+      const { container, unmount } = renderPage();
+
+      expect(await screen.findByText('Comida · Café de especialidad y pan dulce')).toBeInTheDocument();
+      const cover = container.querySelector('.pm-cover-photo');
+      expect(cover).toHaveAttribute('src', 'https://cdn/portada_lg.webp');
+      expect(cover).toHaveAttribute('srcset', 'https://cdn/portada_lg.webp 1024w, https://cdn/portada_original.webp 2048w');
+      const featured = screen.getByRole('region', { name: 'Destacados' });
+      expect(within(featured).getByRole('button', { name: 'Latte' })).toBeInTheDocument();
+      expect(within(featured).queryByRole('button', { name: 'Café americano' })).not.toBeInTheDocument();
+      // −15 %: from $65.00 to $55.00, with the price before crossed out.
+      expect(within(featured).getByText('−15%')).toBeInTheDocument();
+      // Opened from a QR or a link: nothing leads to other businesses.
+      expect(screen.queryByRole('button', { name: 'Regresar' })).not.toBeInTheDocument();
+      unmount();
+
+      renderPage('/m/cafe-luna', undefined, '/explorar');
+      expect(await screen.findByRole('button', { name: 'Regresar' })).toBeInTheDocument();
+    });
+
+    it('finds products by any word of their name or description, without accents', async () => {
+      api.getMenu.mockResolvedValue(storeMenu());
+
+      renderPage();
+      const search = await screen.findByRole('searchbox', { name: 'Buscar en Café Luna' });
+
+      await userEvent.type(search, 'cafe chiapas');
+      expect(screen.getByRole('heading', { name: '1 producto' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Café americano' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Concha de vainilla' })).not.toBeInTheDocument();
+      // While searching the tabs and the featured products step aside.
+      expect(screen.queryByRole('navigation', { name: 'Categorías' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Destacados' })).not.toBeInTheDocument();
+
+      await userEvent.clear(search);
+      await userEvent.type(search, 'tacos');
+      expect(screen.getByRole('heading', { name: 'No encontramos «tacos» en el menú' })).toBeInTheDocument();
+    });
+
+    it('takes a tab to its section and marks the first one at the top of the page', async () => {
+      const scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      api.getMenu.mockResolvedValue(storeMenu());
+
+      renderPage();
+      const tabs = await screen.findByRole('navigation', { name: 'Categorías' });
+
+      expect(within(tabs).getByRole('button', { name: 'Bebidas calientes' })).toHaveAttribute('aria-current', 'true');
+      await userEvent.click(within(tabs).getByRole('button', { name: 'Panadería' }));
+      expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'start' }));
+      expect(scrollIntoView.mock.contexts[0]).toBe(document.getElementById('pm-cat-c2'));
+      expect(screen.getByRole('region', { name: 'Panadería' })).toContainElement(screen.getByRole('button', { name: 'Concha de vainilla' }));
+    });
+
+    it('opens the sheet of a product with its photo, allergens and options, and adds how many with instructions', async () => {
+      api.getMenu.mockResolvedValue(storeMenu());
+      api.placeOrder.mockResolvedValue({
+        orderNumber: 'ORD-3', total: 154, deliveryFee: null, confirmed: false, businessName: 'Café Luna', contactPhone: null,
+      } as never);
+
+      renderPage();
+      const drinks = await screen.findByRole('region', { name: 'Bebidas calientes' });
+      await userEvent.click(within(drinks).getByRole('button', { name: 'Latte' }));
+      const sheet = screen.getByRole('dialog', { name: 'Latte' });
+
+      expect(sheet.querySelector('.pm-product-photo')).toHaveAttribute('src', 'https://cdn/latte_lg.webp');
+      expect(within(sheet).getByText('Espresso con leche vaporizada')).toBeInTheDocument();
+      expect(within(sheet).getByText('Alérgenos: Lácteos')).toBeInTheDocument();
+      expect(within(sheet).getByText('Obligatorio')).toBeInTheDocument();
+      expect(within(sheet).getByText('Elige 1')).toBeInTheDocument();
+      expect(within(sheet).getByText('Elige hasta 2')).toBeInTheDocument();
+      // One size is already chosen, as the apps do.
+      expect(within(sheet).getByRole('radio', { name: /Chico/ })).toBeChecked();
+
+      await userEvent.click(within(sheet).getByRole('radio', { name: /Grande/ }));
+      await userEvent.type(within(sheet).getByLabelText('Instrucciones especiales'), '  sin azúcar  ');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Uno más' }));
+      await userEvent.click(within(sheet).getByRole('button', { name: /^Agregar 2/ }));
+
+      // Two of $67.00: the size adds $12.00.
+      expect(screen.getByRole('button', { name: /^Ver pedido · 2/ })).toHaveTextContent('$134.00');
+      expect(screen.getAllByRole('button', { name: 'Agregar Latte' })[0]).toHaveTextContent('2');
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: ['o2'], quantity: 2, notes: 'sin azúcar' }]);
+
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
+      expect(within(cart).getByText('«sin azúcar»')).toBeInTheDocument();
+      await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
+      await userEvent.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      await userEvent.click(within(cart).getByRole('button', { name: /^Hacer pedido/ }));
+
+      expect(api.placeOrder).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({
+        items: [{ productId: 'p1', quantity: 2, optionIds: ['o2'], notes: 'sin azúcar' }],
+      }));
+    });
+
+    it('adds a product without options at once with its «+», and only shows a product while the menu takes no orders', async () => {
+      api.getMenu.mockResolvedValueOnce(storeMenu());
+
+      const { unmount } = renderPage();
+      await userEvent.click(await screen.findByRole('button', { name: 'Agregar Café americano' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Ver pedido · 1/ })).toHaveTextContent('$35.00');
+      unmount();
+
+      window.localStorage.clear();
+      api.getMenu.mockResolvedValueOnce(storeMenu({ acceptsOrders: false }));
+      renderPage();
+      await userEvent.click(await screen.findByRole('button', { name: 'Café americano' }));
+      const sheet = screen.getByRole('dialog', { name: 'Café americano' });
+      expect(within(sheet).queryByRole('button', { name: /^Agregar/ })).not.toBeInTheDocument();
+      expect(within(sheet).queryByLabelText('Instrucciones especiales')).not.toBeInTheDocument();
     });
   });
 });

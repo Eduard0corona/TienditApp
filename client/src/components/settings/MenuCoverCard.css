@@ -1,0 +1,42 @@
+/* How the cover looks across the top of the online menu, with the logo over it (PublicMenuPage.css, .pm-cover). */
+.mc-preview {
+  max-width: 28rem;
+  padding-bottom: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--ct-border-color);
+  border-radius: var(--ta-radius);
+  background: var(--ta-surface);
+}
+
+.mc-cover {
+  height: 7rem;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(var(--ct-primary-rgb), 0.32), transparent 55%),
+    radial-gradient(circle at 12% 95%, rgba(var(--ct-primary-rgb), 0.22), transparent 50%),
+    var(--ct-primary-bg-subtle);
+}
+
+.mc-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mc-logo {
+  position: relative;
+  display: flex;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: -1.75rem 0 0 1rem;
+  border: 3px solid var(--ta-surface);
+  border-radius: var(--ta-radius);
+  background: var(--ta-surface);
+  object-fit: cover;
+}
+
+.mc-name {
+  display: block;
+  margin: 0.35rem 1rem 0;
+  font-weight: 800;
+}

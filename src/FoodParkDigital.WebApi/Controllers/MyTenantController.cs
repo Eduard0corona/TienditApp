@@ -9,7 +9,7 @@ using FoodParkDigital.WebApi.Errors;
 namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
-/// The business of the session: its profile and modules, logo and WhatsApp. Under /auth/my-tenant, like the guided
+/// The business of the session: its profile and modules, logo, menu cover and WhatsApp. Under /auth/my-tenant, like the guided
 /// setup (<see cref="TenantSetupController"/>), so the middleware checks the membership; the requests decide who may
 /// change what.
 /// </summary>
@@ -67,6 +67,35 @@ public class MyTenantController : ControllerBase
     public async Task<IActionResult> DeleteTenantLogo(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new DeleteTenantLogoCommand(), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return NoContent();
+    }
+
+    /// <summary>The cover of the online menu (Fase 24E): the wide photo across its top.</summary>
+    [HttpPost("cover")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<LogoImageUrlsDto>> UploadTenantCover(IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
+
+        var result = await _mediator.Send(new UploadTenantCoverCommand
+        {
+            FileStream = file.OpenReadStream(),
+            FileName = file.FileName,
+            ContentType = file.ContentType,
+            FileSize = file.Length
+        }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    [HttpDelete("cover")]
+    public async Task<IActionResult> DeleteTenantCover(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeleteTenantCoverCommand(), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();

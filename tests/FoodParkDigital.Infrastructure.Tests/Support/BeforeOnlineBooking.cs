@@ -8,9 +8,9 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 /// <summary>
-/// The model without what Fase 24D added (appointments booked online and the owner's setting for them): the app as
-/// deployed before it, and what a test needs to seed or read on a database migrated to an earlier migration, where those
-/// columns do not exist yet.
+/// The model without what Fase 24D added (appointments booked online and the owner's setting for them), nor what came
+/// after it: the app as deployed before it, and what a test needs to seed or read on a database migrated to an earlier
+/// migration, where those columns do not exist yet.
 /// </summary>
 internal static class BeforeOnlineBooking
 {
@@ -33,6 +33,7 @@ internal static class BeforeOnlineBooking
         appointment.Ignore(a => a.CancelledByCustomerAt);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.OnlineBookingEnabled);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.OnlineBookingCapacity);
+        BeforeBusinessCover.Ignore(modelBuilder);
     }
 
     private sealed class Context(
