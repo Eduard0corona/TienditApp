@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Offcanvas } from 'react-bootstrap';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -135,24 +135,31 @@ export default function PublicMenuPage() {
   const [address, setAddress] = useState<PublicDeliveryAddress>(NO_ADDRESS);
   const queryClient = useQueryClient();
   const { customer, signedIn } = useCustomerAccount();
-  const favorites = useFavoriteBusinesses();
-  // The product of the link, once its menu is here; one the menu no longer shows opens just the menu.
-  if (data && linkedProductId && linkedOpened !== linkedProductId) {
+  // At a table there is no heart: the favorites are not asked for.
+  const favorites = useFavoriteBusinesses(undefined, { enabled: !atTable });
+  // The product of the link, once its menu is fresh (a copy kept from a moment ago may not have it yet, or still have it).
+  if (data && !menu.isFetching && linkedProductId && linkedOpened !== linkedProductId) {
     setLinkedOpened(linkedProductId);
     const linked = data.categories.flatMap((category) => category.products).find((product) => product.id === linkedProductId);
     if (linked) setViewing(linked);
   }
+  // Closed (or not on the menu), the address is the store's again: going back or reloading does not look for it again.
+  const leaveLinkedProduct = useCallback(() => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('producto');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
   const closeSheet = () => {
     setViewing(null);
-    // Closed, the address is the store's again: going back or reloading does not open it once more.
-    if (linkedProductId) {
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete('producto');
-        return next;
-      }, { replace: true });
-    }
+    if (linkedProductId) leaveLinkedProduct();
   };
+  // One the menu no longer shows opens just the menu.
+  const linkedNotOnMenu = linkedProductId !== null && linkedOpened === linkedProductId && viewing === null;
+  useEffect(() => {
+    if (linkedNotOnMenu) leaveLinkedProduct();
+  }, [linkedNotOnMenu, leaveLinkedProduct]);
   // The saved address chosen; null while another one is written; undefined until the cart first goes to an address.
   const [addressChoice, setAddressChoice] = useState<string | null | undefined>(undefined);
   const [keepAddress, setKeepAddress] = useState(true);

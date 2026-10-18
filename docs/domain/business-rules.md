@@ -298,10 +298,10 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 [ADR 0028](../adr/0028-product-search-and-favorites.md):
 
 - **Buscar productos:** una búsqueda en Explorar también muestra los productos de todos sus negocios.
-  - **Qué compara:** cada palabra, sin acentos, con el nombre y la descripción de lo que cada menú ya muestra. Con categoría, solo los productos de sus negocios.
+  - **Qué compara:** cada palabra, sin acentos, con el nombre y la descripción de lo que cada menú ya muestra (los primeros 500 de cada uno, como el menú). Con categoría, solo los productos de sus negocios.
   - **En qué orden:** primero los que la tienen en el nombre; luego los de los negocios que reciben pedidos ahora.
   - **Cuántos:** 3 de un negocio y 12 en total.
-  - **Qué dice cada uno:** su foto (o la inicial en los colores del negocio), su negocio, «Pide en línea» si recibe pedidos ahora, su precio (con el de antes si tiene descuento) y «más IVA» si sus precios no lo incluyen.
+  - **Qué dice cada uno:** su foto (o la inicial en los colores del negocio), su negocio, «Pide en línea» si recibe pedidos ahora, su precio (con el de antes si tiene descuento) y «más IVA» si el pedido le suma IVA (el negocio escribe sus precios sin IVA y el producto no está exento ni al 0 %).
   - **A dónde lleva:** abre la tienda en la hoja del producto, con lo que el menú diga en ese momento. Si el menú ya no lo muestra, abre solo el menú.
 - **Favoritos:**
   - **Quién:** solo una cuenta de cliente guarda negocios, con el corazón de su tarjeta en Explorar o el de la portada de su tienda (no en una mesa). Un visitante va a entrar y regresa; el equipo de un negocio no ve el corazón.

@@ -82,9 +82,14 @@ a.dc-card:hover {
   color: var(--ta-ink);
 }
 
+/* Kept: the red that reads on the surface of each mode (the button's danger red would not in dark). */
 .dc-favorite.is-favorite,
 .dc-favorite.is-favorite:hover {
-  color: var(--ct-danger);
+  color: var(--ct-danger-text-emphasis);
+}
+
+.dc-favorite[aria-disabled='true'] {
+  cursor: progress;
 }
 
 /* Without a logo, the initial in the colors of the business, not of the page. */

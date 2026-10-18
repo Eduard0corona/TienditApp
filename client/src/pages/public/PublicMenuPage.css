@@ -83,10 +83,14 @@
   background: var(--ct-tertiary-bg);
 }
 
-/* The heart of a business the customer keeps among their favorites (Fase 24F). */
+/* The heart of a business the customer keeps among their favorites (Fase 24F), in the red that reads in each mode. */
 .pm-round.is-favorite,
 .pm-round.is-favorite:hover {
-  color: var(--ct-danger);
+  color: var(--ct-danger-text-emphasis);
+}
+
+.pm-round[aria-disabled='true'] {
+  cursor: progress;
 }
 
 .pm-store {

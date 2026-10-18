@@ -11,11 +11,11 @@ interface FavoriteButtonProps {
 
 /**
  * The heart of a business (Fase 24F): a customer keeps it among their favorites or takes it out; a visitor goes to sign
- * in and comes back here. The team of a business sees none.
+ * in and comes back here. The team of a business sees none, and nobody does while the session comes back.
  */
 export default function FavoriteButton({ slug, name, favorites, className }: FavoriteButtonProps) {
   const location = useLocation();
-  if (favorites.mode === 'none') return null;
+  if (favorites.mode === 'none' || favorites.mode === 'loading') return null;
   if (favorites.mode === 'visitor') {
     return (
       <Link className={className} to="/login" state={{ from: location }} aria-label={`Entra para guardar ${name} en tus favoritos`}>
@@ -24,13 +24,16 @@ export default function FavoriteButton({ slug, name, favorites, className }: Fav
     );
   }
   const saved = favorites.isSaved(slug);
+  const busy = favorites.isBusy(slug);
   return (
     <button
       type="button"
       className={`${className} ${saved ? 'is-favorite' : ''}`}
+      // One name, and its state says whether it is kept: «…, presionado» (a toggle button).
+      aria-label={`Guardar ${name} en tus favoritos`}
       aria-pressed={saved}
-      aria-label={saved ? `Quitar ${name} de tus favoritos` : `Guardar ${name} en tus favoritos`}
-      disabled={favorites.isChanging(slug)}
+      // Not disabled while it waits: the focus stays on it.
+      aria-disabled={busy || undefined}
       onClick={() => favorites.toggle(slug)}
     >
       <i className={saved ? 'ri-heart-fill' : 'ri-heart-line'} aria-hidden="true"></i>

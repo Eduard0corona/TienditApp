@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-18 con la Fase 24D-2 y antes con la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-18 con la Fase 24F y antes con la 24D-2, la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -95,6 +95,21 @@ Actualizada el 2026-10-18 con la Fase 24D-2 y antes con la 24E, la 24D-1, la 25,
   - Sin `AppUrl` configurada, la dirección canónica es la de la petición (su encabezado `Host`).
   - Cada visita a una tienda lee su vista previa de la base (hasta cuatro consultas) además de lo que lee su menú; no hay caché por tienda.
   - La 24D-2 suma 51 B a la primera visita (de 178,009 a 178,060 B, dentro del presupuesto de 178,200 B): `HomeRedirect`, que va en ella, pone el título de la app.
+- Productos y favoritos en Explorar (Fase 24F, [ADR 0028](../adr/0028-product-search-and-favorites.md)):
+  - **La búsqueda de productos:**
+    - su índice vive en la memoria de cada instancia y se rearma con la foto de Explorar (cada 30 segundos como mucho, cuando alguien busca);
+    - con varias instancias, cada una arma el suyo;
+    - lee hasta 20,000 productos (los primeros 500 de cada menú, en el orden de Explorar); más allá hará falta un índice de texto en la base (full-text de SQL Server o un servicio de búsqueda);
+    - compara texto: sin sinónimos, errores de dedo, plurales ni cercanía.
+  - **Los títulos y el orden del menú** se escriben en dos lugares que deben coincidir:
+    - `PublicDirectorySnapshot.InMenuOrder` / `ThenInMenuOrder` (las mismas llaves);
+    - el tope de `GetPublicMenuQueryHandler.MaxProducts`, que usan el menú y el índice.
+
+    La prueba de los 500 productos los fija.
+  - **El tope de 100 favoritos** cuenta los de negocios ocultos y no es atómico: dos negocios distintos guardados a la vez con 99 dejan 101, y la lista muestra los 100 más recientes.
+  - **El contrato pierde que una referencia puede ser null** (`card` de `MyFavoriteBusinessDto`): el cliente lo corrige a mano en `accountApi.ts`. Es el mismo caso de las demás referencias opcionales del contrato.
+  - **Visitante y sesión:** el corazón del visitante lleva a entrar, pero quien crea su cuenta desde ahí no regresa al negocio: el registro no conserva `from`.
+  - La 24F suma 41 B a la primera visita (de 178,060 a 178,101 B, dentro del presupuesto de 178,200 B).
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

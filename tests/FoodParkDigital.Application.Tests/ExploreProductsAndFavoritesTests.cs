@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Customers;
+using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
@@ -25,7 +26,8 @@ public class ExploreProductsAndFavoritesTests
     public async Task Search_ShouldFindTheProductsOfTheMenus_ByAnyWordOfTheirNameOrDescription_WithoutAccents()
     {
         await using var fixture = SalesTestFixture.Create();
-        var guero = await BusinessAsync(fixture, "taqueria-guero", "Taquería El Güero");
+        // The taquería takes orders now, so Explorar shows it first.
+        var guero = await BusinessAsync(fixture, "taqueria-guero", "Taquería El Güero", drawer: true);
         await ProductAsync(fixture, guero, "Orden de pastor", 85m, description: "Cinco tacos con PIÑA y cilantro");
         await ProductAsync(fixture, guero, "Agua de horchata", 35m);
         var luna = await BusinessAsync(fixture, "cafe-luna", "Café Luna");
@@ -39,7 +41,8 @@ public class ExploreProductsAndFavoritesTests
         Assert.Equal(("Orden de pastor", 85m, "Taquería El Güero", "taqueria-guero"), (orden.Name, orden.Price, orden.BusinessName, orden.BusinessSlug));
         Assert.Null(orden.CompareAtPrice);
         Assert.Null(orden.ImageUrl);
-        // The name first: the gringa says it in its name, the order only in its description.
+        // The name first, even over the business Explorar shows first: the gringa says it in its name, the order only in
+        // its description.
         Assert.Equal(["Gringa con piña", "Orden de pastor"], pina.Products.Select(p => p.Name));
 
         var pastel = Assert.Single((await SearchAsync(fixture, "pastel")).Products);
@@ -115,6 +118,76 @@ public class ExploreProductsAndFavoritesTests
 
         Assert.Equal(["Café de olla", "Café molido en bolsa"], all.Products.Select(p => p.Name).Order());
         Assert.Equal("Café de olla", Assert.Single(food.Products).Name);
+    }
+
+    [Fact]
+    public async Task Search_ShouldFindOnlyTheProductsItsMenuShows_TheFirstOnesInItsOrder()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var ferre = await BusinessAsync(fixture, "ferre-sol", "Ferretería Sol");
+        var category = await fixture.Context.Categories.IgnoreQueryFilters().FirstAsync(c => c.TenantId == ferre.Id);
+        // A full menu: its featured products first. A service is not on it, so it does not take the place of a product.
+        for (var i = 1; i < GetPublicMenuQueryHandler.MaxProducts; i++)
+            fixture.Context.Products.Add(new Product(ferre.Id, category.Id, $"Clavo {i:000}", null, 1m, "MXN", isFeatured: true));
+        fixture.Context.Products.Add(new Product(ferre.Id, category.Id, "Asesoría de obra", null, 500m, "MXN", isFeatured: true, unit: UnitType.Service));
+        fixture.Context.Products.Add(new Product(ferre.Id, category.Id, "Tornillo de la casa", null, 2m, "MXN", isFeatured: true));
+        // Past what the menu shows (with the product every business of these tests has).
+        fixture.Context.Products.Add(new Product(ferre.Id, category.Id, "Tornillo de bodega", null, 2m, "MXN"));
+        await fixture.Context.SaveChangesAsync();
+
+        var found = await SearchAsync(fixture, "tornillo");
+        var menu = await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(new GetPublicMenuQuery("ferre-sol"), CancellationToken.None);
+
+        var shown = menu!.Categories.SelectMany(c => c.Products).Select(p => p.Name).ToList();
+        Assert.Equal(GetPublicMenuQueryHandler.MaxProducts, shown.Count);
+        Assert.Contains("Tornillo de la casa", shown);
+        Assert.DoesNotContain("Tornillo de bodega", shown);
+        // What a search finds opens in its menu: never one the menu does not show.
+        Assert.Equal("Tornillo de la casa", Assert.Single(found.Products).Name);
+    }
+
+    [Fact]
+    public async Task Search_ShouldSayWhenTheOrderAddsIva_NotForAProductExemptOrAtZero()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var withoutIva = await BusinessAsync(fixture, "abarrotes-sin-iva", "Abarrotes sin IVA");
+        (await SettingsAsync(fixture, withoutIva)).UpdateSalesPolicy(pricesIncludeTax: false, defaultTaxRate: 16m, autoCloseCounterSales: true);
+        var category = await fixture.Context.Categories.IgnoreQueryFilters().FirstAsync(c => c.TenantId == withoutIva.Id);
+        fixture.Context.Products.Add(new Product(withoutIva.Id, category.Id, "Jabón zz1", null, 20m, "MXN"));
+        fixture.Context.Products.Add(new Product(withoutIva.Id, category.Id, "Leche zz1", null, 28m, "MXN", taxRate: 0m));
+        fixture.Context.Products.Add(new Product(withoutIva.Id, category.Id, "Libro zz1", null, 150m, "MXN", isTaxExempt: true));
+        var withIva = await BusinessAsync(fixture, "abarrotes-con-iva", "Abarrotes con IVA");
+        (await SettingsAsync(fixture, withIva)).UpdateSalesPolicy(pricesIncludeTax: true, defaultTaxRate: 16m, autoCloseCounterSales: true);
+        await ProductAsync(fixture, withIva, "Jabón zz2", 23m);
+        await fixture.Context.SaveChangesAsync();
+
+        var found = (await SearchAsync(fixture, "zz1")).Products.ToDictionary(p => p.Name, p => p.AddsTax);
+        var included = Assert.Single((await SearchAsync(fixture, "zz2")).Products);
+
+        Assert.Equal(new Dictionary<string, bool> { ["Jabón zz1"] = true, ["Leche zz1"] = false, ["Libro zz1"] = false }, found);
+        Assert.False(included.AddsTax);
+    }
+
+    [Fact]
+    public async Task Search_ShouldAnswerWithTheBusinesses_WhenItsProductsCannotBeRead()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var cafe = await BusinessAsync(fixture, "cafe-luna", "Café Luna");
+        await ProductAsync(fixture, cafe, "Café de olla", 30m);
+        var directory = new PublicDirectoryCache();
+        var products = new PublicProductIndexCache();
+        var snapshot = await directory.GetAsync(
+            fixture.Clock.UtcNow, (utcNow, ct) => PublicDirectorySnapshot.BuildAsync(fixture.Context, utcNow, ct), CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => products.GetAsync(
+            snapshot, (_, _) => throw new InvalidOperationException("La base no respondió."), CancellationToken.None));
+
+        var found = await new GetPublicDirectoryQueryHandler(
+                fixture.Context, fixture.Clock, directory, products, NullLogger<GetPublicDirectoryQueryHandler>.Instance)
+            .Handle(new GetPublicDirectoryQuery(Search: "cafe"), CancellationToken.None);
+
+        Assert.Empty(found.Products);
+        Assert.Equal("cafe-luna", Assert.Single(found.Businesses.Items).Slug);
     }
 
     [Fact]

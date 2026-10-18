@@ -1,5 +1,7 @@
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -26,8 +28,11 @@ public class PublicDirectoryProductDto
     public BusinessTheme Theme { get; set; }
     /// <summary>Its business takes online orders now: what its card in Explorar says.</summary>
     public bool AcceptsOrders { get; set; }
-    /// <summary>Its prices include IVA (its menu writes «más IVA» when they do not).</summary>
-    public bool PricesIncludeTax { get; set; }
+    /// <summary>
+    /// The order adds IVA to its price: its business writes its prices without IVA and it is not exempt nor at 0%. The
+    /// card writes «más IVA».
+    /// </summary>
+    public bool AddsTax { get; set; }
 }
 
 /// <summary>
@@ -36,8 +41,16 @@ public class PublicDirectoryProductDto
 /// </summary>
 public sealed class PublicProductIndex
 {
-    /// <summary>The most products one index reads; past it, the last ones by business are left out (and logged).</summary>
+    /// <summary>
+    /// The most products one index reads; past it, those of the businesses Explorar shows last are left out (and logged).
+    /// </summary>
     public const int MaxProducts = 20_000;
+
+    /// <summary>The businesses whose products one read brings: few reads, each a bounded one.</summary>
+    internal const int BusinessesPerRead = 50;
+
+    /// <summary>The most rows one read brings: as many as the menus of its businesses can show.</summary>
+    private const int MaxRowsPerRead = BusinessesPerRead * GetPublicMenuQueryHandler.MaxProducts;
 
     /// <summary>The products one search returns.</summary>
     public const int MaxResults = 12;
@@ -57,9 +70,11 @@ public sealed class PublicProductIndex
     public DateTimeOffset BuiltFor { get; }
 
     /// <summary>
-    /// Reads the products the menus of the snapshot's businesses show (<see cref="PublicDirectorySnapshot.MenuProducts"/>):
-    /// a public request has no business, so the read spans them all, each product with its own business and only the
-    /// columns its menu already shows.
+    /// Reads the products the menus of the snapshot's businesses show: of each, the first
+    /// <see cref="GetPublicMenuQueryHandler.MaxProducts"/> in the order of its menu
+    /// (<see cref="PublicDirectorySnapshot.MenuProducts"/>, <see cref="PublicDirectorySnapshot.InMenuOrder"/>), so a product
+    /// found always opens in its menu. A public request has no business, so the read spans them all, each product with its
+    /// own business and only the columns its menu already shows. The businesses are read in the order of Explorar.
     /// </summary>
     /// <param name="logger">Says when there were more products than one index reads.</param>
     public static async Task<PublicProductIndex> BuildAsync(
@@ -68,39 +83,64 @@ public sealed class PublicProductIndex
         var businesses = snapshot.Entries
             .Select((entry, position) => (entry, position))
             .ToDictionary(item => item.entry.TenantId);
-        var tenantIds = businesses.Keys.ToList();
-        if (tenantIds.Count == 0)
-            return new PublicProductIndex(snapshot.BuiltAt, []);
-
-        var rows = await PublicDirectorySnapshot.MenuProducts(context)
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(p => tenantIds.Contains(p.TenantId))
-            .OrderBy(p => p.TenantId).ThenByDescending(p => p.IsFeatured).ThenBy(p => p.SortOrder).ThenBy(p => p.Name)
-            .Take(MaxProducts + 1)
-            .Select(p => new { p.Id, p.TenantId, p.Name, p.Description, p.PriceAmount, p.CompareAtPrice, p.ImageUrl })
-            .ToListAsync(cancellationToken);
-        if (rows.Count > MaxProducts)
+        var entries = new List<Entry>();
+        foreach (var batch in snapshot.Entries.Select(entry => entry.TenantId).Chunk(BusinessesPerRead))
         {
-            logger?.LogWarning("Explorar searches more than {MaxProducts} products: the ones after it are left out.", MaxProducts);
-            rows.RemoveAt(MaxProducts);
+            var tenantIds = batch.ToList();
+            // Each business in the order of its menu (GetPublicMenuQuery): whatever part of it is read, it is what its
+            // menu shows first.
+            var rows = await PublicDirectorySnapshot.ThenInMenuOrder(PublicDirectorySnapshot.MenuProducts(context)
+                    .IgnoreQueryFilters()
+                    .Where(p => tenantIds.Contains(p.TenantId))
+                    .OrderBy(p => p.TenantId))
+                .AsNoTracking()
+                .Take(MaxRowsPerRead)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.TenantId,
+                    p.Name,
+                    p.Description,
+                    p.PriceAmount,
+                    p.CompareAtPrice,
+                    p.ImageUrl,
+                    p.TaxRate,
+                    p.IsTaxExempt,
+                    DefaultTaxRate = context.TenantSettings.Where(s => s.TenantId == p.TenantId).Select(s => s.DefaultTaxRate).FirstOrDefault()
+                })
+                .ToListAsync(cancellationToken);
+            if (rows.Count == MaxRowsPerRead)
+                logger?.LogWarning("Explorar read {MaxRowsPerRead} products of {Businesses} businesses at once: the largest menus may show fewer.", MaxRowsPerRead, tenantIds.Count);
+
+            // The first ones the menu shows of each business, in the order of Explorar (OrderBy keeps each menu's order).
+            entries.AddRange(rows
+                .GroupBy(row => row.TenantId)
+                .SelectMany(menu => menu.Take(GetPublicMenuQueryHandler.MaxProducts))
+                .OrderBy(row => businesses[row.TenantId].position)
+                .Select(row =>
+                {
+                    var (business, position) = businesses[row.TenantId];
+                    return new Entry(
+                        business,
+                        position,
+                        row.Id,
+                        row.Name,
+                        row.PriceAmount,
+                        // The menu's rule (Product.HasDiscount): a price before only when it was higher.
+                        row.CompareAtPrice is { } before && before > row.PriceAmount ? before : null,
+                        ProductImageUrlsDto.FromBaseUrl(row.ImageUrl)?.Small,
+                        !business.Business.PricesIncludeTax && VatRate.ForProduct(row.TaxRate, row.IsTaxExempt, row.DefaultTaxRate).Percent > 0,
+                        PublicDirectorySnapshot.Comparable(row.Name),
+                        PublicDirectorySnapshot.Comparable($"{row.Name} {row.Description}"));
+                }));
+            if (entries.Count > MaxProducts)
+            {
+                logger?.LogWarning("Explorar searches more than {MaxProducts} products: those of the businesses it shows last are left out.", MaxProducts);
+                entries.RemoveRange(MaxProducts, entries.Count - MaxProducts);
+                break;
+            }
         }
 
-        var entries = rows.Select(row =>
-        {
-            var (business, position) = businesses[row.TenantId];
-            return new Entry(
-                business,
-                position,
-                row.Id,
-                row.Name,
-                row.PriceAmount,
-                // The menu's rule (Product.HasDiscount): a price before only when it was higher.
-                row.CompareAtPrice is { } before && before > row.PriceAmount ? before : null,
-                ProductImageUrlsDto.FromBaseUrl(row.ImageUrl)?.Small,
-                PublicDirectorySnapshot.Comparable(row.Name),
-                PublicDirectorySnapshot.Comparable($"{row.Name} {row.Description}"));
-        }).ToList();
         return new PublicProductIndex(snapshot.BuiltAt, entries);
     }
 
@@ -141,7 +181,7 @@ public sealed class PublicProductIndex
                 BusinessSlug = business.Business.Slug,
                 Theme = business.Business.Theme,
                 AcceptsOrders = business.Business.AcceptsOrders,
-                PricesIncludeTax = business.Business.PricesIncludeTax
+                AddsTax = entry.AddsTax
             });
             if (products.Count == MaxResults)
                 break;
@@ -151,6 +191,7 @@ public sealed class PublicProductIndex
     }
 
     /// <param name="Position">Its business's place in Explorar: those taking orders now first.</param>
+    /// <param name="AddsTax">The order adds IVA to its price.</param>
     /// <param name="NameText">Its name as a search compares it.</param>
     /// <param name="SearchText">Its name and description as a search compares them.</param>
     private sealed record Entry(
@@ -161,6 +202,7 @@ public sealed class PublicProductIndex
         decimal Price,
         decimal? CompareAtPrice,
         string? ImageUrl,
+        bool AddsTax,
         string NameText,
         string SearchText);
 }
@@ -176,26 +218,45 @@ public sealed class PublicProductIndexCache
 
     private readonly SemaphoreSlim _rebuild = new(1, 1);
     private PublicProductIndex? _index;
+    // The snapshot whose index could not be built: searches with it do not try again (each would wait its time limit).
+    private DateTimeOffset? _failedFor;
 
-    public async Task<PublicProductIndex> GetAsync(
+    /// <summary>
+    /// The index of <paramref name="snapshot"/>, or of a newer one when another search already built it (a search that
+    /// read the snapshot just before it was rebuilt never puts back the older index). Null when building it for this
+    /// snapshot failed: the search answers without products until the next snapshot.
+    /// </summary>
+    /// <exception cref="Exception">What building it threw, the first time.</exception>
+    public async Task<PublicProductIndex?> GetAsync(
         PublicDirectorySnapshot snapshot,
         Func<PublicDirectorySnapshot, CancellationToken, Task<PublicProductIndex>> build,
         CancellationToken cancellationToken)
     {
         var current = Volatile.Read(ref _index);
-        if (current?.BuiltFor == snapshot.BuiltAt)
+        if (current is not null && current.BuiltFor >= snapshot.BuiltAt)
             return current;
 
         await _rebuild.WaitAsync(cancellationToken);
         try
         {
-            // Another search may have built it while this one waited.
+            // Another search may have built it while this one waited, or failed to.
             current = Volatile.Read(ref _index);
-            if (current?.BuiltFor == snapshot.BuiltAt)
+            if (current is not null && current.BuiltFor >= snapshot.BuiltAt)
                 return current;
+            if (_failedFor >= snapshot.BuiltAt)
+                return null;
             // Its own time limit, as the snapshot's: a customer who changes the search does not throw it away half done.
             using var limit = new CancellationTokenSource(RebuildTimeout);
-            current = await build(snapshot, limit.Token);
+            try
+            {
+                current = await build(snapshot, limit.Token);
+            }
+            catch
+            {
+                _failedFor = snapshot.BuiltAt;
+                throw;
+            }
+
             Volatile.Write(ref _index, current);
             return current;
         }

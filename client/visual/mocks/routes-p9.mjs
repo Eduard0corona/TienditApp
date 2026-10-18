@@ -18,9 +18,9 @@ const CATEGORIES = 11;
 
 /** A card of Explorar: only what the menu of the business already shows. */
 const card = (name, slug, category, overrides = {}) => ({
-  name, slug, logoUrl: null, category, description: null, theme: NOPAL, city: 'Ciudad de México', deliveryOnly: false,
-  deliveryAvailable: false, acceptsOrders: false, ordersPaused: false, statusLabel: null, statusDetail: null, closed: false,
-  pricesIncludeTax: true,
+  name, slug, logoUrl: null, coverImageUrl: null, category, description: null, theme: NOPAL, city: 'Ciudad de México',
+  deliveryOnly: false, deliveryAvailable: false, acceptsOrders: false, ordersPaused: false, statusLabel: null,
+  statusDetail: null, closed: false, pricesIncludeTax: true, booksOnline: false,
   ...overrides,
 });
 
@@ -103,7 +103,8 @@ export const withDeliveryTo = (data, businesses, postalCode) => (postalCode
 
 /**
  * The products with every word in their name or description, of the businesses shown (Fase 24F): those whose name has
- * them first, then by the order of Explorar; three of a business and twelve in all, as the API answers them.
+ * them first, then by the order of Explorar and by name; three of a business and twelve in all, as the API answers them.
+ * The demo businesses write their prices with IVA: none adds it.
  */
 function searchProducts(data, businesses, words) {
   const position = new Map(businesses.map((business, index) => [business.slug, index]));
@@ -111,8 +112,9 @@ function searchProducts(data, businesses, words) {
   return data.directoryProducts
     .filter((item) => position.has(item.slug))
     .filter((item) => words.every((word) => comparable(`${item.name} ${item.description ?? ''}`).includes(word)))
-    .map((item) => ({ item, byName: words.every((word) => comparable(item.name).includes(word)) ? 0 : 1 }))
-    .sort((a, b) => a.byName - b.byName || position.get(a.item.slug) - position.get(b.item.slug))
+    .map((item) => ({ item, text: comparable(item.name), byName: words.every((word) => comparable(item.name).includes(word)) ? 0 : 1 }))
+    .sort((a, b) => a.byName - b.byName || position.get(a.item.slug) - position.get(b.item.slug)
+      || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0))
     .filter(({ item }) => {
       const shown = perBusiness.get(item.slug) ?? 0;
       perBusiness.set(item.slug, shown + 1);
@@ -124,7 +126,7 @@ function searchProducts(data, businesses, words) {
       return {
         id: item.id, name: item.name, price: item.price, compareAtPrice: item.compareAtPrice, imageUrl: item.imageUrl,
         businessName: business.name, businessSlug: business.slug, theme: business.theme,
-        acceptsOrders: business.acceptsOrders, pricesIncludeTax: business.pricesIncludeTax,
+        acceptsOrders: business.acceptsOrders, addsTax: false,
       };
     });
 }

@@ -22890,12 +22890,12 @@
       "PublicDirectoryProductDto": {
         "required": [
           "acceptsOrders",
+          "addsTax",
           "businessName",
           "businessSlug",
           "id",
           "name",
           "price",
-          "pricesIncludeTax",
           "theme"
         ],
         "type": "object",
@@ -22932,7 +22932,7 @@
           "acceptsOrders": {
             "type": "boolean"
           },
-          "pricesIncludeTax": {
+          "addsTax": {
             "type": "boolean"
           }
         },

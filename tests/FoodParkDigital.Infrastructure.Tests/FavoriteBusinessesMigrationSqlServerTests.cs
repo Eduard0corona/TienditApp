@@ -1,3 +1,5 @@
+using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
@@ -80,6 +82,40 @@ public class FavoriteBusinessesMigrationSqlServerTests
         Assert.Equal(1, await CountAsync(forward, $"SELECT COUNT(*) AS [Value] FROM sys.tables WHERE [name] = N'FavoriteBusinesses'"));
     }
 
+    [SqlServerFact]
+    public async Task Save_AtTheSameTimeFromAnotherTab_ShouldKeepOne_AndSucceedInBoth()
+    {
+        await using var database = SqlServerTestDatabase.CreateEmpty();
+        await MigrateAsync(database, Migration);
+        var (userId, businessId) = await SeedAccountWithAFavoriteAsync(database);
+        string slug;
+        await using (var seed = database.CreateContext())
+        {
+            await seed.FavoriteBusinesses.ExecuteDeleteAsync();
+            var settings = await seed.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == businessId);
+            settings.UpdateOnlineMenu(OnlineMenuMode.Orders);
+            await seed.SaveChangesAsync();
+            slug = await seed.Tenants.Where(t => t.Id == businessId).Select(t => t.Slug).SingleAsync();
+        }
+
+        // The same business kept from another tab after this save read that it was not among the favorites.
+        await using var racing = database.CreateProductionLikeContext(
+            new InMemoryApplicationDbContext.TestCurrentTenantService(), new InMemoryApplicationDbContext.NullMediator(),
+            new SavedMeanwhile(async () =>
+            {
+                await using var other = database.CreateContext();
+                other.FavoriteBusinesses.Add(FavoriteBusiness.Create(userId, businessId, favoritesKept: 0));
+                await other.SaveChangesAsync();
+            }));
+        var result = await new FavoriteBusinessCommandHandlers(racing, new Customer(userId))
+            .Handle(new SaveMyFavoriteCommand(slug), CancellationToken.None);
+
+        // The unique index kept the other one: keeping it again changes nothing, as the customer asked.
+        Assert.True(result.IsSuccess);
+        await using var check = database.CreateContext();
+        Assert.Equal(1, await CountAsync(check, $"SELECT COUNT(*) AS [Value] FROM [FavoriteBusinesses]"));
+    }
+
     /// <summary>A customer account that keeps a business among its favorites.</summary>
     private static async Task<(Guid UserId, Guid BusinessId)> SeedAccountWithAFavoriteAsync(SqlServerTestDatabase database)
     {
@@ -126,4 +162,15 @@ public class FavoriteBusinessesMigrationSqlServerTests
 
     private static Task<int> CountAsync(ApplicationDbContext context, FormattableString sql) =>
         context.Database.SqlQuery<int>(sql).SingleAsync();
+
+    /// <summary>The customer account signed in.</summary>
+    private sealed class Customer(Guid userId) : ICurrentUserService
+    {
+        public string? UserId => userId.ToString();
+        public string? UserName => "cliente@demo.com";
+        public string? Role => "CUSTOMER";
+        public string? TenantRole => null;
+        public IReadOnlyCollection<string> Permissions => [];
+        public Guid? TenantId => null;
+    }
 }

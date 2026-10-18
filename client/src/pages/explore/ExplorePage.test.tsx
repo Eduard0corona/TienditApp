@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
 import { publicDirectoryApi, type DirectoryBusiness, type DirectoryProduct, type PublicDirectory } from '../../api/publicDirectoryApi';
 import { BusinessCategory } from '../../api/generated/enums';
+import { ToastContext, type ToastApi } from '../../components/feedback/feedbackContexts';
+import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import type { UserProfileDto } from '../../types';
 import { saveCart } from '../../utils/savedCart';
@@ -36,7 +38,7 @@ function product(overrides: Partial<DirectoryProduct>): DirectoryProduct {
     businessSlug: 'el-guero',
     theme: 0,
     acceptsOrders: true,
-    pricesIncludeTax: true,
+    addsTax: false,
     ...overrides,
   };
 }
@@ -82,16 +84,32 @@ function Address() {
   return <output data-testid="address">{`${location.pathname}${location.search}`}</output>;
 }
 
-function renderPage(path = '/explorar') {
+/** A promise the test settles when it wants: a change of a heart still on its way. */
+function later<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((ok, fail) => {
+    resolve = ok;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+function renderPage(path = '/explorar', { auth, toast }: { auth?: Partial<AuthContextType>; toast?: ToastApi } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = (
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/explorar" element={<><ExplorePage /><Address /></>} />
+        <Route path="/explorar/:categoria" element={<><ExplorePage /><Address /></>} />
+      </Routes>
+    </MemoryRouter>
+  );
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/explorar" element={<><ExplorePage /><Address /></>} />
-          <Route path="/explorar/:categoria" element={<><ExplorePage /><Address /></>} />
-        </Routes>
-      </MemoryRouter>
+      <ToastContext.Provider value={toast ?? null}>
+        {auth ? <AuthContext.Provider value={auth as AuthContextType}>{page}</AuthContext.Provider> : page}
+      </ToastContext.Provider>
     </QueryClientProvider>,
   );
 }
@@ -211,14 +229,14 @@ describe('ExplorePage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type(await screen.findByRole('searchbox', { name: 'Buscar negocios' }), 'tacos');
+    await user.type(await screen.findByRole('searchbox', { name: 'Buscar negocios y productos' }), 'tacos');
 
     expect(await screen.findByText('No encontramos «tacos»')).toBeInTheDocument();
     expect(screen.getByTestId('address')).toHaveTextContent('/explorar?q=tacos');
     expect(api.getDirectory).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'tacos' }), expect.anything());
 
     await user.click(screen.getByRole('button', { name: 'Borrar la búsqueda' }));
-    expect(screen.getByRole('searchbox', { name: 'Buscar negocios' })).toHaveValue('');
+    expect(screen.getByRole('searchbox', { name: 'Buscar negocios y productos' })).toHaveValue('');
     await act(() => new Promise((resolve) => setTimeout(resolve, 350)));
     expect(screen.getByTestId('address')).toHaveTextContent(/^\/explorar$/);
   });
@@ -262,7 +280,7 @@ describe('ExplorePage', () => {
     api.getDirectory.mockResolvedValue(directory([], {
       products: [
         product({ compareAtPrice: 100 }),
-        product({ id: 'p2', name: 'Gringa de pastor', price: 70, businessName: 'Café Luna', businessSlug: 'cafe-luna', acceptsOrders: false, pricesIncludeTax: false }),
+        product({ id: 'p2', name: 'Gringa de pastor', price: 70, businessName: 'Café Luna', businessSlug: 'cafe-luna', acceptsOrders: false, addsTax: true }),
       ],
     }));
 
@@ -301,30 +319,84 @@ describe('ExplorePage', () => {
     expect(account.getFavorites).not.toHaveBeenCalled();
   });
 
-  it('shows the favorites of a customer first, and keeps or takes out a business with its heart', async () => {
+  it('shows the favorites of a customer first, and keeps or takes out a business with its heart at once', async () => {
     signInAsCustomer();
     account.getFavorites.mockResolvedValue([
       { slug: 'el-guero', name: 'Taquería El Güero', savedAt: '2026-10-18T08:00:00Z', card: business({}) },
-      // Out of Explorar now: the API writes its card as null (the contract calls it optional).
-      { slug: 'oculto', name: 'Café Oculto', savedAt: '2026-10-17T08:00:00Z', card: null as never },
+      // Out of Explorar now: the API writes its card as null.
+      { slug: 'oculto', name: 'Café Oculto', savedAt: '2026-10-17T08:00:00Z', card: null },
     ]);
+    const saving = later<void>();
+    account.saveFavorite.mockReturnValue(saving.promise as never);
     account.removeFavorite.mockResolvedValue(undefined as never);
-    account.saveFavorite.mockResolvedValue(undefined as never);
     api.getDirectory.mockResolvedValue(directory([business({}), business({ name: 'Café Luna', slug: 'cafe-luna' })]));
     const user = userEvent.setup();
 
     renderPage();
 
-    const favorites = within(await screen.findByRole('region', { name: 'Tus favoritos' }));
+    const region = await screen.findByRole('region', { name: 'Tus favoritos' });
+    const favorites = within(region);
     expect(favorites.getByRole('link', { name: /^Taquería El Güero/ })).toBeInTheDocument();
     // One out of Explorar keeps its name and opens its menu.
     expect(favorites.getByRole('link', { name: /Café Oculto/ })).toHaveAttribute('href', '/m/oculto');
     expect(favorites.getByText('No aparece en Explorar ahora')).toBeInTheDocument();
 
+    // Kept at once, while the server answers; the heart keeps its name and says it is pressed.
+    const luna = await screen.findByRole('button', { name: 'Guardar Café Luna en tus favoritos', pressed: false });
+    await user.click(luna);
+    expect(account.saveFavorite).toHaveBeenCalledWith('cafe-luna');
+    expect(luna).toHaveAttribute('aria-pressed', 'true');
+    expect(luna).toHaveAttribute('aria-disabled', 'true');
+    account.getFavorites.mockResolvedValue([
+      { slug: 'cafe-luna', name: 'Café Luna', savedAt: '2026-10-18T09:00:00Z', card: business({ name: 'Café Luna', slug: 'cafe-luna' }) },
+      { slug: 'el-guero', name: 'Taquería El Güero', savedAt: '2026-10-18T08:00:00Z', card: business({}) },
+    ]);
+    await act(async () => saving.resolve());
+    await waitFor(() => expect(favorites.getByRole('link', { name: /^Café Luna/ })).toBeInTheDocument());
+
+    // Taken out from «Tus favoritos»: it leaves the row and the focus goes to its title.
+    const guero = favorites.getByRole('button', { name: 'Guardar Taquería El Güero en tus favoritos', pressed: true });
+    account.getFavorites.mockResolvedValue([
+      { slug: 'cafe-luna', name: 'Café Luna', savedAt: '2026-10-18T09:00:00Z', card: business({ name: 'Café Luna', slug: 'cafe-luna' }) },
+    ]);
+    await user.click(guero);
+    expect(account.removeFavorite).toHaveBeenCalledWith('el-guero');
+    await waitFor(() => expect(favorites.queryByRole('link', { name: /^Taquería El Güero/ })).not.toBeInTheDocument());
+    expect(favorites.getByRole('heading', { name: 'Tus favoritos' })).toHaveFocus();
+    // Its heart in «Tus favoritos» and in the list say the same.
+    expect(screen.getAllByRole('button', { name: 'Guardar Café Luna en tus favoritos' }).map((heart) => heart.getAttribute('aria-pressed')))
+      .toEqual(['true', 'true']);
+  });
+
+  it('changes two hearts at once, and one the server refuses goes back with its reason', async () => {
+    signInAsCustomer();
+    account.getFavorites.mockResolvedValue([]);
+    const first = later<void>();
+    account.saveFavorite.mockImplementation((slug: string) => (slug === 'el-guero' ? first.promise : Promise.reject(new Error('Sin conexión'))) as never);
+    api.getDirectory.mockResolvedValue(directory([business({}), business({ name: 'Café Luna', slug: 'cafe-luna' })]));
+    const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } as unknown as ToastApi;
+    const user = userEvent.setup();
+
+    renderPage('/explorar', { toast });
+
+    await user.click(await screen.findByRole('button', { name: 'Guardar Taquería El Güero en tus favoritos', pressed: false }));
+    // The second while the first is on its way: it is not ignored.
     await user.click(screen.getByRole('button', { name: 'Guardar Café Luna en tus favoritos' }));
     expect(account.saveFavorite).toHaveBeenCalledWith('cafe-luna');
-    await user.click(favorites.getByRole('button', { name: 'Quitar Taquería El Güero de tus favoritos' }));
-    expect(account.removeFavorite).toHaveBeenCalledWith('el-guero');
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('No se pudo guardar el negocio.'));
+    expect(screen.getByRole('button', { name: 'Guardar Café Luna en tus favoritos' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Guardar Taquería El Güero en tus favoritos' })).toHaveAttribute('aria-pressed', 'true');
+    await act(async () => first.resolve());
+  });
+
+  it('shows no heart while the session comes back', async () => {
+    api.getDirectory.mockResolvedValue(directory([business({})]));
+
+    renderPage('/explorar', { auth: { isLoading: true, isAuthenticated: false, user: null } });
+
+    await screen.findByRole('link', { name: /^Taquería El Güero/ });
+    expect(screen.queryByRole('link', { name: /favoritos/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /favoritos/ })).not.toBeInTheDocument();
   });
 
   it('shows no favorites while searching or in a category', async () => {

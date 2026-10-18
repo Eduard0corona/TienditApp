@@ -17,16 +17,16 @@ En la 24F entran las tres cosas. Las reseñas quedan fuera: necesitan moderació
 ## Decisión
 
 1. **Una búsqueda de Explorar también busca productos.**
-   - **Qué busca:** los productos que el menú de cada negocio de Explorar ya muestra (`PublicDirectorySnapshot.MenuProducts`, la regla del menú público), por su nombre y descripción. Compara sin acentos ni mayúsculas, como la búsqueda de negocios, y exige cada palabra. Con categoría, solo los de sus negocios.
+   - **Qué busca:** los productos que el menú de cada negocio de Explorar ya muestra, por su nombre y descripción. Es la misma regla del menú público (`PublicDirectorySnapshot.MenuProducts`): disponibles, en una categoría activa y que no son un servicio. También es su mismo orden y su mismo tope: los primeros 500 de cada menú. Un producto encontrado siempre abre en su menú. Desde esta fase, el menú aplica esa regla antes de su tope: un servicio o un producto de una categoría apagada ya no ocupa el lugar de uno que muestra. Compara sin acentos ni mayúsculas, como la búsqueda de negocios, y exige cada palabra. Con categoría, solo los de sus negocios.
    - **En qué orden:**
      1. primero los productos cuyo nombre tiene las palabras;
      2. luego por el orden de Explorar (los que reciben pedidos ahora primero);
      3. luego por nombre.
 
      Devuelve como mucho 3 de un negocio y 12 en total, para que una búsqueda muestre varios negocios. Solo los busca la primera página de resultados.
-   - **Qué datos lleva:** cada producto lleva lo que su menú ya enseña (nombre, precio, precio antes del descuento, foto de 256 px), el nombre y los colores de su negocio, si recibe pedidos ahora y si sus precios incluyen IVA.
+   - **Qué datos lleva:** cada producto lleva lo que su menú ya enseña (nombre, precio, precio antes del descuento, foto de 256 px), el nombre y los colores de su negocio, si recibe pedidos ahora y si el pedido le suma IVA: el negocio escribe sus precios sin IVA y el producto no está exento ni al 0 % («más IVA»).
    - **A dónde lleva:** abre la tienda en la hoja del producto: `/m/{slug}?producto={id}`. La tienda la abre una vez, con lo que su menú diga en ese momento (disponible o no, sus opciones). Al cerrarla, la dirección vuelve a la de la tienda (conservando la mesa). Un producto que el menú ya no muestra abre solo el menú.
-   - **El índice:** se arma con la foto de Explorar (los mismos negocios, hasta 1,000) la primera vez que una búsqueda lo necesita, y se rearma con la foto siguiente (cada 30 segundos como mucho). Explorar sin búsqueda nunca lo lee. Lee hasta 20,000 productos; pasado eso deja fuera los últimos y lo dice en el log.
+   - **El índice:** se arma con la foto de Explorar (los mismos negocios, hasta 1,000) la primera vez que una búsqueda lo necesita, y se rearma con la foto siguiente (cada 30 segundos como mucho). Explorar sin búsqueda nunca lo lee. Lee los negocios en el orden de Explorar, de 50 en 50, hasta 20,000 productos; pasado eso deja fuera los de los negocios que Explorar muestra al final y lo dice en el log. Una búsqueda que leyó la foto anterior usa el índice nuevo, nunca vuelve a armar el anterior encima. Si el índice no se puede armar (la base no responde), la búsqueda responde solo con los negocios, como antes de esta fase, y no lo vuelve a intentar hasta la foto siguiente.
    - **Excepción al filtro por negocio:** una petición pública no tiene negocio, así que la lectura cruza negocios (`IgnoreQueryFilters`, en la lista permitida con su razón) y queda acotada a los negocios de la foto.
 2. **Negocios favoritos de la cuenta del cliente.**
    - **Una tabla nueva, `FavoriteBusinesses`:**
@@ -40,7 +40,7 @@ En la 24F entran las tres cosas. Las reseñas quedan fuera: necesitan moderació
      - un negocio con favoritos no se borra (restricción): se suspende.
    - **Solo una cuenta de cliente** (`Customer`) guarda favoritos (`PUT /api/v1/me/favorites/{slug}`), y solo de una tienda con su menú publicado:
      - guardar dos veces no cambia nada;
-     - dos pestañas que guardan a la vez dejan uno (el índice único);
+     - dos pestañas que guardan el mismo negocio a la vez dejan uno (el índice único) y las dos responden que quedó guardado;
      - quitar (`DELETE`) es por el slug, en cualquier estado del negocio;
      - una cuenta del equipo de un negocio recibe 400.
    - **La lista** (`GET /api/v1/me/favorites`):
@@ -67,7 +67,10 @@ En la 24F entran las tres cosas. Las reseñas quedan fuera: necesitan moderació
     - no ordena por qué tan cerca está el negocio;
     - un producto cambiado tarda hasta 30 segundos en salir con su nombre nuevo;
     - el índice vive en la memoria de cada instancia: unos pocos MB con menús normales, y unos 70 MB en el peor caso (20,000 productos con descripciones de 1,000 caracteres); más allá hará falta un índice de texto en la base.
-  - **Los favoritos:** no avisan nada al cliente (ni promociones ni que el negocio volvió), no se comparten y no se pueden ordenar a mano.
+  - **Los favoritos:**
+    - no avisan nada al cliente (ni promociones ni que el negocio volvió), no se comparten y no se pueden ordenar a mano;
+    - un negocio suspendido o con el menú apagado cuenta para el tope de 100 aunque no aparezca en la lista;
+    - el tope no es atómico: dos negocios distintos guardados a la vez con 99 pueden dejar 101, y la lista muestra los 100 más recientes.
   - **Sin Outbox:** guardar un favorito no publica eventos, así que no hay nada que entregar de forma durable.
 - **Reversibilidad:**
   - **Hay una migración** (`AddFavoriteBusinesses`, que solo crea la tabla) con scripts idempotentes en `database/production/`.

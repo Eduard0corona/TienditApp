@@ -6,7 +6,8 @@ export type MyOrder = Schemas['MyOrderDto'];
 export type MyOrderDetail = Schemas['MyOrderDetailDto'];
 export type MyOrdersScope = Schemas['MyOrdersScope'];
 export type MyAppointmentsScope = Schemas['MyAppointmentsScope'];
-export type MyFavoriteBusiness = Schemas['MyFavoriteBusinessDto'];
+/** Its card is null when it does not show in Explorar now: the contract loses that a reference can be null. */
+export type MyFavoriteBusiness = Omit<Schemas['MyFavoriteBusinessDto'], 'card'> & { card?: Schemas['PublicDirectoryBusinessDto'] | null };
 
 /** The addresses a customer account keeps for its orders (Fase 24B): ten at most. */
 export const MAX_ACCOUNT_ADDRESSES = 10;
@@ -41,7 +42,7 @@ export const accountApi = {
    * The businesses the account keeps among its favorites (Fase 24F), the last one first: each with its card in Explorar
    * while it shows there, answering for the postal code given.
    */
-  getFavorites: (postalCode: string | undefined, signal?: AbortSignal) =>
+  getFavorites: (postalCode: string | undefined, signal?: AbortSignal): Promise<MyFavoriteBusiness[]> =>
     apiRequest('get', '/api/v1/me/favorites', { query: { postalCode }, signal }),
 
   /** Keeps a business by the slug of its store; keeping it again changes nothing. A store not published is not found. */

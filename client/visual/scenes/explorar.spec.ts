@@ -1,6 +1,6 @@
 import { expect, test } from '../fixtures';
 import { SIZES, open, snap, snapElement } from '../helpers';
-import { CON_FAVORITOS, MENU_CON_PEDIDOS, SIN_NEGOCIOS } from './explorar.mocks';
+import { CON_FAVORITOS, MENU_CON_PEDIDOS, MUCHOS_FAVORITOS, SIN_NEGOCIOS } from './explorar.mocks';
 import { CUSTOMER_PROFILE } from './vender-pedidos.mocks';
 
 // Explorar (Fase 24A): the businesses of the city by category, as a visitor and a customer see them, and the card of
@@ -78,14 +78,30 @@ test.describe('Explorar como cliente', () => {
   test.describe('con favoritos', () => {
     test.use({ prepareData: CON_FAVORITOS });
 
-    for (const look of [LOOKS[0], LOOKS[1]]) {
-      test(`explorar favoritos ${look.suffix}`, async ({ page }) => {
-        await page.setViewportSize(look.viewport);
-        await open(page, '/explorar');
-        await expect(page.getByRole('region', { name: 'Tus favoritos' }).getByText('Panadería San Juan')).toBeVisible();
-        await snap(page, `explorar-favoritos-${look.suffix}`);
+    // In dark too: the red of a kept heart reads on each surface.
+    for (const look of LOOKS) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`explorar favoritos ${look.suffix}`, async ({ page }) => {
+          await open(page, '/explorar');
+          await expect(page.getByRole('region', { name: 'Tus favoritos' }).getByText('Panadería San Juan')).toBeVisible();
+          await snap(page, `explorar-favoritos-${look.suffix}`);
+        });
       });
     }
+  });
+
+  test.describe('con muchos favoritos', () => {
+    test.use({ prepareData: MUCHOS_FAVORITOS });
+
+    test('explorar muchos favoritos escritorio', async ({ page }) => {
+      await page.setViewportSize(SIZES.desktop);
+      await open(page, '/explorar');
+      const favorites = page.getByRole('region', { name: 'Tus favoritos' });
+      await expect(favorites.getByRole('button', { name: 'Ver todos tus favoritos (8)' })).toBeVisible();
+      await snapElement(favorites, 'explorar-muchos-favoritos-escritorio');
+    });
   });
 });
 

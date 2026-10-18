@@ -98,6 +98,12 @@ function Address() {
   return <div hidden data-testid="address">{`${location.pathname}${location.search}`}</div>;
 }
 
+/** Where signing in goes back to (Login reads it from the state of the link). */
+function LoginFrom() {
+  const from = (useLocation().state as { from?: { pathname: string; search: string } } | null)?.from;
+  return <p data-testid="login-from">{from ? `${from.pathname}${from.search}` : ''}</p>;
+}
+
 function renderPage(path = '/m/cafe-luna', auth?: Partial<AuthContextType>, from?: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // `from`: the page of the app the customer came from (Explorar), one step back in the history.
@@ -106,6 +112,7 @@ function renderPage(path = '/m/cafe-luna', auth?: Partial<AuthContextType>, from
       <Address />
       <Routes>
         <Route path="/m/:slug" element={<PublicMenuPage />} />
+        <Route path="/login" element={<LoginFrom />} />
       </Routes>
     </MemoryRouter>
   );
@@ -903,10 +910,12 @@ describe('PublicMenuPage', () => {
     it('opens just the menu when the product of the link is no longer on it', async () => {
       api.getMenu.mockResolvedValue(menu());
 
-      renderPage('/m/cafe-luna?producto=gone');
+      renderPage('/m/cafe-luna?mesa=5&producto=gone');
 
       expect(await screen.findByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      // It leaves the address too: reloading does not look for it again.
+      await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent(/^\/m\/cafe-luna\?mesa=5$/));
     });
 
     it('keeps the business among the favorites of a customer account from its cover, and takes it out', async () => {
@@ -921,18 +930,19 @@ describe('PublicMenuPage', () => {
       });
 
       renderPage('/m/cafe-luna', signedInAs('Customer'));
-      const save = await screen.findByRole('button', { name: 'Guardar Café Luna en tus favoritos' });
-      expect(save).toHaveAttribute('aria-pressed', 'false');
-      await userEvent.click(save);
+      const heart = await screen.findByRole('button', { name: 'Guardar Café Luna en tus favoritos', pressed: false });
+      await waitFor(() => expect(heart).not.toHaveAttribute('aria-disabled'));
+      await userEvent.click(heart);
 
       expect(account.saveFavorite).toHaveBeenCalledWith('cafe-luna');
-      const saved = await screen.findByRole('button', { name: 'Quitar Café Luna de tus favoritos' });
-      expect(saved).toHaveAttribute('aria-pressed', 'true');
-      await waitFor(() => expect(saved).toBeEnabled());
-      await userEvent.click(saved);
+      expect(heart).toHaveAttribute('aria-pressed', 'true');
+      await waitFor(() => expect(heart).not.toHaveAttribute('aria-disabled'));
+      await userEvent.click(heart);
 
       expect(account.removeFavorite).toHaveBeenCalledWith('cafe-luna');
-      expect(await screen.findByRole('button', { name: 'Guardar Café Luna en tus favoritos' })).toBeInTheDocument();
+      await waitFor(() => expect(heart).toHaveAttribute('aria-pressed', 'false'));
+      // The focus stays on the heart all along.
+      expect(heart).toHaveFocus();
     });
 
     it('invites a visitor to sign in to keep it, and shows no heart to a business\'s team or at a table', async () => {
@@ -940,8 +950,12 @@ describe('PublicMenuPage', () => {
       account.getAddresses.mockResolvedValue([]);
       account.getFavorites.mockResolvedValue([]);
 
-      const visitor = renderPage();
-      expect(await screen.findByRole('link', { name: 'Entra para guardar Café Luna en tus favoritos' })).toHaveAttribute('href', '/login');
+      const visitor = renderPage('/m/cafe-luna?producto=gone');
+      const signIn = await screen.findByRole('link', { name: 'Entra para guardar Café Luna en tus favoritos' });
+      expect(signIn).toHaveAttribute('href', '/login');
+      // Signed in, back to this store.
+      await userEvent.click(signIn);
+      expect(await screen.findByTestId('login-from')).toHaveTextContent(/^\/m\/cafe-luna/);
       visitor.unmount();
 
       const team = renderPage('/m/cafe-luna', signedInAs('TenantAdmin'));
@@ -950,9 +964,12 @@ describe('PublicMenuPage', () => {
       expect(screen.queryByRole('link', { name: /favoritos/ })).not.toBeInTheDocument();
       team.unmount();
 
+      account.getFavorites.mockClear();
       renderPage('/m/cafe-luna?mesa=5', signedInAs('Customer'));
       await screen.findByRole('button', { name: 'Agregar Latte' });
       expect(screen.queryByRole('button', { name: /favoritos/ })).not.toBeInTheDocument();
+      // At a table the favorites are not asked for.
+      expect(account.getFavorites).not.toHaveBeenCalled();
     });
   });
 });

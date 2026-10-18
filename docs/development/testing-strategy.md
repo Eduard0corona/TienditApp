@@ -555,6 +555,59 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `storeMenu.test.ts` (+1): el título de una tienda por lo que se hace en ella.
     - `PublicMenuPage.test.tsx` y `PublicBookingPage.test.tsx`: la pestaña lleva el título que escribe el servidor.
   - **Escenas visuales:** no cambian: la fase no toca estilos ni lo que se ve en las páginas.
+- Fase 24F, Productos y favoritos en Explorar ([ADR 0028](../adr/0028-product-search-and-favorites.md)):
+  - **Domain:** `FavoriteBusinessTests` (3): un favorito es de una cuenta y un negocio, pide los dos y se detiene en 100.
+  - **Application:**
+    - `ExploreProductsAndFavoritesTests` (13):
+      - **La búsqueda de productos:**
+        - por cualquier palabra del nombre o la descripción, sin acentos, con el nombre primero aunque otro negocio vaya antes en Explorar;
+        - 3 por negocio con los que reciben pedidos primero, y 12 en total;
+        - solo lo que el menú muestra (ni no disponibles, ni servicios, ni categorías apagadas, ni negocios fuera de Explorar) y en la categoría pedida;
+        - con más de 500 productos, solo los primeros 500 de su menú, sin que un servicio ocupe el lugar de un producto, igual que el menú;
+        - «más IVA» solo cuando el pedido se lo suma (ni exento ni al 0 %);
+        - sin productos y con los negocios cuando su índice no se puede armar;
+        - solo con palabras y en la primera página.
+      - **La portada:** la de la tarjeta (512 px).
+      - **Los favoritos:**
+        - se guardan una vez, del último al primero, con su tarjeta mientras aparecen en Explorar;
+        - solo una tienda publicada y solo una cuenta de cliente;
+        - cada cuenta ve solo los suyos;
+        - un negocio suspendido o con el menú apagado no aparece hasta que vuelve, y se puede quitar.
+    - `PublicProductIndexCacheTests` (4):
+      - el índice se arma una vez por foto y otra con la siguiente;
+      - una búsqueda con la foto anterior usa el índice nuevo;
+      - búsquedas al mismo tiempo lo arman una sola vez;
+      - quien deja de esperar no cancela a quien lo arma;
+      - si falla, no se intenta otra vez hasta la foto siguiente.
+    - `AuthorizationBehaviorTests`: 277 casos de uso con regla.
+  - **SQL Server:** `FavoriteBusinessesMigrationSqlServerTests` (3):
+    - un favorito por cuenta y negocio (2601); borrar la cuenta borra sus favoritos y un negocio con favoritos no se borra (547);
+    - revertir se detiene con 50021 sin cambiar nada mientras haya favoritos y, sin ellos, quita solo la tabla;
+    - el mismo negocio guardado al mismo tiempo desde otra pestaña deja uno y las dos responden que quedó guardado (`SavedMeanwhile`).
+  - **WebApi:**
+    - `CrossTenantCustomerAccountsSqlServerTests.FavoritesAndProducts_ShouldBeOnlyTheAccounts_AndOnlyOfPublishedMenus` (1), sobre la API real:
+      - la búsqueda no encuentra los productos de un menú sin publicar, ni se guarda esa tienda;
+      - cada cuenta ve y quita solo los suyos;
+      - el equipo de un negocio recibe 400 y sin sesión, 401.
+    - `TenantFilterBypassAllowlistTests`: `PublicProductSearch.cs` (1) y `OnlineMenuFeature.cs` (2) con su razón.
+    - `ArchitectureTests` conoce `FavoriteBusiness` como entidad sin negocio.
+  - **Cliente:**
+    - `ExplorePage.test.tsx` (16, +7):
+      - los productos con su enlace a la hoja, «Pide en línea», el precio de antes y «más IVA»;
+      - la portada de la tarjeta;
+      - el corazón del visitante;
+      - los favoritos del cliente: guardar al momento con `aria-pressed` y nombre fijo, quitar desde «Tus favoritos» con el foco en su título, y los dos corazones del mismo negocio de acuerdo;
+      - dos corazones a la vez, y uno que el servidor rechaza vuelve con su aviso;
+      - ningún corazón mientras vuelve la sesión;
+      - sin favoritos al buscar o en una categoría.
+    - `PublicMenuPage.test.tsx` (34, +4):
+      - `?producto=` abre la hoja y al cerrarla queda la dirección de la tienda con su mesa;
+      - un producto que ya no está abre solo el menú y sale de la dirección;
+      - guardar y quitar desde la portada con el foco en el corazón;
+      - el visitante va a entrar y regresa a la tienda;
+      - ni corazón ni petición de favoritos para el equipo ni en una mesa.
+    - `Login.test.tsx` (1): regresa a la página de la que vino con su búsqueda.
+  - **Escenas visuales** (contra `master` en `3b51118`): se completan con la comparación de esta revisión.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

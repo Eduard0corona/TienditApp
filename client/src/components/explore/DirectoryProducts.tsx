@@ -39,7 +39,7 @@ export default function DirectoryProducts({ products }: { products: DirectoryPro
                     {product.compareAtPrice != null && (
                       <s className="ta-money dp-compare"><span className="visually-hidden">antes </span>{formatMoney(product.compareAtPrice)}</s>
                     )}
-                    {!product.pricesIncludeTax && <span className="dp-tax">más IVA</span>}
+                    {product.addsTax && <span className="dp-tax">más IVA</span>}
                   </span>
                 </span>
               </Link>

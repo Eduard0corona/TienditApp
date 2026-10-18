@@ -189,16 +189,17 @@
   font-weight: 700;
 }
 
-/* «Tus favoritos»: sideways on a phone, as many as fit on a wide screen. */
+/* «Tus favoritos»: sideways on a phone (the edge that hides more fades); on a wide screen, rows of cards. */
 .ex-favorites {
   margin-top: 1.25rem;
 }
 
+/* Room for the focus ring of a card: a row that scrolls cuts what goes past its edge. */
 .ex-favorites-row {
   display: flex;
   gap: 0.85rem;
-  margin: 0 -1rem;
-  padding: 0 1rem 0.25rem;
+  margin: -0.25rem -1rem 0;
+  padding: 0.25rem 1rem;
   overflow-x: auto;
   list-style: none;
   scrollbar-width: none;
@@ -212,10 +213,28 @@
   flex: 0 0 min(85%, 20rem);
 }
 
+.ex-favorites-all {
+  display: none;
+}
+
 @media (min-width: 768px) {
   .ex-favorites-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
     margin: 0;
-    padding: 0 0 0.25rem;
+    padding: 0;
+    overflow: visible;
+  }
+
+  /* The first rows; «Ver todos» shows the rest. */
+  .ex-favorites-row:not(.is-all) > .ex-favorite-more {
+    display: none;
+  }
+
+  .ex-favorites-all {
+    display: block;
+    margin-top: 0.75rem;
+    text-align: center;
   }
 }
 

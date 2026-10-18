@@ -13381,7 +13381,7 @@ export interface components {
             businessSlug: string;
             theme: components["schemas"]["BusinessTheme"];
             acceptsOrders: boolean;
-            pricesIncludeTax: boolean;
+            addsTax: boolean;
         };
         PublicMenuCategoryDto: {
             /** Format: uuid */

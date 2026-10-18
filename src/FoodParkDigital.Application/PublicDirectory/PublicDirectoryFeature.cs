@@ -183,10 +183,7 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
         var postalCode = DeliveryZone.NormalizePostalCode(request.PostalCode);
         var businesses = await PublicDirectoryCards.WithDeliveryToAsync(_context, page, postalCode, cancellationToken);
         // The products of a search come with its first page; the index of the snapshot is read only when there is one.
-        var products = words.Length == 0 || pageNumber > 1
-            ? []
-            : (await _products.GetAsync(snapshot, (current, ct) => PublicProductIndex.BuildAsync(_context, current, ct, _logger), cancellationToken))
-                .Search(words, request.Category);
+        var products = words.Length == 0 || pageNumber > 1 ? [] : await SearchProductsAsync(snapshot, words, request.Category, cancellationToken);
 
         return new PublicDirectoryDto
         {
@@ -195,6 +192,23 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
             PostalCode = postalCode,
             Products = products
         };
+    }
+
+    /// <summary>The products of a search; none when their index could not be built: the businesses still answer.</summary>
+    private async Task<List<PublicDirectoryProductDto>> SearchProductsAsync(
+        PublicDirectorySnapshot snapshot, string[] words, BusinessCategory? category, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var index = await _products.GetAsync(
+                snapshot, (current, ct) => PublicProductIndex.BuildAsync(_context, current, ct, _logger), cancellationToken);
+            return index?.Search(words, category) ?? [];
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Explorar could not read the products of its businesses: this search answers with the businesses only.");
+            return [];
+        }
     }
 }
 
@@ -370,6 +384,17 @@ public sealed class PublicDirectorySnapshot
         => context.Products.Where(p => p.IsAvailable
             && p.Unit != UnitType.Hour && p.Unit != UnitType.Session && p.Unit != UnitType.Service
             && context.Categories.Any(c => c.Id == p.CategoryId && c.TenantId == p.TenantId && c.IsActive));
+
+    /// <summary>
+    /// The order of a public menu: its featured products first, then as its business sorts them, by name. The menu shows
+    /// the first <see cref="GetPublicMenuQueryHandler.MaxProducts"/> in it, and Explorar searches the same ones.
+    /// </summary>
+    internal static IOrderedQueryable<Product> InMenuOrder(IQueryable<Product> products)
+        => products.OrderByDescending(p => p.IsFeatured).ThenBy(p => p.SortOrder).ThenBy(p => p.Name).ThenBy(p => p.Id);
+
+    /// <summary>The products already ordered by something else (their business), each group in <see cref="InMenuOrder"/>.</summary>
+    internal static IOrderedQueryable<Product> ThenInMenuOrder(IOrderedQueryable<Product> products)
+        => products.ThenByDescending(p => p.IsFeatured).ThenBy(p => p.SortOrder).ThenBy(p => p.Name).ThenBy(p => p.Id);
 
     /// <summary>The card of a business; null for one listed for its services that does not book them online after all.</summary>
     private static Entry? ToEntry(Row row, IEnumerable<SpecialDay> specialDays, DateTimeOffset utcNow)

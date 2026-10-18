@@ -225,7 +225,7 @@ function buildRoutes(data, token) {
   const NOW_LOCAL = localHhmmss(NOW_ISO);
 
   return [
-    ...phase24fRoutes(data, { ok, notFound }),
+    ...phase24fRoutes(data, { ok }),
     ...phase24dRoutes(data, { ok, notFound }),
     ...phase25Routes(data, { ok, notFound }),
     ...phase24bRoutes(data, { ok, notFound }),

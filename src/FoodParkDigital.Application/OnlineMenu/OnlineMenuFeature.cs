@@ -13,6 +13,7 @@ using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Audit.Entities;
@@ -367,11 +368,11 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
             .Select(c => new { c.Id, c.Name })
             .ToListAsync(cancellationToken);
-        var products = await _context.Products
+        // The products a menu shows (the rule Explorar searches, Fase 24F), the first MaxProducts of them in its order: a
+        // service or a product of an inactive category does not take the place of one it shows.
+        var products = await PublicDirectorySnapshot.InMenuOrder(PublicDirectorySnapshot.MenuProducts(_context))
             .AsNoTracking()
             .Include(p => p.OptionGroups).ThenInclude(g => g.Options)
-            .Where(p => p.IsAvailable)
-            .OrderByDescending(p => p.IsFeatured).ThenBy(p => p.SortOrder).ThenBy(p => p.Name)
             .Take(MaxProducts)
             .ToListAsync(cancellationToken);
 

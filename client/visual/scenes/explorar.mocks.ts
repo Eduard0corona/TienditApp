@@ -28,4 +28,19 @@ function withFavorites(data: DemoData) {
   ];
 }
 
+/** She keeps every business of the demo city and the bakery: a wide screen shows two rows and «Ver todos». */
+function withManyFavorites(data: DemoData) {
+  withFavorites(data);
+  const kept = new Set(data.favorites.map((favorite: { slug: string }) => favorite.slug));
+  data.favorites = [
+    ...data.directory
+      .filter((business: { slug: string }) => !kept.has(business.slug))
+      .map((business: { slug: string; name: string; logoUrl: string | null }, index: number) => ({
+        slug: business.slug, name: business.name, logoUrl: business.logoUrl, savedAt: `2026-10-0${3 - Math.min(index, 2)}T12:00:00.000Z`,
+      })),
+    ...data.favorites,
+  ];
+}
+
 export const CON_FAVORITOS = asOption(withFavorites);
+export const MUCHOS_FAVORITOS = asOption(withManyFavorites);
