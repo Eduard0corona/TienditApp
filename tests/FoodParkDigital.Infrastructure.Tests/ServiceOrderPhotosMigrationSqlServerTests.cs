@@ -34,7 +34,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
         var other = await SeedTenantAsync(database);
         var orderId = await SeedOrderWithPhotosAsync(database, tenant.Id);
 
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeOnlineBooking.CreateContext(database, tenant.Id))
         {
             var order = await context.Orders.Include(o => o.ServicePhotos).SingleAsync(o => o.Id == orderId);
             Assert.Equal(
@@ -42,7 +42,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
                 order.ServicePhotos.OrderBy(p => p.Stage).Select(p => (p.Stage, p.Note, p.TakenBy, p.TakenByUserId)).ToList());
         }
         // Another business does not see them, not even asking for them by the order.
-        await using (var neighbor = database.CreateContext(other.Id))
+        await using (var neighbor = BeforeOnlineBooking.CreateContext(database, other.Id))
             Assert.Empty(await neighbor.Set<ServiceOrderPhoto>().Where(p => p.OrderId == orderId).ToListAsync());
 
         var stage = await Assert.ThrowsAsync<SqlException>(() => ExecuteAsync(database,
@@ -51,7 +51,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
         Assert.Contains("CK_ServiceOrderPhotos_Stage", stage.Message);
 
         await ExecuteAsync(database, $"DELETE FROM [Orders] WHERE [Id] = {orderId}");
-        await using var check = database.CreateContext();
+        await using var check = BeforeOnlineBooking.CreateContext(database);
         Assert.Equal(0, await CountAsync(check, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrderPhotos]"));
     }
 
@@ -72,7 +72,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeOnlineBooking.CreateContext(database, tenant.Id);
         Assert.Equal(2, await check.Orders.CountAsync());
         var finished = await check.Orders.Include(o => o.ServicePhotos).SingleAsync(o => o.Id == withPhotos);
         Assert.Equal(OrderStatus.Completed, finished.Status);
@@ -90,7 +90,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforePhotos));
         Assert.Equal(50018, error.Number);
         Assert.Contains("Businesses added photos to their service orders", error.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeOnlineBooking.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(2, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrderPhotos]"));
@@ -98,7 +98,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforePhotos);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeOnlineBooking.CreateContext(database))
         {
             Assert.Equal(BeforePhotos, await LatestMigrationAsync(context));
             Assert.Equal((0, 1), (
@@ -109,7 +109,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the table is back, empty.
         await MigrateAsync(database, BeforePhotos);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext();
+        await using var forward = BeforeOnlineBooking.CreateContext(database);
         Assert.Equal((1, 0), (
             await CountAsync(forward, $"SELECT COUNT(*) AS [Value] FROM sys.tables WHERE [name] = N'ServiceOrderPhotos'"),
             await CountAsync(forward, $"SELECT COUNT(*) AS [Value] FROM [ServiceOrderPhotos]")));
@@ -118,7 +118,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
     /// <summary>A service order with a photo of what was received, with its note, and one of the work done.</summary>
     private static async Task<Guid> SeedOrderWithPhotosAsync(SqlServerTestDatabase database, Guid tenantId)
     {
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeOnlineBooking.CreateContext(database, tenantId);
         var order = NewServiceOrder(tenantId);
         order.AddServicePhoto(ServicePhotoStage.Before, $"/files/orders/{tenantId}/service-intake/202610/antes.webp", "antes.jpg",
             "Mancha en la manga", Now, "Ana", Author);
@@ -143,7 +143,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
     {
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant($"Tintorería {slug}", slug, BusinessType.Service, $"{slug}@demo.com");
-        await using var seed = database.CreateContext();
+        await using var seed = BeforeOnlineBooking.CreateContext(database);
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Service));
         await seed.SaveChangesAsync();
         return tenant;
@@ -158,7 +158,7 @@ public class ServiceOrderPhotosMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, FormattableString sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeOnlineBooking.CreateContext(database);
         await context.Database.ExecuteSqlInterpolatedAsync(sql);
     }
 

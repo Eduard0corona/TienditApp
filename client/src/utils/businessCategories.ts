@@ -60,5 +60,7 @@ export function orderStatus(business: DirectoryBusiness): { tone: 'taking' | 'pa
       ? { tone: 'closed', text: hours }
       : { tone: 'paused', text: 'Pedidos en línea en pausa' };
   }
+  // A business that books appointments online (Fase 24D) has more than a menu: its own badge says so, and this one its hours.
+  if (business.booksOnline && hours) return { tone: closed ? 'closed' : 'menu', text: hours };
   return { tone: closed ? 'closed' : 'menu', text: hours ? `Solo menú · ${hours}` : 'Solo menú' };
 }

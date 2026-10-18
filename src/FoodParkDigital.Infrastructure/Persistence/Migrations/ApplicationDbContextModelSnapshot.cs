@@ -147,6 +147,16 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("CancelledByCustomerAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<Guid?>("ClientRequestId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -162,6 +172,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid?>("CustomerUserId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("EndAt")
                         .HasColumnType("datetimeoffset");
@@ -197,6 +210,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("TrackingToken")
+                        .HasMaxLength(43)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(43)");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -213,6 +231,19 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SaleOrderId");
 
+                    b.HasIndex("TrackingToken")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Appointments_TrackingToken")
+                        .HasFilter("[TrackingToken] IS NOT NULL");
+
+                    b.HasIndex("CustomerUserId", "StartAt")
+                        .HasFilter("[CustomerUserId] IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ClientRequestId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Appointments_TenantId_ClientRequestId")
+                        .HasFilter("[ClientRequestId] IS NOT NULL");
+
                     b.HasIndex("TenantId", "CustomerPhone");
 
                     b.HasIndex("TenantId", "StartAt");
@@ -221,7 +252,12 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "StaffUserId", "StartAt");
 
-                    b.ToTable("Appointments", (string)null);
+                    b.ToTable("Appointments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Appointments_Channel", "[Channel] IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_Appointments_TrackingToken", "[TrackingToken] IS NULL OR LEN([TrackingToken]) = 43");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.AppointmentVisit", b =>
@@ -4379,6 +4415,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("OnboardingCompletedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<int>("OnlineBookingCapacity")
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<bool>("OnlineBookingEnabled")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("OnlineMenuMode")
                         .HasColumnType("int");
 
@@ -4415,6 +4459,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("TenantSettings", null, t =>
                         {
                             t.HasCheckConstraint("CK_TenantSettings_HomeVisitTravelMinutes", "[HomeVisitTravelMinutes] >= 0 AND [HomeVisitTravelMinutes] <= 240");
+
+                            t.HasCheckConstraint("CK_TenantSettings_OnlineBookingCapacity", "[OnlineBookingCapacity] >= 1 AND [OnlineBookingCapacity] <= 20");
                         });
                 });
 
@@ -4882,6 +4928,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.Appointment", b =>
                 {
+                    b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CustomerUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
                         .WithMany()
                         .HasForeignKey("SaleOrderId")

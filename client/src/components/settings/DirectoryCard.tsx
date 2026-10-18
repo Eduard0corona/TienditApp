@@ -141,6 +141,7 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
             deliveryOnly: false,
             deliveryAvailable: false,
             pricesIncludeTax: true,
+            booksOnline: false,
             acceptsOrders: tenant.onlineMenuMode === OnlineMenuMode.Orders,
             ordersPaused: false,
             statusLabel: null,

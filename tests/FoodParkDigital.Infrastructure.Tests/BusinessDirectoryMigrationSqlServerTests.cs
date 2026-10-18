@@ -55,7 +55,7 @@ public class BusinessDirectoryMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using var check = database.CreateContext();
+        await using var check = BeforeOrderTracking.CreateContext(database);
         var tenants = await check.Tenants.ToListAsync();
         Assert.Equal(expected.Count, tenants.Count);
         foreach (var tenant in tenants)
@@ -75,7 +75,7 @@ public class BusinessDirectoryMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedAsync(database, BusinessType.Food);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeOrderTracking.CreateContext(database, tenant.Id))
         {
             (await context.Tenants.SingleAsync()).SetDirectoryProfile(BusinessCategory.Groceries, "Abarrotes y tortillas");
             (await context.TenantSettings.SingleAsync()).SetDirectoryListing(false);
@@ -98,13 +98,13 @@ public class BusinessDirectoryMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
 
-        await using (var check = database.CreateContext(tenant.Id))
+        await using (var check = BeforeOrderTracking.CreateContext(database, tenant.Id))
         {
             var kept = await check.Tenants.SingleAsync(t => t.Id == tenant.Id);
             Assert.Equal(("Tienda de Lupita", BusinessCategory.Groceries, "Abarrotes y tortillas", false),
                 (kept.Name, kept.DirectoryCategory, kept.PublicDescription, (await check.TenantSettings.SingleAsync()).ListedInDirectory));
         }
-        await using var fresh = database.CreateContext(opened.Id);
+        await using var fresh = BeforeOrderTracking.CreateContext(database, opened.Id);
         var started = await fresh.Tenants.SingleAsync(t => t.Id == opened.Id);
         Assert.Equal((BusinessCategory.Other, (string?)null, true),
             (started.DirectoryCategory, started.PublicDescription, (await fresh.TenantSettings.SingleAsync()).ListedInDirectory));
@@ -141,7 +141,7 @@ public class BusinessDirectoryMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedAsync(database, BusinessType.Service);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeOrderTracking.CreateContext(database, tenant.Id))
         {
             (await context.Tenants.SingleAsync()).SetDirectoryProfile(BusinessCategory.Beauty, "Cortes y peinados");
             (await context.TenantSettings.SingleAsync()).SetDirectoryListing(false);
@@ -160,13 +160,13 @@ public class BusinessDirectoryMigrationSqlServerTests
             var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeDirectory));
             Assert.Equal(50016, error.Number);
             Assert.Contains("Owners already decided how their businesses show in Explorar", error.Message);
-            await using var context = database.CreateContext();
+            await using var context = BeforeOrderTracking.CreateContext(database);
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             await context.Database.ExecuteSqlRawAsync(cleanUp);
         }
 
         await MigrateAsync(database, BeforeDirectory);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeOrderTracking.CreateContext(database))
         {
             Assert.Equal(BeforeDirectory, await LatestMigrationAsync(context));
             Assert.Equal(0, await CountAsync(context, $"""
@@ -186,7 +186,7 @@ public class BusinessDirectoryMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the business is listed in the category of its type.
         await MigrateAsync(database, BeforeDirectory);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeOrderTracking.CreateContext(database, tenant.Id);
         var again = await forward.Tenants.SingleAsync();
         Assert.Equal((BusinessCategory.Services, (string?)null, true),
             (again.DirectoryCategory, again.PublicDescription, (await forward.TenantSettings.SingleAsync()).ListedInDirectory));
@@ -195,7 +195,7 @@ public class BusinessDirectoryMigrationSqlServerTests
     private static async Task<Tenant> SeedAsync(SqlServerTestDatabase database, BusinessType type)
     {
         var tenant = NewTenant(type);
-        await using var seed = database.CreateContext();
+        await using var seed = BeforeOrderTracking.CreateContext(database);
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Food));
         await seed.SaveChangesAsync();
         return tenant;
@@ -216,7 +216,7 @@ public class BusinessDirectoryMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, FormattableString sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeOrderTracking.CreateContext(database);
         await context.Database.ExecuteSqlInterpolatedAsync(sql);
     }
 

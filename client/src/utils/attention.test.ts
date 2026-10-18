@@ -12,6 +12,15 @@ describe('attention', () => {
     expect(describeAttention({ key: 'drawersOpenSinceYesterday', count: 2, urgentCount: 0 })?.text).toBe('2 cajas abiertas desde otro día');
   });
 
+  it('leads the requests booked online to the agenda, filtered on them', () => {
+    expect(describeAttention({ key: 'appointmentRequests', count: 2, urgentCount: 1 })).toMatchObject({
+      text: '2 solicitudes de cita por confirmar (1 de hoy)',
+      path: '/appointments?estado=por-confirmar',
+      tone: 'warning',
+    });
+    expect(describeAttention({ key: 'appointmentRequests', count: 1, urgentCount: 0 })?.text).toBe('1 solicitud de cita por confirmar');
+  });
+
   it('marks stock as urgent when something ran out', () => {
     expect(describeAttention({ key: 'lowStock', count: 3, urgentCount: 1 })).toMatchObject({
       text: '3 insumos por reabastecer (1 agotado o crítico)',

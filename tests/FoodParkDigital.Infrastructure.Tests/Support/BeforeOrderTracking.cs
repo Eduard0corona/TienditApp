@@ -19,6 +19,7 @@ internal static class BeforeOrderTracking
     public static void Ignore(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Order>().Ignore(o => o.TrackingToken);
+        BeforeServicePhotos.Ignore(modelBuilder);
     }
 
     private sealed class Context(

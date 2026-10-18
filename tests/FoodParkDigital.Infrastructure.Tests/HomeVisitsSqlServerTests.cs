@@ -335,7 +335,8 @@ public class HomeVisitsSqlServerTests
     /// <summary>An appointment of a haircut, at 72000 by a zone that charges $80 when <paramref name="visit"/>.</summary>
     private static async Task<Guid> SeedAppointmentAsync(SqlServerTestDatabase database, Guid tenantId, bool visit)
     {
-        await using var context = database.CreateContext(tenantId);
+        // Also on a database migrated to AddHomeVisits, without what came after it.
+        await using var context = BeforeBusinessDirectory.CreateContext(database, tenantId);
         var appointment = new Appointment(tenantId, "Ana", "5512345678", "Corte a domicilio", Start, Start.AddHours(1), "Luis");
         if (visit)
             appointment.ArrangeVisit(Address, Zone(tenantId), Now);

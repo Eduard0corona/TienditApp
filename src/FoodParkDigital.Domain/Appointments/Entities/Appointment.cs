@@ -1,8 +1,10 @@
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
 
 namespace FoodParkDigital.Domain.Appointments.Entities;
@@ -69,7 +71,27 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>Changes with every save, so two charges (or a charge and a change) saved at the same time collide.</summary>
     public byte[] Version { get; private set; } = null!;
 
+    /// <summary>Who booked it (Fase 24D): the business's team, or the customer online.</summary>
+    public AppointmentChannel Channel { get; private set; } = AppointmentChannel.Business;
+    /// <summary>The customer account that booked it online (Fase 24D): it sees it in its appointments. Null otherwise.</summary>
+    public Guid? CustomerUserId { get; private set; }
+    /// <summary>
+    /// The key the booking page generated for this request (Fase 24D): sent again, it answers the appointment already
+    /// requested instead of a second one. Unique per business.
+    /// </summary>
+    public Guid? ClientRequestId { get; private set; }
+    /// <summary>
+    /// The link to follow and cancel the appointment without an account (Fase 24D), like an order's
+    /// (<see cref="Order.TrackingTokenLength"/> URL-safe Base64 characters). Only for appointments booked online.
+    /// </summary>
+    public string? TrackingToken { get; private set; }
+    /// <summary>When the customer cancelled it from the account or the link (Fase 24D); null otherwise.</summary>
+    public DateTimeOffset? CancelledByCustomerAt { get; private set; }
+
     public bool IsHomeVisit => Visit is not null;
+
+    /// <summary>Booked online and waiting for the business to accept it.</summary>
+    public bool IsRequest => Status == AppointmentStatus.Requested;
 
     public bool IsClosed => Status is AppointmentStatus.Cancelled or AppointmentStatus.Completed or AppointmentStatus.NoShow;
 
@@ -108,7 +130,95 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     public void ChangeStatus(AppointmentStatus newStatus)
     {
         EnsureOpen();
+        if (newStatus == Status)
+            return;
+        // A request leaves its state only accepted or declined (or cancelled by its customer), and nothing goes back to it.
+        if (Status == AppointmentStatus.Requested)
+            throw new DomainException(OnlineBookingRules.DecideRequestFirstMessage);
+        if (newStatus == AppointmentStatus.Requested)
+            throw new DomainException(OnlineBookingRules.OnlyOnlineRequestedMessage);
         Status = newStatus;
+    }
+
+    /// <summary>
+    /// A customer books online (Fase 24D, ADR 0025): the appointment holds its time and waits for the business to accept
+    /// it. Always at the business: online booking arranges no visit. The phone is the one the booking page normalized.
+    /// </summary>
+    /// <param name="customerUserId">The customer account that booked it, when it was signed in.</param>
+    /// <param name="clientRequestId">The booking page's key for this request.</param>
+    /// <param name="trackingToken">The link to follow it without an account.</param>
+    public static Appointment RequestOnline(
+        Guid tenantId,
+        string customerName,
+        string customerPhone,
+        Guid serviceProductId,
+        string serviceName,
+        DateTimeOffset startAt,
+        DateTimeOffset endAt,
+        string? notes,
+        Guid? customerUserId,
+        Guid? clientRequestId,
+        string trackingToken)
+    {
+        if (serviceProductId == Guid.Empty)
+            throw new ArgumentException("The service is required.", nameof(serviceProductId));
+        if (customerUserId == Guid.Empty)
+            throw new ArgumentException("The account is required when given.", nameof(customerUserId));
+        if (clientRequestId == Guid.Empty)
+            throw new ArgumentException("The key is required when given.", nameof(clientRequestId));
+        if (!Order.IsTrackingToken(trackingToken))
+            throw new ArgumentException("The link must look like one.", nameof(trackingToken));
+
+        var appointment = new Appointment(
+            tenantId, customerName, customerPhone, serviceName, startAt, endAt,
+            staffName: null, notes: string.IsNullOrWhiteSpace(notes) ? null : notes, serviceProductId: serviceProductId)
+        {
+            Status = AppointmentStatus.Requested,
+            Channel = AppointmentChannel.Online,
+            CustomerUserId = customerUserId,
+            ClientRequestId = clientRequestId,
+            TrackingToken = trackingToken
+        };
+        return appointment;
+    }
+
+    /// <summary>
+    /// The business accepts a request: it is agendada. Also once its time began, with the customer already there; once it
+    /// ended, it is moved to another time first.
+    /// </summary>
+    public void Accept(DateTimeOffset now)
+    {
+        if (Status != AppointmentStatus.Requested)
+            throw new DomainException(OnlineBookingRules.NotRequestedMessage);
+        if (EndAt <= now)
+            throw new DomainException(OnlineBookingRules.RequestTimePassedMessage);
+        Status = AppointmentStatus.Scheduled;
+    }
+
+    /// <summary>The business declines a request: it is cancelled and its time is free again.</summary>
+    public void Decline()
+    {
+        if (Status != AppointmentStatus.Requested)
+            throw new DomainException(OnlineBookingRules.NotRequestedMessage);
+        Status = AppointmentStatus.Cancelled;
+    }
+
+    /// <summary>
+    /// Its customer cancels an appointment booked online, from the account or the link, before it starts: requested,
+    /// agendada or confirmed. Once in service, or closed, only the business changes it.
+    /// </summary>
+    public void CancelByCustomer(DateTimeOffset now)
+    {
+        if (Channel != AppointmentChannel.Online)
+            throw new DomainException(OnlineBookingRules.CustomerCancelNotOnlineMessage);
+        if (IsClosed)
+            throw new DomainException(OnlineBookingRules.CustomerCancelClosedMessage);
+        if (Status is not (AppointmentStatus.Requested or AppointmentStatus.Scheduled or AppointmentStatus.Confirmed)
+            || StartAt <= now)
+            throw new DomainException(OnlineBookingRules.CustomerCancelStartedMessage);
+
+        Status = AppointmentStatus.Cancelled;
+        CancelledByCustomerAt = now;
     }
 
     /// <summary>
@@ -179,6 +289,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(HomeVisitRules.CancelledSaleMessage);
         if (Status == AppointmentStatus.NoShow)
             throw new DomainException(HomeVisitRules.NoShowSaleMessage);
+        if (Status == AppointmentStatus.Requested)
+            throw new DomainException(OnlineBookingRules.AcceptBeforeChargingMessage);
         if (SaleOrderId is not null && !previousSaleCancelled)
             throw new DomainException(HomeVisitRules.AlreadySoldMessage);
 

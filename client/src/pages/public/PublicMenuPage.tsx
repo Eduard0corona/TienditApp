@@ -45,6 +45,7 @@ import {
   saveCart,
   type CartLine,
 } from '../../utils/savedCart';
+import { bookingPath } from '../../utils/onlineBooking';
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
 import { newUuid } from '../../utils/uuid';
@@ -94,7 +95,8 @@ function restoredMessage(kept: number, dropped: number, skipped: number, reorder
  * its orders.
  * Its header says whether the business is open now (the API works it out in the business's time and writes the words),
  * its hours of the week, its special days ahead and its address with a map. A business with delivery zones takes the
- * order to the customer's address: the server says what it charges to their postal code, and the total adds it.
+ * order to the customer's address: the server says what it charges to their postal code, and the total adds it. A business
+ * that books appointments online (Fase 24D) leads to its booking page from here.
  */
 export default function PublicMenuPage() {
   const optionsTitleId = useId();
@@ -513,6 +515,15 @@ export default function PublicMenuPage() {
             </p>
           )}
         </section>
+      )}
+
+      {/* A business that books appointments online (Fase 24D): its booking page, the main action when the menu takes no orders. */}
+      {data.booksOnline && !atTable && (
+        <div className="pm-booking">
+          <Link className={`btn btn-touch w-100 ${data.acceptsOrders ? 'btn-light' : 'btn-primary'}`} to={bookingPath(slug)}>
+            <i className="ri-calendar-event-line me-1" aria-hidden="true"></i>Agenda tu cita
+          </Link>
+        </div>
       )}
 
       {restoredNotice && (

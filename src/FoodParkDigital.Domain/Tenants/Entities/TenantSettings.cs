@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Appointments.HomeVisits;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
@@ -165,6 +166,24 @@ public class TenantSettings : BaseEntity, ITenantScoped
     public void SetDirectoryListing(bool listed)
     {
         ListedInDirectory = listed;
+    }
+
+    /// <summary>
+    /// Whether customers book appointments from the online menu (Fase 24D, ADR 0025): off until the owner turns it on. It
+    /// works while the menu is published, the agenda module is on, the business has weekly hours and its main branch has
+    /// premises; this only says the owner wants it.
+    /// </summary>
+    public bool OnlineBookingEnabled { get; private set; }
+
+    /// <summary>Appointments the business attends at once: a time is offered online while fewer than these overlap it.</summary>
+    public int OnlineBookingCapacity { get; private set; } = OnlineBookingRules.DefaultCapacity;
+
+    public void UpdateOnlineBooking(bool enabled, int capacity)
+    {
+        if (capacity is < 1 or > OnlineBookingRules.MaxCapacity)
+            throw new DomainException(OnlineBookingRules.CapacityMessage);
+        OnlineBookingEnabled = enabled;
+        OnlineBookingCapacity = capacity;
     }
 
     /// <summary>The colors of the business in its team's app and its public menu: TienditApp's until the owner picks one.</summary>

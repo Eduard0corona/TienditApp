@@ -400,6 +400,25 @@ La Fase 25 trae una migración, [`database/production/20261017183622_AddServiceO
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla, y las fotos agregadas quedan guardadas sin mostrarse hasta volver a la nueva. Pedidos y el tablero vuelven a mostrar solo las fotos de la recepción.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50018, sin cambiar nada, en cuanto un negocio agregó una foto: se perdería la evidencia de lo que recibió y entregó. Sin fotos, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Citas en línea (Fase 24D)
+
+La Fase 24D-1 trae una migración, [`database/production/20261017225015_AddOnlineBooking`](../../database/production/20261017225015_AddOnlineBooking). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0025](../adr/0025-online-booking.md)).
+
+- **La migración:**
+  - **Qué agrega:**
+    - a `TenantSettings`, `OnlineBookingEnabled` (apagadas, `0`) y `OnlineBookingCapacity` (`1`), con la CHECK de 1 a 20 (`CK_TenantSettings_OnlineBookingCapacity`);
+    - a `Appointments`, `Channel` (`0`, el negocio), `CustomerUserId` (con llave a `AspNetUsers`, sin borrado en cascada), `ClientRequestId`, `TrackingToken` (`varchar(43)`) y `CancelledByCustomerAt`, todas vacías en las citas que ya existen; las CHECK `CK_Appointments_Channel` y `CK_Appointments_TrackingToken` (43 caracteres); y tres índices filtrados: las citas de una cuenta, la llave de la solicitud única por negocio y el enlace único.
+  - **Cuándo cambia algo:** cuando un dueño prende las citas en línea en Configuración y un cliente agenda. Sin eso, la agenda sigue igual: las citas guardadas quedan como del negocio.
+  - **Después de aplicarla:** el `verify.sql` muestra las 7 columnas, las 3 CHECK, la llave y los 3 índices. Su consulta 3 cuenta los negocios que las prendieron y las citas en línea por estado (nada hasta desplegar); la 4, las solicitudes por confirmar; la 5 (consistencia) debe quedar vacía siempre.
+- **Mientras se publica:** la versión de `master` (Fase 25) no conoce las columnas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - públicas: `GET /api/v1/public/menu/{slug}/booking`, `GET /api/v1/public/menu/{slug}/booking/slots`, `POST /api/v1/public/menu/{slug}/appointments`, `POST /api/v1/public/appointments/tracking` y `POST /api/v1/public/appointments/tracking/cancel`;
+  - de la cuenta: `GET /api/v1/me/appointments` y `POST /api/v1/me/appointments/{id}/cancel`;
+  - del negocio: `POST /api/v1/appointments/{id}/accept`, `POST /api/v1/appointments/{id}/decline` y `GET`/`PUT /api/v1/appointments/online-booking`;
+  - los enums `AppointmentChannel` y `MyAppointmentsScope`, el valor `Requested` (5) de `AppointmentStatus`, `channel` y `cancelledByCustomer` en las citas, `booksOnline` en el menú y en Explorar, y la clave `appointmentRequests` de los avisos. Nada se quita ni cambia de nombre.
+- **Volver a la versión anterior:** funciona sin tocar la base, pero no conoce «Por confirmar»: mostraría las solicitudes sin poder aceptarlas ni rechazarlas. La consulta 4 del `verify.sql` dice cuántas esperan; decídelas antes de volver. El menú y Explorar dejan de ofrecer «Agenda tu cita», y los enlaces de las citas dejan de abrir.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50019, sin cambiar nada, en cuanto un cliente agendó una cita en línea: se perdería de dónde vino, su cuenta y su enlace. Sin citas en línea, quita lo que agregó (también lo que eligieron los dueños, que no tiene efecto sin la versión nueva), y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

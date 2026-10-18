@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { appointmentsApi } from '../../api/appointmentsApi';
@@ -15,9 +16,11 @@ import type {
   PaginatedList,
   ProductDto,
 } from '../../types';
-import { AppointmentStatus as AppointmentStatusConst } from '../../types';
+import { AppointmentChannel, AppointmentStatus as AppointmentStatusConst } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { queryKeys } from '../../api/queries';
 import { useAuth } from '../../hooks/useAuth';
+import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
@@ -55,6 +58,10 @@ const OTHER_SERVICE = 'other';
 const DEFAULT_DURATION_MINUTES = 60;
 
 type View = 'upcoming' | 'history' | 'route';
+
+/** The agenda opened from the notice of requests booked online (/appointments?estado=por-confirmar, Fase 24D). */
+const REQUESTS_LINK = 'por-confirmar';
+const REQUESTED_FILTER = String(AppointmentStatusConst.Requested);
 
 /** Where the appointments listed happen: '' all, 'home' at the customer's address, 'business' at the business. */
 type PlaceFilter = '' | 'home' | 'business';
@@ -125,7 +132,11 @@ function formatSlot(item: AppointmentDto): string {
 export default function AppointmentsList() {
   const titleId = useId();
   const toast = useToast();
+  const { confirm } = useConfirm();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const linkedState = searchParams.get('estado') ?? '';
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
   // «Cobrar» opens Vender with the appointment: only for whoever sells.
@@ -135,12 +146,23 @@ export default function AppointmentsList() {
   const [data, setData] = useState<PaginatedList<AppointmentDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('upcoming');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(linkedState === REQUESTS_LINK ? REQUESTED_FILTER : '');
   const [placeFilter, setPlaceFilter] = useState<PlaceFilter>('');
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  // Requests booked online still waiting from now on (Fase 24D): the notice above the list counts them.
+  const [requests, setRequests] = useState(0);
+  const [seenLink, setSeenLink] = useState(linkedState);
+  if (seenLink !== linkedState) {
+    setSeenLink(linkedState);
+    if (linkedState === REQUESTS_LINK) {
+      setView('upcoming');
+      setStatusFilter(REQUESTED_FILTER);
+      setPageNumber(1);
+    }
+  }
 
   const [editing, setEditing] = useState<AppointmentDto | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -183,6 +205,23 @@ export default function AppointmentsList() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const loadRequests = useCallback(async () => {
+    try {
+      const { data } = await appointmentsApi.getAll({
+        status: AppointmentStatusConst.Requested,
+        fromDate: new Date().toISOString(),
+        pageSize: 1,
+      });
+      setRequests(data.totalCount);
+    } catch {
+      // The list says what failed; the notice waits for the next time.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRequests();
+  }, [loadRequests]);
 
   // The catalog's services and the active team, for the form and the route.
   useEffect(() => {
@@ -345,6 +384,46 @@ export default function AppointmentsList() {
     }
   };
 
+  const accept = async (item: AppointmentDto) => {
+    setError('');
+    try {
+      await appointmentsApi.accept(item.id);
+      toast.success('Cita aceptada: el cliente recibe el aviso.');
+      // The bell and Inicio count the requests too.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
+      await Promise.all([loadData(), loadRequests()]);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo aceptar la cita.'));
+    }
+  };
+
+  const decline = async (item: AppointmentDto) => {
+    const accepted = await confirm({
+      title: 'Rechazar la solicitud',
+      message: `La cita de ${item.customerName} (${item.serviceName}, ${formatSlot(item)}) se cancela y el horario queda libre. `
+        + 'El cliente recibe el aviso para elegir otro.',
+      confirmLabel: 'Rechazar',
+      cancelLabel: 'Volver',
+      danger: true,
+    });
+    if (!accepted) return;
+    setError('');
+    try {
+      await appointmentsApi.decline(item.id);
+      toast.success('Solicitud rechazada: el cliente recibe el aviso.');
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
+      await Promise.all([loadData(), loadRequests()]);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo rechazar la solicitud.'));
+    }
+  };
+
+  const showRequests = () => {
+    setView('upcoming');
+    setStatusFilter(REQUESTED_FILTER);
+    setPageNumber(1);
+  };
+
   const chooseView = (next: View) => {
     setView(next);
     setPageNumber(1);
@@ -376,6 +455,17 @@ export default function AppointmentsList() {
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           {error}
           <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setError('')}></button>
+        </div>
+      )}
+
+      {requests > 0 && view !== 'route' && statusFilter !== REQUESTED_FILTER && (
+        <div className="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2" role="status">
+          <span>
+            <i className="ri-calendar-todo-line me-1" aria-hidden="true"></i>
+            {requests === 1 ? 'Tienes 1 solicitud de cita por confirmar.' : `Tienes ${requests} solicitudes de cita por confirmar.`}
+            {' '}Acéptalas o recházalas: el cliente recibe el aviso.
+          </span>
+          <button type="button" className="btn btn-sm btn-light" onClick={showRequests}>Ver solicitudes</button>
         </div>
       )}
 
@@ -428,6 +518,7 @@ export default function AppointmentsList() {
                     }}
                   >
                     <option value="">Todos</option>
+                    <option value={AppointmentStatusConst.Requested}>Por confirmar</option>
                     <option value={AppointmentStatusConst.Scheduled}>Programada</option>
                     <option value={AppointmentStatusConst.Confirmed}>Confirmada</option>
                     <option value={AppointmentStatusConst.InService}>En servicio</option>
@@ -460,7 +551,13 @@ export default function AppointmentsList() {
             renderRow={(item) => (
               <>
                 <td>
-                  <div className="fw-semibold">{item.customerName}</div>
+                  <div className="fw-semibold">
+                    {item.customerName}
+                    {/* Booked by the customer from the online menu (Fase 24D): neutral, it is where it came from. */}
+                    {item.channel === AppointmentChannel.Online && (
+                      <span className="badge text-bg-light border ms-1 fw-normal">En línea</span>
+                    )}
+                  </div>
                   <div className="text-muted small">{item.customerPhone}</div>
                 </td>
                 <td>
@@ -473,9 +570,39 @@ export default function AppointmentsList() {
                 </td>
                 <td className="text-center">
                   <span className={`badge ${statusBadge(item.status)}`}>{statusLabel(item.status)}</span>
+                  {item.cancelledByCustomer && <div className="text-muted small">La canceló el cliente</div>}
                 </td>
                 <td className="text-center">
-                  {isClosed(item.status) ? (
+                  {item.status === AppointmentStatusConst.Requested ? (
+                    // A request booked online is decided first: accepted, declined, or moved to another time and then accepted.
+                    <div className="d-flex gap-1 justify-content-center flex-wrap">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-light"
+                        onClick={() => void accept(item)}
+                        aria-label={`Aceptar la cita de ${item.customerName}`}
+                      >
+                        Aceptar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-light"
+                        onClick={() => void decline(item)}
+                        aria-label={`Rechazar la cita de ${item.customerName}`}
+                      >
+                        Rechazar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-light"
+                        onClick={() => openEdit(item)}
+                        aria-label={`Editar o reprogramar la cita de ${item.customerName}`}
+                        title="Editar o reprogramar"
+                      >
+                        Editar
+                      </button>
+                    </div>
+                  ) : isClosed(item.status) ? (
                     canSell && canBeCharged(item) ? (
                       <button
                         type="button"

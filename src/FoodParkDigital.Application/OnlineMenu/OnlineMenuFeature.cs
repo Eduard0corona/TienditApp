@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -141,6 +142,8 @@ public class PublicMenuDto
     /// next 31 days.
     /// </summary>
     public PublicOpeningHoursDto? OpeningHours { get; set; }
+    /// <summary>Customers book appointments online with the business now (Fase 24D): /m/{slug}/agendar.</summary>
+    public bool BooksOnline { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
 }
 
@@ -378,6 +381,14 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             && OnlineOrderAvailability.TableMayOrderWhileClosed(hours)
             && await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.Table, cancellationToken);
         var acceptsOrders = OnlineOrderAvailability.Gate(settings.OnlineMenuMode, hours, drawerOpen, seated) == OnlineOrderGate.Open;
+        // The rule of its booking page (Fase 24D), and a service to book.
+        var booksOnline = OnlineBookingAvailability.BooksOnline(
+                settings.OnlineBookingEnabled,
+                TenantCapabilityRules.NormalizeCapabilities(settings.Capabilities, tenant.BusinessType),
+                settings.OnlineMenuMode,
+                mainBranch?.ServiceMode,
+                settings.OpeningHours is not null)
+            && await OnlineBookingCalendar.BookableServices(_context).AnyAsync(cancellationToken);
 
         return new PublicMenuDto
         {
@@ -395,6 +406,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             DeliveryOnly = mainBranch is { KeepsAddressPrivate: true },
             DeliveryAvailable = ordersOn && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken),
             OpeningHours = hours is null ? null : PublicOpeningHoursDto.From(hours, seatedOverride: acceptsOrders && closed),
+            BooksOnline = booksOnline,
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto
