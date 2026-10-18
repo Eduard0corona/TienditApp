@@ -11,6 +11,9 @@
   - La que solo entrega guarda su dirección para el equipo: si es la principal, el menú en línea no la muestra y dice «Solo a domicilio», y la respuesta automática a «¿dónde están?» dice que no hay local para visitar.
   - Al crear o guardar sin `serviceMode`, una sucursal nueva tiene local y una guardada conserva el que tenía. La columna tiene `DEFAULT 0` y la restricción `CK_Branches_ServiceMode`.
   - El alta con el giro «Comida a domicilio» crea la principal solo a domicilio; cambiar el giro después no toca las sucursales.
+- Desde la Fase 24G cada sucursal puede tener su punto en el mapa (`Latitude`, `Longitude`, [ADR 0029](../adr/0029-near-me.md)): las dos o ninguna, en rango (`CK_Branches_Location`), sin 0, 0.
+  - Al crear o guardar sin `location`, una sucursal nueva no está en el mapa y una guardada conserva su punto; `location` con las dos mitades vacías la quita.
+  - El cliente solo ve el de la principal y solo si recibe clientes (`PublicLocation`): Explorar mide la distancia hasta ahí y «Cómo llegar» lo abre. El de una sucursal solo a domicilio se queda con el equipo.
 
 ## Qué pertenece a una sucursal
 
