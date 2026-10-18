@@ -7,7 +7,8 @@ import { CUSTOMER_PROFILE } from './vender-pedidos.mocks';
 // the owner's settings that says how its business shows there. The directory of the scenes has seven businesses: two
 // take orders now (one delivers), one has them paused, a kitchen that only delivers, a shop with its menu only and two
 // closed. Since the 24F each card has its cover (Café La Esquina's photo, the colors of the others), a search shows the
-// products it found first, and a customer keeps favorites with a heart.
+// products it found first, and a customer keeps favorites with a heart. Since the 24G «Cerca de mí» orders them by
+// distance from the customer, near the Zócalo of the demo city, each card saying how far it is.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -62,6 +63,52 @@ test.describe('Explorar', () => {
       await expect(page.getByText('Pronto verás aquí los negocios de tu ciudad')).toBeVisible();
       await snap(page, 'explorar-sin-negocios-telefono');
     });
+  });
+});
+
+test.describe('Cerca de mí', () => {
+  test.use({ signedIn: false });
+
+  test.describe('con permiso', () => {
+    test.use({ permissions: ['geolocation'], geolocation: { latitude: 19.4195, longitude: -99.1622 } });
+
+    for (const look of [LOOKS[0], LOOKS[1]]) {
+      test(`explorar cerca de mí ${look.suffix}`, async ({ page }) => {
+        await page.setViewportSize(look.viewport);
+        await open(page, '/explorar?cerca=1');
+        await expect(page.getByText('Primero lo más cercano a ti.')).toBeVisible();
+        await expect(page.getByRole('link', { name: /^Abarrotes Doña Mary/ })).toContainText('a 200 m');
+        await snap(page, `explorar-cerca-${look.suffix}`);
+      });
+    }
+
+    // The products of a search come from the nearest businesses first, each with how far its business is.
+    test('explorar cerca de mí productos teléfono', async ({ page }) => {
+      await page.setViewportSize(SIZES.phone);
+      await open(page, '/explorar?q=chilaquiles&cerca=1');
+      await expect(page.getByRole('link', { name: /^Chilaquiles verdes/ })).toContainText('a 400 m');
+      await snap(page, 'explorar-cerca-productos-telefono');
+    });
+  });
+
+  // A shared link with «Cerca de mí» never opens the browser's prompt by itself: it waits for a tap.
+  test('explorar cerca de mí desde un enlace en el teléfono', async ({ page, context }) => {
+    await context.clearPermissions();
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/explorar?cerca=1');
+    await expect(page.getByRole('button', { name: 'Usar mi ubicación' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Café La Esquina/ })).toBeVisible();
+    await snap(page, 'explorar-cerca-enlace-telefono');
+  });
+
+  // Tapped, the browser does not tell (Playwright refuses what was not allowed): the chip says what to do.
+  test('explorar cerca de mí sin permiso en el teléfono', async ({ page, context }) => {
+    await context.clearPermissions();
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/explorar?cerca=1');
+    await page.getByRole('button', { name: 'Usar mi ubicación' }).click();
+    await expect(page.getByText('Permite tu ubicación en el navegador para ver primero lo más cercano.')).toBeVisible();
+    await snap(page, 'explorar-cerca-sin-permiso-telefono');
   });
 });
 

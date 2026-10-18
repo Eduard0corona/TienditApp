@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
 import { categoryInfo, deliveryToPostalCode, orderStatus } from '../../utils/businessCategories';
 import { getBusinessTheme } from '../../utils/businessThemes';
+import { formatDistance } from '../../utils/geo';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 import './DirectoryBusinessCard.css';
 
@@ -18,7 +19,8 @@ interface DirectoryBusinessCardProps {
  * A business in Explorar: its cover across the top (its colors without one, Fase 24F), its logo (or its initial in its
  * colors), name, what it sells, its category and city, and whether it takes orders now. With the customer's postal code
  * (Fase 24B) it says whether it delivers there and what it costs, and a business that books appointments online says so
- * (Fase 24D). The whole card opens its menu; an action (the heart) sits over its corner, outside the link.
+ * (Fase 24D), and with the customer's position how far it is (Fase 24G). The whole card opens its menu; an action (the
+ * heart) sits over its corner, outside the link.
  */
 export default function DirectoryBusinessCard({ business, preview = false, action }: DirectoryBusinessCardProps) {
   const theme = getBusinessTheme(business.theme);
@@ -30,7 +32,11 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
   } as CSSProperties;
   const status = orderStatus(business);
   const delivery = deliveryToPostalCode(business);
-  const place = [categoryInfo(business.category)?.label, business.deliveryOnly ? 'Solo a domicilio' : business.city]
+  const place = [
+    categoryInfo(business.category)?.label,
+    business.deliveryOnly ? 'Solo a domicilio' : business.city,
+    business.distanceKm != null ? formatDistance(business.distanceKm) : null,
+  ]
     .filter(Boolean)
     .join(' · ');
 

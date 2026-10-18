@@ -12,6 +12,7 @@ using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Tenants;
@@ -99,6 +100,12 @@ public class PublicDirectoryBusinessDto
     /// <summary>From what order in products the delivery there is free, when it is.</summary>
     public decimal? FreeDeliveryFrom { get; set; }
 
+    /// <summary>
+    /// With the customer's position (Fase 24G): how far its main branch is in a straight line, in kilometers with one
+    /// decimal. Null without a position, or when its main branch is not on the map or only delivers.
+    /// </summary>
+    public decimal? DistanceKm { get; set; }
+
     internal PublicDirectoryBusinessDto Copy() => (PublicDirectoryBusinessDto)MemberwiseClone();
 }
 
@@ -114,17 +121,38 @@ public class PublicDirectoryBusinessDto
 /// The customer's postal code (Fase 24B): each card of the page says whether the business delivers there and what it
 /// costs, as its menu would. The order of the list does not change.
 /// </param>
+/// <param name="Latitude">
+/// The customer's position, with <paramref name="Longitude"/> (Fase 24G, «Cerca de mí»): the businesses open now come
+/// nearest first, then the closed ones nearest first, and each card says how far it is. Read to
+/// <see cref="NearDecimals"/> decimals, never kept or written to the log.
+/// </param>
 [AllowAnonymousRequest("Explorar: los negocios que publicaron su menú y aparecen en el directorio, solo con lo que su menú ya muestra.")]
 public record GetPublicDirectoryQuery(
     BusinessCategory? Category = null,
     string? Search = null,
     int PageNumber = 1,
     int PageSize = GetPublicDirectoryQuery.DefaultPageSize,
-    string? PostalCode = null) : IRequest<PublicDirectoryDto>
+    string? PostalCode = null,
+    decimal? Latitude = null,
+    decimal? Longitude = null) : IRequest<PublicDirectoryDto>
 {
     public const int DefaultPageSize = 24;
     public const int MaxPageSize = 48;
     public const int MaxSearchLength = 60;
+    /// <summary>The customer's position is read to three decimals, about 110 m: what the app sends, and all it needs.</summary>
+    public const int NearDecimals = 3;
+    public const string PositionMessage = "No pudimos leer tu ubicación. Vuelve a tocar «Cerca de mí».";
+
+    /// <summary>The customer's position as Explorar measures from it; null without one, or when it is not a point.</summary>
+    public GeoPoint? Near()
+    {
+        if (Latitude is not { } latitude || Longitude is not { } longitude)
+            return null;
+        // Read to three decimals before it is checked: 0.0001, 0.0002 is the 0, 0 it becomes.
+        var lat = Math.Round(latitude, NearDecimals, MidpointRounding.AwayFromZero);
+        var lng = Math.Round(longitude, NearDecimals, MidpointRounding.AwayFromZero);
+        return GeoPoint.Problem(lat, lng) is null ? new GeoPoint(lat, lng) : null;
+    }
 }
 
 public class GetPublicDirectoryQueryValidator : AbstractValidator<GetPublicDirectoryQuery>
@@ -141,6 +169,10 @@ public class GetPublicDirectoryQueryValidator : AbstractValidator<GetPublicDirec
             .Must(code => DeliveryZone.NormalizePostalCode(code) is not { } postalCode || DeliveryZone.IsPostalCode(postalCode))
             // Without what was written: a validation message reaches the log (ADR 0017 keeps postal codes out of it).
             .WithMessage(GetPublicDeliveryQuoteQueryValidator.PostalCodeMessage);
+        // Both halves of a point or neither, never echoed back: the customer's position stays out of the log too.
+        RuleFor(x => x.Latitude)
+            .Must((query, _) => (query.Latitude is null && query.Longitude is null) || query.Near() is not null)
+            .WithMessage(GetPublicDirectoryQuery.PositionMessage);
     }
 }
 
@@ -173,17 +205,21 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
 
         var words = PublicDirectorySnapshot.Comparable(request.Search)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var found = snapshot.Entries
+        var inCategory = snapshot.Entries
             .Where(entry => request.Category is null || entry.Business.Category == request.Category)
+            .ToList();
+        // «Cerca de mí» orders every business of the category, so the products of a search follow the same order.
+        var near = request.Near() is { } position ? PublicDirectoryNearby.Order(inCategory, position) : null;
+        var found = (near?.Entries ?? inCategory)
             .Where(entry => words.All(entry.SearchText.Contains))
             .ToList();
         var pageSize = Math.Clamp(request.PageSize, 1, GetPublicDirectoryQuery.MaxPageSize);
         var pageNumber = Math.Max(1, request.PageNumber);
         var page = found.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
         var postalCode = DeliveryZone.NormalizePostalCode(request.PostalCode);
-        var businesses = await PublicDirectoryCards.WithDeliveryToAsync(_context, page, postalCode, cancellationToken);
+        var businesses = await PublicDirectoryCards.WithDeliveryToAsync(_context, page, postalCode, cancellationToken, near?.DistanceKm);
         // The products of a search come with its first page; the index of the snapshot is read only when there is one.
-        var products = words.Length == 0 || pageNumber > 1 ? [] : await SearchProductsAsync(snapshot, words, request.Category, cancellationToken);
+        var products = words.Length == 0 || pageNumber > 1 ? [] : await SearchProductsAsync(snapshot, words, request.Category, near, cancellationToken);
 
         return new PublicDirectoryDto
         {
@@ -196,13 +232,13 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
 
     /// <summary>The products of a search; none when their index could not be built: the businesses still answer.</summary>
     private async Task<List<PublicDirectoryProductDto>> SearchProductsAsync(
-        PublicDirectorySnapshot snapshot, string[] words, BusinessCategory? category, CancellationToken cancellationToken)
+        PublicDirectorySnapshot snapshot, string[] words, BusinessCategory? category, PublicDirectoryNearby? near, CancellationToken cancellationToken)
     {
         try
         {
             var index = await _products.GetAsync(
                 snapshot, (current, ct) => PublicProductIndex.BuildAsync(_context, current, ct, _logger), cancellationToken);
-            return index?.Search(words, category) ?? [];
+            return index?.Search(words, category, near) ?? [];
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
@@ -217,19 +253,26 @@ internal static class PublicDirectoryCards
 {
     /// <summary>
     /// The cards of <paramref name="page"/>, each saying whether the business delivers to <paramref name="postalCode"/>
-    /// and what it costs: copies, because the snapshot is shared by every request. A business without delivery says
-    /// nothing about it; without a postal code, the cards of the snapshot as they are.
+    /// and what it costs, and how far it is (<paramref name="distanceKm"/>, Fase 24G): copies, because the snapshot is
+    /// shared by every request. A business without delivery says nothing about it; without a postal code or a position,
+    /// the cards of the snapshot as they are.
     /// </summary>
     public static async Task<List<PublicDirectoryBusinessDto>> WithDeliveryToAsync(
-        IApplicationDbContext context, IReadOnlyList<PublicDirectorySnapshot.Entry> page, string? postalCode, CancellationToken cancellationToken)
+        IApplicationDbContext context,
+        IReadOnlyList<PublicDirectorySnapshot.Entry> page,
+        string? postalCode,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<Guid, decimal>? distanceKm = null)
     {
-        if (postalCode is null)
+        if (postalCode is null && distanceKm is null)
             return page.Select(entry => entry.Business).ToList();
 
         // Only the businesses of the page that deliver ask; a page without one reads nothing.
-        var delivering = page.Where(entry => entry.Business.DeliveryAvailable).Select(entry => entry.TenantId).ToList();
+        var delivering = postalCode is null
+            ? []
+            : page.Where(entry => entry.Business.DeliveryAvailable).Select(entry => entry.TenantId).ToList();
         if (delivering.Count == 0)
-            return page.Select(entry => entry.Business).ToList();
+            return page.Select(entry => Measured(entry, distanceKm)).ToList();
 
         // A public request has no business: the active zones of those businesses that reach the postal code, in one read
         // (each zone with its own business, IX_DeliveryZonePostalCodes_PostalCode); a business has one at most.
@@ -245,7 +288,7 @@ internal static class PublicDirectoryCards
 
         return page.Select(entry =>
         {
-            var card = entry.Business.Copy();
+            var card = Measured(entry, distanceKm);
             if (!card.DeliveryAvailable)
                 return card;
             var zone = byBusiness.GetValueOrDefault(entry.TenantId);
@@ -255,6 +298,59 @@ internal static class PublicDirectoryCards
             card.FreeDeliveryFrom = zone?.FreeDeliveryFrom;
             return card;
         }).ToList();
+    }
+
+    /// <summary>A copy of the card with its distance, when there is one to tell; the card itself otherwise.</summary>
+    private static PublicDirectoryBusinessDto Measured(PublicDirectorySnapshot.Entry entry, IReadOnlyDictionary<Guid, decimal>? distanceKm)
+    {
+        var card = entry.Business.Copy();
+        card.DistanceKm = distanceKm is not null && distanceKm.TryGetValue(entry.TenantId, out var km) ? km : null;
+        return card;
+    }
+}
+
+/// <summary>
+/// «Cerca de mí» (Fase 24G, ADR 0029): the businesses of Explorar in the order of their distance to the customer, and how
+/// far each one is. Measured to the main branch, the one whose address its menu shows and where its online orders
+/// arrive, while customers come to it: a kitchen that only delivers is never measured (its address stays private).
+/// </summary>
+public sealed class PublicDirectoryNearby
+{
+    private PublicDirectoryNearby(IReadOnlyList<PublicDirectorySnapshot.Entry> entries, IReadOnlyDictionary<Guid, decimal> distanceKm)
+    {
+        Entries = entries;
+        DistanceKm = distanceKm;
+        Position = entries.Select((entry, index) => (entry.TenantId, index)).ToDictionary(item => item.TenantId, item => item.index);
+    }
+
+    /// <summary>
+    /// The businesses open now first (they take orders, book online or show their menu while open), nearest first; then
+    /// the closed ones, nearest first. In each group, those not on the map follow in the order of Explorar.
+    /// </summary>
+    internal IReadOnlyList<PublicDirectorySnapshot.Entry> Entries { get; }
+
+    /// <summary>How far each business on the map is, in kilometers with one decimal.</summary>
+    internal IReadOnlyDictionary<Guid, decimal> DistanceKm { get; }
+
+    /// <summary>Each business's place in <see cref="Entries"/>: the products of a search follow it.</summary>
+    internal IReadOnlyDictionary<Guid, int> Position { get; }
+
+    internal static PublicDirectoryNearby Order(IReadOnlyList<PublicDirectorySnapshot.Entry> entries, GeoPoint customer)
+    {
+        var measured = entries
+            .Select((entry, index) => (Entry: entry, Index: index, Km: entry.Location?.KilometersTo(customer)))
+            .ToList();
+        var ordered = measured
+            .OrderBy(item => item.Entry.Rank == PublicDirectorySnapshot.ClosedRank ? 1 : 0)
+            .ThenBy(item => item.Km is null ? 1 : 0)
+            .ThenBy(item => item.Km)
+            .ThenBy(item => item.Index)
+            .Select(item => item.Entry)
+            .ToList();
+        var distanceKm = measured
+            .Where(item => item.Km is not null)
+            .ToDictionary(item => item.Entry.TenantId, item => Math.Round((decimal)item.Km!.Value, 1, MidpointRounding.AwayFromZero));
+        return new PublicDirectoryNearby(ordered, distanceKm);
     }
 }
 
@@ -288,10 +384,16 @@ public sealed class PublicDirectorySnapshot
 
     internal IReadOnlyList<PublicDirectoryCategoryDto> Categories { get; }
 
+    /// <summary>The <see cref="Entry.Rank"/> of a business closed now that does not book online either.</summary>
+    internal const int ClosedRank = 2;
+
     /// <param name="TenantId">Its business, to look up its delivery to a postal code; never in the card.</param>
     /// <param name="SearchText">Its name, description and city as a search compares them.</param>
     /// <param name="Rank">0 while it takes orders, 1 open (its menu, or its orders paused), 2 closed.</param>
-    internal sealed record Entry(Guid TenantId, PublicDirectoryBusinessDto Business, string SearchText, int Rank);
+    /// <param name="Location">
+    /// Where its main branch is on the map while customers come to it (Fase 24G); never in the card, only how far it is.
+    /// </param>
+    internal sealed record Entry(Guid TenantId, PublicDirectoryBusinessDto Business, string SearchText, int Rank, GeoPoint? Location = null);
 
     /// <summary>
     /// Reads every business Explorar lists: a public request has no business, so these reads span all of them, each
@@ -332,7 +434,7 @@ public sealed class PublicDirectorySnapshot
                 t.Settings.PricesIncludeTax,
                 context.Branches
                     .Where(b => b.TenantId == t.Id && b.IsDefault)
-                    .Select(b => new MainBranch(b.Id, b.City, b.ServiceMode))
+                    .Select(b => new MainBranch(b.Id, b.City, b.ServiceMode, b.Latitude, b.Longitude))
                     .FirstOrDefault(),
                 // Online orders arrive at the main branch while a drawer is open there; a drawer from before branches, or
                 // any one without a main branch, counts (OrderCashService.HasOpenDrawerAtBranchAsync).
@@ -438,9 +540,11 @@ public sealed class PublicDirectorySnapshot
             PricesIncludeTax = row.PricesIncludeTax,
             BooksOnline = booksOnline
         };
-        var rank = acceptsOrders || booksOnline ? 0 : business.Closed ? 2 : 1;
+        var rank = acceptsOrders || booksOnline ? 0 : business.Closed ? ClosedRank : 1;
+        // Measured only while customers come to it: the point of a kitchen that only delivers stays with its team.
+        var location = deliveryOnly ? null : GeoPoint.FromStored(row.MainBranch?.Latitude, row.MainBranch?.Longitude);
         // Its city too, when the card shows it: never the one of a kitchen that only delivers.
-        return new Entry(row.Id, business, Comparable($"{row.Name} {row.Description} {business.City}"), rank);
+        return new Entry(row.Id, business, Comparable($"{row.Name} {row.Description} {business.City}"), rank, location);
     }
 
     /// <summary>Lowercase, without accents and with single spaces: «Taquería  EL Güero» and «taqueria el guero» match.</summary>
@@ -453,7 +557,7 @@ public sealed class PublicDirectorySnapshot
         return string.Join(' ', new string(letters.ToArray()).Split(' ', StringSplitOptions.RemoveEmptyEntries));
     }
 
-    private sealed record MainBranch(Guid Id, string? City, BranchServiceMode ServiceMode);
+    private sealed record MainBranch(Guid Id, string? City, BranchServiceMode ServiceMode, decimal? Latitude, decimal? Longitude);
 
     private sealed record Row(
         Guid Id,

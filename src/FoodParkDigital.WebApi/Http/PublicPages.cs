@@ -386,6 +386,15 @@ public static class PublicPages
             data["address"] = postal;
         }
 
+        // Where its owner put it on the map (Fase 24G): the point its menu's «Cómo llegar» opens.
+        if (store.Geo is { } geo)
+            data["geo"] = new Dictionary<string, object?>
+            {
+                ["@type"] = "GeoCoordinates",
+                ["latitude"] = geo.Latitude,
+                ["longitude"] = geo.Longitude
+            };
+
         if (store.OpeningHours.Count > 0)
             data["openingHoursSpecification"] = store.OpeningHours.Select(opening => new Dictionary<string, object?>
             {

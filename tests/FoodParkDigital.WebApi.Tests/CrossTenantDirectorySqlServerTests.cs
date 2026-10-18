@@ -1,7 +1,10 @@
+using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.EntityFrameworkCore;
+using static FoodParkDigital.WebApi.Tests.CrossTenantHttpSqlServerTests;
 using static FoodParkDigital.WebApi.Tests.CrossTenantManagementSqlServerTests;
 
 namespace FoodParkDigital.WebApi.Tests;
@@ -9,7 +12,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// <summary>
 /// Explorar (Fase 24A) through the API: a customer without a session sees each business as it decided, only with what
 /// its menu already shows, and only the owners of a business change how it shows (the header of another business
-/// changes nothing).
+/// changes nothing). «Cerca de mí» (Fase 24G) measures each business to the main branch its owner put on the map, only
+/// while customers come to it, and no other business moves it.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantDirectorySqlServerTests
@@ -78,4 +82,58 @@ public sealed class CrossTenantDirectorySqlServerTests
         Assert.Equal(2, (await _api.QueryAsync(hidden.TenantId, db => db.AuditLogs
             .Where(a => a.Action == UpdateDirectoryProfileCommandHandler.AuditAction).ToListAsync())).Count);
     }
+
+    [SqlServerFact]
+    public async Task NearMe_ShouldMeasureEachBusinessAtTheMainBranchItsOwnerPutOnTheMap_OnlyWhileCustomersComeToIt()
+    {
+        var shop = await _api.SignUpAsync("cerca-a", TwoBusinessesApi.FoodBusiness);
+        var kitchen = await _api.SignUpAsync("cerca-b", TwoBusinessesApi.FoodBusiness);
+        await ProductAsync(shop.Client, "Tacos de canasta");
+        await ProductAsync(kitchen.Client, "Pozole rojo");
+        await TwoBusinessesApi.IdAsync(shop.Client, "/api/v1/cash/open", new { openingAmount = 100m });
+        var slug = (await TwoBusinessesApi.ReadAsync(await shop.Client.PutAsJsonAsync(OnlineMenu, new { mode = 2 })))
+            .GetProperty("slug").GetString()!;
+        await TwoBusinessesApi.ReadAsync(await kitchen.Client.PutAsJsonAsync(OnlineMenu, new { mode = 2 }));
+
+        // The shop 300 m from the customer; the kitchen, which only delivers, 200 m.
+        var shopBranch = await MainBranchAsync(shop.Client);
+        var saved = await TwoBusinessesApi.ReadAsync(await shop.Client.PutAsJsonAsync($"/api/v1/branches/{shopBranch}",
+            new { id = shopBranch, name = "Centro", code = "CENTRO", location = new { latitude = 19.046277m, longitude = -98.198626m } }));
+        Assert.Equal((19.046277m, -98.198626m), (saved.GetProperty("latitude").GetDecimal(), saved.GetProperty("longitude").GetDecimal()));
+        var kitchenBranch = await MainBranchAsync(kitchen.Client);
+        await TwoBusinessesApi.ReadAsync(await kitchen.Client.PutAsJsonAsync($"/api/v1/branches/{kitchenBranch}",
+            new { id = kitchenBranch, name = "Cocina", code = "COCINA", serviceMode = 1, location = new { latitude = 19.045377m, longitude = -98.198626m } }));
+
+        // The other business cannot move the shop off its corner.
+        AssertRefused(await kitchen.Client.PutAsJsonAsync($"/api/v1/branches/{shopBranch}",
+            new { id = shopBranch, name = "Centro", code = "CENTRO", location = new { latitude = 20.5m, longitude = -100.4m } }));
+
+        _api.ForgetDirectorySnapshot();
+        using var customer = _api.AnonymousClient();
+        var response = await customer.GetAsync("/api/v1/public/directory?q=cerca&latitude=19.043577&longitude=-98.198626");
+        var raw = await response.Content.ReadAsStringAsync();
+        var near = await TwoBusinessesApi.ReadAsync(response);
+        var cards = near.GetProperty("businesses").GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(
+            [("Negocio CERCA-A", (decimal?)0.3m), ("Negocio CERCA-B", null)],
+            cards.Select(card => (card.GetProperty("name").GetString(), Distance(card))));
+        // No point travels in Explorar, only how far; the kitchen's stays with its team.
+        Assert.DoesNotContain("19.045377", raw);
+        Assert.DoesNotContain("19.046277", raw);
+        // The shop's menu opens its exact point.
+        var menu = await TwoBusinessesApi.ReadAsync(await customer.GetAsync($"/api/v1/public/menu/{slug}"));
+        Assert.Equal(19.046277m, menu.GetProperty("mapPoint").GetProperty("latitude").GetDecimal());
+
+        // Half a position is refused without being written back.
+        var half = await customer.GetAsync("/api/v1/public/directory?latitude=19.0436");
+        Assert.Equal(HttpStatusCode.BadRequest, half.StatusCode);
+        Assert.DoesNotContain("19.0436", await half.Content.ReadAsStringAsync());
+    }
+
+    private static async Task<Guid> MainBranchAsync(HttpClient owner)
+        => (await owner.GetFromJsonAsync<JsonElement>("/api/v1/branches"))
+            .EnumerateArray().Single(b => b.GetProperty("isDefault").GetBoolean()).GetProperty("id").GetGuid();
+
+    private static decimal? Distance(JsonElement card)
+        => card.GetProperty("distanceKm").ValueKind == JsonValueKind.Null ? null : card.GetProperty("distanceKm").GetDecimal();
 }

@@ -139,6 +139,11 @@ public class PublicMenuDto
     /// </summary>
     public string? Address { get; set; }
     /// <summary>
+    /// Where the main branch is on the map (Fase 24G), so «Cómo llegar» opens its exact point; null when its owner has not
+    /// put it there or it only delivers.
+    /// </summary>
+    public MapPointDto? MapPoint { get; set; }
+    /// <summary>
     /// The main branch only delivers: it has no premises to visit, and its address (<see cref="Address"/> stays null) is
     /// never published.
     /// </summary>
@@ -422,6 +427,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             OrdersPaused = ordersOn && !acceptsOrders,
             Theme = settings.Theme,
             Address = AddressText.ForCustomers(mainBranch),
+            MapPoint = MapPointDto.From(mainBranch?.PublicLocation),
             DeliveryOnly = mainBranch is { KeepsAddressPrivate: true },
             DeliveryAvailable = ordersOn && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken),
             OpeningHours = hours is null ? null : PublicOpeningHoursDto.From(hours, seatedOverride: acceptsOrders && closed),

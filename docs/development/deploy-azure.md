@@ -459,6 +459,23 @@ La Fase 24F trae una migración, [`database/production/20261018081803_AddFavorit
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla, y Explorar vuelve a buscar solo negocios, sin portada ni favoritos.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50021, sin cambiar nada, en cuanto una cuenta guardó un favorito: borrar la tabla los perdería. Sin favoritos, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## «Cerca de mí» (Fase 24G)
+
+La Fase 24G trae una migración, [`database/production/20261018114538_AddBranchLocation`](../../database/production/20261018114538_AddBranchLocation). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0029](../adr/0029-near-me.md)).
+
+- **La migración:** agrega a `Branches` las columnas `Latitude` y `Longitude` (`decimal(9,6)` con nulos) y la restricción `CK_Branches_Location` (las dos o ninguna, en rango y nunca 0, 0). Todas las sucursales quedan fuera del mapa hasta que su dueño las ponga. Después de aplicarla, el `verify.sql` muestra las columnas y la restricción, y su consulta 3 cuenta las sucursales en el mapa (ninguna hasta desplegar).
+- **Mientras se publica:** la versión de `master` (Fase 24F) no conoce las columnas, guarda las sucursales como siempre (quedan en NULL, que la restricción acepta) y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - `location` en el cuerpo de crear y editar una sucursal, y `latitude` y `longitude` en cada sucursal;
+  - `latitude` y `longitude` en `GET /api/v1/public/directory`, y `distanceKm` en cada negocio y producto de Explorar;
+  - `mapPoint` en el menú público.
+
+  Nada se quita ni cambia de nombre.
+- **Sin configuración ni servicios externos:** no hay mapa dentro de la app ni geocodificación; el dueño pega el punto de Google Maps o lo toma de su dispositivo.
+- **Registros HTTP de App Service:** si se encienden, guardan la URL completa, con la ubicación de quien usa «Cerca de mí» (a unos 110 m). Es preferible dejarlos apagados.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las columnas, y Explorar deja de ordenar por distancia.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50022, sin cambiar nada, en cuanto una sucursal está en el mapa: quitar las columnas olvidaría dónde está. Sin ninguna, quita la restricción y las columnas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

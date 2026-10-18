@@ -536,6 +536,36 @@ Productos y favoritos en Explorar (Fase 24F, [ADR 0028](../adr/0028-product-sear
   - la API simulada: `mocks/routes-p13.mjs` (favoritos) y los productos de `mocks/routes-p9.mjs`.
 - **Primera visita:** suma 41 B (de 178,060 a 178,101 B, dentro del presupuesto de 178,200 B): `keepPreviousData` de TanStack Query y la vuelta de `Login` con la búsqueda, que van en ella. Explorar, la tienda y sus piezas nuevas bajan con su ruta. Los pendientes de cada corazón van en el estado del hook y no en `useMutationState`, que sumaba 118 B a la primera visita.
 
+«Cerca de mí» (Fase 24G, [ADR 0029](../adr/0029-near-me.md)):
+
+- **`utils/geo`:**
+  - `parseCoordinates` lee lo que pega el dueño: las coordenadas que copia Google Maps («19.043577, -98.198626», con coma o espacio) o el enlace de un lugar con el punto dentro (`!3d…!4d…`, `?q=`, `?query=`, con su coma como `%2C` si la trae). Un texto vacío es `null`; lo demás es `'invalid'`: lo que no es un punto, un 0, 0, un enlace corto (`maps.app.goo.gl`) y el `@lat,lng` de un mapa, que es hacia dónde miraba y no el lugar;
+  - `coordinatesError` dice por qué: un enlace sin el punto («Ese enlace no trae el punto exacto…») o un texto que no entiende;
+  - `formatCoordinates` y `mapPointUrl` lo escriben y lo abren en Google Maps;
+  - `formatDistance` escribe los kilómetros que manda el servidor: «a menos de 100 m», «a 300 m», «a 1 km», «a 2.5 km», «a 12 km».
+- **`hooks/useNearMe(on, attempt)`:**
+  - pide la ubicación al navegador mientras `on`, una vez por intento, y la redondea a tres decimales (`NEAR_DECIMALS`). El intento 0 es la página tal como abrió (`?cerca=1` de un enlace o una recarga): pide solo si `navigator.permissions` dice que el navegador ya la permite; si no, queda en `ask` y espera un toque;
+  - devuelve `off`, `ask`, `locating`, `on`, `denied`, `unavailable` o `unsupported`;
+  - el estado solo cambia en las respuestas del navegador; lo demás se deriva (sin `setState` dentro del efecto, por `react-hooks` v7). Una respuesta de un intento anterior nunca reemplaza la de uno nuevo;
+  - la ubicación vive en memoria: ni en el dispositivo ni en la dirección.
+- **Explorar** (`pages/explore/ExplorePage`):
+  - el chip «Cerca de mí» (`NearMeChip`, un `.ex-chip` con `aria-pressed`) pone o quita `?cerca=1`. Un texto en `role="status"`, siempre en la página y vacío cuando no hay nada que decir, dice qué hace o qué hacer, con «Usar mi ubicación» (en `ask`) o «Intentar de nuevo»; al tocarlo, el foco espera en el chip;
+  - la búsqueda manda `latitude` y `longitude` solo cuando el navegador ya respondió: mientras tanto, Explorar sigue en su orden. Cuando llega la ubicación, la misma búsqueda se reordena sin volver al esqueleto (`placeholderData` solo entre búsquedas que difieren en la ubicación);
+  - escribir en el buscador conserva `cerca`, y los enlaces de las categorías conservan la búsqueda y `cerca`;
+  - solo encenderlo sube el intento: apagarlo no le pregunta nada al navegador.
+- **La distancia:** `DirectoryBusinessCard` la suma a su línea de categoría y ciudad, y `DirectoryProducts` a la del negocio.
+- **Sucursales** (`pages/branches/BranchesList`):
+  - `CoordinatesField` («Ubicación en el mapa (opcional)»), con «Usar mi ubicación» (alta precisión) y «Revisar en el mapa»;
+  - el campo se revisa al salir de él o al guardar, no mientras se escribe; al salir, un punto pegado de cualquier forma se escribe como lo copia Google Maps, y al guardar con un texto que no es un punto el foco vuelve al campo;
+  - «Usar mi ubicación» usa `aria-disabled` mientras el navegador responde (conserva el foco), anuncia lo que llenó en un `role="status"` oculto y descarta una respuesta que llega con el formulario cerrado u otro abierto;
+  - el punto se manda como `serviceMode`: solo si la sucursal es nueva o cambió aquí; vacío manda `{ latitude: null, longitude: null }`. Una lista leída antes nunca la quita del mapa;
+  - la lista marca «En el mapa».
+- **La tienda:** `utils/storeMenu.mapsUrl(dirección, mapPoint)` abre el punto exacto cuando el menú lo trae; si no, busca la dirección. Lo usan la información de la tienda (`StoreInfoModal`, que muestra «Cómo llegar» también sin calle) y el «Lo recoges en» del pedido.
+- **Escenas:**
+  - `scenes/explorar.spec.ts`: «Cerca de mí» con permiso (escritorio, teléfono y una búsqueda de productos) y, sin permiso, un enlace que espera el toque y el mismo después del toque, con `permissions` y `geolocation` de Playwright;
+  - la API simulada ordena por las distancias de `data.directoryDistances` (`mocks/routes-p9.mjs`), y la sucursal principal de la demo está en el mapa (`mocks/data.mjs`).
+- **Primera visita:** 178,116 B (+15 B): `utils/geo` es un trozo compartido por Explorar, Sucursales y la tienda, y la entrada lleva su nombre en el mapa de precarga; su código baja con esas rutas.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.

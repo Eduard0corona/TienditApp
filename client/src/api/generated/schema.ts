@@ -8073,6 +8073,8 @@ export interface paths {
                     category?: components["schemas"]["BusinessCategory"];
                     q?: string;
                     postalCode?: string;
+                    latitude?: number;
+                    longitude?: number;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -10531,10 +10533,20 @@ export interface components {
             isDefault: boolean;
             isActive: boolean;
             serviceMode: components["schemas"]["BranchServiceMode"];
+            /** Format: double */
+            latitude?: number | null;
+            /** Format: double */
+            longitude?: number | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt?: string | null;
+        };
+        BranchLocationFields: {
+            /** Format: double */
+            latitude?: number | null;
+            /** Format: double */
+            longitude?: number | null;
         };
         BranchSalesDto: {
             /** Format: uuid */
@@ -11106,6 +11118,7 @@ export interface components {
             contactName?: string | null;
             contactPhone?: string | null;
             serviceMode?: components["schemas"]["BranchServiceMode"];
+            location?: components["schemas"]["BranchLocationFields"];
             isDefault: boolean;
         };
         CreateBusinessCommand: {
@@ -12175,6 +12188,12 @@ export interface components {
             medium: string;
             small: string;
             thumbnail: string;
+        };
+        MapPointDto: {
+            /** Format: double */
+            latitude: number;
+            /** Format: double */
+            longitude: number;
         };
         /**
          * Format: int32
@@ -13345,6 +13364,8 @@ export interface components {
             minimumOrder?: number | null;
             /** Format: double */
             freeDeliveryFrom?: number | null;
+            /** Format: double */
+            distanceKm?: number | null;
         };
         PublicDirectoryBusinessDtoPaginatedList: {
             items: components["schemas"]["PublicDirectoryBusinessDto"][];
@@ -13382,6 +13403,8 @@ export interface components {
             theme: components["schemas"]["BusinessTheme"];
             acceptsOrders: boolean;
             addsTax: boolean;
+            /** Format: double */
+            distanceKm?: number | null;
         };
         PublicMenuCategoryDto: {
             /** Format: uuid */
@@ -13406,6 +13429,7 @@ export interface components {
             ordersPaused: boolean;
             theme: components["schemas"]["BusinessTheme"];
             address?: string | null;
+            mapPoint?: components["schemas"]["MapPointDto"];
             deliveryOnly: boolean;
             deliveryAvailable: boolean;
             openingHours?: components["schemas"]["PublicOpeningHoursDto"];
@@ -14347,6 +14371,7 @@ export interface components {
             contactName?: string | null;
             contactPhone?: string | null;
             serviceMode?: components["schemas"]["BranchServiceMode"];
+            location?: components["schemas"]["BranchLocationFields"];
             /** Format: uuid */
             id: string;
         };

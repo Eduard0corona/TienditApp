@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { branchesApi, type Branch } from '../../api/branchesApi';
 import { BranchServiceMode } from '../../types';
 import BranchesList from './BranchesList';
@@ -16,7 +16,7 @@ const confirm = vi.fn();
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm }) }));
 
 const MENU_HINT = /dirección de la sucursal principal se muestra en tu menú en línea/i;
-const PRIVATE_HINT = 'Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección. Solo la ve tu equipo.';
+const PRIVATE_HINT = 'Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección ni su ubicación. Solo las ve tu equipo.';
 
 function branch(overrides: Partial<Branch>): Branch {
   return {
@@ -44,6 +44,11 @@ describe('BranchesList', () => {
       branch({}),
       branch({ id: 'b2', name: 'Centro', code: 'CENTRO', isDefault: false, addressLine1: '5 de Mayo 10' }),
     ] as Awaited<ReturnType<typeof branchesApi.getAll>>);
+  });
+
+  afterEach(() => {
+    // jsdom has no geolocation: what a test put on the browser leaves with it.
+    Reflect.deleteProperty(navigator, 'geolocation');
   });
 
   it('says that the address of the main branch is the one customers see in the online menu', async () => {
@@ -117,6 +122,128 @@ describe('BranchesList', () => {
     const [, body] = vi.mocked(branchesApi.update).mock.calls[0];
     expect(body).toMatchObject({ id: 'b1', contactPhone: '222 123 4567' });
     expect(body.serviceMode).toBeUndefined();
+    expect(body.location).toBeUndefined();
+  });
+
+  it('puts a branch on the map with what Google Maps copies, opens it to check, and takes it off (Fase 24G)', async () => {
+    vi.mocked(branchesApi.getAll).mockResolvedValue([
+      branch({ latitude: 19.043577, longitude: -98.198626 }),
+      branch({ id: 'b2', name: 'Centro', code: 'CENTRO', isDefault: false }),
+    ] as Awaited<ReturnType<typeof branchesApi.getAll>>);
+    vi.mocked(branchesApi.update).mockResolvedValue(branch({}) as never);
+    renderBranches();
+
+    // In the list, the branch on the map says so.
+    const main = (await screen.findByText('Sucursal principal')).closest('tr') as HTMLElement;
+    expect(within(main).getByText('En el mapa')).toBeInTheDocument();
+    expect(within(screen.getByText('Centro').closest('tr') as HTMLElement).queryByText('En el mapa')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Centro' }));
+    let dialog = screen.getByRole('dialog', { name: 'Editar Centro' });
+    const field = within(dialog).getByLabelText('Ubicación en el mapa (opcional)');
+    // Checked when the owner leaves the field, not while typing.
+    fireEvent.change(field, { target: { value: 'por el parque' } });
+    expect(field).toHaveAttribute('aria-invalid', 'false');
+    fireEvent.blur(field);
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription(/^No entendemos esas coordenadas/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    expect(await within(dialog).findByText(/No entendemos esas coordenadas/, { selector: '.alert' })).toBeInTheDocument();
+    expect(field).toHaveFocus();
+    expect(branchesApi.update).not.toHaveBeenCalled();
+
+    // A short link says it has no point in it.
+    fireEvent.change(field, { target: { value: 'https://maps.app.goo.gl/AbCd123' } });
+    expect(field).toHaveAccessibleDescription(/^Ese enlace no trae el punto exacto/);
+
+    // A link of the place works: its point is in it, and leaving the field writes it as Google Maps copies it.
+    fireEvent.change(field, { target: { value: 'https://www.google.com/maps/place/Z%C3%B3calo/@19.04,-98.19,17z/data=!3m1!4b1!4m6!3m5!8m2!3d19.0435774!4d-98.1986262' } });
+    fireEvent.blur(field);
+    expect(field).toHaveValue('19.043577, -98.198626');
+    expect(within(dialog).getByRole('link', { name: 'Revisar en el mapa' }))
+      .toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=19.043577,-98.198626');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    await vi.waitFor(() => expect(branchesApi.update).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(branchesApi.update).mock.calls[0][1].location).toEqual({ latitude: 19.043577, longitude: -98.198626 });
+
+    // The main branch shows its point. Saved as it was, the point is left out: the server keeps the one it has.
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Sucursal principal' }));
+    dialog = screen.getByRole('dialog', { name: 'Editar Sucursal principal' });
+    expect(within(dialog).getByLabelText('Ubicación en el mapa (opcional)')).toHaveValue('19.043577, -98.198626');
+    fireEvent.blur(within(dialog).getByLabelText('Ubicación en el mapa (opcional)'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    await vi.waitFor(() => expect(branchesApi.update).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(branchesApi.update).mock.calls[1][1].location).toBeUndefined();
+
+    // Emptied, it leaves the map.
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Sucursal principal' }));
+    dialog = screen.getByRole('dialog', { name: 'Editar Sucursal principal' });
+    fireEvent.change(within(dialog).getByLabelText('Ubicación en el mapa (opcional)'), { target: { value: '' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    await vi.waitFor(() => expect(branchesApi.update).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(branchesApi.update).mock.calls[2][1].location).toEqual({ latitude: null, longitude: null });
+  });
+
+  it('creates a branch already on the map (Fase 24G)', async () => {
+    vi.mocked(branchesApi.create).mockResolvedValue(branch({ id: 'b3' }) as never);
+    renderBranches();
+
+    await screen.findByText('Sucursal principal');
+    fireEvent.click(screen.getByRole('button', { name: /Nueva sucursal/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Nueva sucursal' });
+    fireEvent.change(within(dialog).getByLabelText('Nombre'), { target: { value: 'Norte' } });
+    fireEvent.change(within(dialog).getByLabelText('Clave'), { target: { value: 'norte' } });
+    fireEvent.change(within(dialog).getByLabelText('Ubicación en el mapa (opcional)'), { target: { value: '19.0435774 -98.1986262' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Crear sucursal' }));
+
+    await vi.waitFor(() => expect(branchesApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'NORTE', location: { latitude: 19.043577, longitude: -98.198626 },
+    })));
+  });
+
+  it('fills the point with where the owner stands, and says what to do when the browser does not tell (Fase 24G)', async () => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) =>
+      success({ coords: { latitude: 19.04357749, longitude: -98.19862651 } } as GeolocationPosition));
+    Object.defineProperty(navigator, 'geolocation', { value: { getCurrentPosition }, configurable: true });
+    renderBranches();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Centro' }));
+    const dialog = screen.getByRole('dialog', { name: 'Editar Centro' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Usar mi ubicación' }));
+    expect(within(dialog).getByLabelText('Ubicación en el mapa (opcional)')).toHaveValue('19.043577, -98.198627');
+    // A screen reader hears what was filled in.
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Listo: 19.043577, -98.198627. Revísalo en el mapa.');
+
+    getCurrentPosition.mockImplementation(((_: PositionCallback, failure: PositionErrorCallback) =>
+      failure({ code: 1, PERMISSION_DENIED: 1 } as GeolocationPositionError)) as never);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Usar mi ubicación' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Permite tu ubicación en el navegador, o pega las coordenadas desde Google Maps.');
+    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('asks the browser once at a time, and drops an answer that arrives after the form changed (Fase 24G)', async () => {
+    let answer: PositionCallback | undefined;
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
+      answer = success;
+    });
+    Object.defineProperty(navigator, 'geolocation', { value: { getCurrentPosition }, configurable: true });
+    renderBranches();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Centro' }));
+    let dialog = screen.getByRole('dialog', { name: 'Editar Centro' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Usar mi ubicación' }));
+    const asking = within(dialog).getByRole('button', { name: 'Buscando…' });
+    expect(asking).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(asking);
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+
+    // The owner closes it and opens another branch before the browser answers: its answer is not for this one.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Sucursal principal' }));
+    dialog = await screen.findByRole('dialog', { name: 'Editar Sucursal principal' });
+    act(() => answer?.({ coords: { latitude: 19.0435774, longitude: -98.1986262 } } as GeolocationPosition));
+    expect(within(dialog).getByLabelText('Ubicación en el mapa (opcional)')).toHaveValue('');
+    expect(within(dialog).getByRole('button', { name: 'Usar mi ubicación' })).toHaveAttribute('aria-disabled', 'false');
   });
 
   it('starts a new branch serving like the main one, and sends it', async () => {

@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-18 con la Fase 24F y antes con la 24D-2, la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-18 con la Fase 24G y antes con la 24F, la 24D-2, la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -113,6 +113,14 @@ Actualizada el 2026-10-18 con la Fase 24F y antes con la 24D-2, la 24E, la 24D-1
   - **Pruebas en memoria con dos contextos:** EF guarda los modelos en una caché compartida con límite de tamaño. Llena, porque la suite compila miles de consultas, deja de guardarlos, y el segundo contexto de una prueba arma otro modelo que no coincide con las tablas en memoria del primero («belongs to the type X, but is being used with an instance of type X»).
     - Falló una vez en CI con `OrderInventoryRegressionTests.ConcurrentPieceCompletion_ShouldRetryAndCompleteTheOrder`. Ahora esa clase usa su propia caché sin límite (`UseMemoryCache`), y la falla se reproduce con un límite de 1.
     - Otra prueba que abra dos contextos sobre la misma base en memoria puede necesitar lo mismo.
+- «Cerca de mí» (Fase 24G, [ADR 0029](../adr/0029-near-me.md)):
+  - **La distancia** es en línea recta (haversine) a la sucursal principal, no por calles ni en tiempo; un negocio con varias sucursales con local no aparece cerca por las otras.
+  - **Sin radio:** con «Cerca de mí» sale toda la ciudad (y más), solo ordenada. Con muchos negocios hará falta un radio o leer por cercanía en la base, que hoy ordena en memoria la foto de Explorar.
+  - **Sin mapa dentro de la app:** el dueño pega el punto o lo toma de su dispositivo y lo revisa en Google Maps. Un mapa propio pediría un proveedor de mosaicos y su llave.
+  - **Sin ubicación del navegador no hay distancia:** no hay un catálogo de coordenadas por código postal con licencia clara.
+  - **La ubicación del cliente pasa en la URL:** la app no la registra y el rastreo oculta la consulta, pero un registro de accesos del servidor web la guardaría (a unos 110 m).
+  - **Siguen buscando la dirección como texto:** la tarjeta de una cita en Mis citas, la ruta de servicios a domicilio y la de los repartidores.
+  - **Las pruebas de migraciones** con un modelo anterior (`Before…`) suman `BeforeBranchLocation` a la cadena: una prueba que lee sucursales sobre una base anterior a la 24G necesita un contexto que no conozca las columnas.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

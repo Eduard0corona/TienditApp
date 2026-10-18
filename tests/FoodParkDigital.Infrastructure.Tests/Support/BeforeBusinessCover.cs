@@ -7,8 +7,9 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 /// <summary>
-/// The model without what Fase 24E added (the cover of the online menu): the app as deployed before it, and what a test
-/// needs to seed or read on a database migrated to an earlier migration, where the column does not exist yet.
+/// The model without what Fase 24E added (the cover of the online menu), nor what came after it: the app as deployed
+/// before it, and what a test needs to seed or read on a database migrated to an earlier migration, where the column
+/// does not exist yet.
 /// </summary>
 internal static class BeforeBusinessCover
 {
@@ -16,8 +17,11 @@ internal static class BeforeBusinessCover
         => database.CreateContext(tenantId, (options, tenant, mediator) => new Context(options, tenant, mediator));
 
     /// <summary>For the context of an earlier version, which does not know it either.</summary>
-    public static void Ignore(ModelBuilder modelBuilder) =>
+    public static void Ignore(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Tenant>().Ignore(t => t.CoverImageUrl);
+        BeforeBranchLocation.Ignore(modelBuilder);
+    }
 
     private sealed class Context(
         DbContextOptions<ApplicationDbContext> options,

@@ -281,3 +281,27 @@
   color: var(--ct-secondary-color);
   font-size: 0.85rem;
 }
+
+/* «Cerca de mí» (Fase 24G): the chip and what it is doing. */
+.ex-near {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  /* 10 px: with the chip, a row of whole pixels, so nothing under it lands between two. */
+  margin: 0.625rem 0 0;
+  font-size: 0.9rem;
+}
+
+.ex-near .ex-chip {
+  cursor: pointer;
+}
+
+.ex-near-status {
+  color: var(--ct-secondary-color);
+}
+
+/* Empty, out of the row but still in the page: what it says next is read aloud. */
+.ex-near-status:empty {
+  position: absolute;
+}

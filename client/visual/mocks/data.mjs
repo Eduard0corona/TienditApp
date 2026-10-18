@@ -208,10 +208,11 @@ export function buildData() {
     addressLine1: extra.address, addressLine2: extra.address2, city: 'Ciudad de México', state: 'Ciudad de México',
     country: 'México', postalCode: extra.postalCode, contactName: extra.contactName, contactPhone: extra.contactPhone,
     isDefault: !!extra.isDefault, isActive: extra.isActive ?? true, serviceMode: extra.serviceMode ?? 0,
+    latitude: extra.latitude ?? null, longitude: extra.longitude ?? null,
     createdAt: extra.createdAt ?? '2026-02-12T16:30:00.000Z',
   });
   const locations = [
-    loc('roma', 'Sucursal Roma Norte', 'ROMA', { description: 'Sucursal principal y cocina', address: 'Av. Álvaro Obregón 182, Local 3', address2: 'Col. Roma Norte', postalCode: '06700', contactName: 'Mariana Ortiz', contactPhone: '55 5264 1180', isDefault: true }),
+    loc('roma', 'Sucursal Roma Norte', 'ROMA', { description: 'Sucursal principal y cocina', address: 'Av. Álvaro Obregón 182, Local 3', address2: 'Col. Roma Norte', postalCode: '06700', contactName: 'Mariana Ortiz', contactPhone: '55 5264 1180', isDefault: true, latitude: 19.419444, longitude: -99.162222 }),
     loc('coyoacan', 'Sucursal Coyoacán', 'COY', { description: 'Barra de café y panadería', address: 'Calle Francisco Sosa 45', address2: 'Col. Villa Coyoacán', postalCode: '04000', contactName: 'Carlos Méndez', contactPhone: '55 5658 2290', createdAt: '2026-05-10T15:00:00.000Z' }),
     loc('bodega', 'Bodega Central', 'BOD', { description: 'Almacén de insumos secos y desechables', address: 'Calle Pedro Moreno 210', address2: 'Col. Guerrero', postalCode: '06300', contactName: 'Diego Herrera', contactPhone: '55 5526 7714', createdAt: '2026-03-01T15:00:00.000Z' }),
     loc('kiosko', 'Kiosko Parque México', 'KPM', { description: 'Temporada de verano (cerrado)', address: 'Av. México s/n, Parque México', address2: 'Col. Hipódromo', postalCode: '06100', contactName: 'Paola Jiménez', contactPhone: '55 1123 4498', isActive: false, createdAt: '2026-06-01T15:00:00.000Z' }),

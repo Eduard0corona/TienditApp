@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Reporting.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -11,7 +12,15 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
     public void Configure(EntityTypeBuilder<Branch> builder)
     {
         builder.ToTable("Branches", table =>
-            table.HasCheckConstraint("CK_Branches_ServiceMode", "[ServiceMode] IN (0, 1)"));
+        {
+            table.HasCheckConstraint("CK_Branches_ServiceMode", "[ServiceMode] IN (0, 1)");
+            // A point on the map has both halves, in range, and is never 0, 0 (GeoPoint): never one without the other.
+            table.HasCheckConstraint(
+                "CK_Branches_Location",
+                "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] IS NOT NULL AND [Longitude] IS NOT NULL"
+                + " AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180"
+                + " AND NOT ([Latitude] = 0 AND [Longitude] = 0))");
+        });
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.TenantId).IsRequired();
@@ -35,6 +44,12 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
             .HasDefaultValue(BranchServiceMode.Premises)
             .ValueGeneratedNever()
             .IsRequired();
+
+        // Six decimals, about 11 cm (GeoPoint.Decimals).
+        builder.Property(x => x.Latitude).HasPrecision(9, GeoPoint.Decimals);
+        builder.Property(x => x.Longitude).HasPrecision(9, GeoPoint.Decimals);
+        builder.Ignore(x => x.Location);
+        builder.Ignore(x => x.PublicLocation);
 
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.IsActive });

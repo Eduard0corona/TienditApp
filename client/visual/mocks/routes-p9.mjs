@@ -1,8 +1,9 @@
 // Phase 24A endpoints for the fake backend: Explorar, the directory of businesses (GET /public/directory, with the
-// customer's postal code since the 24B and the products a search finds since the 24F), and how the demo business shows
-// there (GET and PUT /auth/my-tenant/directory). The directory is `data.directory`, in the order the API answers it
-// (taking orders first, then open, then closed), and its products `data.directoryProducts`; a scene file changes them in
-// its `prepareData`.
+// customer's postal code since the 24B, the products a search finds since the 24F and «Cerca de mí» since the 24G), and
+// how the demo business shows there (GET and PUT /auth/my-tenant/directory). The directory is `data.directory`, in the
+// order the API answers it (taking orders first, then open, then closed), its products `data.directoryProducts` and how
+// far each business is from the customer of the scenes `data.directoryDistances`; a scene file changes them in its
+// `prepareData`.
 
 // BusinessCategory, BusinessTheme and DirectoryVisibility as the contract numbers them.
 const FOOD = 0;
@@ -62,6 +63,29 @@ export function demoDirectory() {
       description: 'Cortes, tintes y uñas.', closed: true, statusLabel: 'Cerrado', statusDetail: 'abre mañana a las 10:00',
     }),
   ];
+}
+
+/**
+ * How far each business is from the customer of the scenes (Fase 24G), in kilometers, by its slug. Cocina de Lupita only
+ * delivers and Estética Bella is not on the map: neither is measured.
+ */
+export function demoDistances() {
+  return {
+    'abarrotes-dona-mary': 0.2, 'cafe-la-esquina': 0.4, 'papeleria-la-pluma': 0.6, 'taqueria-el-guero': 1.8, 'ferreteria-don-beto': 3.6,
+  };
+}
+
+/**
+ * «Cerca de mí» as the API orders it: the businesses open now nearest first, those off the map after them; then the
+ * closed ones the same way. Each card says how far it is.
+ */
+function nearby(data, businesses) {
+  const closed = (business) => (business.closed && !business.acceptsOrders && !business.booksOnline ? 1 : 0);
+  return businesses
+    .map((business, index) => ({ business, index, km: data.directoryDistances[business.slug] ?? null }))
+    .sort((a, b) => closed(a.business) - closed(b.business) || (a.km === null) - (b.km === null) || (a.km ?? 0) - (b.km ?? 0)
+      || a.index - b.index)
+    .map(({ business, km }) => ({ ...business, distanceKm: km }));
 }
 
 /** A product a search finds (Fase 24F), by the slug of its business: what its menu shows. */
@@ -126,7 +150,7 @@ function searchProducts(data, businesses, words) {
       return {
         id: item.id, name: item.name, price: item.price, compareAtPrice: item.compareAtPrice, imageUrl: item.imageUrl,
         businessName: business.name, businessSlug: business.slug, theme: business.theme,
-        acceptsOrders: business.acceptsOrders, addsTax: false,
+        acceptsOrders: business.acceptsOrders, addsTax: false, distanceKm: business.distanceKm ?? null,
       };
     });
 }
@@ -135,6 +159,7 @@ export function phase24aRoutes(data, { ok, paginate }) {
   data.directory ??= demoDirectory();
   data.directoryProducts ??= demoDirectoryProducts();
   data.directoryZones ??= demoDeliveryZones();
+  data.directoryDistances ??= demoDistances();
   data.directoryProfile ??= {
     category: FOOD, suggestedCategory: FOOD, description: 'Café de especialidad, pan dulce y chilaquiles desde 2021.', listed: true,
   };
@@ -145,7 +170,9 @@ export function phase24aRoutes(data, { ok, paginate }) {
       const category = q.get('category');
       const words = comparable(q.get('q')).split(/\s+/).filter(Boolean);
       const inCategory = data.directory.filter((business) => category === null || String(business.category) === category);
-      const found = inCategory
+      // With the customer's position the whole category is ordered by distance, so its products follow the same order.
+      const ordered = q.get('latitude') !== null && q.get('longitude') !== null ? nearby(data, inCategory) : inCategory;
+      const found = ordered
         .filter((business) => words.every((word) => comparable(`${business.name} ${business.description ?? ''}`).includes(word)));
       const firstPage = (Number(q.get('pageNumber')) || 1) === 1;
       return ok({
@@ -154,7 +181,7 @@ export function phase24aRoutes(data, { ok, paginate }) {
           count: data.directory.filter((business) => business.category === value).length,
         })),
         businesses: paginate(withDeliveryTo(data, found, q.get('postalCode')), q, 24),
-        products: words.length > 0 && firstPage ? searchProducts(data, inCategory, words) : [],
+        products: words.length > 0 && firstPage ? searchProducts(data, ordered, words) : [],
         postalCode: q.get('postalCode') || null,
       });
     }],

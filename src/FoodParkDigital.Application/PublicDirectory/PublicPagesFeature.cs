@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.OnlineMenu;
@@ -39,6 +40,11 @@ public class StorePreviewDto
     public bool BooksOnline { get; set; }
     /// <summary>Where it sells, as its menu shows it; none for a kitchen that only delivers.</summary>
     public StoreAddressDto? Address { get; set; }
+    /// <summary>
+    /// The point of its main branch on the map (Fase 24G), the one its menu's «Cómo llegar» opens. None when that branch is
+    /// off the map or only delivers; it can come without <see cref="Address"/>, for a branch on the map with no street.
+    /// </summary>
+    public MapPointDto? Geo { get; set; }
     /// <summary>The phone its menu offers for WhatsApp; none without one.</summary>
     public string? ContactPhone { get; set; }
     /// <summary>Its weekly hours, as its menu shows them; empty without hours. Special days are left out.</summary>
@@ -131,6 +137,7 @@ public class GetStorePreviewQueryHandler : IRequestHandler<GetStorePreviewQuery,
                     PostalCode = Blank(mainBranch.PostalCode),
                     Country = Blank(mainBranch.Country)
                 },
+            Geo = MapPointDto.From(mainBranch?.PublicLocation),
             ContactPhone = Blank(tenant.ContactPhone),
             OpeningHours = (settings.OpeningHours?.Intervals ?? [])
                 .OrderBy(interval => ((int)interval.Day + 6) % 7)

@@ -9819,6 +9819,22 @@
             }
           },
           {
+            "name": "latitude",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "longitude",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
@@ -13304,6 +13320,16 @@
           "serviceMode": {
             "$ref": "#/components/schemas/BranchServiceMode"
           },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -13311,6 +13337,22 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BranchLocationFields": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           }
         },
@@ -15238,6 +15280,9 @@
           },
           "serviceMode": {
             "$ref": "#/components/schemas/BranchServiceMode"
+          },
+          "location": {
+            "$ref": "#/components/schemas/BranchLocationFields"
           },
           "isDefault": {
             "type": "boolean"
@@ -18875,6 +18920,24 @@
           },
           "thumbnail": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MapPointDto": {
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -22794,6 +22857,11 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "distanceKm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -22934,6 +23002,11 @@
           },
           "addsTax": {
             "type": "boolean"
+          },
+          "distanceKm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -23031,6 +23104,9 @@
           "address": {
             "type": "string",
             "nullable": true
+          },
+          "mapPoint": {
+            "$ref": "#/components/schemas/MapPointDto"
           },
           "deliveryOnly": {
             "type": "boolean"
@@ -26307,6 +26383,9 @@
           },
           "serviceMode": {
             "$ref": "#/components/schemas/BranchServiceMode"
+          },
+          "location": {
+            "$ref": "#/components/schemas/BranchLocationFields"
           },
           "id": {
             "type": "string",

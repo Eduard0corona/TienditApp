@@ -314,6 +314,23 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - **Privacidad:** ningún negocio sabe quién lo guardó.
 - **La portada en Explorar:** cada tarjeta lleva arriba la portada de su tienda (o sus colores), con el logo encima del borde. La vista previa de Configuración la muestra igual.
 
+## «Cerca de mí» (Fase 24G)
+
+[ADR 0029](../adr/0029-near-me.md):
+
+- **El punto de cada sucursal:**
+  - **Quién lo pone:** el dueño o un administrador, en Configuración › Sucursales. Pega las coordenadas que copia Google Maps (o el enlace de un lugar), o toca «Usar mi ubicación» estando en la sucursal. «Revisar en el mapa» abre lo escrito antes de guardar.
+  - **Qué se guarda:** latitud y longitud con seis decimales, las dos o ninguna; 0, 0 no se acepta, tampoco un punto que redondeado lo es. Un enlace corto o el de un mapa sin lugar no traen el punto, y el campo lo dice. Vaciar el campo quita la sucursal del mapa.
+  - **Qué ve el cliente:** solo el punto de la sucursal principal, y solo si recibe clientes. El de una sucursal solo a domicilio se queda con el equipo, como su dirección.
+- **«Cerca de mí» en Explorar:**
+  - **Cuándo:** el cliente toca el chip y su navegador le pregunta si comparte su ubicación. Si no la da, el chip dice qué hacer. Un enlace con «Cerca de mí» la pide solo si el navegador ya la permite; si no, espera a que el cliente toque «Usar mi ubicación».
+  - **El orden:** los abiertos ahora del más cercano al más lejano, luego los cerrados igual. En cada grupo, los que no están en el mapa van al final.
+  - **Qué dice cada tarjeta:** qué tan lejos está en línea recta («a 300 m», «a 1 km», «a 2.5 km», «a 12 km»), a unos 110 m.
+  - **Los productos de una búsqueda:** siguen el mismo orden y dicen la distancia de su negocio.
+  - **Lo que no cambia:** la categoría, la búsqueda, el código postal y las páginas.
+  - **Privacidad:** la ubicación del cliente no se guarda.
+- **«Cómo llegar»** abre el punto exacto de la sucursal principal cuando está en el mapa; si no, busca su dirección.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

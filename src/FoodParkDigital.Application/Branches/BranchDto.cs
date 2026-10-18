@@ -23,6 +23,9 @@ public class BranchDto
     public bool IsActive { get; set; }
     /// <summary>Whether customers come to it or it only delivers, keeping its address private.</summary>
     public BranchServiceMode ServiceMode { get; set; }
+    /// <summary>Where it is on the map (Fase 24G), with <see cref="Longitude"/>; both null until the owner sets it.</summary>
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 
@@ -43,6 +46,8 @@ public class BranchDto
         IsDefault = x.IsDefault,
         IsActive = x.IsActive,
         ServiceMode = x.ServiceMode,
+        Latitude = x.Latitude,
+        Longitude = x.Longitude,
         CreatedAt = x.CreatedAt,
         UpdatedAt = x.UpdatedAt
     };

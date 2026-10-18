@@ -587,6 +587,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDefault")
                         .HasColumnType("bit");
 
+                    b.Property<decimal?>("Latitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<decimal?>("Longitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("decimal(9,6)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -627,6 +635,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Branches", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Branches_Location", "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] IS NOT NULL AND [Longitude] IS NOT NULL AND [Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180 AND NOT ([Latitude] = 0 AND [Longitude] = 0))");
+
                             t.HasCheckConstraint("CK_Branches_ServiceMode", "[ServiceMode] IN (0, 1)");
                         });
                 });

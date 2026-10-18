@@ -622,6 +622,62 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Lo que encontraron las escenas:**
       - el corazón del visitante también nombra al negocio, así que ahora buscan la tarjeta por el inicio de su nombre;
       - una imagen perezosa detrás de «Ver todos» no carga, así que `settle` ya no espera las imágenes que no se dibujan.
+- Fase 24G, «Cerca de mí» ([ADR 0029](../adr/0029-near-me.md)):
+  - **Domain:** `BranchLocationTests` (13):
+    - `GeoPoint` guarda seis decimales, latitud primero; rechaza un punto fuera de rango y el 0, 0, también el que sale de redondear (0.0000001, 0.0000002), y acepta el que el redondeo deja en rango (90.0000004);
+    - `GeoPoint.FromStored` deja fuera del mapa una fila sin punto, a medias, en 0, 0 o fuera de rango;
+    - la distancia en línea recta (haversine), igual en los dos sentidos;
+    - una sucursal entra y sale del mapa, y una solo a domicilio no lo muestra (`PublicLocation`) hasta que abre su local.
+  - **Application:**
+    - `ExploreNearbyTests` (11):
+      - con la posición, primero los abiertos del más cercano al más lejano, luego los que no están en el mapa y al final los cerrados, cada uno con su distancia; una cocina solo a domicilio nunca se mide;
+      - las tarjetas son copias: la foto que comparten las peticiones (una sola caché en la prueba) no guarda distancias;
+      - los productos de una búsqueda siguen el mismo orden, con la distancia de su negocio;
+      - la posición se lee a tres decimales (dos posiciones a 44 m miden lo mismo);
+      - la página 2 sigue ese orden;
+      - una sucursal con un punto que no lo es (0, 0 guardado antes de la restricción) queda fuera del mapa y Explorar, el menú y sus datos estructurados siguen respondiendo;
+      - la posición a medias, fuera de rango o en 0, 0 al redondearla es `PositionMessage`, sin números;
+      - el menú y sus datos estructurados llevan el punto exacto solo de una sucursal con local.
+    - `BranchesTests` (+2, 6 casos de la regla): crear y cambiar el punto, conservarlo cuando el guardado no lo trae y quitarlo con las dos mitades vacías; la mitad, fuera de rango, 0, 0 y el punto diminuto que redondea a 0, 0 se rechazan con su mensaje.
+  - **SQL Server:**
+    - `BranchLocationMigrationSqlServerTests` (3):
+      - las sucursales que existen quedan fuera del mapa y la versión desplegada las sigue guardando sin tocar el punto;
+      - `CK_Branches_Location` (547) rechaza la mitad de un punto, una latitud o longitud fuera de rango y el 0, 0, y acepta el ecuador solo (0, -78.45);
+      - revertir se detiene con 50022 sin cambiar nada mientras haya una sucursal en el mapa y, sin ellas, quita solo las columnas y la restricción.
+    - `BranchServiceModeMigrationSqlServerTests` lee las sucursales con el modelo anterior a las visitas a domicilio (`BeforeHomeVisits`), porque el actual ya trae las columnas del punto.
+  - **WebApi:**
+    - `CrossTenantDirectorySqlServerTests.NearMe_ShouldMeasureEachBusinessAtTheMainBranchItsOwnerPutOnTheMap_OnlyWhileCustomersComeToIt` (1), sobre la API real:
+      - cada dueño pone su sucursal principal en el mapa, y el otro negocio no puede mover la suya;
+      - Explorar mide al local (0.3 km) y no a la cocina solo a domicilio, y su respuesta no lleva ningún punto, solo la distancia;
+      - el menú del local abre su punto exacto;
+      - media posición es un 400 que no la repite.
+    - `PublicPagesTests`: los datos estructurados llevan `geo` (`GeoCoordinates`).
+  - **Ensayo de los scripts:** sobre una copia de la base de la 24F, `apply.sql` dos veces (la segunda con la caché de planes vacía), la versión desplegada guarda una sucursal sin punto, la restricción rechaza la mitad, fuera de rango y 0, 0 y acepta el ecuador solo, `rollback.sql` se detiene con 50022 con una sucursal en el mapa y, sin ella, corre dos veces, y `apply.sql` otra vez.
+  - **Cliente:**
+    - `geo.test.ts` (6): las coordenadas como las copia Google Maps, el enlace de un lugar (`!3d…!4d…`, `?q=`, `?query=` con `%2C`), nunca el `@` de un mapa ni un enlace corto, el 0, 0, el mensaje de cada caso y las distancias («a menos de 100 m», «a 300 m», «a 1 km», «a 2.5 km», «a 12 km»).
+    - `ExplorePage.test.tsx` (19, +3):
+      - «Cerca de mí» manda la posición a unos 110 m, ordena las tarjetas y los productos con su distancia, queda en la dirección y en los enlaces de las categorías, sigue al escribir, y al apagarlo vuelve el orden de Explorar sin distancias ni otra pregunta al navegador;
+      - abierto desde un enlace espera un toque («Usar mi ubicación»), dice qué hacer si el navegador no la da y con «Intentar de nuevo» la pide otra vez con el foco en el chip;
+      - abierto con el permiso ya dado, la pide sola.
+    - `BranchesList.test.tsx` (11, +4):
+      - el campo se revisa al salir de él, dice por qué no es un punto (un enlace corto), escribe el enlace de un lugar como lo copia Google Maps, devuelve el foco al guardar mal, no manda un punto sin cambios y vacío lo quita;
+      - crear una sucursal ya en el mapa;
+      - «Usar mi ubicación» llena el punto y lo anuncia, o dice qué hacer;
+      - pide una vez a la vez (`aria-disabled`) y descarta la respuesta que llega con otro formulario abierto.
+    - `PublicMenuPage.test.tsx` (+1): «Cómo llegar» abre el punto exacto cuando el menú lo trae.
+  - **Primera visita:** 178,116 B de 178,200 B (+15 B): `utils/geo` ahora es un trozo compartido por Explorar, Sucursales y la tienda, y la entrada lleva su nombre en el mapa de precarga. Su código baja con esas rutas.
+  - **Escenas visuales** (contra `master` en `f1ee170`):
+    - **Nuevas (5):**
+      - «Cerca de mí» con permiso en escritorio y teléfono, y una búsqueda de productos en el teléfono;
+      - un enlace con «Cerca de mí» sin permiso, que espera el toque («Usar mi ubicación»), y el mismo después del toque, cuando el navegador no la da.
+
+      Los datos simulados son las distancias de `data.directoryDistances` (`mocks/routes-p9.mjs`) y la sucursal principal de la demo en el mapa (`mocks/data.mjs`). Estas escenas no salen de la línea base de `master` hasta que la fase entre a `master`.
+    - **Cambian a propósito (23):**
+      - Explorar (13): la fila del chip «Cerca de mí» baja la página 54 px, en cada vista, categoría, búsqueda, favoritos y cliente. En «muchos favoritos» solo cambia la orilla de abajo de la región (212 px), que cae en otra fila de píxeles.
+      - Explorar con tu código postal (2), por la misma fila.
+      - Sucursales (8): la insignia «En el mapa» en la lista y «Ubicación en el mapa (opcional)» con «Usar mi ubicación» y «Revisar en el mapa» en el formulario.
+    - **Resultado:** la comparación contra `master` dio 462 escenas iguales, 5 nuevas y 23 que cambian. Con esas capturas, los tres archivos tocados (125 escenas) pasaron dos corridas seguidas contra el mismo build.
+    - **Lo que encontraron las escenas:** con una altura de fila fraccionaria, el chip dejaba una diferencia de suavizado en escenas de abajo (la agenda de citas): su margen ahora es de 0.625rem (10 px exactos).
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
@@ -629,7 +685,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 
 `ClientDeliveryTests` (Fase 20) arranca la API real sin base sobre una carpeta como la que deja el publish (`UseWebRoot`, sin el manifiesto de static web assets para que Development no le sume `client/dist`): la copia Brotli o gzip según `Accept-Encoding` (con `q=0` y `*`), HEAD igual que GET, `immutable` en `/assets` solo para lo que se envía (un 412 o 416 sin caché ni codificación), `no-cache` en `/`, en las rutas de la app y en `/index.html`, 404 para un archivo viejo o cualquier copia pedida por su nombre (también `/index.html.gz`), el contrato de la API sin comprimir y las subidas con sus encabezados. `PrivateUploadsGuardMiddlewareTests` bloquea también `/uploads//orders`, `//uploads/orders` y las barras invertidas. En el cliente, `useNewVersion.test.tsx` prueba cada momento en que se pregunta por una versión nueva (pestaña visible, foco, conexión, cada 10 minutos, nunca con la pestaña oculta ni justo al cargar) y `NewVersionNotice.test.tsx`, que sin conexión no ofrece recargar; `BranchesList.test.tsx`, el aviso de que el menú muestra la dirección de la sucursal principal.
 
-Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 485 pruebas, contando el muestrario, en estos grupos: Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, Reportes › Liquidaciones (desde la 22G), la Agenda a domicilio (desde la 22E), Explorar (desde la 24A), Cuenta y comprar con la cuenta (desde la 24B), el seguimiento del pedido (desde la 24C), las citas en línea (desde la 24D), la tienda del menú en línea (desde la 24E), las pantallas públicas y de cuenta con el marco, el marco en cada tamaño y el anillo de foco. Salen iguales en cada corrida: sin transiciones, animaciones CSS ni desplazamiento suave, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).
+Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 490 pruebas, contando el muestrario, en estos grupos: Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, Reportes › Liquidaciones (desde la 22G), la Agenda a domicilio (desde la 22E), Explorar (desde la 24A), Cuenta y comprar con la cuenta (desde la 24B), el seguimiento del pedido (desde la 24C), las citas en línea (desde la 24D), la tienda del menú en línea (desde la 24E), «Cerca de mí» (desde la 24G), las pantallas públicas y de cuenta con el marco, el marco en cada tamaño y el anillo de foco. Salen iguales en cada corrida: sin transiciones, animaciones CSS ni desplazamiento suave, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).
 
 El pipeline HTTP completo solo se prueba en la suite de aislamiento entre negocios (Fases 8 a 15, con hubs, webhook y el acceso de soporte), en las rondas de una cuenta con existencias (Fase 14) y sus platillos cancelados (Fase 15), en el controller de sondeo de `RequestCancellationTests` y en la entrega del cliente (`ClientDeliveryTests`, Fase 20); la integración con SQL Server real cubre folios, proyecciones, ventas, sesiones y aislamiento. El workflow `CI` compila y ejecuta las pruebas, valida migraciones pendientes, aplica las migraciones en SQL Server 2022 con el script y el `sqlcmd` de producción (job `Migrations`, ver [migraciones](database-migrations.md)) y corre lint, pruebas, build y `npm audit` del cliente en cada PR; el despliegue repite build, pruebas y lint antes de publicar. Producción y pruebas apuntan a .NET 10.
 

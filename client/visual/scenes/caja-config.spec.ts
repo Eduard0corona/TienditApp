@@ -561,7 +561,7 @@ test.describe('Sucursales', () => {
     await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
     const editing = await dialog(page, 'Editar Sucursal Roma Norte');
     await editing.getByRole('radio', { name: 'Solo a domicilio, sin local' }).check();
-    await expect(editing.getByText('Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección.')).toBeVisible();
+    await expect(editing.getByText('Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección ni su ubicación.')).toBeVisible();
     await snapDialog(page, 'sucursales-principal-solo-a-domicilio-dialogo');
   });
 

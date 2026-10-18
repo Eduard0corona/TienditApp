@@ -33,7 +33,7 @@ public class BranchServiceModeMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var tenant = await SeedAsync(database);
         Guid kitchenId;
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeHomeVisits.CreateContext(database, tenant.Id))
         {
             var kitchen = new Branch(tenant.Id, "Cocina", "COCINA", new BranchContact(AddressLine1: "Privada Los Pinos 8"),
                 serviceMode: BranchServiceMode.DeliveryOnly);
@@ -52,7 +52,7 @@ public class BranchServiceModeMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeHomeVisits.CreateContext(database, tenant.Id);
         var branches = await check.Branches.OrderBy(b => b.Code).ToListAsync();
         Assert.Equal(
             [("CENTRO", BranchServiceMode.Premises), ("COCINA", BranchServiceMode.DeliveryOnly)],
@@ -82,7 +82,7 @@ public class BranchServiceModeMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedAsync(database);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeHomeVisits.CreateContext(database, tenant.Id))
         {
             context.Branches.Add(Branch.CreateDefault(tenant.Id, BranchServiceMode.DeliveryOnly));
             await context.SaveChangesAsync();
@@ -91,7 +91,7 @@ public class BranchServiceModeMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeServiceMode));
         Assert.Equal(50011, error.Number);
         Assert.Contains("branches that only deliver", error.Message);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeHomeVisits.CreateContext(database, tenant.Id))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(BranchServiceMode.DeliveryOnly, (await context.Branches.SingleAsync()).ServiceMode);
@@ -120,7 +120,7 @@ public class BranchServiceModeMigrationSqlServerTests
 
         // Forward again (to this migration; later ones apply on top): every branch has premises.
         await MigrateAsync(database, Migration);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeHomeVisits.CreateContext(database, tenant.Id))
         {
             Assert.Equal(BranchServiceMode.Premises, (await context.Branches.SingleAsync()).ServiceMode);
             Assert.Equal(Migration, await LatestMigrationAsync(context));

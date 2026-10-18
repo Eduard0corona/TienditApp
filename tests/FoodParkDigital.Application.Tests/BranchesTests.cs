@@ -9,6 +9,7 @@ using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -103,6 +104,60 @@ public class BranchesTests
 
         Assert.Equal(Branch.ServiceModeMessage, Assert.Single(create.Errors).ErrorMessage);
         Assert.Equal(Branch.ServiceModeMessage, Assert.Single(update.Errors).ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Branch_ShouldBePutOnTheMap_KeepItsPoint_WhenASaveDoesNotSayWhere_AndBeTakenOffWithNeitherHalf()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        await SeedTenantAsync(host, TenantCapability.Food);
+
+        var centro = await CreateAsync(host, new CreateBranchCommand
+        {
+            Name = "Centro", Code = "CEN", Location = new BranchLocationFields { Latitude = 19.0435774m, Longitude = -98.1986262m }
+        });
+        var norte = await CreateAsync(host, new CreateBranchCommand { Name = "Norte", Code = "NTE" });
+        Assert.True(centro.IsSuccess, centro.Error);
+        // Six decimals, as Google Maps copies them; a branch saved without a point is not on the map.
+        Assert.Equal((19.043577m, -98.198626m), (centro.Value.Latitude, centro.Value.Longitude));
+        Assert.Equal((null, null), (norte.Value.Latitude, norte.Value.Longitude));
+
+        // A screen that does not know the field (an old tab) never takes the branch off the map.
+        var renamed = await UpdateAsync(host, new UpdateBranchCommand { Id = centro.Value.Id, Name = "Centro histórico", Code = "CEN" });
+        Assert.Equal(("Centro histórico", 19.043577m), (renamed.Value.Name, renamed.Value.Latitude));
+
+        var moved = await UpdateAsync(host, new UpdateBranchCommand
+        {
+            Id = centro.Value.Id, Name = "Centro histórico", Code = "CEN", Location = new BranchLocationFields { Latitude = 19.05m, Longitude = -98.2m }
+        });
+        Assert.Equal((19.05m, -98.2m), (moved.Value.Latitude, moved.Value.Longitude));
+
+        var off = await UpdateAsync(host, new UpdateBranchCommand
+        {
+            Id = centro.Value.Id, Name = "Centro histórico", Code = "CEN", Location = new BranchLocationFields()
+        });
+        Assert.True(off.IsSuccess, off.Error);
+        Assert.Null((await host.QueryAsync(db => db.Branches.SingleAsync(b => b.Code == "CEN"))).Location);
+    }
+
+    [Theory]
+    [InlineData(19.04, null, BranchFieldRules.HalfAPointMessage)]
+    [InlineData(null, -98.19, BranchFieldRules.HalfAPointMessage)]
+    [InlineData(91.0, -98.19, GeoPoint.InvalidMessage)]
+    [InlineData(19.04, -180.5, GeoPoint.InvalidMessage)]
+    [InlineData(0.0, 0.0, GeoPoint.NullIslandMessage)]
+    // Kept to six decimals it is 0, 0: what is checked is what would be kept.
+    [InlineData(0.0000001, 0.0000002, GeoPoint.NullIslandMessage)]
+    public void BranchCommands_ShouldRefuse_HalfAPoint_APointOffTheMap_OrZeroZero(double? latitude, double? longitude, string message)
+    {
+        var location = new BranchLocationFields { Latitude = (decimal?)latitude, Longitude = (decimal?)longitude };
+
+        var create = new CreateBranchCommandValidator().Validate(new CreateBranchCommand { Name = "Centro", Code = "CEN", Location = location });
+        var update = new UpdateBranchCommandValidator().Validate(
+            new UpdateBranchCommand { Id = Guid.NewGuid(), Name = "Centro", Code = "CEN", Location = location });
+
+        Assert.Equal(message, Assert.Single(create.Errors).ErrorMessage);
+        Assert.Equal(message, Assert.Single(update.Errors).ErrorMessage);
     }
 
     [Fact]
