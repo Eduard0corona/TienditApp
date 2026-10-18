@@ -280,6 +280,19 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **La portada:** la sube o la quita el dueño o un administrador en Configuración › «Portada del menú». Acepta JPG, PNG, WebP o GIF (solo su primer cuadro) de hasta 5 MB y se ve mejor horizontal, unas tres veces más ancha que alta. Es pública, como el logo.
 - **Lo que no muestra:** calificaciones, tiempos de entrega ni costos de servicio, que el negocio no tiene.
 
+## Buscadores y vistas previas (Fase 24D-2)
+
+[ADR 0027](../adr/0027-search-engines-and-link-previews.md):
+
+- **El enlace de una tienda** (`/m/{slug}`), compartido por WhatsApp o en su QR, se ve con su nombre, su línea (o una frase sobre su menú) y su ciudad, y su portada o su logo. Su página de citas se ve con «Agenda tu cita en {Negocio}».
+- **En los buscadores** aparecen solo las tiendas que aparecen en Explorar (el dueño las muestra ahí y su menú tiene algo que pedir o agendan en línea), y su página de citas mientras agenda en línea. Una tienda fuera de Explorar conserva la vista previa de su enlace, pero no aparece en los buscadores.
+- **Lo que leen los buscadores es lo que el menú ya muestra:**
+  - el nombre, la categoría y la línea;
+  - la dirección de la sucursal principal (nunca la de una cocina sin local);
+  - el teléfono de WhatsApp;
+  - el horario de la semana.
+- **El resto de la app** (Vender, Caja, Configuración, la cuenta del cliente, el seguimiento) no aparece en los buscadores.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

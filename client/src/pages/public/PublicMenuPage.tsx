@@ -14,6 +14,7 @@ import StoreInfoModal from '../../components/store/StoreInfoModal';
 import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useActiveSection } from '../../hooks/useActiveSection';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { formatMoney } from '../../utils/money';
 import { describeDay, describeOpeningStatus, describeTodayHours } from '../../utils/openingHours';
@@ -42,7 +43,7 @@ import {
   type CartLine,
 } from '../../utils/savedCart';
 import { bookingPath } from '../../utils/onlineBooking';
-import { featuredProducts, mapsUrl, optionGroupsOf, searchMenu } from '../../utils/storeMenu';
+import { featuredProducts, mapsUrl, optionGroupsOf, searchMenu, storePageTitle } from '../../utils/storeMenu';
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
 import { newUuid } from '../../utils/uuid';
@@ -105,6 +106,8 @@ export default function PublicMenuPage() {
     staleTime: 60_000,
   });
   const data = menu.data;
+  // The title the server wrote for search engines (PublicPages.cs), also after arriving from Explorar.
+  useDocumentTitle(data ? storePageTitle(data) : null);
   const menuTheme = data?.theme;
   useEffect(() => {
     // The customer sees the menu in the colors its business picked, whoever is signed in on this browser.

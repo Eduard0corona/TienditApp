@@ -105,7 +105,7 @@ public sealed class ClientDeliveryTests : IClassFixture<ClientDeliveryTests.Buil
 
     [Theory]
     [InlineData("/")]
-    [InlineData("/m/dolce-piccante")]
+    [InlineData("/explorar")]
     [InlineData("/orders/new")]
     [InlineData("/index.html")]
     public async Task ThePageOfTheApp_ShouldBeCheckedAgainOnEveryVisit(string path)

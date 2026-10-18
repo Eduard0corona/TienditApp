@@ -762,6 +762,8 @@ describe('PublicMenuPage', () => {
       const { container, unmount } = renderPage();
 
       expect(await screen.findByText('Comida · Café de especialidad y pan dulce')).toBeInTheDocument();
+      // The title the server writes for search engines (Fase 24D-2).
+      expect(document.title).toBe('Café Luna: pide en línea · TienditApp');
       const cover = container.querySelector('.pm-cover-photo');
       expect(cover).toHaveAttribute('src', 'https://cdn/portada_lg.webp');
       expect(cover).toHaveAttribute('srcset', 'https://cdn/portada_lg.webp 1024w, https://cdn/portada_original.webp 2048w');

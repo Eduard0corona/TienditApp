@@ -48,4 +48,11 @@ describe('HomeRedirect', () => {
     start('TenantAdmin', { id: 't1', onboardingCompletedAt: null });
     expect(screen.getByText('Arranque')).toBeInTheDocument();
   });
+
+  it('takes the team to its job with the title of the app, not the one the server wrote for Explorar', () => {
+    document.title = 'Explorar · TienditApp';
+    start('TenantAdmin', { id: 't1', onboardingCompletedAt: null });
+    expect(screen.getByText('Arranque')).toBeInTheDocument();
+    expect(document.title).toBe('TienditApp');
+  });
 });

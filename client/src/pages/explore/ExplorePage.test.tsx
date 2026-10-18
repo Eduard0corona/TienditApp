@@ -169,6 +169,8 @@ describe('ExplorePage', () => {
     expect(chips.getAllByRole('link').map((link) => link.textContent)).toEqual(['Todos', 'Comida2', 'Ferretería y hogar1']);
     expect(chips.getByRole('link', { name: /Comida/ })).toHaveAttribute('aria-current', 'page');
     expect(api.getDirectory).toHaveBeenCalledWith(expect.objectContaining({ category: BusinessCategory.Food }), expect.anything());
+    // The title the server writes for the page (PublicPages.StaticHeadFor).
+    expect(document.title).toBe('Comida · Explorar · TienditApp');
   });
 
   it('searches as the customer types and keeps the search in the address', async () => {

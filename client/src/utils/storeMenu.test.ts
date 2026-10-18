@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { comparableText, discountPercent, featuredProducts, MAX_FEATURED, searchMenu } from './storeMenu';
+import { comparableText, discountPercent, featuredProducts, MAX_FEATURED, searchMenu, storePageTitle } from './storeMenu';
 
 const categories = [
   {
@@ -44,5 +44,15 @@ describe('storeMenu', () => {
     expect(discountPercent(80, 75)).toBeNull();
     expect(discountPercent(99.6, 100)).toBeNull();
     expect(discountPercent(55, null)).toBeNull();
+  });
+
+  it('titles a store by what the customer comes to do, as the server does for search engines', () => {
+    const store = { businessName: 'Café Luna', acceptsOrders: false, ordersPaused: false, booksOnline: false };
+
+    expect(storePageTitle({ ...store, acceptsOrders: true })).toBe('Café Luna: pide en línea · TienditApp');
+    // Closed now, it still takes orders: the same page.
+    expect(storePageTitle({ ...store, ordersPaused: true, booksOnline: true })).toBe('Café Luna: pide en línea · TienditApp');
+    expect(storePageTitle({ ...store, booksOnline: true })).toBe('Café Luna: agenda tu cita · TienditApp');
+    expect(storePageTitle(store)).toBe('Café Luna: menú en línea · TienditApp');
   });
 });

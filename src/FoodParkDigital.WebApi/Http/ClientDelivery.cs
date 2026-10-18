@@ -11,7 +11,8 @@ namespace FoodParkDigital.WebApi.Http;
 /// compresses (static web assets compression, kept on in the csproj): scripts and styles, and also index.html and
 /// the images. The browser gets the copy of a file in /assets it accepts, as the file it encodes; nothing is
 /// compressed on each request, and no copy is served by its own name.</item>
-/// <item>index.html, which every route of the app serves, is checked again on each visit: a deploy shows at once.</item>
+/// <item>index.html, which every route of the app serves, is checked again on each visit: a deploy shows at once. The
+/// public pages get it with their own head (<see cref="PublicPages"/>); every other page stays out of search engines.</item>
 /// <item>Only /assets is compressed. The API's responses carry a session's data and are never compressed, so their
 /// size cannot be used to guess it (BREACH).</item>
 /// </list>
@@ -33,7 +34,7 @@ public static class ClientDelivery
     public static IApplicationBuilder UseClientFiles(this IApplicationBuilder app)
     {
         app.Use(ServePrecompressedAsset);
-        app.UseDefaultFiles();
+        // No default file: / is a public page and gets its head from the fallback, like any other page of the app.
         return app.UseStaticFiles(new StaticFileOptions
         {
             ContentTypeProvider = new CopyContentTypeProvider(),
@@ -57,7 +58,9 @@ public static class ClientDelivery
 
                 if (context.File.Name.Equals("index.html", StringComparison.OrdinalIgnoreCase))
                 {
+                    // /index.html by its name is the app without a page: / is the one search engines list.
                     headers.CacheControl = PageCacheControl;
+                    headers[PublicPages.RobotsHeader] = "noindex";
                     return;
                 }
 
@@ -73,38 +76,22 @@ public static class ClientDelivery
     }
 
     /// <summary>
-    /// Any other route that is not the API's is a screen of the app: it gets index.html, checked again on each visit.
+    /// Any other route that is not the API's is a screen of the app: it gets index.html, checked again on each visit,
+    /// with the head of Explorar and its categories; the store pages have their own endpoints (<see cref="PublicPages"/>).
     /// A missing file (a name with an extension) is a 404, so an open page of an older version reloads.
     /// </summary>
     public static void MapClientFallback(this WebApplication app)
     {
-        app.MapFallback(async context =>
+        app.MapFallback(context =>
         {
             var path = context.Request.Path;
             if (path.StartsWithSegments("/api") || path.StartsWithSegments("/hubs"))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
+                return Task.CompletedTask;
             }
 
-            var webRootPath = app.Environment.WebRootPath;
-            if (string.IsNullOrWhiteSpace(webRootPath))
-            {
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
-            var indexPath = Path.Combine(webRootPath, "index.html");
-            if (!File.Exists(indexPath))
-            {
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
-                await context.Response.WriteAsync("Frontend artifact no encontrado. Asegura que client/dist se publique en wwwroot.");
-                return;
-            }
-
-            context.Response.ContentType = "text/html; charset=utf-8";
-            context.Response.Headers.CacheControl = PageCacheControl;
-            await context.Response.SendFileAsync(indexPath);
+            return PublicPages.WriteIndexAsync(context, app.Environment, PublicPages.StaticHeadFor(path));
         });
     }
 
