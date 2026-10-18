@@ -163,6 +163,8 @@ export interface TenantProfileDto {
   contactPhone?: string;
   logoUrl?: string;
   logoImages?: LogoImageUrlsDto;
+  /** The cover of the online menu (Fase 24E); missing without one. */
+  coverImages?: LogoImageUrlsDto | null;
   capabilities: TenantCapability;
   createdAt: string;
   /** True when catalog prices already include IVA; false when IVA is added on top. */

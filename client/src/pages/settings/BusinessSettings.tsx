@@ -7,6 +7,7 @@ import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
 import OnlineMenuCard from '../../components/settings/OnlineMenuCard';
 import DirectoryCard from '../../components/settings/DirectoryCard';
+import MenuCoverCard from '../../components/settings/MenuCoverCard';
 import OnlineBookingCard from '../../components/settings/OnlineBookingCard';
 import OpeningHoursCard from '../../components/settings/OpeningHoursCard';
 import SpecialDaysCard from '../../components/settings/SpecialDaysCard';
@@ -331,6 +332,7 @@ export default function BusinessSettings() {
       <SubscriptionCard />
       <SalesPolicyCard />
       <OnlineMenuCard />
+      <MenuCoverCard />
       <DirectoryCard />
       <OpeningHoursCard
         upcomingSpecialDays={specialDays.data?.upcoming.length ?? 0}

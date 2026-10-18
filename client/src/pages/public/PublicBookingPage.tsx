@@ -222,31 +222,37 @@ export default function PublicBookingPage() {
 
   return (
     <div className="pm-page">
-      <header className="pm-header">
-        <PhotoOrInitial src={data.logoUrl} name={data.businessName} className="pm-logo" loading="eager" />
-        <div className="pm-header-text">
-          <h1 className="h5 mb-0">{data.businessName}</h1>
+      <header className="pm-bar">
+        <Link className="pm-round" to={`/m/${slug}`} aria-label="Ver menú">
+          <i className="ri-arrow-left-line" aria-hidden="true"></i>
+        </Link>
+        <PhotoOrInitial src={data.logoUrl} name={data.businessName} className="pm-bar-logo" loading="eager" />
+        <div className="min-w-0">
+          <h1 className="pm-bar-name">{data.businessName}</h1>
           <div className="small text-muted">Agenda tu cita</div>
         </div>
-        <Link className="btn btn-sm btn-light" to={`/m/${slug}`}>Ver menú</Link>
       </header>
 
       {!service ? (
-        <main className="pm-list">
-          <h2 className="pm-category">Elige el servicio</h2>
-          {data.services.map((item) => (
-            <button key={item.id} type="button" className="pm-product pb-service" onClick={() => chooseService(item.id)}>
-              {withPhotos && <PhotoOrInitial src={item.imageUrl} name={item.name} className="pm-product-image" />}
-              <span className="flex-grow-1 min-w-0">
-                <span className="pm-product-name d-block">{item.name}</span>
-                {item.description && <span className="pm-product-description d-block">{item.description}</span>}
-                <span className="small text-muted">
-                  {describeDuration(item.durationMinutes)} · <span className="ta-money">{formatMoney(item.price)}</span>
+        <main className="pm-main pb-main">
+          <h2 className="pm-section-title">Elige el servicio</h2>
+          <div className="pm-items">
+            {data.services.map((item) => (
+              <button key={item.id} type="button" className="pm-item pb-service" onClick={() => chooseService(item.id)}>
+                <span className="pm-item-text">
+                  <span className="pm-item-name d-block">{item.name}</span>
+                  <span className="pm-price-row">
+                    <span className="text-muted">{describeDuration(item.durationMinutes)} ·</span>
+                    <span className="pm-price ta-money">{formatMoney(item.price)}</span>
+                  </span>
+                  {item.description && <span className="pm-item-description">{item.description}</span>}
                 </span>
-              </span>
-              <i className="ri-arrow-right-s-line fs-4 text-muted" aria-hidden="true"></i>
-            </button>
-          ))}
+                {withPhotos
+                  ? <PhotoOrInitial src={item.imageUrl} name={item.name} className="pm-item-photo" />
+                  : <i className="ri-arrow-right-s-line fs-4 text-muted align-self-center" aria-hidden="true"></i>}
+              </button>
+            ))}
+          </div>
           {data.services.length === 0 && (
             <p className="text-muted text-center py-5">Este negocio todavía no tiene servicios para agendar en línea.</p>
           )}
@@ -255,7 +261,7 @@ export default function PublicBookingPage() {
           )}
         </main>
       ) : (
-        <main className="pm-list">
+        <main className="pm-main pb-main">
           <div className="pb-chosen">
             <div className="min-w-0">
               <div className="fw-semibold">{service.name}</div>
@@ -275,7 +281,7 @@ export default function PublicBookingPage() {
             </div>
           )}
 
-          <h2 className="pm-category">Elige el día</h2>
+          <h2 className="pm-section-title pb-step">Elige el día</h2>
 
           {slots.isPending && <p className="text-muted" aria-busy="true">Buscando horarios libres…</p>}
           {slots.isError && (
@@ -323,7 +329,7 @@ export default function PublicBookingPage() {
 
               {shownDay ? (
                 <>
-                  <h2 className="pm-category">Elige la hora · {shownDay.label}</h2>
+                  <h2 className="pm-section-title pb-step">Elige la hora · {shownDay.label}</h2>
                   <div className="pb-slots" role="group" aria-label={`Horarios libres del ${shownDay.label}`}>
                     {shownDay.slots.map((slot) => {
                       const active = chosen?.slot.startAt === slot.startAt;
@@ -359,7 +365,7 @@ export default function PublicBookingPage() {
 
       {service && chosen && (
         <div className="pm-cart-bar">
-          <button type="button" className="btn btn-primary btn-touch w-100" onClick={() => setSheetOpen(true)}>
+          <button type="button" className="btn btn-primary pm-cart-button justify-content-center" onClick={() => setSheetOpen(true)}>
             Continuar · {shortDayLabel(chosen.slot.date)} · {chosen.slot.label}
           </button>
         </div>

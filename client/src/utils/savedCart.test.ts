@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { clearCart, latestCart, linesOfOrder, readCart, restoreLines, saveCart } from './savedCart';
+import { cartLineKey, clearCart, latestCart, lineNotes, linesOfOrder, readCart, restoreLines, saveCart } from './savedCart';
 
 const now = new Date('2026-10-17T13:25:00Z');
 const later = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
@@ -91,5 +91,40 @@ describe('savedCart', () => {
     // An option sold out, a required choice missing, an option that no longer exists, a product not available now and
     // one no longer on the menu.
     expect(dropped).toBe(5);
+  });
+
+  it('keeps the note of each product: the same note adds up, another one is another line', () => {
+    expect(cartLineKey('latte', ['grande'])).toBe(cartLineKey('latte', ['grande'], undefined));
+    expect(cartLineKey('latte', ['grande'], 'sin azúcar')).not.toBe(cartLineKey('latte', ['grande']));
+    expect(lineNotes('  sin azúcar  ')).toBe('sin azúcar');
+    expect(lineNotes('   ')).toBeUndefined();
+    expect(lineNotes('x'.repeat(400))).toHaveLength(300);
+
+    saveCart('cafe-luna', {
+      businessName: 'Café Luna',
+      lines: [
+        { productId: 'latte', optionIds: ['grande'], quantity: 1, notes: 'sin azúcar' },
+        { productId: 'latte', optionIds: ['grande'], quantity: 2 },
+      ],
+    }, now);
+    const saved = readCart('cafe-luna', now)!;
+    const { lines } = restoreLines(saved.lines, [latte, concha]);
+
+    expect(lines.map((line) => [line.key, line.quantity, line.notes])).toEqual([
+      ['latte|grande|sin azúcar', 1, 'sin azúcar'],
+      ['latte|grande', 2, undefined],
+    ]);
+  });
+
+  it('reads no line whose note is not text', () => {
+    window.localStorage.setItem('tienditapp.carts', JSON.stringify({
+      'cafe-luna': {
+        businessName: 'Café Luna',
+        savedAt: now.toISOString(),
+        lines: [{ productId: 'concha', optionIds: [], quantity: 1, notes: 7 }, { productId: 'concha', optionIds: [], quantity: 2 }],
+      },
+    }));
+
+    expect(readCart('cafe-luna', now)?.lines).toEqual([{ productId: 'concha', optionIds: [], quantity: 2 }]);
   });
 });
