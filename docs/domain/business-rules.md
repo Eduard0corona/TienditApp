@@ -348,6 +348,26 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Dos cambios a la vez** sobre una reseña (el negocio la reporta mientras la plataforma la oculta, su autor la cambia mientras el negocio responde) no se pisan: el segundo responde 409 y se vuelve a cargar (`Version`, `rowversion`).
 - **Los buscadores** no reciben las reseñas en los datos estructurados de la tienda.
 
+## Pago en línea (Fase 24I)
+
+[ADR 0031](../adr/0031-online-payments.md):
+
+- **La cuenta es del negocio:** el dueño o un administrador conecta la cuenta de Mercado Pago del negocio en Configuración › Pagos en línea y enciende el pago en línea. El dinero llega a esa cuenta; TienditApp no cobra comisión ni ve tarjetas. Sin la configuración de la plataforma no se ofrece.
+- **Dónde:** en el menú en línea, para recoger y a domicilio; nunca en una mesa. El cliente elige pagar ahora en línea o al recibir/recoger.
+- **Cómo:** tarjeta de crédito, de débito o saldo de Mercado Pago, en una sola exhibición y aprobados al momento. Sin OXXO, transferencias, cajero ni meses.
+- **El pedido existe cuando el pago se aprueba:**
+  - al pagar, el servidor cotiza el pedido con las reglas del menú y abre un cobro por ese total, que vence en 30 minutos; el carrito se queda en el dispositivo;
+  - al aprobarse, el pedido se crea con las reglas del menú de ese momento, con un pago «En línea» por su total y la referencia del pago de Mercado Pago, fechado cuando se registra;
+  - lo que el cobro guardaba del cliente se borra al crearse el pedido o al vencer.
+- **Se cree solo lo que dice Mercado Pago:** el aviso firmado, el regreso del cliente y un barrido cada dos minutos leen el pago de Mercado Pago con la llave del negocio. Cuenta solo un pago aprobado de ese cobro, cobrado por la cuenta del negocio, en el modo de la plataforma y por el monto exacto en pesos. El mismo pago aplicado dos veces no cambia nada.
+- **Si el pedido no se puede crear** (el pago llegó tarde, el negocio dejó de recibir pedidos, un producto ya no está, salió de su horario o se borró, una de sus opciones se agotó, el total cambió o el pago no coincide) el cobro queda «no creado» con el motivo para el cliente y su dinero se devuelve completo. Un segundo pago aprobado del mismo cobro también se devuelve.
+- **«En línea» no entra a ninguna caja:** no se registra a mano en una venta ni en la caja, el corte lo muestra aparte, Inicio y ventas por canal dicen cuánto se cobró en línea y el CFDI lleva la forma 31 (intermediario de pagos) con un aviso.
+- **Devoluciones:** un reembolso «En línea» (o anular un pedido pagado en línea) pide la devolución a Mercado Pago por la cola, sin pasar dos veces. El pedido dice si Mercado Pago la hizo, la está haciendo o la rechazó; una rechazada (o sin cuenta conectada) la hace el negocio desde su cuenta de Mercado Pago. Los otros métodos siguen disponibles para el dinero que el negocio devuelve en mano.
+- **La cuenta no cambia con el pago encendido ni con pagos en curso:** desconectarla o conectar otra pide apagar primero el pago en línea y esperar a que terminen los cobros y las devoluciones en curso. Conectar otra vez la misma cuenta se puede siempre. Desconectar borra sus llaves; lo cobrado sigue en la cuenta de Mercado Pago del negocio.
+- **Si Mercado Pago ya no acepta la cuenta** (el dueño quitó el acceso a TienditApp), el menú deja de ofrecer el pago, las devoluciones pendientes las hace el negocio desde su cuenta y Configuración › Pagos en línea pide conectarla otra vez.
+- **El enlace de seguimiento** de un pedido pagado en línea solo aparece en el dispositivo que empezó el pago.
+- **Pagar otra vez el mismo carrito** desde la tienda vuelve al cobro que ya estaba abierto mientras le queda tiempo; un carrito distinto abre otro cobro.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

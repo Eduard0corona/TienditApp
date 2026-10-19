@@ -168,6 +168,8 @@ function publicMenu(data: DemoData, slug: string, table: string | null) {
       deliveryAvailable: acceptsOrders && !!data.menuDelivery,
       // Its booking page (Fase 24D), when a scene turns online booking on.
       booksOnline: !!data.menuBooksOnline,
+      // Paying online in Mercado Pago (Fase 24I), when a scene turns it on.
+      paysOnline: !!data.menuPaysOnline,
       // Its rating (Fase 24H), from the reviews a scene gives it.
       rating: ratingOf((data.reviews ?? []).filter((review: { slug: string }) => review.slug === slug)),
     },
