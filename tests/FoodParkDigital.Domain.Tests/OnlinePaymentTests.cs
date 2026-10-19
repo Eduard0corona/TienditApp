@@ -50,6 +50,22 @@ public class OnlinePaymentTests
     }
 
     [Fact]
+    public void Account_WhoseKeyMercadoPagoRejects_ShouldCountAsExpired_UntilItIsRenewed()
+    {
+        var account = Account();
+
+        account.RejectKey(Now.AddDays(10));
+
+        Assert.False(account.IsUsable(Now.AddDays(10)));
+        Assert.True(account.NeedsRenewal(Now.AddDays(10)));
+        // Rejecting it again later never brings an expiry back.
+        account.RejectKey(Now.AddDays(20));
+        Assert.Equal(Now.AddDays(10), account.AccessTokenExpiresAt);
+        account.RenewTokens("access-2", "refresh-2", Now.AddDays(200), Now.AddDays(20));
+        Assert.True(account.IsUsable(Now.AddDays(20)));
+    }
+
+    [Fact]
     public void Account_ShouldRefuse_KeysMissingOrAlreadyExpired_AndAnUnknownAccount()
     {
         Assert.Throws<DomainException>(() => Account(access: " "));

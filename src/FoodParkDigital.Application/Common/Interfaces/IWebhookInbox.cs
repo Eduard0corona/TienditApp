@@ -7,7 +7,15 @@ namespace FoodParkDigital.Application.Common.Interfaces;
 public interface IWebhookInbox
 {
     /// <returns>False when the exact same delivery was already stored (a provider retry).</returns>
-    Task<bool> EnqueueAsync(string source, string payload, CancellationToken cancellationToken = default);
+    Task<bool> EnqueueAsync(string source, string payload, CancellationToken cancellationToken = default)
+        => EnqueueAsync(source, payload, deliveryKey: null, cancellationToken);
+
+    /// <param name="deliveryKey">
+    /// What identifies a delivery when the payload also carries what the provider does not sign: a delivery with the same
+    /// key is the same one, whatever else its payload says. Null: the payload itself.
+    /// </param>
+    /// <returns>False when the same delivery was already stored (a provider retry, or a replay).</returns>
+    Task<bool> EnqueueAsync(string source, string payload, string? deliveryKey, CancellationToken cancellationToken);
 }
 
 public static class WebhookSources

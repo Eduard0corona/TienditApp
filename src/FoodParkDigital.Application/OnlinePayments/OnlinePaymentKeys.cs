@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.OnlinePayments;
 
@@ -24,6 +25,31 @@ internal static class OnlinePaymentKeys
     /// <summary>The key that renews the access; null when it no longer decrypts.</summary>
     public static string? Refresh(ISecretProtector protector, OnlinePaymentAccount account)
         => Unprotect(protector, account.ProtectedRefreshToken, RefreshPurpose(account.TenantId));
+
+    /// <summary>
+    /// Mercado Pago rejected the account's key: it counts as expired from now on, so the menu stops offering to pay online,
+    /// the sweep stops asking with it and Configuración › Pagos en línea asks to connect it again. The renewal of the next
+    /// sweep may still bring it back. Saved only when <paramref name="save"/> (the queue saves a handler's changes itself).
+    /// </summary>
+    public static async Task RejectAsync(IApplicationDbContext context, DateTimeOffset now, bool save, CancellationToken cancellationToken)
+    {
+        var account = await context.OnlinePaymentAccounts.FirstOrDefaultAsync(cancellationToken);
+        if (account is null)
+            return;
+
+        account.RejectKey(now);
+        if (!save)
+            return;
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The owner connected it again meanwhile: the new key stays.
+            context.ChangeTracker.Clear();
+        }
+    }
 
     private static string? Unprotect(ISecretProtector protector, string value, string purpose)
     {

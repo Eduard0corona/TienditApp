@@ -63,6 +63,8 @@ type MenuLine = CartLine<PublicMenuProduct>;
 const sectionId = (categoryId: string) => `pm-cat-${categoryId}`;
 
 const NO_ADDRESS: PublicDeliveryAddress = { postalCode: '', addressLine: '', references: '', paysWith: '' };
+/** An open checkout is reused for the same cart only while this much time is left to pay it. */
+const REUSE_CHECKOUT_MARGIN_MS = 3 * 60_000;
 
 /**
  * What came back of a saved cart, or of «Pedir otra vez»; '' when everything did. `skipped` are the products of the
@@ -137,13 +139,29 @@ export default function PublicMenuPage() {
   const [receipt, setReceipt] = useState<PublicOrderReceipt | null>(null);
   // How the customer pays when the business takes online payments (Fase 24I): online unless they choose on delivery.
   const [payOnDelivery, setPayOnDelivery] = useState(false);
-  // Back from Mercado Pago, the browser may bring the page back as it left it, still opening the payment.
+  // The checkout opened for this cart, reused while the cart is the same and there is time to pay it; and whether the
+  // page went to Mercado Pago. Back from there, the browser may bring the page back as it left it (or never left it, when
+  // another app took the link), still opening the payment.
+  const onlineAttempt = useRef<{ signature: string; checkoutUrl: string; expiresAt: string } | null>(null);
+  const leftForPayment = useRef(false);
   useEffect(() => {
+    const back = () => {
+      if (!leftForPayment.current) return;
+      leftForPayment.current = false;
+      setSending(false);
+    };
     const shown = (event: PageTransitionEvent) => {
-      if (event.persisted) setSending(false);
+      if (event.persisted) back();
+    };
+    const visible = () => {
+      if (document.visibilityState === 'visible') back();
     };
     window.addEventListener('pageshow', shown);
-    return () => window.removeEventListener('pageshow', shown);
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      window.removeEventListener('pageshow', shown);
+      document.removeEventListener('visibilitychange', visible);
+    };
   }, []);
   const [toAddress, setToAddress] = useState(false);
   const [address, setAddress] = useState<PublicDeliveryAddress>(NO_ADDRESS);
@@ -411,6 +429,14 @@ export default function PublicMenuPage() {
    * and the return key stays too: the return page sends it to read the order's tracking link.
    */
   const payOnline = async (order: PlacePublicOrder) => {
+    const signature = JSON.stringify(order);
+    const open = onlineAttempt.current;
+    // The same cart goes back to the checkout already open for it, while there is time to pay it.
+    if (open?.signature === signature && Date.parse(open.expiresAt) - Date.now() > REUSE_CHECKOUT_MARGIN_MS) {
+      leftForPayment.current = true;
+      goToExternalPage(open.checkoutUrl);
+      return;
+    }
     try {
       const started = await publicMenuApi.startOnlineCheckout(slug, {
         customerName: order.customerName,
@@ -423,6 +449,8 @@ export default function PublicMenuPage() {
         addressLabel: order.addressLabel,
       });
       rememberOnlineCheckout(started.checkoutId, started.returnKey);
+      onlineAttempt.current = { signature, checkoutUrl: started.checkoutUrl, expiresAt: started.expiresAt };
+      leftForPayment.current = true;
       goToExternalPage(started.checkoutUrl);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo abrir el pago. Intenta de nuevo.'));

@@ -62,17 +62,14 @@ public partial class MercadoPagoWebhookController : ControllerBase
         if (type != "payment" || !PaymentIdPattern().IsMatch(dataId))
             return Ok();
 
-        var payload = JsonSerializer.Serialize(new
-        {
-            paymentId = dataId,
-            userId = notification.UserId,
-            action = notification.Action,
-            requestId = Request.Headers[MercadoPagoWebhookSignatureVerifier.RequestIdHeaderName].ToString()
-        });
+        var requestId = Request.Headers[MercadoPagoWebhookSignatureVerifier.RequestIdHeaderName].ToString();
+        var payload = JsonSerializer.Serialize(new { paymentId = dataId, userId = notification.UserId, requestId });
         try
         {
-            // Storing ignores request cancellation: once authenticated, the notification should not be lost.
-            await _inbox.EnqueueAsync(WebhookSources.MercadoPago, payload, CancellationToken.None);
+            // Storing ignores request cancellation: once authenticated, the notification should not be lost. The signature
+            // covers the payment and the request only, so they alone identify the delivery: the same signed notification
+            // sent again with another account in its body is the same one, not a new round of calls to Mercado Pago.
+            await _inbox.EnqueueAsync(WebhookSources.MercadoPago, payload, $"{dataId}:{requestId}", CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -92,17 +89,16 @@ public partial class MercadoPagoWebhookController : ControllerBase
         return new string(buffer, 0, read);
     }
 
-    /// <summary>The type, the action and the account a notification says; none of it is signed.</summary>
-    private static (string? Type, string? Action, long? UserId) Read(string body)
+    /// <summary>The type and the account a notification says; neither is signed.</summary>
+    private static (string? Type, long? UserId) Read(string body)
     {
         try
         {
             using var json = JsonDocument.Parse(body);
             var root = json.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
-                return (null, null, null);
+                return (null, null);
             var type = root.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
-            var action = root.TryGetProperty("action", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString() : null;
             long? userId = root.TryGetProperty("user_id", out var u)
                 ? u.ValueKind switch
                 {
@@ -111,11 +107,11 @@ public partial class MercadoPagoWebhookController : ControllerBase
                     _ => null
                 }
                 : null;
-            return (type, action is { Length: > 60 } ? action[..60] : action, userId);
+            return (type, userId);
         }
         catch (JsonException)
         {
-            return (null, null, null);
+            return (null, null);
         }
     }
 

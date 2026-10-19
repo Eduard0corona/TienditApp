@@ -415,20 +415,95 @@ public class OnlinePaymentsFlowTests
         await using var shop = await Shop.OpenAsync();
         await shop.CheckoutAsync();
 
-        Assert.Equal(OnlinePaymentSettings.InCourseMessage, (await shop.StartConnectionAsync()).Error);
-        Assert.Equal(OnlinePaymentSettings.InCourseMessage, (await shop.DisconnectAsync()).Error);
-        Assert.Single(await shop.Context.OnlinePaymentAccounts.ToListAsync());
-
-        // Turned off, the payment in course ends (here, unpaid) and then the account can go.
+        // On, it goes nowhere: no checkout may start with an account on its way out.
+        Assert.Equal(OnlinePaymentSettings.TurnOffFirstMessage, (await shop.DisconnectAsync()).Error);
+        Assert.Equal(OnlinePaymentSettings.TurnOffFirstMessage, (await shop.ConnectAnotherAccountAsync()).Error);
+        // Off, it waits for the payment in course, which needs the account it started with.
         Assert.False((await shop.AcceptAsync(false)).Value.AcceptsPayments);
+        Assert.Equal(OnlinePaymentSettings.InCourseMessage, (await shop.DisconnectAsync()).Error);
+        Assert.Equal(OnlinePaymentSettings.InCourseMessage, (await shop.ConnectAnotherAccountAsync()).Error);
+        Assert.Equal(FakeOnlinePaymentGateway.AccountId, (await shop.Context.OnlinePaymentAccounts.AsNoTracking().SingleAsync()).ProviderUserId);
+
+        // The same account connects again at any time: that is how a rejected key comes back.
+        shop.Gateway.Credentials = null;
+        var again = await shop.CompleteConnectionAsync(shop.StateOf((await shop.StartConnectionAsync()).Value.AuthorizationUrl), "TG-same");
+        Assert.True(again.IsSuccess, again.Error);
+
+        // Once the payment in course ends (here, unpaid), the account can go.
         shop.Clock.UtcNow = SalesTestFixture.Now + OnlineCheckout.TimeToPay + SweepOnlinePaymentsCommandHandler.ExpiryGrace;
         await shop.SweepAsync();
         var disconnected = await shop.DisconnectAsync();
         Assert.False(disconnected.Value.Connected);
         Assert.Empty(await shop.Context.OnlinePaymentAccounts.ToListAsync());
         Assert.Equal(
-            ["OnlinePaymentsAcceptedChanged", "OnlinePaymentAccountDisconnected"],
+            ["OnlinePaymentsAcceptedChanged", "OnlinePaymentAccountConnected", "OnlinePaymentAccountDisconnected"],
             await shop.Context.AuditLogs.OrderBy(a => a.Timestamp).Select(a => a.Action).ToListAsync());
+    }
+
+    [Fact]
+    public async Task RejectedKey_ShouldStopOffering_LetTheCheckoutsEnd_AndLeaveTheRefundsToTheBusiness()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var started = (await shop.CheckoutAsync()).Value;
+        var payment = shop.Gateway.Approve(started.CheckoutId, 55m, SalesTestFixture.Now.AddMinutes(1));
+        await shop.NotifyAsync(payment.Id);
+        var order = await shop.Context.Orders.AsNoTracking().SingleAsync();
+        await shop.RefundAsync(order.Id, 20m);
+        var pending = (await shop.CheckoutAsync(phone: "5587654321")).Value;
+
+        // The owner revoked TienditApp in Mercado Pago.
+        shop.Gateway.RejectKey = true;
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddMinutes(5);
+        var status = await shop.ConfirmAsync(pending.CheckoutId, null);
+
+        Assert.Equal(OnlineCheckoutStatus.AwaitingPayment, status!.Status);
+        var settings = await shop.SettingsAsync();
+        Assert.True(settings.NeedsReconnect);
+        Assert.False((await shop.MenuAsync()).PaysOnline);
+        Assert.Equal(CreateOnlineCheckoutCommandHandler.NotOfferedMessage, (await shop.CheckoutAsync(phone: "5511112222")).Error);
+
+        // Its refund is not retried forever: the business gives it back from its account.
+        var refund = await shop.Context.OnlinePaymentRefunds.AsNoTracking().SingleAsync(r => r.OrderId == order.Id);
+        await shop.DispatchRefundAsync(refund.Id);
+        Assert.Equal(
+            (OnlinePaymentRefundStatus.Failed, OnlinePaymentRefundRequestedHandler.KeyExpiredMessage),
+            await shop.Context.OnlinePaymentRefunds.AsNoTracking().Where(r => r.Id == refund.Id).Select(r => ValueTuple.Create(r.Status, r.FailureMessage)).SingleAsync());
+
+        // The checkouts still in course end on time, so the account can be connected again.
+        shop.Clock.UtcNow = SalesTestFixture.Now + OnlineCheckout.TimeToPay + SweepOnlinePaymentsCommandHandler.ExpiryGrace + TimeSpan.FromMinutes(1);
+        Assert.Equal(1, (await shop.SweepAsync()).Value.Expired);
+        Assert.Equal((0, 0), ((await shop.SettingsAsync()).CheckoutsInCourse, (await shop.SettingsAsync()).RefundsInCourse));
+    }
+
+    [Fact]
+    public async Task PaidOrder_WhoseProductLeftItsHoursOrTheMenu_WhilePaying_ShouldGoBack()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var outOfHours = (await shop.CheckoutAsync()).Value;
+        var deleted = (await shop.CheckoutAsync(phone: "5587654321")).Value;
+
+        // Breakfast ends while the customer pays.
+        shop.Product.SetAvailabilitySchedule(TimeSpan.FromHours(6), TimeSpan.FromHours(10));
+        await shop.Context.SaveChangesAsync();
+        var first = shop.Gateway.Approve(outOfHours.CheckoutId, 55m, SalesTestFixture.Now.AddMinutes(1));
+        Assert.Equal(OnlinePaymentApplication.NotPlaced, (await shop.NotifyAsync(first.Id)).Value);
+
+        // The product is deleted: the customer's return learns of the payment, and it goes back too.
+        shop.Context.Products.Remove(shop.Product);
+        await shop.Context.SaveChangesAsync();
+        var second = shop.Gateway.Approve(deleted.CheckoutId, 55m, SalesTestFixture.Now.AddMinutes(2));
+        var status = await shop.ConfirmAsync(deleted.CheckoutId, second.Id);
+        Assert.Equal(OnlineCheckoutStatus.NotPlaced, status!.Status);
+        Assert.Equal(ApplyOnlinePaymentCommandHandler.CatalogChangedMessage, status.FailureMessage);
+
+        Assert.Empty(await shop.Context.Orders.ToListAsync());
+        Assert.Empty(await shop.Context.TemporaryCustomers.IgnoreQueryFilters().ToListAsync());
+        Assert.All(
+            await shop.Context.OnlineCheckouts.AsNoTracking().ToListAsync(),
+            c => Assert.Equal((OnlineCheckoutStatus.NotPlaced, OnlineCheckoutFailure.OrderRefused, ApplyOnlinePaymentCommandHandler.CatalogChangedMessage), (c.Status, c.Failure, c.FailureMessage)));
+        Assert.Equal(
+            [first.Id, second.Id],
+            await shop.Context.OnlinePaymentRefunds.Where(r => r.Reason == OnlinePaymentRefundReason.NotPlaced).OrderBy(r => r.PaymentId).Select(r => r.PaymentId).ToListAsync());
     }
 
     [Fact]
@@ -637,7 +712,8 @@ public class OnlinePaymentsFlowTests
                 .Handle(new ConfirmOnlineCheckoutCommand(Slug, checkoutId, paymentId, returnKey), CancellationToken.None);
 
         public Task<Common.Models.Result<OnlinePaymentApplication>> NotifyAsync(string paymentId)
-            => new ApplyOnlinePaymentNotificationCommandHandler(Context, Gateway, Protector, Clock, this)
+            => new ApplyOnlinePaymentNotificationCommandHandler(
+                    Context, Gateway, Protector, Clock, this, NullLogger<ApplyOnlinePaymentNotificationCommandHandler>.Instance)
                 .Handle(new ApplyOnlinePaymentNotificationCommand(paymentId), CancellationToken.None);
 
         public Task<Common.Models.Result<OnlinePaymentSweep>> SweepAsync()
@@ -652,6 +728,15 @@ public class OnlinePaymentsFlowTests
         public Task<Common.Models.Result<OnlinePaymentSettingsDto>> CompleteConnectionAsync(Guid state, string code)
             => new CompleteOnlinePaymentConnectionCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, Gateway, Protector, Clock)
                 .Handle(new CompleteOnlinePaymentConnectionCommand(state, code), CancellationToken.None);
+
+        /// <summary>The owner authorizes another Mercado Pago account than the one connected.</summary>
+        public async Task<Common.Models.Result<OnlinePaymentSettingsDto>> ConnectAnotherAccountAsync()
+        {
+            Gateway.Credentials = new OnlinePaymentCredentials(
+                FakeOnlinePaymentGateway.AccountId + 1, "APP_USR-other", "TG-other", Clock.UtcNow.AddDays(180), LiveMode: true);
+            var started = await StartConnectionAsync();
+            return await CompleteConnectionAsync(StateOf(started.Value.AuthorizationUrl), "TG-other-code");
+        }
 
         public Task<Common.Models.Result<OnlinePaymentSettingsDto>> DisconnectAsync()
             => new DisconnectOnlinePaymentAccountCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, Gateway, Protector, Clock)

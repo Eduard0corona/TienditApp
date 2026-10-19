@@ -57,6 +57,20 @@ public class InboxProcessorTests
     }
 
     [Fact]
+    public async Task Delivery_WithItsOwnKey_ShouldBeStoredOnce_WhateverElseItsPayloadSays()
+    {
+        await using var host = await CreateHostAsync(new ProgrammableSender());
+        Task<bool> Enqueue(string payload) => host.InScopeAsync(services =>
+            services.GetRequiredService<IWebhookInbox>().EnqueueAsync(WebhookSources.MercadoPago, payload, "123:request-1", CancellationToken.None));
+
+        // A signed Mercado Pago notification sent again with another account in its unsigned body is the same delivery.
+        Assert.True(await Enqueue("""{"paymentId":"123","userId":1,"requestId":"request-1"}"""));
+        Assert.False(await Enqueue("""{"paymentId":"123","userId":2,"requestId":"request-1"}"""));
+
+        Assert.Equal("""{"paymentId":"123","userId":1,"requestId":"request-1"}""", Assert.Single(await InboxAsync(host)).Payload);
+    }
+
+    [Fact]
     public async Task PayloadThatIsNotJson_ShouldBeMarkedProcessedWithoutRetries()
     {
         var sender = new ProgrammableSender();

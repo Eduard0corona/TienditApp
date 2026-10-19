@@ -101,6 +101,16 @@ public class OnlinePaymentAccount : AuditableEntity, IAggregateRoot, ITenantScop
 
     public void SetAcceptsPayments(bool accepts) => AcceptsPayments = accepts;
 
+    /// <summary>
+    /// Mercado Pago no longer takes the key (the owner revoked the access): from now on it counts as expired, so nothing is
+    /// offered or asked with it until the account is renewed or connected again.
+    /// </summary>
+    public void RejectKey(DateTimeOffset now)
+    {
+        if (AccessTokenExpiresAt > now)
+            AccessTokenExpiresAt = now;
+    }
+
     /// <summary>Whether its key works: an expired one cannot charge, look up payments or give money back.</summary>
     public bool IsUsable(DateTimeOffset now) => AccessTokenExpiresAt > now;
 

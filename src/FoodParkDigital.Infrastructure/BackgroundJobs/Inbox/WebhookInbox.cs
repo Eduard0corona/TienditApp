@@ -17,13 +17,13 @@ public sealed class WebhookInbox : IWebhookInbox
         _signal = signal;
     }
 
-    public async Task<bool> EnqueueAsync(string source, string payload, CancellationToken cancellationToken = default)
+    public async Task<bool> EnqueueAsync(string source, string payload, string? deliveryKey, CancellationToken cancellationToken)
     {
-        var hash = InboxMessage.HashOf(payload);
+        var hash = InboxMessage.HashOf(deliveryKey ?? payload);
         if (await _context.InboxMessages.AnyAsync(m => m.Source == source && m.PayloadHash == hash, cancellationToken))
             return false;
 
-        var message = new InboxMessage(source, payload, _clock.UtcNow);
+        var message = new InboxMessage(source, payload, _clock.UtcNow, deliveryKey);
         _context.InboxMessages.Add(message);
         try
         {

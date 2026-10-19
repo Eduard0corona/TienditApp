@@ -17,7 +17,7 @@ public sealed class OnlinePaymentRefundRequestedHandler : IOutboxEventHandler<On
     public const string AccountGoneMessage =
         "La cuenta de Mercado Pago ya no está conectada: devuelve el dinero desde tu cuenta de Mercado Pago.";
     public const string KeyExpiredMessage =
-        "La llave de Mercado Pago venció: vuelve a conectar la cuenta y devuelve el dinero desde Mercado Pago.";
+        "La cuenta de Mercado Pago ya no responde: vuelve a conectarla y devuelve el dinero desde tu cuenta de Mercado Pago.";
 
     private readonly IApplicationDbContext _context;
     private readonly IOnlinePaymentGateway _gateway;
@@ -65,7 +65,18 @@ public sealed class OnlinePaymentRefundRequestedHandler : IOutboxEventHandler<On
         }
 
         // Mercado Pago not answering throws: the queue retries with the same key.
-        var outcome = await _gateway.RefundAsync(accessToken, refund.PaymentId, refund.Amount, refund.Id, cancellationToken);
+        OnlinePaymentRefundOutcome outcome;
+        try
+        {
+            outcome = await _gateway.RefundAsync(accessToken, refund.PaymentId, refund.Amount, refund.Id, cancellationToken);
+        }
+        catch (OnlinePaymentAccountRejectedException)
+        {
+            // The owner revoked TienditApp in Mercado Pago: the business gives it back from its account, and connects it again.
+            refund.Fail(KeyExpiredMessage, now);
+            await OnlinePaymentKeys.RejectAsync(_context, now, save: false, cancellationToken);
+            return;
+        }
         switch (outcome)
         {
             case OnlinePaymentRefundOutcome.Done done:

@@ -763,7 +763,7 @@ describe('PublicMenuPage', () => {
       checkoutId: CHECKOUT,
       checkoutUrl: 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=123',
       amount: 110,
-      expiresAt: '2026-10-19T18:30:00Z',
+      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
       returnKey: 'llave-de-regreso',
     };
 
@@ -817,6 +817,30 @@ describe('PublicMenuPage', () => {
 
       window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
       expect(await within(cart).findByRole('button', { name: 'Pagar · $110.00' })).toBeEnabled();
+    });
+
+    it('goes back to the checkout already open for the same cart, and opens another one when the cart changes', async () => {
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
+      api.startOnlineCheckout.mockResolvedValueOnce(started)
+        .mockResolvedValueOnce({ ...started, checkoutId: 'otro-cobro', checkoutUrl: 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=456', amount: 165 });
+
+      const cart = await openCart();
+      await userEvent.click(within(cart).getByRole('button', { name: 'Pagar · $110.00' }));
+      await waitFor(() => expect(goToExternalPage).toHaveBeenCalledTimes(1));
+
+      // Another app took the link and the page never left: back on it, it can pay again, with the same checkout.
+      document.dispatchEvent(new Event('visibilitychange'));
+      await userEvent.click(await within(cart).findByRole('button', { name: 'Pagar · $110.00' }));
+      await waitFor(() => expect(goToExternalPage).toHaveBeenCalledTimes(2));
+      expect(goToExternalPage).toHaveBeenLastCalledWith(started.checkoutUrl);
+      expect(api.startOnlineCheckout).toHaveBeenCalledTimes(1);
+
+      // Another Latte is another order: another checkout.
+      document.dispatchEvent(new Event('visibilitychange'));
+      await userEvent.click(within(cart).getByRole('button', { name: 'Uno más' }));
+      await userEvent.click(await within(cart).findByRole('button', { name: 'Pagar · $165.00' }));
+      await waitFor(() => expect(api.startOnlineCheckout).toHaveBeenCalledTimes(2));
+      expect(goToExternalPage).toHaveBeenLastCalledWith('https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=456');
     });
 
     it('says why the payment could not open, and lets the customer try again', async () => {

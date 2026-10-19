@@ -84,18 +84,25 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var now = _clock.UtcNow;
             var renewBy = now + OnlinePaymentAccount.RenewBefore;
-            // Only to find the businesses with work: the sweep itself runs in each business's scope.
-            tenants = await context.OnlineCheckouts
+            var max = Math.Max(1, _options.MaxBusinessesPerPass);
+            // Only to find the businesses with work: the sweep itself runs in each business's scope. The one whose payment
+            // has waited longest goes first, so a busy platform never leaves the same businesses out of every pass.
+            var withCheckouts = await context.OnlineCheckouts
                 .IgnoreQueryFilters()
                 .Where(c => c.Status == OnlineCheckoutStatus.AwaitingPayment)
-                .Select(c => c.TenantId)
-                .Union(context.OnlinePaymentAccounts
-                    .IgnoreQueryFilters()
-                    .Where(a => a.AccessTokenExpiresAt > now && a.AccessTokenExpiresAt <= renewBy)
-                    .Select(a => a.TenantId))
-                .Distinct()
-                .Take(Math.Max(1, _options.MaxBusinessesPerPass))
+                .GroupBy(c => c.TenantId)
+                .OrderBy(g => g.Min(c => c.StartedAt))
+                .Select(g => g.Key)
+                .Take(max)
                 .ToListAsync(cancellationToken);
+            var renewing = await context.OnlinePaymentAccounts
+                .IgnoreQueryFilters()
+                .Where(a => a.AccessTokenExpiresAt > now && a.AccessTokenExpiresAt <= renewBy)
+                .OrderBy(a => a.AccessTokenExpiresAt)
+                .Select(a => a.TenantId)
+                .Take(max)
+                .ToListAsync(cancellationToken);
+            tenants = withCheckouts.Concat(renewing).Distinct().Take(max).ToList();
         }
 
         foreach (var tenantId in tenants)

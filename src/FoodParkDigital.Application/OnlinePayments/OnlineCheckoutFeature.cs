@@ -228,6 +228,13 @@ public class CreateOnlineCheckoutCommandHandler : IRequestHandler<CreateOnlineCh
             // It never reached Mercado Pago: nothing can be paid for it, and it expires on its own.
             return Result.Failure<OnlineCheckoutStartedDto>(GatewayUnavailableMessage);
         }
+        catch (OnlinePaymentAccountRejectedException)
+        {
+            // The owner revoked TienditApp in Mercado Pago: the menu stops offering it until the account is connected again.
+            _context.ChangeTracker.Clear();
+            await OnlinePaymentKeys.RejectAsync(_context, now, save: true, cancellationToken);
+            return Result.Failure<OnlineCheckoutStartedDto>(NotOfferedMessage);
+        }
 
         checkout.AttachPreference(page.PreferenceId, page.CheckoutUrl);
         await _context.SaveChangesAsync(cancellationToken);
@@ -293,7 +300,7 @@ public class ConfirmOnlineCheckoutCommandHandler : IRequestHandler<ConfirmOnline
         _gateway = gateway;
         _protector = protector;
         _logger = logger;
-        _checker = new OnlinePaymentChecker(context, gateway, protector, clock, sender);
+        _checker = new OnlinePaymentChecker(context, gateway, protector, clock, sender, logger);
     }
 
     public async Task<OnlineCheckoutStatusDto?> Handle(ConfirmOnlineCheckoutCommand request, CancellationToken cancellationToken)

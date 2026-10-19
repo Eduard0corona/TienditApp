@@ -7,7 +7,7 @@ import { OnlineCheckoutStatus, OnlinePaymentRefundStatus } from '../../api/gener
 import { publicMenuApi, type OnlineCheckoutStatus as CheckoutStatus } from '../../api/publicMenuApi';
 import { rememberOnlineCheckout } from '../../utils/onlineCheckouts';
 import { readCart, saveCart } from '../../utils/savedCart';
-import OnlinePaymentReturnPage, { CONFIRM_REFRESH_MS } from './OnlinePaymentReturnPage';
+import OnlinePaymentReturnPage, { CONFIRM_GIVE_UP_MS, CONFIRM_REFRESH_MS, CONFIRM_SLOW_REFRESH_MS } from './OnlinePaymentReturnPage';
 
 vi.mock('../../api/publicMenuApi', () => ({ publicMenuApi: { confirmOnlineCheckout: vi.fn() } }));
 
@@ -152,6 +152,52 @@ describe('OnlinePaymentReturnPage', () => {
 
     expect(await screen.findByRole('heading', { name: '¡Pago recibido!' })).toBeInTheDocument();
     await vi.advanceTimersByTimeAsync(CONFIRM_REFRESH_MS * 3);
+    expect(confirmCheckout).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps asking after the time to pay, while the server may still place the payment, and then slower', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // On this device's clock the time to pay already ended; the notification places the order a minute later.
+    confirmCheckout.mockResolvedValueOnce(status({ expiresAt: new Date(Date.now() - 60_000).toISOString() }))
+      .mockResolvedValueOnce(status({ expiresAt: new Date(Date.now() - 60_000).toISOString() }))
+      .mockResolvedValue(status({ status: OnlineCheckoutStatus.Placed, orderNumber: 'ORD-12', checkoutUrl: null }));
+
+    renderPage('?payment_id=987654321&status=approved');
+
+    expect(await screen.findByText(/Mercado Pago ya lo aprobó/)).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(CONFIRM_REFRESH_MS);
+    expect(confirmCheckout).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(CONFIRM_REFRESH_MS);
+    expect(await screen.findByRole('heading', { name: '¡Pago recibido!' })).toBeInTheDocument();
+  });
+
+  it('stops asking once a checkout could no longer be waiting for its payment', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    confirmCheckout.mockResolvedValue(status());
+
+    renderPage();
+    await screen.findByRole('heading', { name: 'Aún no recibimos tu pago' });
+    await vi.advanceTimersByTimeAsync(CONFIRM_GIVE_UP_MS + CONFIRM_SLOW_REFRESH_MS);
+    const asked = confirmCheckout.mock.calls.length;
+    // Fast for two minutes, then every 10 seconds: far fewer than every 4 seconds for 45 minutes.
+    expect(asked).toBeLessThan(CONFIRM_GIVE_UP_MS / CONFIRM_SLOW_REFRESH_MS + 40);
+    await vi.advanceTimersByTimeAsync(CONFIRM_SLOW_REFRESH_MS * 5);
+    expect(confirmCheckout).toHaveBeenCalledTimes(asked);
+  });
+
+  it('keeps what it showed when a later ask fails, and does not ask again over the limit', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    confirmCheckout.mockResolvedValueOnce(status())
+      .mockRejectedValue({ isAxiosError: true, response: { status: 429, data: { detail: 'Demasiadas solicitudes.' } } });
+
+    renderPage();
+    await screen.findByRole('heading', { name: 'Aún no recibimos tu pago' });
+    await vi.advanceTimersByTimeAsync(CONFIRM_REFRESH_MS);
+
+    expect(await screen.findByText('No pudimos actualizar cómo va tu pago; lo intentamos de nuevo en un momento.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Aún no recibimos tu pago' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Pagar en Mercado Pago' })).toBeInTheDocument();
+    // Over the limit it is not retried at once: only the next ask.
     expect(confirmCheckout).toHaveBeenCalledTimes(2);
   });
 

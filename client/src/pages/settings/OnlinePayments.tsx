@@ -69,7 +69,7 @@ export default function OnlinePayments() {
   const remove = async () => {
     const accepted = await confirm({
       title: 'Desconectar Mercado Pago',
-      message: 'Tu menú deja de ofrecer pagar en línea y TienditApp borra las llaves de tu cuenta. Lo que ya cobraste sigue en tu cuenta de Mercado Pago.',
+      message: 'TienditApp borra las llaves de tu cuenta y ya no puede cobrar en ella. Lo que ya cobraste sigue en tu cuenta de Mercado Pago.',
       confirmLabel: 'Desconectar',
       danger: true,
     });
@@ -136,7 +136,7 @@ export default function OnlinePayments() {
                       <div className="alert alert-warning">
                         La cuenta de Mercado Pago ya no responde: vuelve a conectarla para seguir recibiendo pagos en línea.
                         <div className="mt-2">
-                          <button type="button" className="btn btn-sm btn-warning" onClick={() => void connect()} disabled={start.isPending || inCourse > 0}>
+                          <button type="button" className="btn btn-sm btn-warning" onClick={() => void connect()} disabled={start.isPending || complete.isPending}>
                             Volver a conectar
                           </button>
                         </div>
@@ -170,10 +170,18 @@ export default function OnlinePayments() {
                     {inCourse > 0 && (
                       <p className="small text-muted">
                         Hay {inCourse === 1 ? 'un pago o devolución en curso' : `${inCourse} pagos o devoluciones en curso`}: para
-                        cambiar o desconectar la cuenta, apaga el pago en línea y espera a que terminen (hasta 30 minutos).
+                        cambiar o desconectar la cuenta, espera a que terminen (unos 45 minutos).
                       </p>
                     )}
-                    <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => void remove()} disabled={disconnect.isPending || inCourse > 0}>
+                    {data.acceptsPayments && (
+                      <p className="small text-muted">Para desconectar o cambiar la cuenta, primero apaga el pago en línea.</p>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-outline-danger btn-sm"
+                      onClick={() => void remove()}
+                      disabled={disconnect.isPending || data.acceptsPayments || inCourse > 0}
+                    >
                       Desconectar
                     </button>
                   </>

@@ -30,13 +30,16 @@ public interface IOnlinePaymentGateway
     Task<OnlinePaymentCredentials> RenewAsync(string refreshToken, CancellationToken cancellationToken);
 
     /// <summary>Mercado Pago's checkout page for an order, in the business's account.</summary>
+    /// <exception cref="OnlinePaymentAccountRejectedException">Mercado Pago no longer takes the account's key.</exception>
     Task<OnlinePaymentCheckoutPage> CreateCheckoutAsync(
         string accessToken, OnlinePaymentCheckoutRequest request, CancellationToken cancellationToken);
 
     /// <summary>A payment of the business's account; null when there is no such payment.</summary>
+    /// <exception cref="OnlinePaymentAccountRejectedException">Mercado Pago no longer takes the account's key.</exception>
     Task<OnlinePaymentDetails?> GetPaymentAsync(string accessToken, string paymentId, CancellationToken cancellationToken);
 
     /// <summary>The payments of a checkout (its external reference), newest first.</summary>
+    /// <exception cref="OnlinePaymentAccountRejectedException">Mercado Pago no longer takes the account's key.</exception>
     Task<IReadOnlyList<OnlinePaymentDetails>> FindPaymentsAsync(
         string accessToken, Guid checkoutId, CancellationToken cancellationToken);
 
@@ -44,6 +47,7 @@ public interface IOnlinePaymentGateway
     /// Gives back <paramref name="amount"/> of a payment. The same <paramref name="idempotencyKey"/> never gives it back
     /// twice, so it is safe to retry.
     /// </summary>
+    /// <exception cref="OnlinePaymentAccountRejectedException">Mercado Pago no longer takes the account's key.</exception>
     Task<OnlinePaymentRefundOutcome> RefundAsync(
         string accessToken, string paymentId, decimal amount, Guid idempotencyKey, CancellationToken cancellationToken);
 }
@@ -101,3 +105,9 @@ public sealed class OnlinePaymentGatewayUnavailableException(string message, Exc
 
 /// <summary>Mercado Pago answered no (an expired code, a revoked access): retrying will not change it.</summary>
 public sealed class OnlinePaymentGatewayRefusedException(string message) : Exception(message);
+
+/// <summary>
+/// Mercado Pago no longer takes the key of the business's account (401 or 403: the owner revoked TienditApp, or the key
+/// was invalidated). Retrying will not change it: the account needs to be connected again.
+/// </summary>
+public sealed class OnlinePaymentAccountRejectedException(string message) : Exception(message);

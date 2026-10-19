@@ -32,7 +32,7 @@ public class OnlinePaymentSettingsDto
     public bool AcceptsPayments { get; set; }
     /// <summary>Whether the menu takes orders now; paying online applies to them only.</summary>
     public bool MenuTakesOrders { get; set; }
-    /// <summary>Payments in course: the account cannot change until they end (30 minutes at most).</summary>
+    /// <summary>Payments in course: the account cannot change until they end (about 45 minutes at most).</summary>
     public int CheckoutsInCourse { get; set; }
     /// <summary>Money still going back to customers through Mercado Pago.</summary>
     public int RefundsInCourse { get; set; }
@@ -79,7 +79,7 @@ public class GetOnlinePaymentSettingsQueryHandler : IRequestHandler<GetOnlinePay
 /// <summary>
 /// Starts connecting the business's Mercado Pago account (owners and admins): the owner authorizes TienditApp's application
 /// in Mercado Pago, with PKCE, and comes back with a code that only this business and this person can use, once, for ten
-/// minutes. The account cannot change while payments are in course.
+/// minutes. The same account connects again at any time; another one only with paying online off and nothing in course.
 /// </summary>
 [RequiresTenantManager]
 public record StartOnlinePaymentConnectionCommand : IRequest<Result<OnlinePaymentConnectionStartDto>>;
@@ -114,8 +114,8 @@ public class StartOnlinePaymentConnectionCommandHandler
             return Result.Failure<OnlinePaymentConnectionStartDto>(OnlinePaymentSettings.NotAvailableMessage);
         if (!Guid.TryParse(_currentUser.UserId, out var userId))
             return Result.Failure<OnlinePaymentConnectionStartDto>(OnlinePaymentSettings.NotAvailableMessage);
-        if (await OnlinePaymentSettings.InCourseAsync(_context, cancellationToken))
-            return Result.Failure<OnlinePaymentConnectionStartDto>(OnlinePaymentSettings.InCourseMessage);
+        // Connecting the same account again is how a rejected key comes back, also with payments in course: whether it may
+        // change to another account is decided when Mercado Pago says which one it is.
 
         // Earlier attempts of this person, and any that expired, are no longer needed.
         var now = _clock.UtcNow;
@@ -205,8 +205,6 @@ public class CompleteOnlinePaymentConnectionCommandHandler
         var now = _clock.UtcNow;
         if (authorization.IsExpired(now))
             return await EndAsync(authorization, OnlinePaymentSettings.AuthorizationExpiredMessage, cancellationToken);
-        if (await OnlinePaymentSettings.InCourseAsync(_context, cancellationToken))
-            return await EndAsync(authorization, OnlinePaymentSettings.InCourseMessage, cancellationToken);
 
         OnlinePaymentCredentials credentials;
         try
@@ -233,6 +231,15 @@ public class CompleteOnlinePaymentConnectionCommandHandler
         var refresh = OnlinePaymentKeys.ProtectRefresh(_protector, tenantId, credentials.RefreshToken);
         var account = await _context.OnlinePaymentAccounts.FirstOrDefaultAsync(cancellationToken);
         var previous = account?.ProviderUserId;
+        // Another account: its checkouts and refunds need the account they started with, and none may start meanwhile.
+        if (account is not null && account.ProviderUserId != credentials.ProviderUserId)
+        {
+            if (account.AcceptsPayments)
+                return await EndAsync(authorization, OnlinePaymentSettings.TurnOffFirstMessage, cancellationToken);
+            if (await OnlinePaymentSettings.InCourseAsync(_context, cancellationToken))
+                return await EndAsync(authorization, OnlinePaymentSettings.InCourseMessage, cancellationToken);
+        }
+
         if (account is null)
         {
             account = OnlinePaymentAccount.Connect(
@@ -263,7 +270,7 @@ public class CompleteOnlinePaymentConnectionCommandHandler
 
 /// <summary>
 /// Disconnects the business's Mercado Pago account (owners and admins): its keys are deleted and the menu stops offering
-/// to pay online. Not while payments are in course or money is going back through it.
+/// to pay online. Only once paying online is off, and not while payments are in course or money is going back through it.
 /// </summary>
 [RequiresTenantManager]
 public record DisconnectOnlinePaymentAccountCommand : IRequest<Result<OnlinePaymentSettingsDto>>;
@@ -300,6 +307,9 @@ public class DisconnectOnlinePaymentAccountCommandHandler
         var account = await _context.OnlinePaymentAccounts.FirstOrDefaultAsync(cancellationToken);
         if (account is null)
             return Result.Failure<OnlinePaymentSettingsDto>("El negocio no tiene una cuenta de Mercado Pago conectada.");
+        // Off first, so no checkout starts with the account while it goes.
+        if (account.AcceptsPayments)
+            return Result.Failure<OnlinePaymentSettingsDto>(OnlinePaymentSettings.TurnOffFirstMessage);
         if (await OnlinePaymentSettings.InCourseAsync(_context, cancellationToken))
             return Result.Failure<OnlinePaymentSettingsDto>(OnlinePaymentSettings.InCourseMessage);
 
@@ -370,7 +380,8 @@ internal static class OnlinePaymentSettings
     public const string NotAvailableMessage = "El pago en línea no está disponible en TienditApp por ahora.";
     public const string AuthorizationExpiredMessage = "La autorización de Mercado Pago ya no es válida. Vuelve a conectar la cuenta.";
     public const string InCourseMessage =
-        "Hay pagos en línea en curso: apaga el pago en línea y espera a que terminen (hasta 30 minutos) para cambiar la cuenta.";
+        "Hay pagos o devoluciones en línea en curso: espera a que terminen (unos 45 minutos) para cambiar o desconectar la cuenta.";
+    public const string TurnOffFirstMessage = "Apaga el pago en línea antes de desconectar o cambiar la cuenta de Mercado Pago.";
     public const string ReconnectMessage = "La cuenta de Mercado Pago ya no responde: vuelve a conectarla.";
 
     /// <summary>Payments in course or money going back: they need the account they started with.</summary>

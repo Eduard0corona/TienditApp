@@ -27,10 +27,11 @@ public class ApplyOnlinePaymentNotificationCommandHandler
         IOnlinePaymentGateway gateway,
         ISecretProtector protector,
         IDateTimeProvider clock,
-        ISender sender)
+        ISender sender,
+        ILogger<ApplyOnlinePaymentNotificationCommandHandler> logger)
     {
         _gateway = gateway;
-        _checker = new OnlinePaymentChecker(context, gateway, protector, clock, sender);
+        _checker = new OnlinePaymentChecker(context, gateway, protector, clock, sender, logger);
     }
 
     /// <exception cref="OnlinePaymentGatewayUnavailableException">Mercado Pago did not answer: the delivery is retried.</exception>
@@ -41,7 +42,16 @@ public class ApplyOnlinePaymentNotificationCommandHandler
         if (accessToken is null)
             return Result.Success(OnlinePaymentApplication.Ignored);
 
-        var payment = await _gateway.GetPaymentAsync(accessToken, request.PaymentId, cancellationToken);
+        OnlinePaymentDetails? payment;
+        try
+        {
+            payment = await _gateway.GetPaymentAsync(accessToken, request.PaymentId, cancellationToken);
+        }
+        catch (OnlinePaymentAccountRejectedException)
+        {
+            await _checker.RejectKeyAsync(cancellationToken);
+            return Result.Success(OnlinePaymentApplication.Ignored);
+        }
         if (payment is null || !Guid.TryParse(payment.ExternalReference, out var checkoutId))
             return Result.Success(OnlinePaymentApplication.Ignored);
 
@@ -93,7 +103,7 @@ public class SweepOnlinePaymentsCommandHandler : IRequestHandler<SweepOnlinePaym
         _protector = protector;
         _clock = clock;
         _logger = logger;
-        _checker = new OnlinePaymentChecker(context, gateway, protector, clock, sender);
+        _checker = new OnlinePaymentChecker(context, gateway, protector, clock, sender, logger);
     }
 
     public async Task<Result<OnlinePaymentSweep>> Handle(SweepOnlinePaymentsCommand request, CancellationToken cancellationToken)
@@ -134,6 +144,13 @@ public class SweepOnlinePaymentsCommandHandler : IRequestHandler<SweepOnlinePaym
                     // Mercado Pago did not answer: nothing expires on this pass.
                     _logger.LogWarning("Mercado Pago did not answer the sweep of online checkout {CheckoutId}", checkout.Id);
                     break;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Something unexpected with this one: it stays as it is (it may have been paid) and the others are swept.
+                    _context.ChangeTracker.Clear();
+                    _logger.LogError(ex, "The sweep could not check online checkout {CheckoutId}", checkout.Id);
+                    continue;
                 }
             }
 

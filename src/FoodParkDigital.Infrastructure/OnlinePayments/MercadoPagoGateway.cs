@@ -141,6 +141,7 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
         message.Headers.Add("X-Idempotency-Key", request.CheckoutId.ToString());
 
         using var response = await SendAsync(message, "preference", cancellationToken);
+        await ThrowIfKeyRejectedAsync(response, "preference", cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw await UnavailableAsync(response, "preference", cancellationToken);
 
@@ -165,6 +166,7 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
         using var response = await SendAsync(message, "payment", cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
+        await ThrowIfKeyRejectedAsync(response, "payment", cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw await UnavailableAsync(response, "payment", cancellationToken);
 
@@ -180,6 +182,7 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
             $"{_options.ApiBaseUrl}/v1/payments/search?external_reference={checkoutId}&sort=date_created&criteria=desc&limit=20");
         Authorize(message, accessToken);
         using var response = await SendAsync(message, "search", cancellationToken);
+        await ThrowIfKeyRejectedAsync(response, "search", cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw await UnavailableAsync(response, "search", cancellationToken);
 
@@ -215,8 +218,9 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
             return new OnlinePaymentRefundOutcome.Done(GetNumberOrString(json.RootElement, "id"));
         }
 
+        await ThrowIfKeyRejectedAsync(response, "refund", cancellationToken);
         // Mercado Pago answered no (no balance, already refunded, too old): retrying will not change it.
-        if ((int)response.StatusCode is >= 400 and < 500 and not 401 and not 408 and not 429)
+        if ((int)response.StatusCode is >= 400 and < 500 and not 408 and not 429)
         {
             var (code, text) = await ReadErrorAsync(response, cancellationToken);
             _logger.LogWarning("Mercado Pago refused a refund: {Status} {Code}", (int)response.StatusCode, code);
@@ -270,6 +274,20 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
             _logger.LogWarning("Mercado Pago did not answer the {Operation}: {Error}", operation, ex.GetType().Name);
             throw new OnlinePaymentGatewayUnavailableException("Mercado Pago no respondió. Intenta de nuevo en unos minutos.", ex);
         }
+    }
+
+    /// <summary>
+    /// 401 or 403 with the account's key: the owner revoked TienditApp in Mercado Pago, or the key no longer works. Not
+    /// Mercado Pago being down: retrying would only wait forever.
+    /// </summary>
+    private async Task ThrowIfKeyRejectedAsync(HttpResponseMessage response, string operation, CancellationToken cancellationToken)
+    {
+        if (response.StatusCode is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden))
+            return;
+
+        var (code, _) = await ReadErrorAsync(response, cancellationToken);
+        _logger.LogWarning("Mercado Pago rejected the account's key in the {Operation}: {Status} {Code}", operation, (int)response.StatusCode, code);
+        throw new OnlinePaymentAccountRejectedException("Mercado Pago ya no acepta la cuenta del negocio: hay que conectarla otra vez.");
     }
 
     private async Task<OnlinePaymentGatewayUnavailableException> UnavailableAsync(

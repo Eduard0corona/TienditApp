@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders;
+using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
@@ -44,19 +45,22 @@ internal sealed class OnlinePaymentChecker
     private readonly ISecretProtector _protector;
     private readonly IDateTimeProvider _clock;
     private readonly ISender _sender;
+    private readonly ILogger _logger;
 
     public OnlinePaymentChecker(
         IApplicationDbContext context,
         IOnlinePaymentGateway gateway,
         ISecretProtector protector,
         IDateTimeProvider clock,
-        ISender sender)
+        ISender sender,
+        ILogger logger)
     {
         _context = context;
         _gateway = gateway;
         _protector = protector;
         _clock = clock;
         _sender = sender;
+        _logger = logger;
     }
 
     /// <summary>The key of the business's account, when the platform and the account can use it.</summary>
@@ -73,7 +77,10 @@ internal sealed class OnlinePaymentChecker
     /// the order, any other goes back. <paramref name="paymentId"/> is where the customer's return says it paid; it is read
     /// from Mercado Pago like any other.
     /// </summary>
-    /// <returns>False when the business's account cannot be read (disconnected or its key expired).</returns>
+    /// <returns>
+    /// False when the business's account cannot be read: disconnected, its key expired, or Mercado Pago rejected it (then it
+    /// counts as expired from now on).
+    /// </returns>
     public async Task<bool> CheckAsync(Guid checkoutId, string? paymentId, CancellationToken cancellationToken)
     {
         var accessToken = await AccessTokenAsync(cancellationToken);
@@ -81,34 +88,58 @@ internal sealed class OnlinePaymentChecker
             return false;
 
         IReadOnlyList<OnlinePaymentDetails> payments = [];
-        if (!string.IsNullOrWhiteSpace(paymentId)
-            && await _gateway.GetPaymentAsync(accessToken, paymentId.Trim(), cancellationToken) is { } returned
-            && returned.ExternalReference == checkoutId.ToString())
-            payments = [returned];
-        if (payments.Count == 0)
-            payments = await _gateway.FindPaymentsAsync(accessToken, checkoutId, cancellationToken);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(paymentId)
+                && await _gateway.GetPaymentAsync(accessToken, paymentId.Trim(), cancellationToken) is { } returned
+                && returned.ExternalReference == checkoutId.ToString())
+                payments = [returned];
+            if (payments.Count == 0)
+                payments = await _gateway.FindPaymentsAsync(accessToken, checkoutId, cancellationToken);
+        }
+        catch (OnlinePaymentAccountRejectedException)
+        {
+            await RejectKeyAsync(cancellationToken);
+            return false;
+        }
 
         foreach (var payment in payments.Where(p => p.IsApproved).OrderBy(p => p.ApprovedAt))
             await ApplyAsync(checkoutId, payment, cancellationToken);
         return true;
     }
 
+    /// <summary>Mercado Pago rejected the account's key: it counts as expired until it is renewed or connected again.</summary>
+    public async Task RejectKeyAsync(CancellationToken cancellationToken)
+    {
+        _context.ChangeTracker.Clear();
+        await OnlinePaymentKeys.RejectAsync(_context, _clock.UtcNow, save: true, cancellationToken);
+    }
+
     /// <summary>
     /// Applies a payment Mercado Pago gave to its checkout. Two paths applying it at once are serialized by the checkout's
-    /// version: the one that loses reads the outcome of the winner.
+    /// version (or, for a second payment, by the refund's unique index): the one that loses reads the outcome of the
+    /// winner. An order the catalog of now no longer allows (a product out of its hours, an option sold out, a product
+    /// deleted) is refused like any other, in a transaction of its own: the attempt left nothing behind.
     /// </summary>
     public async Task<OnlinePaymentApplication> ApplyAsync(Guid checkoutId, OnlinePaymentDetails payment, CancellationToken cancellationToken)
     {
+        string? refusal = null;
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                var applied = await _sender.Send(new ApplyOnlinePaymentCommand(checkoutId, payment), cancellationToken);
+                var applied = await _sender.Send(new ApplyOnlinePaymentCommand(checkoutId, payment, refusal), cancellationToken);
                 return applied.Value;
             }
-            catch (DbUpdateConcurrencyException) when (attempt == 1)
+            catch (DbUpdateException) when (attempt == 1)
             {
                 _context.ChangeTracker.Clear();
+            }
+            catch (DomainException ex) when (refusal is null)
+            {
+                _context.ChangeTracker.Clear();
+                refusal = ApplyOnlinePaymentCommandHandler.CatalogChangedMessage;
+                _logger.LogWarning("Online checkout {CheckoutId} could not be placed with the catalog of now ({Exception})", checkoutId, ex.GetType().Name);
             }
         }
     }
@@ -123,8 +154,12 @@ internal sealed class OnlinePaymentChecker
 /// total), with an «En línea» payment for its total; if it can no longer be placed, was paid too late or the checkout was
 /// already paid, the payment goes back to the customer in full. Applying the same payment again changes nothing.
 /// </summary>
+/// <param name="RefusedBecause">
+/// Set when a first attempt found the order can no longer be placed with the catalog of now: the payment goes back with
+/// this reason, without trying to place it again.
+/// </param>
 [AllowAnonymousRequest("Solo lo envía el sistema, con un pago que acaba de leer de Mercado Pago con la llave del negocio; ningún endpoint lo expone.")]
-public record ApplyOnlinePaymentCommand(Guid CheckoutId, OnlinePaymentDetails Payment)
+public record ApplyOnlinePaymentCommand(Guid CheckoutId, OnlinePaymentDetails Payment, string? RefusedBecause = null)
     : IRequest<Result<OnlinePaymentApplication>>, ITransactionalRequest;
 
 public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePaymentCommand, Result<OnlinePaymentApplication>>
@@ -132,6 +167,7 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
     public const string OrdersStoppedMessage = "El negocio dejó de recibir pedidos en línea antes de que se confirmara tu pago.";
     public const string PaidLateMessage = "Tu pago llegó después del tiempo para pagar.";
     public const string MismatchMessage = "El pago no coincide con tu pedido.";
+    public const string CatalogChangedMessage = "Algo de tu pedido cambió en el menú mientras pagabas: un producto, su horario o sus opciones.";
 
     private static readonly JsonSerializerOptions RequestJson = new(JsonSerializerDefaults.Web);
 
@@ -192,6 +228,8 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
             (failure, refusal) = (OnlineCheckoutFailure.PaymentMismatch, MismatchMessage);
         else if (checkout.Status == OnlineCheckoutStatus.Expired || approvedAt > checkout.ExpiresAt)
             (failure, refusal) = (OnlineCheckoutFailure.PaidAfterExpiry, PaidLateMessage);
+        else if (request.RefusedBecause is { } reason)
+            (failure, refusal) = (OnlineCheckoutFailure.OrderRefused, reason);
         else
             (failure, refusal) = await PlaceAsync(checkout, payment, approvedAt, now, cancellationToken);
 

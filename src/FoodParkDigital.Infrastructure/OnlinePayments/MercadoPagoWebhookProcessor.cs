@@ -69,9 +69,15 @@ public sealed class MercadoPagoWebhookProcessor
             {
                 failed++;
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One business failing does not leave the others without the payment: the delivery is retried.
+                _logger.LogError(ex, "The Mercado Pago notification could not be applied for tenant {TenantId}", tenantId);
+                failed++;
+            }
         }
 
-        return failed > 0 ? "Mercado Pago did not answer about the notified payment." : null;
+        return failed > 0 ? "The notified payment could not be applied for every business; it is retried." : null;
     }
 
     private static (string? PaymentId, long? UserId) Read(string payload)

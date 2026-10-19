@@ -7,11 +7,18 @@ export type OnlinePaymentSettings = Schemas['OnlinePaymentSettingsDto'];
 
 export const onlinePaymentSettingsKey = ['online-payments'] as const;
 
+/** While payments or refunds are in course the account waits for them: asked again until they end. */
+export const IN_COURSE_REFRESH_MS = 60_000;
+
 /** The business's Mercado Pago account and whether the menu offers to pay online (owners and admins). */
 export function useOnlinePaymentSettings() {
   return useQuery({
     queryKey: onlinePaymentSettingsKey,
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/online-payments', { signal }),
+    refetchInterval: (query) => {
+      const settings = query.state.data;
+      return settings && settings.checkoutsInCourse + settings.refundsInCourse > 0 ? IN_COURSE_REFRESH_MS : false;
+    },
   });
 }
 
@@ -43,7 +50,7 @@ export function useSetOnlinePaymentsAccepted() {
     apiRequest('put', '/api/v1/online-payments/accepts-payments', { body: { accepts } }));
 }
 
-/** Disconnects the account and deletes its keys; not while payments or refunds are in course. */
+/** Disconnects the account and deletes its keys: with paying online off, and not while payments or refunds are in course. */
 export function useDisconnectOnlinePayments() {
   return useSettingsChange(() => apiRequest('delete', '/api/v1/online-payments/account'));
 }

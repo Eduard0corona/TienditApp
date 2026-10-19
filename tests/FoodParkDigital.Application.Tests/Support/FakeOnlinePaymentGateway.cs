@@ -18,6 +18,8 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
     public bool IsConfigured { get; set; } = true;
     public bool Sandbox { get; set; }
     public bool Unavailable { get; set; }
+    /// <summary>Mercado Pago rejects the account's key (the owner revoked TienditApp).</summary>
+    public bool RejectKey { get; set; }
     public bool RefuseCode { get; set; }
     public OnlinePaymentRefundOutcome RefundOutcome { get; set; } = new OnlinePaymentRefundOutcome.Done("refund-1");
     public OnlinePaymentCredentials? Credentials { get; set; }
@@ -56,6 +58,7 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
         string accessToken, OnlinePaymentCheckoutRequest request, CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
+        ThrowIfKeyRejected();
         AccessTokensUsed.Add(accessToken);
         Checkouts.Add(request);
         return Task.FromResult(new OnlinePaymentCheckoutPage(
@@ -65,6 +68,7 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
     public Task<OnlinePaymentDetails?> GetPaymentAsync(string accessToken, string paymentId, CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
+        ThrowIfKeyRejected();
         AccessTokensUsed.Add(accessToken);
         return Task.FromResult(Payments.GetValueOrDefault(paymentId));
     }
@@ -73,6 +77,7 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
         string accessToken, Guid checkoutId, CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
+        ThrowIfKeyRejected();
         AccessTokensUsed.Add(accessToken);
         IReadOnlyList<OnlinePaymentDetails> found = Payments.Values
             .Where(p => p.ExternalReference == checkoutId.ToString())
@@ -85,6 +90,7 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
         string accessToken, string paymentId, decimal amount, Guid idempotencyKey, CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
+        ThrowIfKeyRejected();
         AccessTokensUsed.Add(accessToken);
         Refunds.Add((paymentId, amount, idempotencyKey));
         return Task.FromResult(RefundOutcome);
@@ -105,6 +111,12 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
     {
         if (Unavailable)
             throw new OnlinePaymentGatewayUnavailableException("Mercado Pago no respondió. Intenta de nuevo en unos minutos.");
+    }
+
+    private void ThrowIfKeyRejected()
+    {
+        if (RejectKey)
+            throw new OnlinePaymentAccountRejectedException("Mercado Pago ya no acepta la cuenta del negocio: hay que conectarla otra vez.");
     }
 }
 

@@ -1,9 +1,11 @@
+import { StrictMode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { IN_COURSE_REFRESH_MS } from '../../api/onlinePayments';
 import { apiRequest, type Schemas } from '../../api/typedClient';
 import { goToExternalPage } from '../../utils/externalNavigation';
 import OnlinePayments from './OnlinePayments';
@@ -52,13 +54,16 @@ function Address() {
 
 function renderPage(url = '/settings/online-payments') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // Strict mode runs each effect twice: what Mercado Pago sent back is still used once.
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[url]}>
-        <Address />
-        <OnlinePayments />
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[url]}>
+          <Address />
+          <OnlinePayments />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </StrictMode>,
   );
 }
 
@@ -123,10 +128,12 @@ describe('OnlinePayments', () => {
     expect(screen.getByTestId('address')).toHaveTextContent(/^\/settings\/online-payments$/);
   });
 
-  it('turns paying online on, and disconnects the account after asking', async () => {
+  it('turns paying online on and off, and disconnects the account after asking only once it is off', async () => {
+    let accepting = false;
     serve(CONNECTED, (method, path, body) => {
       if (method === 'put' && path === '/api/v1/online-payments/accepts-payments') {
-        return Promise.resolve({ ...CONNECTED, acceptsPayments: (body as { accepts: boolean }).accepts });
+        accepting = (body as { accepts: boolean }).accepts;
+        return Promise.resolve({ ...CONNECTED, acceptsPayments: accepting });
       }
       if (method === 'delete' && path === '/api/v1/online-payments/account') return Promise.resolve(NOT_CONNECTED);
       return Promise.reject(new Error(`Sin respuesta para ${method} ${path}`));
@@ -139,12 +146,18 @@ describe('OnlinePayments', () => {
 
     await waitFor(() => expect(toggle).toBeChecked());
     expect(toast.success).toHaveBeenCalledWith('Tu menú ya ofrece pagar en línea.');
+    // On, the account stays: no payment may start with an account on its way out.
+    expect(screen.getByRole('button', { name: 'Desconectar' })).toBeDisabled();
+    expect(screen.getByText('Para desconectar o cambiar la cuenta, primero apaga el pago en línea.')).toBeInTheDocument();
 
+    await userEvent.click(toggle);
+    await waitFor(() => expect(toggle).not.toBeChecked());
     await userEvent.click(screen.getByRole('button', { name: 'Desconectar' }));
     expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'Desconectar Mercado Pago', danger: true }));
     expect(await screen.findByRole('button', { name: 'Conectar Mercado Pago' })).toBeInTheDocument();
     expect(writes()).toEqual([
       ['put', '/api/v1/online-payments/accepts-payments', { body: { accepts: true } }],
+      ['put', '/api/v1/online-payments/accepts-payments', { body: { accepts: false } }],
       ['delete', '/api/v1/online-payments/account'],
     ]);
   });
@@ -160,18 +173,24 @@ describe('OnlinePayments', () => {
     expect(writes()).toEqual([]);
   });
 
-  it('waits for the payments and refunds in course before the account changes, and points to the refused refunds', async () => {
-    serve({ ...CONNECTED, acceptsPayments: true, checkoutsInCourse: 1, refundsInCourse: 1, refundsRefused: 2, needsReconnect: true });
+  it('waits for the payments and refunds in course before the account goes, asks again meanwhile, and points to the refused refunds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    onTestFinished(() => { vi.useRealTimers(); });
+    serve({ ...CONNECTED, checkoutsInCourse: 1, refundsInCourse: 1, refundsRefused: 2, needsReconnect: true });
 
     renderPage();
 
-    expect(await screen.findByText(/Hay 2 pagos o devoluciones en curso/)).toBeInTheDocument();
+    expect(await screen.findByText(/Hay 2 pagos o devoluciones en curso: para cambiar o desconectar la cuenta, espera a que terminen \(unos 45 minutos\)/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Desconectar' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Volver a conectar' })).toBeDisabled();
+    // Connecting the same account again is how it starts answering again, also with payments in course.
+    expect(screen.getByRole('button', { name: 'Volver a conectar' })).toBeEnabled();
     expect(screen.getByText(/La cuenta de Mercado Pago ya no responde/)).toBeInTheDocument();
     expect(screen.getByText(/Mercado Pago no hizo 2 devoluciones/)).toBeInTheDocument();
-    // On, it can always be turned off.
-    expect(screen.getByRole('switch', { name: 'Ofrecer pagar en línea en mi menú' })).toBeEnabled();
+
+    // Once they end, the next ask lets the account go.
+    serve({ ...CONNECTED, refundsRefused: 2, needsReconnect: true });
+    await vi.advanceTimersByTimeAsync(IN_COURSE_REFRESH_MS);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Desconectar' })).toBeEnabled());
   });
 
   it('tells the owner the menu must take orders for paying online to show', async () => {
