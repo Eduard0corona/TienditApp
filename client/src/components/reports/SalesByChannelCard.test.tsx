@@ -185,6 +185,16 @@ describe('SalesByChannelCard', () => {
     await screen.findByRole('table');
     expect(cellsOf('Total')).toEqual(['Total', '40', '$9,800.00', '$120.00', '$9,680.00', '—', '—', '—']);
     expect(screen.queryByText(/El neto esperado/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/se pagaron en línea/)).not.toBeInTheDocument();
+  });
+
+  it('says what the online menu was paid online, which is in Mercado Pago and not in the drawer (Fase 24I)', async () => {
+    const online = sales({ channel: OrderChannel.Online, paidOrders: 3, paymentsAmount: 450, netSales: 450, onlineCollected: 290 });
+    vi.mocked(reportsApi.getSalesByChannel).mockResolvedValue(report({ channels: [online], totals: { ...online, channel: undefined } }));
+    renderCard();
+
+    expect(await screen.findByText('De tu menú en línea se pagaron en línea $290.00: están en tu cuenta de Mercado Pago, no en tu caja.'))
+      .toBeInTheDocument();
   });
 
   it('says when the period had no sales and when the report cannot be read', async () => {

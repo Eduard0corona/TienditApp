@@ -50,6 +50,7 @@ import {
   getOrderStatusLabel,
   getPaymentMethodLabel,
 } from '../../utils/labels';
+import { describeOnlineRefund } from '../../utils/onlineRefunds';
 import { getApiErrorMessage } from '../../api/errors';
 import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 
@@ -1090,7 +1091,13 @@ export default function OrdersList() {
                               {toLocalDateTime(refund.refundedAt)}
                               <div className="text-muted small">{refund.refundedBy}</div>
                             </td>
-                            <td>{getPaymentMethodLabel(refund.method)}</td>
+                            <td>
+                              {getPaymentMethodLabel(refund.method)}
+                              {refund.method === OrderPaymentMethod.Online && (() => {
+                                const online = describeOnlineRefund(refund.onlineStatus, refund.onlineFailure);
+                                return <div className={`small text-${online.tone}`}>{online.text}</div>;
+                              })()}
+                            </td>
                             <td>{refund.reason}</td>
                             <td>
                               {refund.lines.length === 0 ? '-' : refund.lines.map((line) => {

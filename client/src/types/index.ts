@@ -340,6 +340,7 @@ export { TenantCapability } from '../api/generated/enums';
  * keeps its address for the team.
  */
 export { BranchServiceMode } from '../api/generated/enums';
+import type { OnlinePaymentRefundStatus } from '../api/generated/enums';
 
 export interface RegisterBusinessRequest {
   email: string;
@@ -1719,6 +1720,10 @@ export interface OrderRefundDto {
   reference?: string;
   restockItems: boolean;
   lines: Array<{ orderItemId: string; quantity: number }>;
+  /** An «En línea» refund goes back through Mercado Pago (Fase 24I): asked, given back or refused. */
+  onlineStatus?: OnlinePaymentRefundStatus | null;
+  /** What Mercado Pago answered when it refused it. */
+  onlineFailure?: string | null;
 }
 
 /** Units of a dish of a tab cancelled after it went to the kitchen. */
@@ -1928,6 +1933,8 @@ export interface DashboardMetricsDto {
   totalRevenue: number;
   /** The part of totalRevenue the delivery platforms charged in their apps, minus what went back as «Plataforma». */
   platformCollected?: number;
+  /** The part of totalRevenue customers paid online in Mercado Pago, minus what went back as «En línea» (Fase 24I). */
+  onlineCollected?: number;
   /** Revenue divided by the orders that received those payments. */
   averageOrderValue: number;
   paidOrders: number;

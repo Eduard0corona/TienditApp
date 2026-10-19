@@ -58,7 +58,37 @@ const didiPaidInCash: OrderDto = {
   platformOrder: { externalOrderNumber: '12', collectedBy: PlatformCollectedBy.Business },
 };
 
+/** An order of the online menu paid in Mercado Pago (Fase 24I): its money is an «En línea» payment. */
+const paidOnline: OrderDto = {
+  ...sale,
+  channel: OrderChannel.Online,
+  payments: [{ id: 'p1', amount: 350, method: OrderPaymentMethod.Online, paidAt: '2026-10-10T18:00:00Z', reference: '987654321' }],
+};
+
 describe('RefundOrderModal', () => {
+  it('gives back an order paid online through Mercado Pago, and still lets the business hand money back itself', async () => {
+    const onSubmit = vi.fn();
+    render(<RefundOrderModal mode="refund" order={paidOnline} submitting={false} error="" onClose={vi.fn()} onSubmit={onSubmit} />);
+
+    const method = screen.getByLabelText('Se devuelve en');
+    expect(method).toHaveValue(String(OrderPaymentMethod.Online));
+    expect(within(method).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['En línea', 'Efectivo', 'Tarjeta', 'Transferencia', 'Billetera digital', 'Otro']);
+    expect(screen.getByText('Mercado Pago se lo devuelve al cliente a su tarjeta o cuenta; no sale de tu caja.')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Monto a devolver'), '100');
+    await userEvent.type(screen.getByLabelText('Motivo'), 'Faltó un refresco');
+    await userEvent.click(screen.getByRole('button', { name: 'Reembolsar $100.00' }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ amount: 100, method: OrderPaymentMethod.Online }));
+  });
+
+  it('offers «En línea» only for an order paid online', () => {
+    render(<RefundOrderModal mode="refund" order={sale} submitting={false} error="" onClose={vi.fn()} onSubmit={vi.fn()} />);
+
+    expect(within(screen.getByLabelText('Se devuelve en')).getAllByRole('option').map((option) => option.textContent)).not.toContain('En línea');
+  });
+
   it('gives back what the platform charged only as «Plataforma», outside the drawer', async () => {
     const onSubmit = vi.fn();
     render(<RefundOrderModal mode="refund" order={rappi} submitting={false} error="" onClose={vi.fn()} onSubmit={onSubmit} />);

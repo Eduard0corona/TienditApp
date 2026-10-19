@@ -911,6 +911,33 @@ button.pm-pill:hover {
   gap: 0.5rem;
 }
 
+/* How the customer pays when the business takes online payments (Fase 24I): two cards a thumb can pick. */
+.pm-pay-options {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.pm-pay-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-height: var(--ta-touch);
+  padding: 0.75rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--ta-radius-lg);
+  cursor: pointer;
+}
+
+.pm-pay-option .form-check-input {
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+
+.pm-pay-option.is-selected {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 1px var(--bs-primary);
+}
+
 .pm-checkout-footer {
   padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
   border-top: 1px solid var(--ct-border-color);
@@ -960,6 +987,12 @@ button.pm-pill:hover {
   background: var(--ta-chip-ready-bg);
   color: var(--ta-chip-ready-fg);
   font-size: 2.25rem;
+}
+
+/* A paid order that could not be placed: its money goes back (Fase 24I). */
+.pm-receipt-icon-warning {
+  background: var(--ta-chip-preparing-bg);
+  color: var(--ta-chip-preparing-fg);
 }
 
 .pm-receipt-card {

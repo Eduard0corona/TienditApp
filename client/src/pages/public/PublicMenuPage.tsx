@@ -51,6 +51,8 @@ import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
 import { newUuid } from '../../utils/uuid';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
+import { goToExternalPage } from '../../utils/externalNavigation';
+import { rememberOnlineCheckout } from '../../utils/onlineCheckouts';
 import { parsePaysWith, paysWithProblem } from '../../utils/courierCash';
 import PublicDeliveryFields, { type PublicDeliveryAddress } from './PublicDeliveryFields';
 import './PublicMenuPage.css';
@@ -133,6 +135,16 @@ export default function PublicMenuPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [receipt, setReceipt] = useState<PublicOrderReceipt | null>(null);
+  // How the customer pays when the business takes online payments (Fase 24I): online unless they choose on delivery.
+  const [payOnDelivery, setPayOnDelivery] = useState(false);
+  // Back from Mercado Pago, the browser may bring the page back as it left it, still opening the payment.
+  useEffect(() => {
+    const shown = (event: PageTransitionEvent) => {
+      if (event.persisted) setSending(false);
+    };
+    window.addEventListener('pageshow', shown);
+    return () => window.removeEventListener('pageshow', shown);
+  }, []);
   const [toAddress, setToAddress] = useState(false);
   const [address, setAddress] = useState<PublicDeliveryAddress>(NO_ADDRESS);
   const queryClient = useQueryClient();
@@ -175,6 +187,9 @@ export default function PublicMenuPage() {
   // At one of its tables the customer is already there; a kitchen without premises with zones only delivers.
   const deliveryOffered = !!data?.deliveryAvailable && !atTable;
   const deliveryRequired = deliveryOffered && !!data?.deliveryOnly;
+  // Never at a table: the customer pays there.
+  const onlineOffered = !!data?.paysOnline && !atTable;
+  const payingOnline = onlineOffered && !payOnDelivery;
   const delivering = deliveryOffered && (deliveryRequired || toAddress);
   const addresses = useQuery({
     queryKey: ['me', 'addresses'],
@@ -256,7 +271,7 @@ export default function PublicMenuPage() {
       ? belowMinimumMessage(postalCode, terms.minimumOrder)
       : '');
   // «¿Con cuánto pagas?» covers the total with its delivery, once its fee is known.
-  const paysWithIssue = delivering && terms ? paysWithProblem(address.paysWith, totals.total) : '';
+  const paysWithIssue = delivering && terms && !payingOnline ? paysWithProblem(address.paysWith, totals.total) : '';
   const paysWithTyped = parsePaysWith(address.paysWith);
   // To an address the order waits for the server's answer for the postal code.
   const deliveryBlocked = delivering && (checkingQuote || !terms || deliveryProblem !== '' || paysWithIssue !== '');
@@ -354,7 +369,7 @@ export default function PublicMenuPage() {
           postalCode,
           addressLine: address.addressLine.trim(),
           references: address.references.trim() || null,
-          paysWith: typeof paysWithTyped === 'number' ? paysWithTyped : null,
+          paysWith: typeof paysWithTyped === 'number' && !payingOnline ? paysWithTyped : null,
         }
         : undefined,
       items: lines.map((line) => ({
@@ -367,6 +382,10 @@ export default function PublicMenuPage() {
       saveAddress: keeping,
       addressLabel: keeping ? addressLabel.trim() || null : null,
     };
+    if (payingOnline) {
+      await payOnline(order);
+      return;
+    }
     // Another order (a product, the address or the total changed) gets another key.
     const signature = JSON.stringify(order);
     if (attempt.current?.signature !== signature) attempt.current = { signature, key: newUuid() };
@@ -384,6 +403,31 @@ export default function PublicMenuPage() {
       void menu.refetch();
     } finally {
       setSending(false);
+    }
+  };
+
+  /**
+   * Opens Mercado Pago's page for the order (Fase 24I). The cart stays on this device until the payment places the order,
+   * and the return key stays too: the return page sends it to read the order's tracking link.
+   */
+  const payOnline = async (order: PlacePublicOrder) => {
+    try {
+      const started = await publicMenuApi.startOnlineCheckout(slug, {
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        notes: order.notes,
+        items: order.items,
+        expectedTotal: order.expectedTotal,
+        delivery: order.delivery,
+        saveAddress: order.saveAddress,
+        addressLabel: order.addressLabel,
+      });
+      rememberOnlineCheckout(started.checkoutId, started.returnKey);
+      goToExternalPage(started.checkoutUrl);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo abrir el pago. Intenta de nuevo.'));
+      setSending(false);
+      void menu.refetch();
     }
   };
 
@@ -687,6 +731,7 @@ export default function PublicMenuPage() {
                   save={canKeepAddress
                     ? { checked: keepAddress, label: addressLabel, onCheckedChange: setKeepAddress, onLabelChange: setAddressLabel }
                     : null}
+                  paidOnline={payingOnline}
                 />
               )}
               {atTable && <p className="mb-0"><i className="ri-restaurant-line me-1" aria-hidden="true"></i>Te lo llevamos a {tableLabel}.</p>}
@@ -724,6 +769,30 @@ export default function PublicMenuPage() {
               </div>
             </section>
 
+            {onlineOffered && (
+              <section className="pm-checkout-section" aria-labelledby={`${cartTitleId}-pay`}>
+                <h3 id={`${cartTitleId}-pay`} className="pm-checkout-title">Pago</h3>
+                <div className="pm-pay-options" role="radiogroup" aria-labelledby={`${cartTitleId}-pay`}>
+                  <label className={`pm-pay-option ${payingOnline ? 'is-selected' : ''}`}>
+                    <input type="radio" name="pm-pay" className="form-check-input" checked={payingOnline}
+                      onChange={() => setPayOnDelivery(false)} />
+                    <span>
+                      <span className="fw-semibold d-block">Pagar ahora en línea</span>
+                      <span className="small text-muted">Con tarjeta o tu cuenta de Mercado Pago.</span>
+                    </span>
+                  </label>
+                  <label className={`pm-pay-option ${payingOnline ? '' : 'is-selected'}`}>
+                    <input type="radio" name="pm-pay" className="form-check-input" checked={!payingOnline}
+                      onChange={() => setPayOnDelivery(true)} />
+                    <span>
+                      <span className="fw-semibold d-block">{delivering ? 'Pagar al recibir' : 'Pagar al recoger'}</span>
+                      <span className="small text-muted">En efectivo o como acepte el negocio.</span>
+                    </span>
+                  </label>
+                </div>
+              </section>
+            )}
+
             <section className="pm-checkout-section pm-summary" aria-labelledby={`${cartTitleId}-summary`}>
               <h3 id={`${cartTitleId}-summary`} className="pm-checkout-title">Resumen</h3>
               {totals.fee !== null && totals.productsTotal !== null && (
@@ -749,9 +818,15 @@ export default function PublicMenuPage() {
         </Offcanvas.Body>
         <div className="pm-checkout-footer">
           <button type="submit" form="pm-checkout-form" className="btn btn-primary btn-touch btn-touch-lg w-100" disabled={sending || lines.length === 0 || deliveryBlocked}>
-            {sending ? 'Enviando…' : `Hacer pedido · ${formatMoney(totals.total)}`}
+            {sending
+              ? (payingOnline ? 'Abriendo Mercado Pago…' : 'Enviando…')
+              : `${payingOnline ? 'Pagar' : 'Hacer pedido'} · ${formatMoney(totals.total)}`}
           </button>
-          <p className="small text-muted mt-2 mb-0">Usamos tu teléfono solo para avisarte de este pedido.</p>
+          <p className="small text-muted mt-2 mb-0">
+            {payingOnline
+              ? 'Pagas en Mercado Pago; tu pedido se envía cuando se aprueba el pago. Usamos tu teléfono solo para avisarte.'
+              : 'Usamos tu teléfono solo para avisarte de este pedido.'}
+          </p>
         </div>
       </Offcanvas>
     </div>

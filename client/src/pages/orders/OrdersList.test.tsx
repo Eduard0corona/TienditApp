@@ -7,6 +7,7 @@ import { ordersApi } from '../../api/ordersApi';
 import { apiRequest } from '../../api/typedClient';
 import { useAuth } from '../../hooks/useAuth';
 import type { OrderCreatedPayload, OrderUpdatedPayload } from '../../hooks/useOrderSignalR';
+import { OnlinePaymentRefundStatus } from '../../api/generated/enums';
 import { useTenant } from '../../hooks/useTenant';
 import { DeliveryCourier, OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, TenantCapability, type OrderDto } from '../../types';
 import OrdersList from './OrdersList';
@@ -192,6 +193,31 @@ describe('OrdersList', () => {
     // What the platform charged reads with its folio; its commission never reaches Pedidos.
     expect(within(detail).getByRole('cell', { name: 'Plataforma · BC953' })).toBeInTheDocument();
     expect(detail).not.toHaveTextContent(/comisi[oó]n|neto/i);
+  });
+
+  it('says what became of each refund given back through Mercado Pago (Fase 24I)', async () => {
+    const user = userEvent.setup();
+    const refund = (id: string, onlineStatus: number, onlineFailure: string | null = null) => ({
+      id, amount: 40, method: OrderPaymentMethod.Online, reason: 'Faltó un refresco', refundedAt: '2026-10-09T17:00:00Z',
+      refundedBy: 'Mariana', restockItems: false, lines: [], onlineStatus, onlineFailure,
+    });
+    renderOrders(TenantCapability.Food, [order({
+      channel: OrderChannel.Online, createdByBusiness: false, items: [], taxBreakdown: [], statusHistory: [], servicePieces: [],
+      allowedTransitions: [], refundedAmount: 120,
+      payments: [{ id: 'p1', amount: 120, method: OrderPaymentMethod.Online, paidAt: '2026-10-09T16:00:00Z', reference: '987654321' }],
+      refunds: [
+        refund('f1', OnlinePaymentRefundStatus.Requested),
+        refund('f2', OnlinePaymentRefundStatus.Completed),
+        refund('f3', OnlinePaymentRefundStatus.Failed, 'El pago ya no se puede devolver.'),
+      ],
+    } as Partial<OrderDto>)]);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    expect(within(detail).getByText('Mercado Pago lo está devolviendo.')).toHaveClass('text-muted');
+    expect(within(detail).getByText('Mercado Pago ya lo devolvió.')).toHaveClass('text-success');
+    expect(within(detail).getByText('El pago ya no se puede devolver. Devuélvelo desde tu cuenta de Mercado Pago.')).toHaveClass('text-danger');
   });
 
   it('says the business charged an order the courier paid', async () => {

@@ -161,6 +161,12 @@ export default function SalesByChannelCard() {
                 </tfoot>
               </table>
             </div>
+            {/* Paid online in Mercado Pago (Fase 24I): in the business's Mercado Pago account, not in its drawers. */}
+            {data.totals.onlineCollected > 0 && (
+              <p className="small mt-2 mb-0">
+                De tu menú en línea se pagaron en línea {formatMoney(data.totals.onlineCollected)}: están en tu cuenta de Mercado Pago, no en tu caja.
+              </p>
+            )}
             {data.channels
               .filter((row) => isDeliveryPlatform(row.channel) && row.businessCollected > 0)
               .map((row) => (

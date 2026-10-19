@@ -84,6 +84,16 @@ describe('Dashboard', () => {
     await screen.findByText('Café americano');
 
     expect(screen.queryByText(/que cobraron las plataformas/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pagado en línea/)).not.toBeInTheDocument();
+  });
+
+  it('says how much of "Cobrado" was paid online into the business\'s Mercado Pago account (Fase 24I)', async () => {
+    vi.mocked(dashboardApi.getMetrics).mockResolvedValue({
+      data: metrics({ totalRevenue: 1600, onlineCollected: 290 }),
+    } as Awaited<ReturnType<typeof dashboardApi.getMetrics>>);
+    renderDashboard();
+
+    expect(await screen.findByText('Incluye $290.00 pagado en línea; está en tu cuenta de Mercado Pago.')).toHaveClass('small', 'text-muted');
   });
 
   it('counts the orders of the day in singular when there is one', async () => {
