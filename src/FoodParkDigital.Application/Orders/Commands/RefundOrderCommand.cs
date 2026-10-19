@@ -130,6 +130,7 @@ internal static class OrderRefundQueries
             .FirstAsync(o => o.Id == orderId, cancellationToken);
         var dto = order.ToDto();
         dto.ApplyStateMetadata();
+        await OnlineRefundStatuses.ApplyAsync(context, dto, cancellationToken);
         return dto;
     }
 }

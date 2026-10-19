@@ -615,7 +615,7 @@ public class AutoReplyHoursTests
         await using var fixture = SalesTestFixture.Create();
         var saturdayNight = OpeningHours.Create([Open(DayOfWeek.Saturday, "18:00", "01:30")]);
         var tenant = await BusinessAsync(fixture, saturdayNight, timeZone: "America/Tijuana");
-        var menu = new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock);
+        var menu = new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off);
 
         fixture.Clock.UtcNow = new DateTimeOffset(2026, 11, 1, 8, 15, 0, TimeSpan.Zero);
         var firstMenu = (await menu.Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None))!.OpeningHours!;

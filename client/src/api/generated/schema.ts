@@ -5638,6 +5638,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payments/mercadopago/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/messaging/templates": {
         parameters: {
             query?: never;
@@ -6117,6 +6150,203 @@ export interface paths {
                         "text/plain": components["schemas"]["MessagingSettingsDto"];
                         "application/json": components["schemas"]["MessagingSettingsDto"];
                         "text/json": components["schemas"]["MessagingSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/online-payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlinePaymentSettingsDto"];
+                        "application/json": components["schemas"]["OnlinePaymentSettingsDto"];
+                        "text/json": components["schemas"]["OnlinePaymentSettingsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/online-payments/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlinePaymentConnectionStartDto"];
+                        "application/json": components["schemas"]["OnlinePaymentConnectionStartDto"];
+                        "text/json": components["schemas"]["OnlinePaymentConnectionStartDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/online-payments/connect/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CompleteOnlinePaymentConnectionRequest"];
+                    "text/json": components["schemas"]["CompleteOnlinePaymentConnectionRequest"];
+                    "application/*+json": components["schemas"]["CompleteOnlinePaymentConnectionRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlinePaymentSettingsDto"];
+                        "application/json": components["schemas"]["OnlinePaymentSettingsDto"];
+                        "text/json": components["schemas"]["OnlinePaymentSettingsDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/online-payments/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlinePaymentSettingsDto"];
+                        "application/json": components["schemas"]["OnlinePaymentSettingsDto"];
+                        "text/json": components["schemas"]["OnlinePaymentSettingsDto"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/online-payments/accepts-payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetOnlinePaymentsAcceptedRequest"];
+                    "text/json": components["schemas"]["SetOnlinePaymentsAcceptedRequest"];
+                    "application/*+json": components["schemas"]["SetOnlinePaymentsAcceptedRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlinePaymentSettingsDto"];
+                        "application/json": components["schemas"]["OnlinePaymentSettingsDto"];
+                        "text/json": components["schemas"]["OnlinePaymentSettingsDto"];
                     };
                 };
             };
@@ -8665,6 +8895,97 @@ export interface paths {
                         "text/plain": components["schemas"]["PublicOrderReceiptDto"];
                         "application/json": components["schemas"]["PublicOrderReceiptDto"];
                         "text/json": components["schemas"]["PublicOrderReceiptDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/checkouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateOnlineCheckoutRequest"];
+                    "text/json": components["schemas"]["CreateOnlineCheckoutRequest"];
+                    "application/*+json": components["schemas"]["CreateOnlineCheckoutRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineCheckoutStartedDto"];
+                        "application/json": components["schemas"]["OnlineCheckoutStartedDto"];
+                        "text/json": components["schemas"]["OnlineCheckoutStartedDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/checkouts/{checkoutId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                    checkoutId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ConfirmOnlineCheckoutRequest"];
+                    "text/json": components["schemas"]["ConfirmOnlineCheckoutRequest"];
+                    "application/*+json": components["schemas"]["ConfirmOnlineCheckoutRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineCheckoutStatusDto"];
+                        "application/json": components["schemas"]["OnlineCheckoutStatusDto"];
+                        "text/json": components["schemas"]["OnlineCheckoutStatusDto"];
                     };
                 };
             };
@@ -11410,6 +11731,8 @@ export interface components {
             /** Format: double */
             businessCollected: number;
             /** Format: double */
+            onlineCollected: number;
+            /** Format: double */
             commission: number;
             /** Format: double */
             commissionTax: number;
@@ -11454,6 +11777,15 @@ export interface components {
         };
         ClosePurchaseOrderRequest: {
             reason?: string | null;
+        };
+        CompleteOnlinePaymentConnectionRequest: {
+            /** Format: uuid */
+            state: string;
+            code: string;
+        };
+        ConfirmOnlineCheckoutRequest: {
+            paymentId?: string | null;
+            returnKey?: string | null;
         };
         ConfirmPhoneChangeCommand: {
             phoneNumber: string;
@@ -11744,6 +12076,17 @@ export interface components {
             body: string;
             providerTemplateName?: string | null;
             languageCode?: string | null;
+        };
+        CreateOnlineCheckoutRequest: {
+            customerName: string;
+            customerPhone: string;
+            notes?: string | null;
+            items: components["schemas"]["CreateOrderItemDto"][];
+            /** Format: double */
+            expectedTotal?: number | null;
+            delivery?: components["schemas"]["OrderDeliveryInput"];
+            saveAddress: boolean;
+            addressLabel?: string | null;
         };
         CreateOrderCommand: {
             /** Format: uuid */
@@ -12198,6 +12541,8 @@ export interface components {
             totalRevenue: number;
             /** Format: double */
             platformCollected: number;
+            /** Format: double */
+            onlineCollected: number;
             /** Format: double */
             averageOrderValue: number;
             /** Format: int32 */
@@ -12935,6 +13280,37 @@ export interface components {
             missing: string[];
             slug: string;
         };
+        OnlineCheckoutStartedDto: {
+            /** Format: uuid */
+            checkoutId: string;
+            checkoutUrl: string;
+            /** Format: double */
+            amount: number;
+            /** Format: date-time */
+            expiresAt: string;
+            returnKey: string;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OnlineCheckoutStatus: 0 | 1 | 2 | 3;
+        OnlineCheckoutStatusDto: {
+            status: components["schemas"]["OnlineCheckoutStatus"];
+            /** Format: double */
+            amount: number;
+            /** Format: date-time */
+            expiresAt: string;
+            businessName: string;
+            contactPhone?: string | null;
+            checkoutUrl?: string | null;
+            orderNumber?: string | null;
+            confirmed: boolean;
+            linkedToAccount: boolean;
+            trackingToken?: string | null;
+            failureMessage?: string | null;
+            refundStatus?: components["schemas"]["OnlinePaymentRefundStatus"];
+        };
         /**
          * Format: int32
          * @enum {integer}
@@ -12943,6 +13319,34 @@ export interface components {
         OnlineMenuSettingsDto: {
             mode: components["schemas"]["OnlineMenuMode"];
             slug: string;
+        };
+        OnlinePaymentConnectionStartDto: {
+            authorizationUrl: string;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OnlinePaymentRefundStatus: 0 | 1 | 2;
+        OnlinePaymentSettingsDto: {
+            available: boolean;
+            sandbox: boolean;
+            connected: boolean;
+            /** Format: int64 */
+            accountId?: number | null;
+            /** Format: date-time */
+            connectedAt?: string | null;
+            /** Format: date-time */
+            keyExpiresAt?: string | null;
+            needsReconnect: boolean;
+            acceptsPayments: boolean;
+            menuTakesOrders: boolean;
+            /** Format: int32 */
+            checkoutsInCourse: number;
+            /** Format: int32 */
+            refundsInCourse: number;
+            /** Format: int32 */
+            refundsRefused: number;
         };
         OpenCashSessionCommand: {
             /** Format: double */
@@ -13226,6 +13630,8 @@ export interface components {
             reference?: string | null;
             restockItems: boolean;
             lines: components["schemas"]["OrderRefundLineDto"][];
+            onlineStatus?: components["schemas"]["OnlinePaymentRefundStatus"];
+            onlineFailure?: string | null;
         };
         OrderRefundLineDto: {
             /** Format: uuid */
@@ -14022,6 +14428,7 @@ export interface components {
             defaultTaxRate: number;
             acceptsOrders: boolean;
             ordersPaused: boolean;
+            paysOnline: boolean;
             theme: components["schemas"]["BusinessTheme"];
             address?: string | null;
             mapPoint?: components["schemas"]["MapPointDto"];
@@ -14618,6 +15025,9 @@ export interface components {
         SetMessagingOptOutCommand: {
             phone: string;
             optedOut: boolean;
+        };
+        SetOnlinePaymentsAcceptedRequest: {
+            accepts: boolean;
         };
         SetProductOptionGroupsRequest: {
             groups: components["schemas"]["ProductOptionGroupInput"][];

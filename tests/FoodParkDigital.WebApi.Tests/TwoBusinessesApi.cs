@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
@@ -75,6 +76,9 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     public Business A { get; private set; } = null!;
     public Business B { get; private set; } = null!;
 
+    /// <summary>Mercado Pago, as the API sees it.</summary>
+    public TestOnlinePaymentGateway OnlinePayments { get; } = new();
+
     public async Task InitializeAsync()
     {
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(SqlServerTestDatabase.ConnectionVariable)))
@@ -95,7 +99,15 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             // what they would send. The emails are recorded instead: signing in needs the link of the sign-up email.
             host.UseSetting("EmailSettings:Smtp:Host", "");
             host.UseSetting("SmsSettings:AccountSid", "");
-            host.ConfigureTestServices(services => services.AddSingleton<IEmailService>(_emails));
+            host.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<IEmailService>(_emails);
+                services.AddSingleton<IOnlinePaymentGateway>(OnlinePayments);
+            });
+            // Paying online (Fase 24I): the businesses' keys are encrypted with a test key and the notifications signed
+            // with a test secret; Mercado Pago itself is TestOnlinePaymentGateway.
+            host.UseSetting("SecretProtection:Key", Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray()));
+            host.UseSetting("MercadoPago:WebhookSecret", TestOnlinePaymentGateway.WebhookSecret);
             // A hub connection whose session ended closes within a second, not the default 30.
             host.UseSetting("Hubs:AccessCheckInterval", "00:00:01");
             host.UseSetting(WhatsAppWebhookSignatureVerifier.AppSecretSetting, WhatsAppWebhookTestSupport.AppSecret);
@@ -277,6 +289,40 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             request.Headers.Add(
                 WhatsAppWebhookSignatureVerifier.SignatureHeaderName,
                 signature == "valid" ? WhatsAppWebhookTestSupport.Sign(bytes, WhatsAppWebhookTestSupport.AppSecret) : signature);
+        }
+
+        using var client = _factory!.CreateClient();
+        return await client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// Posts a payment notification as Mercado Pago does (Fase 24I): <c>x-signature</c> over the notified id, the request
+    /// id and the time, with the test secret (or the given signature).
+    /// </summary>
+    public async Task<HttpResponseMessage> PostMercadoPagoWebhookAsync(string paymentId, long? userId, string? signature = "valid")
+    {
+        var requestId = Guid.NewGuid().ToString();
+        var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var body = JsonSerializer.Serialize(new
+        {
+            action = "payment.created",
+            api_version = "v1",
+            data = new { id = paymentId },
+            live_mode = true,
+            type = "payment",
+            user_id = userId?.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/payments/mercadopago/webhook?data.id={paymentId}&type=payment")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add(MercadoPagoWebhookSignatureVerifier.RequestIdHeaderName, requestId);
+        if (signature is not null)
+        {
+            var manifest = $"id:{paymentId};request-id:{requestId};ts:{ts};";
+            var v1 = Convert.ToHexStringLower(System.Security.Cryptography.HMACSHA256.HashData(
+                Encoding.UTF8.GetBytes(TestOnlinePaymentGateway.WebhookSecret), Encoding.UTF8.GetBytes(manifest)));
+            request.Headers.Add(MercadoPagoWebhookSignatureVerifier.SignatureHeaderName, signature == "valid" ? $"ts={ts},v1={v1}" : signature);
         }
 
         using var client = _factory!.CreateClient();

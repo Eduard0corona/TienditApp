@@ -417,7 +417,7 @@ public class SpecialDaysMenuTests
     };
 
     private static GetPublicMenuQueryHandler MenuHandler(SalesTestFixture fixture)
-        => new(fixture.Context, fixture.TenantService, fixture.Clock);
+        => new(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off);
 
     private static PlacePublicOrderCommandHandler OrderHandler(SalesTestFixture fixture)
     {

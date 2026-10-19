@@ -10,6 +10,7 @@ using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Delivery;
+using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
@@ -132,6 +133,11 @@ public class PublicMenuDto
     /// charge them in.
     /// </summary>
     public bool OrdersPaused { get; set; }
+    /// <summary>
+    /// The customer may pay the order online, in Mercado Pago (Fase 24I): the business connected its account and turned it
+    /// on. Only to pick it up or to have it delivered, never at a table.
+    /// </summary>
+    public bool PaysOnline { get; set; }
     /// <summary>The colors the business picked: its customers see the menu with them.</summary>
     public BusinessTheme Theme { get; set; }
     /// <summary>
@@ -348,12 +354,15 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IOnlinePaymentGateway _gateway;
 
-    public GetPublicMenuQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider dateTimeProvider)
+    public GetPublicMenuQueryHandler(
+        IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider dateTimeProvider, IOnlinePaymentGateway gateway)
     {
         _context = context;
         _tenantService = tenantService;
         _dateTimeProvider = dateTimeProvider;
+        _gateway = gateway;
     }
 
     public async Task<PublicMenuDto?> Handle(GetPublicMenuQuery request, CancellationToken cancellationToken)
@@ -428,6 +437,8 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             DefaultTaxRate = settings.DefaultTaxRate,
             AcceptsOrders = acceptsOrders,
             OrdersPaused = ordersOn && !acceptsOrders,
+            PaysOnline = acceptsOrders && _gateway.IsConfigured && OnlineCheckoutRules.Offers(
+                await _context.OnlinePaymentAccounts.AsNoTracking().FirstOrDefaultAsync(cancellationToken), _gateway, utcNow),
             Theme = settings.Theme,
             Address = AddressText.ForCustomers(mainBranch),
             MapPoint = MapPointDto.From(mainBranch?.PublicLocation),
@@ -572,6 +583,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
     public const string DeliveryRequiredMessage = "Este negocio solo entrega a domicilio: escribe a dónde te lo llevamos.";
     public const string AlreadySentMessage = "Ese pedido ya se envió.";
     public const string AlreadyCancelledMessage = "Ese pedido ya se envió y el negocio lo canceló.";
+    public const string TooManyWaitingMessage = "Ya tienes pedidos esperando confirmación. Espera a que el negocio los confirme.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -620,42 +632,21 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         if (request.IdempotencyKey is { } key && await PlacedAsync(key, phone, tenant, account, cancellationToken) is { } placed)
             return placed;
 
-        // Closed, the business takes no pickup or delivery orders; a customer at one of its tables is already there,
-        // except on a closed special day. Online orders arrive at the default branch of the business, and only while a
-        // drawer is open there. The same rule as the menu and Explorar.
         var now = _dateTimeProvider.UtcNow;
-        var hours = await BusinessHours.ReadAsync(
-            _context, tenant.Id, tenant.Settings.OpeningHours, tenant.Settings.TimeZone, now, cancellationToken);
-        var seated = OnlineOrderAvailability.TableMayOrderWhileClosed(hours)
-            && await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken);
-        var branchId = await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken);
-        var drawerOpen = await OrderCashService.HasOpenDrawerAtBranchAsync(_context, tenant.Id, branchId, cancellationToken);
-        switch (OnlineOrderAvailability.Gate(tenant.Settings.OnlineMenuMode, hours, drawerOpen, seated))
-        {
-            case OnlineOrderGate.Closed:
-                return Result.Failure<PublicOrderReceiptDto>(BusinessHoursText.ClosedMessage(hours!));
-            case OnlineOrderGate.Paused:
-                return Result.Failure<PublicOrderReceiptDto>(OrdersPausedMessage);
-        }
-
-        // A kitchen without premises that delivers has nowhere to pick an order up: it goes to an address, or to a table
-        // of the business in use (anyone can type a table into the link). Without delivery zones, orders arrive as before
-        // and the business arranges it (Fase 22C).
-        if (request.Delivery is null
-            && await _context.Branches.AnyAsync(b => b.Id == branchId && b.ServiceMode == BranchServiceMode.DeliveryOnly, cancellationToken)
-            && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken)
-            && !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken))
-            return Result.Failure<PublicOrderReceiptDto>(DeliveryRequiredMessage);
+        var asked = Request(request, phone);
+        var placement = new PublicOrderPlacement(_context);
+        var (branchId, closed) = await placement.TakesOrderAsync(tenant, asked, now, cancellationToken);
+        if (closed is not null)
+            return Result.Failure<PublicOrderReceiptDto>(closed);
 
         // Until the business confirms or cancels them, a phone cannot keep piling up orders.
         var waiting = await _context.Orders.CountAsync(o => o.Channel == OrderChannel.Online
             && o.CustomerPhone == phone
             && o.Status == OrderStatus.Pending, cancellationToken);
         if (waiting >= MaxPendingPerPhone)
-            return Result.Failure<PublicOrderReceiptDto>("Ya tienes pedidos esperando confirmación. Espera a que el negocio los confirme.");
+            return Result.Failure<PublicOrderReceiptDto>(TooManyWaitingMessage);
 
         var settings = await TenantSalesSettings.ReadAsync(_context, tenant.Id, cancellationToken);
-        var localTimeOfDay = TenantDateTimeResolver.LocalNow(now, settings.TimeZone).TimeOfDay;
         // With a customer session the session says whose order it is: the account sees it in its orders without confirming
         // the phone by SMS, and nobody who confirms the phone later claims it. Without one, the phone decides.
         var customer = account is not null
@@ -663,71 +654,17 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             : await _customerLookupService.ResolveForOrderAsync(
                 tenant.Id, phone, request.CustomerName.Trim(), CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
 
-        var order = new Order(
-            tenantId: tenant.Id,
-            customerUserId: customer.CustomerUserId,
-            temporaryCustomerId: customer.TemporaryCustomerId,
-            createdByBusiness: false,
-            orderNumber: Order.NumberNotAssigned,
-            businessType: tenant.BusinessType,
-            orderType: OrderType.Retail,
-            customerName: request.CustomerName.Trim(),
-            customerPhone: customer.PhoneNormalized,
-            customerNotes: string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-            tableNumber: string.IsNullOrWhiteSpace(request.TableLabel) ? null : request.TableLabel.Trim(),
-            pricesIncludeTax: settings.PricesIncludeTax,
-            channel: OrderChannel.Online,
-            branchId: branchId);
-
-        var lineBuilder = new OrderLineBuilder(localTimeOfDay, settings.DefaultTaxRate);
-        var products = await OrderCatalog.LoadProductsAsync(_context.Products, request.Items, cancellationToken);
-        foreach (var item in request.Items)
-        {
-            var product = products[item.ProductId];
-            if (!product.IsAvailable || !OrderProductClassifier.MatchesOrderType(OrderType.Retail, product.Unit))
-                return Result.Failure<PublicOrderReceiptDto>($"'{product.Name}' no se puede pedir en línea.");
-
-            var built = lineBuilder.Build(product, item);
-            if (built.IsFailure)
-                return Result.Failure<PublicOrderReceiptDto>(built.Error!);
-            order.AddItem(built.Value.Line);
-        }
-
-        // To the customer's address: the zone's minimum and fee, on the products, before the total is compared.
-        if (request.Delivery is not null)
-        {
-            var deliveryError = await HomeDeliveryPlacement.ArrangeAsync(
-                _context, order, request.Delivery, settings.DefaultTaxRate, cancellationToken);
-            if (deliveryError is not null)
-                return Result.Failure<PublicOrderReceiptDto>(deliveryError);
-        }
+        var (order, refused) = await placement.BuildAsync(tenant, asked, branchId, customer, settings, now, cancellationToken);
+        if (order is null)
+            return Result.Failure<PublicOrderReceiptDto>(refused!);
 
         if (request.ExpectedTotal.HasValue && request.ExpectedTotal.Value != order.Total)
-        {
-            return Result.Failure<PublicOrderReceiptDto>(
-                $"El total de tu pedido es {OrderStatusLabels.FormatMoney(order.Total)}: algún precio cambió. Revísalo antes de enviarlo.");
-        }
+            return Result.Failure<PublicOrderReceiptDto>(TotalChangedMessage(order.Total));
 
-        // Businesses that accept orders automatically send them straight to preparation.
-        var accepted = tenant.Settings.AutoAcceptOrders;
-        if (accepted)
-        {
-            var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
-            if (stateMachine.GetAllowedTransitions(order.Status).Contains(OrderStatus.Confirmed))
-                order.AdvanceOnCreation(OrderStatus.Confirmed, stateMachine, "menu-en-linea");
-            else
-                accepted = false;
-        }
-
-        order.AssignNumber(await _folios.NextOrderNumberAsync(tenant.Id, cancellationToken));
-
-        // The customer's order is never refused for recipe stock: the business sees it and decides.
-        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, StockShortageHandling.Allow);
-        if (account is not null && request.Delivery is not null)
-            await RememberAddressAsync(account.Id, request, now, cancellationToken);
+        var accepted = await placement.PlaceAsync(
+            order, tenant, asked, account?.Id, now, _folios, _orderInventoryService, cancellationToken);
         if (request.IdempotencyKey is { } requestKey)
             order.IdentifyClientRequest(requestKey, capturedOfflineAt: null);
-        order.IssueTrackingToken(OrderTracking.NewToken());
         order.MarkAsCreated();
         _context.Orders.Add(order);
         try
@@ -785,24 +722,21 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         return Result.Success(Receipt(order, tenant, order.Status != OrderStatus.Pending, account));
     }
 
-    /// <summary>
-    /// The account offers this address first from now on: the one it keeps for the same place, or a new one when the
-    /// customer asked to keep it and the account has room. A full account still orders: the address only stays out.
-    /// </summary>
-    private async Task RememberAddressAsync(Guid accountId, PlacePublicOrderCommand request, DateTimeOffset now, CancellationToken cancellationToken)
+    /// <summary>What the customer asked for, with the phone normalized.</summary>
+    internal static PublicOrderRequest Request(PlacePublicOrderCommand request, string phone) => new()
     {
-        var delivery = request.Delivery!;
-        var address = DeliveryAddress.From(delivery.PostalCode, delivery.AddressLine, delivery.References);
-        var kept = await AccountAddresses.OfAsync(_context, accountId, cancellationToken, tracking: true);
-        var saved = kept.FirstOrDefault(existing => existing.IsSamePlaceAs(address));
-        if (saved is null && request.SaveAddress && kept.Count < AccountAddress.MaxPerAccount)
-        {
-            saved = AccountAddress.Create(accountId, request.AddressLabel, address.PostalCode, address.AddressLine, address.References, kept.Count);
-            _context.AccountAddresses.Add(saved);
-        }
+        CustomerName = request.CustomerName,
+        CustomerPhone = phone,
+        Notes = request.Notes,
+        TableLabel = request.TableLabel,
+        Items = request.Items,
+        Delivery = request.Delivery,
+        SaveAddress = request.SaveAddress,
+        AddressLabel = request.AddressLabel
+    };
 
-        saved?.MarkUsed(address, now);
-    }
+    internal static string TotalChangedMessage(decimal total) =>
+        $"El total de tu pedido es {OrderStatusLabels.FormatMoney(total)}: algún precio cambió. Revísalo antes de enviarlo.";
 }
 
 /// <summary>

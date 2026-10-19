@@ -44,14 +44,16 @@ public class AuthorizationBehaviorTests
 
         Assert.Equal(
         [
-            "AcceptInvitationCommand", "ApplyWhatsAppStatusesCommand", "CancelPublicAppointmentCommand", "ChangeUnconfirmedPhoneCommand",
-            "ConfirmEmailCommand", "ConfirmPhoneCommand",
+            "AcceptInvitationCommand", "ApplyOnlinePaymentCommand", "ApplyOnlinePaymentNotificationCommand", "ApplyWhatsAppStatusesCommand", "CancelPublicAppointmentCommand",
+            "ChangeUnconfirmedPhoneCommand", "ConfirmEmailCommand", "ConfirmOnlineCheckoutCommand", "ConfirmPhoneCommand",
+            "CreateOnlineCheckoutCommand",
             "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicAppointmentQuery", "GetPublicBookingQuery",
             "GetPublicBookingSlotsQuery", "GetPublicDeliveryQuoteQuery", "GetPublicDirectoryQuery",
             "GetPublicMenuQuery", "GetPublicOrderTrackingQuery", "GetPublicReviewsQuery", "GetPublicSitemapQuery", "GetStorePreviewQuery",
             "Login2FACommand", "LoginCommand", "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand", "RefreshTokenCommand",
             "RegisterBusinessCommand", "RegisterCustomerCommand", "RequestPublicAppointmentCommand", "ResendConfirmationEmailCommand",
-            "ResendPhoneConfirmationCommand", "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand", "VerifyWhatsAppWebhookTokenQuery"
+            "ResendPhoneConfirmationCommand", "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand", "SweepOnlinePaymentsCommand",
+            "VerifyWhatsAppWebhookTokenQuery"
         ], anonymous);
     }
 

@@ -23,6 +23,7 @@ function sales(patch: Partial<ChannelSales>): ChannelSales {
     netSales: 0,
     platformCollected: 0,
     businessCollected: 0,
+    onlineCollected: 0,
     commission: 0,
     commissionTax: 0,
     isrWithheld: 0,

@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Reviews;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -136,6 +137,66 @@ public class PublicMenuController : ControllerBase
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
+
+    /// <summary>
+    /// Pays the order online (Fase 24I): the server prices it and answers Mercado Pago's page, where the customer pays into
+    /// the business's account within 30 minutes. The order is placed when the payment is approved.
+    /// </summary>
+    [HttpPost("checkouts")]
+    [EnableRateLimiting("public-order")]
+    public async Task<ActionResult<OnlineCheckoutStartedDto>> CreateCheckout(
+        string slug, [FromBody] CreateOnlineCheckoutRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CreateOnlineCheckoutCommand
+        {
+            Slug = slug,
+            CustomerName = request.CustomerName,
+            CustomerPhone = request.CustomerPhone,
+            Notes = request.Notes,
+            Items = request.Items,
+            ExpectedTotal = request.ExpectedTotal,
+            Delivery = request.Delivery,
+            SaveAddress = request.SaveAddress,
+            AddressLabel = request.AddressLabel
+        }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// How the online payment stands, after asking Mercado Pago (the customer's return page): to pay, its order placed, or
+    /// paid but not placed and going back. 404 for a payment that is not of this business.
+    /// </summary>
+    [HttpPost("checkouts/{checkoutId:guid}/confirm")]
+    [EnableRateLimiting("online-payment-status")]
+    public async Task<ActionResult<OnlineCheckoutStatusDto>> ConfirmCheckout(
+        string slug, Guid checkoutId, [FromBody] ConfirmOnlineCheckoutRequest? request, CancellationToken cancellationToken)
+    {
+        var status = await _mediator.Send(new ConfirmOnlineCheckoutCommand(slug, checkoutId, request?.PaymentId, request?.ReturnKey), cancellationToken);
+        return status is null ? this.ApiError(StatusCodes.Status404NotFound, "No encontramos ese pago.") : Ok(status);
+    }
+}
+
+public class CreateOnlineCheckoutRequest
+{
+    public string CustomerName { get; init; } = null!;
+    public string CustomerPhone { get; init; } = null!;
+    public string? Notes { get; init; }
+    public List<FoodParkDigital.Application.Orders.Commands.CreateOrderItemDto> Items { get; init; } = [];
+    public decimal? ExpectedTotal { get; init; }
+    /// <summary>Where the order goes; none to pick it up. Paid online, it carries no bill for the courier.</summary>
+    public FoodParkDigital.Application.Orders.OrderDeliveryInput? Delivery { get; init; }
+    public bool SaveAddress { get; init; }
+    public string? AddressLabel { get; init; }
+}
+
+public class ConfirmOnlineCheckoutRequest
+{
+    /// <summary>The <c>payment_id</c> Mercado Pago's return carries, if any.</summary>
+    public string? PaymentId { get; init; }
+    /// <summary>The return key the store kept when the payment started; without it the tracking link is not answered.</summary>
+    public string? ReturnKey { get; init; }
 }
 
 public class PlacePublicOrderRequest

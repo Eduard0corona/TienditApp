@@ -23,8 +23,11 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
 {
     public const string HttpClientName = "MercadoPago";
 
-    /// <summary>Where Mercado Pago sends the owner back with the code; registered in the application.</summary>
-    public const string CallbackPath = "/api/v1/payments/mercadopago/connect/callback";
+    /// <summary>
+    /// Where Mercado Pago sends the owner back with the code (registered in the application): Configuración › Pagos en
+    /// línea, which finishes the connection with the owner's session.
+    /// </summary>
+    public const string CallbackPath = "/settings/online-payments";
 
     private const string Currency = "MXN";
 

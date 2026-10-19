@@ -10,6 +10,7 @@ using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Billing;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Messaging;
+using FoodParkDigital.Infrastructure.BackgroundJobs.OnlinePayments;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Reporting;
 using FoodParkDigital.Infrastructure.Identity;
@@ -156,7 +157,8 @@ public static class DependencyInjection
         services.AddHttpClient(MercadoPagoGateway.HttpClientName).AddResilienceHandler("mercadopago", ConfigureProviderResilience);
 
         // Background work: outbox (durable side effects of domain events), webhook inbox, messaging
-        // (campaigns, reminders and the queue of outgoing WhatsApp messages), daily sales snapshots and billing status.
+        // (campaigns, reminders and the queue of outgoing WhatsApp messages), daily sales snapshots, billing status and
+        // the sweep of online payments.
         services.Configure<BackgroundJobOptions>(configuration.GetSection(BackgroundJobOptions.SectionName));
         services.AddSingleton<OutboxSignal>();
         services.AddSingleton<InboxSignal>();
@@ -169,6 +171,7 @@ public static class DependencyInjection
         services.AddSingleton<MessagingWorker>();
         services.AddScoped<IWebhookInbox, WebhookInbox>();
         services.AddScoped<WhatsAppWebhookProcessor>();
+        services.AddScoped<MercadoPagoWebhookProcessor>();
         services.AddScoped<IBackgroundExecutionContext, BackgroundExecutionContext>();
         // Data the previous version left without a business while the migration was applied, completed at start.
         services.AddHostedService<OrderTenantBackfillService>();
@@ -179,6 +182,7 @@ public static class DependencyInjection
             services.AddHostedService<MessagingWorkerService>();
             services.AddHostedService<SalesSnapshotWorkerService>();
             services.AddHostedService<SubscriptionStatusWorkerService>();
+            services.AddHostedService<OnlinePaymentsWorkerService>();
             services.AddHostedService<PrivateFilesMigrationService>();
         }
 

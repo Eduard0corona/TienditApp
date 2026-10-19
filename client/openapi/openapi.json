@@ -6712,6 +6712,18 @@
         }
       }
     },
+    "/api/v1/payments/mercadopago/webhook": {
+      "post": {
+        "tags": [
+          "MercadoPagoWebhook"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/messaging/templates": {
       "get": {
         "tags": [
@@ -7343,6 +7355,189 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MessagingSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/online-payments": {
+      "get": {
+        "tags": [
+          "OnlinePayments"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/online-payments/connect": {
+      "post": {
+        "tags": [
+          "OnlinePayments"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentConnectionStartDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentConnectionStartDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentConnectionStartDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/online-payments/connect/complete": {
+      "post": {
+        "tags": [
+          "OnlinePayments"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteOnlinePaymentConnectionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteOnlinePaymentConnectionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteOnlinePaymentConnectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/online-payments/account": {
+      "delete": {
+        "tags": [
+          "OnlinePayments"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/online-payments/accepts-payments": {
+      "put": {
+        "tags": [
+          "OnlinePayments"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOnlinePaymentsAcceptedRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOnlinePaymentsAcceptedRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOnlinePaymentsAcceptedRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePaymentSettingsDto"
                 }
               }
             }
@@ -10517,6 +10712,131 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicOrderReceiptDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/checkouts": {
+      "post": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOnlineCheckoutRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOnlineCheckoutRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOnlineCheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineCheckoutStartedDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineCheckoutStartedDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineCheckoutStartedDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/checkouts/{checkoutId}/confirm": {
+      "post": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "checkoutId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmOnlineCheckoutRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmOnlineCheckoutRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmOnlineCheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineCheckoutStatusDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineCheckoutStatusDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineCheckoutStatusDto"
                 }
               }
             }
@@ -15180,6 +15500,7 @@
           "isDeliveryPlatform",
           "isrWithheld",
           "netSales",
+          "onlineCollected",
           "paidOrders",
           "paymentsAmount",
           "platformCollected",
@@ -15215,6 +15536,10 @@
             "format": "double"
           },
           "businessCollected": {
+            "type": "number",
+            "format": "double"
+          },
+          "onlineCollected": {
             "type": "number",
             "format": "double"
           },
@@ -15359,6 +15684,37 @@
         "type": "object",
         "properties": {
           "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CompleteOnlinePaymentConnectionRequest": {
+        "required": [
+          "code",
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfirmOnlineCheckoutRequest": {
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "returnKey": {
             "type": "string",
             "nullable": true
           }
@@ -16383,6 +16739,49 @@
             "nullable": true
           },
           "languageCode": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateOnlineCheckoutRequest": {
+        "required": [
+          "customerName",
+          "customerPhone",
+          "items",
+          "saveAddress"
+        ],
+        "type": "object",
+        "properties": {
+          "customerName": {
+            "type": "string"
+          },
+          "customerPhone": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateOrderItemDto"
+            }
+          },
+          "expectedTotal": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/OrderDeliveryInput"
+          },
+          "saveAddress": {
+            "type": "boolean"
+          },
+          "addressLabel": {
             "type": "string",
             "nullable": true
           }
@@ -17815,6 +18214,7 @@
           "cancelledOrders",
           "completedOrders",
           "inProgressOrders",
+          "onlineCollected",
           "ordersByStatus",
           "outstandingBalance",
           "paidOrders",
@@ -17875,6 +18275,10 @@
             "format": "double"
           },
           "platformCollected": {
+            "type": "number",
+            "format": "double"
+          },
+          "onlineCollected": {
             "type": "number",
             "format": "double"
           },
@@ -20426,6 +20830,110 @@
         },
         "additionalProperties": false
       },
+      "OnlineCheckoutStartedDto": {
+        "required": [
+          "amount",
+          "checkoutId",
+          "checkoutUrl",
+          "expiresAt",
+          "returnKey"
+        ],
+        "type": "object",
+        "properties": {
+          "checkoutId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "checkoutUrl": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "returnKey": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OnlineCheckoutStatus": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "AwaitingPayment",
+          "Placed",
+          "Expired",
+          "NotPlaced"
+        ]
+      },
+      "OnlineCheckoutStatusDto": {
+        "required": [
+          "amount",
+          "businessName",
+          "confirmed",
+          "expiresAt",
+          "linkedToAccount",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/OnlineCheckoutStatus"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "businessName": {
+            "type": "string"
+          },
+          "contactPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "checkoutUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "orderNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "confirmed": {
+            "type": "boolean"
+          },
+          "linkedToAccount": {
+            "type": "boolean"
+          },
+          "trackingToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "refundStatus": {
+            "$ref": "#/components/schemas/OnlinePaymentRefundStatus"
+          }
+        },
+        "additionalProperties": false
+      },
       "OnlineMenuMode": {
         "enum": [
           0,
@@ -20452,6 +20960,94 @@
           },
           "slug": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OnlinePaymentConnectionStartDto": {
+        "required": [
+          "authorizationUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "authorizationUrl": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OnlinePaymentRefundStatus": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Requested",
+          "Completed",
+          "Failed"
+        ]
+      },
+      "OnlinePaymentSettingsDto": {
+        "required": [
+          "acceptsPayments",
+          "available",
+          "checkoutsInCourse",
+          "connected",
+          "menuTakesOrders",
+          "needsReconnect",
+          "refundsInCourse",
+          "refundsRefused",
+          "sandbox"
+        ],
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "sandbox": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "accountId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "connectedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "keyExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "needsReconnect": {
+            "type": "boolean"
+          },
+          "acceptsPayments": {
+            "type": "boolean"
+          },
+          "menuTakesOrders": {
+            "type": "boolean"
+          },
+          "checkoutsInCourse": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "refundsInCourse": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "refundsRefused": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -21381,6 +21977,13 @@
             "items": {
               "$ref": "#/components/schemas/OrderRefundLineDto"
             }
+          },
+          "onlineStatus": {
+            "$ref": "#/components/schemas/OnlinePaymentRefundStatus"
+          },
+          "onlineFailure": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -24004,6 +24607,7 @@
           "deliveryAvailable",
           "deliveryOnly",
           "ordersPaused",
+          "paysOnline",
           "pricesIncludeTax",
           "slug",
           "theme"
@@ -24053,6 +24657,9 @@
             "type": "boolean"
           },
           "ordersPaused": {
+            "type": "boolean"
+          },
+          "paysOnline": {
             "type": "boolean"
           },
           "theme": {
@@ -26094,6 +26701,18 @@
             "type": "string"
           },
           "optedOut": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetOnlinePaymentsAcceptedRequest": {
+        "required": [
+          "accepts"
+        ],
+        "type": "object",
+        "properties": {
+          "accepts": {
             "type": "boolean"
           }
         },

@@ -41,6 +41,8 @@ public class AddCashTransactionCommandValidator : AbstractValidator<AddCashTrans
         RuleFor(x => x.PaymentMethod).IsInEnum().When(x => x.PaymentMethod.HasValue);
         RuleFor(x => x.PaymentMethod).NotEqual(OrderPaymentMethod.Platform)
             .WithMessage(OrderPaymentMethodRules.NeverEntersADrawerMessage);
+        RuleFor(x => x.PaymentMethod).NotEqual(OrderPaymentMethod.Online)
+            .WithMessage(OrderPaymentMethodRules.OnlineNeverEntersADrawerMessage);
         RuleFor(x => x.InventoryLocationId).NotEmpty().When(x => x.InventoryLocationId.HasValue);
         RuleFor(x => x.Reference).MaximumLength(120);
         RuleFor(x => x.Notes).MaximumLength(1000);

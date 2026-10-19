@@ -32,7 +32,7 @@ public class MercadoPagoGatewayTests
         Assert.Contains("client_id=app-123", url);
         Assert.Contains("response_type=code", url);
         Assert.Contains($"state={state:N}", url);
-        Assert.Contains("redirect_uri=https%3A%2F%2Ftienditapp.test%2Fapi%2Fv1%2Fpayments%2Fmercadopago%2Fconnect%2Fcallback", url);
+        Assert.Contains("redirect_uri=https%3A%2F%2Ftienditapp.test%2Fsettings%2Fonline-payments", url);
         Assert.Contains("code_challenge=challenge-value_123", url);
         Assert.Contains("code_challenge_method=S256", url);
     }
@@ -57,7 +57,7 @@ public class MercadoPagoGatewayTests
         Assert.Equal("TG-code", body.RootElement.GetProperty("code").GetString());
         Assert.Equal("verifier-abc", body.RootElement.GetProperty("code_verifier").GetString());
         Assert.Equal("app-123", body.RootElement.GetProperty("client_id").GetString());
-        Assert.Equal("https://tienditapp.test/api/v1/payments/mercadopago/connect/callback", body.RootElement.GetProperty("redirect_uri").GetString());
+        Assert.Equal("https://tienditapp.test/settings/online-payments", body.RootElement.GetProperty("redirect_uri").GetString());
     }
 
     [Fact]

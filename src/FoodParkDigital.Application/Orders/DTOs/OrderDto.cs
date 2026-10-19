@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.OnlinePayments.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 
@@ -173,6 +174,13 @@ public class OrderRefundDto
     public string? Reference { get; set; }
     public bool RestockItems { get; set; }
     public List<OrderRefundLineDto> Lines { get; set; } = new();
+    /// <summary>
+    /// An «En línea» refund goes back through Mercado Pago (Fase 24I): asked, given back, or refused (then the business
+    /// gives it back from its account). Null for any other method.
+    /// </summary>
+    public OnlinePaymentRefundStatus? OnlineStatus { get; set; }
+    /// <summary>What Mercado Pago answered when it refused it.</summary>
+    public string? OnlineFailure { get; set; }
 }
 
 public class OrderRefundLineDto
@@ -332,6 +340,11 @@ public class DashboardMetricsDto
     /// «Plataforma»: still to be settled with each platform.
     /// </summary>
     public decimal PlatformCollected { get; set; }
+    /// <summary>
+    /// The part of <see cref="TotalRevenue"/> customers paid online in Mercado Pago (Fase 24I), minus what went back as
+    /// «En línea»: in the business's Mercado Pago account, not in its drawers.
+    /// </summary>
+    public decimal OnlineCollected { get; set; }
     /// <summary>Revenue divided by the orders that received those payments.</summary>
     public decimal AverageOrderValue { get; set; }
     public int PaidOrders { get; set; }

@@ -46,6 +46,7 @@ public class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery, Order
 
         var dto = order.ToDto();
         dto.ApplyStateMetadata();
+        await OnlineRefundStatuses.ApplyAsync(_context, dto, cancellationToken);
         return dto;
     }
 }

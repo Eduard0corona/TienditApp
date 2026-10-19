@@ -58,6 +58,11 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Infrastructure/BackgroundJobs/BackgroundQueuesHealthCheck.cs"] = 1,
         ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Messaging/MessagingWorker.cs"] = 5,
         ["src/FoodParkDigital.Infrastructure/Services/WhatsAppWebhookProcessor.cs"] = 1,
+        // Online payments (Fase 24I): the Mercado Pago notification finds the businesses that connected the account it
+        // names, and the sweep the businesses with payments in course or a key to renew; each one is then applied in its
+        // business's scope.
+        ["src/FoodParkDigital.Infrastructure/OnlinePayments/MercadoPagoWebhookProcessor.cs"] = 1,
+        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/OnlinePayments/OnlinePaymentsWorkerService.cs"] = 2,
         // Verification codes by WhatsApp: the platform's account, owned by an active platform admin.
         ["src/FoodParkDigital.Infrastructure/Services/SmsService.cs"] = 2,
         // The online menu finds its business by slug, with its settings, before any business is in context; it then
