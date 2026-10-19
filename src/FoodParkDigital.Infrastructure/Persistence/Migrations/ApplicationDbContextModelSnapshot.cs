@@ -309,6 +309,74 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.OnlineBookingStaff", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AllServices")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("WeeklyHours")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("OnlineBookingStaff", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.OnlineBookingStaffService", b =>
+                {
+                    b.Property<Guid>("StaffId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("StaffId", "ProductId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("OnlineBookingStaffServices", (string)null);
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Audit.Entities.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5385,6 +5453,42 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.OnlineBookingStaff", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.OnlineBookingStaffService", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Catalog.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Appointments.Entities.OnlineBookingStaff", null)
+                        .WithMany("Services")
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Billing.Entities.SubscriptionPayment", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Billing.Entities.TenantSubscription", null)
@@ -6222,6 +6326,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.Appointment", b =>
                 {
                     b.Navigation("Visit");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.OnlineBookingStaff", b =>
+                {
+                    b.Navigation("Services");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Billing.Entities.TenantSubscription", b =>

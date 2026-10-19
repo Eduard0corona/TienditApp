@@ -147,6 +147,10 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <param name="customerUserId">The customer account that booked it, when it was signed in.</param>
     /// <param name="clientRequestId">The booking page's key for this request.</param>
     /// <param name="trackingToken">The link to follow it without an account.</param>
+    /// <param name="staffUserId">
+    /// Who attends it, when the business says who attends online (Fase 24J): the person the customer chose, or the one the
+    /// business's rule picked among the free ones; with <paramref name="staffName"/>, their name in the agenda.
+    /// </param>
     public static Appointment RequestOnline(
         Guid tenantId,
         string customerName,
@@ -158,7 +162,9 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         string? notes,
         Guid? customerUserId,
         Guid? clientRequestId,
-        string trackingToken)
+        string trackingToken,
+        Guid? staffUserId = null,
+        string? staffName = null)
     {
         if (serviceProductId == Guid.Empty)
             throw new ArgumentException("The service is required.", nameof(serviceProductId));
@@ -168,10 +174,13 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new ArgumentException("The key is required when given.", nameof(clientRequestId));
         if (!Order.IsTrackingToken(trackingToken))
             throw new ArgumentException("The link must look like one.", nameof(trackingToken));
+        if (staffUserId == Guid.Empty || (staffUserId is null) != string.IsNullOrWhiteSpace(staffName))
+            throw new ArgumentException("Who attends it goes with their name.", nameof(staffUserId));
 
         var appointment = new Appointment(
             tenantId, customerName, customerPhone, serviceName, startAt, endAt,
-            staffName: null, notes: string.IsNullOrWhiteSpace(notes) ? null : notes, serviceProductId: serviceProductId)
+            staffName: staffName, notes: string.IsNullOrWhiteSpace(notes) ? null : notes, serviceProductId: serviceProductId,
+            staffUserId: staffUserId)
         {
             Status = AppointmentStatus.Requested,
             Channel = AppointmentChannel.Online,
