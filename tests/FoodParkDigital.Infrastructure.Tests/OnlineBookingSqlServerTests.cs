@@ -3,10 +3,13 @@ using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.OnlineBooking;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -20,7 +23,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// <summary>
 /// Online bookings on SQL Server (Fase 24D, ADR 0025): requests that arrive at the same time for the last free time of a
 /// business wait in line on its booking lock, so only one takes it; the same request sent twice at once is one
-/// appointment; and a phone at once does not pass its requests waiting.
+/// appointment; a phone at once does not pass its requests waiting; and while the business says who attends (Fase 24J,
+/// ADR 0032), a person gets one appointment at a time however many ask for them, or for whoever is free, at once.
 /// </summary>
 public class OnlineBookingSqlServerTests
 {
@@ -42,6 +46,31 @@ public class OnlineBookingSqlServerTests
             result => Assert.Equal(RequestPublicAppointmentCommandHandler.TimeTakenMessage, result.Error));
         await using var check = database.CreateContext(business.TenantId);
         Assert.Equal(1, await check.Appointments.CountAsync(a => a.Status == AppointmentStatus.Requested));
+    }
+
+    [SqlServerFact]
+    public async Task RequestsAtOnce_ForAPerson_OrWhoeverIsFree_ShouldGiveEachPersonOneAppointment()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var business = await SeedAsync(database, people: ["Ana", "Luis"]);
+        var ana = business.People[0];
+
+        // Five customers ask for Ana at 10:00 at once: one gets her.
+        var withAna = await Task.WhenAll(Enumerable.Range(0, 5).Select(i =>
+            RequestAsync(database, business, $"55221077{i:00}", Guid.NewGuid(), staffId: ana)));
+        // Five more at once with no preference: only Luis is free, and one gets him.
+        var anyone = await Task.WhenAll(Enumerable.Range(0, 5).Select(i =>
+            RequestAsync(database, business, $"55221088{i:00}", Guid.NewGuid())));
+
+        Assert.Single(withAna, result => result.IsSuccess);
+        Assert.Single(anyone, result => result.IsSuccess);
+        Assert.All(withAna.Concat(anyone).Where(result => result.IsFailure),
+            result => Assert.Equal(RequestPublicAppointmentCommandHandler.TimeTakenMessage, result.Error));
+        await using var check = database.CreateContext(business.TenantId);
+        var attending = await check.Appointments.Select(a => a.StaffUserId).ToListAsync();
+        Assert.Equal(2, attending.Count);
+        Assert.Equal(2, attending.Distinct().Count());
+        Assert.DoesNotContain(null, attending);
     }
 
     [SqlServerFact]
@@ -98,7 +127,7 @@ public class OnlineBookingSqlServerTests
     /// production.
     /// </summary>
     private static async Task<Result<PublicAppointmentReceiptDto>> RequestAsync(
-        SqlServerTestDatabase database, Business business, string phone, Guid key, DateTimeOffset? startAt = null)
+        SqlServerTestDatabase database, Business business, string phone, Guid key, DateTimeOffset? startAt = null, Guid? staffId = null)
     {
         var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
         await using var context = database.CreateProductionLikeContext(
@@ -111,7 +140,8 @@ public class OnlineBookingSqlServerTests
             StartAt = startAt ?? MondayAtTen,
             CustomerName = "Valeria Ruiz",
             CustomerPhone = phone,
-            IdempotencyKey = key
+            IdempotencyKey = key,
+            StaffId = staffId
         };
         var handler = new RequestPublicAppointmentCommandHandler(
             context, tenant, new Anonymous(), new PhoneNormalizationService(), clock, new AppointmentBookingLock(context),
@@ -121,7 +151,8 @@ public class OnlineBookingSqlServerTests
             .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
     }
 
-    private static async Task<Business> SeedAsync(SqlServerTestDatabase database)
+    /// <summary>A barbershop that books one appointment at a time, or each of <paramref name="people"/> (Fase 24J).</summary>
+    private static async Task<Business> SeedAsync(SqlServerTestDatabase database, string[]? people = null)
     {
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant($"Barbería {slug}", slug, BusinessType.Service, $"{slug}@demo.com");
@@ -136,11 +167,34 @@ public class OnlineBookingSqlServerTests
 
         await using var seed = database.CreateContext(tenant.Id);
         seed.AddRange(tenant, settings, Branch.CreateDefault(tenant.Id), category, haircut);
+        var staff = new List<Guid>();
+        foreach (var name in people ?? [])
+        {
+            var email = $"{name.ToLowerInvariant()}.{slug}@demo.com";
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = email,
+                NormalizedUserName = email.ToUpperInvariant(),
+                Email = email,
+                NormalizedEmail = email.ToUpperInvariant(),
+                FirstName = name,
+                LastName = "Equipo",
+                SecurityStamp = Guid.NewGuid().ToString("N"),
+                Role = UserRole.Staff,
+                IsActive = true
+            };
+            var person = OnlineBookingStaff.Create(tenant.Id, user.Id, $"{name} E.", true, true, [], null);
+            seed.Users.Add(user);
+            seed.TenantUsers.Add(new TenantUser(tenant.Id, user.Id, TenantUserRole.Staff, TenantUserStatus.Active));
+            seed.OnlineBookingStaff.Add(person);
+            staff.Add(person.Id);
+        }
         await seed.SaveChangesAsync();
-        return new Business(tenant.Id, slug, haircut.Id);
+        return new Business(tenant.Id, slug, haircut.Id, staff);
     }
 
-    private sealed record Business(Guid TenantId, string Slug, Guid ServiceId);
+    private sealed record Business(Guid TenantId, string Slug, Guid ServiceId, IReadOnlyList<Guid> People);
 
     private sealed class Clock : IDateTimeProvider
     {

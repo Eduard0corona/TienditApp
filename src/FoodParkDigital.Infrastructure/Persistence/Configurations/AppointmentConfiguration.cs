@@ -24,7 +24,7 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
         builder.Property(x => x.CustomerName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.CustomerPhone).HasMaxLength(50).IsRequired();
         builder.Property(x => x.ServiceName).HasMaxLength(200).IsRequired();
-        builder.Property(x => x.StaffName).HasMaxLength(120);
+        builder.Property(x => x.StaffName).HasMaxLength(Appointment.MaxStaffNameLength);
         builder.Property(x => x.StartAt).IsRequired();
         builder.Property(x => x.EndAt).IsRequired();
         builder.Property(x => x.Status).HasConversion<int>().IsRequired();

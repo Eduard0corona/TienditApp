@@ -8,6 +8,9 @@ import type {
 } from '../types';
 
 export type OnlineBookingSettings = Schemas['OnlineBookingSettingsDto'];
+export type OnlineBookingStaffSettings = Schemas['OnlineBookingStaffSettingsDto'];
+export type OnlineBookingStaffMember = Schemas['OnlineBookingStaffMemberDto'];
+export type UpdateOnlineBookingStaff = Schemas['UpdateOnlineBookingStaffRequest'];
 
 export const appointmentsApi = {
   getAll: (params?: {
@@ -45,4 +48,11 @@ export const appointmentsApi = {
 
   updateOnlineBooking: (enabled: boolean, capacity: number) =>
     apiRequest('put', '/api/v1/appointments/online-booking', { body: { enabled, capacity } }),
+
+  /** The active team, with who customers book online, their services and hours (Fase 24J, owners and admins). */
+  getOnlineBookingStaff: (signal?: AbortSignal) => apiRequest('get', '/api/v1/appointments/online-booking/staff', { signal }),
+
+  /** Sets what customers see of a team member and when they book them online. */
+  updateOnlineBookingStaff: (userId: string, body: UpdateOnlineBookingStaff) =>
+    apiRequest('put', '/api/v1/appointments/online-booking/staff/{userId}', { path: { userId }, body }),
 };

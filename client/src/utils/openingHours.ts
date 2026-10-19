@@ -94,12 +94,21 @@ export function describeDay(intervals: readonly OpeningIntervalDto[], day: DayOf
 }
 
 /** What an opening means when it is not plain: the API reads a closing at or before the opening as the next day. */
-export function rangeHint(range: TimeRange): string | null {
+export function rangeHint(range: TimeRange, hints: RangeHints = OPENING_HINTS): string | null {
   if (!range.opens || !range.closes) return null;
-  if (range.opens === range.closes) return 'Abierto las 24 horas';
-  if (range.closes === '00:00') return 'Cierra a medianoche';
-  return range.closes < range.opens ? 'Cierra al día siguiente' : null;
+  if (range.opens === range.closes) return hints.allDay;
+  if (range.closes === '00:00') return hints.untilMidnight;
+  return range.closes < range.opens ? hints.nextDay : null;
 }
+
+/** How a range that is not an ordinary day reads: a business's opening, unless a person's hours say otherwise. */
+export interface RangeHints {
+  allDay: string;
+  untilMidnight: string;
+  nextDay: string;
+}
+
+const OPENING_HINTS: RangeHints = { allDay: 'Abierto las 24 horas', untilMidnight: 'Cierra a medianoche', nextDay: 'Cierra al día siguiente' };
 
 /** An opening that still runs after midnight (18:00 to 2:00); one that closes at 00:00 ends with its day. */
 export function endsAfterMidnight(range: TimeRange): boolean {

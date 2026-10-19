@@ -524,6 +524,27 @@ La Fase 24I trae una migración, [`database/production/20261019015524_AddOnlineP
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas. Un pedido ya pagado en línea conserva su pago «En línea», que esa versión muestra como un método sin nombre, y los cobros en curso quedan sin resolver hasta volver a la nueva (Mercado Pago deja de aceptar pagos de un cobro a los 30 minutos).
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50024, sin cambiar nada, en cuanto un cliente pagó en línea o empezó a hacerlo: perdería el registro de sus pagos y devoluciones. Sin cobros ni devoluciones, quita las tablas y la columna (las cuentas conectadas se pierden y cada negocio la conecta otra vez), y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Elegir con quién en las citas en línea (Fase 24J)
+
+La Fase 24J trae una migración, [`database/production/20261019150436_AddOnlineBookingStaff`](../../database/production/20261019150436_AddOnlineBookingStaff). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0032](../adr/0032-online-booking-staff.md)).
+
+- **La migración:**
+  - crea dos tablas vacías: `OnlineBookingStaff` (las personas que cada negocio ofrece en sus citas en línea, una por cuenta y negocio, con el nombre para clientes, si agenda ahora, si hace todos los servicios y su horario propio en JSON) y `OnlineBookingStaffServices` (sus servicios cuando no son todos);
+  - las llaves: hacia `AspNetUsers` borra en cascada; un servicio borrado del catálogo sale de la lista de cada persona; la de `Tenants` no deja borrar un negocio con personas.
+
+  No toca ninguna tabla existente: las citas ya guardaban quién las atiende (`Appointments.StaffUserId`). Después de aplicarla, el `verify.sql` muestra las tablas con sus índices y llaves. Su consulta 3 cuenta las personas, las encendidas, los negocios y los servicios elegidos (ninguno hasta desplegar), y la 4 las citas en línea con y sin persona.
+- **Mientras se publica:** la versión de `master` (Fase 24I) no conoce las tablas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - `GET /api/v1/appointments/online-booking/staff` y `PUT /api/v1/appointments/online-booking/staff/{userId}` (dueño o administrador, con el módulo de agenda);
+  - `staffCount` en la configuración de las citas en línea;
+  - en la página pública de citas, `staff` (id del perfil y nombre para clientes) y `staffIds` en cada servicio, `staffId` en las horas libres y en la solicitud;
+  - `staffName` en el recibo, en el seguimiento y en Mis citas.
+
+  Nada se quita ni cambia de nombre.
+- **Sin configuración ni servicios externos.** Mientras ningún negocio elija a nadie, las citas en línea siguen con las citas a la vez.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas, las citas en línea vuelven a usar las citas a la vez y las ya pedidas conservan a quién se asignaron.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50025, sin cambiar nada, en cuanto un negocio eligió a alguien: borrar las tablas perdería quiénes son, sus servicios y su horario. Sin personas, quita las dos tablas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

@@ -59,7 +59,7 @@ describe('AppointmentTrackingPage', () => {
 
   it('shows the appointment of the link and cancels it after asking', async () => {
     const user = userEvent.setup();
-    api.trackAppointment.mockResolvedValue(appointment() as never);
+    api.trackAppointment.mockResolvedValue(appointment({ staffName: 'Ana L.' }) as never);
     api.cancelAppointmentByLink.mockResolvedValue(appointment({
       status: AppointmentStatus.Cancelled, statusLabel: 'La cancelaste', canCancel: false,
     }) as never);
@@ -69,6 +69,8 @@ describe('AppointmentTrackingPage', () => {
     expect(api.trackAppointment).toHaveBeenCalledWith(LINK, expect.anything());
     expect(screen.getByText('Por confirmar')).toBeInTheDocument();
     expect(screen.getByText('Lunes 5 de octubre · 10:00 a. m.')).toBeInTheDocument();
+    // Who attends it, by the name the business gave them (Fase 24J).
+    expect(screen.getByText('Te atiende Ana L.')).toBeInTheDocument();
     expect(screen.getByText('Barbería Luis te confirma por WhatsApp.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Agendar otra cita en Barbería Luis' })).toHaveAttribute('href', '/m/barberia-luis/agendar');
     expect(screen.getByRole('link', { name: 'Escribir a Barbería Luis por WhatsApp' }))

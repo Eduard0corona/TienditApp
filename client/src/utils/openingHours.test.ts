@@ -115,6 +115,9 @@ describe('opening hours', () => {
     expect(rangeHint({ opens: '13:00', closes: '00:00' })).toBe('Cierra a medianoche');
     expect(rangeHint({ opens: '08:00', closes: '08:00' })).toBe('Abierto las 24 horas');
     expect(rangeHint({ opens: '09:00', closes: '' })).toBeNull();
+    // A person's hours say it their way.
+    const person = { allDay: 'Las 24 horas', untilMidnight: 'Sale a medianoche', nextDay: 'Sale al día siguiente' };
+    expect(rangeHint({ opens: '18:00', closes: '02:00' }, person)).toBe('Sale al día siguiente');
 
     // Only what still runs after midnight reaches into the next date.
     expect(endsAfterMidnight({ opens: '18:00', closes: '02:00' })).toBe(true);

@@ -69,6 +69,7 @@ public interface IApplicationDbContext
     DbSet<DeliveryZonePostalCode> DeliveryZonePostalCodes { get; }
     DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }
     DbSet<Appointment> Appointments { get; }
+    DbSet<OnlineBookingStaff> OnlineBookingStaff { get; }
     DbSet<AppointmentVisit> AppointmentVisits { get; }
     DbSet<Supplier> Suppliers { get; }
     DbSet<PurchaseOrder> PurchaseOrders { get; }

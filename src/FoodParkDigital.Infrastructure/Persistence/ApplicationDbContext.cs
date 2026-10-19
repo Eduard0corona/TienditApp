@@ -191,6 +191,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<DeliveryZonePostalCode> DeliveryZonePostalCodes => Set<DeliveryZonePostalCode>();
     public DbSet<ServiceOrderPiece> ServiceOrderPieces => Set<ServiceOrderPiece>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<OnlineBookingStaff> OnlineBookingStaff => Set<OnlineBookingStaff>();
     public DbSet<AppointmentVisit> AppointmentVisits => Set<AppointmentVisit>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();

@@ -551,6 +551,94 @@
         }
       }
     },
+    "/api/v1/appointments/online-booking/staff": {
+      "get": {
+        "tags": [
+          "Appointments"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/online-booking/staff/{userId}": {
+      "put": {
+        "tags": [
+          "Appointments"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOnlineBookingStaffRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOnlineBookingStaffRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOnlineBookingStaffRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffMemberDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffMemberDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineBookingStaffMemberDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/appointments/{id}/accept": {
       "post": {
         "tags": [
@@ -10577,6 +10665,14 @@
               "type": "string",
               "format": "date"
             }
+          },
+          {
+            "name": "staffId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -17567,6 +17663,10 @@
           "address": {
             "type": "string",
             "nullable": true
+          },
+          "staffName": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -20793,6 +20893,27 @@
         },
         "additionalProperties": false
       },
+      "OnlineBookingServiceOptionDto": {
+        "required": [
+          "bookableNow",
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "bookableNow": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "OnlineBookingSettingsDto": {
         "required": [
           "booksOnline",
@@ -20800,7 +20921,8 @@
           "enabled",
           "maxCapacity",
           "missing",
-          "slug"
+          "slug",
+          "staffCount"
         ],
         "type": "object",
         "properties": {
@@ -20826,6 +20948,85 @@
           },
           "slug": {
             "type": "string"
+          },
+          "staffCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OnlineBookingStaffMemberDto": {
+        "required": [
+          "allServices",
+          "configured",
+          "enabled",
+          "fullName",
+          "name",
+          "serviceIds",
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "allServices": {
+            "type": "boolean"
+          },
+          "serviceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "weeklyHours": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpeningIntervalDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OnlineBookingStaffSettingsDto": {
+        "required": [
+          "maxEnabled",
+          "members",
+          "services"
+        ],
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OnlineBookingStaffMemberDto"
+            }
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OnlineBookingServiceOptionDto"
+            }
+          },
+          "maxEnabled": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -24086,6 +24287,10 @@
             "type": "string",
             "nullable": true
           },
+          "staffName": {
+            "type": "string",
+            "nullable": true
+          },
           "linkedToAccount": {
             "type": "boolean"
           },
@@ -24138,6 +24343,7 @@
           "pricesIncludeTax",
           "services",
           "slug",
+          "staff",
           "theme"
         ],
         "type": "object",
@@ -24175,6 +24381,12 @@
             "items": {
               "$ref": "#/components/schemas/PublicBookingServiceDto"
             }
+          },
+          "staff": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicBookingStaffDto"
+            }
           }
         },
         "additionalProperties": false
@@ -24184,7 +24396,8 @@
           "durationMinutes",
           "id",
           "name",
-          "price"
+          "price",
+          "staffIds"
         ],
         "type": "object",
         "properties": {
@@ -24210,6 +24423,13 @@
           "imageUrl": {
             "type": "string",
             "nullable": true
+          },
+          "staffIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         },
         "additionalProperties": false
@@ -24256,6 +24476,23 @@
             "type": "string",
             "format": "date",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicBookingStaffDto": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -25671,6 +25908,11 @@
             "nullable": true
           },
           "idempotencyKey": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "staffId": {
             "type": "string",
             "format": "uuid",
             "nullable": true
@@ -28488,6 +28730,41 @@
           "capacity": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateOnlineBookingStaffRequest": {
+        "required": [
+          "allServices",
+          "enabled",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "allServices": {
+            "type": "boolean"
+          },
+          "serviceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "weeklyHours": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpeningIntervalDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false

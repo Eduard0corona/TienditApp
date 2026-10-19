@@ -18,7 +18,7 @@ public class OnlineBookingSettingsDto
 {
     /// <summary>The owner turned it on.</summary>
     public bool Enabled { get; set; }
-    /// <summary>Appointments the business attends at once.</summary>
+    /// <summary>Appointments the business attends at once, while it does not say who attends (<see cref="StaffCount"/> 0).</summary>
     public int Capacity { get; set; }
     public int MaxCapacity { get; set; } = OnlineBookingRules.MaxCapacity;
     /// <summary>Customers book now: it is on and nothing is missing.</summary>
@@ -27,6 +27,11 @@ public class OnlineBookingSettingsDto
     public List<string> Missing { get; set; } = [];
     /// <summary>The business's online menu (/m/{slug}): the booking page is /m/{slug}/agendar.</summary>
     public string Slug { get; set; } = null!;
+    /// <summary>
+    /// The people customers book now (Fase 24J); while there is one, the times come from each person and
+    /// <see cref="Capacity"/> is not used.
+    /// </summary>
+    public int StaffCount { get; set; }
 }
 
 /// <summary>The setting for online appointments, for everyone on the team who manages the agenda.</summary>
@@ -51,6 +56,9 @@ public class OnlineBookingSettingsHandler :
     IRequestHandler<GetOnlineBookingSettingsQuery, OnlineBookingSettingsDto>,
     IRequestHandler<UpdateOnlineBookingSettingsCommand, Result<OnlineBookingSettingsDto>>
 {
+    public const string NobodyOffersMessage =
+        "Nadie de «Quién atiende» hace un servicio que se agenda en línea: revisa sus servicios.";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
@@ -112,14 +120,21 @@ public class OnlineBookingSettingsHandler :
             settings?.OnlineMenuMode ?? OnlineMenuMode.Off,
             mainBranchMode,
             settings?.OpeningHours is not null);
+        var missing = blockers.Select(OnlineBookingAvailability.Describe).ToList();
+        // While the business says who attends (Fase 24J), someone must do a service: otherwise its page has none to book.
+        var staff = await OnlineBookingCalendar.StaffAsync(_context, tenant.Id, cancellationToken);
+        if (staff.Count > 0
+            && !await OnlineBookingCalendar.OfferedServices(_context).AnyAsync(p => p.TenantId == tenant.Id, cancellationToken))
+            missing.Add(NobodyOffersMessage);
         var enabled = settings?.OnlineBookingEnabled ?? false;
         return new OnlineBookingSettingsDto
         {
             Enabled = enabled,
             Capacity = settings?.OnlineBookingCapacity ?? OnlineBookingRules.DefaultCapacity,
-            BooksOnline = enabled && blockers.Count == 0,
-            Missing = blockers.Select(OnlineBookingAvailability.Describe).ToList(),
-            Slug = tenant.Slug
+            BooksOnline = enabled && missing.Count == 0,
+            Missing = missing,
+            Slug = tenant.Slug,
+            StaffCount = staff.Count
         };
     }
 }

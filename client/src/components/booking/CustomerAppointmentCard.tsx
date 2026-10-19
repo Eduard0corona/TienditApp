@@ -17,7 +17,8 @@ interface CustomerAppointmentCardProps {
 }
 
 /**
- * An appointment booked online, as its customer sees it (Fase 24D): the service, the business, when, where, its status in
+ * An appointment booked online, as its customer sees it (Fase 24D): the service, the business, when, who attends it (Fase
+ * 24J), where, its status in
  * the business's words, and what the customer can do with it: cancel it while it has not started, write to the business,
  * book another one, or rate the business once it was attended (Fase 24H).
  */
@@ -43,6 +44,12 @@ export default function CustomerAppointmentCard({
           <i className="ri-calendar-event-line me-1" aria-hidden="true"></i>
           {upperFirst(appointment.dateLabel)} · {appointment.timeLabel}
         </p>
+        {appointment.staffName && (
+          <p className="mb-1">
+            <i className="ri-user-line me-1" aria-hidden="true"></i>
+            Te atiende {appointment.staffName}
+          </p>
+        )}
         {appointment.address && (
           <p className="small mb-1">
             <i className="ri-map-pin-line me-1" aria-hidden="true"></i>

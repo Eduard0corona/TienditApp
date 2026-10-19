@@ -20,7 +20,7 @@ const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn(
 const NO_HOURS = 'Pon el horario de tu negocio: los horarios libres salen de él.';
 
 function settings(overrides: Partial<OnlineBookingSettings> = {}): OnlineBookingSettings {
-  return { enabled: false, capacity: 1, maxCapacity: 20, booksOnline: false, missing: [], slug: 'barberia-luis', ...overrides };
+  return { enabled: false, capacity: 1, maxCapacity: 20, booksOnline: false, missing: [], slug: 'barberia-luis', staffCount: 0, ...overrides };
 }
 
 function withCapabilities(capabilities: number) {
@@ -87,6 +87,14 @@ describe('OnlineBookingCard', () => {
 
     expect(screen.getByText('Las citas a la vez van de 1 a 20.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+  });
+
+  it('says the times come from who attends while someone does, without the appointments at once', async () => {
+    api.getOnlineBooking.mockResolvedValue(settings({ enabled: true, booksOnline: true, staffCount: 2 }) as never);
+    renderCard();
+
+    expect(await screen.findByText(/2 personas agendan en línea/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Citas a la vez')).not.toBeInTheDocument();
   });
 
   it('is not there for a business without the agenda', () => {
