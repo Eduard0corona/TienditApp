@@ -469,10 +469,51 @@ public class OnlinePaymentsFlowTests
             (OnlinePaymentRefundStatus.Failed, OnlinePaymentRefundRequestedHandler.KeyExpiredMessage),
             await shop.Context.OnlinePaymentRefunds.AsNoTracking().Where(r => r.Id == refund.Id).Select(r => ValueTuple.Create(r.Status, r.FailureMessage)).SingleAsync());
 
-        // The checkouts still in course end on time, so the account can be connected again.
+        // A checkout in course that reached Mercado Pago may have been paid: unread, it waits for the account after its
+        // time (the customer is not told nothing was charged), and expires unread a day later.
         shop.Clock.UtcNow = SalesTestFixture.Now + OnlineCheckout.TimeToPay + SweepOnlinePaymentsCommandHandler.ExpiryGrace + TimeSpan.FromMinutes(1);
+        Assert.Equal(0, (await shop.SweepAsync()).Value.Expired);
+        Assert.Equal(OnlineCheckoutStatus.AwaitingPayment, (await shop.ConfirmAsync(pending.CheckoutId, null))!.Status);
+        shop.Clock.UtcNow = SalesTestFixture.Now + OnlineCheckout.TimeToPay + SweepOnlinePaymentsCommandHandler.UnreadableHold;
         Assert.Equal(1, (await shop.SweepAsync()).Value.Expired);
         Assert.Equal((0, 0), ((await shop.SettingsAsync()).CheckoutsInCourse, (await shop.SettingsAsync()).RefundsInCourse));
+    }
+
+    [Fact]
+    public async Task CheckoutPaid_WhileTheAccountCannotBeRead_ShouldWaitForIt_AndBecomeTheOrderOnceItIsConnectedAgain()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var started = (await shop.CheckoutAsync()).Value;
+
+        // The customer pays, and the owner revokes TienditApp before anything read the payment.
+        var payment = shop.Gateway.Approve(started.CheckoutId, 55m, SalesTestFixture.Now.AddMinutes(1));
+        shop.Gateway.RejectKey = true;
+        Assert.Equal(OnlinePaymentApplication.Ignored, (await shop.NotifyAsync(payment.Id)).Value);
+        shop.Clock.UtcNow = SalesTestFixture.Now + OnlineCheckout.TimeToPay + SweepOnlinePaymentsCommandHandler.ExpiryGrace + TimeSpan.FromMinutes(1);
+        Assert.Equal(0, (await shop.SweepAsync()).Value.Expired);
+
+        // The owner connects the same account again: the next sweep reads the payment, approved in time.
+        shop.Gateway.RejectKey = false;
+        Assert.True((await shop.ReconnectAsync("APP_USR-again")).IsSuccess);
+        await shop.SweepAsync();
+
+        Assert.Equal(OnlineCheckoutStatus.Placed, (await shop.ConfirmAsync(started.CheckoutId, null))!.Status);
+        Assert.Single(await shop.Context.Orders.ToListAsync());
+    }
+
+    [Fact]
+    public async Task KeyRejected_WhileTheOwnerConnectsTheAccountAgain_ShouldLeaveTheNewKey()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var started = (await shop.CheckoutAsync()).Value;
+
+        // A return asks with the old key just as the owner connects the account again: Mercado Pago rejects the old one.
+        shop.Gateway.RejectKey = true;
+        shop.Gateway.WhileReading = async () => Assert.True((await shop.ReconnectAsync("APP_USR-again")).IsSuccess);
+        await shop.ConfirmAsync(started.CheckoutId, null);
+
+        Assert.False((await shop.SettingsAsync()).NeedsReconnect);
+        Assert.True((await shop.MenuAsync()).PaysOnline);
     }
 
     [Fact]
@@ -504,6 +545,32 @@ public class OnlinePaymentsFlowTests
         Assert.Equal(
             [first.Id, second.Id],
             await shop.Context.OnlinePaymentRefunds.Where(r => r.Reason == OnlinePaymentRefundReason.NotPlaced).OrderBy(r => r.PaymentId).Select(r => r.PaymentId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task PaidOrder_ThatTheCatalogRefuses_WhileAnotherPathSavesFirst_ShouldStillGoBack()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var started = (await shop.CheckoutAsync()).Value;
+        shop.Context.Products.Remove(shop.Product);
+        await shop.Context.SaveChangesAsync();
+        var payment = shop.Gateway.Approve(started.CheckoutId, 55m, SalesTestFixture.Now.AddMinutes(1));
+
+        // The catalog refuses it, and as it goes back another path saves first: it is retried once more and read again.
+        var raced = false;
+        shop.BeforeApplying = apply =>
+        {
+            if (apply.RefusedBecause is null || raced)
+                return Task.CompletedTask;
+            raced = true;
+            throw new DbUpdateConcurrencyException("Another path saved the checkout first.");
+        };
+
+        Assert.Equal(OnlinePaymentApplication.NotPlaced, (await shop.NotifyAsync(payment.Id)).Value);
+        Assert.Equal(
+            (OnlineCheckoutStatus.NotPlaced, ApplyOnlinePaymentCommandHandler.CatalogChangedMessage),
+            await shop.Context.OnlineCheckouts.AsNoTracking().Select(c => ValueTuple.Create(c.Status, c.FailureMessage)).SingleAsync());
+        Assert.Single(await shop.Context.OnlinePaymentRefunds.ToListAsync());
     }
 
     [Fact]
@@ -738,6 +805,15 @@ public class OnlinePaymentsFlowTests
             return await CompleteConnectionAsync(StateOf(started.Value.AuthorizationUrl), "TG-other-code");
         }
 
+        /// <summary>The owner connects the same Mercado Pago account again, which gives it a new key.</summary>
+        public async Task<Common.Models.Result<OnlinePaymentSettingsDto>> ReconnectAsync(string accessToken)
+        {
+            Gateway.Credentials = new OnlinePaymentCredentials(
+                FakeOnlinePaymentGateway.AccountId, accessToken, $"TG-{accessToken}", Clock.UtcNow.AddDays(180), LiveMode: true);
+            var started = await StartConnectionAsync();
+            return await CompleteConnectionAsync(StateOf(started.Value.AuthorizationUrl), "TG-again-code");
+        }
+
         public Task<Common.Models.Result<OnlinePaymentSettingsDto>> DisconnectAsync()
             => new DisconnectOnlinePaymentAccountCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, Gateway, Protector, Clock)
                 .Handle(new DisconnectOnlinePaymentAccountCommand(), CancellationToken.None);
@@ -772,15 +848,20 @@ public class OnlinePaymentsFlowTests
         public ValueTask DisposeAsync() => Fixture.DisposeAsync();
 
         // The applications of payments go to their own handler, as MediatR would send them.
-        public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
+        /// <summary>Runs before each application of a payment (another path saving first throws from here).</summary>
+        public Func<ApplyOnlinePaymentCommand, Task>? BeforeApplying { get; set; }
+
+        public async Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
         {
             if (request is not ApplyOnlinePaymentCommand apply)
                 throw new NotSupportedException(request.GetType().Name);
+            if (BeforeApplying is { } before)
+                await before(apply);
             var handler = new ApplyOnlinePaymentCommandHandler(
                 Context, Gateway, Clock,
                 new CustomerLookupService(Context, new PhoneNormalizationService(), NullLogger<CustomerLookupService>.Instance),
                 NoOpOrderInventoryService.Instance, new FolioGenerator(Context), NullLogger<ApplyOnlinePaymentCommandHandler>.Instance);
-            return (Task<TResponse>)(object)handler.Handle(apply, cancellationToken);
+            return (TResponse)(object)await handler.Handle(apply, cancellationToken);
         }
 
         public Task Send<TRequest>(TRequest request, CancellationToken cancellationToken = default) where TRequest : IRequest

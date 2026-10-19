@@ -46,6 +46,7 @@ internal sealed class OnlinePaymentChecker
     private readonly IDateTimeProvider _clock;
     private readonly ISender _sender;
     private readonly ILogger _logger;
+    private string? _keyInUse;
 
     public OnlinePaymentChecker(
         IApplicationDbContext context,
@@ -69,6 +70,7 @@ internal sealed class OnlinePaymentChecker
         if (!_gateway.IsConfigured)
             return null;
         var account = await _context.OnlinePaymentAccounts.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        _keyInUse = account?.ProtectedAccessToken;
         return account is null ? null : OnlinePaymentKeys.Access(_protector, account, _clock.UtcNow);
     }
 
@@ -108,11 +110,16 @@ internal sealed class OnlinePaymentChecker
         return true;
     }
 
-    /// <summary>Mercado Pago rejected the account's key: it counts as expired until it is renewed or connected again.</summary>
+    /// <summary>
+    /// Mercado Pago rejected the key <see cref="AccessTokenAsync"/> read last: it counts as expired until it is renewed or
+    /// connected again.
+    /// </summary>
     public async Task RejectKeyAsync(CancellationToken cancellationToken)
     {
+        if (_keyInUse is null)
+            return;
         _context.ChangeTracker.Clear();
-        await OnlinePaymentKeys.RejectAsync(_context, _clock.UtcNow, save: true, cancellationToken);
+        await OnlinePaymentKeys.RejectAsync(_context, _keyInUse, _clock.UtcNow, save: true, cancellationToken);
     }
 
     /// <summary>
@@ -124,15 +131,18 @@ internal sealed class OnlinePaymentChecker
     public async Task<OnlinePaymentApplication> ApplyAsync(Guid checkoutId, OnlinePaymentDetails payment, CancellationToken cancellationToken)
     {
         string? refusal = null;
-        for (var attempt = 1; ; attempt++)
+        // At most one retry for each: the other path won (it is read next), and the catalog refused it (it goes back).
+        var lostARace = false;
+        while (true)
         {
             try
             {
                 var applied = await _sender.Send(new ApplyOnlinePaymentCommand(checkoutId, payment, refusal), cancellationToken);
                 return applied.Value;
             }
-            catch (DbUpdateException) when (attempt == 1)
+            catch (DbUpdateException) when (!lostARace)
             {
+                lostARace = true;
                 _context.ChangeTracker.Clear();
             }
             catch (DomainException ex) when (refusal is null)

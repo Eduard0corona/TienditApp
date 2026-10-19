@@ -843,6 +843,28 @@ describe('PublicMenuPage', () => {
       expect(goToExternalPage).toHaveBeenLastCalledWith('https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=456');
     });
 
+    it('opens another checkout once the open one is nearly over on this device, whatever its clock says', async () => {
+      // A device clock two hours behind the server's: the server's end of the checkout looks far away.
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
+      api.startOnlineCheckout.mockResolvedValueOnce({ ...started, expiresAt: new Date(Date.now() + 150 * 60_000).toISOString() })
+        .mockResolvedValueOnce({ ...started, checkoutId: 'otro-cobro', checkoutUrl: 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=789' });
+
+      const cart = await openCart();
+      await userEvent.click(within(cart).getByRole('button', { name: 'Pagar · $110.00' }));
+      await waitFor(() => expect(goToExternalPage).toHaveBeenCalledTimes(1));
+
+      const opened = Date.now();
+      const now = vi.spyOn(Date, 'now').mockReturnValue(opened + 28 * 60_000);
+      try {
+        document.dispatchEvent(new Event('visibilitychange'));
+        await userEvent.click(await within(cart).findByRole('button', { name: 'Pagar · $110.00' }));
+        await waitFor(() => expect(api.startOnlineCheckout).toHaveBeenCalledTimes(2));
+        expect(goToExternalPage).toHaveBeenLastCalledWith('https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=789');
+      } finally {
+        now.mockRestore();
+      }
+    });
+
     it('says why the payment could not open, and lets the customer try again', async () => {
       api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
       api.startOnlineCheckout.mockRejectedValue({

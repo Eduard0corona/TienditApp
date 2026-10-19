@@ -18,8 +18,10 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
     public bool IsConfigured { get; set; } = true;
     public bool Sandbox { get; set; }
     public bool Unavailable { get; set; }
-    /// <summary>Mercado Pago rejects the account's key (the owner revoked TienditApp).</summary>
+    /// <summary>Mercado Pago rejects the account's key, and renews none (the owner revoked TienditApp).</summary>
     public bool RejectKey { get; set; }
+    /// <summary>Runs once while the next payment is read, before Mercado Pago answers (the owner acting meanwhile).</summary>
+    public Func<Task>? WhileReading { get; set; }
     public bool RefuseCode { get; set; }
     public OnlinePaymentRefundOutcome RefundOutcome { get; set; } = new OnlinePaymentRefundOutcome.Done("refund-1");
     public OnlinePaymentCredentials? Credentials { get; set; }
@@ -49,6 +51,8 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
     public Task<OnlinePaymentCredentials> RenewAsync(string refreshToken, CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
+        if (RejectKey)
+            throw new OnlinePaymentGatewayRefusedException("Mercado Pago ya no permite usar tu cuenta: vuelve a conectarla.");
         Renewals++;
         return Task.FromResult(new OnlinePaymentCredentials(
             AccountId, $"{AccessToken}-{Renewals}", $"{RefreshToken}-{Renewals}", DateTimeOffset.UtcNow.AddDays(400), !Sandbox));
@@ -65,25 +69,26 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
             $"pref-{request.CheckoutId:N}", $"https://www.mercadopago.test/checkout?pref_id={request.CheckoutId:N}"));
     }
 
-    public Task<OnlinePaymentDetails?> GetPaymentAsync(string accessToken, string paymentId, CancellationToken cancellationToken)
+    public async Task<OnlinePaymentDetails?> GetPaymentAsync(string accessToken, string paymentId, CancellationToken cancellationToken)
     {
+        await RunWhileReadingAsync();
         ThrowIfUnavailable();
         ThrowIfKeyRejected();
         AccessTokensUsed.Add(accessToken);
-        return Task.FromResult(Payments.GetValueOrDefault(paymentId));
+        return Payments.GetValueOrDefault(paymentId);
     }
 
-    public Task<IReadOnlyList<OnlinePaymentDetails>> FindPaymentsAsync(
+    public async Task<IReadOnlyList<OnlinePaymentDetails>> FindPaymentsAsync(
         string accessToken, Guid checkoutId, CancellationToken cancellationToken)
     {
+        await RunWhileReadingAsync();
         ThrowIfUnavailable();
         ThrowIfKeyRejected();
         AccessTokensUsed.Add(accessToken);
-        IReadOnlyList<OnlinePaymentDetails> found = Payments.Values
+        return Payments.Values
             .Where(p => p.ExternalReference == checkoutId.ToString())
             .OrderByDescending(p => p.ApprovedAt)
             .ToList();
-        return Task.FromResult(found);
     }
 
     public Task<OnlinePaymentRefundOutcome> RefundAsync(
@@ -105,6 +110,14 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
             checkoutId.ToString(), amount, currency, approvedAt, collector, LiveMode: !Sandbox);
         Payments[payment.Id] = payment;
         return payment;
+    }
+
+    private async Task RunWhileReadingAsync()
+    {
+        if (WhileReading is not { } meanwhile)
+            return;
+        WhileReading = null;
+        await meanwhile();
     }
 
     private void ThrowIfUnavailable()

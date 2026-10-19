@@ -232,7 +232,7 @@ public class CreateOnlineCheckoutCommandHandler : IRequestHandler<CreateOnlineCh
         {
             // The owner revoked TienditApp in Mercado Pago: the menu stops offering it until the account is connected again.
             _context.ChangeTracker.Clear();
-            await OnlinePaymentKeys.RejectAsync(_context, now, save: true, cancellationToken);
+            await OnlinePaymentKeys.RejectAsync(_context, paymentAccount!.ProtectedAccessToken, now, save: true, cancellationToken);
             return Result.Failure<OnlineCheckoutStartedDto>(NotOfferedMessage);
         }
 

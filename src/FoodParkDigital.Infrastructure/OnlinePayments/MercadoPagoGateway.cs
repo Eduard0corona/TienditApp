@@ -164,7 +164,8 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
         using var message = new HttpRequestMessage(HttpMethod.Get, $"{_options.ApiBaseUrl}/v1/payments/{paymentId}");
         Authorize(message, accessToken);
         using var response = await SendAsync(message, "payment", cancellationToken);
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        // Not found, or not this account's to read (403): not a payment of this business. The id may come from anyone.
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
             return null;
         await ThrowIfKeyRejectedAsync(response, "payment", cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -277,12 +278,13 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
     }
 
     /// <summary>
-    /// 401 or 403 with the account's key: the owner revoked TienditApp in Mercado Pago, or the key no longer works. Not
-    /// Mercado Pago being down: retrying would only wait forever.
+    /// 401 with the account's key: the owner revoked TienditApp in Mercado Pago, or the key no longer works. Not Mercado
+    /// Pago being down: retrying would only wait forever. A 403 is not: the key works, it just may not do that (read
+    /// someone else's payment, a refund a policy forbids), so it never stops the whole account.
     /// </summary>
     private async Task ThrowIfKeyRejectedAsync(HttpResponseMessage response, string operation, CancellationToken cancellationToken)
     {
-        if (response.StatusCode is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden))
+        if (response.StatusCode != HttpStatusCode.Unauthorized)
             return;
 
         var (code, _) = await ReadErrorAsync(response, cancellationToken);

@@ -81,6 +81,13 @@ public class SweepOnlinePaymentsCommandHandler : IRequestHandler<SweepOnlinePaym
     /// <summary>After its time to pay, a checkout waits this long for a payment approved at the last moment.</summary>
     public static readonly TimeSpan ExpiryGrace = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// While the business's account cannot be read (the owner revoked TienditApp, its key expired), a checkout that reached
+    /// Mercado Pago may have been paid in time: it waits this long after its time to pay for the account to be connected
+    /// again or renewed, so its payment becomes the order or goes back. Then it expires unread.
+    /// </summary>
+    public static readonly TimeSpan UnreadableHold = TimeSpan.FromDays(1);
+
     public const int MaxPerSweep = 50;
 
     private readonly IApplicationDbContext _context;
@@ -124,8 +131,8 @@ public class SweepOnlinePaymentsCommandHandler : IRequestHandler<SweepOnlinePaym
 
         var checkedCount = 0;
         var expired = 0;
-        // Without a key that works nothing can be looked up; what ran out of time still expires (Mercado Pago stopped
-        // taking its payments when its time ended).
+        // Without a key that works nothing can be looked up: what reached Mercado Pago waits for the account (UnreadableHold),
+        // what never did still expires when its time ends.
         var readable = true;
         foreach (var checkout in pending)
         {
@@ -148,13 +155,19 @@ public class SweepOnlinePaymentsCommandHandler : IRequestHandler<SweepOnlinePaym
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // Something unexpected with this one: it stays as it is (it may have been paid) and the others are swept.
+                    // Only the type: a database message can quote what the customer typed.
                     _context.ChangeTracker.Clear();
-                    _logger.LogError(ex, "The sweep could not check online checkout {CheckoutId}", checkout.Id);
+                    _logger.LogError("The sweep could not check online checkout {CheckoutId} ({Exception})", checkout.Id, ex.GetType().Name);
                     continue;
                 }
             }
 
-            if (now >= checkout.ExpiresAt + ExpiryGrace && await ExpireAsync(checkout.Id, now, cancellationToken))
+            if (now < checkout.ExpiresAt + ExpiryGrace)
+                continue;
+            // Unread, it may have been paid in time: it does not tell its customer nothing was charged yet.
+            if (!readable && checkout.PreferenceId is not null && now < checkout.ExpiresAt + UnreadableHold)
+                continue;
+            if (await ExpireAsync(checkout.Id, now, cancellationToken))
                 expired++;
         }
 

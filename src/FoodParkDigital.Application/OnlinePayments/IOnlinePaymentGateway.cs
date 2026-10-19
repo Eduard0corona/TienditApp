@@ -107,7 +107,8 @@ public sealed class OnlinePaymentGatewayUnavailableException(string message, Exc
 public sealed class OnlinePaymentGatewayRefusedException(string message) : Exception(message);
 
 /// <summary>
-/// Mercado Pago no longer takes the key of the business's account (401 or 403: the owner revoked TienditApp, or the key
-/// was invalidated). Retrying will not change it: the account needs to be connected again.
+/// Mercado Pago no longer takes the key of the business's account (401: the owner revoked TienditApp, or the key was
+/// invalidated). Retrying will not change it: the account needs to be connected again. A 403 is not this: the key works
+/// but may not do that one thing.
 /// </summary>
 public sealed class OnlinePaymentAccountRejectedException(string message) : Exception(message);

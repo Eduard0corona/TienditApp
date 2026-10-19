@@ -102,12 +102,13 @@ public class OnlinePaymentAccount : AuditableEntity, IAggregateRoot, ITenantScop
     public void SetAcceptsPayments(bool accepts) => AcceptsPayments = accepts;
 
     /// <summary>
-    /// Mercado Pago no longer takes the key (the owner revoked the access): from now on it counts as expired, so nothing is
-    /// offered or asked with it until the account is renewed or connected again.
+    /// Mercado Pago no longer takes the key <paramref name="protectedAccessToken"/> (the owner revoked the access): from now
+    /// on it counts as expired, so nothing is offered or asked with it until the account is renewed or connected again. A
+    /// key renewed or connected since is not the one rejected, and stays.
     /// </summary>
-    public void RejectKey(DateTimeOffset now)
+    public void RejectKey(string protectedAccessToken, DateTimeOffset now)
     {
-        if (AccessTokenExpiresAt > now)
+        if (ProtectedAccessToken == protectedAccessToken && AccessTokenExpiresAt > now)
             AccessTokenExpiresAt = now;
     }
 

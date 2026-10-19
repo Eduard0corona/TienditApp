@@ -74,7 +74,7 @@ public sealed class OnlinePaymentRefundRequestedHandler : IOutboxEventHandler<On
         {
             // The owner revoked TienditApp in Mercado Pago: the business gives it back from its account, and connects it again.
             refund.Fail(KeyExpiredMessage, now);
-            await OnlinePaymentKeys.RejectAsync(_context, now, save: false, cancellationToken);
+            await OnlinePaymentKeys.RejectAsync(_context, account.ProtectedAccessToken, now, save: false, cancellationToken);
             return;
         }
         switch (outcome)

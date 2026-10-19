@@ -2,6 +2,7 @@ using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
+using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -72,7 +73,7 @@ public sealed class MercadoPagoWebhookProcessor
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // One business failing does not leave the others without the payment: the delivery is retried.
-                _logger.LogError(ex, "The Mercado Pago notification could not be applied for tenant {TenantId}", tenantId);
+                _logger.LogError(LogRedaction.RedactDatabaseMessages(ex), "The Mercado Pago notification could not be applied for tenant {TenantId}", tenantId);
                 failed++;
             }
         }

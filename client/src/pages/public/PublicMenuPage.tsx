@@ -63,6 +63,8 @@ type MenuLine = CartLine<PublicMenuProduct>;
 const sectionId = (categoryId: string) => `pm-cat-${categoryId}`;
 
 const NO_ADDRESS: PublicDeliveryAddress = { postalCode: '', addressLine: '', references: '', paysWith: '' };
+/** The time to pay a checkout once it starts (OnlineCheckout.TimeToPay on the server). */
+const ONLINE_TIME_TO_PAY_MS = 30 * 60_000;
 /** An open checkout is reused for the same cart only while this much time is left to pay it. */
 const REUSE_CHECKOUT_MARGIN_MS = 3 * 60_000;
 
@@ -142,7 +144,7 @@ export default function PublicMenuPage() {
   // The checkout opened for this cart, reused while the cart is the same and there is time to pay it; and whether the
   // page went to Mercado Pago. Back from there, the browser may bring the page back as it left it (or never left it, when
   // another app took the link), still opening the payment.
-  const onlineAttempt = useRef<{ signature: string; checkoutUrl: string; expiresAt: string } | null>(null);
+  const onlineAttempt = useRef<{ signature: string; checkoutUrl: string; reuseUntil: number } | null>(null);
   const leftForPayment = useRef(false);
   useEffect(() => {
     const back = () => {
@@ -431,8 +433,9 @@ export default function PublicMenuPage() {
   const payOnline = async (order: PlacePublicOrder) => {
     const signature = JSON.stringify(order);
     const open = onlineAttempt.current;
-    // The same cart goes back to the checkout already open for it, while there is time to pay it.
-    if (open?.signature === signature && Date.parse(open.expiresAt) - Date.now() > REUSE_CHECKOUT_MARGIN_MS) {
+    // The same cart goes back to the checkout already open for it, while there is time to pay it: counted on this device
+    // from when it opened, never comparing the device's clock with the server's.
+    if (open?.signature === signature && Date.now() < open.reuseUntil) {
       leftForPayment.current = true;
       goToExternalPage(open.checkoutUrl);
       return;
@@ -449,7 +452,8 @@ export default function PublicMenuPage() {
         addressLabel: order.addressLabel,
       });
       rememberOnlineCheckout(started.checkoutId, started.returnKey);
-      onlineAttempt.current = { signature, checkoutUrl: started.checkoutUrl, expiresAt: started.expiresAt };
+      const reuseUntil = Date.now() + ONLINE_TIME_TO_PAY_MS - REUSE_CHECKOUT_MARGIN_MS;
+      onlineAttempt.current = { signature, checkoutUrl: started.checkoutUrl, reuseUntil };
       leftForPayment.current = true;
       goToExternalPage(started.checkoutUrl);
     } catch (err: unknown) {

@@ -273,12 +273,10 @@ public class MercadoPagoGatewayTests
             () => failing.RefundAsync("APP_USR-business", "1", 10m, Guid.NewGuid(), CancellationToken.None));
     }
 
-    [Theory]
-    [InlineData(HttpStatusCode.Unauthorized)]
-    [InlineData(HttpStatusCode.Forbidden)]
-    public async Task Calls_WithAKeyMercadoPagoNoLongerTakes_ShouldSaySo_NotThatItIsDown(HttpStatusCode status)
+    [Fact]
+    public async Task Calls_WithAKeyMercadoPagoNoLongerTakes_ShouldSaySo_NotThatItIsDown()
     {
-        var (gateway, _) = Create(_ => Json(status, """{"message":"invalid access token","error":"unauthorized","status":401}"""));
+        var (gateway, _) = Create(_ => Json(HttpStatusCode.Unauthorized, """{"message":"invalid access token","error":"unauthorized","status":401}"""));
 
         await Assert.ThrowsAsync<OnlinePaymentAccountRejectedException>(
             () => gateway.GetPaymentAsync("APP_USR-revoked", "1", CancellationToken.None));
@@ -287,6 +285,24 @@ public class MercadoPagoGatewayTests
         await Assert.ThrowsAsync<OnlinePaymentAccountRejectedException>(
             () => gateway.RefundAsync("APP_USR-revoked", "1", 10m, Guid.NewGuid(), CancellationToken.None));
         await Assert.ThrowsAsync<OnlinePaymentAccountRejectedException>(() => gateway.CreateCheckoutAsync("APP_USR-revoked",
+            new OnlinePaymentCheckoutRequest(
+                CheckoutId, "Pedido en Café Luna", 10m, "https://tienditapp.test/m/cafe-luna/pago/x", DateTimeOffset.UtcNow.AddMinutes(30), null),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Calls_ThatTheKeyMayNotDo_ShouldNeverRejectTheAccount()
+    {
+        // 403: the key works but may not read that payment (anyone can send its id) or make that refund.
+        var (gateway, _) = Create(_ => Json(HttpStatusCode.Forbidden,
+            """{"message":"Unauthorized access to resource","error":"forbidden","status":403,"code":"PA_UNAUTHORIZED_RESULT_FROM_POLICIES"}"""));
+
+        Assert.Null(await gateway.GetPaymentAsync("APP_USR-business", "1", CancellationToken.None));
+        Assert.IsType<OnlinePaymentRefundOutcome.Refused>(
+            await gateway.RefundAsync("APP_USR-business", "1", 10m, Guid.NewGuid(), CancellationToken.None));
+        await Assert.ThrowsAsync<OnlinePaymentGatewayUnavailableException>(
+            () => gateway.FindPaymentsAsync("APP_USR-business", CheckoutId, CancellationToken.None));
+        await Assert.ThrowsAsync<OnlinePaymentGatewayUnavailableException>(() => gateway.CreateCheckoutAsync("APP_USR-business",
             new OnlinePaymentCheckoutRequest(
                 CheckoutId, "Pedido en Café Luna", 10m, "https://tienditapp.test/m/cafe-luna/pago/x", DateTimeOffset.UtcNow.AddMinutes(30), null),
             CancellationToken.None));
