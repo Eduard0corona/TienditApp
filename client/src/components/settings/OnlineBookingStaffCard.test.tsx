@@ -8,7 +8,7 @@ import { useToast } from '../../hooks/useToast';
 import { TenantCapability, type TenantProfileDto } from '../../types';
 import OnlineBookingStaffCard from './OnlineBookingStaffCard';
 import { toDraft } from '../../utils/openingHours';
-import { describeStaff, staffDraftProblem, type StaffDraft } from './onlineBookingStaff';
+import { describeStaff, nameLength, staffDraftProblem, type StaffDraft } from './onlineBookingStaff';
 
 vi.mock('../../api/appointmentsApi', () => ({
   appointmentsApi: { getOnlineBookingStaff: vi.fn(), updateOnlineBookingStaff: vi.fn() },
@@ -27,12 +27,10 @@ function member(overrides: Partial<OnlineBookingStaffMember> = {}): OnlineBookin
   } as OnlineBookingStaffMember;
 }
 
-function settings(members: OnlineBookingStaffMember[]): OnlineBookingStaffSettings {
-  return {
-    members,
-    services: [{ id: 's1', name: 'Corte de cabello' }, { id: 's2', name: 'Barba' }],
-    maxEnabled: 30,
-  };
+const SERVICES = [{ id: 's1', name: 'Corte de cabello', bookableNow: true }, { id: 's2', name: 'Barba', bookableNow: true }];
+
+function settings(members: OnlineBookingStaffMember[], overrides: Partial<OnlineBookingStaffSettings> = {}): OnlineBookingStaffSettings {
+  return { members, services: SERVICES, maxEnabled: 30, ...overrides };
 }
 
 function withCapabilities(capabilities: number) {
@@ -44,8 +42,7 @@ function withCapabilities(capabilities: number) {
   });
 }
 
-function renderCard() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderCard(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={queryClient}>
       <OnlineBookingStaffCard />
@@ -126,6 +123,60 @@ describe('OnlineBookingStaffCard', () => {
     expect(await dialog.findByText('Puedes ofrecer hasta 30 personas en tus citas en línea.')).toBeInTheDocument();
   });
 
+  it('keeps a paused service with the person, saying it is not booked now', async () => {
+    const user = userEvent.setup();
+    api.getOnlineBookingStaff.mockResolvedValue(settings(
+      [member({ configured: true, enabled: true, allServices: false, serviceIds: ['s2'] })],
+      { services: [SERVICES[0], { ...SERVICES[1], bookableNow: false }] },
+    ) as never);
+    api.updateOnlineBookingStaff.mockResolvedValue(member({ configured: true, enabled: true, allServices: false, serviceIds: ['s2'] }) as never);
+    renderCard();
+
+    expect(await screen.findByText('Tus clientes ven «Ana L.» · 1 servicio · Horario del negocio')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Editar a Ana López' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ana López' }));
+    expect(dialog.getByLabelText(/Barba/)).toBeChecked();
+    expect(dialog.getByText('· No se agenda ahora')).toBeInTheDocument();
+    await user.click(dialog.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(api.updateOnlineBookingStaff).toHaveBeenCalledTimes(1));
+    expect(api.updateOnlineBookingStaff.mock.calls[0][1]).toMatchObject({ allServices: false, serviceIds: ['s2'] });
+  });
+
+  it('says only «Guardado» when editing who already books online, and refreshes what depends on the team', async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    api.getOnlineBookingStaff.mockResolvedValue(settings([member({ configured: true, enabled: true })]) as never);
+    api.updateOnlineBookingStaff.mockResolvedValue(member({ configured: true, enabled: true, name: 'Anita L.' }) as never);
+    renderCard(queryClient);
+
+    await user.click(await screen.findByRole('button', { name: 'Editar a Ana López' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ana López' }));
+    await user.clear(dialog.getByLabelText('Nombre que ven tus clientes'));
+    await user.type(dialog.getByLabelText('Nombre que ven tus clientes'), 'Anita L.');
+    await user.click(dialog.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Guardado.'));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['online-booking-settings'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['public-booking'] });
+    expect(await screen.findByText(/Tus clientes ven «Anita L\.»/)).toBeInTheDocument();
+  });
+
+  it('starts the switch off for someone new when as many people as allowed already book online', async () => {
+    const user = userEvent.setup();
+    api.getOnlineBookingStaff.mockResolvedValue(settings(
+      [member({ userId: 'u2', fullName: 'Luis Méndez', configured: true, enabled: true }), member()],
+      { maxEnabled: 1 },
+    ) as never);
+    renderCard();
+
+    expect(await screen.findByText('Ya agendan 1 personas, el máximo: apaga a alguien para agregar a otra.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Configurar a Ana López' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ana López' }));
+    expect(dialog.getByRole('switch', { name: 'Agenda citas en línea' })).not.toBeChecked();
+  });
+
   it('is not there for a business without the agenda', () => {
     withCapabilities(TenantCapability.Retail);
     renderCard();
@@ -142,17 +193,27 @@ describe('onlineBookingStaff', () => {
   };
 
   it('asks for a name customers may see, a service and the hours of a day turned on', () => {
-    expect(staffDraftProblem(draft, 2)).toBeNull();
-    expect(staffDraftProblem({ ...draft, name: '  ' }, 2)).toBe('Escribe el nombre que verán tus clientes.');
-    expect(staffDraftProblem({ ...draft, name: 'a'.repeat(41) }, 2)).toBe('El nombre que ven tus clientes puede tener hasta 40 caracteres.');
-    expect(staffDraftProblem({ ...draft, allServices: false }, 0)).toBe('Aún no tienes servicios para agendar en línea: elige «Todos los servicios».');
-    expect(staffDraftProblem({ ...draft, ownHours: true }, 2)).toBe('Marca al menos un día que atiende, o usa el horario del negocio.');
+    expect(staffDraftProblem(draft, SERVICES)).toBeNull();
+    expect(staffDraftProblem({ ...draft, name: '  ' }, SERVICES)).toBe('Escribe el nombre que verán tus clientes.');
+    expect(staffDraftProblem({ ...draft, name: 'a'.repeat(41) }, SERVICES)).toBe('El nombre que ven tus clientes puede tener hasta 40 caracteres.');
+    expect(staffDraftProblem({ ...draft, allServices: false }, [])).toBe('Aún no tienes servicios para agendar en línea: elige «Todos los servicios».');
+    // A service no longer in the catalog does not count.
+    expect(staffDraftProblem({ ...draft, allServices: false, serviceIds: ['gone'] }, SERVICES)).toBe('Elige al menos un servicio, o todos.');
+    expect(staffDraftProblem({ ...draft, ownHours: true }, SERVICES)).toBe('Marca al menos un día que atiende, o usa el horario del negocio.');
     const monday = draft.week.map((day) => (day.day === 1 ? { ...day, open: true, ranges: [{ opens: '10:00', closes: '' }] } : day));
-    expect(staffDraftProblem({ ...draft, ownHours: true, week: monday }, 2)).toBe('Escribe a qué hora entra y sale el lunes.');
+    expect(staffDraftProblem({ ...draft, ownHours: true, week: monday }, SERVICES)).toBe('Escribe a qué hora entra y sale el lunes.');
   });
 
-  it('says every service when the list has them all', () => {
-    expect(describeStaff(member({ allServices: false, serviceIds: ['s1', 's2'] }), 2)).toBe('Todos los servicios · Horario del negocio');
-    expect(describeStaff(member({ allServices: false, serviceIds: ['s1', 's2'] }), 3)).toBe('2 servicios · Horario del negocio');
+  it('counts an emoji with its skin tone, or a flag, as one character, as the server does', () => {
+    expect(nameLength('Ana 👍🏽')).toBe(5);
+    expect(nameLength('🇲🇽')).toBe(1);
+    expect(staffDraftProblem({ ...draft, name: '💈🏽'.repeat(40) }, SERVICES)).toBeNull();
+  });
+
+  it('says every service when the list has them all, and counts only the ones it has', () => {
+    expect(describeStaff(member({ allServices: false, serviceIds: ['s1', 's2'] }), SERVICES)).toBe('Todos los servicios · Horario del negocio');
+    expect(describeStaff(member({ allServices: false, serviceIds: ['s1', 's2'] }), [...SERVICES, { id: 's3', name: 'Tinte', bookableNow: true }]))
+      .toBe('2 servicios · Horario del negocio');
+    expect(describeStaff(member({ allServices: false, serviceIds: ['s1', 'gone'] }), SERVICES)).toBe('1 servicio · Horario del negocio');
   });
 });

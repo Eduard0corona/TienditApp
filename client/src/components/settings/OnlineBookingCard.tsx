@@ -86,8 +86,8 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
       {settings.staffCount > 0 ? (
         <p className="small mb-3">
           <i className="ri-team-line me-1" aria-hidden="true"></i>
-          {settings.staffCount === 1 ? 'Agenda en línea 1 persona' : `Agendan en línea ${settings.staffCount} personas`}: las
-          horas libres salen de quién atiende, abajo, y las citas a la vez ya no se usan.
+          {settings.staffCount === 1 ? 'Una persona agenda en línea' : `${settings.staffCount} personas agendan en línea`}: las
+          horas libres salen de «Quién atiende», abajo, y las citas a la vez ya no se usan.
         </p>
       ) : (
       <div className="mb-3">

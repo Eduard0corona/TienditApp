@@ -39,7 +39,7 @@ export function demoOnlineBookingStaff(data) {
     services: BOOKABLE
       .map((name) => data.products.find((product) => product.name === name))
       .filter(Boolean)
-      .map((product) => ({ id: product.id, name: product.name })),
+      .map((product) => ({ id: product.id, name: product.name, bookableNow: true })),
     maxEnabled: 30,
   };
 }

@@ -12,7 +12,7 @@ import { useToast } from '../../hooks/useToast';
 import { TenantCapability } from '../../types';
 import { fromDraft } from '../../utils/openingHours';
 import { hasCapability } from '../../utils/tenantCapabilities';
-import { describeStaff, draftOf, staffDraftProblem, type StaffDraft } from './onlineBookingStaff';
+import { chosenServices, describeStaff, draftOf, staffDraftProblem, type StaffDraft } from './onlineBookingStaff';
 import WeeklyHoursFields from './WeeklyHoursFields';
 import { PERSON_HOURS_WORDS } from './weeklyHoursWords';
 
@@ -81,7 +81,7 @@ function StaffForm({ member, settings, draft, problem, saving, onChange, onCance
             </div>
 
             <fieldset className="mb-3">
-              <legend className="form-label fs-6 mb-1">Servicios</legend>
+              <legend className="form-label fw-semibold fs-6 mb-1">Servicios</legend>
               <div className="form-check">
                 <input id={`${id}-all`} className="form-check-input" type="radio" name={`${id}-services`}
                   checked={draft.allServices} onChange={() => change({ allServices: true })} />
@@ -106,7 +106,11 @@ function StaffForm({ member, settings, draft, problem, saving, onChange, onCance
                           checked={draft.serviceIds.includes(service.id)}
                           onChange={(event) => toggleService(service.id, event.target.checked)}
                         />
-                        <label className="form-check-label" htmlFor={`${id}-service-${index}`}>{service.name}</label>
+                        <label className="form-check-label" htmlFor={`${id}-service-${index}`}>
+                          {service.name}
+                          {/* Paused in the catalog: it stays with the person and comes back to the page with them. */}
+                          {!service.bookableNow && <span className="small text-muted"> · No se agenda ahora</span>}
+                        </label>
                       </div>
                     ))}
                   </div>
@@ -115,7 +119,7 @@ function StaffForm({ member, settings, draft, problem, saving, onChange, onCance
             </fieldset>
 
             <fieldset className="mb-0">
-              <legend className="form-label fs-6 mb-1">Horario</legend>
+              <legend className="form-label fw-semibold fs-6 mb-1">Horario</legend>
               <div className="form-check">
                 <input id={`${id}-business-hours`} className="form-check-input" type="radio" name={`${id}-hours`}
                   checked={!draft.ownHours} onChange={() => change({ ownHours: false })} />
@@ -175,14 +179,14 @@ export default function OnlineBookingStaffCard() {
   const enabledCount = settings?.members.filter((member) => member.enabled).length ?? 0;
 
   const open = (member: OnlineBookingStaffMember) => {
-    setEditing({ member, draft: draftOf(member, tenant.openingHours ?? []) });
+    setEditing({ member, draft: draftOf(member, tenant.openingHours ?? [], enabledCount < (settings?.maxEnabled ?? 0)) });
     setProblem('');
   };
 
   const save = async () => {
     if (!editing || !settings) return;
     const { member, draft } = editing;
-    const found = staffDraftProblem(draft, settings.services.length);
+    const found = staffDraftProblem(draft, settings.services);
     if (found) {
       setProblem(found);
       return;
@@ -190,23 +194,22 @@ export default function OnlineBookingStaffCard() {
     setSaving(true);
     setProblem('');
     try {
-      // A service the business stopped booking is left out; the rest stay as they were chosen.
-      const offered = new Set(settings.services.map((service) => service.id));
       const saved = await appointmentsApi.updateOnlineBookingStaff(member.userId, {
         enabled: draft.enabled,
         name: draft.name.trim(),
         allServices: draft.allServices,
-        serviceIds: draft.allServices ? [] : draft.serviceIds.filter((serviceId) => offered.has(serviceId)),
+        serviceIds: draft.allServices ? [] : chosenServices(draft.serviceIds, settings.services).map((service) => service.id),
         weeklyHours: draft.ownHours ? fromDraft(draft.week) : null,
       });
       queryClient.setQueryData<OnlineBookingStaffSettings>(STAFF_KEY, (current) => current && {
         ...current,
         members: current.members.map((item) => (item.userId === saved.userId ? saved : item)),
       });
-      // «Citas en línea» says whether the times come from each person.
+      // «Citas en línea» says whether the times come from each person, and the booking page offers who attends.
       void queryClient.invalidateQueries({ queryKey: ['online-booking-settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['public-booking'] });
       setEditing(null);
-      toast.success(saved.enabled ? `Guardado: ${saved.name} ya agenda citas en línea.` : 'Guardado.');
+      toast.success(saved.enabled && !member.enabled ? `Guardado: ${saved.name} ya agenda citas en línea.` : 'Guardado.');
     } catch (err: unknown) {
       setProblem(getApiErrorMessage(err, `No se pudo guardar a ${member.fullName}.`));
     } finally {
@@ -253,7 +256,7 @@ export default function OnlineBookingStaffCard() {
                       </div>
                       {member.configured && (
                         <div className="small text-muted">
-                          Tus clientes ven «{member.name}» · {describeStaff(member, settings.services.length)}
+                          Tus clientes ven «{member.name}» · {describeStaff(member, settings.services)}
                         </div>
                       )}
                     </div>

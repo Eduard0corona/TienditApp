@@ -20895,6 +20895,7 @@
       },
       "OnlineBookingServiceOptionDto": {
         "required": [
+          "bookableNow",
           "id",
           "name"
         ],
@@ -20906,6 +20907,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "bookableNow": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

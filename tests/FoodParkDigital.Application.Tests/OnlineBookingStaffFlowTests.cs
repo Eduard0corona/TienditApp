@@ -3,6 +3,8 @@ using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.OnlineBooking;
+using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Appointments.Entities;
@@ -301,12 +303,115 @@ public class OnlineBookingStaffFlowTests
         var tenant = await BusinessAsync(fixture);
         var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
         var ana = await StaffAsync(fixture, tenant, "Ana", "Ana L.");
+        fixture.CurrentUser.UserId = (await CustomerAsync(fixture)).ToString();
         var receipt = await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), ana.Id);
 
         var followed = await new GetPublicAppointmentQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
             .Handle(new GetPublicAppointmentQuery(receipt.Value!.TrackingToken), CancellationToken.None);
+        // Mis citas reads every business of the account (without the business's filter).
+        fixture.TenantService.SetTenant(Guid.Empty);
+        var mine = await new GetMyAppointmentsQueryHandler(fixture.Context, fixture.CurrentUser, fixture.Clock)
+            .Handle(new GetMyAppointmentsQuery(), CancellationToken.None);
 
         Assert.Equal("Ana L.", followed!.StaffName);
+        Assert.Equal("Ana L.", Assert.Single(mine.Items).StaffName);
+    }
+
+    [Fact]
+    public async Task Request_ShouldKeep_ALongFullName_CutToWhatTheAgendaKeeps()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        var userId = await MemberAsync(fixture, tenant.Id, new string('a', 100), new string('b', 100));
+        var staff = OnlineBookingStaff.Create(tenant.Id, userId, "Ana L.", true, true, [], null);
+        fixture.Context.OnlineBookingStaff.Add(staff);
+        await fixture.Context.SaveChangesAsync();
+
+        var receipt = await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), staff.Id);
+
+        Assert.True(receipt.IsSuccess, receipt.Error);
+        var appointment = await fixture.Context.Appointments.SingleAsync();
+        Assert.Equal(Appointment.MaxStaffNameLength, appointment.StaffName!.Length);
+        Assert.Equal(userId, appointment.StaffUserId);
+    }
+
+    [Fact]
+    public async Task APersonOutOfTheTeam_ShouldNotBeOffered_NorBooked_ThoughStillTurnedOn()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        var ana = await StaffAsync(fixture, tenant, "Ana", "Ana L.");
+        // Luis left the team and Marta's account was turned off; their profiles are still on.
+        var luis = OnlineBookingStaff.Create(
+            tenant.Id, await MemberAsync(fixture, tenant.Id, "Luis", "Equipo", TenantUserStatus.Disabled), "Luis M.", true, true, [], null);
+        var marta = OnlineBookingStaff.Create(
+            tenant.Id, await MemberAsync(fixture, tenant.Id, "Marta", "Equipo", userActive: false), "Marta R.", true, true, [], null);
+        fixture.Context.OnlineBookingStaff.AddRange(luis, marta);
+        await fixture.Context.SaveChangesAsync();
+
+        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService)
+            .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None);
+
+        Assert.Equal([ana.Id], page!.Staff.Select(person => person.Id));
+        Assert.Null(await SlotsAsync(fixture, haircut.Id, staffId: luis.Id));
+        Assert.Null(await SlotsAsync(fixture, haircut.Id, staffId: marta.Id));
+        var refused = await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), luis.Id);
+        Assert.Equal(RequestPublicAppointmentCommandHandler.StaffGoneMessage, refused.Error);
+        Assert.Equal(1, (await OnlineBookingCalendarStaffCountAsync(fixture, tenant.Id)));
+    }
+
+    [Fact]
+    public async Task Menu_AndExplorar_ShouldStopOfferingBooking_WhenNobodyWhoAttendsDoesAServiceStillBooked()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        var beard = await ServiceAsync(fixture, tenant, "Barba", 30);
+        await StaffAsync(fixture, tenant, "Ana", "Ana L.", services: [beard.Id]);
+        Assert.True((await MenuAsync(fixture))!.BooksOnline);
+        Assert.Contains((await ExplorarAsync(fixture)).Entries, entry => entry.TenantId == tenant.Id && entry.Business.BooksOnline);
+
+        beard.SetAvailability(false);
+        await fixture.Context.SaveChangesAsync();
+
+        // The haircut is still booked, but nobody who attends does it: the booking page would have no service.
+        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService)
+            .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None);
+        Assert.Empty(page!.Services);
+        Assert.False((await MenuAsync(fixture))!.BooksOnline);
+        Assert.DoesNotContain((await ExplorarAsync(fixture)).Entries, entry => entry.TenantId == tenant.Id && entry.Business.BooksOnline);
+        fixture.TenantService.SetTenant(tenant.Id);
+        var settings = await new OnlineBookingSettingsHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser)
+            .Handle(new GetOnlineBookingSettingsQuery(), CancellationToken.None);
+        Assert.False(settings.BooksOnline);
+        Assert.Equal([OnlineBookingSettingsHandler.NobodyOffersMessage], settings.Missing);
+    }
+
+    [Fact]
+    public async Task APausedService_ShouldStayWithThePerson_AndComeBackToThePageWithThem()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        var beard = await ServiceAsync(fixture, tenant, "Barba", 30);
+        beard.SetAvailability(false);
+        await fixture.Context.SaveChangesAsync();
+        var ana = await MemberAsync(fixture, tenant.Id, "Ana", "López");
+
+        var settings = await Handler(fixture).Handle(new GetOnlineBookingStaffQuery(), CancellationToken.None);
+        var saved = await Handler(fixture).Handle(
+            Person(ana) with { AllServices = false, ServiceIds = [haircut.Id, beard.Id] }, CancellationToken.None);
+
+        Assert.Equal([("Barba", false), ("Corte de cabello", true)], settings.Services.Select(service => (service.Name, service.BookableNow)));
+        Assert.True(saved.IsSuccess, saved.Error);
+        Assert.Equal([haircut.Id], (await BookingAsync(fixture)).Services.Select(service => service.Id));
+        beard.SetAvailability(true);
+        await fixture.Context.SaveChangesAsync();
+        var back = await BookingAsync(fixture);
+        Assert.Equal(2, back.Services.Count);
+        Assert.All(back.Services, service => Assert.Single(service.StaffIds));
     }
 
     [Fact]
@@ -321,6 +426,37 @@ public class OnlineBookingStaffFlowTests
             .Handle(new GetOnlineBookingSettingsQuery(), CancellationToken.None);
 
         Assert.Equal(1, settings.StaffCount);
+    }
+
+    private static async Task<PublicBookingDto> BookingAsync(SalesTestFixture fixture)
+        => (await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService)
+            .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None))!;
+
+    private static Task<PublicMenuDto?> MenuAsync(SalesTestFixture fixture)
+        => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off)
+            .Handle(new GetPublicMenuQuery(Slug), CancellationToken.None);
+
+    private static Task<PublicDirectorySnapshot> ExplorarAsync(SalesTestFixture fixture)
+        => PublicDirectorySnapshot.BuildAsync(fixture.Context, fixture.Clock.UtcNow, CancellationToken.None);
+
+    private static async Task<int> OnlineBookingCalendarStaffCountAsync(SalesTestFixture fixture, Guid tenantId)
+        => (await OnlineBookingCalendar.StaffAsync(fixture.Context, tenantId, CancellationToken.None)).Count;
+
+    private static async Task<Guid> CustomerAsync(SalesTestFixture fixture)
+    {
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "valeria@cliente.test",
+            UserName = "valeria@cliente.test",
+            FirstName = "Valeria",
+            LastName = "Ruiz",
+            Role = UserRole.Customer,
+            IsActive = true
+        };
+        fixture.Context.Users.Add(user);
+        await fixture.Context.SaveChangesAsync();
+        return user.Id;
     }
 
     private static UpdateOnlineBookingStaffCommand Person(Guid userId) => new() { UserId = userId, Enabled = true, Name = "Ana L.", AllServices = true };

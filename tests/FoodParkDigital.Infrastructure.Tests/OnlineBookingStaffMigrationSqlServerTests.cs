@@ -51,6 +51,17 @@ public class OnlineBookingStaffMigrationSqlServerTests
             var stored = await check.OnlineBookingStaff.IgnoreQueryFilters().Include(s => s.Services).SingleAsync();
             Assert.Equal(2, stored.Services.Count);
             Assert.Null(stored.WeeklyHours);
+
+            // Leaving a service out deletes its row; the one that stays is kept.
+            stored.Change("Ana R.", true, false, [seed.ServiceId], null);
+            await check.SaveChangesAsync();
+        }
+
+        await using (var check = database.CreateContext())
+        {
+            var stored = await check.OnlineBookingStaff.IgnoreQueryFilters().Include(s => s.Services).SingleAsync();
+            Assert.Equal([seed.ServiceId], stored.Services.Select(s => s.ProductId));
+            Assert.Equal(1, await CountAsync(check, $"SELECT COUNT(*) AS [Value] FROM [OnlineBookingStaffServices]"));
         }
 
         var twice = await Assert.ThrowsAsync<SqlException>(() => ExecuteAsync(database, $"""
@@ -60,10 +71,11 @@ public class OnlineBookingStaffMigrationSqlServerTests
         Assert.Equal(2601, twice.Number);
         Assert.Contains("IX_OnlineBookingStaff_TenantId_UserId", twice.Message);
 
-        // Deleting the service deletes it from the person's list.
+        // Deleting the service deletes it from the person's list, and the person stays.
         await ExecuteAsync(database, $"DELETE FROM [Products] WHERE [Id] = {seed.ServiceId}");
         await using var after = database.CreateContext();
-        Assert.Equal(1, await CountAsync(after, $"SELECT COUNT(*) AS [Value] FROM [OnlineBookingStaffServices]"));
+        Assert.Equal(0, await CountAsync(after, $"SELECT COUNT(*) AS [Value] FROM [OnlineBookingStaffServices]"));
+        Assert.Equal(1, await CountAsync(after, $"SELECT COUNT(*) AS [Value] FROM [OnlineBookingStaff]"));
     }
 
     [SqlServerFact]

@@ -410,7 +410,7 @@ public sealed class PublicDirectorySnapshot
     {
         // Explorar lists an active business whose menu is published and shows in Explorar, with a product its menu shows.
         var menuProducts = MenuProducts(context);
-        var bookableServices = OnlineBookingCalendar.BookableServices(context);
+        var bookableServices = OnlineBookingCalendar.OfferedServices(context);
         // A business that only sells services shows while it books them online (Fase 24D): its menu has nothing to order.
         var listed = context.Tenants
             .IgnoreQueryFilters()

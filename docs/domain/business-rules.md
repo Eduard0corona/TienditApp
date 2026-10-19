@@ -263,14 +263,15 @@ El cliente agenda una cita desde el menú en línea del negocio, y el negocio la
 
 - **Quién atiende en línea:** el dueño o un administrador elige en Configuración › Quién atiende a las personas del equipo que agendan en línea (activas, con su cuenta activa), hasta 30 encendidas. A cada una le da:
   - el nombre que ven los clientes («Ana L.» por omisión), de 1 a 40 caracteres, sin enlaces, correos ni teléfonos;
-  - sus servicios: todos (también los que se agreguen) o los que elija;
+  - sus servicios: todos (también los que se agreguen) o los que elija, incluso uno pausado en el catálogo, que vuelve a la página con ella cuando el negocio lo agenda otra vez;
   - su horario: el del negocio o uno propio, con hasta dos horarios por día.
   Apagarla la quita de la página sin perder lo configurado. Cada cambio queda en la actividad del negocio.
-- **Con alguien encendido** las horas salen de cada persona y «Citas a la vez» no se usa. Solo se ofrecen los servicios que alguien hace. Sin nadie, todo sigue como en la Fase 24D.
-- **Hora libre de una persona:** dentro del horario del negocio (con sus días especiales) y del suyo; ninguna de sus citas abiertas se cruza (a sus visitas a domicilio se les suma el traslado); y quedan más personas libres que citas sin persona a esa hora, porque una cita sin persona ocupa a alguien.
+- **Con alguien encendido** las horas salen de cada persona y «Citas a la vez» no se usa. Solo se ofrecen los servicios que alguien hace; si nadie hace uno que se agende, el menú, la tienda y Explorar dejan de ofrecer citas y Configuración dice «Nadie de «Quién atiende» hace un servicio que se agenda en línea». Sin nadie encendido, todo sigue como en la Fase 24D.
+- **Hora libre de una persona:** dentro del horario del negocio (con sus días especiales) y del suyo; ninguna de sus citas abiertas se cruza (a sus visitas a domicilio se les suma el traslado); y quedan más personas libres que citas sin persona a esa hora, porque una cita sin persona ocupa a alguien. Esa última regla es aproximada: cuenta las citas sin persona que se cruzan con la hora, no a quién le tocaría cada una.
 - **El cliente elige** después del servicio «Sin preferencia» (por omisión) o a una persona, y ve sus horas. Ve solo el nombre para clientes.
-- **Sin preferencia,** el servidor asigna a la persona libre con menos citas ese día. Con persona, revisa otra vez que siga libre: si no, «Esa hora ya no está libre. Elige otra.»; si dejó de agendar ese servicio, «Esa persona ya no agenda ese servicio en línea. Elige otra.».
-- **La cita** guarda quién la atiende, como la agenda («Atiende: …»), y el recibo, el seguimiento y Mis citas dicen «Te atiende …» con el nombre para clientes de la persona asignada.
+- **Sin preferencia,** el servidor asigna a la persona libre con menos citas ese día. Con persona, revisa otra vez que siga libre: si no, «Esa hora ya no está libre. Elige otra.»; si dejó de agendar ese servicio (o salió del equipo), «Esa persona ya no agenda ese servicio en línea. Elige otra.». Las solicitudes en línea hacen fila en el candado del negocio, así que dos al mismo tiempo nunca dan a la misma persona; una cita de la agenda guardada en ese mismo instante sí podría cruzarse (la agenda no toma el candado).
+- **Dos dueños que cambian a la misma persona al mismo tiempo:** gana el último que guarda, y los dos cambios quedan en la actividad; si los dos la configuran por primera vez, el segundo lee «Alguien más cambió a esta persona al mismo tiempo».
+- **La cita** guarda quién la atiende y su nombre completo (hasta 120 caracteres), como la agenda («Atiende: …»), y el recibo, el seguimiento y Mis citas dicen «Te atiende …» con el nombre para clientes de la persona asignada.
 
 ## El menú en línea con la forma de las apps de entrega (Fase 24E)
 

@@ -91,10 +91,10 @@ function Elsewhere() {
   return <p>En {location.pathname}{location.hash}</p>;
 }
 
-function renderPage(auth?: Partial<AuthContextType>) {
+function renderPage(auth?: Partial<AuthContextType>, entry = '/m/barberia-luis/agendar') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const page = (
-    <MemoryRouter initialEntries={['/m/barberia-luis/agendar']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/m/:slug/agendar" element={<PublicBookingPage />} />
         <Route path="*" element={<Elsewhere />} />
@@ -297,10 +297,81 @@ describe('PublicBookingPage', () => {
 
     await user.click(await screen.findByRole('button', { name: /Corte de cabello/ }));
     await user.click(await screen.findByRole('button', { name: /Ana L\./ }));
-    expect(await screen.findByText(/Ana L\. ya no agenda este servicio en línea/)).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ya no se agenda este servicio con Ana L. en línea.');
     await user.click(screen.getByRole('button', { name: 'Ver con quien esté libre' }));
 
     expect(await screen.findByRole('button', { name: '10:00 a. m.' })).toBeInTheDocument();
+    // The button went away with the person: the choice it made keeps the focus.
+    expect(screen.getByRole('button', { name: /Sin preferencia/ })).toHaveFocus();
+  });
+
+  it('keeps the server’s message and turns to no preference when the person chosen no longer takes it on sending', async () => {
+    const user = userEvent.setup();
+    const staff = [{ id: 'p1', name: 'Ana L.' }, { id: 'p2', name: 'Luis M.' }];
+    api.getBooking
+      .mockResolvedValueOnce(booking({ staff, services: [{ id: 's1', name: 'Corte de cabello', price: 150, durationMinutes: 45, staffIds: ['p1', 'p2'] }] }) as never)
+      .mockResolvedValue(booking({ staff: [staff[1]], services: [{ id: 's1', name: 'Corte de cabello', price: 150, durationMinutes: 45, staffIds: ['p2'] }] }) as never);
+    api.requestAppointment.mockRejectedValue({
+      isAxiosError: true, response: { status: 400, data: { detail: 'Esa persona ya no agenda ese servicio en línea. Elige otra.' } },
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Corte de cabello/ }));
+    await user.click(await screen.findByRole('button', { name: /Ana L\./ }));
+    await user.click(await screen.findByRole('button', { name: '10:00 a. m.' }));
+    await user.click(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Tu cita' }));
+    await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    await user.click(sheet.getByRole('button', { name: 'Pedir cita' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Esa persona ya no agenda ese servicio en línea. Elige otra.');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tu cita' })).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /Sin preferencia/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: /Ana L\./ })).not.toBeInTheDocument();
+  });
+
+  it('turns back to the services with the server’s message when nobody takes the service any more', async () => {
+    const user = userEvent.setup();
+    api.getBooking
+      .mockResolvedValueOnce(booking({
+        staff: [{ id: 'p1', name: 'Ana L.' }],
+        services: [{ id: 's1', name: 'Corte de cabello', price: 150, durationMinutes: 45, staffIds: ['p1'] }],
+      }) as never)
+      .mockResolvedValue(booking({ staff: [], services: [] }) as never);
+    api.requestAppointment.mockRejectedValue({
+      isAxiosError: true, response: { status: 400, data: { detail: 'Ese servicio no se agenda en línea.' } },
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Corte de cabello/ }));
+    await user.click(await screen.findByRole('button', { name: /Ana L\./ }));
+    await user.click(await screen.findByRole('button', { name: '10:00 a. m.' }));
+    await user.click(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Tu cita' }));
+    await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    await user.click(sheet.getByRole('button', { name: 'Pedir cita' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Ese servicio no se agenda en línea.');
+    expect(screen.getByRole('heading', { name: 'Elige el servicio' })).toBeInTheDocument();
+  });
+
+  it('opens with the person of the link, or no preference when the link names nobody who does the service', async () => {
+    const withPeople = booking({
+      staff: [{ id: 'p1', name: 'Ana L.' }, { id: 'p2', name: 'Luis M.' }],
+      services: [{ id: 's1', name: 'Corte de cabello', price: 150, durationMinutes: 45, staffIds: ['p1', 'p2'] }],
+    });
+    api.getBooking.mockResolvedValue(withPeople as never);
+    const { unmount } = renderPage(undefined, '/m/barberia-luis/agendar?servicio=s1&con=p2');
+
+    expect(await screen.findByRole('button', { name: /Luis M\./ })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(api.getBookingSlots).toHaveBeenLastCalledWith('barberia-luis', 's1', undefined, 'p2', expect.anything()));
+    unmount();
+
+    renderPage(undefined, '/m/barberia-luis/agendar?servicio=s1&con=nadie');
+    expect(await screen.findByRole('button', { name: /Sin preferencia/ })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(api.getBookingSlots).toHaveBeenLastCalledWith('barberia-luis', 's1', undefined, undefined, expect.anything()));
   });
 
   it('says so when the business does not book online', async () => {

@@ -1,9 +1,11 @@
-import type { OnlineBookingStaffMember } from '../../api/appointmentsApi';
+import type { OnlineBookingStaffMember, OnlineBookingStaffSettings } from '../../api/appointmentsApi';
 import type { OpeningIntervalDto } from '../../types';
 import { dayName, firstDayMissingTime, fromDraft, toDraft, type DayDraft } from '../../utils/openingHours';
 
-/** Forty characters for customers, an emoji counting as one (the server counts the same way). */
+/** Forty characters for customers, an emoji counting as one. */
 export const MAX_STAFF_NAME = 40;
+
+type ServiceOption = OnlineBookingStaffSettings['services'][number];
 
 export interface StaffDraft {
   enabled: boolean;
@@ -15,9 +17,22 @@ export interface StaffDraft {
   week: DayDraft[];
 }
 
-export const draftOf = (member: OnlineBookingStaffMember, businessHours: OpeningIntervalDto[]): StaffDraft => ({
-  // Setting someone up is to take their online appointments: the switch starts on.
-  enabled: member.configured ? member.enabled : true,
+/** Characters as a person reads them (the server counts the same way): an emoji with its skin tone or a flag is one. */
+export function nameLength(name: string): number {
+  if (typeof Intl.Segmenter !== 'function') return Array.from(name).length;
+  return Array.from(new Intl.Segmenter('es', { granularity: 'grapheme' }).segment(name)).length;
+}
+
+/**
+ * The draft of a person. Setting someone up is to take their online appointments, so the switch starts on, unless the
+ * business already has as many as it may.
+ */
+export const draftOf = (
+  member: OnlineBookingStaffMember,
+  businessHours: OpeningIntervalDto[],
+  roomForOneMore = true,
+): StaffDraft => ({
+  enabled: member.configured ? member.enabled : roomForOneMore,
   name: member.name,
   allServices: member.allServices,
   serviceIds: member.serviceIds,
@@ -26,13 +41,17 @@ export const draftOf = (member: OnlineBookingStaffMember, businessHours: Opening
   week: toDraft(member.weeklyHours ?? businessHours),
 });
 
+/** The services of the list the person does: a paused one stays chosen and counts. */
+export const chosenServices = (serviceIds: readonly string[], services: readonly ServiceOption[]) =>
+  services.filter((service) => serviceIds.includes(service.id));
+
 /** What the draft lacks, in the owner's words; null when it can be saved. */
-export function staffDraftProblem(draft: StaffDraft, serviceCount: number): string | null {
+export function staffDraftProblem(draft: StaffDraft, services: readonly ServiceOption[]): string | null {
   const name = draft.name.trim();
   if (!name) return 'Escribe el nombre que verán tus clientes.';
-  if (Array.from(name).length > MAX_STAFF_NAME) return `El nombre que ven tus clientes puede tener hasta ${MAX_STAFF_NAME} caracteres.`;
-  if (!draft.allServices && draft.serviceIds.length === 0) {
-    return serviceCount === 0 ? 'Aún no tienes servicios para agendar en línea: elige «Todos los servicios».' : 'Elige al menos un servicio, o todos.';
+  if (nameLength(name) > MAX_STAFF_NAME) return `El nombre que ven tus clientes puede tener hasta ${MAX_STAFF_NAME} caracteres.`;
+  if (!draft.allServices && chosenServices(draft.serviceIds, services).length === 0) {
+    return services.length === 0 ? 'Aún no tienes servicios para agendar en línea: elige «Todos los servicios».' : 'Elige al menos un servicio, o todos.';
   }
   if (draft.ownHours) {
     const missing = firstDayMissingTime(draft.week);
@@ -43,9 +62,10 @@ export function staffDraftProblem(draft: StaffDraft, serviceCount: number): stri
 }
 
 /** How a person reads in the list: their services and their hours. */
-export function describeStaff(member: OnlineBookingStaffMember, serviceCount: number): string {
-  const services = member.allServices || member.serviceIds.length >= serviceCount
+export function describeStaff(member: OnlineBookingStaffMember, services: readonly ServiceOption[]): string {
+  const chosen = chosenServices(member.serviceIds, services).length;
+  const described = member.allServices || (chosen > 0 && chosen === services.length)
     ? 'Todos los servicios'
-    : member.serviceIds.length === 1 ? '1 servicio' : `${member.serviceIds.length} servicios`;
-  return `${services} · ${member.weeklyHours ? 'Horario propio' : 'Horario del negocio'}`;
+    : chosen === 1 ? '1 servicio' : `${chosen} servicios`;
+  return `${described} · ${member.weeklyHours ? 'Horario propio' : 'Horario del negocio'}`;
 }

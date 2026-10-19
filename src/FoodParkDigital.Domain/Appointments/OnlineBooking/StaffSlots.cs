@@ -100,7 +100,7 @@ public static class StaffSlots
             throw new ArgumentException("Someone must be free.", nameof(free));
         return free
             .OrderBy(id => appointmentsThatDay.GetValueOrDefault(id))
-            .ThenBy(id => names.GetValueOrDefault(id) ?? string.Empty, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(id => names.GetValueOrDefault(id) ?? string.Empty, StringComparer.InvariantCultureIgnoreCase)
             .ThenBy(id => id)
             .First();
     }

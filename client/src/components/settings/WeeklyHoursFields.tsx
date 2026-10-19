@@ -54,7 +54,7 @@ export default function WeeklyHoursFields({ week, onChange, idPrefix, disabled =
                 <div className="opening-hours-ranges">
                   {item.ranges.map((range, index) => {
                     const which = index === 0 ? '' : ', segundo horario';
-                    const hint = rangeHint(range);
+                    const hint = rangeHint(range, words.hints);
                     return (
                       <div key={index} className="opening-hours-range">
                         <input

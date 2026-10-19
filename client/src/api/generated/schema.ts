@@ -13358,6 +13358,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            bookableNow: boolean;
         };
         OnlineBookingSettingsDto: {
             enabled: boolean;

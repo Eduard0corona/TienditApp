@@ -299,7 +299,7 @@ test.describe('Citas en línea en Configuración', () => {
       await page.setViewportSize(SIZES.phone);
       await open(page, '/settings/business');
       const card = page.getByRole('region', { name: 'Citas en línea' });
-      await expect(card.getByText(/Agendan en línea 2 personas/)).toBeVisible();
+      await expect(card.getByText(/2 personas agendan en línea/)).toBeVisible();
       await snapElement(card, 'configuracion-citas-por-persona-telefono');
     });
 

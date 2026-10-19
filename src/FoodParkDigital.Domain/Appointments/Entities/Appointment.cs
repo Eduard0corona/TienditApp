@@ -11,6 +11,9 @@ namespace FoodParkDigital.Domain.Appointments.Entities;
 
 public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
 {
+    /// <summary>The longest name of who attends it that an appointment keeps.</summary>
+    public const int MaxStaffNameLength = 120;
+
     private Appointment() { }
 
     public Appointment(

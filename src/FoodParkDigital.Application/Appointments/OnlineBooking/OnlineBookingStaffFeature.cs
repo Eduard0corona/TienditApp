@@ -47,6 +47,11 @@ public class OnlineBookingServiceOptionDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = null!;
+    /// <summary>
+    /// Whether customers book it now; a paused one (unavailable, or in a hidden category) stays with who does it and comes
+    /// back to the booking page with them.
+    /// </summary>
+    public bool BookableNow { get; set; }
 }
 
 /// <summary>The business's active team, with who takes online appointments (owners and admins).</summary>
@@ -120,12 +125,14 @@ public class OnlineBookingStaffHandler :
             .AsNoTracking()
             .Include(s => s.Services)
             .ToListAsync(cancellationToken);
-        var services = await OnlineBookingCalendar.BookableServices(_context)
+        var services = await OnlineBookingCalendar.CatalogServices(_context)
             .AsNoTracking()
             .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
             .Take(OnlineBookingCalendar.MaxServices)
             .Select(p => new OnlineBookingServiceOptionDto { Id = p.Id, Name = p.Name })
             .ToListAsync(cancellationToken);
+        var bookable = (await OnlineBookingCalendar.BookableServices(_context).Select(p => p.Id).ToListAsync(cancellationToken)).ToHashSet();
+        services.ForEach(service => service.BookableNow = bookable.Contains(service.Id));
 
         return new OnlineBookingStaffSettingsDto
         {
@@ -148,9 +155,10 @@ public class OnlineBookingStaffHandler :
         var serviceIds = request.AllServices ? [] : (request.ServiceIds ?? []).Distinct().ToList();
         if (serviceIds.Count > 0)
         {
-            var bookable = await OnlineBookingCalendar.BookableServices(_context)
+            // A paused service may stay chosen: it comes back with the person when the business books it again.
+            var known = await OnlineBookingCalendar.CatalogServices(_context)
                 .CountAsync(p => serviceIds.Contains(p.Id), cancellationToken);
-            if (bookable != serviceIds.Count)
+            if (known != serviceIds.Count)
                 return Result.Failure<OnlineBookingStaffMemberDto>(RequestPublicAppointmentCommandHandler.ServiceNotBookedMessage);
         }
         var hours = request.WeeklyHours is { Count: > 0 } intervals ? OpeningHours.Create(intervals.ToIntervals()) : null;

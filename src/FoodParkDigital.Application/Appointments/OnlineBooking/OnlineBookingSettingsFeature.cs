@@ -56,6 +56,9 @@ public class OnlineBookingSettingsHandler :
     IRequestHandler<GetOnlineBookingSettingsQuery, OnlineBookingSettingsDto>,
     IRequestHandler<UpdateOnlineBookingSettingsCommand, Result<OnlineBookingSettingsDto>>
 {
+    public const string NobodyOffersMessage =
+        "Nadie de «Quién atiende» hace un servicio que se agenda en línea: revisa sus servicios.";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
@@ -117,15 +120,21 @@ public class OnlineBookingSettingsHandler :
             settings?.OnlineMenuMode ?? OnlineMenuMode.Off,
             mainBranchMode,
             settings?.OpeningHours is not null);
+        var missing = blockers.Select(OnlineBookingAvailability.Describe).ToList();
+        // While the business says who attends (Fase 24J), someone must do a service: otherwise its page has none to book.
+        var staff = await OnlineBookingCalendar.StaffAsync(_context, tenant.Id, cancellationToken);
+        if (staff.Count > 0
+            && !await OnlineBookingCalendar.OfferedServices(_context).AnyAsync(p => p.TenantId == tenant.Id, cancellationToken))
+            missing.Add(NobodyOffersMessage);
         var enabled = settings?.OnlineBookingEnabled ?? false;
         return new OnlineBookingSettingsDto
         {
             Enabled = enabled,
             Capacity = settings?.OnlineBookingCapacity ?? OnlineBookingRules.DefaultCapacity,
-            BooksOnline = enabled && blockers.Count == 0,
-            Missing = blockers.Select(OnlineBookingAvailability.Describe).ToList(),
+            BooksOnline = enabled && missing.Count == 0,
+            Missing = missing,
             Slug = tenant.Slug,
-            StaffCount = (await OnlineBookingCalendar.StaffAsync(_context, tenant.Id, cancellationToken)).Count
+            StaffCount = staff.Count
         };
     }
 }

@@ -108,7 +108,7 @@ public class GetStorePreviewQueryHandler : IRequestHandler<GetStorePreviewQuery,
                 settings.OnlineMenuMode,
                 mainBranch?.ServiceMode,
                 settings.OpeningHours is not null)
-            && await OnlineBookingCalendar.BookableServices(_context).AnyAsync(cancellationToken);
+            && await OnlineBookingCalendar.OfferedServices(_context).AnyAsync(cancellationToken);
         // Listed as Explorar lists it (PublicDirectorySnapshot): shown there by its owner, with something to order or book.
         var listed = settings.ListedInDirectory
             && (booksOnline || await PublicDirectorySnapshot.MenuProducts(_context).AnyAsync(cancellationToken));

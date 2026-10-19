@@ -84,6 +84,11 @@
   line-height: 1.25;
 }
 
+/* A long name ends in an ellipsis inside its button instead of spilling over the next one. */
+.pb-person .pb-person-name {
+  max-width: 100%;
+}
+
 .pb-person .pb-person-initial {
   width: 2rem;
   height: 2rem;

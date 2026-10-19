@@ -419,7 +419,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
                 settings.OnlineMenuMode,
                 mainBranch?.ServiceMode,
                 settings.OpeningHours is not null)
-            && await OnlineBookingCalendar.BookableServices(_context).AnyAsync(cancellationToken);
+            && await OnlineBookingCalendar.OfferedServices(_context).AnyAsync(cancellationToken);
 
         var cover = LogoImageUrlsDto.FromBaseUrl(tenant.CoverImageUrl);
         return new PublicMenuDto

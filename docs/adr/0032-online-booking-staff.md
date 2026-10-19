@@ -21,7 +21,7 @@ Las decisiones de la Fase 24J las tomé con la autorización permanente del due�
    - La puede apagar sin perder lo que configuró.
    - Hasta 30 personas encendidas.
    - Cada cambio queda en la actividad del negocio (`OnlineBookingStaffUpdated`).
-2. **Sus servicios.** Todos, incluidos los que el negocio agregue después, o los que el dueño elija (hasta 100) entre los que se agendan en línea, en `OnlineBookingStaffServices`. Borrar un servicio del catálogo lo quita de la lista.
+2. **Sus servicios.** Todos, incluidos los que el negocio agregue después, o los que el dueño elija (hasta 100) entre los servicios del catálogo, en `OnlineBookingStaffServices`. Uno pausado (no disponible o en una categoría oculta) se puede quedar en la lista: Configuración lo marca «No se agenda ahora» y vuelve a la página con la persona cuando el negocio lo agenda otra vez. Borrar un servicio del catálogo lo quita de la lista.
 3. **Su horario.**
    - Es el del negocio o uno propio, con el mismo formato (`OpeningHours`, hasta dos horarios por día).
    - Solo se agenda dentro del horario del negocio y del de la persona a la vez.
@@ -30,18 +30,18 @@ Las decisiones de la Fase 24J las tomé con la autorización permanente del due�
 4. **El modo.**
    - Con al menos una persona encendida (y activa en el equipo), las horas salen de cada persona y «Citas a la vez» ya no se usa; la tarjeta de Citas en línea lo dice.
    - Sin nadie encendido, todo sigue como en el ADR 0025.
-   - Solo se ofrecen los servicios que alguien hace.
+   - Solo se ofrecen los servicios que alguien hace. Si nadie hace uno que se agende, el menú, la tienda y Explorar dejan de ofrecer citas (la misma regla en una consulta, `OfferedServices`) y Configuración lo dice: «Nadie de «Quién atiende» hace un servicio que se agenda en línea».
 5. **Cuándo está libre una persona** (`StaffSlots`, en el dominio).
    - Trabaja toda la cita.
    - Ninguna de sus citas abiertas se cruza con ella. A sus visitas a domicilio se les suma el traslado antes y después, como en la agenda ([ADR 0020](0020-home-visits.md)).
-   - Quedan más personas libres que citas sin persona cruzadas en ese momento. Una cita sin persona ocupa a alguien, así que la regla es conservadora: puede dejar de ofrecer una hora que alguien fuera del equipo en línea iba a atender, pero no da dos citas a la misma persona.
+   - Quedan más personas libres que citas sin persona cruzadas en ese momento. Una cita sin persona ocupa a alguien. La regla es aproximada: cuenta las citas sin persona que se cruzan con la hora, no a quién le tocaría cada una, así que puede dejar de ofrecer una hora que alguien fuera del equipo en línea iba a atender, o, al asignar «sin preferencia», dejar a una cita sin persona sin nadie libre para ella. Nunca da dos citas a la misma persona.
 6. **El cliente elige.**
    - Después del servicio, la página de citas pregunta «¿Con quién?»: «Sin preferencia» (por omisión) o cada persona que hace el servicio, con su nombre para clientes.
    - Con una persona, las horas son las suyas; sin preferencia, las de quien esté libre.
    - La persona se identifica con el id de su perfil de citas, nunca con el de su cuenta, y la página no recibe su nombre completo.
 7. **La solicitud.**
    - Dentro del mismo candado del negocio (`IAppointmentBookingLock`), el servidor revisa otra vez que la persona elegida esté libre, o elige entre las libres a la que tiene menos citas ese día (empate: el nombre y luego el id).
-   - La cita guarda a esa persona (`StaffUserId`) y su nombre completo (`StaffName`), como la agenda.
+   - La cita guarda a esa persona (`StaffUserId`) y su nombre completo (`StaffName`, hasta 120 caracteres), como la agenda.
    - Una persona que ya no agenda ese servicio responde «Esa persona ya no agenda ese servicio en línea. Elige otra.», y la página ofrece ver con quien esté libre.
 8. **El cliente lee quién lo atiende.**
    - El recibo, el seguimiento con el enlace y Mis citas dicen «Te atiende Ana L.»: el nombre para clientes de la persona asignada, también si el negocio la cambia después en la agenda.
@@ -52,7 +52,7 @@ Las decisiones de la Fase 24J las tomé con la autorización permanente del due�
 
 - **Lo que logra:**
   - El cliente elige a su barbero, estilista o especialista, o deja que el negocio asigne.
-  - Una persona no recibe dos citas a la misma hora por más que lleguen al mismo tiempo, y no se le ofrece una hora en que no trabaja o está de visita.
+  - Una persona no recibe dos citas en línea a la misma hora por más solicitudes que lleguen al mismo tiempo, y no se le ofrece una hora en que no trabaja o está de visita.
   - El negocio que no elige a nadie no ve ningún cambio.
 - **Lo que limita:**
   - Sin vacaciones ni ausencias por fecha: una persona que falta un día se apaga ese día, o el negocio marca un día especial.
@@ -61,7 +61,9 @@ Las decisiones de la Fase 24J las tomé con la autorización permanente del due�
   - Las citas sin persona cuentan contra las personas del servicio, no contra todo el equipo.
   - Los avisos de WhatsApp no dicen quién atiende.
   - Un negocio con más de 30 personas que atienden no las ofrece a todas.
-  - Dos dueños que configuran a la misma persona al mismo tiempo: el segundo recibe «Alguien más cambió a esta persona al mismo tiempo».
+  - Dos dueños que cambian a la misma persona al mismo tiempo: gana el último que guarda (los dos cambios quedan en la actividad). Solo si los dos la configuran por primera vez, el segundo recibe «Alguien más cambió a esta persona al mismo tiempo».
+  - La agenda no toma el candado de las solicitudes: una cita guardada en la agenda en el mismo instante que una solicitud en línea para la misma persona podría cruzarse con ella, como ya pasa entre dos citas de la agenda.
+  - Una persona que sale del equipo deja de ofrecerse, pero su perfil sigue encendido: si vuelve, aparece otra vez sin que el dueño haga nada.
 - **Reversibilidad:**
   - Volver a la versión anterior funciona sin tocar la base: no conoce las tablas, las citas en línea vuelven a usar «Citas a la vez» y las ya pedidas conservan a quién se asignaron.
   - `rollback.sql` de `20261019150436_AddOnlineBookingStaff` borra las dos tablas solo si ningún negocio eligió a nadie. En cuanto uno lo hizo, se detiene con el error 50025 sin cambiar nada, y solo queda corregir hacia adelante.

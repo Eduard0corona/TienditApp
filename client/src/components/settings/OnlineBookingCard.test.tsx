@@ -93,7 +93,7 @@ describe('OnlineBookingCard', () => {
     api.getOnlineBooking.mockResolvedValue(settings({ enabled: true, booksOnline: true, staffCount: 2 }) as never);
     renderCard();
 
-    expect(await screen.findByText(/Agendan en línea 2 personas/)).toBeInTheDocument();
+    expect(await screen.findByText(/2 personas agendan en línea/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Citas a la vez')).not.toBeInTheDocument();
   });
 

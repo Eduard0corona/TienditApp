@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Branches.Enums;
@@ -85,11 +86,28 @@ internal static class OnlineBookingCalendar
     /// <summary>At most this many services on the booking page.</summary>
     public const int MaxServices = 100;
 
+    /// <summary>The services of the catalog, booked now or not: sold by the hour, the session or the service.</summary>
+    public static IQueryable<Product> CatalogServices(IApplicationDbContext context)
+        => context.Products.Where(p => p.Unit == UnitType.Hour || p.Unit == UnitType.Session || p.Unit == UnitType.Service);
+
     /// <summary>The services of the catalog a customer books: available, in an active category of their business.</summary>
     public static IQueryable<Product> BookableServices(IApplicationDbContext context)
-        => context.Products.Where(p => p.IsAvailable
-            && (p.Unit == UnitType.Hour || p.Unit == UnitType.Session || p.Unit == UnitType.Service)
+        => CatalogServices(context).Where(p => p.IsAvailable
             && context.Categories.Any(c => c.Id == p.CategoryId && c.TenantId == p.TenantId && c.IsActive));
+
+    /// <summary>
+    /// The services customers book now: the bookable ones, and while the business says who attends (Fase 24J) only those
+    /// someone it books online does. The rule of the booking page (<see cref="StaffAsync"/>) as one query, so its menu,
+    /// its store page and Explorar never offer a page without a service.
+    /// </summary>
+    public static IQueryable<Product> OfferedServices(IApplicationDbContext context)
+    {
+        var staff = context.OnlineBookingStaff.Where(s => s.Enabled
+            && context.TenantUsers.Any(m => m.TenantId == s.TenantId && m.UserId == s.UserId && m.Status == TenantUserStatus.Active)
+            && context.Users.Any(u => u.Id == s.UserId && u.IsActive && u.Role != UserRole.Customer));
+        return BookableServices(context).Where(p => !staff.Any(s => s.TenantId == p.TenantId)
+            || staff.Any(s => s.TenantId == p.TenantId && (s.AllServices || s.Services.Any(service => service.ProductId == p.Id))));
+    }
 
     /// <summary>The open appointments of the business that overlap the range, of every team member.</summary>
     public static Task<List<BookedInterval>> BookedAsync(
@@ -134,10 +152,17 @@ internal static class OnlineBookingCalendar
             .ToListAsync(cancellationToken);
         return rows
             .Select(row => new BookableStaff(
-                row.Id, row.UserId, row.Name, $"{row.FirstName} {row.LastName}".Trim(), row.WeeklyHours, row.AllServices, row.Services.ToHashSet()))
-            .OrderBy(person => person.Name, StringComparer.CurrentCultureIgnoreCase)
+                row.Id, row.UserId, row.Name, AgendaName(row.FirstName, row.LastName), row.WeeklyHours, row.AllServices, row.Services.ToHashSet()))
+            .OrderBy(person => person.Name, StringComparer.InvariantCultureIgnoreCase)
             .ThenBy(person => person.Id)
             .ToList();
+    }
+
+    /// <summary>The full name the agenda shows for the person, cut to what an appointment keeps.</summary>
+    private static string AgendaName(string? firstName, string? lastName)
+    {
+        var name = $"{firstName} {lastName}".Trim();
+        return name.Length <= Appointment.MaxStaffNameLength ? name : name[..Appointment.MaxStaffNameLength].TrimEnd();
     }
 
     /// <summary>The open appointments of the business that overlap the range, with who attends each and whether it is a visit.</summary>

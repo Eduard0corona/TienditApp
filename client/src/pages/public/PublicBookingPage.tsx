@@ -79,7 +79,8 @@ export default function PublicBookingPage() {
   const [day, setDay] = useState<string | null>(null);
   const [chosen, setChosen] = useState<ChosenTime | null>(null);
   const [notice, setNotice] = useState('');
-  const picking = `${serviceId}|${staffId}`;
+  // What is being picked: the service and the person the page still offers (the link may name ones it no longer does).
+  const picking = `${service?.id ?? ''}|${staffId}`;
   const [pickedFor, setPickedFor] = useState(picking);
   if (pickedFor !== picking) {
     setPickedFor(picking);
@@ -100,8 +101,9 @@ export default function PublicBookingPage() {
   const shownDay = days.find((item) => item.date === day && item.slots.length > 0) ?? days.find((item) => item.slots.length > 0) ?? null;
   const { ref: daysRef, fadeClass: daysFade } = useScrollFade<HTMLDivElement>(days.length);
   const { ref: peopleRef, fadeClass: peopleFade } = useScrollFade<HTMLDivElement>(people.length);
-  // The person chosen stopped taking the service while the page was open: the times are not found for them.
+  // The times are not found for the person chosen: they stopped taking the service, or the service stopped being booked.
   const personGone = staffId !== '' && slots.isError && getApiErrorStatus(slots.error) === 404;
+  const anyoneRef = useRef<HTMLButtonElement>(null);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [name, setName] = useState('');
@@ -161,13 +163,20 @@ export default function PublicBookingPage() {
         setError(`${message} Si ya se había enviado, no se repite.`);
         return;
       }
-      // The person no longer takes it: the page reads who does, and the customer picks again.
+      // The person no longer takes it: the page reads who does, and the customer picks again; with nobody doing the
+      // service any more, the customer picks another one.
       if (staffId) {
         const page = await booking.refetch();
-        const stillTakes = page.data?.services.some((item) => item.id === service.id && item.staffIds.includes(staffId));
-        if (!stillTakes) {
+        const fresh = page.data?.services.find((item) => item.id === service.id);
+        if (!fresh?.staffIds.includes(staffId)) {
+          // What changing the person or the service resets, here, so the message stays on top.
           setSheetOpen(false);
-          choosePerson(null);
+          setPickedFor(fresh ? `${service.id}|` : '|');
+          setWeeks([]);
+          setDay(null);
+          setChosen(null);
+          if (fresh) choosePerson(null);
+          else chooseService(null);
           setNotice(message);
           return;
         }
@@ -247,6 +256,12 @@ export default function PublicBookingPage() {
   }
 
   const withPhotos = data.services.some((item) => item.imageUrl);
+  const noticeAlert = notice && (
+    <div className="alert alert-warning d-flex align-items-start gap-2 mt-3 mb-0" role="status">
+      <span className="flex-grow-1">{notice}</span>
+      <button type="button" className="btn-close" aria-label="Cerrar aviso" onClick={() => setNotice('')}></button>
+    </div>
+  );
 
   return (
     <div className="pm-page">
@@ -264,6 +279,7 @@ export default function PublicBookingPage() {
 
       {!service ? (
         <main className="pm-main pb-main">
+          {noticeAlert}
           <h2 className="pm-section-title">Elige el servicio</h2>
           <div className="pm-items">
             {data.services.map((item) => (
@@ -303,18 +319,14 @@ export default function PublicBookingPage() {
             </button>
           </div>
 
-          {notice && (
-            <div className="alert alert-warning d-flex align-items-start gap-2 mt-3 mb-0" role="status">
-              <span className="flex-grow-1">{notice}</span>
-              <button type="button" className="btn-close" aria-label="Cerrar aviso" onClick={() => setNotice('')}></button>
-            </div>
-          )}
+          {noticeAlert}
 
           {people.length > 0 && (
             <>
               <h2 className="pm-section-title pb-step">¿Con quién?</h2>
               <div ref={peopleRef} className={`pb-people ta-scroll-fade ${peopleFade}`} role="group" aria-label="Quién te atiende">
                 <button
+                  ref={anyoneRef}
                   type="button"
                   className={`btn pb-person ${person === null ? 'btn-primary' : 'btn-light'}`}
                   aria-pressed={person === null}
@@ -334,7 +346,7 @@ export default function PublicBookingPage() {
                       onClick={() => choosePerson(item.id)}
                     >
                       <PhotoOrInitial name={item.name} className="pb-person-initial" />
-                      <span className="d-block fw-semibold text-truncate">{item.name}</span>
+                      <span className="d-block fw-semibold text-truncate pb-person-name">{item.name}</span>
                     </button>
                   );
                 })}
@@ -346,14 +358,16 @@ export default function PublicBookingPage() {
 
           {slots.isPending && <p className="text-muted" aria-busy="true">Buscando horarios libres…</p>}
           {personGone && (
-            <div className="alert alert-warning">
-              {person?.name ?? 'Esa persona'} ya no agenda este servicio en línea.{' '}
+            <div className="alert alert-warning" role="alert">
+              Ya no se agenda este servicio con {person?.name} en línea.{' '}
               <button
                 type="button"
                 className="btn btn-link btn-sm p-0 align-baseline"
                 onClick={() => {
                   choosePerson(null);
                   void booking.refetch();
+                  // This button goes away with the person: the choice it made keeps the focus.
+                  anyoneRef.current?.focus();
                 }}
               >
                 Ver con quien esté libre
@@ -361,7 +375,7 @@ export default function PublicBookingPage() {
             </div>
           )}
           {slots.isError && !personGone && (
-            <div className="alert alert-warning">
+            <div className="alert alert-warning" role="alert">
               {getApiErrorMessage(slots.error, 'No pudimos cargar los horarios.')}{' '}
               <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={() => void slots.refetch()}>Intentar de nuevo</button>
             </div>
