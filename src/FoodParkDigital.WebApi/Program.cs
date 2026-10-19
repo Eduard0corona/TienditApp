@@ -63,8 +63,9 @@ builder.AddObservability();
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
 builder.Services.AddScoped<IWhatsAppNotificationService, WhatsAppNotificationService>();
 
-// WhatsApp webhook signature verification (fails closed without WhatsApp:AppSecret)
+// Webhook signature verification (fails closed without WhatsApp:AppSecret or MercadoPago:WebhookSecret)
 builder.Services.AddSingleton<WhatsAppWebhookSignatureVerifier>();
+builder.Services.AddSingleton<MercadoPagoWebhookSignatureVerifier>();
 
 // Rate Limiting
 builder.Services.AddRateLimiter(options =>

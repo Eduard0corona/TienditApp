@@ -13,4 +13,7 @@ public interface IWebhookInbox
 public static class WebhookSources
 {
     public const string WhatsApp = "whatsapp";
+
+    /// <summary>Mercado Pago's notifications of payments (Fase 24I).</summary>
+    public const string MercadoPago = "mercadopago";
 }
