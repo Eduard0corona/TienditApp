@@ -9,12 +9,13 @@ El CI ejecuta `dotnet ef migrations has-pending-model-changes` en cada PR, por l
 Además, el job `Migrations` de `.github/workflows/ci.yml` aplica las migraciones en SQL Server 2022 (Docker) en cada PR y en cada push a `master`:
 
 1. Crea con `dotnet ef database update` una base en `PRODUCTION_BASELINE`, una migración que producción ya tiene (idealmente la última; hoy `20261004165450_AddOfflineSaleIdempotency`, la de la Fase 3).
-2. Le aplica con el `sqlcmd` clásico y `-b` el mismo contenido que un `apply.sql`: el bloque `SET` de los scripts de producción y la salida de `dotnet ef migrations script --idempotent`.
-3. Lo ejecuta otra vez con la caché de planes vacía y falla si cambia el historial o algún objeto. Así SQL Server vuelve a compilar todos los lotes, incluidos los que salta, como en una ejecución posterior en producción: un lote viejo que nombra una columna que una migración nueva borró falla ahí.
-4. Revierte con el `Down` idempotente hasta `PRODUCTION_BASELINE`, lo ejecuta otra vez con la caché de planes vacía (no debe cambiar nada: cada lote tiene que compilar aunque ya no existan las columnas que nombra; sin vaciarla, SQL Server reutiliza los planes de la primera vez y el error no aparece) y aplica el script de nuevo.
-5. Crea otra base vacía con `dotnet ef database update`, como se crea una base nueva.
+2. Compara el `apply.sql` y el `rollback.sql` de la carpeta de la migración más nueva en `database/production` con lo que genera EF (paso `Compare with the newest production scripts`; el formato está en [Scripts para producción](#scripts-para-producción)). Falla si la carpeta más nueva no es la de esa migración, si falta alguno de los dos archivos o si, debajo de su cabecera, cambió una línea: un archivo editado a mano o que quedó atrás de un cambio a la migración. Las carpetas anteriores no se comparan.
+3. Le aplica con el `sqlcmd` clásico y `-b` el mismo contenido que un `apply.sql`: el bloque `SET` de los scripts de producción y la salida de `dotnet ef migrations script --idempotent`.
+4. Lo ejecuta otra vez con la caché de planes vacía y falla si cambia el historial o algún objeto. Así SQL Server vuelve a compilar todos los lotes, incluidos los que salta, como en una ejecución posterior en producción: un lote viejo que nombra una columna que una migración nueva borró falla ahí.
+5. Revierte con el `Down` idempotente hasta `PRODUCTION_BASELINE`, lo ejecuta otra vez con la caché de planes vacía (no debe cambiar nada: cada lote tiene que compilar aunque ya no existan las columnas que nombra; sin vaciarla, SQL Server reutiliza los planes de la primera vez y el error no aparece) y aplica el script de nuevo.
+6. Crea otra base vacía con `dotnet ef database update`, como se crea una base nueva.
 
-La contraseña de SA se genera en el job y el runner la enmascara en los logs. Cuando producción avance, sube `PRODUCTION_BASELINE`; un valor más viejo solo prueba más migraciones. Si el job falla, sus scripts quedan como artefacto `migration-scripts` de la ejecución.
+La contraseña de SA se genera en el job y el runner la enmascara en los logs. Cuando producción avance, sube `PRODUCTION_BASELINE`; un valor más viejo solo prueba más migraciones. Si el job falla, sus scripts quedan como artefacto `migration-scripts` de la ejecución; si falla la comparación, ahí también están el `apply.sql` y el `rollback.sql` de la carpeta más nueva como los espera, con su cabecera.
 
 Migraciones recientes con notas operativas:
 
@@ -134,7 +135,15 @@ Como producción no migra al arrancar, cada migración nueva deja en `database/p
 - **`apply.sql`:** la salida de `dotnet ef migrations script --idempotent`, que aplica solo las migraciones que faltan en `__EFMigrationsHistory`. Va precedida de un bloque `SET` con dos partes:
   - las opciones que exigen los índices filtrados, porque el `sqlcmd` clásico arranca con `QUOTED_IDENTIFIER OFF`;
   - `XACT_ABORT ON`. EF Core 10 envuelve cada migración del script en su propia transacción (EF Core 9 usaba una sola para todas) y no lo incluye; sin él, un error que solo termina una sentencia deja que el `COMMIT` confirme el resto de esa migración. Si una migración falla, las anteriores ya quedaron confirmadas: corrige la causa y vuelve a ejecutar el script, que salta las aplicadas.
-- **`rollback.sql`:** el `Down` idempotente de la migración, para usarlo después de volver al código anterior.
+- **`rollback.sql`:** el `Down` idempotente de las migraciones que agrega la PR, para usarlo después de volver al código anterior: `dotnet ef migrations script <MigrationId> <la migración de la carpeta anterior> --idempotent`, con el mismo bloque `SET`. Casi siempre es solo la suya; una PR que agrega dos migraciones (las Fases 8 y 15) deja una sola carpeta, la de la más nueva, y su `rollback.sql` revierte las dos. Así, los `rollback.sql`, de la carpeta más nueva a la más vieja, se encadenan sin saltarse ninguna migración.
+
+Los dos se arman igual, y el job `Migrations` compara con lo que genera los de la carpeta de la migración más nueva:
+
+1. Una cabecera solo con líneas de comentario (`--`) o en blanco: qué hace el script, con qué comando y versión de EF Core se generó, si es compatible con la versión desplegada y cómo ejecutarlo. Es lo único escrito a mano y lo único que el CI no compara.
+2. El bloque `SET` de arriba, igual al del job (`set-options.sql`), y una línea en blanco.
+3. La salida de EF sin su BOM y sin cambios. Las líneas en blanco al final no cuentan.
+
+El archivo va en UTF-8 con BOM al inicio, por los acentos de la cabecera (lo que genera EF es ASCII), y con finales de línea LF, como todos los de `database/production`; el CI rechaza uno con CRLF y cualquier BOM fuera del inicio, que `sqlcmd` no acepta. Si la comparación falla, el artefacto `migration-scripts` trae los dos archivos como los espera, con la cabecera de la carpeta: reemplázalos y revisa que la cabecera siga diciendo la verdad. También fallará al subir la versión de EF Core, que cambia lo que genera (al menos el `ProductVersion` de cada migración; las dos primeras carpetas salieron de EF Core 9): esa PR vuelve a generar los dos archivos de la carpeta más nueva.
 
 Los `apply.sql` son para la base de producción existente (ya en la Fase 0 o después): el de la última carpeta aplica de una vez todo lo que falte. Una base nueva y vacía se crea con `dotnet ef database update` (o con el arranque en Development): con EF Core 10, el script idempotente desde cero falla en `20260217004713_AddOrderServiceAndTenantCapabilities`, que actualiza en el mismo lote una columna que acaba de agregar. Esa migración ya está aplicada en producción y no se edita.
 
@@ -145,7 +154,7 @@ Antes de publicarlos:
 1. Ejecútalos con `sqlcmd` contra bases desechables (LocalDB o SQL Server en Docker) en los estados posibles de producción: en la versión productiva previa con datos, en la migración anterior y con datos que la migración rechaza. Prueba también los `rollback.sql` de la más nueva a la más vieja.
 2. Vuelve a ejecutarlos para confirmar que la segunda vez no hacen nada.
 
-El job `Migrations` repite estos pasos en cada PR sobre una base sin datos y con scripts que genera él mismo; los estados con datos y los archivos de la carpeta se siguen probando a mano.
+El job `Migrations` repite estos pasos en cada PR sobre una base sin datos y con scripts que genera él mismo, iguales, debajo de su cabecera, al `apply.sql` y al `rollback.sql` de la carpeta más nueva (los compara antes); los estados con datos y `verify.sql` se siguen probando a mano.
 
 Los scripts de la Fase 3 se probaron así en SQL Server 2022 (Docker): desde un respaldo en la Fase 0 con negocios con y sin ubicaciones, ventas, pagos y cajas, el `apply.sql` de `20261004165450_AddOfflineSaleIdempotency` aplicó las Fases 1, 2 y 3; los `rollback.sql` revirtieron la Fase 3 (las guardas 50003 y 50005 se detuvieron sin cambiar nada) y volver a aplicar y repetir el script no hizo nada la segunda vez.
 
@@ -315,6 +324,6 @@ Las reparaciones de datos sin cambio de esquema van en `database/production/data
 ## Deuda actual
 
 - `PendingModelChangesWarning` está ignorado en la configuración del DbContext; el chequeo del CI lo compensa, pero no en ejecución local.
-- El CI no prueba migraciones con datos ni ejecuta los `apply.sql`/`rollback.sql` versionados: regenera el script, así que un archivo que quedó desactualizado frente a su migración no se detecta.
+- El CI no prueba migraciones con datos ni ejecuta los `apply.sql`/`rollback.sql` versionados: ejecuta el script que genera y solo compara con él los de la carpeta más nueva. Las anteriores son la foto del código de su día y no se comparan: las dos primeras salieron de EF Core 9, y el `apply.sql` de `20261009041644_StopMappingRequireOpenCashSession`, de la PR #47, sobre `master` sin la Fase 15. Un cambio a mano en una de ellas no lo detecta el CI, y la revisión de Claude no revisa esos archivos ([flujo Git](git-workflow.md)).
 - La guarda 50005 de `20261004165450_AddOfflineSaleIdempotency` nombra `CapturedOfflineAt` fuera de `EXEC`: si su `rollback.sql` se ejecuta otra vez, ya revertido, falla con `Invalid column name` (no cambia nada). La migración está aplicada en producción y no se edita.
 - Falta el proceso productivo: generar `migrations script --idempotent` como artefacto del pipeline, revisarlo y aplicarlo en un paso controlado antes de desplegar.
