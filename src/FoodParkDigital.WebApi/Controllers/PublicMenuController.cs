@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Application.Reviews;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -35,6 +36,21 @@ public class PublicMenuController : ControllerBase
     {
         var menu = await _mediator.Send(new GetPublicMenuQuery(slug, table), cancellationToken);
         return menu is null ? this.ApiError(StatusCodes.Status404NotFound, "Este negocio no tiene menú en línea.") : Ok(menu);
+    }
+
+    /// <summary>
+    /// The published reviews of the store (Fase 24H), newest first, ten at a time, with how its customers rate it; never
+    /// who wrote them beyond «Mariana O.».
+    /// </summary>
+    /// <param name="slug">The business of the menu.</param>
+    /// <param name="page">From 1.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    [HttpGet("reviews")]
+    [EnableRateLimiting("public-menu")]
+    public async Task<ActionResult<PublicReviewsDto>> GetReviews(string slug, [FromQuery] int page = 1, CancellationToken cancellationToken = default)
+    {
+        var reviews = await _mediator.Send(new GetPublicReviewsQuery(slug, page), cancellationToken);
+        return reviews is null ? this.ApiError(StatusCodes.Status404NotFound, ReviewRules.StoreNotFoundMessage) : Ok(reviews);
     }
 
     /// <summary>Whether the business delivers to a postal code and what it charges (Fase 22C); never the zone's name.</summary>

@@ -82,6 +82,7 @@ export const NAV_GROUPS: NavGroup[] = [
         pages: [
           { label: 'Clientes', path: '/customers', icon: 'ri-team-line', area: 'customers' },
           { label: 'Campañas', path: '/campaigns', icon: 'ri-megaphone-line', area: 'campaigns', keywords: 'promociones mensajes masivos whatsapp recordatorios de citas plantillas bajas' },
+          { label: 'Reseñas', path: '/reviews', icon: 'ri-star-line', area: 'reviews', keywords: 'calificaciones opiniones estrellas responder reportar' },
         ],
       },
       {
@@ -114,6 +115,7 @@ export const NAV_GROUPS: NavGroup[] = [
     entries: [
       { label: 'Negocios', path: '/platform', icon: 'ri-building-4-line', area: 'platform', exact: true, keywords: 'consola tenants suscripciones cobranza suspendidos' },
       { label: 'Planes', path: '/platform/plans', icon: 'ri-price-tag-3-line', area: 'platform', keywords: 'precios módulos límites prueba gratis' },
+      { label: 'Reseñas', path: '/platform/reviews', icon: 'ri-star-line', area: 'platform', keywords: 'moderación reportadas ocultar calificaciones' },
     ],
   },
 ];

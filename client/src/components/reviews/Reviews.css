@@ -1,0 +1,122 @@
+/* The reviews of a business (Fase 24H): its stars, the customer's dialog and the list of the store. */
+
+.rv-stars {
+  display: inline-flex;
+  gap: 0.05rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* The warning's text color: it reads on the surface in both modes, where the amber fill would not. */
+.rv-star-on {
+  color: var(--ta-warning-fg);
+}
+
+.rv-star-off {
+  color: var(--ct-secondary-color);
+}
+
+/* Five stars as radios: each one a touch target, filled up to the one chosen. */
+.rv-star-input {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.rv-star-input label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ta-touch);
+  height: var(--ta-touch);
+  border-radius: var(--ta-radius-sm);
+  font-size: 1.75rem;
+  color: var(--ct-secondary-color);
+  cursor: pointer;
+}
+
+.rv-star-input label.is-on {
+  color: var(--ta-warning-fg);
+}
+
+/* The radio is hidden: its star, right after it, shows where the keyboard is. */
+.rv-star-input input:focus-visible + i {
+  border-radius: var(--ta-radius-sm);
+  outline: var(--ta-focus-ring-width) solid var(--ta-focus-ring);
+  outline-offset: var(--ta-focus-ring-offset);
+}
+
+.rv-comment {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* The business's answer, under the review it answers. */
+.rv-reply {
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid var(--ct-border-color);
+  border-radius: 0 var(--ta-radius-sm) var(--ta-radius-sm) 0;
+  background: var(--ct-tertiary-bg);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.rv-dialog-footer {
+  flex-wrap: wrap;
+}
+
+/* The reviews of the store, after its menu. */
+.rv-section {
+  padding: 1.5rem 1rem 1rem;
+  scroll-margin-top: 1rem;
+}
+
+.rv-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.rv-average {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.rv-average-number {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rv-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rv-item {
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--ct-border-color);
+}
+
+.rv-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.6rem;
+  margin-bottom: 0.25rem;
+}
+
+.rv-author {
+  font-weight: 700;
+}
+
+/* In a table of the business or the platform, which does not wrap its cells: a review does. */
+.rv-cell {
+  min-width: 16rem;
+  max-width: 40rem;
+  white-space: normal;
+}

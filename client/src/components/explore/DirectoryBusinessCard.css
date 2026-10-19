@@ -171,3 +171,10 @@ a.dc-card:hover {
   background: var(--ct-info-bg-subtle);
   color: var(--ct-info-text-emphasis);
 }
+
+/* Its rating (Fase 24H): the warning's colors, as the stars of the store. */
+.dc-badge-rating {
+  background: var(--ct-warning-bg-subtle);
+  color: var(--ct-warning-text-emphasis);
+  font-variant-numeric: tabular-nums;
+}

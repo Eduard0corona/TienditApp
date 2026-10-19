@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Identity.Queries;
 using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Application.Tenants.Commands;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -124,6 +125,38 @@ public class MeController : ControllerBase
     public async Task<IActionResult> RemoveMyFavorite(string slug, CancellationToken cancellationToken)
         => FavoriteResult(await _mediator.Send(new RemoveMyFavoriteCommand(slug), cancellationToken));
 
+    /// <summary>The reviews the customer account wrote (Fase 24H), the latest first, hidden ones too with why.</summary>
+    [HttpGet("reviews")]
+    public async Task<ActionResult<List<MyReviewDto>>> GetMyReviews(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetMyReviewsQuery(), cancellationToken));
+
+    /// <summary>Whether the account may review the business of a store, and the review it already wrote.</summary>
+    [HttpGet("reviews/{slug}")]
+    public async Task<ActionResult<MyReviewOfBusinessDto>> GetMyReview(string slug, CancellationToken cancellationToken)
+    {
+        var review = await _mediator.Send(new GetMyReviewOfBusinessQuery(slug), cancellationToken);
+        return review is null ? this.ApiError(StatusCodes.Status404NotFound, ReviewRules.StoreNotFoundMessage) : Ok(review);
+    }
+
+    /// <summary>
+    /// Writes the account's review of a business, or changes it: after an order received or an appointment attended with
+    /// the account (403 before).
+    /// </summary>
+    [HttpPut("reviews/{slug}")]
+    public async Task<ActionResult<MyReviewDto>> SaveMyReview(string slug, [FromBody] MyReviewRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SaveMyReviewCommand(slug, request.Rating, request.Comment), cancellationToken);
+        return result.IsFailure ? ReviewError(result.Error!) : Ok(result.Value);
+    }
+
+    /// <summary>Deletes the account's review of a business; none there changes nothing.</summary>
+    [HttpDelete("reviews/{slug}")]
+    public async Task<IActionResult> DeleteMyReview(string slug, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeleteMyReviewCommand(slug), cancellationToken);
+        return result.IsFailure ? ReviewError(result.Error!) : NoContent();
+    }
+
     /// <summary>Opens another business with this account, as its owner. Switch to it to finish its setup.</summary>
     [HttpPost("tenants")]
     public async Task<ActionResult<MyTenantDto>> CreateBusiness([FromBody] CreateBusinessCommand command, CancellationToken cancellationToken)
@@ -143,9 +176,20 @@ public class MeController : ControllerBase
             ? NoContent()
             : this.ApiError(result.Error == FavoriteBusinessRules.NotFoundMessage ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest, result.Error!);
 
+    // A store that is not published is not found; reviewing it before buying there is not allowed.
+    private ObjectResult ReviewError(string error) => this.ApiError(error switch
+    {
+        ReviewRules.StoreNotFoundMessage => StatusCodes.Status404NotFound,
+        ReviewRules.NotACustomerYetMessage => StatusCodes.Status403Forbidden,
+        ReviewRules.WrittenMeanwhileMessage => StatusCodes.Status409Conflict,
+        _ => StatusCodes.Status400BadRequest
+    }, error);
+
     // Another account's address, or one already deleted, is not found.
     private ObjectResult AddressError(string error)
         => this.ApiError(error == AccountAddressRules.NotFoundMessage ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest, error);
 }
+
+public record MyReviewRequest(int Rating, string? Comment = null);
 
 public record AccountAddressRequest(string PostalCode, string AddressLine, string? Label = null, string? References = null);

@@ -4,9 +4,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountApi, type MyOrder } from '../../api/accountApi';
 import { getApiErrorMessage } from '../../api/errors';
 import PageTitle from '../../components/common/PageTitle';
+import ReviewButton from '../../components/reviews/ReviewButton';
+import ReviewDialog, { type ReviewedBusiness } from '../../components/reviews/ReviewDialog';
 import { OrderStepChip } from '../../components/tracking/OrderTimeline';
+import { useMyReviews } from '../../hooks/useMyReviews';
 import { useOrderAgain } from '../../hooks/useOrderAgain';
-import { MyOrdersScope, OrderTrackingStep } from '../../types';
+import { MyOrdersScope, OrderStatus, OrderTrackingStep } from '../../types';
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { trackingRefresh } from '../../utils/orderTracking';
@@ -15,8 +18,18 @@ const PAGE_SIZE = 10;
 /** The most the API gives in one page: orders in progress are few, and all of them show. */
 const IN_PROGRESS_PAGE_SIZE = 50;
 
-function OrderCard({ order, onOrderAgain }: { order: MyOrder; onOrderAgain: (order: MyOrder) => void }) {
+interface OrderCardProps {
+  order: MyOrder;
+  onOrderAgain: (order: MyOrder) => void;
+  /** Whether the account already rated its business, and how to open the dialog (Fase 24H). */
+  reviewed: boolean;
+  onReview: (business: ReviewedBusiness) => void;
+}
+
+function OrderCard({ order, onOrderAgain, reviewed, onReview }: OrderCardProps) {
   const cancelled = order.step === OrderTrackingStep.Cancelled;
+  // An order received is what lets the account rate its business, as the API decides.
+  const received = order.status === OrderStatus.Delivered || order.status === OrderStatus.Completed;
   return (
     <div className="card h-100 mb-0">
       <div className="card-body">
@@ -42,7 +55,14 @@ function OrderCard({ order, onOrderAgain }: { order: MyOrder; onOrderAgain: (ord
               <span className="d-block small text-danger fw-normal">Por pagar {formatMoney(order.total - order.paidAmount)}</span>
             )}
           </span>
-          <span className="d-flex gap-2">
+          <span className="d-flex flex-wrap gap-2">
+            {received && (
+              <ReviewButton
+                businessName={order.businessName}
+                reviewed={reviewed}
+                onClick={() => onReview({ slug: order.businessSlug, name: order.businessName })}
+              />
+            )}
             <Link
               className="btn btn-sm btn-light"
               to={`/mis-pedidos/${order.id}`}
@@ -70,11 +90,13 @@ function OrderCard({ order, onOrderAgain }: { order: MyOrder; onOrderAgain: (ord
 /**
  * A customer account's orders in every business (Fase 24C): the ones in progress first, asked again every 20 seconds while
  * there are any, and the ones before, newest first and by pages. «Pedir otra vez» fills the store's cart where the menu
- * takes orders (Fase 24B).
+ * takes orders (Fase 24B), and an order received rates its business (Fase 24H).
  */
 export default function MyOrders() {
   const [page, setPage] = useState(1);
+  const [reviewing, setReviewing] = useState<ReviewedBusiness | null>(null);
   const orderAgain = useOrderAgain();
+  const myReviews = useMyReviews();
   const queryClient = useQueryClient();
   const inProgressQuery = useQuery({
     queryKey: ['me', 'orders', 'in-progress'],
@@ -131,7 +153,7 @@ export default function MyOrders() {
           <div className="row g-3">
             {inProgress.map((order) => (
               <div className="col-12 col-lg-6" key={order.id}>
-                <OrderCard order={order} onOrderAgain={orderAgain} />
+                <OrderCard order={order} onOrderAgain={orderAgain} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
               </div>
             ))}
           </div>
@@ -144,7 +166,7 @@ export default function MyOrders() {
           <div className="row g-3">
             {past.map((order) => (
               <div className="col-12 col-lg-6" key={order.id}>
-                <OrderCard order={order} onOrderAgain={orderAgain} />
+                <OrderCard order={order} onOrderAgain={orderAgain} reviewed={myReviews.has(order.businessSlug)} onReview={setReviewing} />
               </div>
             ))}
           </div>
@@ -167,6 +189,8 @@ export default function MyOrders() {
           )}
         </section>
       )}
+
+      <ReviewDialog business={reviewing} onClose={() => setReviewing(null)} />
     </div>
   );
 }

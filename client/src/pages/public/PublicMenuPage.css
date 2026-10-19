@@ -179,6 +179,16 @@ button.pm-pill:hover {
   background: var(--ct-tertiary-bg);
 }
 
+/* The star of the rating (Fase 24H): the warning's text color reads on the surface in both modes. */
+.pm-pill-star {
+  color: var(--ta-warning-fg);
+}
+
+.pm-pill-muted {
+  color: var(--ct-secondary-color);
+  font-weight: 400;
+}
+
 /* How the customer wants the order, as the apps switch between delivery and pickup; the checkout has the same one. */
 .pm-mode {
   display: flex;

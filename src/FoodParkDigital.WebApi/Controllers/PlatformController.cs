@@ -1,6 +1,8 @@
 using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Domain.Billing.Enums;
+using FoodParkDigital.Domain.Reviews.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -106,14 +108,42 @@ public class PlatformController : ControllerBase
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
+    /// <summary>The reviews to look at (Fase 24H): those their business reported, or those the platform hid.</summary>
+    [HttpGet("reviews")]
+    public async Task<ActionResult<PaginatedList<PlatformReviewDto>>> GetReviews(
+        [FromQuery] PlatformReviewsFilter filter = PlatformReviewsFilter.Reported,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+        => Ok(await _mediator.Send(new GetPlatformReviewsQuery(filter, page, pageSize), cancellationToken));
+
+    /// <summary>Takes a review down, and why; audited in its business.</summary>
+    [HttpPost("reviews/{id:guid}/hide")]
+    public Task<IActionResult> HideReview(Guid id, [FromBody] HideReviewRequest request, CancellationToken cancellationToken)
+        => SendAsync(new HideReviewCommand(id, request.Reason), cancellationToken);
+
+    /// <summary>Keeps a reported review; audited in its business.</summary>
+    [HttpPost("reviews/{id:guid}/keep")]
+    public Task<IActionResult> KeepReview(Guid id, CancellationToken cancellationToken)
+        => SendAsync(new KeepReviewCommand(id), cancellationToken);
+
+    /// <summary>Puts a hidden review back; audited in its business.</summary>
+    [HttpPost("reviews/{id:guid}/restore")]
+    public Task<IActionResult> RestoreReview(Guid id, CancellationToken cancellationToken)
+        => SendAsync(new RestoreReviewCommand(id), cancellationToken);
+
     private async Task<IActionResult> SendAsync(IRequest<Result> command, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(command, cancellationToken);
-        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : NoContent();
+        if (result.IsSuccess)
+            return NoContent();
+        return this.ApiError(result.Error == ReviewRules.NotFoundMessage ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest, result.Error);
     }
 }
 
 public record AssignPlanRequest(Guid PlanId, int? TrialDays);
+
+public record HideReviewRequest(ReviewConcern Reason);
 
 public record RegisterSubscriptionPaymentRequest(int Months, decimal? Amount, SubscriptionPaymentMethod Method, string? Reference);
 

@@ -44,6 +44,7 @@ const KitchenBoard = lazy(() => import('./pages/kitchen/KitchenBoard'));
 const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const PlatformConsole = lazy(() => import('./pages/platform/PlatformConsole'));
 const PlansPage = lazy(() => import('./pages/platform/PlansPage'));
+const PlatformReviewsPage = lazy(() => import('./pages/platform/PlatformReviewsPage'));
 const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const SellPage = lazy(() => import('./pages/sell/SellPage'));
@@ -53,6 +54,7 @@ const PublicBookingPage = lazy(() => import('./pages/public/PublicBookingPage'))
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
 const CampaignsPage = lazy(() => import('./pages/campaigns/CampaignsPage'));
+const BusinessReviewsPage = lazy(() => import('./pages/reviews/BusinessReviewsPage'));
 const EmployeesList = lazy(() => import('./pages/employees/EmployeesList'));
 const AiAgentSettings = lazy(() => import('./pages/ai-agent/AiAgentSettings'));
 const BusinessSettings = lazy(() => import('./pages/settings/BusinessSettings'));
@@ -326,6 +328,14 @@ export default function App() {
                 )}
               />
               <Route
+                path="/platform/reviews"
+                element={(
+                  <AccessRoute area="platform">
+                    <PlatformReviewsPage />
+                  </AccessRoute>
+                )}
+              />
+              <Route
                 path="/orders"
                 element={(
                   <AccessRoute area="orders">
@@ -378,6 +388,14 @@ export default function App() {
                 element={(
                   <AccessRoute area="campaigns">
                     <CampaignsPage />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/reviews"
+                element={(
+                  <AccessRoute area="reviews">
+                    <BusinessReviewsPage />
                   </AccessRoute>
                 )}
               />

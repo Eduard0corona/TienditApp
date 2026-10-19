@@ -8,6 +8,7 @@ using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Interceptors;
@@ -205,6 +206,9 @@ internal sealed class SqliteTestHost : IAsyncDisposable
                 .HasDefaultValueSql("randomblob(8)");
             modelBuilder.Entity<Appointment>()
                 .Property(a => a.Version)
+                .HasDefaultValueSql("randomblob(8)");
+            modelBuilder.Entity<BusinessReview>()
+                .Property(r => r.Version)
                 .HasDefaultValueSql("randomblob(8)");
 
             SqliteConversationVersion.Configure(modelBuilder);

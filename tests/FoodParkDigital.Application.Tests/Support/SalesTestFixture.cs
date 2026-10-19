@@ -11,6 +11,7 @@ using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Platforms;
+using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
@@ -201,6 +202,10 @@ internal sealed class SalesDbContext : ApplicationDbContext
             .ValueGeneratedNever();
         modelBuilder.Entity<WhatsAppConversation>()
             .Property<byte[]>("Version")
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<BusinessReview>()
+            .Property(r => r.Version)
             .IsRequired(false)
             .ValueGeneratedNever();
     }

@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Branches.Enums;
@@ -15,6 +16,7 @@ using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Reviews.Enums;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -105,6 +107,9 @@ public class PublicDirectoryBusinessDto
     /// decimal. Null without a position, or when its main branch is not on the map or only delivers.
     /// </summary>
     public decimal? DistanceKm { get; set; }
+
+    /// <summary>How its customers rate it (Fase 24H): its published reviews and their average; null without reviews.</summary>
+    public RatingSummaryDto? Rating { get; set; }
 
     internal PublicDirectoryBusinessDto Copy() => (PublicDirectoryBusinessDto)MemberwiseClone();
 }
@@ -467,6 +472,15 @@ public sealed class PublicDirectorySnapshot
                 .OrderBy(day => day.Date)
                 .ToListAsync(cancellationToken))
             .ToLookup(day => day.TenantId);
+        // How customers rate each one (Fase 24H): the published reviews of the businesses listed, one row per business.
+        var ratings = (await context.BusinessReviews
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(r => r.Status == ReviewStatus.Published && listed.Any(t => t.Id == r.TenantId))
+                .GroupBy(r => r.TenantId)
+                .Select(g => new { TenantId = g.Key, Count = g.Count(), Stars = g.Sum(r => r.Rating) })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(r => r.TenantId, r => RatingSummaryDto.From(r.Count, r.Stars));
 
         var entries = rows
             .Select(row => ToEntry(row, specialDays[row.Id], utcNow))
@@ -475,6 +489,8 @@ public sealed class PublicDirectorySnapshot
             .OrderBy(entry => entry.Rank)
             .ThenBy(entry => entry.Business.Name, Names)
             .ToList();
+        foreach (var entry in entries)
+            entry.Business.Rating = ratings.GetValueOrDefault(entry.TenantId);
         return new PublicDirectorySnapshot(utcNow, entries);
     }
 

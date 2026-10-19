@@ -19,6 +19,7 @@ using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
+using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
@@ -162,6 +163,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
     public DbSet<AccountAddress> AccountAddresses => Set<AccountAddress>();
     public DbSet<FavoriteBusiness> FavoriteBusinesses => Set<FavoriteBusiness>();
+    public DbSet<BusinessReview> BusinessReviews => Set<BusinessReview>();
     public DbSet<TemporaryCustomer> TemporaryCustomers => Set<TemporaryCustomer>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<FolioSequence> FolioSequences => Set<FolioSequence>();

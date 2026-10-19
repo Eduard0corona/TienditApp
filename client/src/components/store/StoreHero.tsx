@@ -2,7 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { BusinessCategory } from '../../api/generated/enums';
 import type { PublicMenu } from '../../api/publicMenuApi';
+import type { RatingSummary } from '../../api/reviewsApi';
 import { categoryInfo } from '../../utils/businessCategories';
+import { formatAverage, reviewCountLabel, storeRatingName } from '../../utils/reviews';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 
 export interface StoreDeliveryChoice {
@@ -32,16 +34,18 @@ interface StoreHeroProps {
   contactUrl: string | null;
   /** The heart of the business over its cover (Fase 24F); none where it does not apply. */
   favorite?: ReactNode;
+  /** Its rating (Fase 24H), which takes to its reviews; null without reviews. */
+  rating?: { summary: RatingSummary; onOpen: () => void } | null;
 }
 
 /**
  * The top of the online menu as the delivery apps open a store (Fase 24E): the business's cover across the page (its
  * colors without one), its logo over it, its name, what it is and its line, whether it is open, a button for its hours
- * and address, and how the customer wants the order. The arrow goes back only to where the customer came from in the
+ * and address, its rating (Fase 24H), and how the customer wants the order. The arrow goes back only to where the customer came from in the
  * app: a menu opened from a QR or a link never leads to other businesses.
  */
 export default function StoreHero({
-  menu, status, tableLabel, hoursSummary, upcomingNotice, onOpenInfo, delivery, bookingPath, contactUrl, favorite,
+  menu, status, tableLabel, hoursSummary, upcomingNotice, onOpenInfo, delivery, bookingPath, contactUrl, favorite, rating,
 }: StoreHeroProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -129,8 +133,24 @@ export default function StoreHero({
           </p>
         )}
 
-        {(onOpenInfo || menu.deliveryOnly) && (
+        {(onOpenInfo || menu.deliveryOnly || rating) && (
           <div className="pm-pills">
+            {rating && (
+              <button
+                type="button"
+                className="pm-pill"
+                onClick={rating.onOpen}
+                aria-label={`${storeRatingName(rating.summary)}. Ver reseñas`}
+              >
+                <i className={rating.summary.average != null ? 'ri-star-fill pm-pill-star' : 'ri-star-line'} aria-hidden="true"></i>
+                {rating.summary.average != null ? (
+                  <>
+                    <span className="ta-money">{formatAverage(rating.summary.average)}</span>
+                    <span className="pm-pill-muted ta-money">({rating.summary.count.toLocaleString('es-MX')})</span>
+                  </>
+                ) : <span>{reviewCountLabel(rating.summary.count)}</span>}
+              </button>
+            )}
             {onOpenInfo && (
               <button type="button" className="pm-pill" onClick={onOpenInfo}>
                 <i className={hoursSummary ? 'ri-time-line' : 'ri-information-line'} aria-hidden="true"></i>

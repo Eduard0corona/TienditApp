@@ -2,9 +2,10 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
 import { publicMenuApi, type PublicMenu } from '../../api/publicMenuApi';
+import { reviewsApi } from '../../api/reviewsApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import { BusinessTheme, DayOfWeek, SpecialDayKind } from '../../types';
 import { getBusinessTheme } from '../../utils/businessThemes';
@@ -20,6 +21,8 @@ vi.mock('../../api/publicMenuApi', () => ({
   },
 }));
 
+vi.mock('../../api/reviewsApi', () => ({ reviewsApi: { getStoreReviews: vi.fn(), getMyReview: vi.fn() } }));
+
 vi.mock('../../api/accountApi', () => ({
   MAX_ACCOUNT_ADDRESSES: 10,
   accountApi: {
@@ -30,6 +33,7 @@ vi.mock('../../api/accountApi', () => ({
 
 const api = vi.mocked(publicMenuApi);
 const account = vi.mocked(accountApi);
+const reviews = vi.mocked(reviewsApi);
 
 beforeAll(() => {
   // jsdom has no matchMedia, and the cart sheet (Offcanvas) asks it for the screen size.
@@ -986,5 +990,56 @@ describe('PublicMenuPage', () => {
       // At a table the favorites are not asked for.
       expect(account.getFavorites).not.toHaveBeenCalled();
     });
+  });
+
+  it('shows its rating in the header, which takes to its reviews after the menu, with the business answers', async () => {
+    api.getMenu.mockResolvedValue(menu({ rating: { count: 23, average: 4.6 } }));
+    reviews.getStoreReviews.mockResolvedValue({
+      summary: { count: 23, average: 4.6 },
+      pageNumber: 1,
+      hasNextPage: false,
+      items: [{
+        id: 'r1', authorName: 'Mariana O.', rating: 5, comment: 'El mejor latte de la colonia.', writtenAt: '2026-10-10T18:00:00Z',
+        edited: true, reply: '¡Gracias, Mariana!', repliedAt: '2026-10-11T10:00:00Z',
+      }],
+    });
+    // jsdom does not scroll: the page asks the section to come into view.
+    const original = Element.prototype.scrollIntoView;
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    onTestFinished(() => { Element.prototype.scrollIntoView = original; });
+
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: '4.6 de 5 (23 reseñas). Ver reseñas' }));
+    const section = await screen.findByRole('region', { name: 'Reseñas' });
+    expect(section).toHaveTextContent('4.6');
+    expect(within(section).getByText('Mariana O.')).toBeInTheDocument();
+    expect(section).toHaveTextContent('Editada');
+    expect(section).toHaveTextContent('Respuesta de Café Luna');
+    expect(section).toHaveTextContent('¡Gracias, Mariana!');
+    await waitFor(() => expect(scrolled).toHaveBeenCalled());
+    // A visitor does not ask whether it may rate the business.
+    expect(reviews.getMyReview).not.toHaveBeenCalled();
+    expect(within(section).queryByRole('button', { name: 'Calificar' })).not.toBeInTheDocument();
+  });
+
+  it('offers the first review to a customer who bought there, and nothing about reviews to a visitor', async () => {
+    api.getMenu.mockResolvedValue(menu({ rating: { count: 0 } }));
+    account.getFavorites.mockResolvedValue([]);
+    reviews.getMyReview.mockResolvedValue({ canReview: true, review: null });
+
+    const { unmount } = renderPage('/m/cafe-luna', signedInAs('Customer'));
+
+    const section = await screen.findByRole('region', { name: 'Reseñas' });
+    expect(section).toHaveTextContent('Todavía no hay reseñas: la tuya puede ser la primera.');
+    expect(within(section).getByRole('button', { name: 'Calificar' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Ver reseñas/ })).not.toBeInTheDocument();
+    expect(reviews.getStoreReviews).not.toHaveBeenCalled();
+    unmount();
+
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Reseñas' })).not.toBeInTheDocument();
   });
 });

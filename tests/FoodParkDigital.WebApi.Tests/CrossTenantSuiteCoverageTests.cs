@@ -18,7 +18,6 @@ public class CrossTenantSuiteCoverageTests
     private static readonly Dictionary<string, string> OutsideTheSuite = new(StringComparer.Ordinal)
     {
         [nameof(PasswordRecoveryController)] = "Recuperar la contraseña es de la cuenta y anónimo: no tiene datos de un negocio.",
-        [nameof(PlatformController)] = "La consola de plataforma trabaja entre negocios por diseño y es solo para SUPER_ADMIN.",
         [nameof(ProfileController)] = "El perfil es de la cuenta (datos, avatar, teléfono, contraseña y el WhatsApp de sus códigos): no tiene datos de un negocio.",
         [nameof(TwoFactorController)] = "El 2FA es de la cuenta: no tiene datos de un negocio."
     };

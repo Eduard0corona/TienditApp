@@ -16,6 +16,7 @@ using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
+using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +42,7 @@ public interface IApplicationDbContext
     DbSet<CustomerProfile> CustomerProfiles { get; }
     DbSet<AccountAddress> AccountAddresses { get; }
     DbSet<FavoriteBusiness> FavoriteBusinesses { get; }
+    DbSet<BusinessReview> BusinessReviews { get; }
     DbSet<TemporaryCustomer> TemporaryCustomers { get; }
     DbSet<Order> Orders { get; }
     DbSet<OrderItem> OrderItems { get; }

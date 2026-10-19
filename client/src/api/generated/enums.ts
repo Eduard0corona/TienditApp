@@ -39,6 +39,14 @@ export const BusinessCategory = {
 } as const;
 export type BusinessCategory = (typeof BusinessCategory)[keyof typeof BusinessCategory];
 
+export const BusinessReviewsFilter = {
+  All: 0,
+  Unanswered: 1,
+  Reported: 2,
+  Hidden: 3,
+} as const;
+export type BusinessReviewsFilter = (typeof BusinessReviewsFilter)[keyof typeof BusinessReviewsFilter];
+
 export const BusinessTheme = {
   Nopal: 0,
   Talavera: 1,
@@ -289,6 +297,12 @@ export const PlatformCommissionBase = {
 } as const;
 export type PlatformCommissionBase = (typeof PlatformCommissionBase)[keyof typeof PlatformCommissionBase];
 
+export const PlatformReviewsFilter = {
+  Reported: 0,
+  Hidden: 1,
+} as const;
+export type PlatformReviewsFilter = (typeof PlatformReviewsFilter)[keyof typeof PlatformReviewsFilter];
+
 export const PlatformSettlementAdjustmentKind = {
   Promotion: 1,
   Claim: 2,
@@ -321,6 +335,21 @@ export const PurchaseOrderStatus = {
   Cancelled: 99,
 } as const;
 export type PurchaseOrderStatus = (typeof PurchaseOrderStatus)[keyof typeof PurchaseOrderStatus];
+
+export const ReviewConcern = {
+  Offensive: 1,
+  PersonalData: 2,
+  Spam: 3,
+  NotAnExperience: 4,
+  Other: 5,
+} as const;
+export type ReviewConcern = (typeof ReviewConcern)[keyof typeof ReviewConcern];
+
+export const ReviewStatus = {
+  Published: 0,
+  Hidden: 1,
+} as const;
+export type ReviewStatus = (typeof ReviewStatus)[keyof typeof ReviewStatus];
 
 export const ServiceOrderPieceStatus = {
   Accepted: 0,
