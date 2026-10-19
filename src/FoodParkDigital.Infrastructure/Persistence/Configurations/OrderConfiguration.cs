@@ -48,6 +48,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Ignore(o => o.CurrentRound);
         builder.Ignore(o => o.IsDeliveryPlatformOrder);
         builder.Property(o => o.IsTab).HasDefaultValue(false).ValueGeneratedNever();
+        builder.Property(o => o.SoldOnCredit).HasDefaultValue(false).ValueGeneratedNever();
         builder.Property(o => o.TenantId).IsRequired();
 
         // Concurrency token
@@ -162,6 +163,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => new { o.TenantId, o.OrderNumber }).IsUnique();
         builder.HasIndex(o => new { o.TenantId, o.CustomerUserId });
         builder.HasIndex(o => new { o.TenantId, o.TemporaryCustomerId });
+        // What a customer owes, and their card, gather their orders by phone (Fase 26A).
+        builder.HasIndex(o => new { o.TenantId, o.CustomerPhone });
         // A device's key identifies one sale per business: retries return it instead of creating another.
         builder.HasIndex(o => new { o.TenantId, o.ClientRequestId })
             .IsUnique()

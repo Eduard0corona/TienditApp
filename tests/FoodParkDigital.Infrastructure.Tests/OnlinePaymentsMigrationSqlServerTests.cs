@@ -35,7 +35,7 @@ public class OnlinePaymentsMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var seed = await SeedAsync(database);
 
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerCredit.CreateContext(database))
         {
             var checkout = await context.OnlineCheckouts.IgnoreQueryFilters().SingleAsync(c => c.Id == seed.CheckoutId);
             checkout.AttachPreference("pref-1", "https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=pref-1");
@@ -45,7 +45,7 @@ public class OnlinePaymentsMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using (var check = database.CreateContext())
+        await using (var check = BeforeCustomerCredit.CreateContext(database))
         {
             var stored = await check.OnlineCheckouts.IgnoreQueryFilters().SingleAsync(c => c.Id == seed.CheckoutId);
             Assert.Equal((OnlineCheckoutStatus.Placed, seed.OrderId, "98765", (string?)null),
@@ -91,7 +91,7 @@ public class OnlinePaymentsMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var seed = await SeedAsync(database);
         Guid refundId;
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerCredit.CreateContext(database))
         {
             var refund = OnlinePaymentRefund.ForCheckout(
                 seed.TenantId, seed.CheckoutId, "98765", 50m, OnlinePaymentRefundReason.NotPlaced, DateTimeOffset.UtcNow);
@@ -120,14 +120,14 @@ public class OnlinePaymentsMigrationSqlServerTests
                      ("UPDATE [OnlinePaymentAccounts] SET [ProviderUserId] = 0 WHERE [TenantId] = {0}", seed.TenantId, "CK_OnlinePaymentAccounts_ProviderUserId")
                  })
         {
-            await using var context = database.CreateContext();
+            await using var context = BeforeCustomerCredit.CreateContext(database);
             var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(update, id));
             Assert.Equal(547, error.Number);
             Assert.Contains(constraint, error.Message);
         }
 
         // What the domain does is what the database keeps: a checkout that could not be placed, and its refund done.
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerCredit.CreateContext(database))
         {
             var checkout = await context.OnlineCheckouts.IgnoreQueryFilters().SingleAsync(c => c.Id == seed.CheckoutId);
             checkout.FailToPlace("98765", DateTimeOffset.UtcNow, OnlineCheckoutFailure.OrderRefused, "El Latte se agotó.");
@@ -136,7 +136,7 @@ public class OnlinePaymentsMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext();
+        await using var check = BeforeCustomerCredit.CreateContext(database);
         var stored = await check.OnlineCheckouts.IgnoreQueryFilters().SingleAsync(c => c.Id == seed.CheckoutId);
         Assert.Equal((OnlineCheckoutStatus.NotPlaced, OnlineCheckoutFailure.OrderRefused, (string?)null),
             (stored.Status, stored.Failure, stored.CustomerPhone));
@@ -160,7 +160,7 @@ public class OnlinePaymentsMigrationSqlServerTests
                 1, 1, 1, 55, 55, 0, 0, 0, 0, 0, 0, 0)
             """);
 
-        await using var check = database.CreateContext();
+        await using var check = BeforeCustomerCredit.CreateContext(database);
         var day = await check.DailySalesSnapshots.IgnoreQueryFilters().SingleAsync();
         Assert.Equal((55m, 0m), (day.PaymentsAmount, day.OnlineAmount));
     }
@@ -175,7 +175,7 @@ public class OnlinePaymentsMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeOnlinePayments));
         Assert.Equal(50024, error.Number);
         Assert.Contains("Customers paid online", error.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerCredit.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [OnlineCheckouts]"));
@@ -184,7 +184,7 @@ public class OnlinePaymentsMigrationSqlServerTests
 
         // The connected account alone does not stop it: the business connects it again.
         await MigrateAsync(database, BeforeOnlinePayments);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerCredit.CreateContext(database))
         {
             Assert.Equal(BeforeOnlinePayments, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 1, 1, 1), (
@@ -204,7 +204,7 @@ public class OnlinePaymentsMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the tables are back.
         await MigrateAsync(database, BeforeOnlinePayments);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext();
+        await using var forward = BeforeCustomerCredit.CreateContext(database);
         Assert.Equal(4, await CountAsync(forward, $"""
             SELECT COUNT(*) AS [Value] FROM sys.tables
             WHERE [name] IN (N'OnlinePaymentAccounts', N'OnlinePaymentAuthorizations', N'OnlineCheckouts', N'OnlinePaymentRefunds')
@@ -216,7 +216,7 @@ public class OnlinePaymentsMigrationSqlServerTests
     /// <summary>A business with its Mercado Pago account, an order and a checkout awaiting payment.</summary>
     private static async Task<Seed> SeedAsync(SqlServerTestDatabase database)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCustomerCredit.CreateContext(database);
         var slug = $"cafe-{Guid.NewGuid():N}"[..20];
         var tenant = new Tenant("Café Luna", slug, BusinessType.Food, $"{slug}@demo.com");
         var owner = new ApplicationUser

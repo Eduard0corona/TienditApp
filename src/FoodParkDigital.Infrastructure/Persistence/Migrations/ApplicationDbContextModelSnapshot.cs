@@ -1088,6 +1088,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal?>("CreditLimit")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("Email")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
@@ -3050,6 +3053,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasDefaultValue(0m);
 
+                    b.Property<bool>("SoldOnCredit")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -3113,6 +3120,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "CreatedAt")
                         .IsDescending(false, true);
+
+                    b.HasIndex("TenantId", "CustomerPhone");
 
                     b.HasIndex("TenantId", "CustomerUserId");
 

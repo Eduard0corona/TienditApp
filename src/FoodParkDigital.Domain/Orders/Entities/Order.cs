@@ -183,6 +183,13 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
     /// <summary>The order is (or was) a tab: items are added in rounds and it is charged when the table leaves.</summary>
     public bool IsTab { get; private set; }
+
+    /// <summary>
+    /// Sold on credit (fiado, Fase 26A, ADR 0033): the customer took it to pay later, so the counter sale closes as if
+    /// paid and its balance is what the customer owes until they pay it (<see cref="SellOnCredit"/>). Never undone: paying
+    /// the balance leaves it paid, still sold on credit.
+    /// </summary>
+    public bool SoldOnCredit { get; private set; }
     public Guid? DiningTableId { get; private set; }
     /// <summary>The table while the tab is open; cleared when it closes, so a table has one open tab at most.</summary>
     public Guid? OpenTableId { get; private set; }
@@ -560,18 +567,40 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public void AdvanceOnCreation(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy)
         => Transition(newStatus, stateMachine, performedBy, notifyCustomer: false);
 
+    public const string CreditOnlyCounterSaleMessage = "Solo se fía una venta de mostrador del negocio: ni una cuenta de mesa ni un pedido a domicilio.";
+    public const string CreditNeedsCustomerMessage = "Para fiar, la venta necesita al cliente con su teléfono.";
+    public const string CreditNeedsBalanceMessage = "La venta ya está pagada: no queda nada por fiar.";
+
     /// <summary>
-    /// Closes a fully paid counter sale: the customer leaves with what they bought, so nobody has to mark
-    /// it delivered by hand. Food that goes through the kitchen closes only once it is ready, and a service
-    /// only when none of its tracked pieces is still being worked on (those close when their pieces are
-    /// completed). The customer is not messaged about it: they are at the counter.
+    /// Marks a counter sale of the business as sold on credit (fiado, Fase 26A): the customer takes it now and owes its
+    /// balance. Whether that customer may owe it, and how much, is the business's rule, checked before (the limit).
+    /// </summary>
+    public void SellOnCredit()
+    {
+        if (!CreatedByBusiness || IsTab || Delivery is not null || IsDeliveryPlatformOrder)
+            throw new DomainException(CreditOnlyCounterSaleMessage);
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException("La orden está cancelada.");
+        if (string.IsNullOrWhiteSpace(CustomerPhone))
+            throw new DomainException(CreditNeedsCustomerMessage);
+        if (Balance <= 0)
+            throw new DomainException(CreditNeedsBalanceMessage);
+        SoldOnCredit = true;
+    }
+
+    /// <summary>
+    /// Closes a counter sale that is fully paid or sold on credit: the customer leaves with what they bought, so nobody has
+    /// to mark it delivered by hand. Food that goes through the kitchen closes only once it is ready, and a service only
+    /// when none of its tracked pieces is still being worked on (those close when their pieces are completed). The
+    /// customer is not messaged about it: they are at the counter.
     /// </summary>
     /// <returns>True when the order was closed.</returns>
     public bool CloseIfPaidCounterSale(IOrderStateMachine stateMachine, bool waitsForKitchen, string? performedBy)
     {
         // A tab can be paid round by round and keep ordering: it closes only when the table leaves (CloseTab). An order
-        // that goes to the customer's address leaves after the kitchen: ready is not delivered, someone marks it.
-        if (!CreatedByBusiness || IsTab || Delivery is not null || _items.Count == 0 || Balance > 0)
+        // that goes to the customer's address leaves after the kitchen: ready is not delivered, someone marks it. A sale on
+        // credit leaves with its balance: the customer owes it.
+        if (!CreatedByBusiness || IsTab || Delivery is not null || _items.Count == 0 || (Balance > 0 && !SoldOnCredit))
             return false;
 
         OrderStatus closedStatus;
