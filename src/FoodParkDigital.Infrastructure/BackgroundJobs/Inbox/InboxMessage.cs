@@ -17,12 +17,13 @@ public sealed class InboxMessage : QueueItem
     {
     }
 
-    public InboxMessage(string source, string payload, DateTimeOffset receivedAt)
+    /// <param name="deliveryKey">What identifies the delivery when not the whole payload (see IWebhookInbox).</param>
+    public InboxMessage(string source, string payload, DateTimeOffset receivedAt, string? deliveryKey = null)
     {
         Id = Guid.NewGuid();
         Source = source;
         Payload = payload;
-        PayloadHash = HashOf(payload);
+        PayloadHash = HashOf(deliveryKey ?? payload);
         CreatedAt = receivedAt;
         NextAttemptAt = receivedAt;
     }

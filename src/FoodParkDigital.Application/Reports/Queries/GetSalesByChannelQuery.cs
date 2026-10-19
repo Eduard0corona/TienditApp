@@ -99,7 +99,8 @@ public class GetSalesByChannelQueryHandler : IRequestHandler<GetSalesByChannelQu
                 // Each order once in the period, as Inicio counts them.
                 PaidOrders = g.Select(x => x.OrderId).Distinct().Count(),
                 Amount = g.Sum(x => x.Amount),
-                Platform = g.Sum(x => x.Method == OrderPaymentMethod.Platform ? x.Amount : 0m)
+                Platform = g.Sum(x => x.Method == OrderPaymentMethod.Platform ? x.Amount : 0m),
+                Online = g.Sum(x => x.Method == OrderPaymentMethod.Online ? x.Amount : 0m)
             })
             .ToListAsync(cancellationToken);
         var givenBack = await refunds
@@ -108,7 +109,8 @@ public class GetSalesByChannelQueryHandler : IRequestHandler<GetSalesByChannelQu
             {
                 Channel = g.Key,
                 Amount = g.Sum(x => x.Amount),
-                Platform = g.Sum(x => x.Method == OrderPaymentMethod.Platform ? x.Amount : 0m)
+                Platform = g.Sum(x => x.Method == OrderPaymentMethod.Platform ? x.Amount : 0m),
+                Online = g.Sum(x => x.Method == OrderPaymentMethod.Online ? x.Amount : 0m)
             })
             .ToListAsync(cancellationToken);
         var chargedShares = await (
@@ -175,6 +177,7 @@ public class GetSalesByChannelQueryHandler : IRequestHandler<GetSalesByChannelQu
                     paid?.Platform ?? 0m,
                     back?.Amount ?? 0m,
                     back?.Platform ?? 0m,
+                    (paid?.Online ?? 0m) - (back?.Online ?? 0m),
                     PlatformShares.Net(
                         chargedShares.FirstOrDefault(x => x.Channel == channel),
                         givenBackShares.FirstOrDefault(x => x.Channel == channel)));
@@ -197,6 +200,7 @@ public class GetSalesByChannelQueryHandler : IRequestHandler<GetSalesByChannelQu
         decimal platformPayments,
         decimal refundsAmount,
         decimal platformRefunds,
+        decimal onlineCollected,
         PlatformShares shares)
     {
         var isPlatform = OrderChannelRules.IsDeliveryPlatform(channel);
@@ -221,6 +225,7 @@ public class GetSalesByChannelQueryHandler : IRequestHandler<GetSalesByChannelQu
             // What the business charged itself of the platform's orders (the courier paid it): the platform discounts
             // its commission from a deposit.
             BusinessCollected = isPlatform ? netSales - platformCollected : 0m,
+            OnlineCollected = onlineCollected,
             Commission = commission,
             CommissionTax = commissionTax,
             IsrWithheld = isrWithheld,
@@ -240,6 +245,7 @@ public class GetSalesByChannelQueryHandler : IRequestHandler<GetSalesByChannelQu
         NetSales = rows.Sum(x => x.NetSales),
         PlatformCollected = rows.Sum(x => x.PlatformCollected),
         BusinessCollected = rows.Sum(x => x.BusinessCollected),
+        OnlineCollected = rows.Sum(x => x.OnlineCollected),
         Commission = rows.Sum(x => x.Commission),
         CommissionTax = rows.Sum(x => x.CommissionTax),
         IsrWithheld = rows.Sum(x => x.IsrWithheld),
@@ -296,6 +302,11 @@ public class ChannelSalesDto
     public decimal PlatformCollected { get; set; }
     /// <summary>What the business charged itself of the platform's orders: <see cref="NetSales"/> minus <see cref="PlatformCollected"/>.</summary>
     public decimal BusinessCollected { get; set; }
+    /// <summary>
+    /// What customers paid online in Mercado Pago («En línea», Fase 24I) minus what went back that way: it is in the
+    /// business's Mercado Pago account, not in its drawers. Only the online menu has it.
+    /// </summary>
+    public decimal OnlineCollected { get; set; }
     public decimal Commission { get; set; }
     /// <summary>The IVA the platform charges on its commission.</summary>
     public decimal CommissionTax { get; set; }

@@ -232,6 +232,9 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             payment.RuleFor(p => p.Method).IsInEnum();
             // The order of a delivery platform records the platform's payment by itself, never the client.
             payment.RuleFor(p => p.Method).NotEqual(OrderPaymentMethod.Platform).WithMessage(PlatformPaymentMessage);
+            // «En línea» is what a customer paid in Mercado Pago from the online menu (Fase 24I), never a sale's payment.
+            payment.RuleFor(p => p.Method).NotEqual(OrderPaymentMethod.Online)
+                .WithMessage(OrderPaymentMethodRules.OnlineOnlyOnCreationMessage);
             payment.RuleFor(p => p.EvidenceUrl).MaximumLength(1000);
             payment.RuleFor(p => p.Reference).MaximumLength(120);
             payment.RuleFor(p => p.Notes).MaximumLength(1000);

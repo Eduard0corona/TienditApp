@@ -190,6 +190,11 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
         SetPayment(draft, order.Balance, order.Payments.Select(payment => (payment.Method, payment.Amount)).ToList());
         if (order.IsDeliveryPlatformOrder)
             AddDeliveryPlatformWarnings(draft, order, hasReceiver: request.Receiver is not null);
+        // Paid online (Fase 24I): Mercado Pago charged it for the business, an intermediary of payments.
+        if (order.Payments.Any(payment => payment.Method == OrderPaymentMethod.Online))
+            draft.Warnings.Add(
+                "Este pedido se pagó en línea con Mercado Pago: la factura lleva la forma de pago 31 (intermediario de pagos). "
+                + "Mercado Pago te descuenta su comisión y puede retenerte ISR e IVA; confirma con tu contador cómo facturarlo.");
 
         if (draft.Difference != 0)
         {

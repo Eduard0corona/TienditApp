@@ -8,6 +8,7 @@ using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -208,6 +209,15 @@ internal sealed class SqliteTestHost : IAsyncDisposable
                 .Property(a => a.Version)
                 .HasDefaultValueSql("randomblob(8)");
             modelBuilder.Entity<BusinessReview>()
+                .Property(r => r.Version)
+                .HasDefaultValueSql("randomblob(8)");
+            modelBuilder.Entity<OnlinePaymentAccount>()
+                .Property(a => a.Version)
+                .HasDefaultValueSql("randomblob(8)");
+            modelBuilder.Entity<OnlineCheckout>()
+                .Property(c => c.Version)
+                .HasDefaultValueSql("randomblob(8)");
+            modelBuilder.Entity<OnlinePaymentRefund>()
                 .Property(r => r.Version)
                 .HasDefaultValueSql("randomblob(8)");
 

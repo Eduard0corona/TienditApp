@@ -17,8 +17,8 @@ type RefundModalProps = {
   | { mode: 'void'; onSubmit: (request: VoidOrderRequest) => void }
 );
 
-// What the business gives back with its own money. «Plataforma» is never one of them: only what a platform charged goes
-// back that way, outside every drawer, and then it is the only way.
+// What the business gives back with its own money. «Plataforma» and «En línea» are never among them: only what a platform
+// charged, or the customer paid online, goes back that way, outside every drawer, and then it is the only way.
 const METHODS: OrderPaymentMethod[] = [
   PaymentMethod.Cash,
   PaymentMethod.Card,
@@ -51,6 +51,10 @@ export default function RefundOrderModal(props: RefundModalProps) {
   // The platform charged it: its money goes back the way it came (the server refuses any other method).
   const platformCharged = order.payments.some((payment) => payment.method === PaymentMethod.Platform);
   const voidingPlatformOrder = props.mode === 'void' && platformName !== null;
+  // Paid online (Fase 24I): it goes back «En línea», through Mercado Pago, and only that way (the server refuses any other
+  // method): never out of a drawer it never entered.
+  const paidOnline = order.payments.some((payment) => payment.method === PaymentMethod.Online);
+  const fixedMethod = platformCharged ? PaymentMethod.Platform : paidOnline ? PaymentMethod.Online : null;
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   // Weighed lines take a typed quantity ("0.5"); the text is kept while it is being written.
   const [quantityTexts, setQuantityTexts] = useState<Record<string, string>>({});
@@ -92,7 +96,7 @@ export default function RefundOrderModal(props: RefundModalProps) {
     }
     props.onSubmit({
       amount: amountCents / 100,
-      method: platformCharged ? PaymentMethod.Platform : method,
+      method: fixedMethod ?? method,
       reason: reason.trim(),
       restockItems: restock && anyUnits,
       items: Object.entries(quantities)
@@ -208,12 +212,14 @@ export default function RefundOrderModal(props: RefundModalProps) {
                 </div>
                 <div className="col-sm-6">
                   <label className="form-label" htmlFor="refund-method">Se devuelve en</label>
-                  {platformCharged ? (
+                  {fixedMethod !== null ? (
                     <>
                       <input id="refund-method" className="form-control form-control-lg" readOnly
-                        value={getPaymentMethodLabel(PaymentMethod.Platform)} aria-describedby="refund-method-help" />
+                        value={getPaymentMethodLabel(fixedMethod)} aria-describedby="refund-method-help" />
                       <div id="refund-method-help" className="form-text">
-                        La devolución queda registrada para cuadrarla con la liquidación de {platformName ?? 'la plataforma'}; no sale de la caja.
+                        {fixedMethod === PaymentMethod.Platform
+                          ? <>La devolución queda registrada para cuadrarla con la liquidación de {platformName ?? 'la plataforma'}; no sale de la caja.</>
+                          : 'Mercado Pago se lo devuelve al cliente a su tarjeta o cuenta; no sale de tu caja.'}
                       </div>
                     </>
                   ) : (

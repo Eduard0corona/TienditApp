@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Domain.Identity.Events;
+using FoodParkDigital.Domain.OnlinePayments.Events;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Events;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -268,7 +269,8 @@ public class OutboxTests
             new AccountEmailRequestedEvent(AccountEmailPurpose.EmailConfirmation, UserId: Guid.NewGuid()),
             new AccountEmailRequestedEvent(AccountEmailPurpose.PasswordReset, Email: "ana@demo.com"),
             new AccountEmailRequestedEvent(AccountEmailPurpose.SignUpWithExistingEmail, Email: "ana@demo.com"),
-            new AccountEmailRequestedEvent(AccountEmailPurpose.TeamInvitation, UserId: Guid.NewGuid())
+            new AccountEmailRequestedEvent(AccountEmailPurpose.TeamInvitation, UserId: Guid.NewGuid()),
+            new OnlinePaymentRefundRequestedEvent(Guid.NewGuid(), TenantA)
         };
 
         foreach (var domainEvent in events)

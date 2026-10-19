@@ -9,6 +9,8 @@ import { reviewsApi } from '../../api/reviewsApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import { BusinessTheme, DayOfWeek, SpecialDayKind } from '../../types';
 import { getBusinessTheme } from '../../utils/businessThemes';
+import { goToExternalPage } from '../../utils/externalNavigation';
+import { onlineCheckoutReturnKey } from '../../utils/onlineCheckouts';
 import { readCart, saveCart } from '../../utils/savedCart';
 import { applyBusinessTheme } from '../../utils/theme';
 import PublicMenuPage from './PublicMenuPage';
@@ -18,8 +20,11 @@ vi.mock('../../api/publicMenuApi', () => ({
     getMenu: vi.fn(),
     getDeliveryQuote: vi.fn(),
     placeOrder: vi.fn(),
+    startOnlineCheckout: vi.fn(),
   },
 }));
+
+vi.mock('../../utils/externalNavigation', () => ({ goToExternalPage: vi.fn() }));
 
 vi.mock('../../api/reviewsApi', () => ({ reviewsApi: { getStoreReviews: vi.fn(), getMyReview: vi.fn() } }));
 
@@ -749,6 +754,183 @@ describe('PublicMenuPage', () => {
       expect(within(cart).queryByRole('radio', { name: 'A domicilio' })).not.toBeInTheDocument();
       expect(screen.queryByRole('radiogroup', { name: '¿Cómo lo quieres?' })).not.toBeInTheDocument();
       expect(screen.queryByRole('radio', { name: 'A domicilio' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('pago en línea (Fase 24I)', () => {
+    const CHECKOUT = '4f9c8a52-7d1e-4c3b-9a6f-2e5d8b1c0a37';
+    const started = {
+      checkoutId: CHECKOUT,
+      checkoutUrl: 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=123',
+      amount: 110,
+      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      returnKey: 'llave-de-regreso',
+    };
+
+    async function openCart(path = '/m/cafe-luna') {
+      renderPage(path);
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
+      await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
+      await userEvent.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      return cart;
+    }
+
+    it('pays online by default and opens Mercado Pago, keeping the cart and the return key on the device', async () => {
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
+      api.startOnlineCheckout.mockResolvedValue(started);
+
+      const cart = await openCart();
+      const pay = within(cart).getByRole('radiogroup', { name: 'Pago' });
+      expect(within(pay).getByRole('radio', { name: /^Pagar ahora en línea/ })).toBeChecked();
+      expect(within(pay).getByRole('radio', { name: /^Pagar al recoger/ })).not.toBeChecked();
+      expect(within(cart).getByText(/tu pedido se envía cuando se aprueba el pago/)).toBeInTheDocument();
+      await userEvent.click(within(cart).getByRole('button', { name: 'Pagar · $110.00' }));
+
+      await waitFor(() => expect(goToExternalPage).toHaveBeenCalledWith(started.checkoutUrl));
+      expect(api.startOnlineCheckout).toHaveBeenCalledWith('cafe-luna', {
+        customerName: 'Ana',
+        customerPhone: '5512345678',
+        notes: null,
+        items: [{ productId: 'p1', quantity: 2, optionIds: [], notes: null }],
+        expectedTotal: 110,
+        delivery: undefined,
+        saveAddress: false,
+        addressLabel: null,
+      });
+      expect(api.placeOrder).not.toHaveBeenCalled();
+      expect(onlineCheckoutReturnKey(CHECKOUT)).toBe('llave-de-regreso');
+      // The order is placed when the payment is approved: until then the cart stays.
+      expect(readCart('cafe-luna')?.lines).toEqual([{ productId: 'p1', optionIds: [], quantity: 2 }]);
+      expect(within(cart).getByRole('button', { name: 'Abriendo Mercado Pago…' })).toBeDisabled();
+    });
+
+    it('opens the payment again when the browser brings the page back from Mercado Pago', async () => {
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
+      api.startOnlineCheckout.mockResolvedValue(started);
+
+      const cart = await openCart();
+      await userEvent.click(within(cart).getByRole('button', { name: 'Pagar · $110.00' }));
+      await waitFor(() => expect(goToExternalPage).toHaveBeenCalled());
+
+      window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+      expect(await within(cart).findByRole('button', { name: 'Pagar · $110.00' })).toBeEnabled();
+    });
+
+    it('goes back to the checkout already open for the same cart, and opens another one when the cart changes', async () => {
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
+      api.startOnlineCheckout.mockResolvedValueOnce(started)
+        .mockResolvedValueOnce({ ...started, checkoutId: 'otro-cobro', checkoutUrl: 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=456', amount: 165 });
+
+      const cart = await openCart();
+      await userEvent.click(within(cart).getByRole('button', { name: 'Pagar · $110.00' }));
+      await waitFor(() => expect(goToExternalPage).toHaveBeenCalledTimes(1));
+
+      // Another app took the link and the page never left: back on it, it can pay again, with the same checkout.
+      document.dispatchEvent(new Event('visibilitychange'));
+      await userEvent.click(await within(cart).findByRole('button', { name: 'Pagar · $110.00' }));
+      await waitFor(() => expect(goToExternalPage).toHaveBeenCalledTimes(2));
+      expect(goToExternalPage).toHaveBeenLastCalledWith(started.checkoutUrl);
+      expect(api.startOnlineCheckout).toHaveBeenCalledTimes(1);
+
+      // Another Latte is another order: another checkout.
+      document.dispatchEvent(new Event('visibilitychange'));
+      await userEvent.click(within(cart).getByRole('button', { name: 'Uno más' }));
+      await userEvent.click(await within(cart).findByRole('button', { name: 'Pagar · $165.00' }));
+      await waitFor(() => expect(api.startOnlineCheckout).toHaveBeenCalledTimes(2));
+      expect(goToExternalPage).toHaveBeenLastCalledWith('https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=456');
+    });
+
+    it('opens another checkout once the open one is nearly over on this device, whatever its clock says', async () => {
+      // A device clock two hours behind the server's: the server's end of the checkout looks far away.
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
+      api.startOnlineCheckout.mockResolvedValueOnce({ ...started, expiresAt: new Date(Date.now() + 150 * 60_000).toISOString() })
+        .mockResolvedValueOnce({ ...started, checkoutId: 'otro-cobro', checkoutUrl: 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=789' });
+
+      const cart = await openCart();
+      await userEvent.click(within(cart).getByRole('button', { name: 'Pagar · $110.00' }));
+      await waitFor(() => expect(goToExternalPage).toHaveBeenCalledTimes(1));
+
+      const opened = Date.now();
+      const now = vi.spyOn(Date, 'now').mockReturnValue(opened + 28 * 60_000);
+      try {
+        document.dispatchEvent(new Event('visibilitychange'));
+        await userEvent.click(await within(cart).findByRole('button', { name: 'Pagar · $110.00' }));
+        await waitFor(() => expect(api.startOnlineCheckout).toHaveBeenCalledTimes(2));
+        expect(goToExternalPage).toHaveBeenLastCalledWith('https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=789');
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it('says why the payment could not open, and lets the customer try again', async () => {
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
+      api.startOnlineCheckout.mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 422, data: { detail: 'El total de tu pedido cambió: ahora es $120.00. Revísalo y vuelve a enviarlo.' } },
+      });
+
+      const cart = await openCart();
+      await userEvent.click(within(cart).getByRole('button', { name: 'Pagar · $110.00' }));
+
+      expect(await within(cart).findByText('El total de tu pedido cambió: ahora es $120.00. Revísalo y vuelve a enviarlo.')).toBeInTheDocument();
+      expect(within(cart).getByRole('button', { name: 'Pagar · $110.00' })).toBeEnabled();
+      expect(goToExternalPage).not.toHaveBeenCalled();
+    });
+
+    it('places the order as always when the customer pays on pickup', async () => {
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
+      api.placeOrder.mockResolvedValue({
+        orderNumber: 'ORD-9', total: 110, deliveryFee: null, confirmed: false, businessName: 'Café Luna', contactPhone: null,
+      } as never);
+
+      const cart = await openCart();
+      await userEvent.click(within(cart).getByRole('radio', { name: /^Pagar al recoger/ }));
+      await userEvent.click(within(cart).getByRole('button', { name: 'Hacer pedido · $110.00' }));
+
+      expect(await screen.findByText('¡Pedido enviado!')).toBeInTheDocument();
+      expect(api.startOnlineCheckout).not.toHaveBeenCalled();
+    });
+
+    it('asks nothing about the courier\'s change for an order paid online to an address', async () => {
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true, deliveryAvailable: true, deliveryOnly: true }));
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => ({
+        postalCode, covered: true, fee: 35, minimumOrder: 0, freeDeliveryFrom: null,
+      }));
+      api.startOnlineCheckout.mockResolvedValue({ ...started, amount: 145 });
+
+      const cart = await openCart();
+      expect(within(cart).getByRole('radio', { name: /^Pagar al recibir/ })).toBeInTheDocument();
+      await userEvent.type(within(cart).getByLabelText('Código postal'), '72000');
+      await userEvent.type(within(cart).getByLabelText('Dirección'), 'Av. Reforma 123, Centro');
+      expect(within(cart).queryByLabelText('¿Con cuánto pagas? (opcional)')).not.toBeInTheDocument();
+      await userEvent.click(await within(cart).findByRole('button', { name: 'Pagar · $145.00' }));
+
+      await waitFor(() => expect(api.startOnlineCheckout).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({
+        expectedTotal: 145,
+        delivery: { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: null, paysWith: null },
+      })));
+      // Paying on delivery, the question comes back.
+      await userEvent.click(within(cart).getByRole('radio', { name: /^Pagar al recibir/ }));
+      expect(within(cart).getByLabelText('¿Con cuánto pagas? (opcional)')).toBeInTheDocument();
+    });
+
+    it('offers no online payment at a table, nor where the business does not take it', async () => {
+      api.getMenu.mockResolvedValue(menu({ paysOnline: true }));
+      const { unmount } = renderPage('/m/cafe-luna?mesa=Mesa%204');
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      expect(within(screen.getByRole('dialog', { name: 'Tu pedido' })).queryByRole('radiogroup', { name: 'Pago' })).not.toBeInTheDocument();
+      unmount();
+      // The cart of the table stays on the device; this one starts without it.
+      window.localStorage.clear();
+
+      api.getMenu.mockResolvedValue(menu({ paysOnline: false }));
+      const cart = await openCart();
+      expect(within(cart).queryByRole('radiogroup', { name: 'Pago' })).not.toBeInTheDocument();
+      expect(within(cart).getByRole('button', { name: 'Hacer pedido · $110.00' })).toBeInTheDocument();
     });
   });
 

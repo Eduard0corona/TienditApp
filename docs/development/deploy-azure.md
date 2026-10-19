@@ -493,6 +493,37 @@ La Fase 24H trae una migración, [`database/production/20261018141704_AddBusines
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla, y la tienda, Explorar y las cuentas responden como antes.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50023, sin cambiar nada, en cuanto un cliente reseñó un negocio: borrar la tabla perdería lo que escribieron. Sin reseñas, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Pago en línea con Mercado Pago (Fase 24I)
+
+La Fase 24I trae una migración, [`database/production/20261019015524_AddOnlinePayments`](../../database/production/20261019015524_AddOnlinePayments). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0031](../adr/0031-online-payments.md)).
+
+- **La migración:**
+  - crea cuatro tablas: `OnlinePaymentAccounts` (la cuenta de Mercado Pago de cada negocio, con sus llaves cifradas; una por negocio), `OnlinePaymentAuthorizations` (cada conexión en curso, de diez minutos), `OnlineCheckouts` (cada cobro, con lo que se pidió hasta que se crea el pedido o vence; un pedido por cobro) y `OnlinePaymentRefunds` (cada devolución pedida a Mercado Pago; una por pago devuelto solo y una por reembolso del negocio);
+  - sus ocho restricciones (`CK_OnlineCheckouts_Amount`, `_Outcome`, `_Status`, `CK_OnlinePaymentAccounts_ProviderUserId`, `CK_OnlinePaymentRefunds_Amount`, `_Link`, `_Settled` y `_Status`) guardan las reglas del dominio;
+  - agrega `DailySalesSnapshots.OnlineAmount` (0 por omisión): lo cobrado en línea en el resumen diario.
+
+  No cambia ni borra nada existente. Después de aplicarla, el `verify.sql` muestra las tablas con sus índices y restricciones, y su consulta 3 cuenta las cuentas conectadas, los cobros y las devoluciones (ninguna hasta desplegar).
+- **Mientras se publica:** la versión de `master` (Fase 24H) no conoce las tablas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - `GET /api/v1/online-payments`, `POST /api/v1/online-payments/connect` y `/connect/complete`, `PUT /api/v1/online-payments/accepts-payments` y `DELETE /api/v1/online-payments/account` (dueño o administrador);
+  - `POST /api/v1/public/menu/{slug}/checkouts` (anónimo, con el límite de los pedidos del menú) y `POST /api/v1/public/menu/{slug}/checkouts/{checkoutId}/confirm` (anónimo, 30 por minuto por IP: cada consulta puede llegar a Mercado Pago);
+  - `POST /api/v1/payments/mercadopago/webhook` (el aviso de Mercado Pago, firmado; se guarda una vez por pago y petición);
+  - el método de pago `Online` (6), `paysOnline` en el menú público, `onlineStatus` y `onlineFailure` en cada reembolso, y `onlineCollected` en Inicio y en ventas por canal.
+
+  Nada se quita ni cambia de nombre.
+- **Sin configuración, nada cambia:** ninguna pantalla ofrece el pago en línea y Configuración › Pagos en línea dice que no está disponible. Para encenderlo:
+  1. **La aplicación de TienditApp en Mercado Pago** ([Tus integraciones](https://www.mercadopago.com.mx/developers/panel/app)), de tipo Checkout Pro, con la URL de redireccionamiento `{AppUrl}/settings/online-payments` y las notificaciones (webhooks) del evento «Pagos» en `{AppUrl}/api/v1/payments/mercadopago/webhook`.
+  2. **En el App Service** (*Configuration* → *Application settings*, o referencias a Key Vault; son secretos y no van en `appsettings.json`):
+     - `MercadoPago__ClientId` y `MercadoPago__ClientSecret`: los de esa aplicación;
+     - `MercadoPago__WebhookSecret`: la clave secreta de sus notificaciones. Sin ella el webhook responde 503, y con una firma que no coincide, 401;
+     - `SecretProtection__Key`: 32 bytes al azar en base64 (`openssl rand -base64 32`), con la que se cifran las llaves de cada negocio. Cambiarla deja todas las cuentas sin llave: cada negocio la conecta otra vez;
+     - `AppUrl`: la dirección pública de la app (la de los correos y el sitemap), por ejemplo `https://app.tienditapp.mx`. Mercado Pago regresa ahí al dueño y al cliente;
+     - `MercadoPago__Sandbox` = `true` solo para probar con cuentas de prueba de Mercado Pago, nunca en producción: en modo de pruebas no se conecta una cuenta real, ni una de prueba fuera de él.
+  3. **Los workers** (`BackgroundJobs__Enabled`): el barrido de cada dos minutos (`BackgroundJobs__OnlinePayments__IntervalMinutes`) resuelve los pagos que no avisaron, vence los cobros sin pago y renueva las llaves; las devoluciones salen de la cola. Con `BackgroundJobs__Enabled=false` (el slot de staging) los avisos se guardan en el inbox y se aplican cuando una instancia con workers los atiende.
+- **Registros HTTP de App Service:** la URL de regreso lleva el id del cobro y el pago de Mercado Pago, no datos del cliente; el enlace de seguimiento nunca va en una URL.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas. Un pedido ya pagado en línea conserva su pago «En línea», que esa versión muestra como un método sin nombre, y los cobros en curso quedan sin resolver hasta volver a la nueva (Mercado Pago deja de aceptar pagos de un cobro a los 30 minutos).
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50024, sin cambiar nada, en cuanto un cliente pagó en línea o empezó a hacerlo: perdería el registro de sus pagos y devoluciones. Sin cobros ni devoluciones, quita las tablas y la columna (las cuentas conectadas se pierden y cada negocio la conecta otra vez), y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

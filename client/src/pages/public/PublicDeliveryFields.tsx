@@ -43,6 +43,8 @@ interface PublicDeliveryFieldsProps {
   onSelectAddress?: (address: AccountAddress | null) => void;
   /** «Guardar en mi cuenta» for an address written now: absent for a visitor or a full account. */
   save?: SaveAddressChoice | null;
+  /** Paid online (Fase 24I): nothing is paid to the courier, so there is no «¿con cuánto pagas?». */
+  paidOnline?: boolean;
 }
 
 export interface SaveAddressChoice {
@@ -60,12 +62,12 @@ export interface SaveAddressChoice {
  */
 export default function PublicDeliveryFields({
   required, toAddress, onToAddressChange, address, onAddressChange, terms, checking, problem, pricesIncludeTax, total,
-  savedAddresses = [], selectedAddressId = null, onSelectAddress, save = null,
+  savedAddresses = [], selectedAddressId = null, onSelectAddress, save = null, paidOnline = false,
 }: PublicDeliveryFieldsProps) {
   const id = useId();
   const delivering = required || toAddress;
   const usingSaved = savedAddresses.some((saved) => saved.id === selectedAddressId);
-  const paysWithIssue = total === null ? '' : paysWithProblem(address.paysWith, total);
+  const paysWithIssue = total === null || paidOnline ? '' : paysWithProblem(address.paysWith, total);
   const bill = parsePaysWith(address.paysWith);
 
   return (
@@ -195,6 +197,8 @@ export default function PublicDeliveryFields({
               )}
             </>
           )}
+          {!paidOnline && (
+          <>
           <div className="col-6 col-sm-4">
             <label className="form-label small mb-1" htmlFor={`${id}-pays-with`}>¿Con cuánto pagas? (opcional)</label>
             <input
@@ -214,6 +218,8 @@ export default function PublicDeliveryFields({
               : typeof bill === 'number' && total !== null ? <>Tu cambio: <span className="ta-money">{formatMoney(changeFor(bill, total))}</span></>
               : <span className="text-muted">Si pagas en efectivo, el repartidor lleva tu cambio.</span>}
           </div>
+          </>
+          )}
           <div id={`${id}-quote`} className="col-12 small" role="status">
             {checking ? <span className="text-muted">Revisando si llegamos…</span>
               : problem ? <span className="text-danger">{problem}</span>

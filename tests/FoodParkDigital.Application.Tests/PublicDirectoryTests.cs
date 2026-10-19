@@ -71,7 +71,7 @@ public class PublicDirectoryTests
         // The same answer as the menu of each one.
         foreach (var business in listed)
         {
-            var menu = await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            var menu = await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off)
                 .Handle(new GetPublicMenuQuery(business.Slug), CancellationToken.None);
             Assert.True((menu!.AcceptsOrders, menu.OrdersPaused) == (business.AcceptsOrders, business.OrdersPaused), business.Slug);
         }

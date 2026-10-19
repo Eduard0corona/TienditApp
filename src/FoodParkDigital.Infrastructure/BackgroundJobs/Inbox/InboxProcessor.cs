@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Infrastructure.OnlinePayments;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -97,6 +98,9 @@ public sealed class InboxProcessor
         return claimed;
     }
 
+    private static string? Describe(WhatsAppWebhookOutcome outcome)
+        => outcome.FailedItems > 0 ? $"{outcome.FailedItems} message(s) or status batches could not be stored." : null;
+
     private async Task ProcessAsync(InboxMessage message, CancellationToken cancellationToken)
     {
         string? failure;
@@ -105,15 +109,14 @@ public sealed class InboxProcessor
             // No business yet: the processor finds it from the delivery and works in that business's scope.
             await using var scope = _scopeFactory.CreateSystemScope(WebhookActor);
             var services = scope.ServiceProvider;
-            var outcome = message.Source switch
+            failure = message.Source switch
             {
-                WebhookSources.WhatsApp => await services.GetRequiredService<WhatsAppWebhookProcessor>()
+                WebhookSources.WhatsApp => Describe(await services.GetRequiredService<WhatsAppWebhookProcessor>()
+                    .ProcessAsync(message.Payload, cancellationToken)),
+                WebhookSources.MercadoPago => await services.GetRequiredService<MercadoPagoWebhookProcessor>()
                     .ProcessAsync(message.Payload, cancellationToken),
                 _ => throw new InvalidOperationException($"Unknown webhook source '{message.Source}'.")
             };
-            failure = outcome.FailedItems > 0
-                ? $"{outcome.FailedItems} message(s) or status batches could not be stored."
-                : null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

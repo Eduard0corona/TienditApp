@@ -177,7 +177,7 @@ public class DailySalesReadModelTests
         Assert.Equal(
             figures.PaymentsAmount,
             figures.CashAmount + figures.CardAmount + figures.TransferAmount + figures.WalletAmount + figures.OtherAmount
-                + figures.PlatformAmount);
+                + figures.PlatformAmount + figures.OnlineAmount);
         var expectedBucket = method switch
         {
             OrderPaymentMethod.Cash => figures.CashAmount,
@@ -185,11 +185,14 @@ public class DailySalesReadModelTests
             OrderPaymentMethod.Transfer => figures.TransferAmount,
             OrderPaymentMethod.DigitalWallet => figures.WalletAmount,
             OrderPaymentMethod.Platform => figures.PlatformAmount,
+            OrderPaymentMethod.Online => figures.OnlineAmount,
             _ => figures.OtherAmount
         };
         Assert.Equal(245m, expectedBucket);
         if (method != OrderPaymentMethod.Platform)
             Assert.Equal(0m, figures.PlatformAmount);
+        if (method != OrderPaymentMethod.Online)
+            Assert.Equal(0m, figures.OnlineAmount);
     }
 
     private static TimeOnly PaymentAt(int hour, int minute = 0) => new(hour, minute);
@@ -225,17 +228,23 @@ public class DailySalesReadModelTests
         var at = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(time), Mexico), TimeSpan.Zero);
         var branch = await fixture.DefaultBranchAsync();
         var isPlatform = method == OrderPaymentMethod.Platform;
+        var isOnline = method == OrderPaymentMethod.Online;
         var number = await fixture.Context.Orders.CountAsync() + 1;
+        var channel = isPlatform ? OrderChannel.Rappi : isOnline ? OrderChannel.Online : OrderChannel.Counter;
         var order = new Order(
             tenant.Id, null, null, true, $"ORD-{number:000000}", BusinessType.Food, OrderType.Retail, "Público en general",
-            null, null, null, pricesIncludeTax: true, channel: isPlatform ? OrderChannel.Rappi : OrderChannel.Counter,
-            branchId: branch.Id);
+            null, null, null, pricesIncludeTax: true, channel: channel, branchId: branch.Id);
         order.AddItem(Guid.NewGuid(), "Paquete", 1, amount);
         if (isPlatform)
         {
             var setting = new DeliveryPlatformSetting(tenant.Id, OrderChannel.Rappi, isActive: true, PlatformTerms.WithFiscalDefaults(30m));
             fixture.Context.DeliveryPlatformSettings.Add(setting);
             order.RegisterPlatformOrder(setting, PlatformOrderNumber.From($"R{number}"), PlatformCollectedBy.Platform, at, null);
+        }
+        else if (isOnline)
+        {
+            // Paid online through the business's Mercado Pago before the order existed (Fase 24I).
+            order.RegisterOnlinePayment($"{number}", at, null);
         }
         else
         {

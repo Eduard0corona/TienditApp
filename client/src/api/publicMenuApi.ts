@@ -13,6 +13,9 @@ export type PublicBookingSlot = Schemas['PublicBookingSlotDto'];
 export type RequestPublicAppointment = Schemas['RequestPublicAppointmentRequest'];
 export type PublicAppointmentReceipt = Schemas['PublicAppointmentReceiptDto'];
 export type CustomerAppointment = Schemas['CustomerAppointmentDto'];
+export type CreateOnlineCheckout = Schemas['CreateOnlineCheckoutRequest'];
+export type OnlineCheckoutStarted = Schemas['OnlineCheckoutStartedDto'];
+export type OnlineCheckoutStatus = Schemas['OnlineCheckoutStatusDto'];
 
 /** The public menu of a business: no sign-in. */
 export const publicMenuApi = {
@@ -26,6 +29,20 @@ export const publicMenuApi = {
 
   placeOrder: (slug: string, body: PlacePublicOrder) =>
     apiRequest('post', '/api/v1/public/menu/{slug}/orders', { path: { slug }, body }),
+
+  /**
+   * Pays the order online (Fase 24I): the server prices it and answers Mercado Pago's page, where the customer pays within
+   * 30 minutes. The order is placed when the payment is approved.
+   */
+  startOnlineCheckout: (slug: string, body: CreateOnlineCheckout) =>
+    apiRequest('post', '/api/v1/public/menu/{slug}/checkouts', { path: { slug }, body }),
+
+  /**
+   * How an online payment stands after asking Mercado Pago. The return key goes in the body: without it the order's
+   * tracking link is not answered (the checkout's id travels in the return URL, which server telemetry keeps).
+   */
+  confirmOnlineCheckout: (slug: string, checkoutId: string, body: { paymentId?: string | null; returnKey?: string | null }, signal?: AbortSignal) =>
+    apiRequest('post', '/api/v1/public/menu/{slug}/checkouts/{checkoutId}/confirm', { path: { slug, checkoutId }, body, signal }),
 
   /**
    * An online order followed with the link of its receipt (Fase 24C): the link goes in the body, never in the URL, so no

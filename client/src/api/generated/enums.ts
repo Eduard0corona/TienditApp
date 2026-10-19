@@ -199,12 +199,27 @@ export const MyOrdersScope = {
 } as const;
 export type MyOrdersScope = (typeof MyOrdersScope)[keyof typeof MyOrdersScope];
 
+export const OnlineCheckoutStatus = {
+  AwaitingPayment: 0,
+  Placed: 1,
+  Expired: 2,
+  NotPlaced: 3,
+} as const;
+export type OnlineCheckoutStatus = (typeof OnlineCheckoutStatus)[keyof typeof OnlineCheckoutStatus];
+
 export const OnlineMenuMode = {
   Off: 0,
   MenuOnly: 1,
   Orders: 2,
 } as const;
 export type OnlineMenuMode = (typeof OnlineMenuMode)[keyof typeof OnlineMenuMode];
+
+export const OnlinePaymentRefundStatus = {
+  Requested: 0,
+  Completed: 1,
+  Failed: 2,
+} as const;
+export type OnlinePaymentRefundStatus = (typeof OnlinePaymentRefundStatus)[keyof typeof OnlinePaymentRefundStatus];
 
 export const OptOutSource = {
   CustomerKeyword: 0,
@@ -236,6 +251,7 @@ export const OrderPaymentMethod = {
   DigitalWallet: 3,
   Other: 4,
   Platform: 5,
+  Online: 6,
 } as const;
 export type OrderPaymentMethod = (typeof OrderPaymentMethod)[keyof typeof OrderPaymentMethod];
 

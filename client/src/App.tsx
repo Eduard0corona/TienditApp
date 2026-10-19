@@ -33,6 +33,7 @@ const ServiceBoard = lazy(() => import('./pages/services/ServiceBoard'));
 const InventoryManagement = lazy(() => import('./pages/inventory/InventoryManagement'));
 const BranchesList = lazy(() => import('./pages/branches/BranchesList'));
 const DeliveryZones = lazy(() => import('./pages/settings/DeliveryZones'));
+const OnlinePayments = lazy(() => import('./pages/settings/OnlinePayments'));
 const SuppliersList = lazy(() => import('./pages/suppliers/SuppliersList'));
 const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersList'));
 const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
@@ -51,6 +52,7 @@ const SellPage = lazy(() => import('./pages/sell/SellPage'));
 const TablesPage = lazy(() => import('./pages/tables/TablesPage'));
 const PublicMenuPage = lazy(() => import('./pages/public/PublicMenuPage'));
 const PublicBookingPage = lazy(() => import('./pages/public/PublicBookingPage'));
+const OnlinePaymentReturnPage = lazy(() => import('./pages/public/OnlinePaymentReturnPage'));
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
 const CampaignsPage = lazy(() => import('./pages/campaigns/CampaignsPage'));
@@ -91,6 +93,8 @@ export default function App() {
             <Route path="/m/:slug" element={<PublicMenuPage />} />
             {/* Its booking page (Fase 24D): a service, a day and a free time, without signing in. */}
             <Route path="/m/:slug/agendar" element={<PublicBookingPage />} />
+            {/* Where Mercado Pago sends the customer back after paying an order online (Fase 24I). */}
+            <Route path="/m/:slug/pago/:checkoutId" element={<OnlinePaymentReturnPage />} />
 
             {/* The customer's screens: Explorar (no sign-in), and the orders, appointments and account of a customer account. */}
             <Route element={<CustomerLayout />}>
@@ -236,6 +240,14 @@ export default function App() {
                 element={(
                   <AccessRoute area="businessSettings">
                     <DeliveryZones />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/settings/online-payments"
+                element={(
+                  <AccessRoute area="businessSettings">
+                    <OnlinePayments />
                   </AccessRoute>
                 )}
               />

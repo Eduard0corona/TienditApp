@@ -97,7 +97,10 @@ public static partial class SatCatalog
     /// <summary>c_FormaPago "Por definir": the form of a sale paid in installments (PPD).</summary>
     public const string PaymentFormToBeDefined = "99";
 
-    /// <summary>c_FormaPago "Intermediario pagos": what a delivery platform charged in its app and settles later.</summary>
+    /// <summary>
+    /// c_FormaPago "Intermediario pagos": what a delivery platform charged in its app and settles later, and what the
+    /// customer paid online through the business's payment gateway (Mercado Pago).
+    /// </summary>
     public const string PaymentFormIntermediary = "31";
 
     /// <summary>c_FormaPago of a payment method. Cards are declared as credit cards (04).</summary>
@@ -107,7 +110,7 @@ public static partial class SatCatalog
         OrderPaymentMethod.Transfer => "03",
         OrderPaymentMethod.Card => "04",
         OrderPaymentMethod.DigitalWallet => "06",
-        OrderPaymentMethod.Platform => PaymentFormIntermediary,
+        OrderPaymentMethod.Platform or OrderPaymentMethod.Online => PaymentFormIntermediary,
         _ => PaymentFormToBeDefined
     };
 }

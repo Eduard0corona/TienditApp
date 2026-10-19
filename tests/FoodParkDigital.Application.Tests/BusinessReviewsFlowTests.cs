@@ -356,7 +356,7 @@ public class BusinessReviewsFlowTests
         => new GetPublicReviewsQueryHandler(fixture.Context, fixture.TenantService).Handle(new GetPublicReviewsQuery(slug, page), CancellationToken.None);
 
     private static Task<PublicMenuDto?> MenuAsync(SalesTestFixture fixture, string slug)
-        => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock).Handle(new GetPublicMenuQuery(slug), CancellationToken.None);
+        => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off).Handle(new GetPublicMenuQuery(slug), CancellationToken.None);
 
     private static Task<PublicDirectoryDto> DirectoryAsync(SalesTestFixture fixture)
         => new GetPublicDirectoryQueryHandler(

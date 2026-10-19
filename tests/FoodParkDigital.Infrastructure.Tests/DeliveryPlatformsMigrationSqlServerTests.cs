@@ -144,7 +144,7 @@ public class DeliveryPlatformsMigrationSqlServerTests
 
         // Forward again (to this migration; later ones apply on top): the tables start empty and the stored day takes 0.
         await MigrateAsync(database, Migration);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeOnlinePayments.CreateContext(database, tenant.Id))
         {
             Assert.Empty(await context.DeliveryPlatformSettings.ToListAsync());
             Assert.Empty(await context.PlatformOrderDetails.ToListAsync());
@@ -159,7 +159,8 @@ public class DeliveryPlatformsMigrationSqlServerTests
         Assert.Equal(50008, error.Number);
         Assert.Contains("delivery platform orders or payments", error.Message);
 
-        await using var context = database.CreateContext(tenantId);
+        // The rollback undid every migration after this one before it stopped: read with the model of that time.
+        await using var context = BeforeOnlinePayments.CreateContext(database, tenantId);
         Assert.Equal(Migration, await LatestMigrationAsync(context));
         Assert.Equal(2, await CountAsync(context, $"""
             SELECT COUNT(*) AS [Value] FROM sys.objects WHERE [name] IN (N'PlatformOrderDetails', N'DeliveryPlatformSettings')

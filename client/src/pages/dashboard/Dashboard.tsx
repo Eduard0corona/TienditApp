@@ -102,6 +102,7 @@ export default function Dashboard() {
   const doneSetupSteps = SETUP_STEPS.length - pendingSetupSteps.length;
   const value = (amount: number | undefined) => (loading ? '—' : formatMoney(amount ?? 0));
   const platformCollected = metrics?.platformCollected ?? 0;
+  const onlineCollected = metrics?.onlineCollected ?? 0;
   const count = (amount: number | undefined) => (loading ? '—' : String(amount ?? 0));
   const topSellers = metrics?.topSellingItems ?? [];
   // A column that says "Producto" on every row tells nothing: the type shows only when products and services mix.
@@ -216,6 +217,10 @@ export default function Dashboard() {
               {/* Charged in the delivery platforms' apps: in "Cobrado", but in no drawer (each platform deposits it). */}
               {!loading && platformCollected > 0 && (
                 <div className="small text-muted">Incluye {formatMoney(platformCollected)} que cobraron las plataformas; no entra a la caja.</div>
+              )}
+              {/* Paid online in Mercado Pago (Fase 24I): in "Cobrado", in the business's Mercado Pago account. */}
+              {!loading && onlineCollected > 0 && (
+                <div className="small text-muted">Incluye {formatMoney(onlineCollected)} pagado en línea; está en tu cuenta de Mercado Pago.</div>
               )}
             </div>
           </div>

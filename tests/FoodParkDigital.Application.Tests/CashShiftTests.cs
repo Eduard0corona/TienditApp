@@ -337,7 +337,7 @@ public class CashShiftTests
         Assert.Equal(255m, cut.SalesPaymentsTotal);
         Assert.Equal(
             cut.SalesPaymentsTotal,
-            cut.CashTotal + cut.CardTotal + cut.TransferTotal + cut.WalletTotal + cut.OtherTotal + cut.PlatformTotal);
+            cut.CashTotal + cut.CardTotal + cut.TransferTotal + cut.WalletTotal + cut.OtherTotal + cut.PlatformTotal + cut.OnlineTotal);
         var bucket = method switch
         {
             OrderPaymentMethod.Cash => cut.CashTotal,
@@ -345,9 +345,28 @@ public class CashShiftTests
             OrderPaymentMethod.Transfer => cut.TransferTotal,
             OrderPaymentMethod.DigitalWallet => cut.WalletTotal,
             OrderPaymentMethod.Platform => cut.PlatformTotal,
+            OrderPaymentMethod.Online => cut.OnlineTotal,
             _ => cut.OtherTotal
         };
         Assert.Equal(245m, bucket);
+    }
+
+    [Fact]
+    public async Task DailyCut_ShouldShowWhatWasPaidOnlineApart_OutOfTheCashiersAndOfTheMoneyOfTheDay()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Cash, 100m, takenBy: "ana");
+        // Paid online into the business's Mercado Pago: nobody took it at a counter.
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Online, 235.50m);
+
+        var cut = await CutAsync(fixture);
+
+        Assert.Equal((335.50m, 235.50m, 1), (cut.SalesPaymentsTotal, cut.OnlineTotal, cut.OnlinePaymentsCount));
+        Assert.Equal([("ana", 1, 100m)], cut.ByUser.Select(u => (u.UserName, u.PaymentsCount, u.TotalAmount)));
+        // Mercado Pago releases it later, minus its fee: it is not money of the day.
+        Assert.Equal(100m, cut.NetCashFlow);
+        Assert.Equal(100m, cut.NetCashOnlyFlow);
     }
 
     [Fact]
@@ -517,17 +536,23 @@ public class CashShiftTests
         var branch = await fixture.DefaultBranchAsync();
         var location = await fixture.Context.InventoryLocations.Where(l => l.BranchId == branch.Id).Select(l => l.Id).SingleAsync();
         var isPlatform = method == OrderPaymentMethod.Platform;
+        var isOnline = method == OrderPaymentMethod.Online;
         var number = await fixture.Context.Orders.CountAsync() + 1;
+        var channel = isPlatform ? OrderChannel.Rappi : isOnline ? OrderChannel.Online : OrderChannel.Counter;
         var order = new Order(
             tenant.Id, null, null, true, $"ORD-{number:000000}", BusinessType.Food, OrderType.Retail, "Público en general",
-            null, null, null, pricesIncludeTax: true, channel: isPlatform ? OrderChannel.Rappi : OrderChannel.Counter,
-            branchId: branch.Id);
+            null, null, null, pricesIncludeTax: true, channel: channel, branchId: branch.Id);
         order.AddItem(Guid.NewGuid(), "Paquete", 1, amount);
         if (isPlatform)
         {
             var setting = await fixture.Context.DeliveryPlatformSettings.FirstOrDefaultAsync()
                 ?? await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
             order.RegisterPlatformOrder(setting, PlatformOrderNumber.From($"R{number}"), PlatformCollectedBy.Platform, SalesTestFixture.Now, location);
+        }
+        else if (isOnline)
+        {
+            // Paid online through the business's Mercado Pago before the order existed (Fase 24I).
+            order.RegisterOnlinePayment($"{number}", SalesTestFixture.Now, location);
         }
         else
         {

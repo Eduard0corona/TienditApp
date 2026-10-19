@@ -83,7 +83,7 @@ function halfEven(numerator: number, denominator: number) {
  * would not match the cart. Here the folio follows the demo's last one and each line keeps its options. An order of a
  * delivery platform charges the prices set in its app, where there are, as Vender showed them.
  */
-function createSale(data: DemoData, body: SaleRequest) {
+export function createSale(data: DemoData, body: SaleRequest) {
   data.vpSales = (data.vpSales ?? 0) + 1;
   const orderNumber = `ORD-${String(348 + data.vpSales).padStart(6, '0')}`;
   const id = `venta-${orderNumber.toLowerCase()}`;

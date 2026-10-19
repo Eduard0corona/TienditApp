@@ -16,6 +16,17 @@ public sealed class BackgroundJobOptions
     public MessagingOptions Messaging { get; set; } = new();
     public SalesSnapshotOptions SalesSnapshots { get; set; } = new();
     public SubscriptionOptions Subscriptions { get; set; } = new();
+    public OnlinePaymentOptions OnlinePayments { get; set; } = new();
+
+    /// <summary>The sweep of online payments in course and the renewal of the Mercado Pago keys (Fase 24I).</summary>
+    public sealed class OnlinePaymentOptions
+    {
+        /// <summary>How often the payments the notification and the customer's return have not settled are looked up.</summary>
+        public int IntervalMinutes { get; set; } = 2;
+
+        /// <summary>Businesses swept on each pass.</summary>
+        public int MaxBusinessesPerPass { get; set; } = 200;
+    }
 
     /// <summary>Billing dates applied to the businesses (past due, suspended).</summary>
     public sealed class SubscriptionOptions

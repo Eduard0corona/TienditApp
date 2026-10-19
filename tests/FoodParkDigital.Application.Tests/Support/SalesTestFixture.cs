@@ -11,6 +11,7 @@ using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Platforms;
+using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -205,6 +206,18 @@ internal sealed class SalesDbContext : ApplicationDbContext
             .IsRequired(false)
             .ValueGeneratedNever();
         modelBuilder.Entity<BusinessReview>()
+            .Property(r => r.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<OnlinePaymentAccount>()
+            .Property(a => a.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<OnlineCheckout>()
+            .Property(c => c.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<OnlinePaymentRefund>()
             .Property(r => r.Version)
             .IsRequired(false)
             .ValueGeneratedNever();

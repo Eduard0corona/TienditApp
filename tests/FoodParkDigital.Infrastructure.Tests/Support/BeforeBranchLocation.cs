@@ -7,8 +7,9 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 /// <summary>
-/// The model without what Fase 24G added (where each branch is on the map): the app as deployed before it, and what a
-/// test needs to seed or read branches on a database migrated to an earlier migration, where the columns do not exist yet.
+/// The model without what Fase 24G added (where each branch is on the map), nor what came after it: the app as deployed
+/// before it, and what a test needs to seed or read branches on a database migrated to an earlier migration, where the
+/// columns do not exist yet.
 /// </summary>
 internal static class BeforeBranchLocation
 {
@@ -20,6 +21,7 @@ internal static class BeforeBranchLocation
     {
         modelBuilder.Entity<Branch>().Ignore(b => b.Latitude);
         modelBuilder.Entity<Branch>().Ignore(b => b.Longitude);
+        BeforeOnlinePayments.Ignore(modelBuilder);
     }
 
     private sealed class Context(

@@ -160,34 +160,44 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
         // Every method that has no bucket of its own, so the buckets always add up to what was charged.
         var otherTotal = paymentRows
             .Where(x => x.Method is not (OrderPaymentMethod.Cash or OrderPaymentMethod.Card or OrderPaymentMethod.Transfer
-                or OrderPaymentMethod.DigitalWallet or OrderPaymentMethod.Platform))
+                or OrderPaymentMethod.DigitalWallet or OrderPaymentMethod.Platform or OrderPaymentMethod.Online))
             .Sum(x => x.Amount);
         var platformRows = paymentRows
             .Where(x => x.Method == OrderPaymentMethod.Platform)
             .ToList();
         var platformTotal = platformRows.Sum(x => x.Amount);
+        var onlineRows = paymentRows
+            .Where(x => x.Method == OrderPaymentMethod.Online)
+            .ToList();
+        var onlineTotal = onlineRows.Sum(x => x.Amount);
 
-        // What went back as «Plataforma» (an order a platform charged and then cancelled): it never left a drawer and
-        // has no cash movement, so it is shown apart, with the filters of the payments.
-        var platformRefunds = _context.OrderRefunds
-            .AsNoTracking()
-            .Where(x => x.Method == OrderPaymentMethod.Platform && x.RefundedAt >= startUtc && x.RefundedAt <= endUtc);
-
-        if (request.InventoryLocationId is { } refundLocationId)
+        // What went back as «Plataforma» (an order a platform charged and then cancelled) or «En línea» (through Mercado
+        // Pago): it never left a drawer and has no cash movement, so it is shown apart, with the filters of the payments.
+        async Task<decimal> RefundsOutsideTheDrawersAsync(OrderPaymentMethod method)
         {
-            platformRefunds = platformRefunds.Where(x => _context.OrderPayments.Any(payment =>
-                payment.OrderId == x.OrderId
-                && payment.Method == OrderPaymentMethod.Platform
-                && payment.InventoryLocationId == refundLocationId));
+            var refunds = _context.OrderRefunds
+                .AsNoTracking()
+                .Where(x => x.Method == method && x.RefundedAt >= startUtc && x.RefundedAt <= endUtc);
+
+            if (request.InventoryLocationId is { } refundLocationId)
+            {
+                refunds = refunds.Where(x => _context.OrderPayments.Any(payment =>
+                    payment.OrderId == x.OrderId
+                    && payment.Method == method
+                    && payment.InventoryLocationId == refundLocationId));
+            }
+
+            if (request.BranchId is { } refundBranchId)
+                refunds = refunds.Where(x => _context.Orders.Any(order => order.Id == x.OrderId && order.BranchId == refundBranchId));
+
+            if (!string.IsNullOrWhiteSpace(userNameFilter))
+                refunds = refunds.Where(x => x.RefundedBy == userNameFilter || (userCalled != null && x.RefundedBy == userCalled));
+
+            return await refunds.SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
         }
 
-        if (request.BranchId is { } refundBranchId)
-            platformRefunds = platformRefunds.Where(x => _context.Orders.Any(order => order.Id == x.OrderId && order.BranchId == refundBranchId));
-
-        if (!string.IsNullOrWhiteSpace(userNameFilter))
-            platformRefunds = platformRefunds.Where(x => x.RefundedBy == userNameFilter || (userCalled != null && x.RefundedBy == userCalled));
-
-        var platformRefundsTotal = await platformRefunds.SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        var platformRefundsTotal = await RefundsOutsideTheDrawersAsync(OrderPaymentMethod.Platform);
+        var onlineRefundsTotal = await RefundsOutsideTheDrawersAsync(OrderPaymentMethod.Online);
 
         var manualTransactions = _context.CashTransactions
             .AsNoTracking()
@@ -234,9 +244,10 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
         // Tips are not sales, but they are money received: in the drawer when paid in cash.
         var tipsTotal = paymentRows.Sum(x => x.Tip);
         var cashTipsTotal = paymentRows.Where(x => x.Method == OrderPaymentMethod.Cash).Sum(x => x.Tip);
-        // The business has not received what a platform charged (it deposits it later, minus its commission), and its
-        // refunds move no drawer either: both stay out, so the money of the day stays symmetric.
-        var netCashFlow = salesPaymentsTotal - platformTotal + tipsTotal + manualIncomeTotal - manualExpenseTotal;
+        // The business has not received what a platform charged (it deposits it later, minus its commission) nor what was
+        // paid online (Mercado Pago releases it, minus its fee), and their refunds move no drawer either: all stay out, so
+        // the money of the day stays symmetric.
+        var netCashFlow = salesPaymentsTotal - platformTotal - onlineTotal + tipsTotal + manualIncomeTotal - manualExpenseTotal;
         var netCashOnlyFlow = cashTotal + cashTipsTotal + cashManualIncomeTotal - cashManualExpenseTotal;
 
         return new DailyCashCutDto
@@ -252,6 +263,9 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             PlatformTotal = platformTotal,
             PlatformPaymentsCount = platformRows.Count,
             PlatformRefundsTotal = platformRefundsTotal,
+            OnlineTotal = onlineTotal,
+            OnlinePaymentsCount = onlineRows.Count,
+            OnlineRefundsTotal = onlineRefundsTotal,
             TipsTotal = tipsTotal,
             CashTipsTotal = cashTipsTotal,
             ManualIncomeTotal = manualIncomeTotal,

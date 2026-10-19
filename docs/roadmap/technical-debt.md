@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-18 con la Fase 24H y antes con la 24G, la 24F, la 24D-2, la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-19 con la Fase 24I y antes con la 24H, la 24G, la 24F, la 24D-2, la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -131,6 +131,20 @@ Actualizada el 2026-10-18 con la Fase 24H y antes con la 24G, la 24F, la 24D-2, 
   - **El contrato pierde que una referencia puede ser null** (`review` de `MyReviewOfBusinessDto`): el cliente lo corrige a mano en `reviewsApi.ts`, como `card` de los favoritos.
   - **Sin fotos ni calificación por producto.**
   - La 24H suma 406 B a la primera visita (de 178,116 a 178,522 B) y sube el presupuesto a 178,600 B: las dos rutas, su menú, el área de acceso y los enums de reseñas.
+- Pago en línea con Mercado Pago (Fase 24I, [ADR 0031](../adr/0031-online-payments.md)):
+  - **Lo que pasa en Mercado Pago no regresa solo:** un contracargo, o una devolución que el negocio hace desde su cuenta de Mercado Pago, no se refleja en el pedido. TienditApp solo sabe de los pagos que aplica y de las devoluciones que pide. Escuchar esos avisos (`chargebacks`, pagos `refunded`) y registrar una devolución que llegó de fuera es lo siguiente natural.
+  - **Una devolución rechazada no se reintenta:** queda en el pedido y en Configuración › Pagos en línea para que el negocio la haga en Mercado Pago. Nadie le avisa por WhatsApp ni correo.
+  - **La comisión de Mercado Pago no se ve:** los informes dicen lo cobrado en línea, no el neto que llega a la cuenta del negocio.
+  - **Solo Mercado Pago, solo pesos y solo pagos al momento:** sin OXXO, transferencias, meses ni otra pasarela. La interfaz (`IOnlinePaymentGateway`) es de Mercado Pago; otra pasarela necesitaría su propia cuenta, llaves y aviso.
+  - **Un aviso perdido** espera al barrido (cada dos minutos, y deja a cada cobro dos minutos para su aviso); con muchos negocios conectados, el barrido revisa hasta 200 por pasada, primero los de cobros que llevan más tiempo esperando.
+  - **Un cobro que falla de forma inesperada** en el barrido (no Mercado Pago sin responder ni una llave rechazada, que tienen su camino) se registra como error y se deja como está, porque pudo pagarse: queda «en curso» y la cuenta no cambia hasta que alguien lo revise.
+  - **Una llave rechazada** deja los cobros en curso sin poder leerlos. Los que llegaron a Mercado Pago esperan hasta un día a que la cuenta se conecte otra vez; si no vuelve, vencen sin leerse, y un pago aprobado justo antes de que el dueño quitara el acceso no se aplica ni se devuelve solo (el negocio lo ve en su cuenta de Mercado Pago). Si la cuenta vuelve dentro de ese día, el pago aprobado a tiempo crea el pedido aunque sea tarde, como después de una caída de Mercado Pago; el negocio decide si lo prepara o lo devuelve.
+  - **La llave de cifrado no rota:** cambiar `SecretProtection:Key` deja todas las cuentas sin llave y cada negocio la conecta otra vez. Rotarla pediría guardar con qué llave se cifró cada una.
+  - **El enlace de seguimiento** solo aparece en el dispositivo que empezó el pago (la llave vive en su `localStorage`); en otro, el cliente lo recibe por WhatsApp o en Mis pedidos.
+  - **El regreso pregunta cada 4 s** con un límite de 30 por minuto por IP: varias personas detrás de la misma IP pagando a la vez podrían llegar a él; el barrido y el aviso crean el pedido de todos modos.
+  - **El aviso de Mercado Pago** se firma solo sobre el id del pago: de lo demás solo se usa la cuenta que menciona, para saber qué negocios probar, y todo se lee de Mercado Pago. El inbox guarda cada aviso una vez por pago y petición firmados; la hora de la firma no se revisa (Mercado Pago reintenta avisos), así que un aviso capturado puede repetirse con otro id de petición solo si viene firmado.
+  - **La carrera de dos pagos del mismo cobro** se resuelve con el índice único de las devoluciones y un reintento; no hay una prueba de concurrencia real sobre SQL Server, solo las vías una tras otra.
+  - La 24I suma 226 B a la primera visita (de 178,522 a 178,748 B) y sube el presupuesto a 178,800 B: las dos rutas, su entrada en el menú y el método «En línea».
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

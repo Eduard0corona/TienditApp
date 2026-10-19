@@ -380,7 +380,7 @@ public class OpeningHoursFlowTests
         => new(fixture.Context, fixture.CurrentUser, fixture.TenantService);
 
     private static GetPublicMenuQueryHandler MenuHandler(SalesTestFixture fixture)
-        => new(fixture.Context, fixture.TenantService, fixture.Clock);
+        => new(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off);
 
     private static PlacePublicOrderCommandHandler OrderHandler(SalesTestFixture fixture)
     {

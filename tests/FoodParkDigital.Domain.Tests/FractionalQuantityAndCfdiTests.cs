@@ -250,6 +250,8 @@ public class FractionalQuantityAndCfdiTests
     [InlineData(OrderPaymentMethod.Other, SatCatalog.PaymentFormToBeDefined)]
     // What Rappi, Uber Eats or DiDi Food charged in their app: "Intermediario pagos".
     [InlineData(OrderPaymentMethod.Platform, "31")]
+    // What the customer paid online through the business's Mercado Pago: "Intermediario pagos" too (Fase 24I).
+    [InlineData(OrderPaymentMethod.Online, "31")]
     public void PaymentForm_ShouldDeclareEachMethodWithItsSatCode(OrderPaymentMethod method, string expected)
     {
         Assert.Equal(expected, SatCatalog.PaymentForm(method));

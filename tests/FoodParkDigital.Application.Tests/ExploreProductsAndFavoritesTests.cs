@@ -139,7 +139,7 @@ public class ExploreProductsAndFavoritesTests
         await fixture.Context.SaveChangesAsync();
 
         var found = await SearchAsync(fixture, "tornillo");
-        var menu = await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+        var menu = await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off)
             .Handle(new GetPublicMenuQuery("ferre-sol"), CancellationToken.None);
 
         var shown = menu!.Categories.SelectMany(c => c.Products).Select(p => p.Name).ToList();

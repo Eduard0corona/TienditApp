@@ -129,9 +129,12 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
     {
         if (Status != CashSessionStatus.Open)
             throw new DomainException("No se pueden registrar movimientos en una caja cerrada.");
-        // What a delivery platform charged in its app is settled by the platform: it never was in a drawer.
+        // What a delivery platform charged in its app is settled by the platform, and what the customer paid online is in
+        // the business's Mercado Pago account: neither ever was in a drawer.
         if (paymentMethod is { } method && !OrderPaymentMethodRules.EntersADrawer(method))
-            throw new DomainException(OrderPaymentMethodRules.NeverEntersADrawerMessage);
+            throw new DomainException(method == OrderPaymentMethod.Online
+                ? OrderPaymentMethodRules.OnlineNeverEntersADrawerMessage
+                : OrderPaymentMethodRules.NeverEntersADrawerMessage);
 
         var transaction = new CashTransaction(
             tenantId: TenantId,

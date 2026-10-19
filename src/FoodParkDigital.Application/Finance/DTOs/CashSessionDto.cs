@@ -85,6 +85,14 @@ public class DailyCashCutDto
     public int PlatformPaymentsCount { get; set; }
     /// <summary>What went back as «Plataforma» in the day (orders a platform charged and then cancelled): no drawer gave it.</summary>
     public decimal PlatformRefundsTotal { get; set; }
+    /// <summary>
+    /// What customers paid online into the business's Mercado Pago account («En línea» payments, Fase 24I): part of what
+    /// was charged, but in no drawer and in no cashier's row. Mercado Pago releases it to the business, minus its fee.
+    /// </summary>
+    public decimal OnlineTotal { get; set; }
+    public int OnlinePaymentsCount { get; set; }
+    /// <summary>What went back «En línea» in the day, through Mercado Pago: no drawer gave it.</summary>
+    public decimal OnlineRefundsTotal { get; set; }
     /// <summary>Tips given with the payments (not sales), and the part of them paid in cash (in the drawer).</summary>
     public decimal TipsTotal { get; set; }
     public decimal CashTipsTotal { get; set; }
@@ -96,7 +104,8 @@ public class DailyCashCutDto
     public decimal CashManualExpenseTotal { get; set; }
     /// <summary>
     /// All the money the business received in the day: payments and tips plus manual income minus manual expenses, of any
-    /// method, except what the platforms charged (<see cref="PlatformTotal"/>).
+    /// method, except what the platforms charged (<see cref="PlatformTotal"/>) and what was paid online
+    /// (<see cref="OnlineTotal"/>), which reach the business later and minus a fee.
     /// </summary>
     public decimal NetCashFlow { get; set; }
     /// <summary>Cash payments and cash tips plus cash manual income minus cash manual expenses: the net change of the drawers.</summary>

@@ -63,8 +63,9 @@ builder.AddObservability();
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
 builder.Services.AddScoped<IWhatsAppNotificationService, WhatsAppNotificationService>();
 
-// WhatsApp webhook signature verification (fails closed without WhatsApp:AppSecret)
+// Webhook signature verification (fails closed without WhatsApp:AppSecret or MercadoPago:WebhookSecret)
 builder.Services.AddSingleton<WhatsAppWebhookSignatureVerifier>();
+builder.Services.AddSingleton<MercadoPagoWebhookSignatureVerifier>();
 
 // Rate Limiting
 builder.Services.AddRateLimiter(options =>
@@ -119,6 +120,17 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = isDev ? 600 : 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+    // The return page of an online payment asks how it stands while Mercado Pago confirms it (Fase 24I): each ask may
+    // reach Mercado Pago.
+    options.AddPolicy("online-payment-status", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 300 : 30,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));

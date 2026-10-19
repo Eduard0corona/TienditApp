@@ -43,6 +43,9 @@ public class AddOrderPaymentCommandValidator : AbstractValidator<AddOrderPayment
         // What a delivery platform charged is recorded by its order when it is created, for the total.
         RuleFor(x => x.Method).NotEqual(OrderPaymentMethod.Platform)
             .WithMessage(OrderPaymentMethodRules.PlatformOnlyOnCreationMessage);
+        // What the customer paid online is recorded when the payment places the order (Fase 24I).
+        RuleFor(x => x.Method).NotEqual(OrderPaymentMethod.Online)
+            .WithMessage(OrderPaymentMethodRules.OnlineOnlyOnCreationMessage);
         RuleFor(x => x.EvidenceUrl).MaximumLength(1000);
         RuleFor(x => x.Reference).MaximumLength(120);
         RuleFor(x => x.Notes).MaximumLength(1000);
