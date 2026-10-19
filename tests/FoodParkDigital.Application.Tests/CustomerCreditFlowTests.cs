@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -250,6 +251,142 @@ public class CustomerCreditFlowTests
     }
 
     [Fact]
+    public async Task SaleOnCredit_ToWhoAlreadyOwesTheirLimit_ShouldSayToChargeItAll()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+        var soap = await fixture.AddProductAsync(tenant, "Jabón", 100m);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 300m);
+        Assert.True((await fixture.CreateOrderHandler().Handle(CreditSale(ana, soap, quantity: 3), default)).IsSuccess);
+        // The owner lowered her limit since.
+        (await fixture.Context.Customers.SingleAsync(c => c.Id == ana.Id)).SetCreditLimit(250m);
+        await fixture.Context.SaveChangesAsync();
+
+        var over = await fixture.CreateOrderHandler().Handle(CreditSale(ana, soap), default);
+
+        Assert.Equal("Ana López ya debe $300.00 y su límite es $250.00: cobra la venta completa o pide que suban su límite.", over.Error);
+    }
+
+    [Fact]
+    public async Task AccountPayment_SentAgain_ShouldFindTheAccountChanged_AndNotBeRegisteredTwice()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+        var soap = await fixture.AddProductAsync(tenant, "Jabón", 100m);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 500m);
+        await fixture.OpenCashSessionAsync(tenant);
+        Assert.True((await fixture.CreateOrderHandler().Handle(CreditSale(ana, soap, quantity: 2), default)).IsSuccess);
+        var payment = Pay(ana, 50m) with { ExpectedOwed = 200m };
+
+        var first = await PayHandler(fixture).Handle(payment, default);
+        var again = await PayHandler(fixture).Handle(payment, default);
+        var next = await PayHandler(fixture).Handle(payment with { ExpectedOwed = 150m }, default);
+
+        Assert.True(first.IsSuccess, first.Error);
+        Assert.Equal(PayCustomerAccountCommandHandler.OwedChangedMessage(150m), again.Error);
+        Assert.True(next.IsSuccess, next.Error);
+        Assert.Equal(100m, await fixture.Context.OrderPayments.SumAsync(p => p.Amount));
+        Assert.False(new PayCustomerAccountCommandValidator().Validate(payment with { ExpectedOwed = 0m }).IsValid);
+    }
+
+    [Fact]
+    public async Task Receivables_ShouldShowNoLimit_ForACustomerWhoWasDeactivated()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+        var soap = await fixture.AddProductAsync(tenant, "Jabón", 100m);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 50m);
+        Assert.True((await fixture.CreateOrderHandler().Handle(CreditSale(ana, soap) with { OnCredit = false }, default)).IsSuccess);
+        var order = await fixture.Context.Orders.SingleAsync();
+        await DeliverAsync(fixture, order.Id, OrderStateMachineFactory.Create(BusinessType.Retail, OrderType.Retail));
+        (await fixture.Context.Customers.SingleAsync(c => c.Id == ana.Id)).SetActive(false);
+        await fixture.Context.SaveChangesAsync();
+
+        var row = Assert.Single((await new GetReceivablesQueryHandler(fixture.Context, new PhoneNormalizationService())
+            .Handle(new GetReceivablesQuery(), default)).Page.Items);
+
+        Assert.Equal(("Ana López", 100m, (decimal?)null, false), (row.Name, row.Owed, row.CreditLimit, row.OverLimit));
+    }
+
+    [Fact]
+    public async Task TheCustomerCard_ShouldShowTheRecordTheSaleOnCreditUses_WhenTwoShareThePhone()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+        await AddCustomerAsync(fixture, tenant, "Ana", "55 1234 5678");
+        await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 400m);
+
+        var card = await new GetCustomerCardQueryHandler(fixture.Context, new PhoneNormalizationService(), fixture.TenantService, fixture.Clock)
+            .Handle(new GetCustomerCardQuery { Phone = AnaPhone }, default);
+
+        Assert.Equal(("Ana López", 400m, true), (card.Value.Name, card.Value.CreditLimit, card.Value.SellsOnCredit));
+    }
+
+    [Fact]
+    public async Task PayingAServiceSoldOnCredit_ShouldNotCloseIt_WhileItsPieceIsInTheWorkshop()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, laundry) = await LaundryAsync(fixture);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 500m);
+        await fixture.OpenCashSessionAsync(tenant);
+        var sale = await fixture.CreateOrderHandler().Handle(CreditSale(ana, laundry) with { OrderType = OrderType.Service }, default);
+        Assert.True(sale.IsSuccess, sale.Error);
+        Assert.Equal(OrderStatus.Accepted, sale.Value.Status);
+        // Each request reads the order on its own, as in the app: its pieces are not already in memory.
+        fixture.Context.ChangeTracker.Clear();
+
+        var toTheAccount = await PayHandler(fixture).Handle(Pay(ana, 10m), default);
+        fixture.Context.ChangeTracker.Clear();
+        var inPedidos = await fixture.AddPaymentHandler().Handle(
+            new AddOrderPaymentCommand { OrderId = sale.Value.Id, Amount = 10m, Method = OrderPaymentMethod.Cash }, default);
+        fixture.Context.ChangeTracker.Clear();
+
+        Assert.True(toTheAccount.IsSuccess, toTheAccount.Error);
+        Assert.True(inPedidos.IsSuccess, inPedidos.Error);
+        var order = await fixture.Context.Orders.SingleAsync(o => o.Id == sale.Value.Id);
+        Assert.Equal((OrderStatus.Accepted, 70m), (order.Status, order.Balance));
+    }
+
+    [Fact]
+    public async Task TheLastPaymentOfAService_ShouldNotCloseIt_WhileItsPieceIsInTheWorkshop()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, laundry) = await LaundryAsync(fixture);
+        await fixture.OpenCashSessionAsync(tenant);
+        var sale = await fixture.CreateOrderHandler().Handle(Sale("Ana", AnaPhone, laundry) with
+        {
+            OrderType = OrderType.Service,
+            Payments = [new CreateOrderPaymentDto { Amount = 40m, Method = OrderPaymentMethod.Cash }]
+        }, default);
+        Assert.True(sale.IsSuccess, sale.Error);
+        fixture.Context.ChangeTracker.Clear();
+
+        var rest = await fixture.AddPaymentHandler().Handle(
+            new AddOrderPaymentCommand { OrderId = sale.Value.Id, Amount = 50m, Method = OrderPaymentMethod.Cash }, default);
+        fixture.Context.ChangeTracker.Clear();
+
+        Assert.True(rest.IsSuccess, rest.Error);
+        var order = await fixture.Context.Orders.SingleAsync(o => o.Id == sale.Value.Id);
+        Assert.Equal((OrderStatus.Accepted, 0m), (order.Status, order.Balance));
+    }
+
+    [Fact]
+    public async Task ASaleOnCredit_WithoutClosingSalesByItself_ShouldStayOpen_AndBeOwed()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true, autoCloseCounterSales: false);
+        var soap = await fixture.AddProductAsync(tenant, "Jabón", 100m);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 500m);
+
+        var sale = await fixture.CreateOrderHandler().Handle(CreditSale(ana, soap), default);
+
+        Assert.True(sale.IsSuccess, sale.Error);
+        Assert.True(sale.Value.SoldOnCredit);
+        Assert.NotEqual(OrderStatus.Delivered, sale.Value.Status);
+        Assert.Equal(100m, await Receivables.OwedAsync(fixture.Context.Orders, AnaPhone, default));
+    }
+
+    [Fact]
     public async Task Receivables_ShouldList_WhoOwes_ByPhone_WithTheRuleOfWhatIsOwed()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -314,6 +451,18 @@ public class CustomerCreditFlowTests
         fixture.Context.Customers.Add(customer);
         await fixture.Context.SaveChangesAsync();
         return customer;
+    }
+
+    /// <summary>A laundry whose «Lavado» ($90) is a service tracked piece by piece in the workshop.</summary>
+    private static async Task<(Tenant Tenant, Product Laundry)> LaundryAsync(SalesTestFixture fixture)
+    {
+        var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service, pricesIncludeTax: true);
+        var category = new Category(tenant.Id, "Servicios", null);
+        var laundry = new Product(tenant.Id, category.Id, "Lavado", null, 90m, "MXN", unit: UnitType.Service, isTrackable: true);
+        fixture.Context.Categories.Add(category);
+        fixture.Context.Products.Add(laundry);
+        await fixture.Context.SaveChangesAsync();
+        return (tenant, laundry);
     }
 
     private static CreateOrderCommand CreditSale(Customer customer, Product product, decimal quantity = 1) => new()

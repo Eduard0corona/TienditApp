@@ -441,7 +441,8 @@ export default function ChargePanel({
         <p id={creditNoticeId} className="charge-credit small mt-3 mb-0" aria-live="polite">
           <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>
           <strong>{credit.name}</strong> tiene fiado: le quedan <span className="ta-money">{formatMoney(credit.available)}</span>.
-          {!creditFits && (
+          {!creditFits && credit.available <= 0 && <> Ya no le queda fiado: cobra la venta completa.</>}
+          {!creditFits && credit.available > 0 && (
             <> Para fiarle el resto, cobra al menos <span className="ta-money">{formatMoney(creditMinimumCents / 100)}</span>.</>
           )}
           {creditFits && tipCents > 0 && <> Para fiar, quita la propina.</>}
@@ -459,7 +460,8 @@ export default function ChargePanel({
             <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar otro pago
           </button>
         )}
-        {credit && creditCents > 0 && (
+        {/* Nothing left to owe: no «Fiar» to press, only the notice that says so. */}
+        {credit && credit.available > 0 && creditCents > 0 && (
           <button
             type="button"
             className="btn btn-outline-primary btn-touch"

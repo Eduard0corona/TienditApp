@@ -148,7 +148,9 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
             var record = await _context.Customers.AsNoTracking()
                 .Include(c => c.Addresses)
                 .Where(c => !c.IsPublicGeneral && c.Phone != null && forms.Contains(c.Phone))
+                // The same record as the sale on credit picks (CreditAccount.RecordAsync): the active one, then one with a limit.
                 .OrderByDescending(c => c.IsActive)
+                .ThenByDescending(c => c.CreditLimit != null)
                 .FirstOrDefaultAsync(cancellationToken);
             if (record is not null)
                 FillFromRecord(card, record);

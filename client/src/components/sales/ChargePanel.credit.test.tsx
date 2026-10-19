@@ -61,6 +61,14 @@ describe('ChargePanel on credit (fiado)', () => {
     }));
   });
 
+  it('offers no «Fiar» to who has no fiado left, only says to charge it all', () => {
+    renderPanel({ name: 'Roberto', available: 0 });
+
+    expect(screen.getByText(/tiene fiado/)).toHaveTextContent('Roberto tiene fiado: le quedan $0.00. Ya no le queda fiado: cobra la venta completa.');
+    expect(screen.queryByRole('button', { name: /Fiar/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cobrar $116.00' })).toBeEnabled();
+  });
+
   it('sells on credit what is left after a payment already added', async () => {
     const onSubmit = renderPanel({ name: 'Ana López', available: 500 });
 

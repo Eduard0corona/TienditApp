@@ -82,9 +82,11 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
 
     public async Task<Result<OrderDto>> Handle(AddOrderPaymentCommand request, CancellationToken cancellationToken)
     {
+        // With its pieces: a service still in the workshop does not close when it is paid (CloseIfPaidCounterSale).
         var order = await _context.Orders
             .Include(o => o.Items)
             .Include(o => o.Payments)
+            .Include(o => o.ServicePieces)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 

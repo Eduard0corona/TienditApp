@@ -244,7 +244,8 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
         var items = page.Select(c =>
         {
             records.TryGetValue(c.Phone, out var record);
-            var limit = record?.CreditLimit;
+            // A customer record deactivated keeps its limit, but they are not sold on credit: no limit to show or pass.
+            var limit = record is { SellsOnCredit: true } ? record.CreditLimit : null;
             return new ReceivableDto
             {
                 Phone = c.Phone,
@@ -378,6 +379,12 @@ public record PayCustomerAccountCommand : IRequest<Result<CustomerAccountDto>>, 
     public string? Notes { get; init; }
     /// <summary>What the customer handed over in cash, to keep the change.</summary>
     public decimal? CashReceived { get; init; }
+    /// <summary>
+    /// What the account owed when the payment was taken, as the screen showed it. A payment sent twice, or after another
+    /// one that the screen did not see, finds the account changed and is refused instead of registered again (a payment has
+    /// no idempotency key).
+    /// </summary>
+    public decimal? ExpectedOwed { get; init; }
 }
 
 public class PayCustomerAccountCommandValidator : AbstractValidator<PayCustomerAccountCommand>
@@ -405,6 +412,8 @@ public class PayCustomerAccountCommandValidator : AbstractValidator<PayCustomerA
             .When(x => x.CashReceived.HasValue && x.Method == OrderPaymentMethod.Cash)
             .WithName(nameof(PayCustomerAccountCommand.CashReceived))
             .WithMessage(OrderPayment.CashReceivedShortMessage);
+        RuleFor(x => x.ExpectedOwed!.Value).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
+            .When(x => x.ExpectedOwed.HasValue).WithName(nameof(PayCustomerAccountCommand.ExpectedOwed));
     }
 }
 
@@ -443,6 +452,9 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
     public static string AboveOwedMessage(decimal owed) =>
         $"Debe {OrderStatusLabels.FormatMoney(owed)}: el abono no puede ser mayor.";
 
+    public static string OwedChangedMessage(decimal owed) =>
+        $"La cuenta cambió: ahora debe {OrderStatusLabels.FormatMoney(owed)}. Revisa el estado de cuenta antes de cobrar.";
+
     public async Task<Result<CustomerAccountDto>> Handle(PayCustomerAccountCommand request, CancellationToken cancellationToken)
     {
         var resolved = await CreditAccount.ResolveAsync(_context, _phones, request.CustomerId, request.Phone, cancellationToken);
@@ -454,10 +466,12 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
         await _creditLock.AcquireAsync(_tenant.TenantId, account.Phone, cancellationToken);
 
         var variants = MessagingPhone.Variants(account.Phone).ToList();
+        // With its pieces: a service still in the workshop does not close when it is paid (CloseIfPaidCounterSale).
         var orders = await _context.Orders
             .Include(o => o.Items)
             .Include(o => o.Payments)
             .Include(o => o.Delivery)
+            .Include(o => o.ServicePieces)
             .Where(o => o.CustomerPhone != null && variants.Contains(o.CustomerPhone))
             .Where(Receivables.IsOwed)
             .OrderBy(o => o.CreatedAt)
@@ -468,6 +482,8 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
         var owed = orders.Sum(o => o.Balance);
         if (owed == 0)
             return Result.Failure<CustomerAccountDto>(NothingOwedMessage);
+        if (request.ExpectedOwed is { } expected && expected != owed)
+            return Result.Failure<CustomerAccountDto>(OwedChangedMessage(owed));
         if (request.Amount > owed)
             return Result.Failure<CustomerAccountDto>(AboveOwedMessage(owed));
 
@@ -533,9 +549,12 @@ public static class CustomerCredit
     public static string NoCreditMessage(string? name) =>
         $"{(string.IsNullOrWhiteSpace(name) ? "Este cliente" : name)} no tiene fiado: el dueño o un administrador le pone un límite en Clientes.";
 
-    public static string OverLimitMessage(string name, decimal owed, decimal sale, decimal limit) =>
-        $"Con esta venta, {name} debería {OrderStatusLabels.FormatMoney(owed + sale)} y su límite es " +
-        $"{OrderStatusLabels.FormatMoney(limit)}: cobra al menos {OrderStatusLabels.FormatMoney(owed + sale - limit)} o pide que suban su límite.";
+    public static string OverLimitMessage(string name, decimal owed, decimal sale, decimal limit) => owed >= limit
+        // Nothing of the sale fits (the limit was lowered, or orders were handed over unpaid): charging part does not help.
+        ? $"{name} ya debe {OrderStatusLabels.FormatMoney(owed)} y su límite es {OrderStatusLabels.FormatMoney(limit)}: " +
+          "cobra la venta completa o pide que suban su límite."
+        : $"Con esta venta, {name} debería {OrderStatusLabels.FormatMoney(owed + sale)} y su límite es " +
+          $"{OrderStatusLabels.FormatMoney(limit)}: cobra al menos {OrderStatusLabels.FormatMoney(owed + sale - limit)} o pide que suban su límite.";
 
     /// <param name="customerId">The customer chosen in Vender, when one was.</param>
     /// <param name="orderPhone">The phone the order is stored with.</param>

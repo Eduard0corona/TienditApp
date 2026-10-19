@@ -12,7 +12,7 @@ import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
 import { formatDate, formatDateTime } from '../../utils/dates';
 import { getPaymentMethodLabel } from '../../utils/labels';
-import { formatMoney } from '../../utils/money';
+import { formatMoney, toCents } from '../../utils/money';
 import { accountSummaryText, daysSince, describeDays } from './customerAccount';
 
 interface CustomerAccountModalProps {
@@ -43,8 +43,10 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
   const submitPayment = async (charge: ChargeResult) => {
     if (!account) return;
     setPayError('');
-    // One payment per method: each one is split over the orders owed from the oldest.
-    let paid = 0;
+    // One payment per method: each one is split over the orders owed from the oldest. Each says what the account owed
+    // as this screen saw it, so a payment sent twice finds it changed and is refused instead of registered again.
+    const owedCents = toCents(account.owed);
+    let paidCents = 0;
     try {
       for (const payment of charge.payments) {
         await pay.mutateAsync({
@@ -55,16 +57,17 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
           reference: payment.reference,
           evidenceUrl: payment.evidenceUrl,
           cashReceived: payment.cashReceived,
+          expectedOwed: (owedCents - paidCents) / 100,
         });
-        paid += payment.amount;
+        paidCents += toCents(payment.amount);
       }
-      toast.success(`Abono de ${formatMoney(paid)} registrado.`);
+      toast.success(`Abono de ${formatMoney(paidCents / 100)} registrado.`);
       setPaying(false);
     } catch (err: unknown) {
       const message = getApiErrorMessage(err, 'No se pudo registrar el abono.');
-      if (paid > 0) {
+      if (paidCents > 0) {
         setPaying(false);
-        setPartialNotice(`Se registraron ${formatMoney(paid)}; el resto no: ${message} Revisa lo que debe antes de cobrar lo que falta.`);
+        setPartialNotice(`Se registraron ${formatMoney(paidCents / 100)}; el resto no: ${message} Revisa lo que debe antes de cobrar lo que falta.`);
       } else {
         setPayError(message);
       }

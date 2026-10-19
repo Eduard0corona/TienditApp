@@ -22993,6 +22993,11 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "expectedOwed": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false

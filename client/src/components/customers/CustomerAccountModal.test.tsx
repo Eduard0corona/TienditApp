@@ -92,7 +92,7 @@ describe('CustomerAccountModal', () => {
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Abono de $100.00 registrado.'));
     expect(request).toHaveBeenCalledWith('post', '/api/v1/customers/account/payments', {
-      body: expect.objectContaining({ customerId: 'c1', amount: 100, method: OrderPaymentMethod.Cash, cashReceived: 100 }),
+      body: expect.objectContaining({ customerId: 'c1', amount: 100, method: OrderPaymentMethod.Cash, cashReceived: 100, expectedOwed: 150 }),
     });
   });
 
@@ -114,7 +114,9 @@ describe('CustomerAccountModal', () => {
     expect(await screen.findByText(/Se registraron \$100\.00; el resto no: La terminal no respondió\./)).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: 'Estado de cuenta' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Efectivo recibido')).not.toBeInTheDocument();
-    expect(request.mock.calls.filter(([method]) => method === 'post')).toHaveLength(2);
+    // Each payment says what the account owed as the screen saw it: the card one, after the cash.
+    expect(request.mock.calls.filter(([method]) => method === 'post').map(([, , options]) => (options as unknown as { body: { expectedOwed: number } }).body.expectedOwed))
+      .toEqual([150, 50]);
     expect(toast.success).not.toHaveBeenCalled();
   });
 

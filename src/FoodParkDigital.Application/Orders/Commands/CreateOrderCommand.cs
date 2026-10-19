@@ -632,6 +632,10 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 order.CustomerPhone,
                 order.Total - request.Payments.Sum(p => p.Amount),
                 cancellationToken);
+            // The same sale sent twice at once: this one waited on the lock while the other was recorded, and counted it in
+            // what the customer owes. The answer is the sale recorded, not a refusal of the limit.
+            if (request.IdempotencyKey is { } waitedKey && await ExistingSaleAsync(waitedKey, cancellationToken) is { } recorded)
+                return Result.Success(recorded);
             if (creditError is not null)
                 return Result.Failure<OrderDto>(creditError);
         }

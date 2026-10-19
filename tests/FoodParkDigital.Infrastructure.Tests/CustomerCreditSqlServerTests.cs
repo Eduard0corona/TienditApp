@@ -55,6 +55,26 @@ public class CustomerCreditSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task TheSameSaleOnCredit_SentTwiceAtOnce_ShouldAnswerTheSaleRecorded_NotTheLimit()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var shop = await Shop.OpenAsync(database, creditLimit: 150m);
+        Assert.True((await shop.SellAsync(shop.CreditSale() with
+        {
+            OnCredit = false,
+            Payments = [new CreateOrderPaymentDto { Amount = 100m, Method = OrderPaymentMethod.Cash }]
+        })).IsSuccess);
+        var key = Guid.NewGuid();
+
+        // A retry of Vender keeps the key: the second one waits on Ana's lock while the first is recorded.
+        var sales = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => shop.SellAsync(shop.CreditSale() with { IdempotencyKey = key })));
+
+        Assert.All(sales, s => Assert.True(s.IsSuccess, s.Error));
+        Assert.Single(sales.Select(s => s.Value.Id).Distinct());
+        Assert.Equal(100m, (await shop.AccountAsync()).Owed);
+    }
+
+    [SqlServerFact]
     public async Task AccountPayments_AtTheSameTime_ShouldNeverPayMoreThanIsOwed()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();

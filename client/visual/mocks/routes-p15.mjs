@@ -100,7 +100,8 @@ function receivables(data, q, paginate) {
       ...page,
       items: page.items.map((row) => {
         const record = recordOf(data, row.phone);
-        const limit = record?.creditLimit ?? null;
+        // A customer deactivated keeps their limit, but is not sold on credit.
+        const limit = sellsOnCredit(record) ? record.creditLimit : null;
         return {
           phone: row.phone, name: record?.name ?? row.latest.customerName, customerId: record?.id ?? null, owed: row.owed,
           orders: row.orders, since: row.since, creditLimit: limit, overLimit: limit != null && row.owed > limit,
@@ -110,10 +111,17 @@ function receivables(data, q, paginate) {
   };
 }
 
-/** A payment to the account, split over the orders owed from the oldest (change on the last part), as the server does. */
+/**
+ * A payment to the account, split over the orders owed from the oldest (change on the last part), as the server does. One
+ * that expected another balance (sent twice, or after another one) is refused.
+ */
 function pay(data, body) {
   const key = body?.customerId ? phoneKey(data.customers.find((c) => c.id === body.customerId)?.phone) : phoneKey(body?.phone);
   const orders = data.orders.filter((o) => isOwed(o) && phoneKey(o.customerPhone) === key).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const owed = r2(orders.reduce((sum, o) => sum + o.total - o.paidAmount, 0));
+  if (body?.expectedOwed != null && Math.abs(body.expectedOwed - owed) > 0.001) {
+    return { status: 400, json: { code: 'bad_request', detail: `La cuenta cambió: ahora debe $${owed.toFixed(2)}. Revisa el estado de cuenta antes de cobrar.` } };
+  }
   let left = body?.amount ?? 0;
   for (const order of orders) {
     if (left <= 0) break;
@@ -123,7 +131,7 @@ function pay(data, body) {
     order.balance = r2(order.total - order.paidAmount);
     left = r2(left - part);
   }
-  return account(data, key, recordOf(data, key));
+  return { status: 200, json: account(data, key, recordOf(data, key)) };
 }
 
 export function phase26aRoutes(data, { ok, notFound, paginate }) {
@@ -135,7 +143,7 @@ export function phase26aRoutes(data, { ok, notFound, paginate }) {
       if (!key) return notFound('Cliente');
       return ok(account(data, key, record ?? recordOf(data, key)));
     }],
-    ['POST', /^\/customers\/account\/payments$/, (m, q, body) => ok(pay(data, body))],
+    ['POST', /^\/customers\/account\/payments$/, (m, q, body) => pay(data, body)],
     ['PUT', /^\/customers\/([^/]+)\/credit-limit$/, (m, q, body) => {
       const customer = data.customers.find((c) => c.id === m[1]);
       if (!customer) return notFound('Cliente');

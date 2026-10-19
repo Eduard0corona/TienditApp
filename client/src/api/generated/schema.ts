@@ -14091,6 +14091,8 @@ export interface components {
             notes?: string | null;
             /** Format: double */
             cashReceived?: number | null;
+            /** Format: double */
+            expectedOwed?: number | null;
         };
         PendingCourierOrdersDto: {
             owed: components["schemas"]["CourierOrderDto"][];

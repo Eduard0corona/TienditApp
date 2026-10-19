@@ -173,7 +173,7 @@ test.describe('Vender fiado', () => {
   test('cobrar a quien pasó su límite', async ({ page }) => {
     await open(page, '/sell');
     const panel = await chargeTo(page, '55 9921 0087');
-    await expect(panel.getByText(/cobra al menos \$71\.00/)).toBeVisible();
+    await expect(panel.getByText(/Ya no le queda fiado: cobra la venta completa/)).toBeVisible();
     await snapScreen(page, 'vender-cobrar-fiado-sin-credito');
   });
 
