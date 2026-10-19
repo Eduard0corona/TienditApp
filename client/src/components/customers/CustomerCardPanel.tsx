@@ -27,7 +27,8 @@ export default function CustomerCardPanel({ phone, customerId, fallbackName, onN
   const { data: card, error, isPending } = useCustomerCard(phone, customerId);
   const { user } = useAuth();
   const { capabilities } = useTenant();
-  const canCreateCustomer = getAccess(user, capabilities).customers;
+  const access = getAccess(user, capabilities);
+  const canCreateCustomer = access.customers;
 
   if (error) return <div className="alert alert-warning mb-0">{getApiErrorMessage(error, 'No se pudo cargar la ficha del cliente.')}</div>;
   if (isPending || !card) return <p className="text-muted mb-0">Cargando ficha…</p>;
@@ -66,6 +67,22 @@ export default function CustomerCardPanel({ phone, customerId, fallbackName, onN
           </div>
         </div>
       </div>
+      {(card.creditLimit != null || card.balance > 0) && card.phone && (
+        <p className="small mb-3 d-flex flex-wrap align-items-center gap-2">
+          <span>
+            <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>
+            {card.creditLimit == null
+              ? 'Sin fiado'
+              : `Fiado: le quedan ${formatMoney(Math.max(0, card.creditLimit - card.balance))} de ${formatMoney(card.creditLimit)}`}
+            {card.creditLimit != null && !card.sellsOnCredit && ' (ahora no se le fía)'}
+          </span>
+          {access.receivables && (
+            <Link className="btn btn-link btn-sm p-0" to={`/customers/receivables?cuenta=${encodeURIComponent(card.phone)}`}>
+              Ver cuenta
+            </Link>
+          )}
+        </p>
+      )}
       {card.ordersCount > 0 && (
         <p className="small text-muted mb-3">
           Ticket promedio {formatMoney(card.averageTicket)} · cliente desde {formatDateTime(card.firstOrderAt)} · última compra {formatDateTime(card.lastOrderAt)}

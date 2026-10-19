@@ -69,7 +69,9 @@ export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOr
               ? `Venta ${sale.order.orderNumber} guardada sin conexión`
               : sale?.unpaid
                 ? `Pedido ${sale.order.orderNumber} guardado`
-                : `Venta ${sale?.order.orderNumber} cobrada`}
+                : sale?.order.soldOnCredit
+                  ? `Venta ${sale.order.orderNumber} fiada`
+                  : `Venta ${sale?.order.orderNumber} cobrada`}
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>

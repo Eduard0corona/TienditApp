@@ -400,6 +400,33 @@ describe('SellPage', () => {
     expect(await screen.findByText('Venta SC-0001 guardada sin conexión')).toBeInTheDocument();
   });
 
+  it('sells on credit to a customer with fiado through the server, even with the connection down', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) => Promise.resolve(
+      path === '/api/v1/customers/account'
+        ? { phone: '+525512345678', name: 'Ana López', sellsOnCredit: true, creditLimit: 500, owed: 0, available: 500, orders: [], ordersCount: 0, recentPayments: [] }
+        : path === '/api/v1/delivery-platforms/channels' ? [] : undefined,
+    )) as unknown as typeof apiRequest);
+    vi.mocked(ordersApi.create).mockResolvedValue({ data: { ...chargedTaco, payments: [], paidAmount: 0, balance: 25, soldOnCredit: true } } as never);
+    renderAt('/sell?phone=5512345678&name=Ana');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: /Cobrar \$25\.00/ }));
+    const charge = within(await screen.findByRole('dialog'));
+    expect(await charge.findByText(/tiene fiado: le quedan/)).toHaveTextContent('Ana López tiene fiado: le quedan $500.00.');
+
+    // A sale on credit is checked against the customer's limit as it is sold: it never waits on the device.
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    await userEvent.click(charge.getByRole('button', { name: 'Fiar $25.00' }));
+
+    expect(enqueueSale).not.toHaveBeenCalled();
+    expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({ customerPhone: '5512345678', onCredit: true, payments: [] }));
+    expect(await screen.findByText('Venta ORD-000003 fiada')).toBeInTheDocument();
+    expect(vi.mocked(apiRequest).mock.calls).toContainEqual(['get', '/api/v1/customers/account', expect.objectContaining({
+      query: { customerId: undefined, phone: '5512345678' },
+    })]);
+  });
+
   it('records a sale started from a WhatsApp conversation as a WhatsApp order that can be saved unpaid', async () => {
     signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageWhatsApp']);
     vi.mocked(ordersApi.create).mockResolvedValue({

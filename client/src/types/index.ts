@@ -1356,6 +1356,8 @@ export interface CustomerDto {
   isPublicGeneral: boolean;
   isActive: boolean;
   notes?: string | null;
+  /** How much the business lets them owe (fiado); null when they are not sold on credit. */
+  creditLimit?: number | null;
   /** Only in the detail of one customer. */
   addresses?: CustomerAddressDto[];
   createdAt: string;
@@ -1629,6 +1631,8 @@ export interface OrderDto {
   isTab?: boolean;
   /** A tab still taking rounds. */
   isOpenTab?: boolean;
+  /** A counter sale closed on credit (fiado): its balance is what the customer owes. Still true once paid. */
+  soldOnCredit?: boolean;
   diningTableId?: string | null;
   kitchenTickets?: KitchenTicketSummaryDto[];
   /** Only in the answer to a new sale: recipe supplies it took below zero ("Tortilla quedó en -3"). */
@@ -1793,7 +1797,12 @@ export interface CustomerCardDto {
   /** Paid minus refunded, over orders that were not cancelled. */
   totalSpent: number;
   averageTicket: number;
+  /** What they owe: orders delivered or sold on credit and not paid (an order in progress is not owed yet). */
   balance: number;
+  /** How much the business lets them owe, from the customer record; null without fiado. */
+  creditLimit?: number | null;
+  /** The business sells to them on credit now. */
+  sellsOnCredit?: boolean;
   firstOrderAt?: string;
   lastOrderAt?: string;
   recentOrders: Array<{
@@ -1848,6 +1857,11 @@ export interface CreateOrderRequest {
   delivery?: OrderDeliveryInput;
   /** The appointment of the agenda this sale charges (Fase 22E): done with it, and its visit charge in the total. */
   appointmentId?: string;
+  /**
+   * Sold on credit (fiado): what the payments leave unpaid is what the customer owes. Only a counter sale with
+   * connection to a customer the business sells to on credit, within their limit (the server checks it).
+   */
+  onCredit?: boolean;
 }
 
 export interface CreateOrderPaymentRequest {

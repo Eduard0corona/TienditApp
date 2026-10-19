@@ -8,9 +8,10 @@ import { cashApi } from '../../api/cashApi';
 import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
 import { useDeliveryPlatformChannels } from '../../api/queries';
 import { useDeliveryZones } from '../../api/deliveryZones';
+import { useCustomerAccount, useRefreshCustomerCredit } from '../../api/customerCredit';
 import { useFocusMode } from '../../components/layout/focusMode';
 import OpenDrawerModal from '../../components/cash/OpenDrawerModal';
-import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
+import ChargePanel, { type ChargeCredit, type ChargeResult } from '../../components/sales/ChargePanel';
 import PendingSalesModal from '../../components/sales/PendingSalesModal';
 import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -674,6 +675,18 @@ export default function SellPage() {
     }
   };
 
+  // Fiado (Fase 26A): read when the charge opens, for a counter sale with the customer's phone; the server checks the
+  // limit again as it sells.
+  const creditPhone = canCharge && online && !platform && !delivery && !tabTarget
+    ? details.customerPhone.replace(/\D/g, '')
+    : '';
+  const creditAccount = useCustomerAccount({ phone: creditPhone }, chargeOpen && creditPhone.length >= 10);
+  const refreshCredit = useRefreshCustomerCredit();
+  const account = creditAccount.data;
+  const credit: ChargeCredit | undefined = account?.sellsOnCredit && account.available != null
+    ? { name: account.name ?? (details.customerName.trim() || 'El cliente'), available: account.available }
+    : undefined;
+
   const submitSale = async (charge: ChargeResult | null) => {
     if (!validateSale()) {
       setChargeOpen(false);
@@ -685,7 +698,8 @@ export default function SellPage() {
     // (its pieces are picked up with the server's folio) or an order of a platform (checked against today's folios)
     // need the server.
     // The sale of an appointment needs the server too: it checks the appointment as it charges it.
-    const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices && !platform && !delivery && !appointment;
+    // A sale on credit needs the server too: it checks the customer's limit as it sells.
+    const canQueue = !!charge && !charge.onCredit && !tabTarget && !chatOrigin && !hasServices && !platform && !delivery && !appointment;
     // The same key on a retry returns this sale instead of charging twice; another cart is another sale.
     const draft = toDraft(cart, details);
     const sale = describeSale(draft);
@@ -704,6 +718,7 @@ export default function SellPage() {
         tip: payment.tip,
         cashReceived: payment.cashReceived,
       })),
+      onCredit: charge?.onCredit || undefined,
     };
     if (canQueue && !navigator.onLine && await queueOfflineSale(request, charge)) {
       setSubmitting(false);
@@ -717,6 +732,7 @@ export default function SellPage() {
       if (stockWarning) toast.warning(stockWarning, { title: STOCK_WARNING_TITLE });
       clearSale();
       setChargeOpen(false);
+      if (charge?.onCredit) refreshCredit();
       if (charge) {
         setCompletedSale({ order });
       } else if (isDeliveryPlatform(order.channel)) {
@@ -1010,6 +1026,7 @@ export default function SellPage() {
               error={saleError}
               // The tip of a platform's order is in its app, for the courier.
               allowTip={!platform}
+              credit={credit}
               onSubmit={(charge) => void submitSale(charge)}
               onCancel={() => setChargeOpen(false)}
               uploadEvidence={async (file) => {

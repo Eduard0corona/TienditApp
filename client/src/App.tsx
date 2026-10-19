@@ -55,6 +55,7 @@ const PublicBookingPage = lazy(() => import('./pages/public/PublicBookingPage'))
 const OnlinePaymentReturnPage = lazy(() => import('./pages/public/OnlinePaymentReturnPage'));
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
+const ReceivablesPage = lazy(() => import('./pages/customers/ReceivablesPage'));
 const CampaignsPage = lazy(() => import('./pages/campaigns/CampaignsPage'));
 const BusinessReviewsPage = lazy(() => import('./pages/reviews/BusinessReviewsPage'));
 const EmployeesList = lazy(() => import('./pages/employees/EmployeesList'));
@@ -392,6 +393,14 @@ export default function App() {
                 element={(
                   <AccessRoute area="customers">
                     <CustomersList />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/customers/receivables"
+                element={(
+                  <AccessRoute area="receivables">
+                    <ReceivablesPage />
                   </AccessRoute>
                 )}
               />
