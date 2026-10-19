@@ -603,6 +603,11 @@ public class OnlinePaymentsFlowTests
         await shop.NotifyAsync(payment.Id);
         var order = await shop.Context.Orders.AsNoTracking().SingleAsync();
 
+        // Never out of a drawer the money never entered.
+        var inCash = await shop.RefundAsync(order.Id, 55m, OrderPaymentMethod.Cash);
+        Assert.Equal(Domain.Orders.Entities.Order.PaidOnlineRefundMessage, inCash.Error);
+        shop.Context.ChangeTracker.Clear();
+
         var refunded = await shop.RefundAsync(order.Id, 55m);
 
         Assert.True(refunded.IsSuccess, refunded.Error);
@@ -830,9 +835,10 @@ public class OnlinePaymentsFlowTests
             => new GetOnlinePaymentSettingsQueryHandler(Context, Fixture.TenantService, Gateway, Protector, Clock)
                 .Handle(new GetOnlinePaymentSettingsQuery(), CancellationToken.None);
 
-        public Task<Common.Models.Result<Orders.DTOs.OrderDto>> RefundAsync(Guid orderId, decimal amount)
+        public Task<Common.Models.Result<Orders.DTOs.OrderDto>> RefundAsync(
+            Guid orderId, decimal amount, OrderPaymentMethod method = OrderPaymentMethod.Online)
             => new RefundOrderCommandHandler(Context, Fixture.CurrentUser, new OrderCashService(Context, Fixture.CurrentUser), Clock, NoOpOrderInventoryService.Instance)
-                .Handle(new RefundOrderCommand { OrderId = orderId, Amount = amount, Method = OrderPaymentMethod.Online, Reason = "Llegó frío", RestockItems = false }, CancellationToken.None);
+                .Handle(new RefundOrderCommand { OrderId = orderId, Amount = amount, Method = method, Reason = "Llegó frío", RestockItems = false }, CancellationToken.None);
 
         public Task<Orders.DTOs.OrderDto> OrderAsync(Guid orderId)
             => new GetOrderByIdQueryHandler(Context).Handle(new GetOrderByIdQuery(orderId), CancellationToken.None);

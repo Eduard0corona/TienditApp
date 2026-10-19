@@ -296,9 +296,11 @@ public class ApplyOnlinePaymentCommandHandler : IRequestHandler<ApplyOnlinePayme
             ? new CustomerLookupResult(asked.CustomerPhone, accountId, null, name)
             : await _customerLookupService.ResolveForOrderAsync(
                 tenant.Id, asked.CustomerPhone, name, CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
-        var (order, _) = await placement.BuildAsync(tenant, asked, branchId, customer, settings, now, cancellationToken);
-        if (order is null || order.Total != checkout.Amount)
-            return (OnlineCheckoutFailure.OrderRefused, PlacePublicOrderCommandHandler.TotalChangedMessage(draft.Total));
+        var (order, refusedNow) = await placement.BuildAsync(tenant, asked, branchId, customer, settings, now, cancellationToken);
+        if (order is null)
+            return (OnlineCheckoutFailure.OrderRefused, refusedNow ?? CatalogChangedMessage);
+        if (order.Total != checkout.Amount)
+            return (OnlineCheckoutFailure.OrderRefused, PlacePublicOrderCommandHandler.TotalChangedMessage(order.Total));
 
         await placement.PlaceAsync(order, tenant, asked, accountId, now, _folios, _orderInventoryService, cancellationToken);
         // Stamped when it is recorded, like every payment: a late notification must not rewrite a closed day.

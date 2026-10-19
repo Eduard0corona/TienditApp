@@ -243,7 +243,7 @@ test.describe('Un pedido pagado en línea', () => {
     const { detail, folio } = await openOrder(page);
     await detail.getByRole('button', { name: 'Reembolsar' }).click();
     const refund = await dialog(page, `Reembolsar ${folio}`);
-    await expect(refund.getByLabel('Se devuelve en')).toHaveValue('6');
+    await expect(refund.getByLabel('Se devuelve en')).toHaveValue('En línea');
     await refund.getByLabel('Monto a devolver').fill('38');
     await refund.getByLabel('Motivo').fill('Faltó un café americano');
     await snapScreen(page, 'pedidos-reembolsar-en-linea');

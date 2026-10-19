@@ -294,10 +294,16 @@ public class OnlinePaymentTests
     }
 
     [Fact]
-    public void Order_PaidOnline_ShouldGiveBackOnline_UpToWhatWasPaidOnline()
+    public void Order_PaidOnline_ShouldGiveBackOnlyOnline_UpToWhatWasPaidOnline()
     {
         var order = OnlineOrder();
         order.RegisterOnlinePayment("98765", Now, null);
+
+        // Never out of a drawer the money never entered.
+        foreach (var method in new[] { OrderPaymentMethod.Cash, OrderPaymentMethod.Card, OrderPaymentMethod.Transfer, OrderPaymentMethod.Other })
+            Assert.Equal(Order.PaidOnlineRefundMessage, Assert.Throws<DomainException>(() =>
+                order.RegisterRefund(10m, method, "En efectivo", Now, "cajero", null, null, false, [])).Message);
+        Assert.Empty(order.Refunds);
 
         order.RegisterRefund(200m, OrderPaymentMethod.Online, "Se agotó el pan", Now, "dueño", null, null, false, []);
         Assert.Equal(35.50m, order.OnlineRefundable);

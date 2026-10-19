@@ -745,6 +745,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public const string OnlinePaymentOnlyOnlineMessage = "Solo un pedido de la tienda en línea se paga en línea.";
     public const string OnlinePaymentBeforeAnyPaymentMessage = "El pago en línea se registra antes que cualquier otro cobro del pedido.";
     public const string OnlineRefundOnlyOfOnlineMessage = "Solo se devuelve «En línea» lo que el cliente pagó en línea, y no más.";
+    public const string PaidOnlineRefundMessage = "Lo que el cliente pagó en línea se devuelve «En línea», por Mercado Pago: no sale de la caja.";
 
     /// <summary>
     /// What the customer paid online for this order of the online menu (Fase 24I, ADR 0031): the business's payment gateway
@@ -1037,9 +1038,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(PlatformOrderRules.PlatformRefundOnlyOfPlatformMessage);
         if (method != OrderPaymentMethod.Platform && platformCharged)
             throw new DomainException(PlatformOrderRules.PlatformChargedRefundMessage);
-        // What was paid online goes back to the customer's card through the gateway, up to what was paid that way.
+        // What was paid online goes back to the customer's card through the gateway, up to what was paid that way, and
+        // only that way: never out of a drawer it never entered.
         if (method == OrderPaymentMethod.Online && amount > OnlineRefundable)
             throw new DomainException(OnlineRefundOnlyOfOnlineMessage);
+        if (method != OrderPaymentMethod.Online && _payments.Any(p => p.Method == OrderPaymentMethod.Online))
+            throw new DomainException(PaidOnlineRefundMessage);
 
         var refund = new OrderRefund(
             TenantId, Id, amount, method, reason, refundedAt, refundedBy, inventoryLocationId, reference, restockItems);

@@ -66,14 +66,13 @@ const paidOnline: OrderDto = {
 };
 
 describe('RefundOrderModal', () => {
-  it('gives back an order paid online through Mercado Pago, and still lets the business hand money back itself', async () => {
+  it('gives back an order paid online only through Mercado Pago, never out of the drawer', async () => {
     const onSubmit = vi.fn();
     render(<RefundOrderModal mode="refund" order={paidOnline} submitting={false} error="" onClose={vi.fn()} onSubmit={onSubmit} />);
 
     const method = screen.getByLabelText('Se devuelve en');
-    expect(method).toHaveValue(String(OrderPaymentMethod.Online));
-    expect(within(method).getAllByRole('option').map((option) => option.textContent))
-      .toEqual(['En línea', 'Efectivo', 'Tarjeta', 'Transferencia', 'Billetera digital', 'Otro']);
+    expect(method).toHaveValue('En línea');
+    expect(method).toHaveAttribute('readonly');
     expect(screen.getByText('Mercado Pago se lo devuelve al cliente a su tarjeta o cuenta; no sale de tu caja.')).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('Monto a devolver'), '100');
@@ -83,7 +82,7 @@ describe('RefundOrderModal', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ amount: 100, method: OrderPaymentMethod.Online }));
   });
 
-  it('offers «En línea» only for an order paid online', () => {
+  it('never offers «En línea» for an order not paid online', () => {
     render(<RefundOrderModal mode="refund" order={sale} submitting={false} error="" onClose={vi.fn()} onSubmit={vi.fn()} />);
 
     expect(within(screen.getByLabelText('Se devuelve en')).getAllByRole('option').map((option) => option.textContent)).not.toContain('En línea');
