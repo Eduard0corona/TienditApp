@@ -4,16 +4,19 @@ import { SIZES, dialog, open, snap, snapElement } from '../helpers';
 import {
   AGENDA_SOLICITUDES,
   APPOINTMENT_LINK,
+  CITAS_CON_PERSONAS,
   CITAS_PRENDIDAS,
   CITAS_ROUTES,
   EXPLORAR_AGENDA,
   MENU_AGENDA,
+  QUIEN_ATIENDE,
 } from './citas-en-linea.mocks';
 import { ACCOUNT_PROFILE } from './cuenta-cliente.mocks';
 
 // Citas en línea (Fase 24D): the booking page of Café La Esquina (a service, a day and a free time, the customer's data and
 // the receipt), the appointment followed with its link, Mis citas of María Fernanda's account, the requests in the agenda
-// of the business and the owner's card in Configuración.
+// of the business and the owner's card in Configuración; and who attends (Fase 24J): «¿Con quién?» on the booking page and
+// «Quién atiende» in Configuración.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -93,6 +96,42 @@ test.describe('Agendar en línea', () => {
     await open(page, '/m/otro-negocio/agendar');
     await expect(page.getByRole('heading', { name: 'Este negocio no agenda citas en línea' })).toBeVisible();
     await snap(page, 'agendar-no-agenda-telefono');
+  });
+});
+
+// ------------------------------------------------------------------ Who attends (Fase 24J)
+
+test.describe('Agendar con quién', () => {
+  test.use({ signedIn: false, extraRoutes: CITAS_ROUTES, prepareData: CITAS_CON_PERSONAS });
+
+  for (const look of LOOKS) {
+    test.describe(look.suffix, () => {
+      test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+      test(`agendar con quien ${look.suffix}`, async ({ page }) => {
+        await openCata(page);
+        const people = page.getByRole('group', { name: 'Quién te atiende' });
+        await people.getByRole('button', { name: /Paola J\./ }).click();
+        await expect(people.getByRole('button', { name: /Paola J\./ })).toHaveAttribute('aria-pressed', 'true');
+        // Paola comes in at 12:00: her first time on Monday.
+        await expect(page.getByRole('button', { name: '12:00 p. m.' })).toBeVisible();
+        await expect(page.getByRole('button', { name: '8:00 a. m.' })).toHaveCount(0);
+        await snap(page, `agendar-con-quien-${look.suffix}`);
+      });
+    });
+  }
+
+  test('agendar con quien solicitud enviada', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await openCata(page);
+    await page.getByRole('group', { name: 'Quién te atiende' }).getByRole('button', { name: /Paola J\./ }).click();
+    const sheet = await pickMondayAfternoon(page);
+    await expect(sheet.getByText('Con Paola J.')).toBeVisible();
+    await sheet.getByLabel('Tu nombre').fill('Valeria Ruiz');
+    await sheet.getByLabel('Teléfono (WhatsApp)').fill('55 2210 7765');
+    await sheet.getByRole('button', { name: 'Pedir cita' }).click();
+    await expect(page.getByText('Te atiende Paola J.')).toBeVisible();
+    await snap(page, 'agendar-con-quien-solicitud-enviada-telefono');
   });
 });
 
@@ -235,6 +274,43 @@ test.describe('Citas en línea en Configuración', () => {
     const card = page.getByRole('region', { name: 'Citas en línea' });
     await expect(card.getByText(/Las citas en línea están apagadas/)).toBeVisible();
     await snapElement(card, 'configuracion-citas-apagadas-escritorio');
+  });
+
+  test('configuracion quien atiende sin nadie', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/settings/business');
+    const card = page.getByRole('region', { name: 'Quién atiende' });
+    await expect(card.getByRole('button', { name: 'Configurar a Carlos Méndez' })).toBeVisible();
+    await snapElement(card, 'configuracion-quien-atiende-sin-nadie-escritorio');
+  });
+
+  test.describe('con personas', () => {
+    test.use({ prepareData: QUIEN_ATIENDE });
+
+    test('configuracion quien atiende', async ({ page }) => {
+      await page.setViewportSize(SIZES.desktop);
+      await open(page, '/settings/business');
+      const card = page.getByRole('region', { name: 'Quién atiende' });
+      await expect(card.getByText('Tus clientes ven «Paola J.» · 1 servicio · Horario propio')).toBeVisible();
+      await snapElement(card, 'configuracion-quien-atiende-escritorio');
+    });
+
+    test('configuracion citas en linea por persona', async ({ page }) => {
+      await page.setViewportSize(SIZES.phone);
+      await open(page, '/settings/business');
+      const card = page.getByRole('region', { name: 'Citas en línea' });
+      await expect(card.getByText(/Agendan en línea 2 personas/)).toBeVisible();
+      await snapElement(card, 'configuracion-citas-por-persona-telefono');
+    });
+
+    test('configuracion quien atiende editar', async ({ page }) => {
+      await page.setViewportSize(SIZES.phone);
+      await open(page, '/settings/business');
+      await page.getByRole('button', { name: 'Editar a Paola Jiménez' }).click();
+      const form = await dialog(page, 'Paola Jiménez');
+      await expect(form.getByLabel('Entra el lunes')).toHaveValue('12:00');
+      await snap(page, 'configuracion-quien-atiende-editar-telefono', { fullPage: false });
+    });
   });
 
   test.describe('prendidas', () => {

@@ -66,7 +66,7 @@ Las decisiones del dueño para la Fase 24D-1:
   - Una solicitud ocupa su hora desde que se pide: el negocio no tiene que apurarse para que nadie más la tome.
 - **Lo que limita:**
   - Las citas en línea son en el negocio: no se agenda a domicilio ([ADR 0020](0020-home-visits.md)).
-  - El cliente no elige quién lo atiende: la capacidad es del negocio, no por persona.
+  - El cliente no elige quién lo atiende: la capacidad es del negocio, no por persona. Desde la Fase 24J ([ADR 0032](0032-online-booking-staff.md)), un negocio que elige quién agenda en línea ofrece las horas de cada persona y el cliente la elige.
   - El paso de media hora, la hora de anticipación y los 30 días son fijos, no por negocio.
   - Una solicitud que nadie decide sigue ocupando su hora hasta que pasa; Inicio la marca urgente el mismo día.
   - Sin SQL Server el candado no hace nada: el índice único de la llave evita la doble petición, pero no dos clientes distintos en la última hora.

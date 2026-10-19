@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-19 con la Fase 24I y antes con la 24H, la 24G, la 24F, la 24D-2, la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-19 con la Fase 24J y antes con la 24I, la 24H, la 24G, la 24F, la 24D-2, la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -67,7 +67,7 @@ Actualizada el 2026-10-19 con la Fase 24I y antes con la 24H, la 24G, la 24F, la
   - La 24C suma 311 B a la primera visita (de 177,261 a 177,572 B, contra `master` en `29a81a8`) y sube el presupuesto a 177,800 B. Como en la 24A, una parte son los enums del contrato, que viven en el primer chunk.
 - Citas en línea (Fase 24D-1, [ADR 0025](../adr/0025-online-booking.md)):
   - Son en el negocio: no se agenda a domicilio en línea, aunque el negocio haga visitas (Fase 22E).
-  - El cliente no elige quién lo atiende: «Citas a la vez» es del negocio, no por persona, y la solicitud llega sin persona asignada.
+  - Resuelto en la Fase 24J ([ADR 0032](../adr/0032-online-booking-staff.md)): el cliente elige quién lo atiende y la solicitud llega con su persona. «Citas a la vez» sigue para el negocio que no elige a nadie.
   - El paso de 30 minutos, la hora de anticipación, los 30 días y las 3 solicitudes por teléfono son fijos, no por negocio.
   - Una solicitud que nadie decide ocupa su hora hasta que pasa; no vence sola ni avisa al cliente que no se decidió.
   - El candado de las solicitudes (`sp_getapplock`) solo existe en SQL Server: en otro proveedor dos clientes distintos podrían tomar la última hora. La llave de la solicitud sí evita la doble petición en cualquiera.
@@ -145,6 +145,16 @@ Actualizada el 2026-10-19 con la Fase 24I y antes con la 24H, la 24G, la 24F, la
   - **El aviso de Mercado Pago** se firma solo sobre el id del pago: de lo demás solo se usa la cuenta que menciona, para saber qué negocios probar, y todo se lee de Mercado Pago. El inbox guarda cada aviso una vez por pago y petición firmados; la hora de la firma no se revisa (Mercado Pago reintenta avisos), así que un aviso capturado puede repetirse con otro id de petición solo si viene firmado.
   - **La carrera de dos pagos del mismo cobro** se resuelve con el índice único de las devoluciones y un reintento; no hay una prueba de concurrencia real sobre SQL Server, solo las vías una tras otra.
   - La 24I suma 226 B a la primera visita (de 178,522 a 178,748 B) y sube el presupuesto a 178,800 B: las dos rutas, su entrada en el menú y el método «En línea».
+- Elegir con quién en las citas en línea (Fase 24J, [ADR 0032](../adr/0032-online-booking-staff.md)):
+  - **Sin vacaciones ni ausencias por fecha:** una persona que falta un día se apaga ese día, o el negocio marca un día especial (que cierra para todos).
+  - **Sin foto de la persona:** la página muestra su inicial.
+  - **El horario propio va dentro del negocio:** solo se agenda cuando ambos atienden, y las horas siguen cada media hora desde cada apertura del negocio (una persona que entra a las 9:15 empieza a las 9:30).
+  - **Las citas sin persona** (las que el negocio registró sin asignar, o las solicitudes de antes de la 24J) cuentan contra las personas que hacen el servicio, no contra todo el equipo. La regla es conservadora: puede dejar de ofrecer una hora que alguien fuera del equipo en línea iba a atender, pero nunca da dos citas a la misma persona.
+  - **Los avisos de WhatsApp no dicen quién atiende:** ni el de la solicitud ni el de la confirmación.
+  - **Hasta 30 personas encendidas** por negocio.
+  - **El nombre para clientes lo escribe el dueño:** se revisa con la regla de las reseñas (sin enlaces, correos ni teléfonos), no contra el nombre de la cuenta.
+  - **«Te atiende»** lee el nombre para clientes de hoy: si el dueño lo cambia, las citas anteriores dicen el nuevo.
+  - La 24J deja la primera visita en 178,757 B (+9 B, solo por las huellas en los nombres de los archivos de cada ruta) sin subir el presupuesto.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

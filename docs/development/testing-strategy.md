@@ -768,6 +768,31 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Lo que cambia y por qué:** las pantallas de Configuración (45 en `caja-config`, `clientes-mensajes` y `agenda-domicilio`): su fila de pestañas suma «Pagos en línea» después de «Zonas de entrega».
     - **Resultado:** la comparación contra `master` dio 460 escenas iguales, 20 nuevas y 45 que cambian. Con esas capturas, los cuatro archivos tocados y la cobertura de rutas (169 escenas) pasaron dos corridas seguidas contra el mismo build.
     - **Lo que encontraron las escenas:** la cobertura de rutas lee la ruta de cada escena como texto literal (una plantilla con `${…}` no cuenta), y la demo ya tiene pedidos de «Valeria Morales», así que el pedido pagado en línea es de otra clienta.
+- Fase 24J, elegir con quién en las citas en línea ([ADR 0032](../adr/0032-online-booking-staff.md)):
+  - **Domain:**
+    - `OnlineBookingStaffTests` (21):
+      - **la persona:** guarda su nombre para clientes, sus servicios y su horario; «todos los servicios» ofrece cada uno, también los nuevos, sin lista; rechaza un nombre vacío, de más de 40 caracteres (un emoji cuenta como uno) o con enlaces, correos o teléfonos, ninguno o más de 100 servicios; cambiar los servicios conserva las filas que siguen, y un nombre rechazado no cambia nada; el nombre sugerido es el nombre y la inicial, también con el nombre más largo;
+      - **la cita:** la solicitud en línea guarda a la persona y su nombre completo, o ninguno de los dos;
+      - **cuándo está libre** (`StaffSlots`): se ofrece una hora mientras alguien esté libre; cada persona dentro de su horario y del negocio, solo dentro de uno de sus horarios, uniendo los que se siguen y uno que pasa la medianoche; nada un día que no viene ni en un día especial cerrado del negocio; una cita sin persona ocupa a alguien; empieza después de la hora más temprana y sin personas ni horario no ofrece nada; dice quién está libre a una hora ofrecida y nadie a otra; «sin preferencia» elige a quien tiene menos citas ese día, luego por nombre.
+  - **Application:**
+    - `OnlineBookingStaffFlowTests` (14):
+      - **Configuración:** lista al equipo activo con los nombres sugeridos y los servicios que se agendan en línea; guarda a la persona y su actividad solo cuando algo cambió; rechaza a alguien fuera del equipo (o una cuenta de cliente), un servicio que no se agenda y un horario mal escrito; enciende hasta 30; la tarjeta de Citas en línea cuenta a las personas;
+      - **la página de citas:** ofrece a las personas y solo los servicios que alguien hace; las horas de cada persona o de quien esté libre; rechaza a una persona que no hace el servicio, o a cualquiera cuando nadie agenda; una cita sin persona quita una hora cuando nadie más está libre; respeta el traslado alrededor de una visita a domicilio;
+      - **la solicitud:** guarda a la persona elegida y el recibo dice su nombre; sin preferencia va a quien tiene menos citas ese día; una persona que ya no hace el servicio se rechaza con «Elige otra»;
+      - **el cliente:** el seguimiento y Mis citas dicen quién atiende con su nombre para clientes.
+  - **Infrastructure:**
+    - `OnlineBookingStaffMigrationSqlServerTests` (2): una persona por negocio con sus servicios y su horario (cambiar los servicios conserva la fila que sigue), y borrar un servicio lo quita de su lista; revertir se detiene con 50025 sin cambiar nada en cuanto un negocio eligió a alguien y, sin nadie, quita solo las tablas.
+  - **WebApi:** `CrossTenantOnlineBookingSqlServerTests` (+1), sobre la API real: un negocio no ve ni configura al equipo de otro, y la página de un negocio no agenda con la persona de otro.
+  - **Ensayo de los scripts:** sobre una copia de la base de la 24I, `apply.sql` dos veces; la base rechaza a la misma persona dos veces en un negocio (en otro sí entra), el mismo servicio dos veces, un servicio que no existe y borrar el negocio con sus personas, y borrar un servicio o a la persona borra sus filas; `rollback.sql` se detiene con 50025 con una persona y, sin ella, corre dos veces, y `apply.sql` otra vez.
+  - **Cliente:**
+    - `OnlineBookingStaffCard.test.tsx` (6): el equipo con quién agenda, el nombre que ven los clientes, sus servicios y su horario; configurar a una persona con algunos servicios y su horario propio, que empieza del horario del negocio; qué falta antes de guardar y qué rechazó el servidor; no aparece sin la agenda; las reglas del borrador y «Todos los servicios» cuando la lista los tiene todos.
+    - `PublicBookingPage.test.tsx` (8, +2): elegir con quién, con las horas de esa persona y su nombre en el recibo; cuando la persona deja de hacer el servicio, ofrece ver con quien esté libre.
+    - `OnlineBookingCard.test.tsx` (5, +1): con personas, las horas salen de cada una y no pide «Citas a la vez».
+    - `AppointmentTrackingPage.test.tsx`: el seguimiento dice «Te atiende …».
+  - **Cliente en total:** 132 archivos y 812 pruebas.
+  - **Primera visita:** 178,757 B de 178,800 B (+9 B contra `master`, solo por las huellas en los nombres de los archivos de cada ruta).
+  - **Escenas visuales:** `citas-en-linea.spec.ts` (+8): «¿Con quién?» con Paola elegida (escritorio, teléfono y oscuro) y la solicitud enviada con «Te atiende»; Configuración › Quién atiende sin nadie, con dos personas y editando a una (teléfono), y la tarjeta de Citas en línea por persona.
+    - ESCENAS_24J
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

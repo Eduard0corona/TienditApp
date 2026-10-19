@@ -1,5 +1,6 @@
 import { asOption, type DemoData, type SceneOptions } from '../fixtures';
 import { uuid } from '../mocks/data.mjs';
+import { demoOnlineBookingStaff } from '../mocks/routes-p12.mjs';
 import { demoDirectory } from '../mocks/routes-p9.mjs';
 import { publicRoutes } from './publico-cuenta-marco.mocks';
 
@@ -76,12 +77,36 @@ function services(data: DemoData): BookingService[] {
 }
 
 /**
- * A week of free times of a service (PublicBookingSlotsDto) as BookingSlots.FreeStarts gives them: every half hour from
- * each opening, an hour from now at the earliest, within the opening and not over the appointments taken.
+ * Who Café La Esquina books online when it says who attends (Fase 24J): Carlos all day, every service; Paola from 12:00,
+ * only the catas. None by default.
  */
-function week(data: DemoData, serviceId: string, from: string | null) {
+interface BookingPerson {
+  id: string;
+  name: string;
+  /** The first minute of the day they attend. */
+  fromMinutes: number;
+  /** Their services, by name; none means all. */
+  services?: string[];
+}
+
+const PEOPLE: BookingPerson[] = [
+  { id: uuid('staff:carlos'), name: 'Carlos M.', fromMinutes: 0 },
+  { id: uuid('staff:paola'), name: 'Paola J.', fromMinutes: 12 * 60, services: ['Cata de café de especialidad'] },
+];
+
+const people = (data: DemoData): BookingPerson[] => (data.bookingWithPeople ? PEOPLE : []);
+const offers = (person: BookingPerson, serviceName: string) => !person.services || person.services.includes(serviceName);
+
+/**
+ * A week of free times of a service (PublicBookingSlotsDto) as BookingSlots.FreeStarts gives them: every half hour from
+ * each opening, an hour from now at the earliest, within the opening and not over the appointments taken; with a person,
+ * from the time they come in.
+ */
+function week(data: DemoData, serviceId: string, from: string | null, staffId: string | null = null) {
   const service = services(data).find((candidate) => candidate.id === serviceId);
   if (!service) return null;
+  const person = staffId ? people(data).find((candidate) => candidate.id === staffId && offers(candidate, service.name)) : null;
+  if (staffId && !person) return null;
   const first = from && from > TODAY ? from : TODAY;
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = addDays(first, index);
@@ -90,7 +115,7 @@ function week(data: DemoData, serviceId: string, from: string | null) {
       const starts: number[] = [];
       for (let start = opens; start + service.durationMinutes <= closes; start += 30) starts.push(start);
       return starts;
-    }).filter((start) => (date !== TODAY || start >= NOW_MINUTES + 60)
+    }).filter((start) => (date !== TODAY || start >= NOW_MINUTES + 60) && start >= (person?.fromMinutes ?? 0)
       && !(TAKEN[date] ?? []).some(([takenFrom, takenTo]) => start < takenTo && takenFrom < start + service.durationMinutes));
     return {
       date,
@@ -133,14 +158,19 @@ const bookingRoutes: ExtraRoutes = (data, helpers) => [
     ? helpers.ok({
       businessName: data.tenant.name, slug: data.tenant.slug, logoUrl: null, contactPhone: data.tenant.contactPhone,
       theme: data.tenant.theme, address: 'Av. Álvaro Obregón 120, Roma Norte, 06700 Ciudad de México, CDMX',
-      pricesIncludeTax: true, daysAhead: 30, services: services(data),
+      pricesIncludeTax: true, daysAhead: 30,
+      services: services(data).map((service) => ({
+        ...service,
+        staffIds: people(data).filter((person) => offers(person, service.name)).map((person) => person.id),
+      })),
+      staff: people(data).map(({ id, name }) => ({ id, name })),
     })
     : problem(404, 'Este negocio no agenda citas en línea.'))],
   ['GET', /^\/public\/menu\/([^/]+)\/booking\/slots$/, (_match, query) => {
-    const slots = week(data, query.get('serviceId') ?? '', query.get('from'));
+    const slots = week(data, query.get('serviceId') ?? '', query.get('from'), query.get('staffId'));
     return slots ? helpers.ok(slots) : problem(404, 'Ese servicio no se agenda en línea.');
   }],
-  ['POST', /^\/public\/menu\/([^/]+)\/appointments$/, (_match, _query, body: { serviceProductId?: string; startAt?: string }) => {
+  ['POST', /^\/public\/menu\/([^/]+)\/appointments$/, (_match, _query, body: { serviceProductId?: string; startAt?: string; staffId?: string | null }) => {
     const service = services(data).find((candidate) => candidate.id === body?.serviceProductId);
     const [date, time] = (body?.startAt ?? '').split('T');
     const minutes = Number(time?.slice(0, 2)) * 60 + Number(time?.slice(3, 5));
@@ -149,6 +179,8 @@ const bookingRoutes: ExtraRoutes = (data, helpers) => [
       dateLabel: dateLabel(date), timeLabel: timeLabel(minutes), businessName: data.tenant.name, contactPhone: '5512345678',
       address: 'Av. Álvaro Obregón 120, Roma Norte, 06700 Ciudad de México, CDMX',
       linkedToAccount: data.profile.role === 'Customer', trackingToken: APPOINTMENT_LINK,
+      // The person chosen, or, without preference, the first one free (the server picks the one with fewer appointments).
+      staffName: people(data).find((person) => person.id === body?.staffId)?.name ?? people(data)[0]?.name ?? null,
     });
   }],
   ['POST', /^\/public\/appointments\/tracking$/, (_match, _query, body: { token?: string }) => (body?.token === APPOINTMENT_LINK
@@ -200,7 +232,33 @@ function withRequests(data: DemoData) {
 
 /** Online booking is on and customers book: the owner's card links the booking page. */
 function bookingOn(data: DemoData) {
-  data.onlineBooking = { enabled: true, capacity: 2, maxCapacity: 20, booksOnline: true, missing: [], slug: data.tenant.slug };
+  data.onlineBooking = { enabled: true, capacity: 2, maxCapacity: 20, booksOnline: true, missing: [], slug: data.tenant.slug, staffCount: 0 };
+}
+
+/** The booking page of Café La Esquina says who attends (Fase 24J): Carlos and Paola. */
+function withPeople(data: DemoData) {
+  data.bookingWithPeople = true;
+}
+
+/**
+ * The owner said who attends online (Fase 24J): Carlos every service in the business's hours, Paola the catas from 12:00
+ * on weekdays; the rest of the team does not.
+ */
+function staffSet(data: DemoData) {
+  bookingOn(data);
+  const settings = demoOnlineBookingStaff(data);
+  const cata = settings.services.find((service: { name: string }) => service.name === 'Cata de café de especialidad');
+  for (const member of settings.members) {
+    if (member.fullName === 'Carlos Méndez') Object.assign(member, { configured: true, enabled: true, name: 'Carlos M.' });
+    if (member.fullName === 'Paola Jiménez') {
+      Object.assign(member, {
+        configured: true, enabled: true, name: 'Paola J.', allServices: false, serviceIds: cata ? [cata.id] : [],
+        weeklyHours: [1, 2, 3, 4, 5].map((day) => ({ day, opens: '12:00', closes: '20:00' })),
+      });
+    }
+  }
+  data.onlineBookingStaff = settings;
+  data.onlineBooking.staffCount = 2;
 }
 
 export const CITAS_ROUTES = asOption(bookingRoutes);
@@ -208,3 +266,5 @@ export const MENU_AGENDA = asOption(menuBooks);
 export const EXPLORAR_AGENDA = asOption(directoryBooks);
 export const AGENDA_SOLICITUDES = asOption(withRequests);
 export const CITAS_PRENDIDAS = asOption(bookingOn);
+export const CITAS_CON_PERSONAS = asOption(withPeople);
+export const QUIEN_ATIENDE = asOption(staffSet);
