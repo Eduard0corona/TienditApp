@@ -94,9 +94,14 @@ jobs:
                - blocker/major/minor: severity counts covering ALL findings that currently apply
                  in what you reviewed (new and previously raised).
                - incomplete: true if any part of the diff went unreviewed, for whatever reason;
-                 false only when you reviewed all of it.
-               - skipped: the paths or directories you did not review; empty when incomplete is
-                 false.
+                 false only when you reviewed all of it. Generated files do not count: CI checks
+                 them, so do not review them line by line and never list them in skipped:
+                 **/Migrations/*.Designer.cs, **/Migrations/*ModelSnapshot.cs,
+                 database/production/**/{apply,rollback,verify}.sql, client/openapi/openapi.json
+                 and client/src/api/generated/**. The migration itself (its Up and Down) and the
+                 DTOs and controllers behind the contract are not generated: review them.
+               - skipped: the paths or directories you did not review, one per entry, with no
+                 comment; empty when incomplete is false.
                - summary: markdown. Its first line says what you reviewed, then one line per
                  finding (`SEVERITY path:line - problem`), or one line saying there are none.
             Write comments and the summary in Spanish, like the repository's docs and PRs.
@@ -136,8 +141,21 @@ jobs:
           RESULT: ${{ steps.claude-review.outputs.structured_output }}
         run: |
           marker='<!-- claude-code-review -->'
-          # Anything listed as skipped makes the review incomplete, whatever the flag says.
-          incomplete=$(jq '.incomplete or (.skipped | length > 0)' <<<"$RESULT")
+          # Generated files never count as skipped, even when the model lists them anyway: CI checks them (the same
+          # list as point 6 of the prompt). On PR #97 it listed them with a comment and several per entry, so an entry
+          # is dropped when every path in it is generated, as in "a, b (comment)"; any other word, or a comment with
+          # a "/" or ".", keeps it. With only generated files listed the review is complete; anything still in skipped
+          # makes it incomplete, whatever the flag says.
+          RESULT=$(jq '
+            def generated:
+              test("^(.+/)?Migrations/[^/]+\\.Designer\\.cs$|^(.+/)?Migrations/[^/]*ModelSnapshot\\.cs$|^database/production/(.+/)?(apply|rollback|verify)\\.sql$|^client/openapi/openapi\\.json$|^client/src/api/generated(/.*)?$");
+            def only_generated:
+              [sub("\\s*\\([^()/.]*\\)\\s*$"; "") | splits("[\\s,`]+") | ltrimstr("./") | select(. != "")]
+              | length > 0 and all(generated);
+            (.skipped | length) as $listed
+            | .skipped |= map(select(only_generated | not))
+            | .incomplete = ((.skipped | length) > 0 or (.incomplete and $listed == 0))' <<<"$RESULT")
+          incomplete=$(jq '.incomplete' <<<"$RESULT")
           body=$(jq -r --arg m "$marker" --argjson incomplete "$incomplete" '
             "\($m)\n**BLOCKER** \(.blocker) · **MAJOR** \(.major) · **MINOR** \(.minor)"
             + (if $incomplete then
@@ -159,8 +177,8 @@ jobs:
           fi
 
           # The check turns red with BLOCKER findings or when part of the diff went unreviewed,
-          # so a green run means a complete review. Remove this block if the review should not
-          # gate merges.
+          # so a green run means a complete review (generated files aside). Remove this block if
+          # the review should not gate merges.
           status=0
           if [ "$(jq '.blocker' <<<"$RESULT")" -gt 0 ]; then
             echo "::error::Claude review reported BLOCKER findings"
