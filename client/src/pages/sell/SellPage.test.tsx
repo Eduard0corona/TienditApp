@@ -427,6 +427,55 @@ describe('SellPage', () => {
     })]);
   });
 
+  it('reads the account again when the server refuses the sale on credit', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    let available = 500;
+    vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) => Promise.resolve(
+      path === '/api/v1/customers/account'
+        ? { phone: '+525512345678', name: 'Ana López', sellsOnCredit: true, creditLimit: 500, owed: 500 - available, available, orders: [], ordersCount: 0, recentPayments: [] }
+        : path === '/api/v1/delivery-platforms/channels' ? [] : undefined,
+    )) as unknown as typeof apiRequest);
+    const headers = new AxiosHeaders();
+    vi.mocked(ordersApi.create).mockImplementation(() => {
+      // Another register sold to Ana on credit meanwhile: $10 are left.
+      available = 10;
+      return Promise.reject(new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+        status: 400, statusText: '', headers, config: { headers },
+        data: { code: 'bad_request', detail: 'Ana López debe $490.00 y con esta venta pasaría su límite de $500.00.' },
+      } as AxiosResponse));
+    });
+    renderAt('/sell?phone=5512345678&name=Ana');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: /Cobrar \$25\.00/ }));
+    const charge = within(await screen.findByRole('dialog'));
+    await userEvent.click(await charge.findByRole('button', { name: 'Fiar $25.00' }));
+
+    expect(await charge.findByText(/pasaría su límite/)).toBeInTheDocument();
+    expect(await charge.findByText(/tiene fiado: le quedan/)).toHaveTextContent('le quedan $10.00. Para fiarle el resto, cobra al menos $15.00.');
+    expect(charge.getByRole('button', { name: 'Fiar $25.00' })).toBeDisabled();
+  });
+
+  it('offers no fiado without connection: the account is not read and the sale is charged as always', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(useOnlineStatus).mockReturnValue(false);
+    vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) => Promise.resolve(
+      path === '/api/v1/customers/account'
+        ? { phone: '+525512345678', name: 'Ana López', sellsOnCredit: true, creditLimit: 500, owed: 0, available: 500, orders: [], ordersCount: 0, recentPayments: [] }
+        : path === '/api/v1/delivery-platforms/channels' ? [] : undefined,
+    )) as unknown as typeof apiRequest);
+    renderAt('/sell?phone=5512345678&name=Ana');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: /Cobrar \$25\.00/ }));
+    const charge = within(await screen.findByRole('dialog'));
+
+    expect(charge.getByRole('button', { name: 'Cobrar $25.00' })).toBeEnabled();
+    expect(charge.queryByText(/tiene fiado/)).not.toBeInTheDocument();
+    expect(charge.queryByRole('button', { name: /Fiar/ })).not.toBeInTheDocument();
+    expect(vi.mocked(apiRequest).mock.calls.map(([, path]) => path)).not.toContain('/api/v1/customers/account');
+  });
+
   it('records a sale started from a WhatsApp conversation as a WhatsApp order that can be saved unpaid', async () => {
     signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageWhatsApp']);
     vi.mocked(ordersApi.create).mockResolvedValue({

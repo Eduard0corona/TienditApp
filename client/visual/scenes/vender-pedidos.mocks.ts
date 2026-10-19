@@ -35,6 +35,8 @@ interface SaleRequest {
   delivery?: { postalCode: string; addressLine: string; references?: string; paysWith?: number };
   /** The appointment the sale charges (Fase 22E): one at the customer's address adds its charge for the visit. */
   appointmentId?: string;
+  /** What is not paid now is owed (fiado, Fase 26A): the sale closes like a paid one. */
+  onCredit?: boolean;
 }
 
 /** A delivery zone of the business as GET /delivery-zones answers it. */
@@ -169,7 +171,7 @@ export function createSale(data: DemoData, body: SaleRequest) {
   });
   const paidCents = payments.reduce((sum, payment) => sum + cents(payment.amount), 0);
   const isService = body.orderType === 1;
-  const paid = items.length > 0 && paidCents >= totalCents;
+  const paid = items.length > 0 && (paidCents >= totalCents || !!body.onCredit);
   // An order sent to an address leaves after the kitchen: paid, it is not closed yet.
   const status = paid && data.tenant.autoCloseCounterSales && !zone ? (isService ? 7 : 6) : 1;
 
@@ -181,7 +183,7 @@ export function createSale(data: DemoData, body: SaleRequest) {
     paidAmount: money(paidCents), balance: money(totalCents - paidCents), tipTotal: money(payments.reduce((sum, payment) => sum + cents(payment.tip), 0)),
     refundedAmount: 0, netPaidAmount: money(paidCents), canCancel: payments.length === 0, allowedTransitions: status === 1 ? [4, 2, 99] : [],
     createdAt: NOW_ISO, items, statusHistory: [], servicePieces: [], payments, refunds: [], itemCancellations: [],
-    isTab: false, isOpenTab: false, kitchenTickets: [], stockWarnings: [],
+    isTab: false, isOpenTab: false, kitchenTickets: [], stockWarnings: [], soldOnCredit: !!body.onCredit,
     platformOrder: isPlatform ? { externalOrderNumber: body.externalOrderNumber ?? '', collectedBy } : null,
     delivery: zone && body.delivery
       ? {

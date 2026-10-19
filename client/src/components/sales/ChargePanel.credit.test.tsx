@@ -45,6 +45,12 @@ describe('ChargePanel on credit (fiado)', () => {
     expect(screen.getByRole('button', { name: 'Fiar $116.00' })).toBeDisabled();
     expect(screen.getByText(/cobra al menos/)).toHaveTextContent('Para fiarle el resto, cobra al menos $66.00.');
 
+    // The least to charge is of the whole sale: it stays as the cashier types it.
+    await userEvent.type(screen.getByLabelText('Efectivo recibido'), '30');
+    expect(screen.getByText(/cobra al menos/)).toHaveTextContent('Para fiarle el resto, cobra al menos $66.00.');
+    expect(screen.getByRole('button', { name: 'Fiar $86.00' })).toBeDisabled();
+
+    await userEvent.clear(screen.getByLabelText('Efectivo recibido'));
     await userEvent.type(screen.getByLabelText('Efectivo recibido'), '70');
     await userEvent.click(screen.getByRole('button', { name: 'Fiar $46.00' }));
 
@@ -53,6 +59,36 @@ describe('ChargePanel on credit (fiado)', () => {
       cashReceived: 70,
       payments: [expect.objectContaining({ method: OrderPaymentMethod.Cash, amount: 70, cashReceived: 70 })],
     }));
+  });
+
+  it('sells on credit what is left after a payment already added', async () => {
+    const onSubmit = renderPanel({ name: 'Ana López', available: 500 });
+
+    await userEvent.click(screen.getByRole('radio', { name: /Tarjeta/ }));
+    await userEvent.type(screen.getByLabelText('Monto'), '16');
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar otro pago' }));
+    await userEvent.type(screen.getByLabelText('Efectivo recibido'), '20');
+    await userEvent.click(screen.getByRole('button', { name: 'Fiar $80.00' }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      onCredit: true,
+      payments: [
+        expect.objectContaining({ method: OrderPaymentMethod.Card, amount: 16 }),
+        expect.objectContaining({ method: OrderPaymentMethod.Cash, amount: 20, cashReceived: 20 }),
+      ],
+    }));
+  });
+
+  it('never sells all of it on credit while the cash or the tip typed is not an amount', async () => {
+    renderPanel({ name: 'Ana López', available: 500 });
+
+    await userEvent.type(screen.getByLabelText('Efectivo recibido'), '1OO');
+    expect(screen.getByRole('button', { name: 'Fiar $116.00' })).toBeDisabled();
+
+    await userEvent.clear(screen.getByLabelText('Efectivo recibido'));
+    await userEvent.click(screen.getByRole('radio', { name: 'Otra' }));
+    await userEvent.type(screen.getByLabelText('Monto de la propina'), 'diez');
+    expect(screen.getByRole('button', { name: 'Fiar $116.00' })).toBeDisabled();
   });
 
   it('asks to take the tip away: a tip has no payment to go with', async () => {

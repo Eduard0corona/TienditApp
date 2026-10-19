@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import type { OrderPaymentMethod } from '../../types';
 import { OrderPaymentMethod as PaymentMethod } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
@@ -140,12 +140,18 @@ export default function ChargePanel({
     && (allowPartial ? coveredCents > 0 : missingCents === 0);
   const canAddAnother = currentIsValid && currentCents > 0 && currentCents < remainingCents;
   // On credit, what the customer pays now is what was added and typed: an empty field is no payment here (charging in
-  // full reads it as the exact amount). The rest is what they would owe; a tip has no payment to go with.
+  // full reads it as the exact amount). The rest is what they would owe; a tip has no payment to go with. Text that is
+  // not an amount is no payment either, so it never sells all of it on credit.
+  const cashIsValid = !cashTyped || parseMoneyInput(cashReceived) !== null;
   const typedNowCents = !currentIsValid ? 0 : isCash ? (cashTyped ? cashAppliedCents : 0) : (amountInput.trim() === '' ? 0 : typedCents);
   const creditCents = credit ? Math.max(0, dueCents - addedCents - typedNowCents) : 0;
-  const creditShortCents = credit ? Math.max(0, creditCents - toCents(credit.available)) : 0;
-  const canSellOnCredit = !!credit && !submitting && !uploading && currentIsValid && creditCents > 0
-    && creditShortCents === 0 && tipCents === 0;
+  const creditFits = !!credit && creditCents <= toCents(credit.available);
+  // The least the customer pays now for the rest to fit in their fiado: of the whole sale, so it does not change as the
+  // cashier types it.
+  const creditMinimumCents = credit ? Math.max(0, dueCents - toCents(credit.available)) : 0;
+  const canSellOnCredit = !!credit && !submitting && !uploading && currentIsValid && cashIsValid && tipIsValid
+    && creditCents > 0 && creditFits && tipCents === 0;
+  const creditNoticeId = useId();
   const suggestions = useMemo(() => getCashSuggestions(remainingCents + tipCents), [remainingCents, tipCents]);
 
   const resetCurrent = () => {
@@ -432,13 +438,13 @@ export default function ChargePanel({
       )}
 
       {credit && (
-        <p className="charge-credit small mt-3 mb-0">
+        <p id={creditNoticeId} className="charge-credit small mt-3 mb-0" aria-live="polite">
           <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>
           <strong>{credit.name}</strong> tiene fiado: le quedan <span className="ta-money">{formatMoney(credit.available)}</span>.
-          {creditShortCents > 0 && (
-            <> Para fiarle el resto, cobra al menos <span className="ta-money">{formatMoney(creditShortCents / 100)}</span>.</>
+          {!creditFits && (
+            <> Para fiarle el resto, cobra al menos <span className="ta-money">{formatMoney(creditMinimumCents / 100)}</span>.</>
           )}
-          {creditShortCents === 0 && tipCents > 0 && <> Para fiar, quita la propina.</>}
+          {creditFits && tipCents > 0 && <> Para fiar, quita la propina.</>}
         </p>
       )}
 
@@ -454,7 +460,13 @@ export default function ChargePanel({
           </button>
         )}
         {credit && creditCents > 0 && (
-          <button type="button" className="btn btn-outline-primary btn-touch" onClick={submitOnCredit} disabled={!canSellOnCredit}>
+          <button
+            type="button"
+            className="btn btn-outline-primary btn-touch"
+            onClick={submitOnCredit}
+            disabled={!canSellOnCredit}
+            aria-describedby={creditNoticeId}
+          >
             <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>Fiar <span className="ta-money">{formatMoney(creditCents / 100)}</span>
           </button>
         )}

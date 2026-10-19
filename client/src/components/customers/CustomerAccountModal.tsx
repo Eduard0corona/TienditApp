@@ -36,6 +36,9 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
   const pay = usePayCustomerAccount();
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState('');
+  // Some payments went through and one did not: the panel closes, so pressing «Abonar» again never sends again the ones
+  // already registered (a payment has no idempotency key), and the account shows what is still owed.
+  const [partialNotice, setPartialNotice] = useState('');
 
   const submitPayment = async (charge: ChargeResult) => {
     if (!account) return;
@@ -59,7 +62,12 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
       setPaying(false);
     } catch (err: unknown) {
       const message = getApiErrorMessage(err, 'No se pudo registrar el abono.');
-      setPayError(paid > 0 ? `Se registraron ${formatMoney(paid)}; el resto no: ${message}` : message);
+      if (paid > 0) {
+        setPaying(false);
+        setPartialNotice(`Se registraron ${formatMoney(paid)}; el resto no: ${message} Revisa lo que debe antes de cobrar lo que falta.`);
+      } else {
+        setPayError(message);
+      }
     }
   };
 
@@ -127,6 +135,7 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
               />
             ) : (
               <>
+                {partialNotice && <div className="alert alert-warning py-2" role="status">{partialNotice}</div>}
                 <h3 className="h6">Lo que debe</h3>
                 {account.orders.length === 0 ? (
                   <p className="text-muted small">No debe nada.</p>
@@ -163,7 +172,9 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
                     </table>
                     {account.ordersCount > account.orders.length && (
                       <p className="small text-muted mt-1 mb-0">
-                        Y {account.ordersCount - account.orders.length} pedidos más, más recientes.
+                        {account.ordersCount - account.orders.length === 1
+                          ? 'Y 1 pedido más, más reciente.'
+                          : `Y ${account.ordersCount - account.orders.length} pedidos más, más recientes.`}
                       </p>
                     )}
                   </div>
@@ -195,7 +206,14 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
             className="btn btn-light btn-touch"
           />
           {canCharge && account.owed > 0 && (
-            <button type="button" className="btn btn-primary btn-touch" onClick={() => setPaying(true)}>
+            <button
+              type="button"
+              className="btn btn-primary btn-touch"
+              onClick={() => {
+                setPartialNotice('');
+                setPaying(true);
+              }}
+            >
               <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>Abonar
             </button>
           )}

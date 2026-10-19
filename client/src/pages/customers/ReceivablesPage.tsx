@@ -46,12 +46,14 @@ export default function ReceivablesPage() {
       <div className="card">
         <div className="card-body">
           {error && <div className="alert alert-danger">{getApiErrorMessage(error, 'No se pudo cargar lo que te deben.')}</div>}
-          <p className="mb-3">
-            Te deben <strong className="ta-money fs-5">{formatMoney(data?.totalOwed ?? 0)}</strong>
-            {data && data.page.totalCount > 0 && (
-              <span className="text-muted"> · {data.page.totalCount === 1 ? '1 cliente' : `${data.page.totalCount} clientes`}</span>
-            )}
-          </p>
+          {data && (
+            <p className="mb-3">
+              Te deben <strong className="ta-money fs-5">{formatMoney(data.totalOwed)}</strong>
+              {data.page.totalCount > 0 && (
+                <span className="text-muted"> · {data.page.totalCount === 1 ? '1 cliente' : `${data.page.totalCount} clientes`}</span>
+              )}
+            </p>
+          )}
 
           <DataTable<Receivable>
             data={data?.page.items ?? []}
@@ -111,7 +113,7 @@ export default function ReceivablesPage() {
                   <button
                     type="button"
                     className="btn btn-sm btn-light"
-                    aria-label={`Ver la cuenta de ${row.name}`}
+                    aria-label={`Ver cuenta de ${row.name}`}
                     onClick={() => setAccount({ customerId: row.customerId, phone: row.customerId ? null : row.phone, name: row.name })}
                   >
                     Ver cuenta

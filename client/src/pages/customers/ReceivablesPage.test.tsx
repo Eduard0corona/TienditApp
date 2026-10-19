@@ -70,7 +70,7 @@ describe('ReceivablesPage', () => {
   it('opens the account of a customer without a record by their phone', async () => {
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Ver la cuenta de Luis Pérez' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Ver cuenta de Luis Pérez' }));
 
     expect(await screen.findByText('ORD-000020')).toBeInTheDocument();
     expect(request).toHaveBeenCalledWith('get', '/api/v1/customers/account', expect.objectContaining({

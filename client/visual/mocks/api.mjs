@@ -20,6 +20,7 @@ import { phase25Routes } from './routes-p11.mjs';
 import { phase24dRoutes } from './routes-p12.mjs';
 import { phase24fRoutes } from './routes-p13.mjs';
 import { phase24hRoutes } from './routes-p14.mjs';
+import { phase26aRoutes } from './routes-p15.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 export { NOW_ISO };
@@ -131,7 +132,8 @@ function createMockOrder(data, body) {
   data.mockOrderSeq = (data.mockOrderSeq ?? 400) + 1;
   const seq = data.mockOrderSeq;
   const isService = body?.orderType === 1;
-  const paid = paidAmount >= taxes.total && items.length > 0;
+  // A sale on credit (fiado, Fase 26A) closes like a paid one: what is left is owed.
+  const paid = (paidAmount >= taxes.total || !!body?.onCredit) && items.length > 0;
   const status = paid && data.tenant.autoCloseCounterSales ? (isService ? 7 : 6) : 1;
   const order = {
     id: `mock-order-${seq}`, createdByBusiness: true, orderNumber: `ORD-${String(seq).padStart(6, '0')}`,
@@ -139,7 +141,7 @@ function createMockOrder(data, body) {
     customerName: body?.customerName || 'Público en general', customerPhone: body?.customerPhone, customerNotes: body?.customerNotes, tableNumber: body?.tableNumber,
     pricesIncludeTax: data.tenant.pricesIncludeTax, taxBreakdown: taxes.breakdown, subTotal: taxes.subTotal, tax: taxes.tax, total: taxes.total,
     paidAmount, balance: Math.round((taxes.total - paidAmount) * 100) / 100, createdAt: NOW_ISO, items, statusHistory: [], servicePieces: [], payments,
-    tipTotal: Math.round(payments.reduce((s, x) => s + x.tip, 0) * 100) / 100,
+    tipTotal: Math.round(payments.reduce((s, x) => s + x.tip, 0) * 100) / 100, soldOnCredit: !!body?.onCredit,
   };
   data.orders.unshift(order);
   return order;
@@ -226,6 +228,7 @@ function buildRoutes(data, token) {
   const NOW_LOCAL = localHhmmss(NOW_ISO);
 
   return [
+    ...phase26aRoutes(data, { ok, notFound, paginate }),
     ...phase24hRoutes(data, { ok }),
     ...phase24fRoutes(data, { ok }),
     ...phase24dRoutes(data, { ok, notFound }),

@@ -754,6 +754,8 @@ export default function SellPage() {
       if (!charge) toast.error(message);
       // A price or availability may have changed: refresh the catalog and the cart prices.
       void catalog.reload();
+      // Refused on credit: what the customer owes may have changed at another register, so the panel reads it again.
+      if (charge?.onCredit) refreshCredit();
     } finally {
       setSubmitting(false);
     }

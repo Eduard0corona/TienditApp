@@ -22,6 +22,7 @@ export default function CreditLimitModal({ customer, onClose }: CreditLimitModal
   const [typed, setTyped] = useState(customer.creditLimit != null ? String(customer.creditLimit) : '');
   const [error, setError] = useState('');
   const problem = creditLimitProblem(typed);
+  const showProblem = typed.trim() !== '' && !!problem;
 
   const save = async (creditLimit: number | null) => {
     setError('');
@@ -51,20 +52,21 @@ export default function CreditLimitModal({ customer, onClose }: CreditLimitModal
           <label className="form-label fw-semibold" htmlFor="credit-limit">Le fías hasta</label>
           <input
             id="credit-limit"
-            className={`form-control form-control-lg ta-money ${typed.trim() !== '' && problem ? 'is-invalid' : ''}`}
+            className={`form-control form-control-lg ta-money ${showProblem ? 'is-invalid' : ''}`}
             inputMode="decimal"
             autoComplete="off"
             placeholder="500"
             value={typed}
             onChange={(event) => setTyped(event.target.value)}
             disabled={update.isPending}
-            aria-describedby="credit-limit-help"
+            aria-invalid={showProblem || !!error}
+            aria-describedby={['credit-limit-help', showProblem && 'credit-limit-problem', error && 'credit-limit-error'].filter(Boolean).join(' ')}
           />
-          {typed.trim() !== '' && problem && <div className="invalid-feedback">{problem}</div>}
+          {showProblem && <div id="credit-limit-problem" className="invalid-feedback">{problem}</div>}
           <div id="credit-limit-help" className="form-text">
             En Vender podrás fiarle mientras lo que debe, con la venta, no pase de este límite.
           </div>
-          {error && <div className="alert alert-danger py-2 mt-3 mb-0">{error}</div>}
+          {error && <div id="credit-limit-error" className="alert alert-danger py-2 mt-3 mb-0">{error}</div>}
         </Modal.Body>
         <Modal.Footer className="flex-wrap">
           {customer.creditLimit != null && (

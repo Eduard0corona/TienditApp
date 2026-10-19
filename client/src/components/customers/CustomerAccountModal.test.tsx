@@ -96,6 +96,28 @@ describe('CustomerAccountModal', () => {
     });
   });
 
+  it('closes the panel when one payment went through and the next did not, so a retry never sends it again', async () => {
+    signIn(['ManageOrders', 'ChargeOrders']);
+    request.mockImplementation(((method: string, _path: string, options?: { body?: { method?: number } }) => {
+      if (method !== 'post') return Promise.resolve(ACCOUNT);
+      return options?.body?.method === OrderPaymentMethod.Card
+        ? Promise.reject(apiError(400, 'bad_request', 'La terminal no respondió.'))
+        : Promise.resolve({ ...ACCOUNT, owed: 50 });
+    }) as never);
+    renderModal();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Abonar/ }));
+    await userEvent.type(screen.getByLabelText('Efectivo recibido'), '100');
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar otro pago' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Abonar $150.00' }));
+
+    expect(await screen.findByText(/Se registraron \$100\.00; el resto no: La terminal no respondió\./)).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Estado de cuenta' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Efectivo recibido')).not.toBeInTheDocument();
+    expect(request.mock.calls.filter(([method]) => method === 'post')).toHaveLength(2);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
   it('keeps the panel with the server’s reason when the payment is refused', async () => {
     signIn(['ManageOrders', 'ChargeOrders']);
     request.mockImplementation(((method: string) => method === 'post'
