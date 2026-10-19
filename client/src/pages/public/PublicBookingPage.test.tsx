@@ -136,7 +136,7 @@ describe('PublicBookingPage', () => {
     // A day without free times cannot be picked; the first one with them opens.
     expect(await screen.findByRole('button', { name: /Dom 4.*Sin horarios.*domingo 4 de octubre/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Lun 5.*2 horarios.*lunes 5 de octubre/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(api.getBookingSlots).toHaveBeenCalledWith('barberia-luis', 's1', undefined, expect.anything());
+    expect(api.getBookingSlots).toHaveBeenCalledWith('barberia-luis', 's1', undefined, undefined, expect.anything());
 
     await user.click(screen.getByRole('button', { name: '10:00 a. m.' }));
     await user.click(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
@@ -153,6 +153,7 @@ describe('PublicBookingPage', () => {
       customerName: 'Valeria Ruiz',
       customerPhone: '5522107765',
       notes: null,
+      staffId: null,
       idempotencyKey: expect.any(String),
     }));
     expect(await screen.findByRole('heading', { name: '¡Solicitud enviada!' })).toBeInTheDocument();
@@ -169,7 +170,7 @@ describe('PublicBookingPage', () => {
     await user.click(await screen.findByRole('button', { name: /Corte de cabello/ }));
     expect(await screen.findByRole('button', { name: 'Semana anterior' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Semana siguiente' }));
-    await waitFor(() => expect(api.getBookingSlots).toHaveBeenLastCalledWith('barberia-luis', 's1', '2026-10-11', expect.anything()));
+    await waitFor(() => expect(api.getBookingSlots).toHaveBeenLastCalledWith('barberia-luis', 's1', '2026-10-11', undefined, expect.anything()));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Semana anterior' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Semana anterior' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Semana anterior' })).toBeDisabled());
@@ -248,6 +249,58 @@ describe('PublicBookingPage', () => {
     await user.click(screen.getByRole('button', { name: 'Continuar · Mar 6 · 12:30 a. m.' }));
 
     expect(within(await screen.findByRole('dialog', { name: 'Tu cita' })).getByText('Martes 6 de octubre · 12:30 a. m.')).toBeInTheDocument();
+  });
+
+  it('lets the customer choose who attends, with that person’s times, and says so in the receipt', async () => {
+    const user = userEvent.setup();
+    api.getBooking.mockResolvedValue(booking({
+      staff: [{ id: 'p1', name: 'Ana L.' }, { id: 'p2', name: 'Luis M.' }],
+      services: [
+        { id: 's1', name: 'Corte de cabello', price: 150, durationMinutes: 45, staffIds: ['p1', 'p2'] },
+        { id: 's2', name: 'Barba', price: 90, durationMinutes: 90, staffIds: ['p2'] },
+      ],
+    }) as never);
+    api.requestAppointment.mockResolvedValue(receipt({ staffName: 'Ana L.' }) as never);
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Corte de cabello/ }));
+    const people = within(await screen.findByRole('group', { name: 'Quién te atiende' }));
+    // No preference first: whoever is free.
+    expect(people.getByRole('button', { name: /Sin preferencia/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(api.getBookingSlots).toHaveBeenLastCalledWith('barberia-luis', 's1', undefined, undefined, expect.anything());
+    await user.click(people.getByRole('button', { name: /Ana L\./ }));
+    await waitFor(() => expect(api.getBookingSlots).toHaveBeenLastCalledWith('barberia-luis', 's1', undefined, 'p1', expect.anything()));
+    expect(people.getByRole('button', { name: /Ana L\./ })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(await screen.findByRole('button', { name: '10:00 a. m.' }));
+    await user.click(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Tu cita' }));
+    expect(sheet.getByText('Con Ana L.')).toBeInTheDocument();
+    await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    await user.click(sheet.getByRole('button', { name: 'Pedir cita' }));
+
+    await waitFor(() => expect(api.requestAppointment).toHaveBeenCalledWith('barberia-luis', expect.objectContaining({ staffId: 'p1' })));
+    expect(await screen.findByText('Te atiende Ana L.')).toBeInTheDocument();
+  });
+
+  it('offers to book with whoever is free when the person chosen stops taking the service', async () => {
+    const user = userEvent.setup();
+    api.getBooking.mockResolvedValue(booking({
+      staff: [{ id: 'p1', name: 'Ana L.' }],
+      services: [{ id: 's1', name: 'Corte de cabello', price: 150, durationMinutes: 45, staffIds: ['p1'] }],
+    }) as never);
+    api.getBookingSlots.mockImplementation(((_slug: string, _service: string, _from?: string, staffId?: string) => staffId
+      ? Promise.reject({ isAxiosError: true, response: { status: 404, data: { detail: 'Ese servicio no se agenda en línea.' } } })
+      : Promise.resolve(week())) as never);
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /Corte de cabello/ }));
+    await user.click(await screen.findByRole('button', { name: /Ana L\./ }));
+    expect(await screen.findByText(/Ana L\. ya no agenda este servicio en línea/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ver con quien esté libre' }));
+
+    expect(await screen.findByRole('button', { name: '10:00 a. m.' })).toBeInTheDocument();
   });
 
   it('says so when the business does not book online', async () => {

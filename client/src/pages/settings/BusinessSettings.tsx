@@ -9,6 +9,7 @@ import OnlineMenuCard from '../../components/settings/OnlineMenuCard';
 import DirectoryCard from '../../components/settings/DirectoryCard';
 import MenuCoverCard from '../../components/settings/MenuCoverCard';
 import OnlineBookingCard from '../../components/settings/OnlineBookingCard';
+import OnlineBookingStaffCard from '../../components/settings/OnlineBookingStaffCard';
 import OpeningHoursCard from '../../components/settings/OpeningHoursCard';
 import SpecialDaysCard from '../../components/settings/SpecialDaysCard';
 import DeliveryPlatformsCard from '../../components/settings/DeliveryPlatformsCard';
@@ -340,6 +341,7 @@ export default function BusinessSettings() {
       />
       <SpecialDaysCard />
       <OnlineBookingCard />
+      <OnlineBookingStaffCard />
       <DeliveryPlatformsCard />
       <ThemeCard />
 

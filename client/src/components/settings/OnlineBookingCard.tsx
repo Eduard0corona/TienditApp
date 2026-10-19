@@ -83,6 +83,13 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
         <div className="form-text">Cada solicitud llega a la Agenda como «Por confirmar» hasta que la aceptas o la rechazas.</div>
       </div>
 
+      {settings.staffCount > 0 ? (
+        <p className="small mb-3">
+          <i className="ri-team-line me-1" aria-hidden="true"></i>
+          {settings.staffCount === 1 ? 'Agenda en línea 1 persona' : `Agendan en línea ${settings.staffCount} personas`}: las
+          horas libres salen de quién atiende, abajo, y las citas a la vez ya no se usan.
+        </p>
+      ) : (
       <div className="mb-3">
         <label className="form-label" htmlFor={`${ids}-capacity`}>Citas a la vez</label>
         <input
@@ -104,6 +111,7 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
             : `Las citas a la vez van de 1 a ${settings.maxCapacity}.`}
         </div>
       </div>
+      )}
 
       <div className="d-flex gap-2">
         <button type="button" className="btn btn-primary" disabled={!dirty || !capacityValid || saving} onClick={() => void save()}>
@@ -157,7 +165,7 @@ export default function OnlineBookingCard() {
         )}
         {settings.data && (
           <OnlineBookingForm
-            key={`${settings.data.enabled}|${settings.data.capacity}|${settings.data.booksOnline}|${settings.data.missing.join('|')}`}
+            key={`${settings.data.enabled}|${settings.data.capacity}|${settings.data.booksOnline}|${settings.data.staffCount}|${settings.data.missing.join('|')}`}
             settings={settings.data}
           />
         )}

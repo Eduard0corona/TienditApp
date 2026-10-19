@@ -8,6 +8,7 @@ export type PublicDeliveryQuote = Schemas['PublicDeliveryQuoteDto'];
 export type PublicOrderTracking = Schemas['PublicOrderTrackingDto'];
 export type PublicBooking = Schemas['PublicBookingDto'];
 export type PublicBookingService = Schemas['PublicBookingServiceDto'];
+export type PublicBookingStaff = Schemas['PublicBookingStaffDto'];
 export type PublicBookingSlots = Schemas['PublicBookingSlotsDto'];
 export type PublicBookingSlot = Schemas['PublicBookingSlotDto'];
 export type RequestPublicAppointment = Schemas['RequestPublicAppointmentRequest'];
@@ -55,11 +56,14 @@ export const publicMenuApi = {
   getBooking: (slug: string, signal?: AbortSignal) =>
     apiRequest('get', '/api/v1/public/menu/{slug}/booking', { path: { slug }, signal }),
 
-  /** The free times of a service for a week from `from` (today when omitted); `nextFrom` opens the next one. */
-  getBookingSlots: (slug: string, serviceId: string, from?: string, signal?: AbortSignal) =>
+  /**
+   * The free times of a service for a week from `from` (today when omitted); `nextFrom` opens the next one. With `staffId`
+   * (Fase 24J), the ones of that person; without it, whoever is free. Not found (404) when the person no longer takes it.
+   */
+  getBookingSlots: (slug: string, serviceId: string, from?: string, staffId?: string, signal?: AbortSignal) =>
     apiRequest('get', '/api/v1/public/menu/{slug}/booking/slots', {
       path: { slug },
-      query: from ? { serviceId, from } : { serviceId },
+      query: { serviceId, ...(from ? { from } : {}), ...(staffId ? { staffId } : {}) },
       signal,
     }),
 

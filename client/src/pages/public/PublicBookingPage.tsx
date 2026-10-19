@@ -41,13 +41,15 @@ const horarios = (count: number) => (count === 1 ? '1 horario' : `${count} horar
  * books online, a day of the week and one of its free times, and leaves its name and phone. The appointment waits «Por
  * confirmar» until the business accepts it; the receipt gives the link to follow it (/cita#link), and with a customer
  * account it is also in Mis citas. The server works out the free times (its hours, the service's duration and the
- * appointments already taken) and says no when the time was taken meanwhile; the page only shows them.
+ * appointments already taken) and says no when the time was taken meanwhile; the page only shows them. When the business
+ * says who attends (Fase 24J, ADR 0032), the customer chooses the person, or no preference, and the times are theirs.
  */
 export default function PublicBookingPage() {
   const sheetTitleId = useId();
   const { slug = '' } = useParams<{ slug: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const serviceId = searchParams.get('servicio') ?? '';
+  const staffParam = searchParams.get('con') ?? '';
   const queryClient = useQueryClient();
   const { customer, signedIn } = useCustomerAccount();
   const booking = useQuery({
@@ -67,15 +69,20 @@ export default function PublicBookingPage() {
     return () => previewBusinessTheme(undefined);
   }, [theme]);
   const service = data?.services.find((item) => item.id === serviceId) ?? null;
+  // Who does the service, when the business says who attends; the person chosen among them, or none (no preference).
+  const people = service ? (data?.staff ?? []).filter((person) => service.staffIds.includes(person.id)) : [];
+  const person = people.find((item) => item.id === staffParam) ?? null;
+  const staffId = person?.id ?? '';
 
   // The weeks visited for the service: the first starts today, each next one where the server said.
   const [weeks, setWeeks] = useState<string[]>([]);
   const [day, setDay] = useState<string | null>(null);
   const [chosen, setChosen] = useState<ChosenTime | null>(null);
   const [notice, setNotice] = useState('');
-  const [pickedFor, setPickedFor] = useState(serviceId);
-  if (pickedFor !== serviceId) {
-    setPickedFor(serviceId);
+  const picking = `${serviceId}|${staffId}`;
+  const [pickedFor, setPickedFor] = useState(picking);
+  if (pickedFor !== picking) {
+    setPickedFor(picking);
     setWeeks([]);
     setDay(null);
     setChosen(null);
@@ -83,8 +90,8 @@ export default function PublicBookingPage() {
   }
   const from = weeks[weeks.length - 1];
   const slots = useQuery({
-    queryKey: ['public-booking-slots', slug, serviceId, from ?? ''],
-    queryFn: ({ signal }) => publicMenuApi.getBookingSlots(slug, serviceId, from, signal),
+    queryKey: ['public-booking-slots', slug, serviceId, staffId, from ?? ''],
+    queryFn: ({ signal }) => publicMenuApi.getBookingSlots(slug, serviceId, from, staffId || undefined, signal),
     enabled: service !== null,
     retry: false,
   });
@@ -92,6 +99,9 @@ export default function PublicBookingPage() {
   // The day picked while it has free times; otherwise the first of the week that has.
   const shownDay = days.find((item) => item.date === day && item.slots.length > 0) ?? days.find((item) => item.slots.length > 0) ?? null;
   const { ref: daysRef, fadeClass: daysFade } = useScrollFade<HTMLDivElement>(days.length);
+  const { ref: peopleRef, fadeClass: peopleFade } = useScrollFade<HTMLDivElement>(people.length);
+  // The person chosen stopped taking the service while the page was open: the times are not found for them.
+  const personGone = staffId !== '' && slots.isError && getApiErrorStatus(slots.error) === 404;
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [name, setName] = useState('');
@@ -112,6 +122,7 @@ export default function PublicBookingPage() {
   }
 
   const chooseService = (id: string | null) => setSearchParams(id ? { servicio: id } : {});
+  const choosePerson = (id: string | null) => setSearchParams(id ? { servicio: serviceId, con: id } : { servicio: serviceId });
 
   const changeWeek = (next: string | null) => {
     setWeeks((current) => (next ? [...current, next] : current.slice(0, -1)));
@@ -130,6 +141,7 @@ export default function PublicBookingPage() {
       customerName: name.trim(),
       customerPhone: phone.trim(),
       notes: notes.trim() || null,
+      staffId: staffId || null,
     };
     // Another request (another time, name or phone) gets another key.
     const signature = JSON.stringify(request);
@@ -148,6 +160,17 @@ export default function PublicBookingPage() {
       if (answerLost(err)) {
         setError(`${message} Si ya se había enviado, no se repite.`);
         return;
+      }
+      // The person no longer takes it: the page reads who does, and the customer picks again.
+      if (staffId) {
+        const page = await booking.refetch();
+        const stillTakes = page.data?.services.some((item) => item.id === service.id && item.staffIds.includes(staffId));
+        if (!stillTakes) {
+          setSheetOpen(false);
+          choosePerson(null);
+          setNotice(message);
+          return;
+        }
       }
       // Taken meanwhile: the times are read again, and the customer picks another one.
       const fresh = await slots.refetch();
@@ -183,7 +206,8 @@ export default function PublicBookingPage() {
   if (receipt) {
     const followUp = businessWhatsAppUrl(
       receipt.contactPhone,
-      `Hola, pedí una cita de ${receipt.serviceName} el ${receipt.dateLabel} a las ${receipt.timeLabel} en su menú en línea.`,
+      `Hola, pedí una cita de ${receipt.serviceName}${receipt.staffName ? ` con ${receipt.staffName}` : ''} el ${receipt.dateLabel} `
+        + `a las ${receipt.timeLabel} en su menú en línea.`,
     );
     return (
       <div className="pm-page">
@@ -192,6 +216,7 @@ export default function PublicBookingPage() {
           <h1 className="h4">¡Solicitud enviada!</h1>
           <p className="mb-1"><strong>{receipt.serviceName}</strong></p>
           <p className="mb-1">{upperFirst(receipt.dateLabel)} · {receipt.timeLabel}</p>
+          {receipt.staffName && <p className="mb-1">Te atiende {receipt.staffName}</p>}
           {receipt.address && <p className="small text-muted mb-1">{receipt.address}</p>}
           <p className="text-muted">{receipt.businessName} te confirma por WhatsApp. Mientras, tu cita queda por confirmar.</p>
           {receipt.linkedToAccount
@@ -285,10 +310,57 @@ export default function PublicBookingPage() {
             </div>
           )}
 
+          {people.length > 0 && (
+            <>
+              <h2 className="pm-section-title pb-step">¿Con quién?</h2>
+              <div ref={peopleRef} className={`pb-people ta-scroll-fade ${peopleFade}`} role="group" aria-label="Quién te atiende">
+                <button
+                  type="button"
+                  className={`btn pb-person ${person === null ? 'btn-primary' : 'btn-light'}`}
+                  aria-pressed={person === null}
+                  onClick={() => choosePerson(null)}
+                >
+                  <span className="d-block fw-semibold">Sin preferencia</span>
+                  <span className="d-block small">Quien esté libre</span>
+                </button>
+                {people.map((item) => {
+                  const active = person?.id === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`btn pb-person ${active ? 'btn-primary' : 'btn-light'}`}
+                      aria-pressed={active}
+                      onClick={() => choosePerson(item.id)}
+                    >
+                      <PhotoOrInitial name={item.name} className="pb-person-initial" />
+                      <span className="d-block fw-semibold text-truncate">{item.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
           <h2 className="pm-section-title pb-step">Elige el día</h2>
 
           {slots.isPending && <p className="text-muted" aria-busy="true">Buscando horarios libres…</p>}
-          {slots.isError && (
+          {personGone && (
+            <div className="alert alert-warning">
+              {person?.name ?? 'Esa persona'} ya no agenda este servicio en línea.{' '}
+              <button
+                type="button"
+                className="btn btn-link btn-sm p-0 align-baseline"
+                onClick={() => {
+                  choosePerson(null);
+                  void booking.refetch();
+                }}
+              >
+                Ver con quien esté libre
+              </button>
+            </div>
+          )}
+          {slots.isError && !personGone && (
             <div className="alert alert-warning">
               {getApiErrorMessage(slots.error, 'No pudimos cargar los horarios.')}{' '}
               <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={() => void slots.refetch()}>Intentar de nuevo</button>
@@ -385,6 +457,7 @@ export default function PublicBookingPage() {
               <p className="mb-3">
                 <strong>{service.name}</strong>
                 <span className="d-block">{upperFirst(chosen.slot.dateLabel)} · {chosen.slot.label}</span>
+                {people.length > 0 && <span className="d-block">{person ? `Con ${person.name}` : 'Con quien esté libre'}</span>}
                 {data.address && <span className="d-block small text-muted">{data.address}</span>}
               </p>
               <div className="row g-2">
