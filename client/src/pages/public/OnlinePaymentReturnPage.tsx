@@ -194,8 +194,8 @@ export default function OnlinePaymentReturnPage() {
     );
   }
 
-  // Still to pay: what Mercado Pago's return said, while the server confirms it. On time as of its last answer.
-  const stillOnTime = Date.parse(data.expiresAt) > checkout.dataUpdatedAt;
+  // Still to pay: what Mercado Pago's return said, while the server confirms it. Its page comes only while the server
+  // says there is time to pay it.
   return frame(
     <>
       {refreshFailed}
@@ -219,7 +219,7 @@ export default function OnlinePaymentReturnPage() {
         <div><dt>Total</dt><dd><strong className="ta-money">{formatMoney(data.amount)}</strong></dd></div>
       </dl>
       <div className="pm-receipt-actions d-grid gap-2 mt-3">
-        {data.checkoutUrl && stillOnTime && returned !== 'approved' && (
+        {data.checkoutUrl && returned !== 'approved' && (
           <a className="btn btn-primary btn-touch" href={data.checkoutUrl}>
             {returned === 'rejected' ? 'Intentar de nuevo' : 'Pagar en Mercado Pago'}
           </a>

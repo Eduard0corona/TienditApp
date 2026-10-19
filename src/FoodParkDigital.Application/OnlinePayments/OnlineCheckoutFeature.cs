@@ -45,7 +45,7 @@ public class OnlineCheckoutStatusDto
     public DateTimeOffset ExpiresAt { get; set; }
     public string BusinessName { get; set; } = null!;
     public string? ContactPhone { get; set; }
-    /// <summary>Mercado Pago's page, to pay again while there is time; null once it ended.</summary>
+    /// <summary>Mercado Pago's page, to pay again while there is time (by the server's clock); null once it ended.</summary>
     public string? CheckoutUrl { get; set; }
     /// <summary>The order the payment placed (<see cref="OnlineCheckoutStatus.Placed"/>).</summary>
     public string? OrderNumber { get; set; }
@@ -282,6 +282,7 @@ public class ConfirmOnlineCheckoutCommandHandler : IRequestHandler<ConfirmOnline
     private readonly OnlinePaymentChecker _checker;
     private readonly IOnlinePaymentGateway _gateway;
     private readonly ISecretProtector _protector;
+    private readonly IDateTimeProvider _clock;
     private readonly ILogger<ConfirmOnlineCheckoutCommandHandler> _logger;
 
     public ConfirmOnlineCheckoutCommandHandler(
@@ -299,6 +300,7 @@ public class ConfirmOnlineCheckoutCommandHandler : IRequestHandler<ConfirmOnline
         _currentUser = currentUser;
         _gateway = gateway;
         _protector = protector;
+        _clock = clock;
         _logger = logger;
         _checker = new OnlinePaymentChecker(context, gateway, protector, clock, sender, logger);
     }
@@ -333,7 +335,7 @@ public class ConfirmOnlineCheckoutCommandHandler : IRequestHandler<ConfirmOnline
         }
 
         var mayTrack = OnlineCheckoutRules.IsReturnKey(_protector, tenant.Id, request.CheckoutId, request.ReturnKey);
-        return await OnlineCheckoutRules.StatusAsync(_context, tenant, request.CheckoutId, _currentUser, mayTrack, cancellationToken);
+        return await OnlineCheckoutRules.StatusAsync(_context, tenant, request.CheckoutId, _currentUser, mayTrack, _clock.UtcNow, cancellationToken);
     }
 }
 
@@ -380,6 +382,7 @@ internal static class OnlineCheckoutRules
         Guid checkoutId,
         ICurrentUserService currentUser,
         bool mayTrack,
+        DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var checkout = await context.OnlineCheckouts.AsNoTracking().FirstOrDefaultAsync(c => c.Id == checkoutId, cancellationToken);
@@ -393,7 +396,8 @@ internal static class OnlineCheckoutRules
             ExpiresAt = checkout.ExpiresAt,
             BusinessName = tenant.Name,
             ContactPhone = tenant.ContactPhone,
-            CheckoutUrl = checkout.IsAwaitingPayment ? checkout.CheckoutUrl : null,
+            // Whether it can still be paid is the server's to say: the device's clock may be off.
+            CheckoutUrl = checkout.IsAwaitingPayment && !checkout.IsExpired(now) ? checkout.CheckoutUrl : null,
             FailureMessage = checkout.FailureMessage
         };
 

@@ -457,6 +457,7 @@ public class OnlinePaymentsFlowTests
         var status = await shop.ConfirmAsync(pending.CheckoutId, null);
 
         Assert.Equal(OnlineCheckoutStatus.AwaitingPayment, status!.Status);
+        Assert.NotNull(status.CheckoutUrl);
         var settings = await shop.SettingsAsync();
         Assert.True(settings.NeedsReconnect);
         Assert.False((await shop.MenuAsync()).PaysOnline);
@@ -473,7 +474,10 @@ public class OnlinePaymentsFlowTests
         // time (the customer is not told nothing was charged), and expires unread a day later.
         shop.Clock.UtcNow = SalesTestFixture.Now + OnlineCheckout.TimeToPay + SweepOnlinePaymentsCommandHandler.ExpiryGrace + TimeSpan.FromMinutes(1);
         Assert.Equal(0, (await shop.SweepAsync()).Value.Expired);
-        Assert.Equal(OnlineCheckoutStatus.AwaitingPayment, (await shop.ConfirmAsync(pending.CheckoutId, null))!.Status);
+        var waiting = await shop.ConfirmAsync(pending.CheckoutId, null);
+        Assert.Equal(OnlineCheckoutStatus.AwaitingPayment, waiting!.Status);
+        // Its time to pay is over on the server's clock: Mercado Pago's page is no longer offered.
+        Assert.Null(waiting.CheckoutUrl);
         shop.Clock.UtcNow = SalesTestFixture.Now + OnlineCheckout.TimeToPay + SweepOnlinePaymentsCommandHandler.UnreadableHold;
         Assert.Equal(1, (await shop.SweepAsync()).Value.Expired);
         Assert.Equal((0, 0), ((await shop.SettingsAsync()).CheckoutsInCourse, (await shop.SettingsAsync()).RefundsInCourse));

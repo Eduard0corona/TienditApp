@@ -212,8 +212,19 @@ describe('OnlinePaymentReturnPage', () => {
     expect(screen.getByText('Total').nextSibling).toHaveTextContent('$145.00');
   });
 
-  it('offers to pay when the customer came back without paying, but not once the time is over', async () => {
+  it('offers to pay when the customer came back without paying, while the server says there is time', async () => {
+    // This device's clock says the time is over: the server's answer decides.
     confirmCheckout.mockResolvedValue(status({ expiresAt: new Date(Date.now() - 60_000).toISOString() }));
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'Aún no recibimos tu pago' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Pagar en Mercado Pago' }))
+      .toHaveAttribute('href', 'https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=123');
+  });
+
+  it('does not offer to pay once the server says the time is over, whatever this device\'s clock says', async () => {
+    confirmCheckout.mockResolvedValue(status({ checkoutUrl: null }));
 
     renderPage();
 
