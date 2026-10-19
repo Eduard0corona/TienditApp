@@ -47,8 +47,15 @@ public class CustomerCardDto
     /// <summary>Paid minus refunded, over orders that were not cancelled.</summary>
     public decimal TotalSpent { get; set; }
     public decimal AverageTicket { get; set; }
-    /// <summary>Still to be collected over orders that were not cancelled.</summary>
+    /// <summary>
+    /// What they owe (Fase 26A): orders delivered or sold on credit and not paid, the rule of Clientes › Por cobrar
+    /// (<see cref="Receivables"/>). An order still in progress is not owed yet.
+    /// </summary>
     public decimal Balance { get; set; }
+    /// <summary>How much the business lets them owe, from the customer record; null when they are not sold on credit.</summary>
+    public decimal? CreditLimit { get; set; }
+    /// <summary>The business sells to them on credit now: an active customer record with a phone and a limit.</summary>
+    public bool SellsOnCredit { get; set; }
     public DateTimeOffset? FirstOrderAt { get; set; }
     public DateTimeOffset? LastOrderAt { get; set; }
     public List<CustomerCardOrderDto> RecentOrders { get; set; } = [];
@@ -155,7 +162,6 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
             {
                 Count = g.Count(),
                 Paid = g.Sum(o => o.PaidAmount - o.RefundedAmount),
-                Balance = g.Sum(o => o.Total - o.PaidAmount),
                 First = g.Min(o => o.CreatedAt),
                 Last = g.Max(o => o.CreatedAt)
             })
@@ -164,11 +170,12 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
         {
             card.OrdersCount = totals.Count;
             card.TotalSpent = totals.Paid;
-            card.Balance = totals.Balance;
             card.FirstOrderAt = totals.First;
             card.LastOrderAt = totals.Last;
             card.AverageTicket = totals.Count == 0 ? 0 : Math.Round(totals.Paid / totals.Count, 2, MidpointRounding.ToEven);
         }
+
+        card.Balance = await Receivables.OwedAsync(_context.Orders.AsNoTracking(), key, cancellationToken);
 
         card.RecentOrders = await _context.Orders.AsNoTracking()
             .Where(o => o.CustomerPhone != null && variants.Contains(o.CustomerPhone))
@@ -239,6 +246,8 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
         card.Email = dto.Email;
         card.Notes = dto.Notes;
         card.Addresses = dto.Addresses;
+        card.CreditLimit = customer.CreditLimit;
+        card.SellsOnCredit = customer.SellsOnCredit;
     }
 
     /// <summary>

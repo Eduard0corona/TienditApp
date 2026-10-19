@@ -352,6 +352,12 @@ export const PurchaseOrderStatus = {
 } as const;
 export type PurchaseOrderStatus = (typeof PurchaseOrderStatus)[keyof typeof PurchaseOrderStatus];
 
+export const ReceivablesSort = {
+  Owed: 0,
+  Oldest: 1,
+} as const;
+export type ReceivablesSort = (typeof ReceivablesSort)[keyof typeof ReceivablesSort];
+
 export const ReviewConcern = {
   Offensive: 1,
   PersonalData: 2,

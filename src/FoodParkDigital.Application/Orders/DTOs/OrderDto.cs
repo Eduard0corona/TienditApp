@@ -64,6 +64,10 @@ public class OrderDto
     public bool IsTab { get; set; }
     /// <summary>A tab still taking rounds.</summary>
     public bool IsOpenTab { get; set; }
+    /// <summary>
+    /// A counter sale the business closed on credit (Fase 26A): its balance is what the customer owes. Still true once paid.
+    /// </summary>
+    public bool SoldOnCredit { get; set; }
     public Guid? DiningTableId { get; set; }
     /// <summary>Rounds of the tab sent to the kitchen.</summary>
     public List<KitchenTicketSummaryDto> KitchenTickets { get; set; } = new();

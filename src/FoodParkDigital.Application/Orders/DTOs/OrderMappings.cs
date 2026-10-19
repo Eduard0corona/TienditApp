@@ -80,6 +80,7 @@ public static class OrderMappings
         ItemCancellations = order.ItemCancellations.OrderBy(c => c.CancelledAt).Select(ToDto).ToList(),
         IsTab = order.IsTab,
         IsOpenTab = order.IsOpenTab,
+        SoldOnCredit = order.SoldOnCredit,
         DiningTableId = order.DiningTableId,
         KitchenTickets = order.KitchenTickets.OrderBy(t => t.Round).Select(ToSummaryDto).ToList()
     };
@@ -409,6 +410,7 @@ public static class OrderMappings
             && order.Status != OrderStatus.Delivered
             && order.Status != OrderStatus.Cancelled
             && order.Status != OrderStatus.Completed,
+        SoldOnCredit = order.SoldOnCredit,
         DiningTableId = order.DiningTableId,
         KitchenTickets = order.KitchenTickets.OrderBy(t => t.Round).Select(ticket => new KitchenTicketSummaryDto
         {

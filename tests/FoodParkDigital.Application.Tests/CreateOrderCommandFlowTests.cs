@@ -501,7 +501,8 @@ public class CreateOrderCommandFlowTests
                 new PhoneNormalizationService(),
                 NoOpOrderInventoryService.Instance,
                 NoOpOrderCashService.Instance,
-                new FolioGenerator(Context));
+                new FolioGenerator(Context),
+                new CustomerCreditLock(Context));
         }
 
         public async Task<(Tenant Tenant, Product Product)> SeedCatalogAsync()

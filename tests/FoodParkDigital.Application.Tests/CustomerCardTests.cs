@@ -31,8 +31,12 @@ public class CustomerCardTests
         var fromChat = await handler.Handle(Sale("Ana", "+5215512345678", (coffee.Id, 1)) with { Channel = OrderChannel.WhatsApp }, CancellationToken.None);
         var cancelled = await handler.Handle(Sale("Ana", "5512345678", (bread.Id, 5)), CancellationToken.None);
         Assert.True(paid.IsSuccess && fromChat.IsSuccess && cancelled.IsSuccess, paid.Error ?? fromChat.Error ?? cancelled.Error);
+        var stateMachine = Domain.Orders.StateMachines.OrderStateMachineFactory.Create(BusinessType.Retail, OrderType.Retail);
         var toCancel = await fixture.Context.Orders.SingleAsync(o => o.Id == cancelled.Value.Id);
-        toCancel.Cancel(Domain.Orders.StateMachines.OrderStateMachineFactory.Create(BusinessType.Retail, OrderType.Retail), "test", "error");
+        toCancel.Cancel(stateMachine, "test", "error");
+        // What they owe is what was handed over unpaid (Fase 26A): the order from the chat once it is delivered.
+        var handedOver = await fixture.Context.Orders.SingleAsync(o => o.Id == fromChat.Value.Id);
+        handedOver.TransitionTo(OrderStatus.Delivered, stateMachine, "test");
         fixture.Context.MessagingOptOuts.Add(new MessagingOptOut(tenant.Id, "+5215512345678", OptOutSource.CustomerKeyword, SalesTestFixture.Now));
         var conversation = new WhatsAppConversation(tenant.Id, "+5215512345678", "Ana WhatsApp");
         fixture.Context.WhatsAppConversations.Add(conversation);

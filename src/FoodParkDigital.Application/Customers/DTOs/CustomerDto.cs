@@ -11,6 +11,8 @@ public class CustomerDto
     public bool IsPublicGeneral { get; set; }
     public bool IsActive { get; set; }
     public string? Notes { get; set; }
+    /// <summary>How much the business lets them owe (Fase 26A); null when they are not sold on credit.</summary>
+    public decimal? CreditLimit { get; set; }
     /// <summary>Only in the detail of one customer (the list leaves it empty).</summary>
     public List<CustomerAddressDto> Addresses { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
@@ -26,6 +28,7 @@ public class CustomerDto
         IsPublicGeneral = customer.IsPublicGeneral,
         IsActive = customer.IsActive,
         Notes = customer.Notes,
+        CreditLimit = customer.CreditLimit,
         Addresses = customer.Addresses
             .OrderByDescending(a => a.IsDefault)
             .ThenBy(a => a.CreatedAt)

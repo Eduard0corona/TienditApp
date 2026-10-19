@@ -3489,6 +3489,163 @@
         }
       }
     },
+    "/api/v1/customers/receivables": {
+      "get": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ReceivablesSort"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceivablesDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceivablesDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceivablesDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/account": {
+      "get": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "phone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/account/payments": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayCustomerAccountCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayCustomerAccountCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayCustomerAccountCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/customers/{id}": {
       "get": {
         "tags": [
@@ -3645,6 +3802,65 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/customers/{id}/credit-limit": {
+      "put": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerCreditLimitRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerCreditLimitRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerCreditLimitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              }
+            }
           }
         }
       }
@@ -16986,6 +17202,10 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "onCredit": {
+            "type": "boolean",
+            "default": false
           }
         },
         "additionalProperties": false
@@ -17551,6 +17771,140 @@
         },
         "additionalProperties": false
       },
+      "CustomerAccountDto": {
+        "required": [
+          "orders",
+          "ordersCount",
+          "overLimit",
+          "owed",
+          "phone",
+          "recentPayments",
+          "sellsOnCredit"
+        ],
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "creditLimit": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "sellsOnCredit": {
+            "type": "boolean"
+          },
+          "owed": {
+            "type": "number",
+            "format": "double"
+          },
+          "available": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "overLimit": {
+            "type": "boolean"
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerAccountOrderDto"
+            }
+          },
+          "ordersCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "recentPayments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerAccountPaymentDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomerAccountOrderDto": {
+        "required": [
+          "balance",
+          "createdAt",
+          "orderId",
+          "orderNumber",
+          "paid",
+          "soldOnCredit",
+          "status",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "soldOnCredit": {
+            "type": "boolean"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "paid": {
+            "type": "number",
+            "format": "double"
+          },
+          "balance": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomerAccountPaymentDto": {
+        "required": [
+          "amount",
+          "method",
+          "orderNumber",
+          "paidAt"
+        ],
+        "type": "object",
+        "properties": {
+          "orderNumber": {
+            "type": "string"
+          },
+          "paidAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OrderPaymentMethod"
+          }
+        },
+        "additionalProperties": false
+      },
       "CustomerAddressDto": {
         "required": [
           "addressLine",
@@ -17748,6 +18102,7 @@
           "optedOut",
           "ordersCount",
           "recentOrders",
+          "sellsOnCredit",
           "totalSpent",
           "upcomingAppointments"
         ],
@@ -17795,6 +18150,14 @@
           "balance": {
             "type": "number",
             "format": "double"
+          },
+          "creditLimit": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "sellsOnCredit": {
+            "type": "boolean"
           },
           "firstOrderAt": {
             "type": "string",
@@ -17941,6 +18304,11 @@
           },
           "notes": {
             "type": "string",
+            "nullable": true
+          },
+          "creditLimit": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           },
           "addresses": {
@@ -21605,6 +21973,7 @@
           "refundedAmount",
           "refunds",
           "servicePieces",
+          "soldOnCredit",
           "status",
           "statusHistory",
           "stockWarnings",
@@ -21788,6 +22157,9 @@
             "type": "boolean"
           },
           "isOpenTab": {
+            "type": "boolean"
+          },
+          "soldOnCredit": {
             "type": "boolean"
           },
           "diningTableId": {
@@ -22578,6 +22950,49 @@
           },
           "hasAccessToken": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PayCustomerAccountCommand": {
+        "required": [
+          "amount",
+          "method"
+        ],
+        "type": "object",
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OrderPaymentMethod"
+          },
+          "evidenceUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "cashReceived": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -25599,6 +26014,122 @@
         },
         "additionalProperties": false
       },
+      "ReceivableDto": {
+        "required": [
+          "name",
+          "orders",
+          "overLimit",
+          "owed",
+          "phone",
+          "since"
+        ],
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "owed": {
+            "type": "number",
+            "format": "double"
+          },
+          "orders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "creditLimit": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "overLimit": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReceivableDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceivableDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReceivablesDto": {
+        "required": [
+          "page",
+          "totalOwed"
+        ],
+        "type": "object",
+        "properties": {
+          "page": {
+            "$ref": "#/components/schemas/ReceivableDtoPaginatedList"
+          },
+          "totalOwed": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReceivablesSort": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Owed",
+          "Oldest"
+        ]
+      },
       "ReceivePurchaseOrderLineItemRequest": {
         "required": [
           "purchaseOrderLineId",
@@ -28424,6 +28955,17 @@
           },
           "notes": {
             "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateCustomerCreditLimitRequest": {
+        "type": "object",
+        "properties": {
+          "creditLimit": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           }
         },
