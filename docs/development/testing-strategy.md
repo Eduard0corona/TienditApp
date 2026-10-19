@@ -795,7 +795,8 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Cliente en total:** 132 archivos y 819 pruebas.
   - **Primera visita:** 178,773 B de 178,800 B (+25 B contra `master`, solo por las huellas en los nombres de los archivos de cada ruta).
   - **Escenas visuales:** `citas-en-linea.spec.ts` (+8): «¿Con quién?» con Paola elegida (escritorio, teléfono y oscuro) y la solicitud enviada con «Te atiende»; Configuración › Quién atiende sin nadie, con dos personas y editando a una (teléfono), y la tarjeta de Citas en línea por persona.
-    - ESCENAS_24J
+    - **Lo que cambia y por qué:** las 10 pantallas de Mi negocio en `caja-config` crecen con la tarjeta «Quién atiende» (unos 440 px en escritorio y 660 px en teléfono). La de Plataformas de reparto, que queda más abajo, cae en otra fracción de píxel.
+    - **Resultado:** la comparación contra `master` dio 515 escenas iguales, 8 nuevas y 10 que cambian. Con esas capturas pasaron las 533 escenas, y los dos archivos tocados con la cobertura de rutas (129 escenas) pasaron una segunda corrida contra el mismo build.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
