@@ -165,6 +165,11 @@ public class SalesFiguresDto
     /// drawer. The platform deposits it later, minus its commission and withholdings.
     /// </summary>
     public decimal PlatformAmount { get; set; }
+    /// <summary>
+    /// What customers paid online («En línea» payments, Fase 24I): part of what was charged, never of a drawer. It is in
+    /// the business's Mercado Pago account.
+    /// </summary>
+    public decimal OnlineAmount { get; set; }
     public int RefundsCount { get; set; }
     public decimal RefundsAmount { get; set; }
     /// <summary>Charged minus given back.</summary>
@@ -183,6 +188,7 @@ public class SalesFiguresDto
         WalletAmount = figures.WalletAmount,
         OtherAmount = figures.OtherAmount,
         PlatformAmount = figures.PlatformAmount,
+        OnlineAmount = figures.OnlineAmount,
         RefundsCount = figures.RefundsCount,
         RefundsAmount = figures.RefundsAmount,
         NetSales = figures.NetSales,

@@ -742,6 +742,54 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         return PlatformDetail;
     }
 
+    public const string OnlinePaymentOnlyOnlineMessage = "Solo un pedido de la tienda en línea se paga en línea.";
+    public const string OnlinePaymentBeforeAnyPaymentMessage = "El pago en línea se registra antes que cualquier otro cobro del pedido.";
+    public const string OnlineRefundOnlyOfOnlineMessage = "Solo se devuelve «En línea» lo que el cliente pagó en línea, y no más.";
+
+    /// <summary>
+    /// What the customer paid online for this order of the online menu (Fase 24I, ADR 0031): the business's payment gateway
+    /// approved it for the whole total before the order existed, so it is recorded once, with the order, and never enters a
+    /// drawer (<see cref="OrderPaymentMethodRules.EntersADrawer"/>).
+    /// </summary>
+    /// <param name="paymentReference">The gateway's id of the payment, which its refunds use.</param>
+    /// <param name="paidAt">When the gateway approved it.</param>
+    /// <param name="inventoryLocationId">Stock location of the branch, recorded on the payment like any other.</param>
+    public OrderPayment RegisterOnlinePayment(string paymentReference, DateTimeOffset paidAt, Guid? inventoryLocationId)
+    {
+        if (string.IsNullOrWhiteSpace(paymentReference))
+            throw new DomainException("El pago en línea necesita su referencia.");
+        if (Channel != OrderChannel.Online)
+            throw new DomainException(OnlinePaymentOnlyOnlineMessage);
+        if (_payments.Count > 0)
+            throw new DomainException(OnlinePaymentBeforeAnyPaymentMessage);
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException("No se pueden registrar pagos en una orden cancelada.");
+        if (_items.Count == 0 || Total <= 0)
+            throw new DomainException("El pedido no tiene nada que cobrar.");
+
+        // The only way an «En línea» payment is made: RegisterPayment refuses the method.
+        var payment = new OrderPayment(
+            tenantId: TenantId,
+            orderId: Id,
+            amount: Total,
+            method: OrderPaymentMethod.Online,
+            paidAt: paidAt,
+            inventoryLocationId: inventoryLocationId,
+            evidenceUrl: null,
+            reference: paymentReference.Trim(),
+            notes: null,
+            tip: 0,
+            cashReceived: null);
+        _payments.Add(payment);
+        PaidAmount = Total;
+        return payment;
+    }
+
+    /// <summary>What the customer paid online and has not been given back the same way.</summary>
+    public decimal OnlineRefundable =>
+        _payments.Where(p => p.Method == OrderPaymentMethod.Online).Sum(p => p.Amount)
+        - _refunds.Where(r => r.Method == OrderPaymentMethod.Online).Sum(r => r.Amount);
+
     /// <summary>
     /// Sends a new order to the customer's address: the zone must reach its postal code (and be active) and the products
     /// must reach the zone's minimum. The delivery charges what the zone charges for those products (nothing from its
@@ -928,6 +976,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         // These rules depend on the channel and the payments, always loaded, never on the platform detail.
         if (method == OrderPaymentMethod.Platform)
             throw new DomainException(OrderPaymentMethodRules.PlatformOnlyOnCreationMessage);
+        if (method == OrderPaymentMethod.Online)
+            throw new DomainException(OrderPaymentMethodRules.OnlineOnlyOnCreationMessage);
         if (_payments.Any(p => p.Method == OrderPaymentMethod.Platform))
             throw new DomainException(PlatformOrderRules.PlatformChargedMessage);
         if (tip > 0 && IsDeliveryPlatformOrder)
@@ -987,6 +1037,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(PlatformOrderRules.PlatformRefundOnlyOfPlatformMessage);
         if (method != OrderPaymentMethod.Platform && platformCharged)
             throw new DomainException(PlatformOrderRules.PlatformChargedRefundMessage);
+        // What was paid online goes back to the customer's card through the gateway, up to what was paid that way.
+        if (method == OrderPaymentMethod.Online && amount > OnlineRefundable)
+            throw new DomainException(OnlineRefundOnlyOfOnlineMessage);
 
         var refund = new OrderRefund(
             TenantId, Id, amount, method, reason, refundedAt, refundedBy, inventoryLocationId, reference, restockItems);

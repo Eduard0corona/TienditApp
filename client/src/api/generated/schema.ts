@@ -12134,6 +12134,12 @@ export interface components {
             /** Format: double */
             platformRefundsTotal: number;
             /** Format: double */
+            onlineTotal: number;
+            /** Format: int32 */
+            onlinePaymentsCount: number;
+            /** Format: double */
+            onlineRefundsTotal: number;
+            /** Format: double */
             tipsTotal: number;
             /** Format: double */
             cashTipsTotal: number;
@@ -13202,7 +13208,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4 | 5;
+        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4 | 5 | 6;
         OrderPlatformDto: {
             externalOrderNumber: string;
             collectedBy: components["schemas"]["PlatformCollectedBy"];
@@ -14386,6 +14392,8 @@ export interface components {
             otherAmount: number;
             /** Format: double */
             platformAmount: number;
+            /** Format: double */
+            onlineAmount: number;
             /** Format: int32 */
             refundsCount: number;
             /** Format: double */

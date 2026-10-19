@@ -236,6 +236,7 @@ export const OrderPaymentMethod = {
   DigitalWallet: 3,
   Other: 4,
   Platform: 5,
+  Online: 6,
 } as const;
 export type OrderPaymentMethod = (typeof OrderPaymentMethod)[keyof typeof OrderPaymentMethod];
 

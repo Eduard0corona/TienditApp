@@ -49,6 +49,8 @@ const PAYMENT_METHOD_LABELS: Record<OrderPaymentMethod, string> = {
   4: 'Otro',
   // Charged by Rappi, Uber Eats or DiDi Food in their app: it never enters a drawer.
   5: 'Plataforma',
+  // Paid online into the business's Mercado Pago account (Fase 24I): it never enters a drawer either.
+  6: 'En línea',
 };
 
 const PAYMENT_METHOD_BY_NAME: Record<string, OrderPaymentMethod> = {
@@ -58,6 +60,7 @@ const PAYMENT_METHOD_BY_NAME: Record<string, OrderPaymentMethod> = {
   DigitalWallet: 3,
   Other: 4,
   Platform: 5,
+  Online: 6,
 };
 
 /** The couriers a business asks for the trip of an order sent to an address (Fase 22C). */

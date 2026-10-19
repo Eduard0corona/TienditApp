@@ -23,6 +23,7 @@ function figures(patch: Partial<Figures> = {}): Figures {
     walletAmount: 0,
     otherAmount: 210,
     platformAmount: 0,
+    onlineAmount: 0,
     refundsCount: 1,
     refundsAmount: 63,
     netSales: 4137,

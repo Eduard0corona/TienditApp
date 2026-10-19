@@ -17645,6 +17645,9 @@
           "manualIncomeTotal",
           "netCashFlow",
           "netCashOnlyFlow",
+          "onlinePaymentsCount",
+          "onlineRefundsTotal",
+          "onlineTotal",
           "otherTotal",
           "platformPaymentsCount",
           "platformRefundsTotal",
@@ -17698,6 +17701,18 @@
             "format": "int32"
           },
           "platformRefundsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "onlineTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "onlinePaymentsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "onlineRefundsTotal": {
             "type": "number",
             "format": "double"
           },
@@ -21289,7 +21304,8 @@
           2,
           3,
           4,
-          5
+          5,
+          6
         ],
         "type": "integer",
         "format": "int32",
@@ -21299,7 +21315,8 @@
           "Transfer",
           "DigitalWallet",
           "Other",
-          "Platform"
+          "Platform",
+          "Online"
         ]
       },
       "OrderPlatformDto": {
@@ -25254,6 +25271,7 @@
           "cardAmount",
           "cashAmount",
           "netSales",
+          "onlineAmount",
           "ordersCreated",
           "otherAmount",
           "paidOrders",
@@ -25304,6 +25322,10 @@
             "format": "double"
           },
           "platformAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "onlineAmount": {
             "type": "number",
             "format": "double"
           },

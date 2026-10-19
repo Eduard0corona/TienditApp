@@ -100,11 +100,27 @@ public class CashSessionTests
     [InlineData(OrderPaymentMethod.DigitalWallet, true)]
     [InlineData(OrderPaymentMethod.Other, true)]
     [InlineData(OrderPaymentMethod.Platform, false)]
-    public void OnlyWhatAPlatformCharged_ShouldStayOutOfTheDrawers(OrderPaymentMethod method, bool entersADrawer)
+    [InlineData(OrderPaymentMethod.Online, false)]
+    public void OnlyWhatAPlatformOrTheGatewayCharged_ShouldStayOutOfTheDrawers(OrderPaymentMethod method, bool entersADrawer)
     {
         Assert.Equal(entersADrawer, OrderPaymentMethodRules.EntersADrawer(method));
+        Assert.Equal(!entersADrawer, OrderPaymentMethodRules.RecordedOnlyOnCreation(method));
         // Added at the end of the enum: stored payments keep their method.
         Assert.Equal(5, (int)OrderPaymentMethod.Platform);
+        Assert.Equal(6, (int)OrderPaymentMethod.Online);
+    }
+
+    [Fact]
+    public void WhatTheCustomerPaidOnline_ShouldNeverEnterADrawer()
+    {
+        var session = NewSession(openingAmount: 100m);
+
+        var error = Assert.Throws<DomainException>(
+            () => session.RegisterTransaction(CashTransactionType.SalePayment, 350m, Now, OrderPaymentMethod.Online));
+
+        Assert.Equal(OrderPaymentMethodRules.OnlineNeverEntersADrawerMessage, error.Message);
+        Assert.Empty(session.Transactions);
+        Assert.Equal(100m, session.ExpectedBalance);
     }
 
     [Theory]
@@ -133,7 +149,7 @@ public class CashSessionTests
         foreach (var method in Enum.GetValues<OrderPaymentMethod>().Where(OrderPaymentMethodRules.EntersADrawer))
             session.RegisterTransaction(CashTransactionType.SalePayment, 10m, Now, method);
 
-        Assert.Equal(Enum.GetValues<OrderPaymentMethod>().Length - 1, session.Transactions.Count);
+        Assert.Equal(Enum.GetValues<OrderPaymentMethod>().Length - 2, session.Transactions.Count);
     }
 
     private static CashSession NewSession(decimal openingAmount) =>
