@@ -9,7 +9,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// <summary>
 /// Appointments booked online (Fase 24D, ADR 0025) through the API: a booking page offers only its business's services, a
 /// request lands in that business, its link opens only it, the team of another business neither reads, accepts nor
-/// declines it, and an account sees and cancels only its own.
+/// declines it, and an account sees and cancels only its own. Who attends (Fase 24J) is set only for a business's own team
+/// and booked only on its own page.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantOnlineBookingSqlServerTests
@@ -87,6 +88,44 @@ public sealed class CrossTenantOnlineBookingSqlServerTests
         Assert.True(agenda.GetProperty("cancelledByCustomer").GetBoolean());
     }
 
+    [SqlServerFact]
+    public async Task Staff_ShouldBeSetOnlyForItsOwnTeam_AndBookedOnlyOnItsOwnPage()
+    {
+        var mine = await _api.SignUpAsync("quien-a");
+        var theirs = await _api.SignUpAsync("quien-b");
+        var (mySlug, myService) = await BookingAsync(mine.Client, "Corte con persona");
+        var (theirSlug, theirService) = await BookingAsync(theirs.Client, "Masaje con persona");
+        using var stranger = _api.AnonymousClient();
+
+        // Each team lists only its own people; the other business cannot set them up.
+        var myTeam = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"{Settings}/staff"));
+        var me = Assert.Single(myTeam.GetProperty("members").EnumerateArray()).GetProperty("userId").GetGuid();
+        Assert.DoesNotContain(me.ToString(), await theirs.Client.GetStringAsync($"{Settings}/staff"));
+        var person = new { enabled = true, name = "Dueña A.", allServices = true };
+        Assert.Equal(HttpStatusCode.BadRequest, (await theirs.Client.PutAsJsonAsync($"{Settings}/staff/{me}", person)).StatusCode);
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"{Settings}/staff/{me}", person));
+
+        // The person shows on their business's page only, and books only there.
+        var page = await TwoBusinessesApi.ReadAsync(await stranger.GetAsync($"/api/v1/public/menu/{mySlug}/booking"));
+        var staffId = Assert.Single(page.GetProperty("staff").EnumerateArray()).GetProperty("id").GetGuid();
+        var theirPage = await TwoBusinessesApi.ReadAsync(await stranger.GetAsync($"/api/v1/public/menu/{theirSlug}/booking"));
+        Assert.Equal(0, theirPage.GetProperty("staff").GetArrayLength());
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await stranger.GetAsync($"/api/v1/public/menu/{theirSlug}/booking/slots?serviceId={theirService}&staffId={staffId}")).StatusCode);
+        var elsewhere = await stranger.PostAsJsonAsync($"/api/v1/public/menu/{theirSlug}/appointments",
+            Request(theirService, await FirstFreeAsync(stranger, theirSlug, theirService), "5511113333", staffId));
+        Assert.Equal(HttpStatusCode.BadRequest, elsewhere.StatusCode);
+
+        var startAt = await FirstFreeAsync(stranger, mySlug, myService, staffId);
+        var receipt = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync(
+            $"/api/v1/public/menu/{mySlug}/appointments", Request(myService, startAt, "5512344321", staffId)));
+        Assert.Equal("Dueña A.", receipt.GetProperty("staffName").GetString());
+        var tracked = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync(Tracking, new { token = receipt.GetProperty("trackingToken").GetString() }));
+        Assert.Equal("Dueña A.", tracked.GetProperty("staffName").GetString());
+        Assert.Equal(1, (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(Settings))).GetProperty("staffCount").GetInt32());
+        Assert.Equal(0, (await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync(Settings))).GetProperty("staffCount").GetInt32());
+    }
+
     /// <returns>The slug of the business's menu and a service it books online.</returns>
     private static async Task<(string Slug, Guid Service)> BookingAsync(HttpClient owner, string serviceName)
     {
@@ -112,21 +151,23 @@ public sealed class CrossTenantOnlineBookingSqlServerTests
         return (slug, service);
     }
 
-    private static async Task<DateTimeOffset> FirstFreeAsync(HttpClient client, string slug, Guid service)
+    private static async Task<DateTimeOffset> FirstFreeAsync(HttpClient client, string slug, Guid service, Guid? staffId = null)
     {
-        var week = await TwoBusinessesApi.ReadAsync(await client.GetAsync($"/api/v1/public/menu/{slug}/booking/slots?serviceId={service}"));
+        var week = await TwoBusinessesApi.ReadAsync(await client.GetAsync(
+            $"/api/v1/public/menu/{slug}/booking/slots?serviceId={service}" + (staffId is null ? "" : $"&staffId={staffId}")));
         return week.GetProperty("days").EnumerateArray()
             .SelectMany(day => day.GetProperty("slots").EnumerateArray())
             .Select(slot => slot.GetProperty("startAt").GetDateTimeOffset())
             .First();
     }
 
-    private static object Request(Guid service, DateTimeOffset startAt, string phone) => new
+    private static object Request(Guid service, DateTimeOffset startAt, string phone, Guid? staffId = null) => new
     {
         serviceProductId = service,
         startAt,
         customerName = "Valeria Citas",
         customerPhone = phone,
-        idempotencyKey = Guid.NewGuid()
+        idempotencyKey = Guid.NewGuid(),
+        staffId
     };
 }

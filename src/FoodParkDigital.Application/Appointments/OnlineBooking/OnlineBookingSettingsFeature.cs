@@ -18,7 +18,7 @@ public class OnlineBookingSettingsDto
 {
     /// <summary>The owner turned it on.</summary>
     public bool Enabled { get; set; }
-    /// <summary>Appointments the business attends at once.</summary>
+    /// <summary>Appointments the business attends at once, while it does not say who attends (<see cref="StaffCount"/> 0).</summary>
     public int Capacity { get; set; }
     public int MaxCapacity { get; set; } = OnlineBookingRules.MaxCapacity;
     /// <summary>Customers book now: it is on and nothing is missing.</summary>
@@ -27,6 +27,11 @@ public class OnlineBookingSettingsDto
     public List<string> Missing { get; set; } = [];
     /// <summary>The business's online menu (/m/{slug}): the booking page is /m/{slug}/agendar.</summary>
     public string Slug { get; set; } = null!;
+    /// <summary>
+    /// The people customers book now (Fase 24J); while there is one, the times come from each person and
+    /// <see cref="Capacity"/> is not used.
+    /// </summary>
+    public int StaffCount { get; set; }
 }
 
 /// <summary>The setting for online appointments, for everyone on the team who manages the agenda.</summary>
@@ -119,7 +124,8 @@ public class OnlineBookingSettingsHandler :
             Capacity = settings?.OnlineBookingCapacity ?? OnlineBookingRules.DefaultCapacity,
             BooksOnline = enabled && blockers.Count == 0,
             Missing = blockers.Select(OnlineBookingAvailability.Describe).ToList(),
-            Slug = tenant.Slug
+            Slug = tenant.Slug,
+            StaffCount = (await OnlineBookingCalendar.StaffAsync(_context, tenant.Id, cancellationToken)).Count
         };
     }
 }

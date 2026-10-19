@@ -85,6 +85,30 @@ public class AppointmentsController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>The business's active team, with who customers book online and their services and hours (Fase 24J).</summary>
+    [HttpGet("online-booking/staff")]
+    public async Task<ActionResult<OnlineBookingStaffSettingsDto>> GetOnlineBookingStaff(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetOnlineBookingStaffQuery(), cancellationToken));
+
+    /// <summary>Sets what customers see of a team member and when they book them online (owners and admins, Fase 24J).</summary>
+    [HttpPut("online-booking/staff/{userId:guid}")]
+    public async Task<ActionResult<OnlineBookingStaffMemberDto>> UpdateOnlineBookingStaff(
+        Guid userId, [FromBody] UpdateOnlineBookingStaffRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateOnlineBookingStaffCommand
+        {
+            UserId = userId,
+            Enabled = request.Enabled,
+            Name = request.Name,
+            AllServices = request.AllServices,
+            ServiceIds = request.ServiceIds,
+            WeeklyHours = request.WeeklyHours
+        }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
     /// <summary>Accepts an appointment a customer requested online (Fase 24D): it is agendada and the customer hears it.</summary>
     [HttpPost("{id:guid}/accept")]
     public async Task<ActionResult<AppointmentDto>> Accept(Guid id, CancellationToken cancellationToken)
@@ -148,4 +172,13 @@ public class AppointmentsController : ControllerBase
 public class UpdateAppointmentStatusRequest
 {
     public AppointmentStatus NewStatus { get; init; }
+}
+
+public class UpdateOnlineBookingStaffRequest
+{
+    public bool Enabled { get; init; }
+    public string Name { get; init; } = null!;
+    public bool AllServices { get; init; } = true;
+    public List<Guid>? ServiceIds { get; init; }
+    public List<FoodParkDigital.Application.Tenants.DTOs.OpeningIntervalDto>? WeeklyHours { get; init; }
 }

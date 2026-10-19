@@ -413,6 +413,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appointments/online-booking/staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineBookingStaffSettingsDto"];
+                        "application/json": components["schemas"]["OnlineBookingStaffSettingsDto"];
+                        "text/json": components["schemas"]["OnlineBookingStaffSettingsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments/online-booking/staff/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateOnlineBookingStaffRequest"];
+                    "text/json": components["schemas"]["UpdateOnlineBookingStaffRequest"];
+                    "application/*+json": components["schemas"]["UpdateOnlineBookingStaffRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineBookingStaffMemberDto"];
+                        "application/json": components["schemas"]["OnlineBookingStaffMemberDto"];
+                        "text/json": components["schemas"]["OnlineBookingStaffMemberDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/appointments/{id}/accept": {
         parameters: {
             query?: never;
@@ -8785,6 +8867,7 @@ export interface paths {
                 query?: {
                     serviceId?: string;
                     from?: string;
+                    staffId?: string;
                 };
                 header?: never;
                 path: {
@@ -12318,6 +12401,7 @@ export interface components {
             businessSlug: string;
             businessContactPhone?: string | null;
             address?: string | null;
+            staffName?: string | null;
         };
         CustomerAppointmentDtoPaginatedList: {
             items: components["schemas"]["CustomerAppointmentDto"][];
@@ -13270,6 +13354,11 @@ export interface components {
             status: string;
             logoUrl?: string | null;
         };
+        OnlineBookingServiceOptionDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         OnlineBookingSettingsDto: {
             enabled: boolean;
             /** Format: int32 */
@@ -13279,6 +13368,25 @@ export interface components {
             booksOnline: boolean;
             missing: string[];
             slug: string;
+            /** Format: int32 */
+            staffCount: number;
+        };
+        OnlineBookingStaffMemberDto: {
+            /** Format: uuid */
+            userId: string;
+            fullName: string;
+            name: string;
+            configured: boolean;
+            enabled: boolean;
+            allServices: boolean;
+            serviceIds: string[];
+            weeklyHours?: components["schemas"]["OpeningIntervalDto"][] | null;
+        };
+        OnlineBookingStaffSettingsDto: {
+            members: components["schemas"]["OnlineBookingStaffMemberDto"][];
+            services: components["schemas"]["OnlineBookingServiceOptionDto"][];
+            /** Format: int32 */
+            maxEnabled: number;
         };
         OnlineCheckoutStartedDto: {
             /** Format: uuid */
@@ -14273,6 +14381,7 @@ export interface components {
             businessName: string;
             contactPhone?: string | null;
             address?: string | null;
+            staffName?: string | null;
             linkedToAccount: boolean;
             trackingToken: string;
         };
@@ -14296,6 +14405,7 @@ export interface components {
             /** Format: int32 */
             daysAhead: number;
             services: components["schemas"]["PublicBookingServiceDto"][];
+            staff: components["schemas"]["PublicBookingStaffDto"][];
         };
         PublicBookingServiceDto: {
             /** Format: uuid */
@@ -14307,6 +14417,7 @@ export interface components {
             /** Format: int32 */
             durationMinutes: number;
             imageUrl?: string | null;
+            staffIds: string[];
         };
         PublicBookingSlotDto: {
             /** Format: date-time */
@@ -14320,6 +14431,11 @@ export interface components {
             days: components["schemas"]["PublicBookingDayDto"][];
             /** Format: date */
             nextFrom?: string | null;
+        };
+        PublicBookingStaffDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
         };
         PublicDayHoursDto: {
             /** Format: date */
@@ -14722,6 +14838,8 @@ export interface components {
             notes?: string | null;
             /** Format: uuid */
             idempotencyKey?: string | null;
+            /** Format: uuid */
+            staffId?: string | null;
         };
         ResendConfirmationEmailCommand: {
             email: string;
@@ -15527,6 +15645,13 @@ export interface components {
             enabled: boolean;
             /** Format: int32 */
             capacity: number;
+        };
+        UpdateOnlineBookingStaffRequest: {
+            enabled: boolean;
+            name: string;
+            allServices: boolean;
+            serviceIds?: string[] | null;
+            weeklyHours?: components["schemas"]["OpeningIntervalDto"][] | null;
         };
         UpdateOnlineMenuRequest: {
             mode: components["schemas"]["OnlineMenuMode"];

@@ -36,6 +36,11 @@ public class CustomerAppointmentDto
     public string? BusinessContactPhone { get; set; }
     /// <summary>Where it happens: the main branch, in one line.</summary>
     public string? Address { get; set; }
+    /// <summary>
+    /// Who attends it, by the name the business gave them for customers (Fase 24J); null when nobody is assigned or the
+    /// business gave them none.
+    /// </summary>
+    public string? StaffName { get; set; }
 }
 
 public enum MyAppointmentsScope
@@ -93,7 +98,11 @@ public static class CustomerAppointments
             tenant.Slug,
             tenant.ContactPhone,
             context.TenantSettings.Where(s => s.TenantId == tenant.Id).Select(s => s.TimeZone).FirstOrDefault(),
-            context.Branches.Where(b => b.TenantId == tenant.Id && b.IsDefault).FirstOrDefault());
+            context.Branches.Where(b => b.TenantId == tenant.Id && b.IsDefault).FirstOrDefault(),
+            context.OnlineBookingStaff
+                .Where(s => s.TenantId == appointment.TenantId && s.UserId == appointment.StaffUserId)
+                .Select(s => s.Name)
+                .FirstOrDefault());
 
     internal static CustomerAppointmentDto ToDto(Row row, DateTimeOffset now)
     {
@@ -112,7 +121,8 @@ public static class CustomerAppointments
             BusinessName = row.BusinessName,
             BusinessSlug = row.BusinessSlug,
             BusinessContactPhone = row.BusinessContactPhone,
-            Address = AddressText.ForCustomers(row.MainBranch)
+            Address = AddressText.ForCustomers(row.MainBranch),
+            StaffName = row.StaffName
         };
     }
 
@@ -128,7 +138,8 @@ public static class CustomerAppointments
         string BusinessSlug,
         string? BusinessContactPhone,
         string? TimeZone,
-        Domain.Branches.Entities.Branch? MainBranch);
+        Domain.Branches.Entities.Branch? MainBranch,
+        string? StaffName);
 }
 
 /// <summary>

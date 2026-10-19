@@ -82,13 +82,14 @@ public class PublicMenuController : ControllerBase
     /// <param name="slug">The business of the menu.</param>
     /// <param name="serviceId">A service the business books online.</param>
     /// <param name="from">The first day of the week asked for.</param>
+    /// <param name="staffId">The person chosen (Fase 24J); none for whoever is free.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     [HttpGet("booking/slots")]
     [EnableRateLimiting("public-menu")]
     public async Task<ActionResult<PublicBookingSlotsDto>> GetBookingSlots(
-        string slug, [FromQuery] Guid serviceId, [FromQuery] DateOnly? from, CancellationToken cancellationToken)
+        string slug, [FromQuery] Guid serviceId, [FromQuery] DateOnly? from, [FromQuery] Guid? staffId, CancellationToken cancellationToken)
     {
-        var slots = await _mediator.Send(new GetPublicBookingSlotsQuery(slug, serviceId, from), cancellationToken);
+        var slots = await _mediator.Send(new GetPublicBookingSlotsQuery(slug, serviceId, from, staffId), cancellationToken);
         return slots is null
             ? this.ApiError(StatusCodes.Status404NotFound, RequestPublicAppointmentCommandHandler.ServiceNotBookedMessage)
             : Ok(slots);
@@ -108,7 +109,8 @@ public class PublicMenuController : ControllerBase
             CustomerName = request.CustomerName,
             CustomerPhone = request.CustomerPhone,
             Notes = request.Notes,
-            IdempotencyKey = request.IdempotencyKey
+            IdempotencyKey = request.IdempotencyKey,
+            StaffId = request.StaffId
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -225,4 +227,6 @@ public class RequestPublicAppointmentRequest
     public string? Notes { get; init; }
     /// <summary>The booking page's key for this request: sent again, it answers the appointment already requested.</summary>
     public Guid? IdempotencyKey { get; init; }
+    /// <summary>The person chosen (Fase 24J); none for whoever is free.</summary>
+    public Guid? StaffId { get; init; }
 }

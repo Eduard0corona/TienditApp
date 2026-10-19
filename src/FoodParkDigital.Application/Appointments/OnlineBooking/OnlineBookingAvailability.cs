@@ -5,6 +5,8 @@ using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -104,4 +106,94 @@ internal static class OnlineBookingCalendar
                 && a.StartAt < to && a.EndAt > from)
             .Select(a => new BookedInterval(a.StartAt, a.EndAt))
             .ToListAsync(cancellationToken);
+
+    /// <summary>
+    /// The people customers book online now (Fase 24J): turned on by the business, with an active membership and account.
+    /// Empty when the business did not say who attends: its times come from how many it attends at once.
+    /// </summary>
+    public static async Task<List<BookableStaff>> StaffAsync(IApplicationDbContext context, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var rows = await (
+                from staff in context.OnlineBookingStaff.AsNoTracking()
+                join member in context.TenantUsers.AsNoTracking()
+                    on new { staff.TenantId, staff.UserId } equals new { member.TenantId, member.UserId }
+                join user in context.Users.AsNoTracking() on staff.UserId equals user.Id
+                where staff.TenantId == tenantId && staff.Enabled
+                    && member.Status == TenantUserStatus.Active && user.IsActive && user.Role != UserRole.Customer
+                select new
+                {
+                    staff.Id,
+                    staff.UserId,
+                    staff.Name,
+                    user.FirstName,
+                    user.LastName,
+                    staff.WeeklyHours,
+                    staff.AllServices,
+                    Services = staff.Services.Select(service => service.ProductId).ToList()
+                })
+            .ToListAsync(cancellationToken);
+        return rows
+            .Select(row => new BookableStaff(
+                row.Id, row.UserId, row.Name, $"{row.FirstName} {row.LastName}".Trim(), row.WeeklyHours, row.AllServices, row.Services.ToHashSet()))
+            .OrderBy(person => person.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(person => person.Id)
+            .ToList();
+    }
+
+    /// <summary>The open appointments of the business that overlap the range, with who attends each and whether it is a visit.</summary>
+    public static Task<List<StaffBooking>> BookingsAsync(
+        IApplicationDbContext context,
+        Guid tenantId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+        => context.Appointments
+            .AsNoTracking()
+            .Where(a => a.TenantId == tenantId
+                && a.Status != AppointmentStatus.Cancelled
+                && a.Status != AppointmentStatus.NoShow
+                && a.StartAt < to && a.EndAt > from)
+            .Select(a => new StaffBooking(a.StaffUserId, a.StartAt, a.EndAt, a.Visit != null))
+            .ToListAsync(cancellationToken);
+
+    /// <summary>
+    /// What each person's appointments hold of their time, and the appointments nobody attends yet. A visit at the
+    /// customer's address holds the trip too, before and after, as in the agenda (ADR 0020); appointments of someone who
+    /// does not take online appointments hold nobody's.
+    /// </summary>
+    public static (List<StaffCalendar> Calendars, List<BookedInterval> Unassigned) Calendars(
+        IEnumerable<BookableStaff> staff, IReadOnlyCollection<StaffBooking> bookings, int travelMinutes)
+    {
+        var travel = TimeSpan.FromMinutes(travelMinutes);
+        BookedInterval Held(StaffBooking booking) => booking.IsVisit
+            ? new BookedInterval(booking.StartAt - travel, booking.EndAt + travel)
+            : new BookedInterval(booking.StartAt, booking.EndAt);
+        var calendars = staff
+            .Select(person => new StaffCalendar(
+                person.Id,
+                person.WeeklyHours,
+                bookings.Where(booking => booking.StaffUserId == person.UserId).Select(Held).ToList()))
+            .ToList();
+        var unassigned = bookings
+            .Where(booking => booking.StaffUserId is null)
+            .Select(booking => new BookedInterval(booking.StartAt, booking.EndAt))
+            .ToList();
+        return (calendars, unassigned);
+    }
 }
+
+/// <summary>A person customers book online (Fase 24J): their name for customers and for the agenda, hours and services.</summary>
+internal sealed record BookableStaff(
+    Guid Id,
+    Guid UserId,
+    string Name,
+    string FullName,
+    OpeningHours? WeeklyHours,
+    bool AllServices,
+    IReadOnlySet<Guid> ServiceIds)
+{
+    public bool Offers(Guid serviceId) => AllServices || ServiceIds.Contains(serviceId);
+}
+
+/// <summary>An open appointment of the business: who attends it (none yet when null), when, and whether it is a visit.</summary>
+internal sealed record StaffBooking(Guid? StaffUserId, DateTimeOffset StartAt, DateTimeOffset EndAt, bool IsVisit);
