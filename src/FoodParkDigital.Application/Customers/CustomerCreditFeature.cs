@@ -499,8 +499,8 @@ public record PayCustomerAccountCommand : IRequest<Result<CustomerAccountDto>>, 
     [System.ComponentModel.DefaultValue(false)]
     public bool RestInFavor { get; init; }
     /// <summary>
-    /// Their balance in their favor as the screen showed it (Fase 26D). Like <see cref="ExpectedOwed"/>, a payment that finds
-    /// it changed is refused: one sent twice uses or leaves nothing twice.
+    /// Their balance in their favor as the screen showed it (Fase 26D), required to pay with it or to leave the rest. Like
+    /// <see cref="ExpectedOwed"/>, a payment that finds it changed is refused: one sent twice uses or leaves nothing twice.
     /// </summary>
     public decimal? ExpectedBalance { get; init; }
 }
@@ -534,6 +534,10 @@ public class PayCustomerAccountCommandValidator : AbstractValidator<PayCustomerA
             .When(x => x.ExpectedOwed.HasValue).WithName(nameof(PayCustomerAccountCommand.ExpectedOwed));
         RuleFor(x => x.ExpectedBalance!.Value).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
             .When(x => x.ExpectedBalance.HasValue).WithName(nameof(PayCustomerAccountCommand.ExpectedBalance));
+        // Nothing else stops a retry from using or leaving the balance twice: with nothing owed there is no ExpectedOwed.
+        RuleFor(x => x.ExpectedBalance).NotNull()
+            .When(x => x.RestInFavor || x.Method == OrderPaymentMethod.CustomerBalance)
+            .WithMessage(PayCustomerAccountCommandHandler.ExpectedBalanceMessage);
         RuleFor(x => x.RestInFavor).Equal(false).When(x => !OrderPaymentMethodRules.EntersADrawer(x.Method))
             .WithMessage(PayCustomerAccountCommandHandler.RestInFavorInPersonMessage);
         RuleFor(x => x.EvidenceUrl).Null().When(x => x.Method == OrderPaymentMethod.CustomerBalance)
@@ -547,6 +551,8 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
     public const string RestInFavorInPersonMessage =
         "Lo que sobra queda a favor solo si se paga en persona: efectivo, tarjeta, transferencia, billetera u otro.";
     public const string BalanceWithoutEvidenceMessage = "Lo que se paga con saldo a favor no lleva comprobante.";
+    public const string ExpectedBalanceMessage =
+        "Indica el saldo a favor que se veía (expectedBalance): así un abono repetido no lo usa ni lo deja dos veces.";
     public const string RestNote = "Lo que sobró de un abono";
     // Orders split in one payment: far more than a customer owes at once.
     private const int MaxOrders = 500;
@@ -630,11 +636,8 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
             var balance = await CustomerBalances.OfAsync(_context, account.Phone, cancellationToken);
             if (request.ExpectedBalance is { } expectedBalance && expectedBalance != balance)
                 return Result.Failure<CustomerAccountDto>(CustomerBalances.ChangedMessage(balance));
-            if (withBalance && balance <= 0)
-                return Result.Failure<CustomerAccountDto>(CustomerBalances.NothingInFavorMessage);
-            if (withBalance && request.Amount > balance)
-                return Result.Failure<CustomerAccountDto>(
-                    string.Format(CustomerBalanceEntry.NotEnoughMessage, OrderStatusLabels.FormatMoney(balance)));
+            if (withBalance && CustomerBalanceEntry.CoverProblem(balance, request.Amount, OrderStatusLabels.FormatMoney) is { } notCovered)
+                return Result.Failure<CustomerAccountDto>(notCovered);
         }
 
         var settings = await TenantSalesSettings.ReadAsync(_context, _tenant.TenantId, cancellationToken);

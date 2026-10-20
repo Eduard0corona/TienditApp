@@ -189,9 +189,12 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
 
             if (request.InventoryLocationId is { } refundLocationId)
             {
+                // «Plataforma» and «En línea» go back only as they were paid; the balance takes a refund of an order paid
+                // any way (Fase 26D), so it counts where the order was charged.
+                var sameMethod = method != OrderPaymentMethod.CustomerBalance;
                 refunds = refunds.Where(x => _context.OrderPayments.Any(payment =>
                     payment.OrderId == x.OrderId
-                    && payment.Method == method
+                    && (!sameMethod || payment.Method == method)
                     && payment.InventoryLocationId == refundLocationId));
             }
 
@@ -232,10 +235,11 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             .ToListAsync(cancellationToken);
         // What customers left in their favor and what was given back to them (Fase 26D): money of the drawers, but neither
         // a sale nor a movement by hand, so it is shown on its own lines.
-        var balanceMovements = movementRows
-            .Where(x => x.TransactionType is CashTransactionType.CustomerDeposit or CashTransactionType.CustomerDepositReturn)
-            .ToList();
-        var manualRows = movementRows.Except(balanceMovements).ToList();
+        static bool IsBalanceMovement(CashTransactionType type) =>
+            type is CashTransactionType.CustomerDeposit or CashTransactionType.CustomerDepositReturn;
+        var balanceMovements = movementRows.Where(x => IsBalanceMovement(x.TransactionType)).ToList();
+        // Every other row, one by one: two withdrawals of $500 the same day are two movements, not one.
+        var manualRows = movementRows.Where(x => !IsBalanceMovement(x.TransactionType)).ToList();
         var customerDepositsTotal = balanceMovements.Where(x => x.Amount > 0).Sum(x => x.Amount);
         var customerDepositReturnsTotal = balanceMovements.Where(x => x.Amount < 0).Sum(x => Math.Abs(x.Amount));
         var cashBalanceMovements = balanceMovements.Where(x => CashSession.IsCashMovement(x.PaymentMethod)).ToList();

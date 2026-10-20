@@ -215,6 +215,14 @@ public class CustomerBalanceFlowTests
             validator.Validate(payWithBalance with { RestInFavor = true }).Errors.Select(e => e.ErrorMessage));
         Assert.Contains(PayCustomerAccountCommandHandler.BalanceWithoutEvidenceMessage,
             validator.Validate(payWithBalance with { EvidenceUrl = "/api/v1/files/x" }).Errors.Select(e => e.ErrorMessage));
+        // Paying with it, or leaving the rest, always says the balance the screen saw: nothing else stops a retry.
+        var inCash = payWithBalance with { Method = OrderPaymentMethod.Cash, ExpectedBalance = null };
+        Assert.True(validator.Validate(inCash).IsValid);
+        Assert.Contains(PayCustomerAccountCommandHandler.ExpectedBalanceMessage,
+            validator.Validate(payWithBalance with { ExpectedBalance = null }).Errors.Select(e => e.ErrorMessage));
+        Assert.Contains(PayCustomerAccountCommandHandler.ExpectedBalanceMessage,
+            validator.Validate(inCash with { RestInFavor = true }).Errors.Select(e => e.ErrorMessage));
+        Assert.False(new AddCustomerDepositCommandValidator().Validate(Deposit(ana, 10m, OrderPaymentMethod.Cash, expected: -1m)).IsValid);
     }
 
     [Fact]
@@ -331,7 +339,7 @@ public class CustomerBalanceFlowTests
         var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone);
         await fixture.OpenCashSessionAsync(tenant);
         await DepositHandler(fixture).Handle(Deposit(ana, 200m, OrderPaymentMethod.Cash), default);
-        await DepositHandler(fixture).Handle(Deposit(ana, 50m, OrderPaymentMethod.Card), default);
+        await DepositHandler(fixture).Handle(Deposit(ana, 50m, OrderPaymentMethod.Card, expected: 200m), default);
         var withBalance = await fixture.CreateOrderHandler().Handle(BalanceSale(ana, soap, fromBalance: 100m), default);
         var inCash = await fixture.CreateOrderHandler().Handle(Sale(ana, soap) with
         {
@@ -367,6 +375,12 @@ public class CustomerBalanceFlowTests
         Assert.Equal(shifts.Sum(s => s.Inflows - s.Outflows), cut.NetCashOnlyFlow);
         // Paid with what she left, the sale is no cashier's.
         Assert.Equal(40m, cut.ByUser.Sum(u => u.TotalAmount));
+
+        // By the stock location, the refund to her balance counts where the order paid in cash was charged.
+        var location = (await fixture.Context.OrderPayments.FirstAsync(p => p.OrderId == inCash.Value.Id)).InventoryLocationId;
+        var atLocation = await new GetDailyCashCutQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(new GetDailyCashCutQuery { InventoryLocationId = location }, default);
+        Assert.Equal((100m, 10m), (atLocation.CustomerBalanceTotal, atLocation.CustomerBalanceRefundsTotal));
     }
 
     [Fact]
@@ -436,7 +450,7 @@ public class CustomerBalanceFlowTests
         return customer;
     }
 
-    private static AddCustomerDepositCommand Deposit(Customer customer, decimal amount, OrderPaymentMethod method, decimal? expected = null) => new()
+    private static AddCustomerDepositCommand Deposit(Customer customer, decimal amount, OrderPaymentMethod method, decimal expected = 0m) => new()
     {
         CustomerId = customer.Id,
         Amount = amount,

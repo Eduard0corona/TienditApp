@@ -157,12 +157,11 @@ public class CustomerBalanceTests
     [Fact]
     public void WhatLeavesTheBalance_ShouldNeverTakeItBelowZero()
     {
-        CustomerBalanceEntry.EnsureCovers(100m, 100m, Money);
+        Assert.Null(CustomerBalanceEntry.CoverProblem(100m, 100m, Money));
 
-        var refused = Assert.Throws<DomainException>(() => CustomerBalanceEntry.EnsureCovers(100m, 100.01m, Money));
-        Assert.Equal("No le alcanza el saldo a favor: tiene $100.00.", refused.Message);
-        Assert.Equal("No le alcanza el saldo a favor: tiene $0.00.",
-            Assert.Throws<DomainException>(() => CustomerBalanceEntry.EnsureCovers(-3m, 1m, Money)).Message);
+        Assert.Equal("No le alcanza el saldo a favor: tiene $100.00.", CustomerBalanceEntry.CoverProblem(100m, 100.01m, Money));
+        Assert.Equal("No tiene saldo a favor.", CustomerBalanceEntry.CoverProblem(0m, 1m, Money));
+        Assert.Equal("No tiene saldo a favor.", CustomerBalanceEntry.CoverProblem(-3m, 1m, Money));
     }
 
     [Fact]

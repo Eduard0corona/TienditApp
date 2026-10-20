@@ -677,12 +677,11 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             if (request.IdempotencyKey is { } waitedKey && await ExistingSaleAsync(waitedKey, cancellationToken) is { } recorded)
                 return Result.Success(recorded);
             var balance = await CustomerBalances.OfAsync(_context, balancePhone, cancellationToken);
-            if (balance <= 0)
-                return Result.Failure<OrderDto>(CustomerBalances.NothingInFavorMessage);
-            if (fromBalance > balance)
-                return Result.Failure<OrderDto>(string.Format(CustomerBalanceEntry.NotEnoughMessage, OrderStatusLabels.FormatMoney(balance)));
-            balanceCustomerId = request.CustomerId
-                ?? (await CreditAccount.RecordAsync(_context, balancePhone, cancellationToken, tracked: false))?.Id;
+            if (CustomerBalanceEntry.CoverProblem(balance, fromBalance, OrderStatusLabels.FormatMoney) is { } notCovered)
+                return Result.Failure<OrderDto>(notCovered);
+            // The record of the phone whose balance it spends, as every movement of that account (not the customer chosen in
+            // Vender, which may carry another phone).
+            balanceCustomerId = (await CreditAccount.RecordAsync(_context, balancePhone, cancellationToken, tracked: false))?.Id;
         }
 
         // 12. The folio, once the checks without side effects passed: payments and supplies name the order by it.

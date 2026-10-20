@@ -23,6 +23,7 @@ public class CustomerBalanceEntry : AuditableEntity, ITenantScoped
     public const string PhoneMessage = "El saldo a favor es de la cuenta de un cliente: necesita su teléfono.";
     public const string InPersonMethodMessage = "Elige cómo entra o sale el dinero: efectivo, tarjeta, transferencia, billetera u otro.";
     public const string NotEnoughMessage = "No le alcanza el saldo a favor: tiene {0}.";
+    public const string NothingInFavorMessage = "No tiene saldo a favor.";
 
     private CustomerBalanceEntry() { }
 
@@ -103,14 +104,14 @@ public class CustomerBalanceEntry : AuditableEntity, ITenantScoped
         };
 
     /// <summary>
-    /// What leaves the balance never takes it below zero: the caller reads the balance inside the account's lock and passes it
-    /// here before recording the movement.
+    /// What leaves the balance never takes it below zero: whoever pays with it or gives it back reads the balance inside the
+    /// account's lock and asks here before recording the movement.
     /// </summary>
-    public static void EnsureCovers(decimal balance, decimal amount, Func<decimal, string> formatMoney)
-    {
-        if (amount > balance)
-            throw new DomainException(string.Format(NotEnoughMessage, formatMoney(Math.Max(0, balance))));
-    }
+    /// <returns>Why the balance does not cover the amount; null when it does.</returns>
+    public static string? CoverProblem(decimal balance, decimal amount, Func<decimal, string> formatMoney) =>
+        balance <= 0 ? NothingInFavorMessage
+        : amount > balance ? string.Format(NotEnoughMessage, formatMoney(balance))
+        : null;
 
     private static CustomerBalanceEntry InPerson(
         Guid tenantId, string phone, Guid? customerId, CustomerBalanceEntryKind kind, decimal amount, OrderPaymentMethod method,

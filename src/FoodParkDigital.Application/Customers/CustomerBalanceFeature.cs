@@ -40,7 +40,7 @@ public static class CustomerBalances
 {
     public const int RecentEntries = 10;
     public const string NoOpenDrawerMessage = "Abre tu caja: lo que un cliente deja a su favor, o se le devuelve, pasa por una caja.";
-    public const string NothingInFavorMessage = "No tiene saldo a favor.";
+    public const string NothingInFavorMessage = CustomerBalanceEntry.NothingInFavorMessage;
 
     public static string ChangedMessage(decimal balance) =>
         $"El saldo a favor cambió: ahora tiene {OrderStatusLabels.FormatMoney(balance)}. Revisa el estado de cuenta antes de seguir.";
@@ -109,10 +109,10 @@ public record AddCustomerDepositCommand : IRequest<Result<CustomerAccountDto>>, 
     public string? Reference { get; init; }
     public string? Notes { get; init; }
     /// <summary>
-    /// Their balance as the screen showed it. Sent twice, or after a movement the screen did not see, it finds the balance
-    /// changed and is refused instead of leaving it twice.
+    /// Their balance as the screen showed it (0 when they have none). Sent twice, or after a movement the screen did not see,
+    /// it finds the balance changed and is refused instead of leaving it twice: a deposit has no idempotency key.
     /// </summary>
-    public decimal? ExpectedBalance { get; init; }
+    public decimal ExpectedBalance { get; init; }
 }
 
 public class AddCustomerDepositCommandValidator : AbstractValidator<AddCustomerDepositCommand>
@@ -128,8 +128,7 @@ public class AddCustomerDepositCommandValidator : AbstractValidator<AddCustomerD
             .WithMessage(CustomerBalanceEntry.InPersonMethodMessage);
         RuleFor(x => x.Reference).MaximumLength(CustomerBalanceEntry.MaxReferenceLength);
         RuleFor(x => x.Notes).MaximumLength(CustomerBalanceEntry.MaxNotesLength);
-        RuleFor(x => x.ExpectedBalance!.Value).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
-            .When(x => x.ExpectedBalance.HasValue).WithName(nameof(AddCustomerDepositCommand.ExpectedBalance));
+        RuleFor(x => x.ExpectedBalance).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
     }
 }
 
@@ -172,7 +171,7 @@ public class AddCustomerDepositCommandHandler : IRequestHandler<AddCustomerDepos
 
         await _creditLock.AcquireAsync(_tenant.TenantId, account.Phone, cancellationToken);
         var balance = await CustomerBalances.OfAsync(_context, account.Phone, cancellationToken);
-        if (request.ExpectedBalance is { } expected && expected != balance)
+        if (request.ExpectedBalance != balance)
             return Result.Failure<CustomerAccountDto>(CustomerBalances.ChangedMessage(balance));
 
         var entry = await CustomerBalanceDeposits.LeaveAsync(
@@ -311,8 +310,8 @@ public class ReturnCustomerBalanceCommandHandler : IRequestHandler<ReturnCustome
             return Result.Failure<CustomerAccountDto>(CustomerBalances.NothingInFavorMessage);
         if (request.ExpectedBalance != balance)
             return Result.Failure<CustomerAccountDto>(CustomerBalances.ChangedMessage(balance));
-        if (request.Amount > balance)
-            return Result.Failure<CustomerAccountDto>(string.Format(CustomerBalanceEntry.NotEnoughMessage, OrderStatusLabels.FormatMoney(balance)));
+        if (CustomerBalanceEntry.CoverProblem(balance, request.Amount, OrderStatusLabels.FormatMoney) is { } notCovered)
+            return Result.Failure<CustomerAccountDto>(notCovered);
 
         var now = _clock.UtcNow;
         var by = _currentUser.UserName ?? "system";

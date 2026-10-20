@@ -292,6 +292,28 @@ public class CashShiftTests
     }
 
     [Fact]
+    public async Task DailyCut_ShouldCountEachOfTwoEqualMovements()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
+        var drawer = await fixture.OpenCashSessionAsync(tenant);
+        // Two withdrawals of $500 and two deposits of $40 the same day are four movements, not two.
+        drawer.RegisterTransaction(CashTransactionType.Withdrawal, 500m, SalesTestFixture.Now);
+        drawer.RegisterTransaction(CashTransactionType.Withdrawal, 500m, SalesTestFixture.Now);
+        drawer.RegisterTransaction(CashTransactionType.Deposit, 40m, SalesTestFixture.Now);
+        drawer.RegisterTransaction(CashTransactionType.Deposit, 40m, SalesTestFixture.Now);
+        await fixture.Context.SaveChangesAsync();
+
+        var cut = await new GetDailyCashCutQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(new GetDailyCashCutQuery(), CancellationToken.None);
+
+        Assert.Equal((80m, 1000m), (cut.ManualIncomeTotal, cut.ManualExpenseTotal));
+        Assert.Equal((80m, 1000m), (cut.CashManualIncomeTotal, cut.CashManualExpenseTotal));
+        Assert.Equal(drawer.Inflows - drawer.Outflows, cut.NetCashOnlyFlow);
+        Assert.Equal(-920m, cut.NetCashFlow);
+    }
+
+    [Fact]
     public async Task DailyCut_ShouldShowWhatThePlatformsCharged_OutsideTheDrawers()
     {
         await using var fixture = SalesTestFixture.Create();
