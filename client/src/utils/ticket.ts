@@ -218,6 +218,8 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
     if (cashReceived > 0) lines.push(`Efectivo recibido: ${formatMoney(cashReceived)}`);
     if (change > 0) lines.push(`Cambio: ${formatMoney(change)}`);
   }
+  // What the business forgave (Fase 26B): without it, the total less the payments is not the balance.
+  if ((order.writtenOffAmount ?? 0) > 0) lines.push(`Condonado: ${formatMoney(order.writtenOffAmount ?? 0)}`);
   if (order.balance > 0) {
     // What the business still collects of an order of a platform comes from the courier.
     lines.push(platform ? `*Cobrar al repartidor: ${formatMoney(order.balance)}*` : `Saldo pendiente: ${formatMoney(order.balance)}`);

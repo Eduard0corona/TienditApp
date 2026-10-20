@@ -169,9 +169,10 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
 
 [ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md):
 
-- **Condonar es un registro aparte** (`OrderWriteOff`, inmutable): monto (`decimal(18,2)`, mayor a cero, a centavos), motivo, nota, fecha y autor. El pedido acumula `WrittenOffAmount` y su saldo es `Total − PaidAmount − WrittenOffAmount`. La venta, sus pagos, sus impuestos y la caja no cambian: no es un pago ni un reembolso.
+- **Condonar es un registro aparte** (`OrderWriteOff`): monto (`decimal(18,2)`, mayor a cero, a centavos), motivo, nota, fecha y autor. El pedido acumula `WrittenOffAmount` y su saldo es `Total − PaidAmount − WrittenOffAmount`. La venta, sus pagos, sus impuestos y la caja no cambian: no es un pago ni un reembolso.
+- **Deshacer** compensa sin borrar: el registro se queda con `ReversedAt` y `ReversedBy`, una sola vez, y `WrittenOffAmount` baja ese monto, así que el pedido vuelve a deberlo. Cancelar un pedido con algo condonado pide deshacerlo antes.
 - **El reparto** es como el de un abono: de un pedido, o del más viejo al más nuevo, cada parte `min(lo que queda, saldo del pedido)`. Nunca más que el saldo, y un pago posterior cubre solo lo que queda.
-- **El plazo** (`TenantSettings.CreditTermDays`, de 1 a 120 días o sin plazo) solo dice qué está vencido: un pedido vence al día siguiente de su día de venta más el plazo, en la zona horaria del negocio. No cobra intereses ni impide fiar.
+- **El plazo** (`TenantSettings.CreditTermDays`, de 1 a 120 días o sin plazo) solo dice qué está vencido: un pedido vence al día siguiente de su último día para pagar, el día en que se empezó a deber más el plazo, en la zona horaria del negocio. Una venta fiada se debe desde que se vendió; un pedido entregado sin cobrar, desde que se entregó. No cobra intereses ni impide fiar.
 - **El CFDI va por el total:** lo condonado se queda como no pagado en el borrador (PPD si queda algo sin pagar), con un aviso de que requiere una nota de crédito (CFDI de egreso), que todavía no se genera.
 - **Lo que no cambia:** el corte, los reportes por cobros y las ventas. Lo condonado se ve en cada pedido, en la cuenta del cliente y en la actividad del negocio.
 

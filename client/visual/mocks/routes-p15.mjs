@@ -78,7 +78,10 @@ export function account(data, key, record) {
     .slice(0, RECENT_PAYMENTS);
   const writeOffs = data.orders
     .filter((o) => phoneKey(o.customerPhone) === key && o.status !== CANCELLED)
-    .flatMap((o) => (o.writeOffs ?? []).map((w) => ({ orderNumber: o.orderNumber, writtenOffAt: w.writtenOffAt, amount: w.amount, reason: w.reason, notes: w.notes ?? null })))
+    .flatMap((o) => (o.writeOffs ?? []).map((w) => ({
+      id: w.id, orderNumber: o.orderNumber, writtenOffAt: w.writtenOffAt, amount: w.amount, reason: w.reason, notes: w.notes ?? null,
+      reversedAt: w.reversedAt ?? null,
+    })))
     .sort((a, b) => b.writtenOffAt.localeCompare(a.writtenOffAt))
     .slice(0, RECENT_WRITE_OFFS);
   return {

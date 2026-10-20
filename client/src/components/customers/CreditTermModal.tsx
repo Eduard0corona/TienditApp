@@ -8,6 +8,8 @@ import { creditTermProblem, describeTerm } from './customerAccount';
 interface CreditTermModalProps {
   /** The term the business has now; null without one. */
   creditTermDays: number | null;
+  /** The term saved; null when it was taken away. */
+  onSaved?: (creditTermDays: number | null) => void;
   onClose: () => void;
 }
 
@@ -15,8 +17,9 @@ interface CreditTermModalProps {
  * How many days the business gives its customers to pay what they owe (fiado, Fase 26B; owners and admins). It only says
  * what is overdue in Por cobrar, the account and Vender: it charges no interest and stops no sale.
  */
-export default function CreditTermModal({ creditTermDays, onClose }: CreditTermModalProps) {
+export default function CreditTermModal({ creditTermDays, onSaved, onClose }: CreditTermModalProps) {
   const titleId = useId();
+  const ids = { input: useId(), help: useId(), problem: useId(), error: useId() };
   const toast = useToast();
   const update = useUpdateCreditTerm();
   const [typed, setTyped] = useState(creditTermDays != null ? String(creditTermDays) : '');
@@ -28,6 +31,7 @@ export default function CreditTermModal({ creditTermDays, onClose }: CreditTermM
     setError('');
     try {
       await update.mutateAsync(days);
+      onSaved?.(days);
       toast.success(days == null ? 'El fiado ya no tiene plazo.' : `El plazo del fiado es de ${describeTerm(days)}.`);
       onClose();
     } catch (err: unknown) {
@@ -47,10 +51,10 @@ export default function CreditTermModal({ creditTermDays, onClose }: CreditTermM
         }}
       >
         <Modal.Body>
-          <label className="form-label fw-semibold" htmlFor="credit-term">Te pagan en</label>
+          <label className="form-label fw-semibold" htmlFor={ids.input}>Te pagan en</label>
           <div className="input-group input-group-lg">
             <input
-              id="credit-term"
+              id={ids.input}
               className={`form-control ${showProblem ? 'is-invalid' : ''}`}
               inputMode="numeric"
               autoComplete="off"
@@ -59,16 +63,16 @@ export default function CreditTermModal({ creditTermDays, onClose }: CreditTermM
               onChange={(event) => setTyped(event.target.value)}
               disabled={update.isPending}
               aria-invalid={showProblem || !!error}
-              aria-describedby={['credit-term-help', showProblem && 'credit-term-problem', error && 'credit-term-error'].filter(Boolean).join(' ')}
+              aria-describedby={[ids.help, showProblem && ids.problem, error && ids.error].filter(Boolean).join(' ')}
             />
             <span className="input-group-text">días</span>
           </div>
-          {showProblem && <div id="credit-term-problem" className="invalid-feedback d-block">{problem}</div>}
-          <div id="credit-term-help" className="form-text">
+          {showProblem && <div id={ids.problem} className="invalid-feedback d-block">{problem}</div>}
+          <div id={ids.help} className="form-text">
             Se cuentan desde el día de la venta. Lo que pase del plazo se ve como vencido en Por cobrar, el estado de cuenta y
             Vender; no cobra intereses ni impide fiar.
           </div>
-          {error && <div id="credit-term-error" className="alert alert-danger py-2 mt-3 mb-0">{error}</div>}
+          {error && <div id={ids.error} className="alert alert-danger py-2 mt-3 mb-0" role="alert">{error}</div>}
         </Modal.Body>
         <Modal.Footer className="flex-wrap">
           {creditTermDays != null && (

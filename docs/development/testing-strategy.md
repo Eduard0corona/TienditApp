@@ -826,31 +826,42 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Lo que cambia y por qué:** la barra de pestañas de Clientes gana «Por cobrar» en Clientes, Campañas (lista, detalle y nueva) y Reseñas, y las filas de Clientes ganan el botón «Fiado» (también detrás de la ficha). Son 11 escenas de `clientes-mensajes` y 6 de `resenas`. La API simulada sigue la regla nueva de «Debe» y el baseline usa las mismas escenas, así que la ficha no cambia por eso.
     - **Resultado:** la comparación contra `master` dio 516 escenas iguales, 17 nuevas y 17 que cambian. Con esas capturas pasaron las 550 escenas, y los tres archivos tocados con la cobertura de rutas (75 escenas) pasaron dos corridas seguidas contra el mismo build.
 - Fase 26B, condonar y plazo del fiado ([ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md)):
-  - **Domain:** `CustomerWriteOffTests` (10):
+  - **Domain:** `CustomerWriteOffTests` (12):
     - **condonar:** baja el saldo y deja la venta, sus pagos y un registro aparte; un pago después cubre lo que queda, nunca más; se condona todo en varias partes, pero nunca más de lo que se debe;
     - **qué se rechaza:** mayor a cero y a centavos; «Otro» pide una nota de 3 letras o más; un motivo que no existe;
     - **qué se condona:** lo que el cliente debe (una venta fiada o un pedido entregado sin cobrar), nunca lo que cobra un repartidor;
+    - **deshacer:** el pedido vuelve a deber ese monto y el registro se queda con cuándo y quién, una sola vez; cancelar espera a que se deshaga lo condonado;
     - **el plazo:** de 1 a 120 días o ninguno, y rechaza lo que queda fuera.
-  - **Application:** `CustomerWriteOffFlowTests` (8):
-    - **condonar la cuenta:** va del pedido más viejo, queda en la actividad y no mueve dinero de la caja; un pedido solo hasta lo que debe; se rechaza con la cuenta cambiada, por encima de lo que debe o con un pedido que no es de la cuenta; un abono después toma lo que queda; el comando pide la nota con «Otro» y lo que la cuenta debía;
-    - **el plazo:** es del dueño, queda en la actividad y va de 1 a 120 días;
-    - **lo vencido:** lo que pasó el plazo, en Por cobrar (con «Solo vencidos») y en la cuenta; los días se cuentan en la zona horaria del negocio.
-    - `CustomerCreditFlowTests`, `DtoMappingTests` y las pruebas de las reglas de la API: los manejadores leen el reloj, y cada saldo resta lo condonado.
+  - **Application:**
+    - `CustomerWriteOffFlowTests` (13):
+      - **condonar la cuenta:** va del pedido más viejo, queda en la actividad y no mueve dinero de la caja; un pedido solo hasta lo que debe; se rechaza con la cuenta cambiada (con su propio mensaje), por encima de lo que debe o con un pedido que no es de la cuenta; un abono después toma lo que queda; el comando pide la nota con «Otro» y lo que la cuenta debía;
+      - **deshacer:** el pedido vuelve a deber, el registro y la actividad se quedan, y otra vez se rechaza; uno que no existe no se encuentra;
+      - **el plazo:** es del dueño, queda en la actividad y va de 1 a 120 días;
+      - **lo vencido:** lo que pasó el plazo, en Por cobrar (con «Solo vencidos») y en la cuenta; se cuenta desde que se empezó a deber (un servicio recibido hace veinte días y recogido ayer sin pagar no está vencido); los días van en la zona horaria del negocio, y un día sin 00:00 empieza en su primer minuto;
+      - **lo que responde un pedido:** el cobro en Pedidos responde el pedido con lo condonado;
+      - **los saldos:** la ficha, Inicio («por cobrar») y el borrador del CFDI (por el total, PPD y el aviso de la nota de crédito) con algo condonado.
+    - `DtoMappingTests`: el pedido con lo condonado (y una condonación deshecha) da lo mismo en memoria y en SQL.
+    - `CustomerCreditFlowTests` y las pruebas de las reglas de la API: los manejadores leen el reloj, y cada saldo resta lo condonado.
   - **Infrastructure:**
-    - `CustomerWriteOffsMigrationSqlServerTests` (3): las columnas guardan lo condonado a centavos y el plazo, y la versión anterior no escribe ninguno; la base rechaza un monto negativo o de cero y un plazo fuera de rango; revertir se detiene con 50027 sin cambiar nada en cuanto un negocio condonó o puso plazo y, sin eso, quita solo lo que agregó.
-    - `CustomerCreditSqlServerTests` (+2): una condonación y un abono al mismo tiempo nunca toman más de lo que se debe; lo vencido y lo condonado los lee la base.
+    - `CustomerWriteOffsMigrationSqlServerTests` (3): las columnas guardan lo condonado a centavos, lo deshecho y el plazo, y la versión anterior no escribe ninguno; la base rechaza un monto negativo o de cero y un plazo fuera de rango; revertir se detiene con 50027 sin cambiar nada en cuanto un negocio condonó o puso plazo y, sin eso, quita solo lo que agregó.
+    - `CustomerCreditSqlServerTests` (+2): una condonación y un abono al mismo tiempo nunca toman más de lo que se debe; lo vencido y lo condonado los lee la base, también un pedido entregado días después de hacerse (la consulta con el historial de estados corre en SQL Server).
     - Las pruebas de migraciones anteriores usan `BeforeCustomerWriteOffs`, la versión sin las columnas nuevas.
-  - **WebApi:** `CrossTenantCustomerCreditSqlServerTests` (+1), sobre la API real: un negocio no condona lo que le deben a otro, aunque sea el mismo teléfono o nombre un pedido ajeno; cada negocio tiene su plazo; condonar y el plazo son del dueño y los administradores, no de quien cobra o atiende clientes.
-  - **Ensayo de los scripts:** sobre una copia de la base de la 26A, `apply.sql` dos veces; la versión de la 26A sigue escribiendo, con 0 condonado y sin plazo; la base rechaza un monto negativo o de cero y un plazo de 121 días; `rollback.sql` se detiene con 50027 con algo condonado y con solo un plazo y, sin ellos, corre dos veces y conserva los saldos, y `apply.sql` otra vez.
+  - **WebApi:** `CrossTenantCustomerCreditSqlServerTests` (+1), sobre la API real: un negocio no condona ni deshace lo que le deben a otro, aunque sea el mismo teléfono o nombre un pedido ajeno; cada negocio tiene su plazo; condonar, deshacer y el plazo son del dueño y los administradores, no de quien cobra o atiende clientes.
+  - **Ensayo de los scripts:** sobre una copia de la base de la 26A, `apply.sql` dos veces; la versión de la 26A sigue escribiendo, con 0 condonado y sin plazo; la base rechaza un monto negativo o de cero y un plazo de 121 días; `rollback.sql` se detiene con 50027 con algo condonado y con solo un plazo y, sin ellos, corre dos veces y conserva los saldos, y `apply.sql` otra vez. `verify.sql` muestra `ReversedAt` y `ReversedBy` y cuenta lo deshecho.
   - **Cliente:**
-    - `CustomerAccountModal.test.tsx` (7, +3): el plazo, lo vencido, el día límite de cada pedido y lo condonado, con «Condonar» solo para el dueño; condonar parte de un pedido con su motivo y lo que la cuenta debía; el motivo del servidor cuando se rechaza.
-    - `customerAccount.test.ts` (+3): cuándo vence cada pedido (y nada sin plazo), lo vencido en el resumen para WhatsApp y el monto a condonar.
-    - `ReceivablesPage.test.tsx` (5, +2): lo vencido con plazo y «Solo vencidos»; el dueño pone el plazo.
+    - `CustomerAccountModal.test.tsx` (10, +6): el plazo, lo vencido, el día límite de cada pedido y lo condonado, sin «Condonar» ni «Deshacer» para quien atiende clientes o cobra; condonar parte de un pedido con el monto vacío al empezar, su motivo y lo que la cuenta debía; el motivo del servidor cuando se rechaza; un reintento después de una respuesta perdida manda lo que la cuenta debía al abrir el panel (toda la cuenta, sin pedido); deshacer después de confirmar, y nada si el dueño dice que no.
+    - `customerAccount.test.ts` (+3): cuándo vence cada pedido (y nada sin plazo), lo vencido en el resumen para WhatsApp y el monto a condonar; el plazo acepta solo dígitos (`1e1`, `0x1F` y `15.0` no).
+    - `ReceivablesPage.test.tsx` (8, +5): lo vencido con plazo y «Solo vencidos»; el dueño pone el plazo; quitarlo apaga «Solo vencidos»; el motivo del servidor en el plazo; quien solo cobra no lo cambia.
+    - `OrderItemsSummary.test.tsx` (+3), `MyOrders.test.tsx` (+1) y `MyOrderPage.test.tsx` (+1): lo que ve el cliente no pide pagar lo condonado aunque en decimales no cuadre (100.70 − 50.40 − 50.30), y dice «Nada por pagar».
+    - `OrdersList.test.tsx` (+1): «Saldado» y no «Pagado» cuando lo condonado cerró el saldo, y lo deshecho tachado en el detalle.
+    - `SaleTicket.test.tsx` y `ticket.test.ts` (+1 cada una): el ticket dice lo condonado.
     - `ChargePanel.credit.test.tsx` (+1): avisa lo vencido antes de fiar más.
-    - `MyOrderPage.test.tsx` (+1): el cliente no ve «Por pagar» por lo que el negocio condonó.
-  - **Cliente en total:** 136 archivos y 868 pruebas.
-  - **Primera visita:** 179,074 B de 179,100 B (+69 B contra `master`). Los nombres de los motivos van en `utils/writeOffReasons.ts`, fuera de la primera visita.
-  - **Escenas visuales:** `condonar.spec.ts` (12, nuevas): Por cobrar con plazo (escritorio, teléfono y oscuro) y «Solo vencidos», el plazo del fiado, el estado de cuenta con lo vencido (escritorio) y lo condonado (teléfono), condonar (escritorio) y por otro motivo (teléfono), la cuenta ya condonada, cobrar en Vender a quien tiene algo vencido y Pedidos con lo condonado.
+  - **Cliente en total:** 136 archivos y 884 pruebas.
+  - **Primera visita:** 179,065 B de 179,100 B (+60 B contra `master`). Los nombres de los motivos van en `utils/writeOffReasons.ts`, fuera de la primera visita.
+  - **Escenas visuales:** `condonar.spec.ts` (14, nuevas): Por cobrar con plazo (escritorio, teléfono y oscuro) y «Solo vencidos», el plazo del fiado, el estado de cuenta con lo vencido (escritorio) y lo condonado (teléfono), condonar (escritorio) y por otro motivo (teléfono), la cuenta ya condonada, deshacer lo condonado (la pregunta y la cuenta con lo deshecho), cobrar en Vender a quien tiene algo vencido y Pedidos con lo condonado.
+    - **Lo que cambia y por qué:** 7 escenas de `fiado.spec.ts`. Por cobrar dice «Sin plazo · Poner plazo» al dueño, y su estado de cuenta suma «Condonar»: Por cobrar en escritorio, teléfono y oscuro, los tres estados de cuenta y abonar, con Por cobrar detrás.
+    - **Resultado:** la comparación contra `master` dio 543 escenas iguales, 14 nuevas y 7 que cambian. Con esas capturas pasaron las 564 escenas, y los cuatro archivos tocados con la cobertura de rutas (105 escenas) pasaron una segunda corrida contra el mismo build.
+    - **Lo que encontraron las escenas:** Mis pedidos dejaba de decir «Por pagar» porque la API simulada no mandaba `writtenOffAmount`, que el contrato siempre trae. La simulación ahora lo manda, y esas pantallas quedan iguales a `master`.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

@@ -627,20 +627,21 @@ Fiado (Fase 26A, [ADR 0033](../adr/0033-customer-credit.md)):
 
 Condonar y plazo del fiado (Fase 26B, [ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md)):
 
-- **`api/customerCredit.ts`:** `useWriteOffCustomerAccount` y `useUpdateCreditTerm`, que vuelven a pedir las listas, las cuentas y las fichas como un abono; `useReceivables` manda `overdueOnly`.
-- **Estado de cuenta:** con plazo, «Plazo de N días · Vencido $X» (o «Nada vencido»). Cada pedido dice «Vence el…» o «Venció el…» (`describeDue`, con `formatCalendarDate`: `dueOn` es un día del calendario, sin zona) y, bajo «Pagado», lo condonado. «Lo condonado» lista los últimos 10 con fecha, motivo, folio y nota. El resumen para WhatsApp dice lo vencido.
+- **`api/customerCredit.ts`:** `useWriteOffCustomerAccount`, `useReverseWriteOff` y `useUpdateCreditTerm`, que vuelven a pedir las listas, las cuentas y las fichas como un abono; `useReceivables` manda `overdueOnly`.
+- **Estado de cuenta:** con plazo, «Plazo de N días · Vencido $X» (o «Nada vencido»). Cada pedido dice «Vence el…» o «Venció el…» (`describeDue`, con `formatCalendarDate`: `dueOn` es un día del calendario, sin zona) y, bajo «Pagado», lo condonado. «Lo condonado» lista los últimos 10 con fecha, motivo, folio y nota; el dueño y los administradores tienen «Deshacer» en cada uno, que pregunta antes (`useConfirm`), y lo deshecho sale tachado con «Deshecho el…». El resumen para WhatsApp dice lo vencido.
+- **La cuenta al abrir el panel:** «Abonar» y «Condonar» trabajan con la cuenta como estaba al abrirse y mandan lo que debía entonces (`expectedOwed`). Si una respuesta se pierde aunque entró, la cuenta de atrás se vuelve a leer, pero un reintento sigue diciendo lo que vio el panel y el servidor lo rechaza. Lo que responde el servidor reemplaza la cuenta en la caché (`setQueryData`), sin esperar a que se vuelva a leer.
 - **Condonar (`components/customers/WriteOffPanel`):** solo para el dueño y los administradores (`access.isAdmin`).
-  - Antes de los campos dice que no mueve la caja y no se deshace.
-  - «¿Qué condonas?» elige toda la cuenta o un pedido; «Cuánto» empieza en todo lo que debe esa elección y no pasa de ahí (`writeOffProblem`, en centavos).
-  - «Motivo» (`utils/writeOffReasons.ts`, fuera de la primera visita) y «Nota», obligatoria con «Otro».
+  - Antes de los campos dice que no mueve la caja.
+  - «¿Qué condonas?» elige toda la cuenta o un pedido; «Cuánto» empieza vacío, con el foco, dice «Hasta $X» y no pasa de ahí (`writeOffProblem`, en centavos).
+  - «Motivo» (`utils/writeOffReasons.ts`, fuera de la primera visita) y «Nota», obligatoria con «Otro» y ligada a su mensaje (`aria-describedby`).
   - El botón dice el monto («Condonar $X»). La petición lleva lo que la cuenta debía en pantalla (`expectedOwed`); un rechazo se queda en el panel con el motivo del servidor.
-- **Plazo del fiado (`components/customers/CreditTermModal`):** «Te pagan en N días», de 1 a 120 (`creditTermProblem`), «Guardar plazo» y «Quitar plazo». Se abre desde Por cobrar («Poner plazo» o «Cambiar plazo»), solo para el dueño y los administradores.
-- **Por cobrar:** con plazo, «· Vencido $X» junto al total, «Vencido $Y» bajo lo que debe cada cliente y la casilla «Solo vencidos» junto al orden.
-- **Vender:** el aviso del cobro agrega «Tiene $X vencido.» (`ChargeCredit.overdue`); no cambia lo que se puede fiar.
-- **Pedidos:** «Condonado $X» en la fila y, en el detalle, «Condonado» en los totales y una tabla con fecha, quién, motivo, nota y monto.
-- **Lo que ve el cliente:** «Por pagar» resta lo condonado (`OrderItemsSummary`, Mis pedidos).
-- **Escenas:** `scenes/condonar.spec.ts` con `scenes/condonar.mocks.ts` (`CON_PLAZO`: plazo de 7 días y dos condonaciones). La API simulada de la 26A (`mocks/routes-p15.mjs`) resta lo condonado y calcula lo vencido; `mocks/routes-p16.mjs` agrega condonar y el plazo.
-- **Primera visita:** 179,074 B de 179,100 B (+69 B contra `master`), dentro del presupuesto.
+- **Plazo del fiado (`components/customers/CreditTermModal`):** «Te pagan en N días», solo dígitos y de 1 a 120 (`creditTermProblem`), «Guardar plazo» y «Quitar plazo». Quitar el plazo apaga «Solo vencidos» en Por cobrar. Se abre desde Por cobrar («Poner plazo» o «Cambiar plazo»), solo para el dueño y los administradores.
+- **Por cobrar:** con plazo, «· Vencido $X» junto al total, «Vencido $Y» bajo lo que debe cada cliente y el interruptor «Solo vencidos» junto al orden.
+- **Vender:** el aviso del cobro agrega «Debe $X vencido.» (`ChargeCredit.overdue`); no cambia lo que se puede fiar.
+- **Pedidos:** «Condonado $X» en la fila y «Saldado» (no «Pagado») cuando lo condonado cerró el saldo; en el detalle, «Condonado» en los totales y una tabla con fecha, quién, motivo, nota y monto, con lo deshecho tachado. El ticket (impreso y por WhatsApp) lleva la línea «Condonado».
+- **Lo que ve el cliente:** «Por pagar» resta lo condonado, en centavos (`OrderItemsSummary`, Mis pedidos), y dice «Nada por pagar» en lugar de «Pagado» cuando lo condonado cerró el saldo.
+- **Escenas:** `scenes/condonar.spec.ts` con `scenes/condonar.mocks.ts` (`CON_PLAZO`: plazo de 7 días y dos condonaciones). La API simulada de la 26A (`mocks/routes-p15.mjs`) resta lo condonado y calcula lo vencido; `mocks/routes-p16.mjs` agrega condonar, deshacer y el plazo.
+- **Primera visita:** 179,065 B de 179,100 B (+60 B contra `master`), dentro del presupuesto.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

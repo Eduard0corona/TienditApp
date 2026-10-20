@@ -220,6 +220,30 @@ describe('OrdersList', () => {
     expect(within(detail).getByText('El pago ya no se puede devolver. Devuélvelo desde tu cuenta de Mercado Pago.')).toHaveClass('text-danger');
   });
 
+  it('says «Saldado», not «Pagado», for a sale settled by what was forgiven, and what was undone (Fase 26B)', async () => {
+    const user = userEvent.setup();
+    const writeOff = (id: string, amount: number, reversedAt: string | null) => ({
+      id, amount, reason: 3, notes: null, writtenOffAt: '2026-10-09T17:00:00Z', writtenOffBy: 'Dueña', reversedAt, reversedBy: reversedAt ? 'Admin' : null,
+    });
+    renderOrders(TenantCapability.Retail, [order({
+      customerName: 'Ana López', soldOnCredit: true, total: 100, paidAmount: 0, balance: 0, writtenOffAmount: 100,
+      items: [], taxBreakdown: [], statusHistory: [], servicePieces: [], allowedTransitions: [], refunds: [], payments: [],
+      writeOffs: [writeOff('w1', 30, '2026-10-09T18:00:00Z'), writeOff('w2', 100, null)],
+    } as Partial<OrderDto>)]);
+
+    const row = (await screen.findByRole('button', { name: 'ORD-000001' })).closest('tr')!;
+    expect(within(row).getByText('Saldado')).toBeInTheDocument();
+    expect(within(row).queryByText('Pagado')).not.toBeInTheDocument();
+    expect(within(row).getByText('Condonado $100.00')).toBeInTheDocument();
+
+    await user.click(within(row).getByRole('button', { name: 'ORD-000001' }));
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    expect(within(detail).getByRole('heading', { name: 'Condonado' })).toBeInTheDocument();
+    expect(within(detail).getByText(/^Deshecho el .* por Admin$/)).toBeInTheDocument();
+    expect(within(detail).getByText('−$30.00')).toHaveClass('text-decoration-line-through');
+    expect(within(detail).getByText('−$100.00')).not.toHaveClass('text-decoration-line-through');
+  });
+
   it('says the business charged an order the courier paid', async () => {
     const user = userEvent.setup();
     renderOrders(TenantCapability.Food, [rappiOrder({

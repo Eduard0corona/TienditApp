@@ -172,6 +172,22 @@ describe('MyOrders', () => {
     expect(screen.getByTestId('store')).toHaveTextContent('/mis-pedidos/o2');
   });
 
+  it('asks for nothing of an order that what was paid and what the business forgave cover', async () => {
+    request.mockImplementation(((_method: string, path: string, options: { query: { scope: number } }) => {
+      if (path === MY_REVIEWS) return Promise.resolve([]);
+      return Promise.resolve(options.query.scope === MyOrdersScope.InProgress
+        ? pageOf([])
+        // In floats, 100.70 − 50.40 − 50.30 is not 0.
+        : pageOf([order([{ productId: 'latte', productName: 'Latte', quantity: 1, optionIds: [] }], { total: 100.7, paidAmount: 50.4, writtenOffAmount: 50.3 })]));
+    }) as never);
+
+    renderOrders();
+
+    const past = await screen.findByRole('region', { name: 'Anteriores' });
+    expect(past).toHaveTextContent('T-1042');
+    expect(past).not.toHaveTextContent('Por pagar');
+  });
+
   it('says there are no orders when the account has none', async () => {
     request.mockImplementation(((_method: string, path: string) => Promise.resolve(path === MY_REVIEWS ? [] : pageOf([]))) as never);
 

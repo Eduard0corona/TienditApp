@@ -1745,6 +1745,9 @@ export interface OrderWriteOffDto {
   notes?: string | null;
   writtenOffAt: string;
   writtenOffBy: string;
+  /** When and by whom it was undone (owed again); null while it stands. */
+  reversedAt?: string | null;
+  reversedBy?: string | null;
 }
 
 /** Units of a dish of a tab cancelled after it went to the kitchen. */

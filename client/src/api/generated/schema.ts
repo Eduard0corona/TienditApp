@@ -3196,6 +3196,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/account/write-offs/{id}/reversal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAccountDto"];
+                        "application/json": components["schemas"]["CustomerAccountDto"];
+                        "text/json": components["schemas"]["CustomerAccountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/credit-term": {
         parameters: {
             query?: never;
@@ -12681,6 +12720,8 @@ export interface components {
             method: components["schemas"]["OrderPaymentMethod"];
         };
         CustomerAccountWriteOffDto: {
+            /** Format: uuid */
+            id: string;
             orderNumber: string;
             /** Format: date-time */
             writtenOffAt: string;
@@ -12688,6 +12729,8 @@ export interface components {
             amount: number;
             reason: components["schemas"]["OrderWriteOffReason"];
             notes?: string | null;
+            /** Format: date-time */
+            reversedAt?: string | null;
         };
         CustomerAddressDto: {
             /** Format: uuid */
@@ -14150,6 +14193,9 @@ export interface components {
             /** Format: date-time */
             writtenOffAt: string;
             writtenOffBy: string;
+            /** Format: date-time */
+            reversedAt?: string | null;
+            reversedBy?: string | null;
         };
         /**
          * Format: int32

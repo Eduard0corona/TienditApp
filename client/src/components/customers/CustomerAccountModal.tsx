@@ -1,13 +1,18 @@
 import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import { useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { ordersApi } from '../../api/ordersApi';
-import { type AccountOf, useCustomerAccount, usePayCustomerAccount, useWriteOffCustomerAccount } from '../../api/customerCredit';
+import {
+  type AccountOf, type CustomerAccount, type CustomerAccountWriteOff, creditKeys, useCustomerAccount, usePayCustomerAccount,
+  useReverseWriteOff, useWriteOffCustomerAccount,
+} from '../../api/customerCredit';
 import ChargePanel, { type ChargeResult } from '../sales/ChargePanel';
 import WriteOffPanel, { type WriteOffChoice } from './WriteOffPanel';
 import StatusChip from '../common/StatusChip';
 import WhatsAppLink from '../common/WhatsAppLink';
 import { useAuth } from '../../hooks/useAuth';
+import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
@@ -45,7 +50,14 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
   const { data: account, error, isPending } = useCustomerAccount(of);
   const pay = usePayCustomerAccount();
   const writeOff = useWriteOffCustomerAccount();
+  const reverse = useReverseWriteOff();
+  const { confirm } = useConfirm();
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode>('account');
+  // The account as it was when «Abonar» or «Condonar» opened: the panel works on it and sends what it owed. If the answer
+  // to a payment or a write-off is lost although it went through, the account behind reads again, but a retry still says
+  // what the panel saw, finds the account changed and is refused instead of charging or forgiving it again.
+  const [opened, setOpened] = useState<CustomerAccount | null>(null);
   const paying = mode === 'paying';
   const busy = pay.isPending || writeOff.isPending;
   const [payError, setPayError] = useState('');
@@ -54,18 +66,26 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
   // already registered (a payment has no idempotency key), and the account shows what is still owed.
   const [partialNotice, setPartialNotice] = useState('');
 
+  const open = (next: Mode) => {
+    setOpened(account ?? null);
+    setPartialNotice('');
+    setPayError('');
+    setWriteOffError('');
+    setMode(next);
+  };
+
   const submitPayment = async (charge: ChargeResult) => {
-    if (!account) return;
+    if (!opened) return;
     setPayError('');
     // One payment per method: each one is split over the orders owed from the oldest. Each says what the account owed
-    // as this screen saw it, so a payment sent twice finds it changed and is refused instead of registered again.
-    const owedCents = toCents(account.owed);
+    // as the panel saw it, so a payment sent twice finds it changed and is refused instead of registered again.
+    const owedCents = toCents(opened.owed);
     let paidCents = 0;
     try {
       for (const payment of charge.payments) {
-        await pay.mutateAsync({
-          customerId: account.customerId ?? undefined,
-          phone: account.customerId ? undefined : account.phone,
+        const after = await pay.mutateAsync({
+          customerId: opened.customerId ?? undefined,
+          phone: opened.customerId ? undefined : opened.phone,
           amount: payment.amount,
           method: payment.method,
           reference: payment.reference,
@@ -74,6 +94,7 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
           expectedOwed: (owedCents - paidCents) / 100,
         });
         paidCents += toCents(payment.amount);
+        queryClient.setQueryData(creditKeys.account(of), after);
       }
       toast.success(`Abono de ${formatMoney(paidCents / 100)} registrado.`);
       setMode('account');
@@ -89,23 +110,43 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
   };
 
   const submitWriteOff = async (choice: WriteOffChoice) => {
-    if (!account) return;
+    if (!opened) return;
     setWriteOffError('');
     try {
-      // What the account owed as this screen saw it: a write-off sent twice finds it changed and is refused.
-      await writeOff.mutateAsync({
-        customerId: account.customerId ?? undefined,
-        phone: account.customerId ? undefined : account.phone,
+      // What the account owed as the panel saw it: a write-off sent twice finds it changed and is refused.
+      const after = await writeOff.mutateAsync({
+        customerId: opened.customerId ?? undefined,
+        phone: opened.customerId ? undefined : opened.phone,
         orderId: choice.orderId ?? undefined,
         amount: choice.amount,
         reason: choice.reason,
         notes: choice.notes ?? undefined,
-        expectedOwed: account.owed,
+        expectedOwed: opened.owed,
       });
+      // The account as the server left it shows at once, not the one before the write-off until it reads again.
+      queryClient.setQueryData(creditKeys.account(of), after);
       toast.success(`Se condonaron ${formatMoney(choice.amount)}.`);
       setMode('account');
     } catch (err: unknown) {
       setWriteOffError(getApiErrorMessage(err, 'No se pudo condonar.'));
+    }
+  };
+
+  const undoWriteOff = async (record: CustomerAccountWriteOff) => {
+    const accepted = await confirm({
+      title: 'Deshacer lo condonado',
+      message: `${record.orderNumber} vuelve a deber ${formatMoney(record.amount)}. Lo condonado queda registrado como deshecho.`,
+      confirmLabel: 'Deshacer',
+      cancelLabel: 'Volver',
+      danger: true,
+    });
+    if (!accepted) return;
+    try {
+      const after = await reverse.mutateAsync(record.id);
+      queryClient.setQueryData(creditKeys.account(of), after);
+      toast.success(`${record.orderNumber} vuelve a deber ${formatMoney(record.amount)}.`);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo deshacer lo condonado.'));
     }
   };
 
@@ -161,9 +202,9 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
               <p className="small text-muted mb-3">Tiene límite, pero ahora no se le fía: el cliente está desactivado o no tiene teléfono.</p>
             )}
 
-            {paying ? (
+            {paying && opened ? (
               <ChargePanel
-                amountDue={account.owed}
+                amountDue={opened.owed}
                 submitting={pay.isPending}
                 allowPartial
                 allowTip={false}
@@ -179,9 +220,9 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
                   return { url: data.url, fileName: data.fileName };
                 }}
               />
-            ) : mode === 'writingOff' ? (
+            ) : mode === 'writingOff' && opened ? (
               <WriteOffPanel
-                account={account}
+                account={opened}
                 submitting={writeOff.isPending}
                 error={writeOffError}
                 onSubmit={(choice) => void submitWriteOff(choice)}
@@ -263,15 +304,30 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
                   <>
                     <h3 className="h6 mt-3">Lo condonado</h3>
                     <ul className="list-unstyled small mb-0">
-                      {account.recentWriteOffs.map((writeOffRecord, index) => (
-                        <li key={`${writeOffRecord.orderNumber}-${writeOffRecord.writtenOffAt}-${index}`}>
+                      {account.recentWriteOffs.map((writeOffRecord) => (
+                        <li key={writeOffRecord.id} className="mb-1">
                           <div className="d-flex justify-content-between gap-2">
                             <span>
                               {formatDateTime(writeOffRecord.writtenOffAt)} · {getWriteOffReasonLabel(writeOffRecord.reason)} · {writeOffRecord.orderNumber}
                             </span>
-                            <span className="ta-money">{formatMoney(writeOffRecord.amount)}</span>
+                            <span className={`ta-money ${writeOffRecord.reversedAt ? 'text-muted text-decoration-line-through' : ''}`}>
+                              {formatMoney(writeOffRecord.amount)}
+                            </span>
                           </div>
                           {writeOffRecord.notes && <div className="text-muted">{writeOffRecord.notes}</div>}
+                          {writeOffRecord.reversedAt ? (
+                            <div className="text-muted">Deshecho el {formatDateTime(writeOffRecord.reversedAt)}: lo vuelve a deber.</div>
+                          ) : canWriteOff && (
+                            <button
+                              type="button"
+                              className="btn btn-link btn-sm text-danger p-0"
+                              aria-label={`Deshacer lo condonado de ${writeOffRecord.orderNumber}`}
+                              onClick={() => void undoWriteOff(writeOffRecord)}
+                              disabled={busy || reverse.isPending}
+                            >
+                              Deshacer
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -293,11 +349,7 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
             <button
               type="button"
               className="btn btn-light text-danger btn-touch"
-              onClick={() => {
-                setPartialNotice('');
-                setWriteOffError('');
-                setMode('writingOff');
-              }}
+              onClick={() => open('writingOff')}
             >
               Condonar
             </button>
@@ -306,10 +358,7 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
             <button
               type="button"
               className="btn btn-primary btn-touch"
-              onClick={() => {
-                setPartialNotice('');
-                setMode('paying');
-              }}
+              onClick={() => open('paying')}
             >
               <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>Abonar
             </button>

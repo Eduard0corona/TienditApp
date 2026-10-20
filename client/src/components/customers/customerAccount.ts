@@ -66,8 +66,9 @@ export const MAX_CREDIT_TERM_DAYS = 120;
 
 /** What the term typed means, in the owner's words; null when it can be saved. */
 export function creditTermProblem(typed: string): string | null {
+  // Only digits: Number() would also take "1e1", "0x1F" or "15.0".
+  if (!/^\d{1,3}$/.test(typed.trim())) return 'Escribe en cuántos días te pagan, por ejemplo 15.';
   const days = Number(typed.trim());
-  if (typed.trim() === '' || !Number.isInteger(days)) return 'Escribe en cuántos días te pagan, por ejemplo 15.';
   if (days < MIN_CREDIT_TERM_DAYS || days > MAX_CREDIT_TERM_DAYS) return 'El plazo del fiado va de 1 a 120 días.';
   return null;
 }

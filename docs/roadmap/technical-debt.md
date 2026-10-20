@@ -172,11 +172,13 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - La 26A deja la primera visita en 179,005 B (+232 B) y sube el presupuesto a 179,100 B: «Fiar» vive en el cobro de Vender.
 - Condonar y plazo del fiado (Fase 26B, [ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md)):
   - **Sin nota de crédito fiscal:** lo condonado de una venta facturada requiere un CFDI de egreso que TienditApp no genera; el borrador de la factura lo avisa.
-  - **Sin «deshacer»:** una condonación equivocada se compensa hacia adelante (no hay un cargo de vuelta).
+  - **Deshacer es una vez:** una condonación deshecha no se rehace; se condona otra vez con su propio registro.
   - **Sin vista de lo condonado en Reportes:** está en cada pedido, en la cuenta del cliente (las últimas 10) y en la actividad.
   - **Un plazo para todo el negocio:** sin plazo por cliente ni recordatorios de lo vencido (Fase 26C).
   - **Durante un swap con la versión anterior** (26A), esa versión no resta lo condonado y dejaría cobrarlo; un pago así deja el pedido con saldo negativo, que esta versión trata como pagado.
-  - La 26B deja la primera visita en 179,074 B (+69 B) dentro del presupuesto: las etiquetas de los motivos van en un módulo que solo cargan Clientes y Pedidos.
+  - **Sin restricción de base para pagado más condonado:** durante un regreso a la 26A, un pago de más deja el pedido con saldo negativo, que esta versión trata como pagado (ADR 0034).
+  - **Un pago en Pedidos no lleva lo que debía la pantalla:** el abono y la condonación de la cuenta sí (`expectedOwed`, con la cuenta como estaba al abrir el panel); el cobro de un pedido sigue protegido por la versión del pedido (409), como antes.
+  - La 26B deja la primera visita en 179,065 B (+60 B) dentro del presupuesto: las etiquetas de los motivos van en un módulo que solo cargan Clientes y Pedidos.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

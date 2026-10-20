@@ -11,6 +11,7 @@ export type CustomerAccount = Schemas['CustomerAccountDto'];
 export type PayCustomerAccountBody = Schemas['PayCustomerAccountCommand'];
 export type WriteOffCustomerAccountBody = Schemas['WriteOffCustomerAccountCommand'];
 export type CustomerAccountOrder = Schemas['CustomerAccountOrderDto'];
+export type CustomerAccountWriteOff = Schemas['CustomerAccountWriteOffDto'];
 
 /** Whose account: the customer record, or only the phone of the orders. */
 export interface AccountOf {
@@ -91,6 +92,19 @@ export function useWriteOffCustomerAccount() {
   const refresh = useRefreshCredit();
   return useMutation({
     mutationFn: (body: WriteOffCustomerAccountBody) => apiRequest('post', '/api/v1/customers/account/write-offs', { body }),
+    onSettled: refresh,
+  });
+}
+
+/**
+ * Undoes a write-off made by mistake (Fase 26B): its record stays, marked as undone, and what it forgave is owed again
+ * (owners and admins). Sent twice, it undoes it once.
+ */
+export function useReverseWriteOff() {
+  const refresh = useRefreshCredit();
+  return useMutation({
+    mutationFn: (writeOffId: string) =>
+      apiRequest('post', '/api/v1/customers/account/write-offs/{id}/reversal', { path: { id: writeOffId } }),
     onSettled: refresh,
   });
 }

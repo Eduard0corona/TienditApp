@@ -69,7 +69,7 @@ export default function ReceivablesPage() {
                 )}
               </p>
               <span className="small text-muted">
-                {creditTerm != null ? `Plazo de ${describeTerm(creditTerm)}` : 'Sin plazo de pago'}
+                {creditTerm != null ? `Plazo de ${describeTerm(creditTerm)}` : 'Sin plazo'}
                 {canSetTerm && (
                   <button type="button" className="btn btn-link btn-sm align-baseline p-0 ms-2" onClick={() => setEditingTerm(true)}>
                     {creditTerm != null ? 'Cambiar plazo' : 'Poner plazo'}
@@ -106,10 +106,11 @@ export default function ReceivablesPage() {
                   </select>
                 </DataTableFilter>
                 {creditTerm != null && (
-                  <div className="form-check mb-2">
+                  <div className="form-check form-switch mb-1">
                     <input
                       id="receivables-overdue"
                       type="checkbox"
+                      role="switch"
                       className="form-check-input"
                       checked={overdueOnly}
                       onChange={(event) => {
@@ -174,7 +175,14 @@ export default function ReceivablesPage() {
       </div>
 
       {account && <CustomerAccountModal of={account} name={account.name} onClose={closeAccount} />}
-      {editingTerm && <CreditTermModal creditTermDays={creditTerm} onClose={() => setEditingTerm(false)} />}
+      {editingTerm && (
+        <CreditTermModal
+          creditTermDays={creditTerm}
+          // Without a term nothing is overdue, and «Solo vencidos» is no longer there to turn off.
+          onSaved={(days) => days == null && setOverdueOnly(false)}
+          onClose={() => setEditingTerm(false)}
+        />
+      )}
     </>
   );
 }

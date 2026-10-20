@@ -97,6 +97,10 @@ describe('term and overdue', () => {
   it.each([
     ['', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
     ['7.5', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
+    // Number() would take these as 10, 31 and 15: only digits are a term.
+    ['1e1', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
+    ['0x1F', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
+    ['15.0', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
     ['0', 'El plazo del fiado va de 1 a 120 días.'],
     ['121', 'El plazo del fiado va de 1 a 120 días.'],
   ])('refuses the term %j', (typed, problem) => {

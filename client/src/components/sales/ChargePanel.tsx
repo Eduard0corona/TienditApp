@@ -444,7 +444,7 @@ export default function ChargePanel({
           <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>
           <strong>{credit.name}</strong> tiene fiado: le quedan <span className="ta-money">{formatMoney(credit.available)}</span>.
           {!!credit.overdue && credit.overdue > 0 && (
-            <> <strong className="text-danger">Tiene <span className="ta-money">{formatMoney(credit.overdue)}</span> vencido.</strong></>
+            <> <strong className="text-danger">Debe <span className="ta-money">{formatMoney(credit.overdue)}</span> vencido.</strong></>
           )}
           {!creditFits && credit.available <= 0 && <> Ya no le queda fiado: cobra la venta completa.</>}
           {!creditFits && credit.available > 0 && (

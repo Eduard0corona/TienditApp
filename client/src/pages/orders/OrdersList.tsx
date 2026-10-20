@@ -703,7 +703,7 @@ export default function OrdersList() {
                           ? `Por cobrar ${formatMoney(order.balance)}`
                           : chargedByPlatform(order)
                             ? `Cobró ${getCollectedByLabel(PlatformCollectedBy.Platform, order.channel)}`
-                            : 'Pagado'}
+                            : (order.writtenOffAmount ?? 0) > 0 ? 'Saldado' : 'Pagado'}
                       </small>
                       {(order.refundedAmount ?? 0) > 0 && (
                         <small className="d-block text-warning">Reembolsado {formatMoney(order.refundedAmount ?? 0)}</small>
@@ -1152,7 +1152,12 @@ export default function OrdersList() {
                               {getWriteOffReasonLabel(writeOff.reason)}
                               {writeOff.notes && <div className="text-muted small">{writeOff.notes}</div>}
                             </td>
-                            <td className="text-end">−{formatMoney(writeOff.amount)}</td>
+                            <td className="text-end">
+                              <span className={writeOff.reversedAt ? 'text-muted text-decoration-line-through' : ''}>−{formatMoney(writeOff.amount)}</span>
+                              {writeOff.reversedAt && (
+                                <div className="text-muted small">Deshecho el {toLocalDateTime(writeOff.reversedAt)}{writeOff.reversedBy ? ` por ${writeOff.reversedBy}` : ''}</div>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

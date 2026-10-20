@@ -29,7 +29,7 @@ describe('ChargePanel on credit (fiado)', () => {
   it('tells the cashier what the customer has overdue before selling more on credit', () => {
     renderPanel({ name: 'Ana López', available: 500, overdue: 80 });
 
-    expect(screen.getByText(/tiene fiado: le quedan/)).toHaveTextContent('Ana López tiene fiado: le quedan $500.00. Tiene $80.00 vencido.');
+    expect(screen.getByText(/tiene fiado: le quedan/)).toHaveTextContent('Ana López tiene fiado: le quedan $500.00. Debe $80.00 vencido.');
     expect(screen.getByRole('button', { name: 'Fiar $116.00' })).toBeEnabled();
   });
 

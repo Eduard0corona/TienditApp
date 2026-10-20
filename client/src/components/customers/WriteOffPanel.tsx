@@ -24,32 +24,26 @@ interface WriteOffPanelProps {
 const NOTES_MAX_LENGTH = 500;
 const NOTES_NEEDED = 'Escribe por qué condonas cuando el motivo es «Otro».';
 
-/** An amount as the field shows it: "316.00". */
-const asTyped = (cents: number) => (cents / 100).toFixed(2);
-
 /**
  * Condonar (Fase 26B): the owner forgives part or all of what a customer owes, of one order or of the whole account from
- * the oldest order, with a reason. No money moves and it cannot be undone, so the panel says so before the button.
+ * the oldest order, with a reason. No money moves, and the panel says so before the button; a mistake is undone from «Lo
+ * condonado» in the account.
  */
 export default function WriteOffPanel({ account, submitting, error, onSubmit, onCancel }: WriteOffPanelProps) {
-  const ids = { scope: useId(), amount: useId(), reason: useId(), notes: useId(), amountHelp: useId() };
+  const ids = { scope: useId(), amount: useId(), reason: useId(), notes: useId(), amountHelp: useId(), notesHelp: useId() };
   const [orderId, setOrderId] = useState('');
   const maxCents = toCents(orderId ? account.orders.find((o) => o.orderId === orderId)?.balance ?? 0 : account.owed);
-  const [amount, setAmount] = useState(asTyped(toCents(account.owed)));
+  // It starts empty: the owner writes how much, even when it is all of it, so a slip never forgives the whole account.
+  const [amount, setAmount] = useState('');
   const [reason, setReason] = useState<OrderWriteOffReason>(OrderWriteOffReason.WontBeCollected);
   const [notes, setNotes] = useState('');
 
   const amountProblem = writeOffProblem(amount, maxCents);
+  const showAmountProblem = amount.trim() !== '' && !!amountProblem;
   const notesProblem = reason === OrderWriteOffReason.Other && notes.trim().length < 3 ? NOTES_NEEDED : null;
+  const showNotesProblem = notes.trim() !== '' && !!notesProblem;
   const typedCents = amountProblem ? 0 : toCents(parseMoneyInput(amount) ?? 0);
   const canSubmit = !submitting && !amountProblem && !notesProblem;
-
-  const changeScope = (value: string) => {
-    setOrderId(value);
-    // Each choice starts with all it owes: the owner lowers it to forgive part.
-    const cents = toCents(value ? account.orders.find((o) => o.orderId === value)?.balance ?? 0 : account.owed);
-    setAmount(asTyped(cents));
-  };
 
   return (
     <form
@@ -61,12 +55,12 @@ export default function WriteOffPanel({ account, submitting, error, onSubmit, on
       noValidate
     >
       <p className="small text-muted">
-        Condonar no mueve dinero de la caja: baja lo que debe y queda registrado quién lo condonó y por qué. No se puede deshacer.
+        Condonar no mueve dinero de la caja: baja lo que debe y queda registrado quién lo condonó y por qué. Si es un error, se deshace desde «Lo condonado».
       </p>
 
       <div className="mb-3">
         <label className="form-label" htmlFor={ids.scope}>¿Qué condonas?</label>
-        <select id={ids.scope} className="form-select" value={orderId} onChange={(event) => changeScope(event.target.value)} disabled={submitting}>
+        <select id={ids.scope} className="form-select" value={orderId} onChange={(event) => setOrderId(event.target.value)} disabled={submitting}>
           <option value="">Toda la cuenta · {formatMoney(account.owed)}</option>
           {account.orders.map((order) => (
             <option key={order.orderId} value={order.orderId}>{order.orderNumber} · {formatMoney(order.balance)}</option>
@@ -83,18 +77,20 @@ export default function WriteOffPanel({ account, submitting, error, onSubmit, on
           <span className="input-group-text">$</span>
           <input
             id={ids.amount}
-            className={`form-control ta-money ${amount && amountProblem ? 'is-invalid' : ''}`}
+            className={`form-control ta-money ${showAmountProblem ? 'is-invalid' : ''}`}
             inputMode="decimal"
             autoComplete="off"
+            // The panel replaces the account and its buttons: the focus starts on what the owner writes first.
+            autoFocus
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             aria-describedby={ids.amountHelp}
-            aria-invalid={!!amountProblem}
+            aria-invalid={showAmountProblem}
             disabled={submitting}
           />
         </div>
-        <div id={ids.amountHelp} className={amountProblem ? 'invalid-feedback d-block' : 'form-text'}>
-          {amountProblem ?? `Hasta ${formatMoney(maxCents / 100)}.`}
+        <div id={ids.amountHelp} className={showAmountProblem ? 'invalid-feedback d-block' : 'form-text'}>
+          {showAmountProblem ? amountProblem : `Hasta ${formatMoney(maxCents / 100)}.`}
         </div>
       </div>
 
@@ -117,15 +113,16 @@ export default function WriteOffPanel({ account, submitting, error, onSubmit, on
         </label>
         <textarea
           id={ids.notes}
-          className={`form-control ${notesProblem && notes ? 'is-invalid' : ''}`}
+          className={`form-control ${showNotesProblem ? 'is-invalid' : ''}`}
           rows={2}
           maxLength={NOTES_MAX_LENGTH}
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
-          aria-invalid={!!notesProblem}
+          aria-describedby={notesProblem ? ids.notesHelp : undefined}
+          aria-invalid={showNotesProblem}
           disabled={submitting}
         />
-        {notesProblem && <div className="form-text">{notesProblem}</div>}
+        {notesProblem && <div id={ids.notesHelp} className={showNotesProblem ? 'invalid-feedback d-block' : 'form-text'}>{notesProblem}</div>}
       </div>
 
       {error && <div className="alert alert-danger py-2" role="alert">{error}</div>}

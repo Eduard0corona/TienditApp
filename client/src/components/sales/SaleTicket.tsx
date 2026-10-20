@@ -160,6 +160,13 @@ export default function SaleTicket({ order, businessName, logoUrl, provisional }
               )}
             </div>
           )}
+          {(order.writtenOffAmount ?? 0) > 0 && (
+            // What the business forgave (Fase 26B): without it, the total less the payments is not the balance.
+            <div className="ta-ticket-row small">
+              <span>Condonado</span>
+              <span className="ta-money">{formatMoney(order.writtenOffAmount ?? 0)}</span>
+            </div>
+          )}
           {order.balance > 0 && (
             <div className="ta-ticket-row fw-bold">
               {/* What the business still collects of an order of a platform comes from the courier. */}

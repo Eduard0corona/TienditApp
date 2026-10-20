@@ -14,6 +14,7 @@ vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
+vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm: vi.fn() }) }));
 vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
 
 const request = vi.mocked(apiRequest);
@@ -114,7 +115,7 @@ describe('ReceivablesPage', () => {
       : path === '/api/v1/customers/receivables' ? RECEIVABLES : LUIS_ACCOUNT)) as never);
     renderPage();
 
-    expect(await screen.findByText('Sin plazo de pago')).toBeInTheDocument();
+    expect(await screen.findByText('Sin plazo')).toBeInTheDocument();
     expect(screen.queryByLabelText('Solo vencidos')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Poner plazo' }));
     const dialog = await screen.findByRole('dialog', { name: 'Plazo del fiado' });
@@ -126,6 +127,56 @@ describe('ReceivablesPage', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar plazo' }));
 
     expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/credit-term', { body: { creditTermDays: 30 } });
+  });
+
+  it('takes «Solo vencidos» off when the owner takes the term away, so the list does not stay empty', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role: 'TenantAdmin', permissions: [] } } as unknown as ReturnType<typeof useAuth>);
+    let term: number | null = 15;
+    request.mockImplementation(((method: string, path: string, options?: { body?: { creditTermDays: number | null } }) => {
+      if (method === 'put') {
+        term = options?.body?.creditTermDays ?? null;
+        return Promise.resolve({ creditTermDays: term });
+      }
+      return Promise.resolve(path === '/api/v1/customers/receivables' ? { ...RECEIVABLES, creditTermDays: term } : LUIS_ACCOUNT);
+    }) as never);
+    renderPage();
+
+    await userEvent.click(await screen.findByLabelText('Solo vencidos'));
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar plazo' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Plazo del fiado' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Quitar plazo' }));
+
+    expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/credit-term', { body: { creditTermDays: null } });
+    expect(await screen.findByText('Sin plazo')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Solo vencidos')).not.toBeInTheDocument();
+    expect(request).toHaveBeenLastCalledWith('get', '/api/v1/customers/receivables', expect.objectContaining({
+      query: expect.objectContaining({ overdueOnly: undefined }),
+    }));
+    expect(await screen.findByText('Ana López')).toBeInTheDocument();
+  });
+
+  it('says why the server refused the term, and keeps it to try again', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role: 'TenantAdmin', permissions: [] } } as unknown as ReturnType<typeof useAuth>);
+    request.mockImplementation(((method: string, path: string) => method === 'put'
+      ? Promise.reject({ isAxiosError: true, response: { status: 400, data: { detail: 'El plazo del fiado va de 1 a 120 días.' } } })
+      : Promise.resolve(path === '/api/v1/customers/receivables' ? RECEIVABLES : LUIS_ACCOUNT)) as never);
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Poner plazo' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Plazo del fiado' });
+    await userEvent.type(within(dialog).getByLabelText('Te pagan en'), '30');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar plazo' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('El plazo del fiado va de 1 a 120 días.');
+    expect(within(dialog).getByLabelText('Te pagan en')).toHaveValue('30');
+  });
+
+  it('does not let whoever only charges set the term', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role: 'Employee', permissions: ['ManageOrders', 'ChargeOrders'] } } as unknown as ReturnType<typeof useAuth>);
+    renderPage();
+
+    expect(await screen.findByText('Ana López')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /plazo/ })).not.toBeInTheDocument();
   });
 
   it('opens the account the customer card linked to', async () => {

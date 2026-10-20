@@ -5,8 +5,8 @@ import { CON_PLAZO } from './condonar.mocks';
 import { SELL_ROUTES } from './vender-pedidos.mocks';
 
 // Condonar y plazo del fiado (Fase 26B): Clientes › Por cobrar with a term of 7 days, what is overdue and «Solo vencidos»,
-// the term of the fiado, the account with the due day of each order and what was forgiven, «Condonar», what is overdue
-// when charging in Vender and what was forgiven of a sale in Pedidos.
+// the term of the fiado, the account with the due day of each order and what was forgiven, «Condonar» and «Deshacer»,
+// what is overdue when charging in Vender and what was forgiven of a sale in Pedidos.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -98,6 +98,9 @@ test.describe('Por cobrar con plazo', () => {
   test('condonar', async ({ page }) => {
     await open(page, '/customers/receivables');
     const panel = await openWriteOff(page, 'Roberto Sánchez Vega');
+    // The amount starts empty: a slip never forgives the whole account.
+    await expect(panel.getByRole('button', { name: 'Condonar $0.00' })).toBeDisabled();
+    await panel.getByLabel('Cuánto').fill('360');
     await expect(panel.getByRole('button', { name: 'Condonar $360.00' })).toBeEnabled();
     await snapScreen(page, 'por-cobrar-condonar-escritorio');
   });
@@ -116,10 +119,30 @@ test.describe('Por cobrar con plazo', () => {
   test('condonado', async ({ page }) => {
     await open(page, '/customers/receivables');
     const panel = await openWriteOff(page, 'Roberto Sánchez Vega');
+    await panel.getByLabel('Cuánto').fill('360');
     await panel.getByRole('button', { name: 'Condonar $360.00' }).click();
     const account = await dialog(page, 'Estado de cuenta');
     await expect(account.getByText('No debe nada.')).toBeVisible();
     await snapScreen(page, 'por-cobrar-condonado-escritorio');
+  });
+
+  test('deshacer lo condonado', async ({ page }) => {
+    await open(page, '/customers/receivables');
+    const account = await openAccount(page, 'Oficinas Grupo Altavista');
+    await account.getByRole('button', { name: 'Deshacer lo condonado de ORD-000262' }).click();
+    const confirm = await dialog(page, 'Deshacer lo condonado');
+    await expect(confirm.getByText(/ORD-000262 vuelve a deber \$100\.00/)).toBeVisible();
+    await snapScreen(page, 'por-cobrar-deshacer-lo-condonado');
+  });
+
+  test('lo condonado deshecho', async ({ page }) => {
+    await open(page, '/customers/receivables');
+    const account = await openAccount(page, 'Oficinas Grupo Altavista');
+    await account.getByRole('button', { name: 'Deshacer lo condonado de ORD-000262' }).click();
+    await (await dialog(page, 'Deshacer lo condonado')).getByRole('button', { name: 'Deshacer' }).click();
+    await expect(account.getByText(/^Deshecho el .*: lo vuelve a deber\.$/)).toBeVisible();
+    await expect(account.getByRole('button', { name: /^Deshacer lo condonado/ })).toBeHidden();
+    await snapScreen(page, 'por-cobrar-condonado-deshecho');
   });
 });
 

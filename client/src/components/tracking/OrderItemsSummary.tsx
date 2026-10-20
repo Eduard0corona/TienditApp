@@ -1,5 +1,5 @@
 import type { Schemas } from '../../api/typedClient';
-import { formatMoney } from '../../utils/money';
+import { formatMoney, toCents } from '../../utils/money';
 
 type Item = Schemas['CustomerOrderItemDto'];
 
@@ -22,7 +22,8 @@ interface OrderItemsSummaryProps {
 export default function OrderItemsSummary({
   items, deliveryFee, visitFee, pricesIncludeTax, tax, total, paidAmount, writtenOffAmount = 0, cancelled,
 }: OrderItemsSummaryProps) {
-  const toPay = total - paidAmount - writtenOffAmount;
+  // In cents: three amounts in floating point do not always add up (100.70 − 50.40 − 50.30 is not 0).
+  const toPayCents = toCents(total) - toCents(paidAmount) - toCents(writtenOffAmount);
   return (
     <>
       <ul className="list-unstyled mb-3">
@@ -60,15 +61,17 @@ export default function OrderItemsSummary({
           <dt>Total</dt>
           <dd className="mb-0 ta-money">{formatMoney(total)}</dd>
         </div>
-        {!cancelled && toPay > 0 && (
+        {!cancelled && toPayCents > 0 && (
           <div className="d-flex justify-content-between text-danger">
             <dt className="fw-normal">Por pagar</dt>
-            <dd className="mb-0 ta-money">{formatMoney(toPay)}</dd>
+            <dd className="mb-0 ta-money">{formatMoney(toPayCents / 100)}</dd>
           </div>
         )}
       </dl>
-      {!cancelled && toPay <= 0 && total > 0 && (
-        <p className="small text-success mb-0 mt-1"><i className="ri-check-line me-1" aria-hidden="true"></i>Pagado</p>
+      {!cancelled && toPayCents <= 0 && total > 0 && (
+        <p className="small text-success mb-0 mt-1">
+          <i className="ri-check-line me-1" aria-hidden="true"></i>{writtenOffAmount > 0 ? 'Nada por pagar' : 'Pagado'}
+        </p>
       )}
     </>
   );

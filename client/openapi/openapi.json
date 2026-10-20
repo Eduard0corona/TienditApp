@@ -3702,6 +3702,46 @@
         }
       }
     },
+    "/api/v1/customers/account/write-offs/{id}/reversal": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/customers/credit-term": {
       "put": {
         "tags": [
@@ -18043,12 +18083,17 @@
       "CustomerAccountWriteOffDto": {
         "required": [
           "amount",
+          "id",
           "orderNumber",
           "reason",
           "writtenOffAt"
         ],
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "orderNumber": {
             "type": "string"
           },
@@ -18065,6 +18110,11 @@
           },
           "notes": {
             "type": "string",
+            "nullable": true
+          },
+          "reversedAt": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -22996,6 +23046,15 @@
           },
           "writtenOffBy": {
             "type": "string"
+          },
+          "reversedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "reversedBy": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
