@@ -1,5 +1,7 @@
-import type { CustomerAccount, CustomerAccountOrder } from '../../api/customerCredit';
+import type { CustomerAccount, CustomerAccountOrder, CustomerBalanceEntry } from '../../api/customerCredit';
+import { CustomerBalanceEntryKind } from '../../api/generated/enums';
 import { formatCalendarDate, formatDate } from '../../utils/dates';
+import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney, parseMoneyInput } from '../../utils/money';
 
 // Orders listed in the WhatsApp summary: more would make a message nobody reads to the end.
@@ -13,7 +15,10 @@ export function accountSummaryText(account: CustomerAccount, businessName: strin
   const lines = [`*Estado de cuenta en ${businessName}*`];
   if (account.name) lines.push(account.name);
   lines.push('');
+  // What they have in their favor (Fase 26D), whether they owe or not.
+  const inFavor = account.creditBalance > 0 ? `Tienes *${formatMoney(account.creditBalance)}* a tu favor.` : null;
   if (account.owed <= 0) {
+    if (inFavor) lines.push(inFavor, '');
     lines.push('No debes nada. ¡Gracias!');
     return lines.join('\n');
   }
@@ -31,8 +36,24 @@ export function accountSummaryText(account: CustomerAccount, businessName: strin
   if (account.creditLimit != null && account.available != null) {
     lines.push('', `Tu límite de fiado es ${formatMoney(account.creditLimit)}: te quedan ${formatMoney(account.available)}.`);
   }
+  if (inFavor) lines.push('', inFavor);
   lines.push('', '¡Gracias!');
   return lines.join('\n');
+}
+
+/**
+ * A movement of the balance in their favor (Fase 26D), as the account lists it: what happened, how the money moved or the
+ * order, e.g. «Dejó a favor · Efectivo» or «Pagó con saldo a favor · ORD-000123».
+ */
+export function describeBalanceEntry(entry: Pick<CustomerBalanceEntry, 'kind' | 'method' | 'orderNumber'>): string {
+  const what = {
+    [CustomerBalanceEntryKind.Deposit]: 'Dejó a favor',
+    [CustomerBalanceEntryKind.Refund]: 'Reembolso a su favor',
+    [CustomerBalanceEntryKind.Applied]: 'Pagó con saldo a favor',
+    [CustomerBalanceEntryKind.Returned]: 'Se le devolvió',
+  }[entry.kind];
+  const detail = entry.method != null ? getPaymentMethodLabel(entry.method) : entry.orderNumber;
+  return detail ? `${what} · ${detail}` : what;
 }
 
 /** Whole days since the order was made, as the list reads them. */

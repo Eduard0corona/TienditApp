@@ -53,6 +53,10 @@ export default function DailyCut({ branches }: DailyCutProps) {
 
   const platformTotal = cut?.platformTotal ?? 0;
   const platformRefundsTotal = cut?.platformRefundsTotal ?? 0;
+  const balanceTotal = cut?.customerBalanceTotal ?? 0;
+  const balanceRefundsTotal = cut?.customerBalanceRefundsTotal ?? 0;
+  const depositsTotal = cut?.customerDepositsTotal ?? 0;
+  const depositReturnsTotal = cut?.customerDepositReturnsTotal ?? 0;
   const figures: Figure[] = !cut ? [] : [
     { label: 'Cobrado', value: cut.salesPaymentsTotal, detail: `${cut.salesPaymentsCount} pagos` },
     { label: 'Efectivo', value: cut.cashTotal },
@@ -66,6 +70,24 @@ export default function DailyCut({ branches }: DailyCutProps) {
         value: platformTotal,
         detail: 'Lo cobró la plataforma: no entra a la caja',
         note: platformRefundsTotal > 0 ? `Devuelto: ${formatMoney(platformRefundsTotal)}` : undefined,
+      }]
+      : []),
+    // Paid with the balance customers left before (Fase 26D): part of "Cobrado", in no drawer, since it entered then.
+    ...(balanceTotal > 0 || balanceRefundsTotal > 0
+      ? [{
+        label: 'Saldo a favor',
+        value: balanceTotal,
+        detail: 'Pagado con lo que dejaron antes: no entra a la caja',
+        note: balanceRefundsTotal > 0 ? `Reembolsado a su saldo: ${formatMoney(balanceRefundsTotal)}` : undefined,
+      }]
+      : []),
+    // What customers left in their favor: it entered the drawers, but it is not a sale until they use it.
+    ...(depositsTotal > 0 || depositReturnsTotal > 0
+      ? [{
+        label: 'Dejaron a favor',
+        value: depositsTotal,
+        detail: 'Entró a la caja: no es venta',
+        note: depositReturnsTotal > 0 ? `Devuelto: ${formatMoney(depositReturnsTotal)}` : undefined,
       }]
       : []),
     { label: 'Neto en efectivo', value: cut.netCashOnlyFlow, detail: cut.cashTipsTotal > 0 ? 'Efectivo + propinas + depósitos − gastos' : 'Efectivo + depósitos − gastos' },

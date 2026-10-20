@@ -3,7 +3,8 @@ import type { ReceivablesSort } from './generated/enums';
 import { apiRequest, type Schemas } from './typedClient';
 
 // Fiado (Fase 26A): Clientes › Por cobrar, the account of a customer, its payments and the limit; what the business
-// forgives and the term of its fiado (Fase 26B); a customer's own term and the reminders of what is overdue (Fase 26C).
+// forgives and the term of its fiado (Fase 26B); a customer's own term and the reminders of what is overdue (Fase 26C);
+// the balance in a customer's favor (Fase 26D).
 // Kept out of queries.ts, which the first visit loads.
 
 export type Receivable = Schemas['ReceivableDto'];
@@ -13,6 +14,9 @@ export type PayCustomerAccountBody = Schemas['PayCustomerAccountCommand'];
 export type WriteOffCustomerAccountBody = Schemas['WriteOffCustomerAccountCommand'];
 export type CustomerAccountOrder = Schemas['CustomerAccountOrderDto'];
 export type CustomerAccountWriteOff = Schemas['CustomerAccountWriteOffDto'];
+export type CustomerBalanceEntry = Schemas['CustomerBalanceEntryDto'];
+export type AddCustomerDepositBody = Schemas['AddCustomerDepositCommand'];
+export type ReturnCustomerBalanceBody = Schemas['ReturnCustomerBalanceCommand'];
 export type CreditReminders = Schemas['CreditRemindersDto'];
 export type UpdateCreditRemindersBody = Schemas['UpdateCreditRemindersCommand'];
 
@@ -84,6 +88,27 @@ export function usePayCustomerAccount() {
   const refresh = useRefreshCredit();
   return useMutation({
     mutationFn: (body: PayCustomerAccountBody) => apiRequest('post', '/api/v1/customers/account/payments', { body }),
+    onSettled: refresh,
+  });
+}
+
+/**
+ * What the customer leaves in their favor (Fase 26D): it adds to their balance and enters the drawer of whoever charges as
+ * a movement of its own, not a sale.
+ */
+export function useAddCustomerDeposit() {
+  const refresh = useRefreshCredit();
+  return useMutation({
+    mutationFn: (body: AddCustomerDepositBody) => apiRequest('post', '/api/v1/customers/account/balance/deposits', { body }),
+    onSettled: refresh,
+  });
+}
+
+/** Gives back part or all of their balance (Fase 26D), out of the drawer of whoever gives it (who may refund). */
+export function useReturnCustomerBalance() {
+  const refresh = useRefreshCredit();
+  return useMutation({
+    mutationFn: (body: ReturnCustomerBalanceBody) => apiRequest('post', '/api/v1/customers/account/balance/returns', { body }),
     onSettled: refresh,
   });
 }

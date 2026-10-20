@@ -67,7 +67,8 @@ export default function CustomerCardPanel({ phone, customerId, fallbackName, onN
           </div>
         </div>
       </div>
-      {(card.creditLimit != null || card.balance > 0) && card.phone && (
+      {/* Whoever charges reaches the account to leave something in their favor (Fase 26D), even without fiado or debt. */}
+      {(card.creditLimit != null || card.balance > 0 || card.creditBalance > 0 || access.charge) && card.phone && (
         <p className="small mb-3 d-flex flex-wrap align-items-center gap-2">
           <span>
             <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>
@@ -76,6 +77,9 @@ export default function CustomerCardPanel({ phone, customerId, fallbackName, onN
               : `Fiado: le quedan ${formatMoney(Math.max(0, card.creditLimit - card.balance))} de ${formatMoney(card.creditLimit)}`}
             {card.creditLimit != null && !card.sellsOnCredit && ' (ahora no se le fía)'}
           </span>
+          {card.creditBalance > 0 && (
+            <strong className="text-success">A favor <span className="ta-money">{formatMoney(card.creditBalance)}</span></strong>
+          )}
           {access.receivables && (
             <Link className="btn btn-link btn-sm p-0" to={`/customers/receivables?cuenta=${encodeURIComponent(card.phone)}`}>
               Ver cuenta

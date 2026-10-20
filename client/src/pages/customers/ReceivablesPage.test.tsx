@@ -50,7 +50,7 @@ const REMINDERS = {
 
 const LUIS_ACCOUNT = {
   phone: '+525566667777', name: 'Luis Pérez', customerId: null, creditLimit: null, sellsOnCredit: false, owed: 50, available: null,
-  overLimit: false, ordersCount: 1, recentPayments: [], recentWriteOffs: [], creditTermDays: null, overdue: 0,
+  overLimit: false, ordersCount: 1, recentPayments: [], recentWriteOffs: [], creditBalance: 0, recentBalanceEntries: [], creditTermDays: null, overdue: 0,
   orders: [{
     orderId: 'o9', orderNumber: 'ORD-000020', createdAt: '2026-10-18T18:00:00Z', status: 6, soldOnCredit: false, total: 50, paid: 0,
     writtenOff: 0, balance: 50, dueOn: null, isOverdue: false,

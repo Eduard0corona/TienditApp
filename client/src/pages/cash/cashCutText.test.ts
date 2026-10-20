@@ -164,3 +164,26 @@ describe('cash cut text', () => {
     expect(text).not.toContain('Contado');
   });
 });
+
+describe('cut with the balance in customers\' favor (Fase 26D)', () => {
+  it('shows what was paid with it and refunded to it, and what was left and given back', () => {
+    const rows = getDailyCutRows(cut({
+      customerBalanceTotal: 100, customerBalanceRefundsTotal: 10, customerDepositsTotal: 250, customerDepositReturnsTotal: 30,
+    }));
+
+    expect(rows).toEqual(expect.arrayContaining([
+      ['Pagado con saldo a favor', 100],
+      ['Reembolsado a saldo a favor', 10],
+      ['Saldo a favor que dejaron', 250],
+      ['Saldo a favor devuelto', 30],
+    ]));
+    // Before the net of the drawers, as the platforms.
+    expect(rows.findIndex(([label]) => label === 'Saldo a favor devuelto'))
+      .toBeLessThan(rows.findIndex(([label]) => label === 'Neto en efectivo'));
+  });
+
+  it('shows none of it without movements of the balance', () => {
+    expect(getDailyCutRows(cut()).map(([label]) => label).filter((label) => label.includes('saldo a favor') || label.includes('Saldo a favor')))
+      .toEqual([]);
+  });
+});

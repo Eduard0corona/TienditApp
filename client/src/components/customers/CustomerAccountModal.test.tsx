@@ -40,6 +40,8 @@ const ACCOUNT = {
   ordersCount: 2,
   recentPayments: [{ orderNumber: 'ORD-000014', paidAt: '2026-10-15T18:05:00Z', amount: 30, method: OrderPaymentMethod.Cash }],
   recentWriteOffs: [],
+  creditBalance: 0,
+  recentBalanceEntries: [],
 } as CustomerAccount;
 
 function apiError(status: number, code: string, detail: string): AxiosError {
@@ -297,5 +299,127 @@ describe('CustomerAccountModal', () => {
 
     expect(await screen.findByText(/Abre tu caja para cobrar/)).toBeInTheDocument();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  /** Ana with $80.00 in her favor: what she left, and part of it used on an order (Fase 26D). */
+  const IN_FAVOR = {
+    ...ACCOUNT,
+    creditBalance: 80,
+    recentBalanceEntries: [
+      { id: 'b2', kind: 2, amount: -20, method: null, orderNumber: 'ORD-000012', reference: null, notes: null, occurredAt: '2026-10-18T17:00:00Z' },
+      { id: 'b1', kind: 0, amount: 100, method: OrderPaymentMethod.Transfer, orderNumber: null, reference: null, notes: 'Anticipo del pastel', occurredAt: '2026-10-16T17:00:00Z' },
+    ],
+  } as CustomerAccount;
+
+  it('shows what she has in her favor, its movements and says so on WhatsApp', async () => {
+    signIn(['ManageCustomers']);
+    request.mockResolvedValue(IN_FAVOR as never);
+    renderModal();
+
+    expect((await screen.findByText('A favor')).parentElement).toHaveTextContent('$80.00');
+    expect(screen.getByRole('heading', { name: 'Saldo a favor' })).toBeInTheDocument();
+    expect(screen.getByText(/Pagó con saldo a favor · ORD-000012/)).toBeInTheDocument();
+    expect(screen.getByText(/Dejó a favor · Transferencia/)).toBeInTheDocument();
+    expect(screen.getByText('Anticipo del pastel')).toBeInTheDocument();
+    expect(screen.getByText('−$20.00')).toBeInTheDocument();
+    expect(screen.getByText('+$100.00')).toBeInTheDocument();
+    expect(decodeURIComponent(screen.getByRole('link', { name: /Enviar por WhatsApp/ }).getAttribute('href') ?? ''))
+      .toContain('Tienes *$80.00* a tu favor.');
+    // Looking after customers moves no money: neither leaving it, using it nor giving it back.
+    expect(screen.queryByRole('button', { name: /Dejar a favor/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Usar saldo a favor' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Devolver' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the three tiles of the fiado while she has nothing in her favor', async () => {
+    signIn(['ManageCustomers']);
+    request.mockResolvedValue(ACCOUNT as never);
+    renderModal();
+
+    expect(await screen.findByText('ORD-000010')).toBeInTheDocument();
+    expect(screen.queryByText('A favor')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Saldo a favor' })).not.toBeInTheDocument();
+  });
+
+  it('leaves money in her favor with how she paid it and what the panel saw', async () => {
+    signIn(['ManageOrders', 'ChargeOrders']);
+    request.mockImplementation(((method: string) => Promise.resolve(method === 'post' ? { ...IN_FAVOR, creditBalance: 280 } : IN_FAVOR)) as never);
+    renderModal();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Dejar a favor/ }));
+    expect(screen.getByRole('dialog', { name: 'Dejar a favor' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dejar a favor $0.00' })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('Monto'), '200');
+    await userEvent.click(screen.getByRole('radio', { name: /Tarjeta/ }));
+    await userEvent.type(screen.getByLabelText('Nota (opcional)'), 'Anticipo de la fiesta');
+    await userEvent.click(screen.getByRole('button', { name: 'Dejar a favor $200.00' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Quedaron $200.00 a su favor.'));
+    expect(request).toHaveBeenCalledWith('post', '/api/v1/customers/account/balance/deposits', {
+      body: expect.objectContaining({
+        customerId: 'c1', amount: 200, method: OrderPaymentMethod.Card, notes: 'Anticipo de la fiesta', expectedBalance: 80,
+      }),
+    });
+  });
+
+  it('pays what she owes with her balance, up to the least of both, and never with more', async () => {
+    signIn(['ManageOrders', 'ChargeOrders']);
+    request.mockImplementation(((method: string) => Promise.resolve(method === 'post' ? { ...IN_FAVOR, owed: 70, creditBalance: 0 } : IN_FAVOR)) as never);
+    renderModal();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Usar saldo a favor' }));
+    // No way to pay: the balance itself pays, and nothing enters a drawer.
+    expect(screen.queryByRole('radio', { name: /Efectivo/ })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Monto'), '90');
+    expect(screen.getByRole('button', { name: 'Usar $0.00' })).toBeDisabled();
+    await userEvent.clear(screen.getByLabelText('Monto'));
+    await userEvent.click(screen.getByRole('button', { name: 'Usar $80.00' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Se usaron $80.00 de su saldo a favor.'));
+    expect(request).toHaveBeenCalledWith('post', '/api/v1/customers/account/payments', {
+      body: expect.objectContaining({
+        customerId: 'c1', amount: 80, method: OrderPaymentMethod.CustomerBalance, restInFavor: false, expectedOwed: 150, expectedBalance: 80,
+      }),
+    });
+  });
+
+  it('gives it back only to who may also refund, out of their drawer', async () => {
+    signIn(['ManageOrders', 'ChargeOrders']);
+    request.mockResolvedValue(IN_FAVOR as never);
+    const { unmount } = renderModal();
+    expect(await screen.findByRole('button', { name: /Dejar a favor/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Devolver' })).not.toBeInTheDocument();
+    unmount();
+
+    signIn(['ManageOrders', 'ChargeOrders', 'ProcessRefunds']);
+    request.mockImplementation(((method: string) => Promise.resolve(method === 'post' ? { ...IN_FAVOR, creditBalance: 30 } : IN_FAVOR)) as never);
+    renderModal();
+    await userEvent.click(await screen.findByRole('button', { name: 'Devolver' }));
+    await userEvent.type(screen.getByLabelText('Monto'), '50');
+    await userEvent.click(screen.getByRole('button', { name: 'Devolver $50.00' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Se le devolvieron $50.00.'));
+    expect(request).toHaveBeenCalledWith('post', '/api/v1/customers/account/balance/returns', {
+      body: expect.objectContaining({ customerId: 'c1', amount: 50, method: OrderPaymentMethod.Cash, expectedBalance: 80 }),
+    });
+  });
+
+  it('leaves the change of a cash payment in her favor when asked', async () => {
+    signIn(['ManageOrders', 'ChargeOrders']);
+    request.mockImplementation(((method: string) => Promise.resolve(method === 'post' ? { ...IN_FAVOR, owed: 0, creditBalance: 130 } : IN_FAVOR)) as never);
+    renderModal();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Abonar/ }));
+    await userEvent.type(screen.getByLabelText('Efectivo recibido'), '200');
+    await userEvent.click(screen.getByLabelText('Dejar el cambio a su favor'));
+    expect(screen.getByText('Queda a su favor')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Abonar $150.00' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Abono de $150.00 registrado; $50.00 quedaron a su favor.'));
+    expect(request).toHaveBeenCalledWith('post', '/api/v1/customers/account/payments', {
+      body: expect.objectContaining({
+        amount: 200, method: OrderPaymentMethod.Cash, cashReceived: undefined, restInFavor: true, expectedOwed: 150, expectedBalance: 80,
+      }),
+    });
   });
 });

@@ -44,6 +44,8 @@ export interface Access {
   businessSettings: boolean;
   /** Refund and void paid sales: ManageOrders + ProcessRefunds (owners and admins have both). */
   refunds: boolean;
+  /** Give a customer back their balance in their favor (Fase 26D): ChargeOrders + ProcessRefunds, as the API asks. */
+  returnBalance: boolean;
   /** WhatsApp campaigns, templates, appointment reminders and opt-outs: ManageCampaigns. */
   campaigns: boolean;
   /** The business's reviews, to answer and report them (Fase 24H): owners and admins, as the API asks. */
@@ -103,6 +105,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     aiAgent: commerce && can('ManageAiAgent'),
     businessSettings: isAdmin,
     refunds: commerce && can('ManageOrders') && can('ProcessRefunds'),
+    returnBalance: commerce && can('ChargeOrders') && can('ProcessRefunds'),
     campaigns: commerce && can('ManageCampaigns'),
     reviews: isAdmin,
     platform: role === 'superadmin',

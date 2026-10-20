@@ -82,6 +82,24 @@ describe('RefundOrderModal', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ amount: 100, method: OrderPaymentMethod.Online }));
   });
 
+  it('gives back to the balance in the customer\'s favor only an order with their phone (Fase 26D)', async () => {
+    const options = () => within(screen.getByLabelText('Se devuelve en')).getAllByRole('option').map((option) => option.textContent);
+    const { unmount } = render(<RefundOrderModal mode="refund" order={sale} submitting={false} error="" onClose={vi.fn()} onSubmit={vi.fn()} />);
+    expect(options()).not.toContain('Saldo a favor');
+    unmount();
+
+    const onSubmit = vi.fn();
+    render(<RefundOrderModal mode="refund" order={{ ...sale, customerName: 'Ana López', customerPhone: '+525512345678' }}
+      submitting={false} error="" onClose={vi.fn()} onSubmit={onSubmit} />);
+    await userEvent.selectOptions(screen.getByLabelText('Se devuelve en'), 'Saldo a favor');
+    expect(screen.getByText('Queda a favor del cliente para su próxima compra; no sale de tu caja.')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Monto a devolver'), '50');
+    await userEvent.type(screen.getByLabelText('Motivo'), 'No le gustó');
+    await userEvent.click(screen.getByRole('button', { name: 'Reembolsar $50.00' }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ amount: 50, method: OrderPaymentMethod.CustomerBalance }));
+  });
+
   it('never offers «En línea» for an order not paid online', () => {
     render(<RefundOrderModal mode="refund" order={sale} submitting={false} error="" onClose={vi.fn()} onSubmit={vi.fn()} />);
 

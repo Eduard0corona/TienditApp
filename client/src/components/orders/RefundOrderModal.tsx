@@ -18,7 +18,8 @@ type RefundModalProps = {
 );
 
 // What the business gives back with its own money. «Plataforma» and «En línea» are never among them: only what a platform
-// charged, or the customer paid online, goes back that way, outside every drawer, and then it is the only way.
+// charged, or the customer paid online, goes back that way, outside every drawer, and then it is the only way. «Saldo a
+// favor» (Fase 26D) is offered apart, when the order has the customer's phone.
 const METHODS: OrderPaymentMethod[] = [
   PaymentMethod.Cash,
   PaymentMethod.Card,
@@ -55,6 +56,8 @@ export default function RefundOrderModal(props: RefundModalProps) {
   // method): never out of a drawer it never entered.
   const paidOnline = order.payments.some((payment) => payment.method === PaymentMethod.Online);
   const fixedMethod = platformCharged ? PaymentMethod.Platform : paidOnline ? PaymentMethod.Online : null;
+  // To the balance in the customer's favor (Fase 26D): the account of the order's phone, so only with one.
+  const methods = order.customerPhone ? [...METHODS, PaymentMethod.CustomerBalance as OrderPaymentMethod] : METHODS;
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   // Weighed lines take a typed quantity ("0.5"); the text is kept while it is being written.
   const [quantityTexts, setQuantityTexts] = useState<Record<string, string>>({});
@@ -226,11 +229,14 @@ export default function RefundOrderModal(props: RefundModalProps) {
                     <>
                       <select id="refund-method" className="form-select form-select-lg" value={method}
                         onChange={(event) => setMethod(Number(event.target.value) as OrderPaymentMethod)}>
-                        {METHODS.map((item) => (
+                        {methods.map((item) => (
                           <option key={item} value={item}>{getPaymentMethodLabel(item)}</option>
                         ))}
                       </select>
                       {method === PaymentMethod.Cash && <div className="form-text">Sale del efectivo de tu caja.</div>}
+                      {method === PaymentMethod.CustomerBalance && (
+                        <div className="form-text">Queda a favor del cliente para su próxima compra; no sale de tu caja.</div>
+                      )}
                     </>
                   )}
                 </div>

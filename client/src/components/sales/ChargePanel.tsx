@@ -3,6 +3,7 @@ import type { OrderPaymentMethod } from '../../types';
 import { OrderPaymentMethod as PaymentMethod } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney, parseMoneyInput, toCents } from '../../utils/money';
+import { IN_PERSON_METHODS } from './paymentMethods';
 
 export interface ChargePayment {
   method: OrderPaymentMethod;
@@ -25,6 +26,8 @@ export interface ChargeResult {
   tip: number;
   /** The rest was sold on credit (fiado): the payments are what the customer paid now, possibly none. */
   onCredit?: boolean;
+  /** The change of the cash payment stays in the customer's favor (Fase 26D) instead of being handed back. */
+  changeInFavor?: boolean;
 }
 
 /** The customer of the sale may owe the rest (fiado, Fase 26A): who, and how much they may still owe. */
@@ -33,6 +36,12 @@ export interface ChargeCredit {
   available: number;
   /** What of what they owe is past the business's term (Fase 26B): the cashier sees it before selling more on credit. */
   overdue?: number;
+}
+
+/** The customer of the sale has a balance in their favor (Fase 26D): who, and how much they can pay with it. */
+export interface ChargeBalance {
+  name: string;
+  available: number;
 }
 
 type TipChoice = 'none' | 10 | 15 | 'other';
@@ -60,15 +69,13 @@ interface ChargePanelProps {
   allowTip?: boolean;
   /** Offers «Fiar» the rest to this customer, within what they may still owe (the server checks it again). */
   credit?: ChargeCredit;
+  /** Offers «Saldo a favor» as a way to pay, up to what this customer has (the server checks it again). */
+  balance?: ChargeBalance;
+  /** Offers to leave the change of a cash payment in the customer's favor (a payment to their account). */
+  allowChangeInFavor?: boolean;
 }
 
-const METHODS: Array<{ value: OrderPaymentMethod; icon: string }> = [
-  { value: PaymentMethod.Cash, icon: 'ri-money-dollar-circle-line' },
-  { value: PaymentMethod.Card, icon: 'ri-bank-card-line' },
-  { value: PaymentMethod.Transfer, icon: 'ri-exchange-dollar-line' },
-  { value: PaymentMethod.DigitalWallet, icon: 'ri-smartphone-line' },
-  { value: PaymentMethod.Other, icon: 'ri-more-line' },
-];
+const BALANCE_METHOD = { value: PaymentMethod.CustomerBalance as OrderPaymentMethod, icon: 'ri-wallet-3-line' };
 
 const BILLS = [20, 50, 100, 200, 500, 1000];
 
@@ -99,6 +106,8 @@ export default function ChargePanel({
   uploadEvidence,
   allowTip = true,
   credit,
+  balance,
+  allowChangeInFavor = false,
 }: ChargePanelProps) {
   const [added, setAdded] = useState<ChargePayment[]>([]);
   const [method, setMethod] = useState<OrderPaymentMethod>(PaymentMethod.Cash);
@@ -110,11 +119,20 @@ export default function ChargePanel({
   const [localError, setLocalError] = useState('');
   const [tipChoice, setTipChoice] = useState<TipChoice>('none');
   const [tipInput, setTipInput] = useState('');
+  const [changeInFavor, setChangeInFavor] = useState(false);
 
   const dueCents = toCents(amountDue);
   const addedCents = added.reduce((sum, payment) => sum + toCents(payment.amount), 0);
   const remainingCents = Math.max(0, dueCents - addedCents);
   const isCash = method === PaymentMethod.Cash;
+  const isBalance = method === PaymentMethod.CustomerBalance;
+  // What the customer still has in their favor once the payments added with it count.
+  const balanceLeftCents = balance
+    ? Math.max(0, toCents(balance.available) - added
+      .filter((payment) => payment.method === PaymentMethod.CustomerBalance)
+      .reduce((sum, payment) => sum + toCents(payment.amount), 0))
+    : 0;
+  const methods = balance && toCents(balance.available) > 0 ? [...IN_PERSON_METHODS, BALANCE_METHOD] : IN_PERSON_METHODS;
 
   // The tip goes on top of what is owed, with the last payment of the charge.
   const tipCents = !allowTip || tipChoice === 'none'
@@ -130,15 +148,21 @@ export default function ChargePanel({
   const receivedCents = cashTyped ? toCents(parseMoneyInput(cashReceived) ?? 0) : remainingCents + tipCents;
   const cashAppliedCents = Math.min(Math.max(0, receivedCents - tipCents), remainingCents);
   const changeCents = Math.max(0, receivedCents - remainingCents - tipCents);
-  // Card, transfer and others: the amount typed, never above what is owed (there is no change).
-  const typedCents = amountInput.trim() === '' ? remainingCents : toCents(parseMoneyInput(amountInput) ?? -1);
+  // Card, transfer and others: the amount typed, never above what is owed (there is no change). With the balance in their
+  // favor, never above what they have left either.
+  const maxTypedCents = isBalance ? Math.min(remainingCents, balanceLeftCents) : remainingCents;
+  const typedCents = amountInput.trim() === '' ? maxTypedCents : toCents(parseMoneyInput(amountInput) ?? -1);
   const currentCents = isCash ? cashAppliedCents : typedCents;
-  const currentIsValid = isCash ? true : typedCents >= 0 && typedCents <= remainingCents;
+  const currentIsValid = isCash ? true : typedCents >= 0 && typedCents <= maxTypedCents;
+  // The tip goes with the last payment, and the balance in their favor never pays one.
+  const tipWithBalance = isBalance && tipCents > 0;
+  // Only the change of cash stays in their favor, and only when there is change.
+  const keepsChange = allowChangeInFavor && changeInFavor && isCash && changeCents > 0;
   const coveredCents = addedCents + (currentIsValid ? currentCents : 0);
   const missingCents = Math.max(0, dueCents - coveredCents);
   // More tip than bill is a typing mistake (the server refuses it too).
   const tipFits = tipCents <= dueCents;
-  const canSubmit = !submitting && !uploading && currentIsValid && tipIsValid && tipFits
+  const canSubmit = !submitting && !uploading && currentIsValid && tipIsValid && tipFits && !tipWithBalance
     && (allowPartial ? coveredCents > 0 : missingCents === 0);
   const canAddAnother = currentIsValid && currentCents > 0 && currentCents < remainingCents;
   // On credit, what the customer pays now is what was added and typed: an empty field is no payment here (charging in
@@ -189,7 +213,10 @@ export default function ChargePanel({
 
   const submit = () => {
     if (!canSubmit) {
-      if (!currentIsValid) setLocalError('El monto no puede ser mayor a lo que falta por cobrar.');
+      if (!currentIsValid && isBalance && typedCents > balanceLeftCents) {
+        setLocalError(`Tiene ${formatMoney(balanceLeftCents / 100)} a favor: no puede pagar más con su saldo.`);
+      } else if (!currentIsValid) setLocalError('El monto no puede ser mayor a lo que falta por cobrar.');
+      else if (tipWithBalance) setLocalError('La propina no se paga con saldo a favor: cóbrala con otra forma de pago.');
       else if (!tipIsValid) setLocalError('Escribe una propina válida, por ejemplo 20 o 15.50.');
       else if (!tipFits) setLocalError('La propina no puede ser mayor que el total de la cuenta.');
       else if (missingCents > 0) setLocalError(`Faltan ${formatMoney(missingCents / 100)} por cobrar.`);
@@ -199,9 +226,10 @@ export default function ChargePanel({
     const payments = current ? [...added, current] : added;
     onSubmit({
       payments,
-      change: isCash ? changeCents / 100 : 0,
+      change: isCash && !keepsChange ? changeCents / 100 : 0,
       cashReceived: isCash ? receivedCents / 100 : 0,
       tip: current?.tip ?? 0,
+      changeInFavor: keepsChange || undefined,
     });
   };
 
@@ -274,7 +302,7 @@ export default function ChargePanel({
       )}
 
       <div className="charge-methods mb-3" role="radiogroup" aria-label="Forma de pago">
-        {METHODS.map((item) => (
+        {methods.map((item) => (
           <button
             key={item.value}
             type="button"
@@ -335,7 +363,7 @@ export default function ChargePanel({
             <div className={`charge-change mt-3 ${changeCents > 0 ? 'has-change' : ''}`} aria-live="polite">
               {receivedCents >= remainingCents + tipCents ? (
                 <>
-                  <span>Cambio</span>
+                  <span>{keepsChange ? 'Queda a su favor' : 'Cambio'}</span>
                   <strong className="ta-money">{formatMoney(changeCents / 100)}</strong>
                 </>
               ) : (
@@ -344,6 +372,21 @@ export default function ChargePanel({
                   <strong className="ta-money text-danger">{formatMoney((remainingCents + tipCents - receivedCents) / 100)}</strong>
                 </>
               )}
+            </div>
+          )}
+          {allowChangeInFavor && changeCents > 0 && (
+            <div className="form-check mt-2">
+              <input
+                id="charge-change-in-favor"
+                className="form-check-input"
+                type="checkbox"
+                checked={changeInFavor}
+                onChange={(event) => setChangeInFavor(event.target.checked)}
+                disabled={submitting}
+              />
+              <label className="form-check-label" htmlFor="charge-change-in-favor">
+                Dejar el cambio a su favor
+              </label>
             </div>
           )}
         </div>
@@ -356,14 +399,18 @@ export default function ChargePanel({
               className={`form-control form-control-lg ta-money ${currentIsValid ? '' : 'is-invalid'}`}
               inputMode="decimal"
               autoComplete="off"
-              placeholder={(remainingCents / 100).toFixed(2)}
+              placeholder={(maxTypedCents / 100).toFixed(2)}
               value={amountInput}
               onChange={(event) => setAmountInput(event.target.value)}
               disabled={submitting}
             />
-            {!currentIsValid && <div className="invalid-feedback">No puede ser mayor a lo que falta.</div>}
+            {!currentIsValid && (
+              <div className="invalid-feedback">
+                {isBalance && typedCents > balanceLeftCents ? 'No puede ser mayor a su saldo a favor.' : 'No puede ser mayor a lo que falta.'}
+              </div>
+            )}
           </div>
-          <div className="col-sm-6">
+          {!isBalance && <div className="col-sm-6">
             <label className="form-label fw-semibold" htmlFor="charge-reference">
               {method === PaymentMethod.Card ? 'Autorización o últimos 4 dígitos' : 'Referencia'} (opcional)
             </label>
@@ -375,7 +422,7 @@ export default function ChargePanel({
               onChange={(event) => setReference(event.target.value)}
               disabled={submitting}
             />
-          </div>
+          </div>}
           {method === PaymentMethod.Transfer && uploadEvidence && (
             <div className="col-12">
               <label className="form-label" htmlFor="charge-evidence">Comprobante (imagen o PDF, opcional)</label>
@@ -451,6 +498,14 @@ export default function ChargePanel({
             <> Para fiarle el resto, cobra al menos <span className="ta-money">{formatMoney(creditMinimumCents / 100)}</span>.</>
           )}
           {creditFits && tipCents > 0 && <> Para fiar, quita la propina.</>}
+        </p>
+      )}
+
+      {balance && toCents(balance.available) > 0 && (
+        <p className="charge-credit small mt-3 mb-0" aria-live="polite">
+          <i className="ri-wallet-3-line me-1" aria-hidden="true"></i>
+          <strong>{balance.name}</strong> tiene <span className="ta-money">{formatMoney(balanceLeftCents / 100)}</span> a favor.
+          {tipWithBalance && <> La propina no se paga con saldo a favor.</>}
         </p>
       )}
 
