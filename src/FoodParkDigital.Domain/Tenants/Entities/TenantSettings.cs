@@ -146,9 +146,9 @@ public class TenantSettings : BaseEntity, ITenantScoped
     public const string CreditTermRangeMessage = "El plazo del fiado va de 1 a 120 días, o sin plazo.";
 
     /// <summary>
-    /// How many days a customer has to pay what they owe (fiado, Fase 26B, ADR 0034), counted from the business day of the
-    /// sale; null when the business gives no term and nothing is ever overdue. It only tells what is overdue: it neither
-    /// charges interest nor stops selling on credit.
+    /// How many days a customer has to pay what they owe (fiado, Fase 26B, ADR 0034), counted from the business day they
+    /// started to owe it; null when the business gives no term. A customer may have a term of their own (Fase 26C). It only
+    /// tells what is overdue: it neither charges interest nor stops selling on credit.
     /// </summary>
     public int? CreditTermDays { get; private set; }
 
@@ -157,6 +157,30 @@ public class TenantSettings : BaseEntity, ITenantScoped
         if (days is < MinCreditTermDays or > MaxCreditTermDays)
             throw new DomainException(CreditTermRangeMessage);
         CreditTermDays = days;
+    }
+
+    public const int MinCreditReminderEveryDays = 1;
+    public const int MaxCreditReminderEveryDays = 30;
+    public const int DefaultCreditReminderEveryDays = 7;
+    public const string CreditReminderEveryDaysMessage = "Los recordatorios del fiado se repiten cada 1 a 30 días.";
+
+    /// <summary>
+    /// WhatsApp reminders to the customers with something overdue (Fase 26C, ADR 0035); off until the owner turns them on.
+    /// </summary>
+    public bool CreditRemindersEnabled { get; private set; }
+    /// <summary>The days between two reminders to the same customer while something stays overdue.</summary>
+    public int CreditReminderEveryDays { get; private set; } = DefaultCreditReminderEveryDays;
+    /// <summary>The credit reminder template; null uses the default text.</summary>
+    public Guid? CreditReminderTemplateId { get; private set; }
+
+    public void UpdateCreditReminders(bool enabled, int everyDays, Guid? templateId)
+    {
+        if (everyDays is < MinCreditReminderEveryDays or > MaxCreditReminderEveryDays)
+            throw new DomainException(CreditReminderEveryDaysMessage);
+
+        CreditRemindersEnabled = enabled;
+        CreditReminderEveryDays = everyDays;
+        CreditReminderTemplateId = templateId;
     }
 
     /// <summary>Records the end of the guided setup; finishing it again keeps the first date.</summary>

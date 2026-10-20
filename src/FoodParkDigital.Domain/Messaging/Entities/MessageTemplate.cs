@@ -17,7 +17,7 @@ public partial class MessageTemplate : AuditableEntity, ITenantScoped, IAggregat
     public const int MaxProviderTemplateNameLength = 100;
     public const int MaxLanguageCodeLength = 10;
     public const string DefaultLanguageCode = "es_MX";
-    public const string TemplatePurposeError = "Las plantillas son para campañas o recordatorios de citas.";
+    public const string TemplatePurposeError = "Las plantillas son para campañas o recordatorios de citas o del fiado.";
 
     [GeneratedRegex("^[a-z0-9_]+$")]
     private static partial Regex ProviderTemplateNamePattern();
@@ -36,7 +36,7 @@ public partial class MessageTemplate : AuditableEntity, ITenantScoped, IAggregat
         string? languageCode = null)
     {
         // Appointment notices are written by the system with the whole appointment; a business does not edit them.
-        if (purpose is not (MessagePurpose.Campaign or MessagePurpose.AppointmentReminder))
+        if (purpose is not (MessagePurpose.Campaign or MessagePurpose.AppointmentReminder or MessagePurpose.CreditReminder))
             throw new DomainException(TemplatePurposeError);
 
         TenantId = tenantId;

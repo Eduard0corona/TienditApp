@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Tenants.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -8,7 +9,9 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
 {
     public void Configure(EntityTypeBuilder<Customer> builder)
     {
-        builder.ToTable("Customers");
+        builder.ToTable("Customers", table => table.HasCheckConstraint(
+            "CK_Customers_CreditTermDays",
+            $"[CreditTermDays] IS NULL OR ([CreditTermDays] >= {TenantSettings.MinCreditTermDays} AND [CreditTermDays] <= {TenantSettings.MaxCreditTermDays})"));
         builder.HasKey(c => c.Id);
 
         builder.Property(c => c.TenantId).IsRequired();

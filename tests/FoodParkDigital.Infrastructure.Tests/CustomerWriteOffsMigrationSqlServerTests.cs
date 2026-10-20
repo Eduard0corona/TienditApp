@@ -47,7 +47,7 @@ public class CustomerWriteOffsMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
         Guid forgiven;
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCustomerCreditReminders.CreateContext(database, tenant.Id))
         {
             var orders = await context.Orders.ToListAsync();
             Assert.Equal(2, orders.Count);
@@ -61,7 +61,7 @@ public class CustomerWriteOffsMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using (var check = database.CreateContext(tenant.Id))
+        await using (var check = BeforeCustomerCreditReminders.CreateContext(database, tenant.Id))
         {
             var order = await check.Orders.Include(o => o.WriteOffs).SingleAsync(o => o.Id == forgiven);
             var writeOff = Assert.Single(order.WriteOffs);
@@ -76,7 +76,7 @@ public class CustomerWriteOffsMigrationSqlServerTests
             await check.SaveChangesAsync();
         }
 
-        await using var undone = database.CreateContext(tenant.Id);
+        await using var undone = BeforeCustomerCreditReminders.CreateContext(database, tenant.Id);
         var reversedOrder = await undone.Orders.Include(o => o.WriteOffs).SingleAsync(o => o.Id == forgiven);
         var reversed = Assert.Single(reversedOrder.WriteOffs);
         Assert.Equal((0m, reversedOrder.Total), (reversedOrder.WrittenOffAmount, reversedOrder.Balance));
@@ -90,7 +90,7 @@ public class CustomerWriteOffsMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
         Guid orderId;
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCustomerCreditReminders.CreateContext(database, tenant.Id))
         {
             var order = SoldOnCredit(tenant.Id);
             context.Orders.Add(order);
@@ -98,7 +98,7 @@ public class CustomerWriteOffsMigrationSqlServerTests
             orderId = order.Id;
         }
 
-        await using var check = database.CreateContext();
+        await using var check = BeforeCustomerCreditReminders.CreateContext(database);
         Assert.Equal(547, (await Assert.ThrowsAsync<SqlException>(() => check.Database.ExecuteSqlAsync(
             $"UPDATE [Orders] SET [WrittenOffAmount] = -1 WHERE [Id] = {orderId}"))).Number);
         Assert.Equal(547, (await Assert.ThrowsAsync<SqlException>(() => check.Database.ExecuteSqlAsync(
@@ -117,7 +117,7 @@ public class CustomerWriteOffsMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCustomerCreditReminders.CreateContext(database, tenant.Id))
         {
             var order = SoldOnCredit(tenant.Id);
             order.WriteOff(10m, OrderWriteOffReason.WontBeCollected, null, Now, "dueno");
@@ -131,14 +131,14 @@ public class CustomerWriteOffsMigrationSqlServerTests
         Assert.Contains("wrote off customer debts", forgiven.Message);
 
         // And a term alone too.
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerCreditReminders.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             await context.Database.ExecuteSqlRawAsync("DELETE FROM [OrderWriteOffs]; UPDATE [Orders] SET [WrittenOffAmount] = 0; UPDATE [TenantSettings] SET [CreditTermDays] = 30");
         }
         var term = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeWriteOffs));
         Assert.Equal(50027, term.Number);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerCreditReminders.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(30, await CountAsync(context, $"SELECT [CreditTermDays] AS [Value] FROM [TenantSettings]"));
@@ -146,7 +146,7 @@ public class CustomerWriteOffsMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeWriteOffs);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerCreditReminders.CreateContext(database))
         {
             Assert.Equal(BeforeWriteOffs, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 0, 0, 1), (
@@ -160,7 +160,7 @@ public class CustomerWriteOffsMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the sale is there, owed in full.
         await MigrateAsync(database, BeforeWriteOffs);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeCustomerCreditReminders.CreateContext(database, tenant.Id);
         var sale = await forward.Orders.SingleAsync();
         Assert.Equal((0m, sale.Total), (sale.WrittenOffAmount, sale.Balance));
         Assert.Null((await forward.TenantSettings.SingleAsync()).CreditTermDays);

@@ -1091,6 +1091,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("CreditLimit")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int?>("CreditTermDays")
+                        .HasColumnType("int");
+
                     b.Property<string>("Email")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
@@ -1133,7 +1136,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "Phone");
 
-                    b.ToTable("Customers", (string)null);
+                    b.ToTable("Customers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Customers_CreditTermDays", "[CreditTermDays] IS NULL OR ([CreditTermDays] >= 1 AND [CreditTermDays] <= 120)");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.CustomerAddress", b =>
@@ -4972,6 +4978,17 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("Capabilities")
                         .HasColumnType("int");
 
+                    b.Property<int>("CreditReminderEveryDays")
+                        .HasColumnType("int")
+                        .HasDefaultValue(7);
+
+                    b.Property<Guid?>("CreditReminderTemplateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("CreditRemindersEnabled")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<int?>("CreditTermDays")
                         .HasColumnType("int");
 
@@ -5043,6 +5060,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantSettings", null, t =>
                         {
+                            t.HasCheckConstraint("CK_TenantSettings_CreditReminderEveryDays", "[CreditReminderEveryDays] >= 1 AND [CreditReminderEveryDays] <= 30");
+
                             t.HasCheckConstraint("CK_TenantSettings_CreditTermDays", "[CreditTermDays] IS NULL OR ([CreditTermDays] >= 1 AND [CreditTermDays] <= 120)");
 
                             t.HasCheckConstraint("CK_TenantSettings_HomeVisitTravelMinutes", "[HomeVisitTravelMinutes] >= 0 AND [HomeVisitTravelMinutes] <= 240");
