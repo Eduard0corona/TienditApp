@@ -60,7 +60,9 @@ export function phase2Routes(data, { ok, notFound, paginate }) {
   };
   return [
     ['GET', /^\/me\/access$/, () => ok({ userId: data.USER_ID, role: 'TENANT_ADMIN', tenantRole: 'Owner', tenantId: data.TENANT_ID, isMember: true, isTenantManager: true, isPlatformAdmin: false, permissions: [...data.profile.permissions, 'ProcessRefunds', 'ManageCampaigns'], capabilities: data.tenant.capabilities })],
-    ['GET', /^\/customers\/card$/, (m, q) => ok(customerCard(q.get('phone') ?? data.customers[1]?.phone ?? '5541238890'))],
+    // By phone, or by the customer record Clientes opens it with (Fase 26D: Sofía's card, not María Fernanda's).
+    ['GET', /^\/customers\/card$/, (m, q) => ok(customerCard(q.get('phone')
+      ?? data.customers.find((c) => c.id === q.get('customerId'))?.phone ?? data.customers[1]?.phone ?? '5541238890'))],
     ['GET', /^\/messaging\/templates$/, (m, q) => {
       let rows = p2.templates;
       if (q.get('purpose')) rows = rows.filter((t) => t.purpose === Number(q.get('purpose')));

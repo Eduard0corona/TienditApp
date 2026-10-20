@@ -6,6 +6,7 @@ import {
   CAJA_ROUTES,
   CASHIER_PROFILE,
   CORTE_CON_PLATAFORMA_DATA,
+  CORTE_CON_SALDO_A_FAVOR_DATA,
   MENU_EN_LINEA_DATA,
   NEGOCIO_DATA,
   PLATAFORMAS_ROUTES,
@@ -310,6 +311,21 @@ test.describe('Caja', () => {
 
       await printCut(page, page.getByRole('button', { name: 'Imprimir corte del día' }));
       await snap(page, 'caja-corte-del-dia-plataforma-impreso');
+    });
+  });
+
+  test.describe('con saldo a favor', () => {
+    // What customers paid with their balance, what went back to it, what they left and what was given back (Fase 26D).
+    test.use({ prepareData: CORTE_CON_SALDO_A_FAVOR_DATA });
+
+    test('caja, corte del día con saldo a favor', async ({ page }) => {
+      await open(page, '/cash');
+      await openCashTab(page, 'Corte del día', page.getByText('Pagado con lo que dejaron antes: no entra a la caja'));
+      await expect(page.getByText('Devuelto: $50.00')).toBeVisible();
+      await snap(page, 'caja-corte-del-dia-saldo-a-favor');
+
+      await printCut(page, page.getByRole('button', { name: 'Imprimir corte del día' }));
+      await snap(page, 'caja-corte-del-dia-saldo-a-favor-impreso');
     });
   });
 

@@ -391,6 +391,35 @@ function withPlatformInTheCut(data: DemoData) {
 }
 
 /**
+ * The balance in customers' favor in the day's cut (Fase 26D): two sales paid with it ($180), $45 of a refund that went
+ * back to it, $700 left in their favor ($200 in cash and $500 by transfer) and $50 given back in cash. What was paid with
+ * it is part of "Cobrado" and of each branch, in no drawer and no cashier's row; what was left and given back is money of
+ * the drawers, not sales: in the net flow, and in the cash one only its cash.
+ */
+function withBalanceInTheCut(data: DemoData) {
+  completeCashData(data);
+  const cut = data.dailyCut;
+  const paid = 180;
+  const add = (amount: number) => Math.round((amount + paid) * 100) / 100;
+  Object.assign(cut, {
+    salesPaymentsTotal: add(cut.salesPaymentsTotal),
+    salesPaymentsCount: cut.salesPaymentsCount + 2,
+    customerBalanceTotal: paid,
+    customerBalancePaymentsCount: 2,
+    customerBalanceRefundsTotal: 45,
+    customerDepositsTotal: 700,
+    customerDepositReturnsTotal: 50,
+    cashCustomerDepositsTotal: 200,
+    cashCustomerDepositReturnsTotal: 50,
+    netCashFlow: Math.round((cut.netCashFlow + 700 - 50) * 100) / 100,
+    netCashOnlyFlow: Math.round((cut.netCashOnlyFlow + 200 - 50) * 100) / 100,
+  });
+  for (const place of [...cut.byLocation, ...cut.byBranch]) {
+    Object.assign(place, { paymentsCount: place.paymentsCount + 2, totalAmount: add(place.totalAmount) });
+  }
+}
+
+/**
  * The delivery zones of Café La Esquina (Configuración › Zonas de entrega): Roma and Condesa with a minimum and free
  * delivery from $400, Juárez and Cuauhtémoc without a minimum, and Del Valle turned off, with more postal codes than a
  * row shows.
@@ -527,6 +556,7 @@ export const MENU_EN_LINEA_DATA = asOption(businessWithOnlineMenu);
 export const PLATAFORMAS_ROUTES = asOption(platformsRoutes);
 export const VENTAS_POR_CANAL_ROUTES = asOption(salesByChannelRoutes);
 export const CORTE_CON_PLATAFORMA_DATA = asOption(withPlatformInTheCut);
+export const CORTE_CON_SALDO_A_FAVOR_DATA = asOption(withBalanceInTheCut);
 
 /** The platform admin (TienditApp's own team): no role in the business, the platform console. */
 export const SUPER_ADMIN_PROFILE = {
