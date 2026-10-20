@@ -10,5 +10,9 @@ public enum CashTransactionType
     OpeningAdjustment = 5,
     ClosingAdjustment = 6,
     /// <summary>A tip given with a sale payment: it enters the drawer but is not a sale.</summary>
-    Tip = 7
+    Tip = 7,
+    /// <summary>What a customer leaves in their favor (Fase 26D): it enters the drawer but is not a sale until they use it.</summary>
+    CustomerDeposit = 8,
+    /// <summary>What is given back to a customer of their balance in their favor (Fase 26D): it leaves the drawer.</summary>
+    CustomerDepositReturn = 9
 }

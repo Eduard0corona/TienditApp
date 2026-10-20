@@ -103,6 +103,12 @@ public static partial class SatCatalog
     /// </summary>
     public const string PaymentFormIntermediary = "31";
 
+    /// <summary>
+    /// c_FormaPago "Aplicación de anticipos": what the customer paid with the balance they left before (Fase 26D). The CFDI of
+    /// the advance itself, and its credit note, are the accountant's: TienditApp does not issue them.
+    /// </summary>
+    public const string PaymentFormAdvanceApplied = "30";
+
     /// <summary>c_FormaPago of a payment method. Cards are declared as credit cards (04).</summary>
     public static string PaymentForm(OrderPaymentMethod method) => method switch
     {
@@ -111,6 +117,7 @@ public static partial class SatCatalog
         OrderPaymentMethod.Card => "04",
         OrderPaymentMethod.DigitalWallet => "06",
         OrderPaymentMethod.Platform or OrderPaymentMethod.Online => PaymentFormIntermediary,
+        OrderPaymentMethod.CustomerBalance => PaymentFormAdvanceApplied,
         _ => PaymentFormToBeDefined
     };
 }
