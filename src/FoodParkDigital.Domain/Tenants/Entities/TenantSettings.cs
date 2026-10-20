@@ -141,6 +141,24 @@ public class TenantSettings : BaseEntity, ITenantScoped
         HomeVisitTravelMinutes = minutes;
     }
 
+    public const int MinCreditTermDays = 1;
+    public const int MaxCreditTermDays = 120;
+    public const string CreditTermRangeMessage = "El plazo del fiado va de 1 a 120 días, o sin plazo.";
+
+    /// <summary>
+    /// How many days a customer has to pay what they owe (fiado, Fase 26B, ADR 0034), counted from the business day of the
+    /// sale; null when the business gives no term and nothing is ever overdue. It only tells what is overdue: it neither
+    /// charges interest nor stops selling on credit.
+    /// </summary>
+    public int? CreditTermDays { get; private set; }
+
+    public void SetCreditTermDays(int? days)
+    {
+        if (days is < MinCreditTermDays or > MaxCreditTermDays)
+            throw new DomainException(CreditTermRangeMessage);
+        CreditTermDays = days;
+    }
+
     /// <summary>Records the end of the guided setup; finishing it again keeps the first date.</summary>
     public void CompleteOnboarding(DateTimeOffset completedAt)
     {

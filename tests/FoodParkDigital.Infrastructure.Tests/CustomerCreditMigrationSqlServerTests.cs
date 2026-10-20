@@ -47,7 +47,7 @@ public class CustomerCreditMigrationSqlServerTests
             previous.Orders.Add(NewCounterSale(tenant.Id));
             await previous.SaveChangesAsync();
         }
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database, tenant.Id))
         {
             Assert.All(await context.Customers.ToListAsync(), customer => Assert.Null(customer.CreditLimit));
             Assert.All(await context.Orders.ToListAsync(), order => Assert.False(order.SoldOnCredit));
@@ -59,7 +59,7 @@ public class CustomerCreditMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeCustomerWriteOffs.CreateContext(database, tenant.Id);
         Assert.Equal(1500.50m, (await check.Customers.SingleAsync(c => c.Phone == Phone)).CreditLimit);
         Assert.Equal(1, await check.Orders.CountAsync(o => o.SoldOnCredit));
         Assert.Equal(1, await CountAsync(check, $"""
@@ -73,7 +73,7 @@ public class CustomerCreditMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database, tenant.Id))
         {
             var customer = new Customer(tenant.Id, "Valeria", Phone, null);
             customer.SetCreditLimit(800m);
@@ -87,7 +87,7 @@ public class CustomerCreditMigrationSqlServerTests
         Assert.Contains("sell on credit", limit.Message);
 
         // And a sale on credit alone too.
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database, tenant.Id))
         {
             (await context.Customers.SingleAsync()).SetCreditLimit(null);
             var sale = NewCounterSale(tenant.Id);
@@ -97,14 +97,14 @@ public class CustomerCreditMigrationSqlServerTests
         }
         var sold = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeCredit));
         Assert.Equal(50026, sold.Number);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             await context.Database.ExecuteSqlRawAsync("UPDATE [Orders] SET [SoldOnCredit] = 0");
         }
 
         await MigrateAsync(database, BeforeCredit);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(BeforeCredit, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 0, 1, 1), (
@@ -118,7 +118,7 @@ public class CustomerCreditMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the customer and the sale are there, without credit.
         await MigrateAsync(database, BeforeCredit);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeCustomerWriteOffs.CreateContext(database, tenant.Id);
         Assert.Null((await forward.Customers.SingleAsync()).CreditLimit);
         Assert.False((await forward.Orders.SingleAsync()).SoldOnCredit);
     }

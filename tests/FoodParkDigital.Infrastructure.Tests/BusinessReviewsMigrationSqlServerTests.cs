@@ -45,7 +45,7 @@ public class BusinessReviewsMigrationSqlServerTests
         Assert.Equal(547, deleteBusiness.Number);
 
         await ExecuteAsync(database, $"DELETE FROM [AspNetUsers] WHERE [Id] = {userId}");
-        await using var check = database.CreateContext();
+        await using var check = BeforeCustomerWriteOffs.CreateContext(database);
         Assert.Equal(0, await CountAsync(check, $"SELECT COUNT(*) AS [Value] FROM [BusinessReviews]"));
     }
 
@@ -73,14 +73,14 @@ public class BusinessReviewsMigrationSqlServerTests
                      ("UPDATE [BusinessReviews] SET [Status] = 1, [HiddenReason] = 1, [ReportedAt] = SYSDATETIMEOFFSET(), [ReportReason] = 2 WHERE [Id] = {0}", "CK_BusinessReviews_Report")
                  })
         {
-            await using var context = database.CreateContext();
+            await using var context = BeforeCustomerWriteOffs.CreateContext(database);
             var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(update, reviewId));
             Assert.Equal(547, error.Number);
             Assert.Contains(constraint, error.Message);
         }
 
         // What the domain does is what the database keeps.
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             var review = await context.BusinessReviews.IgnoreQueryFilters().SingleAsync(r => r.Id == reviewId);
             review.ReplyWith("¡Gracias por venir!", DateTimeOffset.UtcNow);
@@ -90,7 +90,7 @@ public class BusinessReviewsMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext();
+        await using var check = BeforeCustomerWriteOffs.CreateContext(database);
         var stored = await check.BusinessReviews.IgnoreQueryFilters().SingleAsync(r => r.Id == reviewId);
         Assert.Equal((ReviewStatus.Hidden, ReviewConcern.Offensive, "¡Gracias por venir!"), (stored.Status, stored.HiddenReason, stored.Reply));
     }
@@ -105,7 +105,7 @@ public class BusinessReviewsMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeReviews));
         Assert.Equal(50023, error.Number);
         Assert.Contains("Customers reviewed businesses", error.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [BusinessReviews]"));
@@ -113,7 +113,7 @@ public class BusinessReviewsMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeReviews);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(BeforeReviews, await LatestMigrationAsync(context));
             Assert.Equal((0, 1, 1), (
@@ -125,14 +125,14 @@ public class BusinessReviewsMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the table is back.
         await MigrateAsync(database, BeforeReviews);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext();
+        await using var forward = BeforeCustomerWriteOffs.CreateContext(database);
         Assert.Equal(1, await CountAsync(forward, $"SELECT COUNT(*) AS [Value] FROM sys.tables WHERE [name] = N'BusinessReviews'"));
     }
 
     /// <summary>A customer account that reviewed a business.</summary>
     private static async Task<(Guid UserId, Guid BusinessId, Guid ReviewId)> SeedReviewAsync(SqlServerTestDatabase database)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCustomerWriteOffs.CreateContext(database);
         var slug = $"cafe-{Guid.NewGuid():N}"[..20];
         var tenant = new Tenant("Café Luna", slug, BusinessType.Food, $"{slug}@demo.com");
         var user = new ApplicationUser
@@ -165,7 +165,7 @@ public class BusinessReviewsMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, FormattableString sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCustomerWriteOffs.CreateContext(database);
         await context.Database.ExecuteSqlInterpolatedAsync(sql);
     }
 

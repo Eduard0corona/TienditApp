@@ -272,7 +272,7 @@ public static class OrderMappings
             CashToCollect = order.Delivery.CashToCollect,
             // Order.AwaitsCourierCash, written out so the database reads it.
             AwaitsCourierCash = order.Delivery.CashToCollect != null && order.Status == OrderStatus.Delivered
-                && order.Total > order.PaidAmount
+                && order.Total > order.PaidAmount + order.WrittenOffAmount
         },
         VisitCharge = order.VisitCharge == null ? null : new OrderVisitChargeDto
         {
@@ -287,7 +287,7 @@ public static class OrderMappings
         Tax = order.Tax,
         Total = order.Total,
         PaidAmount = order.PaidAmount,
-        Balance = order.Total - order.PaidAmount,
+        Balance = order.Total - order.PaidAmount - order.WrittenOffAmount,
         TipTotal = order.Payments.Sum(p => p.Tip),
         RefundedAmount = order.RefundedAmount,
         NetPaidAmount = order.PaidAmount - order.RefundedAmount,

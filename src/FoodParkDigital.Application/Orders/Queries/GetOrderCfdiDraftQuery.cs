@@ -187,7 +187,10 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
 
         SetIssuer(draft, tenant.Rfc, tenant.LegalName, tenant.TaxRegime, tenant.Address?.ZipCode);
         SetReceiver(draft, request.Receiver);
-        SetPayment(draft, order.Balance, order.Payments.Select(payment => (payment.Method, payment.Amount)).ToList());
+        // What the business forgave was not paid (Fase 26B): the invoice goes for the whole sale, so it stays unpaid here.
+        SetPayment(draft, order.Total - order.PaidAmount, order.Payments.Select(payment => (payment.Method, payment.Amount)).ToList());
+        if (order.WrittenOffAmount > 0)
+            draft.Warnings.Add(WrittenOffWarning(order.WrittenOffAmount));
         if (order.IsDeliveryPlatformOrder)
             AddDeliveryPlatformWarnings(draft, order, hasReceiver: request.Receiver is not null);
         // Paid online (Fase 24I): Mercado Pago charged it for the business, an intermediary of payments.
@@ -269,6 +272,14 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             CfdiUse = receiver.CfdiUse
         };
     }
+
+    /// <summary>
+    /// Part of the sale was forgiven (Fase 26B, ADR 0034): the invoice goes for the whole sale, and what was forgiven needs a
+    /// credit note (CFDI de egreso) that TienditApp does not issue yet.
+    /// </summary>
+    public static string WrittenOffWarning(decimal writtenOff) =>
+        $"Se condonaron {OrderStatusLabels.FormatMoney(writtenOff)} de esta venta: la factura va por el total y lo condonado " +
+        "requiere una nota de crédito (CFDI de egreso), que TienditApp todavía no genera. Consúltalo con tu contador.";
 
     private static void SetPayment(CfdiDraftDto draft, decimal balance, IReadOnlyList<(OrderPaymentMethod Method, decimal Amount)> payments)
     {

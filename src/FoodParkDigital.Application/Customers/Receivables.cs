@@ -18,7 +18,8 @@ public static class Receivables
     public static readonly Expression<Func<Order, bool>> IsOwed = o =>
         o.Status != OrderStatus.Cancelled
         && o.CustomerPhone != null
-        && o.Total > o.PaidAmount
+        // Order.Balance above zero: what the business forgave is not owed (Fase 26B).
+        && o.Total > o.PaidAmount + o.WrittenOffAmount
         && (o.SoldOnCredit || o.Status == OrderStatus.Delivered || o.Status == OrderStatus.Completed)
         // Order.AwaitsCourierCash, written out so the database reads it.
         && !(o.Delivery != null && o.Delivery.CashToCollect != null && o.Status == OrderStatus.Delivered);
@@ -40,7 +41,7 @@ public static class Receivables
             SoldOnCredit = o.SoldOnCredit,
             Total = o.Total,
             Paid = o.PaidAmount,
-            Balance = o.Total - o.PaidAmount
+            Balance = o.Total - o.PaidAmount - o.WrittenOffAmount
         });
 
     /// <summary>The orders a customer owes, by the phone key.</summary>

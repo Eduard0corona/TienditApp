@@ -98,6 +98,16 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
     /// connection strings of the app (with MARS, SQL Server keeps no savepoint when a save fails inside a transaction).
     /// </summary>
     public ApplicationDbContext CreateProductionLikeContext(ICurrentTenantService tenant, IMediator mediator, params IInterceptor[] interceptors)
+        => CreateProductionLikeContext(
+            tenant, mediator, (options, currentTenant, currentMediator) => new ApplicationDbContext(options, currentTenant, currentMediator), interceptors);
+
+    /// <summary>The same, for a context of an earlier version of the app (see <see cref="CreateContext{TContext}"/>).</summary>
+    public TContext CreateProductionLikeContext<TContext>(
+        ICurrentTenantService tenant,
+        IMediator mediator,
+        Func<DbContextOptions<ApplicationDbContext>, ICurrentTenantService, IMediator, TContext> create,
+        params IInterceptor[] interceptors)
+        where TContext : ApplicationDbContext
     {
         var connection = new SqlConnectionStringBuilder(_connectionString) { MultipleActiveResultSets = true };
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -106,7 +116,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
                 .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
             .AddInterceptors(interceptors)
             .Options;
-        return new ApplicationDbContext(options, tenant, mediator);
+        return create(options, tenant, mediator);
     }
 
     public async ValueTask DisposeAsync()

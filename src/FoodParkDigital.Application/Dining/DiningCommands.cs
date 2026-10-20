@@ -86,7 +86,7 @@ public class GetDiningRoomQueryHandler : IRequestHandler<GetDiningRoomQuery, Din
                     CustomerName = o.CustomerName,
                     TableNumber = o.TableNumber,
                     Total = o.Total,
-                    Balance = o.Total - o.PaidAmount,
+                    Balance = o.Total - o.PaidAmount - o.WrittenOffAmount,
                     OpenedAt = o.CreatedAt,
                     Rounds = o.KitchenTickets.Count,
                     RoundsInKitchen = o.KitchenTickets.Count(t => t.Status == KitchenTicketStatus.Pending || t.Status == KitchenTicketStatus.Preparing),

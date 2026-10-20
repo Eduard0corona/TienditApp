@@ -32,7 +32,7 @@ public class OnlineBookingStaffMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var seed = await SeedAsync(database);
 
-        await using (var check = database.CreateContext())
+        await using (var check = BeforeCustomerWriteOffs.CreateContext(database))
         {
             var stored = await check.OnlineBookingStaff.IgnoreQueryFilters().Include(s => s.Services).SingleAsync();
             Assert.Equal(("Ana R. 💈", true, false), (stored.Name, stored.Enabled, stored.AllServices));
@@ -46,7 +46,7 @@ public class OnlineBookingStaffMigrationSqlServerTests
             await check.SaveChangesAsync();
         }
 
-        await using (var check = database.CreateContext())
+        await using (var check = BeforeCustomerWriteOffs.CreateContext(database))
         {
             var stored = await check.OnlineBookingStaff.IgnoreQueryFilters().Include(s => s.Services).SingleAsync();
             Assert.Equal(2, stored.Services.Count);
@@ -57,7 +57,7 @@ public class OnlineBookingStaffMigrationSqlServerTests
             await check.SaveChangesAsync();
         }
 
-        await using (var check = database.CreateContext())
+        await using (var check = BeforeCustomerWriteOffs.CreateContext(database))
         {
             var stored = await check.OnlineBookingStaff.IgnoreQueryFilters().Include(s => s.Services).SingleAsync();
             Assert.Equal([seed.ServiceId], stored.Services.Select(s => s.ProductId));
@@ -73,7 +73,7 @@ public class OnlineBookingStaffMigrationSqlServerTests
 
         // Deleting the service deletes it from the person's list, and the person stays.
         await ExecuteAsync(database, $"DELETE FROM [Products] WHERE [Id] = {seed.ServiceId}");
-        await using var after = database.CreateContext();
+        await using var after = BeforeCustomerWriteOffs.CreateContext(database);
         Assert.Equal(0, await CountAsync(after, $"SELECT COUNT(*) AS [Value] FROM [OnlineBookingStaffServices]"));
         Assert.Equal(1, await CountAsync(after, $"SELECT COUNT(*) AS [Value] FROM [OnlineBookingStaff]"));
     }
@@ -88,7 +88,7 @@ public class OnlineBookingStaffMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeOnlineBookingStaff));
         Assert.Equal(50025, error.Number);
         Assert.Contains("who takes their online appointments", error.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [OnlineBookingStaffServices]"));
@@ -96,7 +96,7 @@ public class OnlineBookingStaffMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeOnlineBookingStaff);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(BeforeOnlineBookingStaff, await LatestMigrationAsync(context));
             Assert.Equal((0, 1, 1, 1), (
@@ -111,7 +111,7 @@ public class OnlineBookingStaffMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the tables are back.
         await MigrateAsync(database, BeforeOnlineBookingStaff);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext();
+        await using var forward = BeforeCustomerWriteOffs.CreateContext(database);
         Assert.Equal(2, await CountAsync(forward, $"""
             SELECT COUNT(*) AS [Value] FROM sys.tables WHERE [name] IN (N'OnlineBookingStaff', N'OnlineBookingStaffServices')
             """));
@@ -122,7 +122,7 @@ public class OnlineBookingStaffMigrationSqlServerTests
     /// <summary>A barbershop with a service and a team member who attends it online in their own hours.</summary>
     private static async Task<Seed> SeedAsync(SqlServerTestDatabase database)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCustomerWriteOffs.CreateContext(database);
         var slug = $"barberia-{Guid.NewGuid():N}"[..20];
         var tenant = new Tenant("Barbería Norte", slug, BusinessType.Service, $"{slug}@demo.com");
         var member = new ApplicationUser
@@ -160,7 +160,7 @@ public class OnlineBookingStaffMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, FormattableString sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCustomerWriteOffs.CreateContext(database);
         await context.Database.ExecuteSqlInterpolatedAsync(sql);
     }
 

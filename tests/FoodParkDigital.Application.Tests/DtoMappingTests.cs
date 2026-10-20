@@ -81,7 +81,9 @@ public class DtoMappingTests
         var listed = Project(order, OrderMappings.AsDto);
 
         Assert.True(dto.IsOpenTab);
-        Assert.Equal(order.Total - order.PaidAmount, listed.Balance);
+        // What the business forgave is not owed (Fase 26B).
+        Assert.Equal(order.Total - order.PaidAmount - order.WrittenOffAmount, listed.Balance);
+        Assert.Equal(order.Balance, listed.Balance);
         Assert.Equal(order.Payments.Sum(p => p.Tip), listed.TipTotal);
         Assert.Equal(20m, listed.Payments[0].Change);
         Assert.Equal(dto.KitchenTickets.OrderBy(t => t.Round).Select(t => t.Id), dto.KitchenTickets.Select(t => t.Id));

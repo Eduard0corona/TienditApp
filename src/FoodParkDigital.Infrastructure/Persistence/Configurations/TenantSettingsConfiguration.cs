@@ -16,6 +16,9 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             table.HasCheckConstraint(
                 "CK_TenantSettings_HomeVisitTravelMinutes", "[HomeVisitTravelMinutes] >= 0 AND [HomeVisitTravelMinutes] <= 240");
             table.HasCheckConstraint(
+                "CK_TenantSettings_CreditTermDays",
+                $"[CreditTermDays] IS NULL OR ([CreditTermDays] >= {TenantSettings.MinCreditTermDays} AND [CreditTermDays] <= {TenantSettings.MaxCreditTermDays})");
+            table.HasCheckConstraint(
                 "CK_TenantSettings_OnlineBookingCapacity",
                 $"[OnlineBookingCapacity] >= 1 AND [OnlineBookingCapacity] <= {OnlineBookingRules.MaxCapacity}");
         });

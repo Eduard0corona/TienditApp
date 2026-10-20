@@ -3096,6 +3096,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
 
+                    b.Property<decimal>("WrittenOffAmount")
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId");
@@ -3146,6 +3150,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Orders_CustomerLink", "([CustomerUserId] IS NULL OR [TemporaryCustomerId] IS NULL) AND ([CreatedByBusiness] = 1 OR [CustomerUserId] IS NOT NULL OR [TemporaryCustomerId] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_Orders_TrackingToken", "[TrackingToken] IS NULL OR LEN([TrackingToken]) = 43");
+
+                            t.HasCheckConstraint("CK_Orders_WrittenOffAmount", "[WrittenOffAmount] >= 0");
                         });
                 });
 
@@ -3652,6 +3658,61 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_OrderVisitCharges_Fee", "[Fee] > 0 AND [Fee] <= 10000");
 
                             t.HasCheckConstraint("CK_OrderVisitCharges_FeeTaxRate", "[FeeTaxRate] >= 0 AND [FeeTaxRate] <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderWriteOff", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("WrittenOffAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("WrittenOffBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("TenantId", "OrderId");
+
+                    b.HasIndex("TenantId", "WrittenOffAt");
+
+                    b.ToTable("OrderWriteOffs", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OrderWriteOffs_Amount", "[Amount] > 0");
                         });
                 });
 
@@ -4904,6 +4965,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("Capabilities")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CreditTermDays")
+                        .HasColumnType("int");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -4972,6 +5036,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantSettings", null, t =>
                         {
+                            t.HasCheckConstraint("CK_TenantSettings_CreditTermDays", "[CreditTermDays] IS NULL OR ([CreditTermDays] >= 1 AND [CreditTermDays] <= 120)");
+
                             t.HasCheckConstraint("CK_TenantSettings_HomeVisitTravelMinutes", "[HomeVisitTravelMinutes] >= 0 AND [HomeVisitTravelMinutes] <= 240");
 
                             t.HasCheckConstraint("CK_TenantSettings_OnlineBookingCapacity", "[OnlineBookingCapacity] >= 1 AND [OnlineBookingCapacity] <= 20");
@@ -5999,6 +6065,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderWriteOff", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany("WriteOffs")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.PlatformOrderDetail", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
@@ -6414,6 +6489,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("StatusHistory");
 
                     b.Navigation("VisitCharge");
+
+                    b.Navigation("WriteOffs");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderItem", b =>

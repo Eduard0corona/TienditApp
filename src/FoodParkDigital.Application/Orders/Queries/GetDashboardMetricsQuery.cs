@@ -96,8 +96,10 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
             {
                 Status = g.Key,
                 Count = g.Count(),
-                Unpaid = g.Count(o => o.Total - o.PaidAmount > 0),
-                Owed = g.Where(o => o.Total - o.PaidAmount > 0).Sum(o => (decimal?)(o.Total - o.PaidAmount)) ?? 0m
+                // Order.Balance, written out so the database reads it: what was forgiven is not owed (Fase 26B).
+                Unpaid = g.Count(o => o.Total - o.PaidAmount - o.WrittenOffAmount > 0),
+                Owed = g.Where(o => o.Total - o.PaidAmount - o.WrittenOffAmount > 0)
+                    .Sum(o => (decimal?)(o.Total - o.PaidAmount - o.WrittenOffAmount)) ?? 0m
             })
             .ToListAsync(cancellationToken);
         var uniqueCustomers = await orders
