@@ -4,12 +4,13 @@ import { messagingApi } from '../../api/messagingApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useToast } from '../../hooks/useToast';
 import { MessagePurpose, type MessageTemplateDto } from '../../types';
-import { PLACEHOLDER_HELP } from './campaignLabels';
+import { CREDIT_PLACEHOLDER_HELP, PLACEHOLDER_HELP } from './campaignLabels';
 
 const PURPOSE_LABEL: Record<MessagePurpose, string> = {
   [MessagePurpose.Campaign]: 'Campaña',
   [MessagePurpose.AppointmentReminder]: 'Recordatorio de cita',
   [MessagePurpose.AppointmentNotice]: 'Aviso de cita',
+  [MessagePurpose.CreditReminder]: 'Recordatorio del fiado',
 };
 
 // Appointment notices are written by the system: no template uses them.
@@ -17,6 +18,7 @@ const PLACEHOLDERS: Record<MessagePurpose, string[]> = {
   [MessagePurpose.Campaign]: ['nombre', 'negocio'],
   [MessagePurpose.AppointmentReminder]: ['nombre', 'negocio', 'servicio', 'fecha', 'hora'],
   [MessagePurpose.AppointmentNotice]: [],
+  [MessagePurpose.CreditReminder]: ['nombre', 'negocio', 'monto', 'vencido', 'fecha'],
 };
 
 type Draft = {
@@ -204,13 +206,14 @@ export default function TemplatesTab() {
                     onChange={(event) => setDraft({ ...draft, purpose: Number(event.target.value) as MessagePurpose })}>
                     <option value={MessagePurpose.Campaign}>Campaña</option>
                     <option value={MessagePurpose.AppointmentReminder}>Recordatorio de cita</option>
+                    <option value={MessagePurpose.CreditReminder}>Recordatorio del fiado</option>
                   </select>
                 </div>
               </div>
               <label className="form-label" htmlFor="template-body">Mensaje</label>
               <div className="d-flex flex-wrap gap-1 mb-1">
                 {PLACEHOLDERS[draft.purpose].map((name) => (
-                  <button key={name} type="button" className="btn btn-sm btn-soft-primary" title={PLACEHOLDER_HELP[name]}
+                  <button key={name} type="button" className="btn btn-sm btn-soft-primary" title={(draft.purpose === MessagePurpose.CreditReminder ? CREDIT_PLACEHOLDER_HELP : PLACEHOLDER_HELP)[name]}
                     onClick={() => insertPlaceholder(name)}>
                     {`{${name}}`}
                   </button>

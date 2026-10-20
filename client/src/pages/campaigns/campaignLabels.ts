@@ -43,3 +43,12 @@ export const PLACEHOLDER_HELP: Record<string, string> = {
   fecha: 'Día de la cita',
   hora: 'Hora de la cita',
 };
+
+/** The same chips in a reminder of what a customer owes (Fase 26C): {fecha} is the last day to pay that passed. */
+export const CREDIT_PLACEHOLDER_HELP: Record<string, string> = {
+  nombre: 'Nombre del cliente',
+  negocio: 'Nombre de tu negocio',
+  monto: 'Lo que debe en total',
+  vencido: 'Lo que ya venció',
+  fecha: 'Último día para pagar que ya pasó',
+};

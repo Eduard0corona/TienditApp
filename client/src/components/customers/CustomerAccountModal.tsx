@@ -20,7 +20,7 @@ import { formatDate, formatDateTime } from '../../utils/dates';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 import { formatMoney, toCents } from '../../utils/money';
-import { accountSummaryText, daysSince, describeDays, describeDue, describeTerm } from './customerAccount';
+import { accountSummaryText, daysSince, describeDays, describeDue, describeReminder, describeTerm } from './customerAccount';
 
 interface CustomerAccountModalProps {
   of: AccountOf;
@@ -37,7 +37,8 @@ const TITLES: Record<Mode, string> = { account: 'Estado de cuenta', paying: 'Abo
 /**
  * The account of a customer (fiado, Fase 26A): what they may and do owe, the orders owed from the oldest, their latest
  * payments, «Abonar» for whoever charges and the summary for WhatsApp. Fase 26B: what is past the business's term, what
- * was forgiven, and «Condonar» for owners and admins.
+ * was forgiven, and «Condonar» for owners and admins. Fase 26C: whether the term is the customer's own, and the WhatsApp
+ * reminders of what is overdue.
  */
 export default function CustomerAccountModal({ of, name, onClose }: CustomerAccountModalProps) {
   const titleId = useId();
@@ -48,6 +49,7 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
   const canCharge = access.charge;
   const canWriteOff = access.isAdmin;
   const { data: account, error, isPending } = useCustomerAccount(of);
+  const reminder = account ? describeReminder(account) : null;
   const pay = usePayCustomerAccount();
   const writeOff = useWriteOffCustomerAccount();
   const reverse = useReverseWriteOff();
@@ -189,10 +191,13 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
             </div>
             {account.creditTermDays != null && (
               <p className="small mb-3">
-                <span className="text-muted">Plazo de {describeTerm(account.creditTermDays)} · </span>
+                <span className="text-muted">
+                  Plazo de {describeTerm(account.creditTermDays)}{account.ownCreditTermDays != null ? ' (solo para este cliente)' : ''} ·{' '}
+                </span>
                 {account.overdue > 0
                   ? <strong className="text-danger">Vencido <span className="ta-money">{formatMoney(account.overdue)}</span></strong>
                   : <span className="text-muted">Nada vencido</span>}
+                {reminder && <span className="d-block text-muted">{reminder}</span>}
               </p>
             )}
             {account.overLimit && (

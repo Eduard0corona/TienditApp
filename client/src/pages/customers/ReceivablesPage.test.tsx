@@ -32,6 +32,22 @@ const RECEIVABLES = {
   },
 };
 
+const REMINDERS = {
+  enabled: false,
+  everyDays: 7,
+  templateId: null,
+  whatsAppConnected: true,
+  creditTermDays: 15,
+  customersWithOwnTerm: 0,
+  defaultBody: 'Hola {nombre}, te recordamos que en {negocio} tienes un saldo de {monto}; {vencido} venció el {fecha}.',
+  placeholders: ['nombre', 'negocio', 'monto', 'vencido', 'fecha'],
+  templates: [],
+  minEveryDays: 1,
+  maxEveryDays: 30,
+  sendFrom: '10:00',
+  sendUntil: '19:00',
+};
+
 const LUIS_ACCOUNT = {
   phone: '+525566667777', name: 'Luis Pérez', customerId: null, creditLimit: null, sellsOnCredit: false, owed: 50, available: null,
   overLimit: false, ordersCount: 1, recentPayments: [], recentWriteOffs: [], creditTermDays: null, overdue: 0,
@@ -177,6 +193,85 @@ describe('ReceivablesPage', () => {
 
     expect(await screen.findByText('Ana López')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /plazo/ })).not.toBeInTheDocument();
+  });
+
+  it('shows what is overdue by a customer\'s own term, without a term of the business', async () => {
+    request.mockImplementation(((_method: string, path: string) => Promise.resolve(path === '/api/v1/customers/receivables'
+      ? {
+        ...RECEIVABLES,
+        totalOverdue: 120,
+        page: { ...RECEIVABLES.page, items: [{ ...RECEIVABLES.page.items[0], overdue: 120, ownCreditTermDays: 7 }, RECEIVABLES.page.items[1]] },
+      }
+      : LUIS_ACCOUNT)) as never);
+    renderPage();
+
+    const ana = (await screen.findByText('Ana López')).closest('tr')!;
+    expect(within(ana).getByText('Paga en 7 días')).toBeInTheDocument();
+    expect(within(ana).getByText('$120.00')).toBeInTheDocument();
+    expect(screen.getByText('Sin plazo')).toBeInTheDocument();
+    expect(screen.getAllByText('Vencido')).toHaveLength(2);
+    expect(screen.getByLabelText('Solo vencidos')).toBeInTheDocument();
+    // Who looks after customers sees no reminders to turn on.
+    expect(screen.queryByText('Sin recordatorios')).not.toBeInTheDocument();
+  });
+
+  it('lets an owner turn the reminders on, every few days, showing the message as a customer reads it', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role: 'TenantAdmin', permissions: [] } } as unknown as ReturnType<typeof useAuth>);
+    let everyDays: number | null = null;
+    request.mockImplementation(((method: string, path: string, options?: { body?: { enabled: boolean; everyDays: number } }) => {
+      if (path === '/api/v1/customers/credit-reminders') {
+        if (method === 'put') everyDays = options?.body?.enabled ? options.body.everyDays : null;
+        return Promise.resolve({ ...REMINDERS, enabled: everyDays != null, everyDays: everyDays ?? 7 });
+      }
+      return Promise.resolve(path === '/api/v1/customers/receivables'
+        ? { ...RECEIVABLES, creditTermDays: 15, creditReminderEveryDays: everyDays }
+        : LUIS_ACCOUNT);
+    }) as never);
+    renderPage();
+
+    expect(await screen.findByText('Sin recordatorios')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Activar' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Recordatorios del fiado' });
+    expect(await within(dialog).findByText(/Hola Ana, te recordamos que en Tiendita tienes un saldo de \$1,160\.00/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Sin plantilla aprobada en Meta/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByLabelText('Recordar lo vencido por WhatsApp'));
+    await userEvent.clear(within(dialog).getByLabelText('Cada'));
+    await userEvent.type(within(dialog).getByLabelText('Cada'), '31');
+    expect(within(dialog).getByText('Los recordatorios se repiten cada 1 a 30 días.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Guardar' })).toBeDisabled();
+    await userEvent.clear(within(dialog).getByLabelText('Cada'));
+    await userEvent.type(within(dialog).getByLabelText('Cada'), '3');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+
+    expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/credit-reminders', { body: { enabled: true, everyDays: 3, templateId: null } });
+    expect(await screen.findByText('Recordatorios cada 3 días')).toBeInTheDocument();
+  });
+
+  it('does not let an owner turn the reminders on without WhatsApp, and says where to connect it', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role: 'TenantAdmin', permissions: [] } } as unknown as ReturnType<typeof useAuth>);
+    request.mockImplementation(((_method: string, path: string) => Promise.resolve(path === '/api/v1/customers/credit-reminders'
+      ? { ...REMINDERS, whatsAppConnected: false, creditTermDays: null }
+      : path === '/api/v1/customers/receivables' ? RECEIVABLES : LUIS_ACCOUNT)) as never);
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Activar' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Recordatorios del fiado' });
+    expect(await within(dialog).findByRole('link', { name: 'Ir a WhatsApp' })).toHaveAttribute('href', '/settings/whatsapp');
+    expect(within(dialog).getByText('Sin plazo nada vence: pon un plazo para que haya a quién recordarle.')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByLabelText('Recordar lo vencido por WhatsApp'));
+
+    expect(within(dialog).getByRole('button', { name: 'Guardar' })).toBeDisabled();
+  });
+
+  it('tells whoever charges that reminders go out, without letting them change it', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role: 'Employee', permissions: ['ManageOrders', 'ChargeOrders'] } } as unknown as ReturnType<typeof useAuth>);
+    request.mockImplementation(((_method: string, path: string) => Promise.resolve(path === '/api/v1/customers/receivables'
+      ? { ...RECEIVABLES, creditReminderEveryDays: 7 }
+      : LUIS_ACCOUNT)) as never);
+    renderPage();
+
+    expect(await screen.findByText('Recordatorios cada 7 días')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cambiar' })).not.toBeInTheDocument();
   });
 
   it('opens the account the customer card linked to', async () => {

@@ -245,6 +245,11 @@ export default function CustomersList() {
                       {customer.creditLimit != null && (
                         <span className="badge bg-warning-subtle text-warning-emphasis">Fiado hasta {formatMoney(customer.creditLimit)}</span>
                       )}
+                      {customer.creditTermDays != null && (
+                        <span className="badge bg-secondary-subtle text-secondary-emphasis ms-1">
+                          Paga en {customer.creditTermDays === 1 ? '1 día' : `${customer.creditTermDays} días`}
+                        </span>
+                      )}
                     </td>
                     <td className="text-nowrap">{customer.phone || '-'}</td>
                     <td>{customer.email || '-'}</td>

@@ -4,6 +4,7 @@ import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import CustomerAccountModal from '../../components/customers/CustomerAccountModal';
 import CreditTermModal from '../../components/customers/CreditTermModal';
+import CreditRemindersModal from '../../components/customers/CreditRemindersModal';
 import { daysSince, describeDays, describeTerm } from '../../components/customers/customerAccount';
 import { type AccountOf, type Receivable, useReceivables } from '../../api/customerCredit';
 import { ReceivablesSort } from '../../api/generated/enums';
@@ -27,6 +28,7 @@ const COLUMNS = [
  * Clientes › Por cobrar (fiado, Fase 26A): who owes the business, a row per customer by phone, with the total. Each row
  * opens the customer's account, where whoever charges takes a payment. The customer card links here with ?cuenta=.
  * Fase 26B: with a term, what is overdue per customer and in total, and «Solo vencidos»; owners and admins set the term.
+ * Fase 26C: a customer's own term in their row, and the WhatsApp reminders of what is overdue, which owners and admins set.
  */
 export default function ReceivablesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -34,6 +36,7 @@ export default function ReceivablesPage() {
   const [sort, setSort] = useState<ReceivablesSort>(ReceivablesSort.Owed);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [editingTerm, setEditingTerm] = useState(false);
+  const [editingReminders, setEditingReminders] = useState(false);
   const { user } = useAuth();
   const { capabilities } = useTenant();
   const canSetTerm = getAccess(user, capabilities).isAdmin;
@@ -43,6 +46,9 @@ export default function ReceivablesPage() {
   const [account, setAccount] = useState<(AccountOf & { name?: string }) | null>(linkedPhone ? { phone: linkedPhone } : null);
   const { data, error, isPending } = useReceivables({ search, sort, overdueOnly, page, pageSize });
   const creditTerm = data?.creditTermDays ?? null;
+  const reminderEveryDays = data?.creditReminderEveryDays ?? null;
+  // Customers with a term of their own may have something overdue without the business's; «Solo vencidos» stays while on.
+  const showsOverdue = creditTerm != null || (data?.totalOverdue ?? 0) > 0 || overdueOnly;
 
   const closeAccount = () => {
     setAccount(null);
@@ -64,18 +70,30 @@ export default function ReceivablesPage() {
                 {data.page.totalCount > 0 && (
                   <span className="text-muted"> · {data.page.totalCount === 1 ? '1 cliente' : `${data.page.totalCount} clientes`}</span>
                 )}
-                {creditTerm != null && data.totalOverdue > 0 && (
+                {data.totalOverdue > 0 && (
                   <> · <strong className="text-danger text-nowrap">Vencido <span className="ta-money">{formatMoney(data.totalOverdue)}</span></strong></>
                 )}
               </p>
-              <span className="small text-muted">
-                {creditTerm != null ? `Plazo de ${describeTerm(creditTerm)}` : 'Sin plazo'}
-                {canSetTerm && (
-                  <button type="button" className="btn btn-link btn-sm align-baseline p-0 ms-2" onClick={() => setEditingTerm(true)}>
-                    {creditTerm != null ? 'Cambiar plazo' : 'Poner plazo'}
-                  </button>
+              <div className="small text-muted d-flex flex-wrap column-gap-3 row-gap-1">
+                <span>
+                  {creditTerm != null ? `Plazo de ${describeTerm(creditTerm)}` : 'Sin plazo'}
+                  {canSetTerm && (
+                    <button type="button" className="btn btn-link btn-sm align-baseline p-0 ms-2" onClick={() => setEditingTerm(true)}>
+                      {creditTerm != null ? 'Cambiar plazo' : 'Poner plazo'}
+                    </button>
+                  )}
+                </span>
+                {(canSetTerm || reminderEveryDays != null) && (
+                  <span>
+                    {reminderEveryDays != null ? `Recordatorios cada ${describeTerm(reminderEveryDays)}` : 'Sin recordatorios'}
+                    {canSetTerm && (
+                      <button type="button" className="btn btn-link btn-sm align-baseline p-0 ms-2" onClick={() => setEditingReminders(true)}>
+                        {reminderEveryDays != null ? 'Cambiar' : 'Activar'}
+                      </button>
+                    )}
+                  </span>
                 )}
-              </span>
+              </div>
             </div>
           )}
 
@@ -105,7 +123,7 @@ export default function ReceivablesPage() {
                     <option value={ReceivablesSort.Oldest}>Debe desde hace más</option>
                   </select>
                 </DataTableFilter>
-                {creditTerm != null && (
+                {showsOverdue && (
                   <div className="form-check form-switch mb-1">
                     <input
                       id="receivables-overdue"
@@ -157,6 +175,9 @@ export default function ReceivablesPage() {
                 <td className="text-end">
                   {row.creditLimit != null ? <span className="ta-money">{formatMoney(row.creditLimit)}</span> : <span className="text-muted">Sin fiado</span>}
                   {row.overLimit && <div><span className="badge bg-danger-subtle text-danger-emphasis">Pasó su límite</span></div>}
+                  {row.ownCreditTermDays != null && (
+                    <small className="d-block text-muted">Paga en {describeTerm(row.ownCreditTermDays)}</small>
+                  )}
                 </td>
                 <td className="text-center">
                   <button
@@ -178,11 +199,12 @@ export default function ReceivablesPage() {
       {editingTerm && (
         <CreditTermModal
           creditTermDays={creditTerm}
-          // Without a term nothing is overdue, and «Solo vencidos» is no longer there to turn off.
+          // Without the business's term, only customers with their own may have something overdue: show everyone again.
           onSaved={(days) => days == null && setOverdueOnly(false)}
           onClose={() => setEditingTerm(false)}
         />
       )}
+      {editingReminders && <CreditRemindersModal onClose={() => setEditingReminders(false)} />}
     </>
   );
 }
