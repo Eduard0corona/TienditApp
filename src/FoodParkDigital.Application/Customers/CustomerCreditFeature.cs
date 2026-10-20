@@ -36,6 +36,8 @@ public class ReceivableDto
     public decimal? CreditLimit { get; set; }
     /// <summary>They owe more than their limit (it was lowered, or orders were delivered unpaid).</summary>
     public bool OverLimit { get; set; }
+    /// <summary>What of it is past the term of the fiado (Fase 26B); 0 without a term.</summary>
+    public decimal Overdue { get; set; }
 }
 
 public class ReceivablesDto
@@ -43,6 +45,10 @@ public class ReceivablesDto
     public PaginatedList<ReceivableDto> Page { get; set; } = null!;
     /// <summary>What all the customers that match owe the business.</summary>
     public decimal TotalOwed { get; set; }
+    /// <summary>What of it is past the term of the fiado (Fase 26B); 0 without a term.</summary>
+    public decimal TotalOverdue { get; set; }
+    /// <summary>How many days the business gives to pay (Fase 26B); null without a term.</summary>
+    public int? CreditTermDays { get; set; }
 }
 
 public enum ReceivablesSort
@@ -66,12 +72,18 @@ public class CustomerAccountDto
     /// <summary>What they may still owe (never below 0); null without a limit.</summary>
     public decimal? Available { get; set; }
     public bool OverLimit { get; set; }
+    /// <summary>How many days the business gives to pay (Fase 26B); null without a term.</summary>
+    public int? CreditTermDays { get; set; }
+    /// <summary>What of what they owe is past the term (Fase 26B); 0 without a term.</summary>
+    public decimal Overdue { get; set; }
     /// <summary>The orders owed, the oldest first (at most <see cref="GetCustomerAccountQuery.MaxOrders"/>).</summary>
     public List<CustomerAccountOrderDto> Orders { get; set; } = [];
     /// <summary>How many orders they owe, also beyond the ones listed.</summary>
     public int OrdersCount { get; set; }
     /// <summary>Their latest payments, on any of their orders.</summary>
     public List<CustomerAccountPaymentDto> RecentPayments { get; set; } = [];
+    /// <summary>What the business forgave them lately (Fase 26B), on any of their orders.</summary>
+    public List<CustomerAccountWriteOffDto> RecentWriteOffs { get; set; } = [];
 }
 
 public class CustomerAccountOrderDto
@@ -83,7 +95,29 @@ public class CustomerAccountOrderDto
     public bool SoldOnCredit { get; set; }
     public decimal Total { get; set; }
     public decimal Paid { get; set; }
+    /// <summary>What the business forgave of it (Fase 26B).</summary>
+    public decimal WrittenOff { get; set; }
     public decimal Balance { get; set; }
+    /// <summary>The last day to pay it, in the business's calendar (Fase 26B); null without a term.</summary>
+    public DateOnly? DueOn { get; set; }
+    /// <summary>Its last day to pay has passed.</summary>
+    public bool IsOverdue { get; set; }
+}
+
+/// <summary>What the business forgave a customer of an order (Fase 26B, ADR 0034).</summary>
+public class CustomerAccountWriteOffDto
+{
+    public string OrderNumber { get; set; } = null!;
+    public DateTimeOffset WrittenOffAt { get; set; }
+    public decimal Amount { get; set; }
+    public OrderWriteOffReason Reason { get; set; }
+    public string? Notes { get; set; }
+}
+
+/// <summary>The term of the fiado of the business (Fase 26B).</summary>
+public class CustomerCreditTermDto
+{
+    public int? CreditTermDays { get; set; }
 }
 
 public class CustomerAccountPaymentDto
@@ -178,6 +212,8 @@ public record GetReceivablesQuery : IRequest<ReceivablesDto>
     /// <summary>Part of the customer's name or of their phone.</summary>
     public string? Search { get; init; }
     public ReceivablesSort Sort { get; init; } = ReceivablesSort.Owed;
+    /// <summary>Only the customers with something past the term of the fiado (Fase 26B); nobody without a term.</summary>
+    public bool OverdueOnly { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }
@@ -200,18 +236,28 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
 
     private readonly IApplicationDbContext _context;
     private readonly IPhoneNormalizationService _phones;
+    private readonly IDateTimeProvider _clock;
 
-    public GetReceivablesQueryHandler(IApplicationDbContext context, IPhoneNormalizationService phones)
+    public GetReceivablesQueryHandler(IApplicationDbContext context, IPhoneNormalizationService phones, IDateTimeProvider clock)
     {
         _context = context;
         _phones = phones;
+        _clock = clock;
     }
 
     public async Task<ReceivablesDto> Handle(GetReceivablesQuery request, CancellationToken cancellationToken)
     {
+        var term = await CreditTerm.ReadAsync(_context, cancellationToken);
+        var overdueBefore = term.OverdueBefore(_clock.UtcNow);
         var lines = Receivables.Lines(_context.Orders.AsNoTracking());
         if (!string.IsNullOrWhiteSpace(request.Search))
             lines = await MatchingAsync(lines, request.Search.Trim(), cancellationToken);
+        if (request.OverdueOnly)
+        {
+            // Every order of a customer with something overdue stays: what they owe is all of it.
+            var overduePhones = lines.Where(l => l.CreatedAt < overdueBefore).Select(l => l.Phone);
+            lines = lines.Where(l => overduePhones.Contains(l.Phone));
+        }
 
         var customers = lines
             .GroupBy(l => l.Phone)
@@ -219,6 +265,7 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
             {
                 Phone = g.Key,
                 Owed = g.Sum(l => l.Balance),
+                Overdue = g.Sum(l => l.CreatedAt < overdueBefore ? l.Balance : 0m),
                 Orders = g.Count(),
                 Since = g.Min(l => l.CreatedAt)
             });
@@ -229,6 +276,7 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
         var (pageNumber, pageSize) = Paging.Normalize(request.PageNumber, request.PageSize);
         var count = await customers.CountAsync(cancellationToken);
         var totalOwed = await lines.SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
+        var totalOverdue = await lines.Where(l => l.CreatedAt < overdueBefore).SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
         var page = await ordered.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
 
         // The page's names and limits: the customer record with each phone, else the name on the latest order owed.
@@ -255,14 +303,17 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
                 Orders = c.Orders,
                 Since = c.Since,
                 CreditLimit = limit,
-                OverLimit = limit is { } value && c.Owed > value
+                OverLimit = limit is { } value && c.Owed > value,
+                Overdue = c.Overdue
             };
         }).ToList();
 
         return new ReceivablesDto
         {
             Page = new PaginatedList<ReceivableDto>(items, count, pageNumber, pageSize),
-            TotalOwed = totalOwed
+            TotalOwed = totalOwed,
+            TotalOverdue = totalOverdue,
+            CreditTermDays = term.Days
         };
     }
 
@@ -324,6 +375,7 @@ public record GetCustomerAccountQuery : IRequest<Result<CustomerAccountDto>>
 {
     public const int MaxOrders = 100;
     public const int RecentPayments = 10;
+    public const int RecentWriteOffs = 10;
 
     public Guid? CustomerId { get; init; }
     public string? Phone { get; init; }
@@ -343,11 +395,13 @@ public class GetCustomerAccountQueryHandler : IRequestHandler<GetCustomerAccount
 {
     private readonly IApplicationDbContext _context;
     private readonly IPhoneNormalizationService _phones;
+    private readonly IDateTimeProvider _clock;
 
-    public GetCustomerAccountQueryHandler(IApplicationDbContext context, IPhoneNormalizationService phones)
+    public GetCustomerAccountQueryHandler(IApplicationDbContext context, IPhoneNormalizationService phones, IDateTimeProvider clock)
     {
         _context = context;
         _phones = phones;
+        _clock = clock;
     }
 
     public async Task<Result<CustomerAccountDto>> Handle(GetCustomerAccountQuery request, CancellationToken cancellationToken)
@@ -355,7 +409,7 @@ public class GetCustomerAccountQueryHandler : IRequestHandler<GetCustomerAccount
         var account = await CreditAccount.ResolveAsync(_context, _phones, request.CustomerId, request.Phone, cancellationToken);
         return account.IsFailure
             ? Result.Failure<CustomerAccountDto>(account.Error!)
-            : Result.Success(await account.Value.ReadAsync(_context, cancellationToken));
+            : Result.Success(await account.Value.ReadAsync(_context, _clock.UtcNow, cancellationToken));
     }
 }
 
@@ -532,7 +586,7 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
             metadata: JsonSerializer.Serialize(new { request.Amount, Method = request.Method.ToString(), Orders = parts })));
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(await account.ReadAsync(_context, cancellationToken));
+        return Result.Success(await account.ReadAsync(_context, _clock.UtcNow, cancellationToken));
     }
 }
 
@@ -639,10 +693,13 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<CustomerAccountDto> ReadAsync(IApplicationDbContext context, CancellationToken cancellationToken)
+    public async Task<CustomerAccountDto> ReadAsync(IApplicationDbContext context, DateTimeOffset utcNow, CancellationToken cancellationToken)
     {
+        var term = await CreditTerm.ReadAsync(context, cancellationToken);
+        var overdueBefore = term.OverdueBefore(utcNow);
         var lines = Receivables.OfCustomer(context.Orders.AsNoTracking(), Phone);
         var owed = await lines.SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
+        var overdue = await lines.Where(l => l.CreatedAt < overdueBefore).SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
         var count = await lines.CountAsync(cancellationToken);
         var orders = await lines
             .OrderBy(l => l.CreatedAt)
@@ -657,9 +714,13 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
                 SoldOnCredit = l.SoldOnCredit,
                 Total = l.Total,
                 Paid = l.Paid,
-                Balance = l.Balance
+                WrittenOff = l.WrittenOff,
+                Balance = l.Balance,
+                IsOverdue = l.CreatedAt < overdueBefore
             })
             .ToListAsync(cancellationToken);
+        foreach (var order in orders)
+            order.DueOn = term.DueOn(order.CreatedAt);
 
         var variants = MessagingPhone.Variants(Phone).ToList();
         var payments = await context.OrderPayments.AsNoTracking()
@@ -674,6 +735,22 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
                 Amount = p.Amount,
                 Method = p.Method
             })
+            .ToListAsync(cancellationToken);
+        var writeOffs = await context.OrderWriteOffs.AsNoTracking()
+            .Join(
+                context.Orders.Where(o => o.CustomerPhone != null && variants.Contains(o.CustomerPhone) && o.Status != OrderStatus.Cancelled),
+                writeOff => writeOff.OrderId,
+                order => order.Id,
+                (writeOff, order) => new CustomerAccountWriteOffDto
+                {
+                    OrderNumber = order.OrderNumber,
+                    WrittenOffAt = writeOff.WrittenOffAt,
+                    Amount = writeOff.Amount,
+                    Reason = writeOff.Reason,
+                    Notes = writeOff.Notes
+                })
+            .OrderByDescending(w => w.WrittenOffAt)
+            .Take(GetCustomerAccountQuery.RecentWriteOffs)
             .ToListAsync(cancellationToken);
 
         var name = Customer?.Name ?? await context.Orders.AsNoTracking()
@@ -692,9 +769,12 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
             Owed = owed,
             Available = limit is { } value ? Math.Max(0m, value - owed) : null,
             OverLimit = limit is { } max && owed > max,
+            CreditTermDays = term.Days,
+            Overdue = overdue,
             Orders = orders,
             OrdersCount = count,
-            RecentPayments = payments
+            RecentPayments = payments,
+            RecentWriteOffs = writeOffs
         };
     }
 }

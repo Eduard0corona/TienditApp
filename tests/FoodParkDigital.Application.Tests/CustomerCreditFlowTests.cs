@@ -302,7 +302,7 @@ public class CustomerCreditFlowTests
         (await fixture.Context.Customers.SingleAsync(c => c.Id == ana.Id)).SetActive(false);
         await fixture.Context.SaveChangesAsync();
 
-        var row = Assert.Single((await new GetReceivablesQueryHandler(fixture.Context, new PhoneNormalizationService())
+        var row = Assert.Single((await new GetReceivablesQueryHandler(fixture.Context, new PhoneNormalizationService(), fixture.Clock)
             .Handle(new GetReceivablesQuery(), default)).Page.Items);
 
         Assert.Equal(("Ana López", 100m, (decimal?)null, false), (row.Name, row.Owed, row.CreditLimit, row.OverLimit));
@@ -413,7 +413,7 @@ public class CustomerCreditFlowTests
         var cancelled = await handler.Handle(Sale("Pepe", "5588889999", soap), default);
         (await fixture.Context.Orders.SingleAsync(o => o.Id == cancelled.Value.Id)).Cancel(machine, "test", "error");
         await fixture.Context.SaveChangesAsync();
-        var receivables = new GetReceivablesQueryHandler(fixture.Context, new PhoneNormalizationService());
+        var receivables = new GetReceivablesQueryHandler(fixture.Context, new PhoneNormalizationService(), fixture.Clock);
 
         var byOwed = await receivables.Handle(new GetReceivablesQuery(), default);
         var oldest = await receivables.Handle(new GetReceivablesQuery { Sort = ReceivablesSort.Oldest }, default);
@@ -504,7 +504,7 @@ public class CustomerCreditFlowTests
 
     private static async Task<CustomerAccountDto> AccountAsync(SalesTestFixture fixture, Guid customerId)
     {
-        var result = await new GetCustomerAccountQueryHandler(fixture.Context, new PhoneNormalizationService())
+        var result = await new GetCustomerAccountQueryHandler(fixture.Context, new PhoneNormalizationService(), fixture.Clock)
             .Handle(new GetCustomerAccountQuery { CustomerId = customerId }, default);
         Assert.True(result.IsSuccess, result.Error);
         return result.Value;

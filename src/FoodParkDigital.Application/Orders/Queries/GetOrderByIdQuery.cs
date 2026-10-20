@@ -32,6 +32,7 @@ public class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery, Order
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
             .Include(o => o.Refunds).ThenInclude(r => r.Lines)
+            .Include(o => o.WriteOffs)
             .Include(o => o.KitchenTickets)
             .Include(o => o.ItemCancellations)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)

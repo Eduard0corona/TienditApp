@@ -1,4 +1,6 @@
 using System.Linq.Expressions;
+using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -41,6 +43,7 @@ public static class Receivables
             SoldOnCredit = o.SoldOnCredit,
             Total = o.Total,
             Paid = o.PaidAmount,
+            WrittenOff = o.WrittenOffAmount,
             Balance = o.Total - o.PaidAmount - o.WrittenOffAmount
         });
 
@@ -69,5 +72,43 @@ public sealed class OwedOrder
     public bool SoldOnCredit { get; init; }
     public decimal Total { get; init; }
     public decimal Paid { get; init; }
+    /// <summary>What the business forgave of it (Fase 26B).</summary>
+    public decimal WrittenOff { get; init; }
     public decimal Balance { get; init; }
+}
+
+/// <summary>
+/// The term of the fiado (Fase 26B, ADR 0034): an order owed is overdue once its last day to pay, the business day it was
+/// made plus the term, has passed in the business's time zone. Without a term nothing is overdue.
+/// </summary>
+public static class CreditTerm
+{
+    /// <summary>The business's term and time zone, as its settings keep them.</summary>
+    public sealed record Settings(int? Days, string? TimeZone)
+    {
+        /// <summary>
+        /// The orders made before this instant are overdue today: the start of the business day <see cref="Days"/> days
+        /// ago. Without a term, the earliest instant, so nothing is.
+        /// </summary>
+        public DateTimeOffset OverdueBefore(DateTimeOffset utcNow)
+        {
+            if (Days is not { } days)
+                return DateTimeOffset.MinValue;
+            var zone = TenantDateTimeResolver.Resolve(TimeZone);
+            var today = TimeZoneInfo.ConvertTime(utcNow, zone).Date;
+            return TenantDateTimeResolver.LocalDateBoundaryToUtc(today.AddDays(-days), startOfDay: true, zone);
+        }
+
+        /// <summary>The last day to pay an order made at <paramref name="createdAt"/>, in the business's calendar.</summary>
+        public DateOnly? DueOn(DateTimeOffset createdAt) => Days is { } days
+            ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(createdAt, TenantDateTimeResolver.Resolve(TimeZone)).Date.AddDays(days))
+            : null;
+    }
+
+    /// <summary>The settings of the business of the request (the tenant filter picks them).</summary>
+    public static async Task<Settings> ReadAsync(IApplicationDbContext context, CancellationToken cancellationToken)
+        => await context.TenantSettings.AsNoTracking()
+            .Select(s => new Settings(s.CreditTermDays, s.TimeZone))
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? new Settings(null, null);
 }
