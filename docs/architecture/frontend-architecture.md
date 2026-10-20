@@ -656,6 +656,31 @@ Plazo por cliente y recordatorios del fiado (Fase 26C, [ADR 0035](../adr/0035-cu
 - **Clientes:** «Paga en N días» junto a «Fiado hasta $X». **Campañas › Plantillas:** el uso «Recordatorio del fiado», con `{monto}`, `{vencido}` y `{fecha}`, su ayuda (`CREDIT_PLACEHOLDER_HELP`) y su ejemplo. **Campañas › Recordatorios del fiado** (`CreditRemindersTab`): los últimos con su resultado, con `MessageHistory` de los de citas. `?tab=` abre una pestaña de Campañas; la pantalla de los recordatorios lleva a Plantillas y a lo que se mandó.
 - **Escenas:** `scenes/recordatorios.spec.ts` con `scenes/recordatorios.mocks.ts`. La API simulada de la 26A (`mocks/routes-p15.mjs`) cuenta lo vencido con el plazo de cada cliente; `mocks/routes-p17.mjs` agrega el plazo por cliente y los recordatorios.
 
+Saldo a favor del cliente (Fase 26D, [ADR 0036](../adr/0036-customer-balance.md)):
+
+- **`api/customerCredit.ts`:** `useAddCustomerDeposit` y `useReturnCustomerBalance`, que dejan la cuenta que responde el servidor en la caché (`setQueryData`) y vuelven a pedir las listas, las cuentas y las fichas como un abono.
+- **Estado de cuenta (`components/customers/CustomerAccountModal`):**
+  - con saldo o con movimientos, un cuarto mosaico «A favor» (`col-6 col-md-3`) y la lista «Saldo a favor» con los últimos 10 (`describeBalanceEntry`: «Dejó a favor · Efectivo», «Pagó con saldo a favor · ORD-…», «Se le devolvió · Efectivo», «Reembolso a su favor · ORD-…») y su nota;
+  - «Dejar a favor» para quien cobra, «Usar saldo a favor» si además debe y tiene, y «Devolver» con `access.returnBalance` (comercio, `ChargeOrders` y `ProcessRefunds`, como la API);
+  - el resumen para WhatsApp dice «Tienes *$X* a tu favor».
+- **`components/customers/BalanceMovementPanel`:** el panel de los tres movimientos.
+  - Lleva el monto en centavos, hasta $1,000,000 o hasta lo que puede mover. Vacío al usar o devolver toma todo; al dejar pide un monto.
+  - Pide cómo entra o sale (`components/sales/paymentMethods.ts`, `IN_PERSON_METHODS`, los mismos botones que el cobro), con referencia y nota. Usar el saldo no lleva método.
+  - El botón dice el monto («Dejar a favor $X», «Usar $X», «Devolver $X»). Cada petición manda el saldo que mostraba la cuenta al abrir el panel (`expectedBalance`), y usarlo también lo que debía (`expectedOwed`).
+- **Abonar (`ChargePanel` con `allowChangeInFavor`):** con efectivo de más, «Dejar el cambio a su favor» cambia «Cambio» por «Queda a su favor». El abono manda el efectivo recibido como monto, con `restInFavor` y el saldo que veía.
+- **Vender (`ChargePanel` con `balance`):**
+  - Con saldo, el cobro ofrece «Saldo a favor» después de los métodos en persona, con el aviso «{nombre} tiene $X a favor» (`aria-live`), que baja con cada pago agregado.
+  - El monto vacío toma lo que tiene o lo que falta, lo que sea menos, y no deja más. No lleva referencia ni propina: con propina, el aviso lo dice y no deja cobrar.
+  - `SellPage` toma el saldo de la misma cuenta que lee para el fiado (`creditBalance`). La venta con saldo nunca va a la cola del dispositivo, y después vuelve a pedir la cuenta, también si el servidor la rechaza.
+- **Reembolsar (`RefundOrderModal`):** «Saldo a favor» entre las formas de devolver si el pedido tiene teléfono, con «Queda a favor del cliente para su próxima compra; no sale de tu caja».
+- **Corte del día (`DailyCut`, `cashCutText`):** las cifras «Saldo a favor» (con lo reembolsado) y «Dejaron a favor» (con lo devuelto), y en el impreso y el WhatsApp «Pagado con saldo a favor», «Reembolsado a saldo a favor», «Saldo a favor que dejaron» y «Saldo a favor devuelto». La caja nombra sus movimientos 8 y 9 («Saldo a favor», «Saldo a favor devuelto», `cashFormat`).
+- **Ficha y Por cobrar:**
+  - La ficha muestra su línea de fiado («Sin fiado» o lo que le queda) también a quien cobra, con «A favor $X» y «Ver cuenta».
+  - Por cobrar dice «Tienes $X a favor de tus clientes» y «A favor $Y» bajo lo que debe cada uno.
+- **Etiquetas (`utils/labels.ts`):** «Saldo a favor» (7). Los nombres que llegan por SignalR se buscan en los enums generados (`OrderStatus`, `OrderPaymentMethod`, `OrderChannel`, `PlatformCollectedBy`, `ServiceOrderPieceStatus`) en lugar de copias a mano.
+- **Escenas:** `scenes/saldo-a-favor.spec.ts` con `scenes/saldo-a-favor.mocks.ts` (`CON_SALDO_A_FAVOR`), y el corte en `caja-config.spec.ts` (`CORTE_CON_SALDO_A_FAVOR_DATA`). La API simulada de la 26A (`mocks/routes-p15.mjs`) suma `data.balanceEntries` por teléfono y agrega dejar y devolver; la ficha simulada (`routes-p2.mjs`) lee su saldo y busca al cliente por `customerId`.
+- **Primera visita:** 179,063 B de 179,100 B (−11 B contra `master`). La forma de pago, la regla de acceso y los enums nuevos ocupan lo que las etiquetas dejan de copiar.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.

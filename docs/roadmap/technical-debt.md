@@ -160,7 +160,7 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - La 24J deja la primera visita en 178,773 B (+25 B, solo por las huellas en los nombres de los archivos de cada ruta) sin subir el presupuesto.
 - Fiado (Fase 26A, [ADR 0033](../adr/0033-customer-credit.md)):
   - Resuelto en la 26B: una deuda que no se va a cobrar se condona con un registro aparte ([ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md)).
-  - **Sin saldo a favor:** ni anticipos ni abonos de más; un abono mayor que lo que debe se rechaza.
+  - Resuelto en la 26D: anticipos y abonos de más quedan como saldo a favor ([ADR 0036](../adr/0036-customer-balance.md)).
   - **Sin intereses ni recordatorios automáticos:** el estado de cuenta se manda a mano por WhatsApp desde el dispositivo (la 26B agregó el plazo y lo vencido).
   - **La cuenta va por teléfono:** un cliente que cambia de número empieza otra cuenta, y una venta fiada al cliente con otro teléfono se rechaza.
   - **Sin conexión no se fía:** el límite se revisa al vender.
@@ -190,6 +190,14 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - **El texto se arma al encolar:** un reintento del mismo día sale con lo que debía en la mañana aunque después haya pagado una parte (si pagó todo lo vencido, se omite).
   - **Una plantilla desactivada** deja el texto predeterminado, que no está aprobado en Meta: fuera de las 24 horas esos recordatorios fallan, y la cadencia los cuenta.
   - **Durante un regreso a la 26B, o mientras conviven las dos versiones en un despliegue,** todos vuelven al plazo del negocio y los recordatorios ya encolados salen sin la revisión de lo vencido.
+- Saldo a favor del cliente (Fase 26D, [ADR 0036](../adr/0036-customer-balance.md)):
+  - **Sin CFDI del anticipo:** lo pagado con saldo lleva la forma de pago 30 y un aviso; el CFDI del anticipo y su egreso los hace el contador.
+  - **En los reportes por día cuenta como «Otros»:** la foto diaria tiene columnas fijas y no hay una para el saldo; el corte sí lo separa.
+  - **Sin conexión no se paga con saldo:** solo el servidor lo sabe. Tampoco se usa desde Pedidos (se cobra desde la cuenta o en Vender).
+  - **La cuenta va por teléfono,** como el fiado: un cliente con dos teléfonos tiene dos saldos, y sin teléfono no hay saldo.
+  - **Dejar a favor y devolverlo no tienen llave de idempotencia:** los protege el saldo que veía la pantalla (`ExpectedBalance`, obligatorio al devolver). Dejar a favor sin mandarlo (otra integración) podría registrar dos veces el mismo anticipo.
+  - **Durante un regreso a la 26C, o mientras conviven las dos versiones,** esa versión no conoce la forma de pago 7 ni los movimientos de caja 8 y 9; una vez usados, `rollback.sql` se detiene con 50029 y solo queda corregir hacia adelante.
+  - La 26D deja la primera visita en 179,063 B (−11 B contra `master`): las etiquetas toman los nombres de los enums generados en lugar de copiarlos, lo que compensa la forma de pago y la regla de acceso nuevas.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

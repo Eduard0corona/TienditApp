@@ -161,9 +161,9 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
 
 - **Sin libro aparte:** lo que un cliente debe es el saldo (`Total − PaidAmount`) de sus pedidos no cancelados que se vendieron fiados o ya se entregaron, sin lo que el repartidor salió a cobrar en efectivo (`Receivables.IsOwed`). Fiar no mueve la caja; abonar es pagar.
 - **El límite** (`Customer.CreditLimit`, `decimal(18,2)`) se compara con lo que debe más lo que deja la venta (su total menos los pagos que la acompañan), en `decimal`, sin redondeos intermedios: la venta cabe si la suma no pasa del límite.
-- **El abono** se reparte en orden (el pedido más viejo primero, luego el folio): cada parte es `min(lo que queda del abono, saldo del pedido)`, un `OrderPayment` en la caja de quien cobra, con el método del abono. Las partes suman el abono exacto; con efectivo, `CashReceived` de la última parte es su monto más el cambio, así que el cambio del abono sale una vez. Un abono mayor que lo que debe se rechaza: no hay saldo a favor.
+- **El abono** se reparte en orden (el pedido más viejo primero, luego el folio): cada parte es `min(lo que queda del abono, saldo del pedido)`, un `OrderPayment` en la caja de quien cobra, con el método del abono. Las partes suman el abono exacto; con efectivo, `CashReceived` de la última parte es su monto más el cambio, así que el cambio del abono sale una vez. Un abono mayor que lo que debe se rechaza, salvo que se pida dejar el resto a su favor (Fase 26D).
 - **Lo que no cambia:** el corte y los reportes (un abono es un pago con su método), el CFDI (un pedido con saldo ya se timbra PPD) y los cobros en Pedidos, que siguen siendo pago por pedido.
-- **Pendiente:** saldo a favor (Fase 26D) e intereses. El plazo llegó en la 26B; el plazo por cliente y los recordatorios, en la 26C.
+- **Pendiente:** intereses. El plazo llegó en la 26B; el plazo por cliente y los recordatorios, en la 26C, y el saldo a favor, en la 26D.
 
 ## Condonar y plazo del fiado (Fase 26B)
 
@@ -184,6 +184,22 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
 - **Lo vencido lo suma la base** (`CreditTerm.OverdueAsync`): los pedidos que se deben se juntan con el plazo propio de su teléfono, y cada plazo en uso es una condición con su propio instante. Los saldos siguen en `decimal`.
 - **El recordatorio** dice lo que se debe en total (`{monto}`), lo vencido (`{vencido}`) y el último día para pagar que ya pasó (`{fecha}`). Las cantidades se escriben como `$1,234.50`, igual en cualquier servidor.
 - **Lo que no cambia:** ni el saldo, ni la caja, ni el CFDI. Recordar no cobra intereses ni impide fiar.
+
+## Saldo a favor del cliente (Fase 26D)
+
+[ADR 0036](../adr/0036-customer-balance.md):
+
+- **Un libro aparte, inmutable** (`CustomerBalanceEntry`), por teléfono como el fiado. Cada movimiento lleva su monto con signo, en `decimal(18,2)`: lo que deja (`Deposit`) y lo que se le reembolsa (`Refund`) suman; lo que paga (`Applied`) y lo que se le devuelve (`Returned`) restan. El saldo es la suma, nunca negativo: lo que resta se revisa contra el saldo dentro del candado del cliente.
+- **Dejar a favor** entra a la caja de quien cobra como `CashTransactionType.CustomerDeposit` (8), con su método. No es una venta, ni un pago de un pedido, ni lleva CFDI. **Devolverlo** sale de la caja como `CustomerDepositReturn` (9), con signo negativo.
+- **El resto de un abono:** con `RestInFavor`, lo que pasa de lo que debe queda como un `Deposit` en la misma caja. Las partes suman el abono exacto: los pedidos primero, del más viejo, y luego el resto. Con efectivo, el cambio sale una vez.
+- **Pagar con él** es un `OrderPayment` con `CustomerBalance` (7), que no entra a ninguna caja: la venta se reconoce entonces. Su `Applied` queda ligado al pago (índice único), y no lleva propina, comprobante ni efectivo recibido.
+- **Reembolsar a él** es un `OrderRefund` con `CustomerBalance`, que no sale de la caja y suma un `Refund` ligado al reembolso (índice único). Anular una venta pagada con saldo lo regresa al saldo.
+- **El corte del día:**
+  - lo pagado con saldo está en «Cobrado» y en cada sucursal, pero no en la fila de un cajero ni en `NetCashFlow`;
+  - lo que dejaron y lo devuelto están fuera de los movimientos a mano, en `NetCashFlow` con cualquier método y en `NetCashOnlyFlow` solo en efectivo;
+  - el corte sigue cuadrando con lo que entró y salió de cada caja: `NetCashFlow == Σ(Inflows − Outflows + NonCashInflows)` y `NetCashOnlyFlow == Σ(Inflows − Outflows)`.
+- **CFDI:** lo pagado con saldo usa la forma de pago 30 (aplicación de anticipos), con un aviso en el borrador. El CFDI del anticipo y su egreso no los genera TienditApp.
+- **Reportes diarios:** lo pagado con saldo cuenta en «Otros» de la foto diaria.
 
 ## Otros cálculos
 

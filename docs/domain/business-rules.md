@@ -391,10 +391,10 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **A quién se le fía:** a un cliente del negocio, activo, con teléfono y que no es «Público en general». El dueño o un administrador le pone un límite de $1 a $1,000,000, a centavos, o se lo quita; cada cambio queda en la actividad. Un cliente desactivado conserva su límite, pero no se le fía. Bajar el límite por debajo de lo que debe solo impide fiarle más.
 - **Qué se debe** (una sola regla para Por cobrar, el estado de cuenta, el límite y «Debe» en la ficha): el saldo de los pedidos no cancelados, con el teléfono del cliente, que se vendieron fiados o ya se entregaron. No se debe un pedido en curso ni lo que el repartidor salió a cobrar en efectivo (lo debe el repartidor). Los pedidos se juntan por teléfono: +52 y +521 son la misma persona.
 - **Fiar en Vender:** solo una venta de mostrador del negocio, con conexión, a un cliente al que se le fía, y la venta tiene que dejar saldo; el cliente puede dejar una parte. Lo que debe más lo que deja la venta no pasa de su límite: si pasa, el mensaje dice cuánto cobrar como mínimo, o que cobre la venta completa cuando ya debe su límite. El servidor lo revisa dentro de un candado por cliente, así que dos cajas que le venden a la vez se cuentan entre sí. La venta se entrega como una pagada (la comida con cocina, cuando está lista; un servicio, cuando sus piezas salen del taller) y queda marcada «Fiado» aunque luego se pague.
-- **Abonar a la cuenta:** un monto con un método que entra a caja, repartido del pedido más viejo al más nuevo como pagos de cada pedido en la caja de quien cobra, con la nota «Abono a la cuenta»; el cambio va con la última parte. Nunca más de lo que debe. Un abono que llega dos veces, o después de otro que la pantalla no vio, encuentra la cuenta cambiada y se rechaza.
+- **Abonar a la cuenta:** un monto con un método que entra a caja, repartido del pedido más viejo al más nuevo como pagos de cada pedido en la caja de quien cobra, con la nota «Abono a la cuenta»; el cambio va con la última parte. Nunca más de lo que debe, salvo que se deje el resto a su favor (Fase 26D). Un abono que llega dos veces, o después de otro que la pantalla no vio, encuentra la cuenta cambiada y se rechaza.
 - **El estado de cuenta:** el límite, lo que debe y lo que le queda, los pedidos que debe (hasta 100, del más viejo) y sus últimos 10 pagos; «Enviar por WhatsApp» lo manda desde el dispositivo.
 - **Clientes › Por cobrar:** una fila por teléfono con lo que debe, cuántos pedidos y desde cuándo, su límite (si hoy se le fía) y si lo rebasa, y el total; busca por nombre o parte del teléfono y ordena por lo que debe o por lo más viejo.
-- **Sin** saldo a favor ni intereses. El plazo y los recordatorios llegaron en la 26B y la 26C.
+- **Sin** intereses. El plazo y los recordatorios llegaron en la 26B y la 26C, y el saldo a favor en la 26D.
 
 ## Condonar y plazo del fiado (Fase 26B)
 
@@ -422,6 +422,28 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - Nunca a quien escribió BAJA.
   - Sin plantilla aprobada en Meta solo llegan a quien escribió en las últimas 24 horas.
 - **Se ve:** «Paga en N días» en Clientes y en Por cobrar; en el estado de cuenta, si el plazo es solo para ese cliente y el último recordatorio.
+
+## Saldo a favor del cliente (Fase 26D)
+
+[ADR 0036](../adr/0036-customer-balance.md):
+
+- **De quién es:** de la cuenta de un teléfono, como el fiado, tenga ficha o no. Sin teléfono no hay saldo a favor.
+- **Dejar a favor** (quien cobra, `ChargeOrders`): un monto de hasta $1,000,000, a centavos, con cómo entra (efectivo, tarjeta, transferencia, billetera u otro), referencia y nota. Entra a la caja de quien cobra, o a la única abierta; sin caja abierta no se puede. Queda en la actividad.
+- **El resto de un abono:** «Dejar el cambio a su favor» en Abonar deja a su favor lo que pasa de lo que debe, en vez de dar cambio. Solo con un método que entra a caja.
+- **Pagar con él:**
+  - en Vender, en una venta de mostrador con el teléfono del cliente, con conexión y no de una plataforma;
+  - en el estado de cuenta, con «Usar saldo a favor», del pedido más viejo al más nuevo, hasta lo que debe o lo que tiene, lo que sea menos.
+
+  No en Pedidos ni a mano en la caja. Sin propina. No entra a ninguna caja, porque ya entró cuando lo dejó.
+- **Reembolsar a él:** «Saldo a favor» en Reembolsar, si el pedido tiene teléfono. Queda a favor de ese teléfono y no sale de la caja. Anular una venta pagada con saldo lo regresa al saldo.
+- **Devolverlo** (quien cobra y reembolsa, `ChargeOrders` y `ProcessRefunds`): hasta lo que tiene, con un método en persona; sale de la caja de quien lo devuelve. Queda en la actividad.
+- **Nunca dos veces:** cada pantalla manda el saldo que mostraba (y la cuenta lo que debía). Si cambió (otro cajero, un reintento), se rechaza con el saldo nuevo. Todo lo que toma del saldo se revisa en el servidor dentro del candado del cliente.
+- **Se ve:**
+  - «A favor $X» en el estado de cuenta (con sus últimos 10 movimientos), la ficha, Por cobrar y el aviso de Vender;
+  - el total a favor de los clientes en Por cobrar;
+  - en el corte del día, sus líneas;
+  - «Tienes $X a tu favor» en el estado de cuenta por WhatsApp.
+- **Sin** intereses, saldo sin teléfono, anticipos ligados a un pedido o una cita, ni CFDI del anticipo.
 
 ## Cancelación y trazabilidad
 

@@ -67,7 +67,7 @@ Tomé las decisiones de la Fase 26C con la autorización permanente del dueño d
     - recordatorios por SMS o correo;
     - pausar los recordatorios de un cliente sin su baja (la baja de Mensajes la registra el negocio a petición del cliente);
     - el horario del negocio y sus días cerrados en la ventana de envío;
-    - intereses y saldo a favor (26D).
+    - intereses y saldo a favor (el saldo a favor llegó en la 26D, [ADR 0036](0036-customer-balance.md); los intereses siguen fuera).
 11. **La migración** `20261020055548_AddCustomerCreditReminders` agrega:
     - `Customers.CreditTermDays` (`int`, con nulos), con `CK_Customers_CreditTermDays` (de 1 a 120);
     - `TenantSettings.CreditRemindersEnabled` (`bit`, 0 por omisión);
