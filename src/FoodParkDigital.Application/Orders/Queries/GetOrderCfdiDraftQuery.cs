@@ -198,6 +198,9 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             draft.Warnings.Add(
                 "Este pedido se pagó en línea con Mercado Pago: la factura lleva la forma de pago 31 (intermediario de pagos). "
                 + "Mercado Pago te descuenta su comisión y puede retenerte ISR e IVA; confirma con tu contador cómo facturarlo.");
+        // Paid with the balance the customer left before (Fase 26D): an advance applied.
+        if (order.Payments.Any(payment => payment.Method == OrderPaymentMethod.CustomerBalance))
+            draft.Warnings.Add(CustomerBalanceWarning);
 
         if (draft.Difference != 0)
         {
@@ -302,6 +305,16 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
         draft.PaymentMethod = "PUE";
         draft.PaymentForm = SatCatalog.PaymentForm(main.Method);
     }
+
+    /// <summary>
+    /// What a customer paid with the balance they left before (Fase 26D, ADR 0036) is an advance applied: when it is the main
+    /// method the invoice declares form 30. The CFDI of the advance when it was received and the credit note that applies
+    /// it are the accountant's: this draft does not issue them.
+    /// </summary>
+    public const string CustomerBalanceWarning =
+        "Parte de esta venta se pagó con saldo a favor del cliente (un anticipo): si es la forma de pago principal, la factura "
+        + "lleva la forma de pago 30 (aplicación de anticipos). El anticipo se factura cuando se recibe y su aplicación lleva "
+        + "un CFDI de egreso: TienditApp no los genera; confirma con tu contador cómo facturarlos.";
 
     /// <summary>
     /// An order of Rappi, Uber Eats or DiDi Food. When the platform charged it, the invoice declares form 31

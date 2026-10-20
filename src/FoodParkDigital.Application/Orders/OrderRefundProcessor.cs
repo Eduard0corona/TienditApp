@@ -1,6 +1,9 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Customers;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -25,7 +28,9 @@ public sealed record OrderRefundInput(
 /// Like a payment, every refund of money the business received goes through a drawer, whatever its method: one
 /// no open drawer takes is refused. What a delivery platform charged goes back as «Plataforma» (the order decides
 /// the method, <see cref="Order.RegisterRefund"/>): no money leaves a drawer, so it needs none open. What a customer paid
-/// online goes back as «En línea» through Mercado Pago, without a drawer either.
+/// online goes back as «En línea» through Mercado Pago, without a drawer either. A refund to the balance in the customer's
+/// favor (Fase 26D) adds to the account of the order's phone, and no money leaves a drawer: adding to a balance never takes
+/// it below zero, so it needs no lock.
 /// The requests that use it declare who may refund: <see cref="TenantPermission.ProcessRefunds"/>.
 /// </summary>
 public sealed class OrderRefundProcessor
@@ -92,6 +97,15 @@ public sealed class OrderRefundProcessor
             var paid = order.Payments.First(p => p.Method == OrderPaymentMethod.Online);
             _context.OnlinePaymentRefunds.Add(OnlinePaymentRefund.ForOrder(
                 order.TenantId, order.Id, refund.Id, paid.Reference!, refund.Amount, refund.RefundedAt));
+        }
+
+        // To the balance in their favor (Fase 26D): the account of the order's phone, which the order requires for it.
+        if (refund.Method == OrderPaymentMethod.CustomerBalance)
+        {
+            var phone = MessagingPhone.ToKey(order.CustomerPhone!);
+            var customer = await CreditAccount.RecordAsync(_context, phone, cancellationToken, tracked: false);
+            _context.CustomerBalanceEntries.Add(CustomerBalanceEntry.Refunded(
+                order.TenantId, phone, customer?.Id, refund.Amount, order.Id, refund.Id, refund.RefundedAt, refund.RefundedBy));
         }
 
         if (refund.RestockItems)

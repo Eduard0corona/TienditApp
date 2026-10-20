@@ -456,6 +456,40 @@ describe('SellPage', () => {
     expect(charge.getByRole('button', { name: 'Fiar $25.00' })).toBeDisabled();
   });
 
+  it('pays with the balance in her favor through the server, never on the device, and reads it again (Fase 26D)', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) => Promise.resolve(
+      path === '/api/v1/customers/account'
+        ? {
+          phone: '+525512345678', name: 'Ana López', sellsOnCredit: false, creditLimit: null, owed: 0, available: null, orders: [],
+          ordersCount: 0, recentPayments: [], creditBalance: 40, recentBalanceEntries: [],
+        }
+        : path === '/api/v1/delivery-platforms/channels' ? [] : undefined,
+    )) as unknown as typeof apiRequest);
+    vi.mocked(ordersApi.create).mockResolvedValue({ data: chargedTaco } as never);
+    renderAt('/sell?phone=5512345678&name=Ana');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: /Cobrar \$25\.00/ }));
+    const charge = within(await screen.findByRole('dialog'));
+    expect(await charge.findByText(/tiene.*a favor\./)).toHaveTextContent('Ana López tiene $40.00 a favor.');
+    await userEvent.click(charge.getByRole('radio', { name: /Saldo a favor/ }));
+    const accountReads = () => vi.mocked(apiRequest).mock.calls.filter(([, path]) => path === '/api/v1/customers/account').length;
+    const readsBefore = accountReads();
+
+    // Only the server knows the balance: the sale never waits on the device, even with the connection down.
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    await userEvent.click(charge.getByRole('button', { name: 'Cobrar $25.00' }));
+
+    expect(enqueueSale).not.toHaveBeenCalled();
+    expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      customerPhone: '5512345678',
+      payments: [expect.objectContaining({ amount: 25, method: OrderPaymentMethod.CustomerBalance, tip: undefined, cashReceived: undefined })],
+    }));
+    expect(await screen.findByText('Venta ORD-000003 cobrada')).toBeInTheDocument();
+    await waitFor(() => expect(accountReads()).toBeGreaterThan(readsBefore));
+  });
+
   it('offers no fiado without connection: the account is not read and the sale is charged as always', async () => {
     signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
     vi.mocked(useOnlineStatus).mockReturnValue(false);

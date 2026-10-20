@@ -41,6 +41,7 @@ public interface IApplicationDbContext
     DbSet<Customer> Customers { get; }
     DbSet<CustomerAddress> CustomerAddresses { get; }
     DbSet<CustomerProfile> CustomerProfiles { get; }
+    DbSet<CustomerBalanceEntry> CustomerBalanceEntries { get; }
     DbSet<AccountAddress> AccountAddresses { get; }
     DbSet<FavoriteBusiness> FavoriteBusinesses { get; }
     DbSet<BusinessReview> BusinessReviews { get; }

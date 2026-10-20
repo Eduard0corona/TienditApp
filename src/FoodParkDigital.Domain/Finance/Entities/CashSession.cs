@@ -100,7 +100,8 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
 
     /// <summary>
     /// The transaction type decides the direction of the money: sales, tips and deposits enter the drawer,
-    /// refunds, expenses and withdrawals leave it. Adjustments keep the sign they are given.
+    /// refunds, expenses and withdrawals leave it. Adjustments keep the sign they are given. What a customer leaves in their
+    /// favor enters it, and what is given back to them leaves it (Fase 26D).
     /// </summary>
     public static decimal ToSignedAmount(CashTransactionType transactionType, decimal amount)
     {
@@ -109,10 +110,13 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
 
         return transactionType switch
         {
-            CashTransactionType.SalePayment or CashTransactionType.Deposit or CashTransactionType.Tip when amount < 0 =>
+            CashTransactionType.SalePayment or CashTransactionType.Deposit or CashTransactionType.Tip
+                or CashTransactionType.CustomerDeposit when amount < 0 =>
                 throw new DomainException("El monto de un ingreso debe ser mayor a cero."),
-            CashTransactionType.SalePayment or CashTransactionType.Deposit or CashTransactionType.Tip => amount,
-            CashTransactionType.Refund or CashTransactionType.Expense or CashTransactionType.Withdrawal => -Math.Abs(amount),
+            CashTransactionType.SalePayment or CashTransactionType.Deposit or CashTransactionType.Tip
+                or CashTransactionType.CustomerDeposit => amount,
+            CashTransactionType.Refund or CashTransactionType.Expense or CashTransactionType.Withdrawal
+                or CashTransactionType.CustomerDepositReturn => -Math.Abs(amount),
             _ => amount
         };
     }
@@ -132,9 +136,7 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
         // What a delivery platform charged in its app is settled by the platform, and what the customer paid online is in
         // the business's Mercado Pago account: neither ever was in a drawer.
         if (paymentMethod is { } method && !OrderPaymentMethodRules.EntersADrawer(method))
-            throw new DomainException(method == OrderPaymentMethod.Online
-                ? OrderPaymentMethodRules.OnlineNeverEntersADrawerMessage
-                : OrderPaymentMethodRules.NeverEntersADrawerMessage);
+            throw new DomainException(OrderPaymentMethodRules.NeverEntersADrawer(method));
 
         var transaction = new CashTransaction(
             tenantId: TenantId,

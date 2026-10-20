@@ -262,6 +262,7 @@ public static class DailySalesReadModel
                 case OrderPaymentMethod.Platform: _platform += amount; break;
                 // Paid online into the business's Mercado Pago account: never in a drawer either.
                 case OrderPaymentMethod.Online: _online += amount; break;
+                // What was paid with a balance in the customer's favor (Fase 26D) has no column of its own: «Otros».
                 default: _other += amount; break;
             }
         }

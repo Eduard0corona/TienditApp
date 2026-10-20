@@ -160,7 +160,8 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
         // Every method that has no bucket of its own, so the buckets always add up to what was charged.
         var otherTotal = paymentRows
             .Where(x => x.Method is not (OrderPaymentMethod.Cash or OrderPaymentMethod.Card or OrderPaymentMethod.Transfer
-                or OrderPaymentMethod.DigitalWallet or OrderPaymentMethod.Platform or OrderPaymentMethod.Online))
+                or OrderPaymentMethod.DigitalWallet or OrderPaymentMethod.Platform or OrderPaymentMethod.Online
+                or OrderPaymentMethod.CustomerBalance))
             .Sum(x => x.Amount);
         var platformRows = paymentRows
             .Where(x => x.Method == OrderPaymentMethod.Platform)
@@ -170,9 +171,16 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             .Where(x => x.Method == OrderPaymentMethod.Online)
             .ToList();
         var onlineTotal = onlineRows.Sum(x => x.Amount);
+        // What customers paid with their balance in their favor (Fase 26D): sales of the day, but the money entered a drawer
+        // when they left it, as a movement of its own.
+        var balanceRows = paymentRows
+            .Where(x => x.Method == OrderPaymentMethod.CustomerBalance)
+            .ToList();
+        var customerBalanceTotal = balanceRows.Sum(x => x.Amount);
 
-        // What went back as «Plataforma» (an order a platform charged and then cancelled) or «En línea» (through Mercado
-        // Pago): it never left a drawer and has no cash movement, so it is shown apart, with the filters of the payments.
+        // What went back as «Plataforma» (an order a platform charged and then cancelled), «En línea» (through Mercado Pago)
+        // or to the balance in the customer's favor (Fase 26D): it never left a drawer and has no cash movement, so it is
+        // shown apart, with the filters of the payments.
         async Task<decimal> RefundsOutsideTheDrawersAsync(OrderPaymentMethod method)
         {
             var refunds = _context.OrderRefunds
@@ -181,9 +189,12 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
 
             if (request.InventoryLocationId is { } refundLocationId)
             {
+                // «Plataforma» and «En línea» go back only as they were paid; the balance takes a refund of an order paid
+                // any way (Fase 26D), so it counts where the order was charged.
+                var sameMethod = method != OrderPaymentMethod.CustomerBalance;
                 refunds = refunds.Where(x => _context.OrderPayments.Any(payment =>
                     payment.OrderId == x.OrderId
-                    && payment.Method == method
+                    && (!sameMethod || payment.Method == method)
                     && payment.InventoryLocationId == refundLocationId));
             }
 
@@ -198,6 +209,7 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
 
         var platformRefundsTotal = await RefundsOutsideTheDrawersAsync(OrderPaymentMethod.Platform);
         var onlineRefundsTotal = await RefundsOutsideTheDrawersAsync(OrderPaymentMethod.Online);
+        var customerBalanceRefundsTotal = await RefundsOutsideTheDrawersAsync(OrderPaymentMethod.CustomerBalance);
 
         var manualTransactions = _context.CashTransactions
             .AsNoTracking()
@@ -218,9 +230,21 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
         if (!string.IsNullOrWhiteSpace(userNameFilter))
             manualTransactions = manualTransactions.Where(x => x.CreatedBy == userNameFilter || (userCalled != null && x.CreatedBy == userCalled));
 
-        var manualRows = await manualTransactions
-            .Select(x => new { x.Amount, x.PaymentMethod })
+        var movementRows = await manualTransactions
+            .Select(x => new { x.Amount, x.PaymentMethod, x.TransactionType })
             .ToListAsync(cancellationToken);
+        // What customers left in their favor and what was given back to them (Fase 26D): money of the drawers, but neither
+        // a sale nor a movement by hand, so it is shown on its own lines.
+        static bool IsBalanceMovement(CashTransactionType type) =>
+            type is CashTransactionType.CustomerDeposit or CashTransactionType.CustomerDepositReturn;
+        var balanceMovements = movementRows.Where(x => IsBalanceMovement(x.TransactionType)).ToList();
+        // Every other row, one by one: two withdrawals of $500 the same day are two movements, not one.
+        var manualRows = movementRows.Where(x => !IsBalanceMovement(x.TransactionType)).ToList();
+        var customerDepositsTotal = balanceMovements.Where(x => x.Amount > 0).Sum(x => x.Amount);
+        var customerDepositReturnsTotal = balanceMovements.Where(x => x.Amount < 0).Sum(x => Math.Abs(x.Amount));
+        var cashBalanceMovements = balanceMovements.Where(x => CashSession.IsCashMovement(x.PaymentMethod)).ToList();
+        var cashCustomerDepositsTotal = cashBalanceMovements.Where(x => x.Amount > 0).Sum(x => x.Amount);
+        var cashCustomerDepositReturnsTotal = cashBalanceMovements.Where(x => x.Amount < 0).Sum(x => Math.Abs(x.Amount));
 
         var manualIncomeTotal = manualRows
             .Where(x => x.Amount > 0)
@@ -246,9 +270,12 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
         var cashTipsTotal = paymentRows.Where(x => x.Method == OrderPaymentMethod.Cash).Sum(x => x.Tip);
         // The business has not received what a platform charged (it deposits it later, minus its commission) nor what was
         // paid online (Mercado Pago releases it, minus its fee), and their refunds move no drawer either: all stay out, so
-        // the money of the day stays symmetric.
-        var netCashFlow = salesPaymentsTotal - platformTotal - onlineTotal + tipsTotal + manualIncomeTotal - manualExpenseTotal;
-        var netCashOnlyFlow = cashTotal + cashTipsTotal + cashManualIncomeTotal - cashManualExpenseTotal;
+        // the money of the day stays symmetric. What was paid with a balance in favor entered when the customer left it
+        // (Fase 26D): that day's deposits count, and what was given back of them.
+        var netCashFlow = salesPaymentsTotal - platformTotal - onlineTotal - customerBalanceTotal + tipsTotal
+            + manualIncomeTotal - manualExpenseTotal + customerDepositsTotal - customerDepositReturnsTotal;
+        var netCashOnlyFlow = cashTotal + cashTipsTotal + cashManualIncomeTotal - cashManualExpenseTotal
+            + cashCustomerDepositsTotal - cashCustomerDepositReturnsTotal;
 
         return new DailyCashCutDto
         {
@@ -266,6 +293,13 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             OnlineTotal = onlineTotal,
             OnlinePaymentsCount = onlineRows.Count,
             OnlineRefundsTotal = onlineRefundsTotal,
+            CustomerBalanceTotal = customerBalanceTotal,
+            CustomerBalancePaymentsCount = balanceRows.Count,
+            CustomerBalanceRefundsTotal = customerBalanceRefundsTotal,
+            CustomerDepositsTotal = customerDepositsTotal,
+            CustomerDepositReturnsTotal = customerDepositReturnsTotal,
+            CashCustomerDepositsTotal = cashCustomerDepositsTotal,
+            CashCustomerDepositReturnsTotal = cashCustomerDepositReturnsTotal,
             TipsTotal = tipsTotal,
             CashTipsTotal = cashTipsTotal,
             ManualIncomeTotal = manualIncomeTotal,

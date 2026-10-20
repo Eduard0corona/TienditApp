@@ -1025,6 +1025,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(PlatformOrderRules.PlatformChargedMessage);
         if (tip > 0 && IsDeliveryPlatformOrder)
             throw new DomainException(PlatformOrderRules.NoTipMessage);
+        // The balance is the customer's account (Fase 26D): the order says whose it is by its phone.
+        if (method == OrderPaymentMethod.CustomerBalance && string.IsNullOrWhiteSpace(CustomerPhone))
+            throw new DomainException(OrderPaymentMethodRules.CustomerBalanceNeedsPhoneMessage);
+        if (method == OrderPaymentMethod.CustomerBalance && tip > 0)
+            throw new DomainException(OrderPaymentMethodRules.CustomerBalanceNoTipMessage);
 
         var payment = new OrderPayment(
             tenantId: TenantId,
@@ -1148,6 +1153,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(OnlineRefundOnlyOfOnlineMessage);
         if (method != OrderPaymentMethod.Online && _payments.Any(p => p.Method == OrderPaymentMethod.Online))
             throw new DomainException(PaidOnlineRefundMessage);
+        // A refund to the balance in their favor goes to the customer's account, which the order names by its phone.
+        if (method == OrderPaymentMethod.CustomerBalance && string.IsNullOrWhiteSpace(CustomerPhone))
+            throw new DomainException(OrderPaymentMethodRules.CustomerBalanceNeedsPhoneMessage);
 
         var refund = new OrderRefund(
             TenantId, Id, amount, method, reason, refundedAt, refundedBy, inventoryLocationId, reference, restockItems);

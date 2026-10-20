@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Finance;
@@ -75,21 +76,57 @@ public class OrderCashService : IOrderCashService
         return true;
     }
 
-    private async Task<Domain.Finance.Entities.CashSession?> FindDrawerAsync(
+    public async Task<Guid?> RegisterCustomerBalanceAsync(
+        Guid tenantId,
+        CashTransactionType transactionType,
+        decimal amount,
+        OrderPaymentMethod method,
+        DateTimeOffset occurredAt,
+        string? reference,
+        string? notes,
+        CancellationToken cancellationToken)
+    {
+        if (transactionType is not (CashTransactionType.CustomerDeposit or CashTransactionType.CustomerDepositReturn))
+            throw new ArgumentOutOfRangeException(nameof(transactionType), transactionType, "Only a customer's balance in their favor.");
+
+        // Not a sale: no branch or location to follow, so the cashier's own drawer, else the only one open.
+        var session = await FindDrawerAsync(tenantId, branchId: null, inventoryLocationId: null, cancellationToken);
+        if (session is null)
+            return null;
+
+        session.RegisterTransaction(
+            transactionType: transactionType,
+            amount: amount,
+            occurredAt: occurredAt,
+            paymentMethod: method,
+            inventoryLocationId: session.InventoryLocationId,
+            reference: reference,
+            notes: notes);
+        return session.Id;
+    }
+
+    private Task<Domain.Finance.Entities.CashSession?> FindDrawerAsync(
         Order order,
+        Guid? inventoryLocationId,
+        CancellationToken cancellationToken)
+        => FindDrawerAsync(order.TenantId, order.BranchId, inventoryLocationId, cancellationToken);
+
+    private async Task<Domain.Finance.Entities.CashSession?> FindDrawerAsync(
+        Guid tenantId,
+        Guid? branchId,
         Guid? inventoryLocationId,
         CancellationToken cancellationToken)
     {
         var openSessions = await _context.CashSessions
             .AsNoTracking()
-            .Where(x => x.TenantId == order.TenantId && x.Status == CashSessionStatus.Open)
+            .Where(x => x.TenantId == tenantId && x.Status == CashSessionStatus.Open)
             .Select(x => new DrawerCandidate(x.Id, x.OpenedByUserId, x.BranchId, x.InventoryLocationId))
             .ToListAsync(cancellationToken);
         if (openSessions.Count == 0)
             return null;
 
         var userId = Guid.TryParse(_currentUserService.UserId, out var parsed) ? parsed : (Guid?)null;
-        var sessionId = PickDrawer(openSessions, userId, order.BranchId, inventoryLocationId);
+        var sessionId = PickDrawer(openSessions, userId, branchId, inventoryLocationId);
         if (sessionId is null)
             return null;
 

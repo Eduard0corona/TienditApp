@@ -162,6 +162,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerAddress> CustomerAddresses => Set<CustomerAddress>();
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
+    public DbSet<CustomerBalanceEntry> CustomerBalanceEntries => Set<CustomerBalanceEntry>();
     public DbSet<AccountAddress> AccountAddresses => Set<AccountAddress>();
     public DbSet<FavoriteBusiness> FavoriteBusinesses => Set<FavoriteBusiness>();
     public DbSet<BusinessReview> BusinessReviews => Set<BusinessReview>();

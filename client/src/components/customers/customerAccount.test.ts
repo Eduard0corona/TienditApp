@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { CustomerAccount } from '../../api/customerCredit';
+import { OrderPaymentMethod } from '../../types';
 import {
-  accountSummaryText, creditLimitProblem, creditTermProblem, daysSince, describeDays, describeDue, describeReminder, describeTerm,
-  previewReminder, reminderEveryDaysProblem, writeOffProblem,
+  accountSummaryText, creditLimitProblem, creditTermProblem, daysSince, describeBalanceEntry, describeDays, describeDue, describeReminder,
+  describeTerm, previewReminder, reminderEveryDaysProblem, writeOffProblem,
 } from './customerAccount';
 
 function account(overrides: Partial<CustomerAccount> = {}): CustomerAccount {
@@ -155,5 +156,23 @@ describe('credit reminders', () => {
   it('shows the message with made-up amounts and the business name, and leaves what it does not know', () => {
     expect(previewReminder('Hola {nombre}, en {Negocio} debes {monto}; {vencido} venció el {fecha}. {cupon}', 'Tiendita'))
       .toBe('Hola Ana, en Tiendita debes $1,160.00; $500.00 venció el lunes 5 de octubre. {cupon}');
+  });
+});
+
+describe('the balance in their favor (Fase 26D)', () => {
+  it('says what they have in their favor, whether they owe or not', () => {
+    expect(accountSummaryText(account({ creditBalance: 80 }), 'Tiendita')).toContain('Tienes *$80.00* a tu favor.');
+    const nothingOwed = accountSummaryText(account({ owed: 0, orders: [], ordersCount: 0, creditBalance: 80 }), 'Tiendita');
+    expect(nothingOwed).toContain('Tienes *$80.00* a tu favor.');
+    expect(nothingOwed).toContain('No debes nada. ¡Gracias!');
+    expect(accountSummaryText(account({ creditBalance: 0 }), 'Tiendita')).not.toContain('a tu favor');
+  });
+
+  it('describes each movement by what happened, how the money moved or the order', () => {
+    expect(describeBalanceEntry({ kind: 0, method: OrderPaymentMethod.Cash, orderNumber: null })).toBe('Dejó a favor · Efectivo');
+    expect(describeBalanceEntry({ kind: 1, method: undefined, orderNumber: 'ORD-000020' })).toBe('Reembolso a su favor · ORD-000020');
+    expect(describeBalanceEntry({ kind: 2, method: undefined, orderNumber: 'ORD-000021' })).toBe('Pagó con saldo a favor · ORD-000021');
+    expect(describeBalanceEntry({ kind: 3, method: OrderPaymentMethod.Transfer, orderNumber: null })).toBe('Se le devolvió · Transferencia');
+    expect(describeBalanceEntry({ kind: 2, method: undefined, orderNumber: null })).toBe('Pagó con saldo a favor');
   });
 });

@@ -93,10 +93,30 @@ public class DailyCashCutDto
     public int OnlinePaymentsCount { get; set; }
     /// <summary>What went back «En línea» in the day, through Mercado Pago: no drawer gave it.</summary>
     public decimal OnlineRefundsTotal { get; set; }
+    /// <summary>
+    /// What customers paid with their balance in their favor (Fase 26D): part of what was charged, but in no drawer and in no
+    /// cashier's row, since the money entered when they left it (<see cref="CustomerDepositsTotal"/> of that day).
+    /// </summary>
+    public decimal CustomerBalanceTotal { get; set; }
+    public int CustomerBalancePaymentsCount { get; set; }
+    /// <summary>What was refunded to customers' balances in the day: no drawer gave it.</summary>
+    public decimal CustomerBalanceRefundsTotal { get; set; }
+    /// <summary>
+    /// What customers left in their favor (advances, the rest of a payment) and what was given back of it, whatever their
+    /// method (Fase 26D): money the drawers took in or gave out, neither sales nor movements by hand.
+    /// </summary>
+    public decimal CustomerDepositsTotal { get; set; }
+    public decimal CustomerDepositReturnsTotal { get; set; }
+    /// <summary>The part of those made in cash: only it enters or leaves the drawers.</summary>
+    public decimal CashCustomerDepositsTotal { get; set; }
+    public decimal CashCustomerDepositReturnsTotal { get; set; }
     /// <summary>Tips given with the payments (not sales), and the part of them paid in cash (in the drawer).</summary>
     public decimal TipsTotal { get; set; }
     public decimal CashTipsTotal { get; set; }
-    /// <summary>Movements other than sales and tips (deposits, expenses, withdrawals, refunds), whatever their method.</summary>
+    /// <summary>
+    /// Movements other than sales, tips and customers' balances (deposits, expenses, withdrawals, refunds), whatever their
+    /// method.
+    /// </summary>
     public decimal ManualIncomeTotal { get; set; }
     public decimal ManualExpenseTotal { get; set; }
     /// <summary>The part of those movements made in cash: only it enters or leaves the drawers.</summary>
@@ -105,10 +125,14 @@ public class DailyCashCutDto
     /// <summary>
     /// All the money the business received in the day: payments and tips plus manual income minus manual expenses, of any
     /// method, except what the platforms charged (<see cref="PlatformTotal"/>) and what was paid online
-    /// (<see cref="OnlineTotal"/>), which reach the business later and minus a fee.
+    /// (<see cref="OnlineTotal"/>), which reach the business later and minus a fee, and what was paid with a balance in
+    /// favor (<see cref="CustomerBalanceTotal"/>); plus what customers left in their favor minus what was given back.
     /// </summary>
     public decimal NetCashFlow { get; set; }
-    /// <summary>Cash payments and cash tips plus cash manual income minus cash manual expenses: the net change of the drawers.</summary>
+    /// <summary>
+    /// Cash payments and cash tips plus cash manual income minus cash manual expenses, plus what customers left in their
+    /// favor in cash minus what was given back in cash: the net change of the drawers.
+    /// </summary>
     public decimal NetCashOnlyFlow { get; set; }
     /// <summary>Payments by the person who took them, without what the platforms charged.</summary>
     public List<DailyCashCutByUserDto> ByUser { get; set; } = [];

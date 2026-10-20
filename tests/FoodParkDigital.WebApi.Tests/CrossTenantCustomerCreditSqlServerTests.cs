@@ -14,7 +14,9 @@ namespace FoodParkDigital.WebApi.Tests;
 /// and takes account payments only over its own orders, even for the same phone; the owner sets the limit, and selling on
 /// credit or taking a payment needs ChargeOrders. Fase 26B: each business forgives only what its own customers owe it and
 /// keeps its own term, and only owners and admins forgive or set the term. Fase 26C: each business gives terms only to its
-/// own customers and keeps its own credit reminders, and only owners and admins set either.
+/// own customers and keeps its own credit reminders, and only owners and admins set either. Fase 26D: what a customer
+/// leaves in their favor is only the business's, for the same phone too; who charges leaves it and pays with it, and giving
+/// it back also needs who may refund.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantCustomerCreditSqlServerTests
@@ -236,6 +238,72 @@ public sealed class CrossTenantCustomerCreditSqlServerTests
             await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CreditRemindersUpdated")),
             await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CreditRemindersUpdated"))));
     }
+
+    [SqlServerFact]
+    public async Task BalanceInFavor_ShouldBeOnlyTheBusinesses_AndNeedWhoChargesOrRefunds()
+    {
+        var mine = await _api.SignUpAsync("a-favor-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("a-favor-b", TwoBusinessesApi.FoodBusiness);
+        var myProduct = await ProductAsync(mine.Client, "Pastel");
+        var theirProduct = await ProductAsync(theirs.Client, "Gelatina");
+        await TwoBusinessesApi.IdAsync(mine.Client, "/api/v1/cash/open", new { openingAmount = 100m });
+        await TwoBusinessesApi.IdAsync(theirs.Client, "/api/v1/cash/open", new { openingAmount = 100m });
+        var customer = await TwoBusinessesApi.IdAsync(mine.Client, Customers, new { name = "Ana López", phone = Phone });
+        var theirCustomer = await TwoBusinessesApi.IdAsync(theirs.Client, Customers, new { name = "Ana L.", phone = Phone });
+        var takesOrders = await EmployeeAsync(mine, "ManageOrders", "ManageCustomers");
+        var cashier = await EmployeeAsync(mine, "ManageOrders", "ChargeOrders", "ManageCash");
+
+        // Leaving it in her favor is charging: who only takes orders cannot; who charges leaves it in their own drawer.
+        var deposit = new { customerId = customer, amount = 200m, method = 0, expectedBalance = 0m };
+        Assert.Equal(HttpStatusCode.Forbidden, (await takesOrders.PostAsJsonAsync($"{Account}/balance/deposits", deposit)).StatusCode);
+        await TwoBusinessesApi.IdAsync(cashier, "/api/v1/cash/open", new { openingAmount = 0m });
+        var left = await TwoBusinessesApi.ReadAsync(await cashier.PostAsJsonAsync($"{Account}/balance/deposits", deposit));
+        Assert.Equal(200m, left.GetProperty("creditBalance").GetDecimal());
+
+        // Another business sees nothing of it, by customer or by phone, and neither gives it back nor pays with it.
+        Assert.Equal(HttpStatusCode.BadRequest, (await theirs.Client.GetAsync($"{Account}?customerId={customer}")).StatusCode);
+        var theirAccount = await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync($"{Account}?phone={Phone}"));
+        Assert.Equal((0m, 0), (theirAccount.GetProperty("creditBalance").GetDecimal(), theirAccount.GetProperty("recentBalanceEntries").GetArrayLength()));
+        Assert.Equal(0m, (await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync(Receivables))).GetProperty("totalCreditBalance").GetDecimal());
+        var theirReturn = await theirs.Client.PostAsJsonAsync($"{Account}/balance/returns", new { phone = Phone, amount = 50m, method = 0, expectedBalance = 200m });
+        Assert.Equal((HttpStatusCode.BadRequest, CustomerBalances.NothingInFavorMessage), (theirReturn.StatusCode, await DetailAsync(theirReturn)));
+        var theirSale = await theirs.Client.PostAsJsonAsync("/api/v1/orders", BalanceSale(theirProduct, theirCustomer, 10m));
+        Assert.Equal((HttpStatusCode.BadRequest, CustomerBalances.NothingInFavorMessage), (theirSale.StatusCode, await DetailAsync(theirSale)));
+
+        // Mine pays with it in Vender and refunds to it; another business does not find that order.
+        var sale = await TwoBusinessesApi.ReadAsync(await cashier.PostAsJsonAsync("/api/v1/orders", BalanceSale(myProduct, customer, 10m)));
+        var orderId = sale.GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{orderId}/refunds",
+            new { amount = 5m, method = 7, reason = "Ajuste", restockItems = false })).StatusCode);
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/orders/{orderId}/refunds",
+            new { amount = 5m, method = 7, reason = "Ajuste", restockItems = false }));
+        var account = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"{Account}?customerId={customer}"));
+        Assert.Equal(195m, account.GetProperty("creditBalance").GetDecimal());
+        Assert.Equal(195m, (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(Receivables))).GetProperty("totalCreditBalance").GetDecimal());
+
+        // Giving it back also needs who may refund: who only charges cannot, the owner can, out of their own drawer.
+        var giveBack = new { customerId = customer, amount = 95m, method = 0, expectedBalance = 195m };
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync($"{Account}/balance/returns", giveBack)).StatusCode);
+        var returned = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"{Account}/balance/returns", giveBack));
+        Assert.Equal(100m, returned.GetProperty("creditBalance").GetDecimal());
+
+        Assert.Equal((4, 0), (
+            await _api.QueryAsync(mine.TenantId, db => db.CustomerBalanceEntries.CountAsync()),
+            await _api.QueryAsync(theirs.TenantId, db => db.CustomerBalanceEntries.CountAsync())));
+        Assert.Equal((2, 0), (
+            await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerBalanceDeposited" || l.Action == "CustomerBalanceReturned")),
+            await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerBalanceDeposited" || l.Action == "CustomerBalanceReturned"))));
+    }
+
+    private static object BalanceSale(Guid product, Guid customer, decimal fromBalance) => new
+    {
+        orderType = 0,
+        channel = 0,
+        createdByBusiness = true,
+        customerId = customer,
+        items = new[] { Line(product) },
+        payments = new[] { new { amount = fromBalance, method = 7 } }
+    };
 
     private static object CreditSale(Guid product, Guid customer) => new
     {

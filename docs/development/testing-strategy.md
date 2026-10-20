@@ -903,6 +903,48 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - Campañas suma la pestaña «Recordatorios del fiado»: 4 de `clientes-mensajes.spec.ts`.
     - **Resultado:** la comparación contra `master` dio 542 escenas iguales, 12 nuevas y 22 que cambian. Con esas capturas pasaron las 576 escenas, y los cuatro archivos tocados con la cobertura de rutas (86 escenas) pasaron una segunda corrida contra el mismo build.
     - **Lo que encontraron las escenas:** en «Fiado de…» el radio del plazo propio quedaba corrido respecto al del negocio; el campo de días ahora va en línea después de su etiqueta.
+- Fase 26D, saldo a favor del cliente ([ADR 0036](../adr/0036-customer-balance.md)):
+  - **Domain:** `CustomerBalanceTests` (27):
+    - **los cuatro movimientos:** lo que deja suma por la caja de quien cobra; lo que se devuelve resta por la de quien lo da; lo que paga resta ligado a su pago y sin caja; lo que se reembolsa suma ligado al reembolso y sin caja;
+    - **qué se rechaza:** montos de $0.01 a $1,000,000 a centavos, sin teléfono, y dejar o devolver con un método que no entra a una caja;
+    - **el saldo nunca queda negativo** (`CoverProblem`: «No tiene saldo a favor» o «No le alcanza…»);
+    - **la forma de pago:** `CustomerBalance` no entra a ninguna caja y se declara como forma 30; la caja suma lo que dejan y resta lo devuelto, nunca un pago con saldo; pagar o reembolsar con él pide el teléfono del pedido y no lleva propina.
+    - `CashSessionTests`: tres formas de pago nunca entran a una caja.
+  - **Application:**
+    - `CustomerBalanceFlowTests` (12):
+      - **dejar a favor:** entra a la caja de quien cobra como movimiento propio y queda en la actividad; se rechaza con el saldo cambiado (una pantalla que lo manda dos veces), sin caja abierta o con un método que no es en persona; una cuenta sin ficha, por su teléfono;
+      - **pagar con él en Vender:** la venta queda fuera de toda caja; pide el teléfono, conexión, ninguna propina, comprobante ni plataforma;
+      - **pagar la cuenta con él:** salda del pedido más viejo, rechaza más de lo que tiene, un saldo que cambió y un reintento; el validador pide el saldo que se veía al pagar con él o dejar el resto;
+      - **el resto a su favor:** solo cuando se pide y con un método en persona; con nada que deber, todo queda a favor;
+      - **reembolsar a él y anular:** suma a la cuenta sin salir de la caja, y anular regresa lo que se usó;
+      - **devolverlo:** hasta lo que tiene, de la caja de quien lo da, con `ProcessRefunds`;
+      - **el corte:** lo que dejaron y lo devuelto en sus líneas y lo pagado con saldo fuera del dinero; las sumas cuadran con las cajas, y por sucursal lo reembolsado al saldo cuenta donde se cobró el pedido;
+      - **CFDI, cuenta, Por cobrar y ficha** con el saldo; Pedidos y los movimientos a mano no lo aceptan.
+    - `CashShiftTests` (+1): dos movimientos a mano iguales el mismo día cuentan los dos en el corte (antes de la revisión se juntaban en uno). Las pruebas de cada forma de pago le dan teléfono al pedido pagado con saldo.
+  - **Infrastructure:**
+    - `CustomerBalanceMigrationSqlServerTests` (3): la tabla guarda cada movimiento con su signo y lo que liga; las restricciones rechazan lo que el dominio nunca escribe; revertir se detiene con 50029 sin cambiar nada en cuanto se usó el saldo y, sin eso, quita solo la tabla.
+    - `CustomerCreditSqlServerTests` (+4), con el candado de producción: cinco ventas con saldo a la vez solo gastan lo que hay; la misma venta dos veces con su llave usa el saldo una vez; devolver y pagar con él a la vez nunca lo dejan negativo; dejar a favor dos veces con el mismo saldo deja uno.
+  - **WebApi:** `CrossTenantCustomerCreditSqlServerTests` (+1), sobre la API real: otro negocio no ve, no usa ni devuelve el saldo, aunque sea el mismo teléfono; dejarlo pide `ChargeOrders`, y devolverlo también `ProcessRefunds`. El contrato (`openapi.json`, `enums.ts`) lleva la forma de pago 7, los movimientos 8 y 9 y `CustomerBalanceEntryKind`.
+  - **Ensayo de los scripts:** sobre una copia de la base de la 26C:
+    - `apply.sql` dos veces, y la 26C sigue escribiendo;
+    - las restricciones rechazan lo que el dominio no escribe;
+    - `rollback.sql` se detiene con 50029 con un movimiento de saldo, con solo un pago con saldo, con solo un reembolso a él, con solo lo que dejaron en una caja y con solo lo devuelto;
+    - sin ninguno, `rollback.sql` corre dos veces, y `apply.sql` otra vez.
+  - **Cliente:**
+    - `ChargePanel.balance.test.tsx` (3, nuevas): sin saldo no ofrece «Saldo a favor»; paga con lo que tiene y el resto en efectivo; rechaza más de lo que tiene y una propina pagada con él.
+    - `CustomerAccountModal.test.tsx` (+7): el saldo y sus movimientos; quien no cobra no ve sus acciones; dejar a favor con el saldo que veía; usarlo hasta lo menos de lo que debe y tiene, con el porqué junto al monto; devolverlo solo quien también reembolsa, con el monto escrito; el cambio de un abono a su favor; la cuenta de quien no debe.
+    - `RefundOrderModal.test.tsx` (+2): «Saldo a favor» solo con el teléfono del pedido; anular después de un reembolso al saldo dice lo que el servidor devuelve de cada forma (del pago más grande).
+    - `SellPage.test.tsx` (+1): la venta con saldo va al servidor aun sin conexión, con la forma 7 y sin propina, y vuelve a leer la cuenta.
+    - `cashCutText.test.ts`, `customerAccount.test.ts` y `ReceivablesPage.test.tsx`: las líneas del corte, los movimientos y el resumen para WhatsApp, y «A favor» en Por cobrar.
+  - **Cliente en total:** 138 archivos y 923 pruebas.
+  - **Primera visita:** 179,066 B de 179,100 B (−8 B contra `master`): las etiquetas toman los nombres de los enums generados y la regla de «Devolver saldo» vive en el estado de cuenta.
+  - **Escenas visuales:** `saldo-a-favor.spec.ts` (17, nuevas): Por cobrar con saldo a favor (escritorio, teléfono y oscuro), el estado de cuenta con su saldo (escritorio y teléfono), dejar a favor (escritorio y teléfono), lo dejado, usarlo, devolverlo, el cambio de un abono a su favor, la ficha y la cuenta de quien no debe, cobrar con saldo en Vender (escritorio y teléfono), la venta cobrada y reembolsar a él. En `caja-config.spec.ts`, el corte del día con saldo a favor y su impreso (1, nueva).
+    - **Lo que cambia y por qué:** 15 escenas.
+      - El estado de cuenta suma «Dejar a favor» para quien cobra: 3 de `fiado.spec.ts`, 5 de `condonar.spec.ts` y 1 de `recordatorios.spec.ts`.
+      - Abonar con efectivo de más ofrece «Dejar el cambio a su favor»: abonar en el teléfono de `fiado.spec.ts`.
+      - La ficha muestra la línea del fiado («Sin fiado · Ver cuenta») a quien cobra: 5 de `clientes-mensajes.spec.ts`.
+    - **Resultado:** la comparación contra `master` dio 561 escenas iguales, 18 nuevas y 15 que cambian; «auditoría escritorio-oscuro» difirió una vez por el desplazamiento de la barra de pestañas de Configuración y pasó dos veces seguidas al repetirla, sin cambios de esta fase. Con esas capturas, los seis archivos tocados con la cobertura de rutas (196 escenas) pasaron dos corridas seguidas contra el mismo build.
+    - **Lo que encontraron las escenas:** la ficha simulada no leía `customerId`, así que la ficha de Sofía abría la de María Fernanda; ahora busca al cliente como lo pide Clientes, y las fichas de María Fernanda quedan iguales.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

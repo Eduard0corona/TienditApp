@@ -32,3 +32,7 @@ Primera parte de las cuentas por cobrar: el fiado ([ADR 0033](0033-customer-cred
 ## Actualización 2026-10-20 (Fase 26B)
 
 Primer ajuste de crédito trazable: condonar ([ADR 0034](0034-customer-write-offs-and-credit-term.md)). El dueño o un administrador perdona todo o parte de lo que un cliente debe. Cada parte es un `OrderWriteOff` inmutable con monto, motivo, nota, fecha y autor, y baja el saldo del pedido (`Order.WrittenOffAmount`), sin tocar la venta, sus pagos ni la caja. El negocio también puede poner un plazo al fiado para ver lo vencido, también uno por cliente, y recordar lo vencido por WhatsApp ([ADR 0035](0035-customer-credit-term-and-reminders.md)). Siguen pendientes las notas de crédito fiscales (lo condonado de una venta facturada), el saldo a favor, intereses, Wallet y conciliación.
+
+## Actualización 2026-10-20 (Fase 26D)
+
+Segundo ajuste trazable: el saldo a favor del cliente ([ADR 0036](0036-customer-balance.md)). Es un libro inmutable por cuenta (`CustomerBalanceEntry`): lo que el cliente deja (un anticipo, o el resto de un abono) y lo que se le reembolsa suman; lo que paga con él y lo que se le devuelve restan. Lo que deja o se le devuelve pasa por la caja como movimiento propio, no como venta. Pagar con él es una forma de pago que no entra a ninguna caja (`CustomerBalance`), y la venta se reconoce entonces, con la forma de pago 30 del CFDI. Siguen pendientes las notas de crédito fiscales, el CFDI del anticipo, intereses, Wallet y conciliación.

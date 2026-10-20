@@ -1,16 +1,16 @@
-import { DeliveryCourier, OrderChannel } from '../types';
-import type {
+import {
+  DeliveryCourier,
+  OrderChannel,
   OrderPaymentMethod,
   OrderStatus,
-  OrderType,
   PlatformCollectedBy,
-  PurchaseOrderStatus,
   ServiceOrderPieceStatus,
 } from '../types';
+import type { OrderType, PurchaseOrderStatus } from '../types';
 
 // Single catalog of the Spanish labels shown for backend enums. REST responses carry enums as numbers
 // and SignalR payloads (and some report dictionaries) carry their C# names, so each label is reachable
-// by both keys.
+// by both keys: the name goes to its number through the generated enum, which the contract test keeps as the server's.
 
 const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   0: 'Pendiente',
@@ -22,18 +22,6 @@ const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   6: 'Entregada',
   7: 'Completada',
   99: 'Cancelada',
-};
-
-const ORDER_STATUS_BY_NAME: Record<string, OrderStatus> = {
-  Pending: 0,
-  Confirmed: 1,
-  InPreparation: 2,
-  Ready: 3,
-  Accepted: 4,
-  InProgress: 5,
-  Delivered: 6,
-  Completed: 7,
-  Cancelled: 99,
 };
 
 export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
@@ -51,16 +39,8 @@ const PAYMENT_METHOD_LABELS: Record<OrderPaymentMethod, string> = {
   5: 'Plataforma',
   // Paid online into the business's Mercado Pago account (Fase 24I): it never enters a drawer either.
   6: 'En línea',
-};
-
-const PAYMENT_METHOD_BY_NAME: Record<string, OrderPaymentMethod> = {
-  Cash: 0,
-  Card: 1,
-  Transfer: 2,
-  DigitalWallet: 3,
-  Other: 4,
-  Platform: 5,
-  Online: 6,
+  // Paid with what the customer left in their favor before (Fase 26D): it entered a drawer when they left it.
+  7: 'Saldo a favor',
 };
 
 /** The couriers a business asks for the trip of an order sent to an address (Fase 22C). */
@@ -78,15 +58,6 @@ export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
   5: 'DiDi Food',
 };
 
-const ORDER_CHANNEL_BY_NAME: Record<string, OrderChannel> = {
-  Counter: 0,
-  WhatsApp: 1,
-  Online: 2,
-  Rappi: 3,
-  UberEats: 4,
-  DidiFood: 5,
-};
-
 /** Rappi, Uber Eats and DiDi Food, in the order of the enum (OrderChannelRules.DeliveryPlatforms); utils/deliveryPlatforms builds on it. */
 export const DELIVERY_PLATFORM_CHANNELS = [OrderChannel.Rappi, OrderChannel.UberEats, OrderChannel.DidiFood] as const;
 
@@ -96,23 +67,11 @@ const COLLECTED_BY_LABELS: Record<PlatformCollectedBy, string> = {
   1: 'El negocio',
 };
 
-const COLLECTED_BY_BY_NAME: Record<string, PlatformCollectedBy> = {
-  Platform: 0,
-  Business: 1,
-};
-
 export const SERVICE_PIECE_STATUS_LABELS: Record<ServiceOrderPieceStatus, string> = {
   0: 'Aceptada',
   1: 'En progreso',
   2: 'Completada',
   99: 'Cancelada',
-};
-
-const SERVICE_PIECE_STATUS_BY_NAME: Record<string, ServiceOrderPieceStatus> = {
-  Accepted: 0,
-  InProgress: 1,
-  Completed: 2,
-  Cancelled: 99,
 };
 
 const CATALOG_ITEM_TYPE_LABELS: Record<string, string> = {
@@ -154,16 +113,16 @@ function lookup<T extends number>(
 
 /** Label of an order status given as its number (REST) or its name (SignalR, report keys). */
 export function getOrderStatusLabel(status: OrderStatus | string | null | undefined): string {
-  return lookup(status, ORDER_STATUS_LABELS, ORDER_STATUS_BY_NAME);
+  return lookup(status, ORDER_STATUS_LABELS, OrderStatus);
 }
 
 export function getPaymentMethodLabel(method: OrderPaymentMethod | string | null | undefined): string {
-  return lookup(method, PAYMENT_METHOD_LABELS, PAYMENT_METHOD_BY_NAME);
+  return lookup(method, PAYMENT_METHOD_LABELS, OrderPaymentMethod);
 }
 
 /** Label of an order channel given as its number (REST) or its name (SignalR payloads). */
 export function getChannelLabel(channel: OrderChannel | string | null | undefined): string {
-  return lookup(channel, ORDER_CHANNEL_LABELS, ORDER_CHANNEL_BY_NAME);
+  return lookup(channel, ORDER_CHANNEL_LABELS, OrderChannel);
 }
 
 /**
@@ -174,14 +133,14 @@ export function getCollectedByLabel(
   collectedBy: PlatformCollectedBy | string | null | undefined,
   channel?: OrderChannel | null,
 ): string {
-  const label = lookup(collectedBy, COLLECTED_BY_LABELS, COLLECTED_BY_BY_NAME);
+  const label = lookup(collectedBy, COLLECTED_BY_LABELS, PlatformCollectedBy);
   const byThePlatform = label === COLLECTED_BY_LABELS[0];
   const platform = DELIVERY_PLATFORM_CHANNELS.find((candidate) => candidate === channel);
   return byThePlatform && platform !== undefined ? ORDER_CHANNEL_LABELS[platform] : label;
 }
 
 export function getServicePieceStatusLabel(status: ServiceOrderPieceStatus | string | null | undefined): string {
-  return lookup(status, SERVICE_PIECE_STATUS_LABELS, SERVICE_PIECE_STATUS_BY_NAME);
+  return lookup(status, SERVICE_PIECE_STATUS_LABELS, ServiceOrderPieceStatus);
 }
 
 /** Label of a platform role (SUPER_ADMIN, TenantAdmin...) or membership role (Owner, Admin, Staff). */

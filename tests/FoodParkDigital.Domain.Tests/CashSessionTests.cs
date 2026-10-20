@@ -149,7 +149,8 @@ public class CashSessionTests
         foreach (var method in Enum.GetValues<OrderPaymentMethod>().Where(OrderPaymentMethodRules.EntersADrawer))
             session.RegisterTransaction(CashTransactionType.SalePayment, 10m, Now, method);
 
-        Assert.Equal(Enum.GetValues<OrderPaymentMethod>().Length - 2, session.Transactions.Count);
+        // Every method but Plataforma, En línea and Saldo a favor (Fase 26D).
+        Assert.Equal(Enum.GetValues<OrderPaymentMethod>().Length - 3, session.Transactions.Count);
     }
 
     private static CashSession NewSession(decimal openingAmount) =>

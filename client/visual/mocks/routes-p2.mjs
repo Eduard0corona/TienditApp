@@ -1,6 +1,6 @@
 // Phase 2 endpoints for the fake backend: access, customer card, messaging, cash shifts, refunds.
 import { NOW_ISO } from './data.mjs';
-import { owedBy, phoneKey, recordOf, sellsOnCredit } from './routes-p15.mjs';
+import { balanceOfAccount, owedBy, phoneKey, recordOf, sellsOnCredit } from './routes-p15.mjs';
 
 const ago = (minutes) => new Date(new Date(NOW_ISO).getTime() - minutes * 60000).toISOString();
 
@@ -48,7 +48,7 @@ export function phase2Routes(data, { ok, notFound, paginate }) {
     const spent = live.reduce((s, o) => s + o.paidAmount - (o.refundedAmount ?? 0), 0);
     return {
       phone: phone ? `+52${phone.replace(/\D/g, '').slice(-10)}` : null, name: orders[0]?.customerName ?? 'María Fernanda López', customerId: null, email: null,
-      ordersCount: live.length || 7, totalSpent: Math.round((spent || 1843.5) * 100) / 100, averageTicket: 263.36, balance: owedBy(data, phone),
+      ordersCount: live.length || 7, totalSpent: Math.round((spent || 1843.5) * 100) / 100, averageTicket: 263.36, balance: owedBy(data, phone), creditBalance: balanceOfAccount(data, phoneKey(phone)),
       firstOrderAt: ago(60000), lastOrderAt: ago(30),
       recentOrders: (orders.length ? orders : data.orders.slice(0, 4)).slice(0, 5).map((o, i) => ({ id: o.id, orderNumber: o.orderNumber, createdAt: o.createdAt, status: o.status, channel: i === 0 ? 1 : 0, total: o.total, balance: o.balance })),
       favoriteProducts: [{ productId: 'p1', productName: 'Latte', quantity: 14 }, { productId: 'p2', productName: 'Torta de jamón', quantity: 9 }, { productId: 'p3', productName: 'Agua de jamaica', quantity: 6 }],
@@ -60,7 +60,9 @@ export function phase2Routes(data, { ok, notFound, paginate }) {
   };
   return [
     ['GET', /^\/me\/access$/, () => ok({ userId: data.USER_ID, role: 'TENANT_ADMIN', tenantRole: 'Owner', tenantId: data.TENANT_ID, isMember: true, isTenantManager: true, isPlatformAdmin: false, permissions: [...data.profile.permissions, 'ProcessRefunds', 'ManageCampaigns'], capabilities: data.tenant.capabilities })],
-    ['GET', /^\/customers\/card$/, (m, q) => ok(customerCard(q.get('phone') ?? data.customers[1]?.phone ?? '5541238890'))],
+    // By phone, or by the customer record Clientes opens it with (Fase 26D: Sofía's card, not María Fernanda's).
+    ['GET', /^\/customers\/card$/, (m, q) => ok(customerCard(q.get('phone')
+      ?? data.customers.find((c) => c.id === q.get('customerId'))?.phone ?? data.customers[1]?.phone ?? '5541238890'))],
     ['GET', /^\/messaging\/templates$/, (m, q) => {
       let rows = p2.templates;
       if (q.get('purpose')) rows = rows.filter((t) => t.purpose === Number(q.get('purpose')));

@@ -12,7 +12,9 @@ using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Customers.Enums;
 using FoodParkDigital.Domain.Finance.Entities;
+using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
@@ -31,7 +33,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// database, and the customer's credit lock keeps sales on credit and account payments sent at the same time from passing
 /// the limit or paying more than is owed. Fase 26B: what is overdue and what was forgiven are read by the database too, and
 /// the same lock keeps a write-off and a payment at once from forgiving or paying more than is owed. Fase 26C: each
-/// customer's own term, and the reminders of what is overdue, are read by the database as well.
+/// customer's own term, and the reminders of what is overdue, are read by the database as well. Fase 26D: the same lock
+/// keeps sales paid with the balance in the customer's favor, giving it back and leaving it from spending or leaving it twice.
 /// </summary>
 public class CustomerCreditSqlServerTests
 {
@@ -93,6 +96,69 @@ public class CustomerCreditSqlServerTests
         Assert.Equal(200m, await check.OrderPayments.SumAsync(p => p.Amount));
         Assert.Equal(0m, (await shop.AccountAsync()).Owed);
         Assert.Equal(2, await check.Orders.CountAsync(o => o.SoldOnCredit && o.Status == OrderStatus.Delivered));
+    }
+
+    [SqlServerFact]
+    public async Task BalanceSales_AtTheSameTime_ShouldNeverSpendMoreThanTheBalance()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var shop = await Shop.OpenAsync(database, creditLimit: 500m);
+        Assert.True((await shop.DepositAsync(250m, expectedBalance: 0m)).IsSuccess);
+
+        var sales = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => shop.SellAsync(shop.BalanceSale())));
+
+        Assert.Equal(2, sales.Count(s => s.IsSuccess));
+        Assert.All(sales.Where(s => s.IsFailure), s => Assert.Equal("No le alcanza el saldo a favor: tiene $50.00.", s.Error));
+        Assert.Equal(50m, (await shop.AccountAsync()).CreditBalance);
+        await using var check = database.CreateContext(shop.TenantId);
+        Assert.Equal(2, await check.CustomerBalanceEntries.CountAsync(e => e.Kind == CustomerBalanceEntryKind.Applied));
+    }
+
+    [SqlServerFact]
+    public async Task TheSameBalanceSale_SentTwiceAtOnce_ShouldUseTheBalanceOnce()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var shop = await Shop.OpenAsync(database, creditLimit: 500m);
+        Assert.True((await shop.DepositAsync(150m, expectedBalance: 0m)).IsSuccess);
+        var key = Guid.NewGuid();
+
+        // A retry of Vender keeps the key: the second one waits on Ana's lock while the first uses her balance.
+        var sales = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => shop.SellAsync(shop.BalanceSale() with { IdempotencyKey = key })));
+
+        Assert.All(sales, s => Assert.True(s.IsSuccess, s.Error));
+        Assert.Single(sales.Select(s => s.Value.Id).Distinct());
+        Assert.Equal(50m, (await shop.AccountAsync()).CreditBalance);
+    }
+
+    [SqlServerFact]
+    public async Task GivingTheBalanceBack_AndPayingWithIt_AtTheSameTime_ShouldNeverTakeItBelowZero()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var shop = await Shop.OpenAsync(database, creditLimit: 500m);
+        Assert.True((await shop.DepositAsync(150m, expectedBalance: 0m)).IsSuccess);
+
+        var giveBack = shop.ReturnAsync(100m, expectedBalance: 150m);
+        var sale = shop.SellAsync(shop.BalanceSale());
+        await Task.WhenAll(giveBack, sale);
+
+        // Whichever waited finds $50.00 left: the return, a balance it did not see; the sale, not enough of it.
+        Assert.Equal(1, new[] { (await giveBack).IsSuccess, (await sale).IsSuccess }.Count(ok => ok));
+        Assert.Equal(50m, (await shop.AccountAsync()).CreditBalance);
+    }
+
+    [SqlServerFact]
+    public async Task TheSameDeposit_SentTwiceAtOnce_ShouldLeaveItOnce()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var shop = await Shop.OpenAsync(database, creditLimit: 500m);
+
+        var deposits = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => shop.DepositAsync(200m, expectedBalance: 0m)));
+
+        Assert.Equal(1, deposits.Count(d => d.IsSuccess));
+        Assert.Equal(CustomerBalances.ChangedMessage(200m), Assert.Single(deposits, d => d.IsFailure).Error);
+        Assert.Equal(200m, (await shop.AccountAsync()).CreditBalance);
+        await using var check = database.CreateContext(shop.TenantId);
+        Assert.Equal(1, await check.CashTransactions.CountAsync(t => t.TransactionType == CashTransactionType.CustomerDeposit));
     }
 
     [SqlServerFact]
@@ -336,6 +402,14 @@ public class CustomerCreditSqlServerTests
             Items = [new CreateOrderItemDto { ProductId = ProductId, Quantity = 1 }]
         };
 
+        /// <summary>The soap ($100) for Ana, paid all with her balance in her favor (Fase 26D).</summary>
+        public CreateOrderCommand BalanceSale() => new()
+        {
+            CustomerId = CustomerId,
+            Items = [new CreateOrderItemDto { ProductId = ProductId, Quantity = 1 }],
+            Payments = [new CreateOrderPaymentDto { Amount = 100m, Method = OrderPaymentMethod.CustomerBalance }]
+        };
+
         public CreateOrderCommand Sale(string name, string phone) => new()
         {
             CustomerName = name,
@@ -377,6 +451,40 @@ public class CustomerCreditSqlServerTests
                 new CustomerCreditLock(context));
 
             return await new TransactionBehavior<PayCustomerAccountCommand, Result<CustomerAccountDto>>(context)
+                .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
+        }
+
+        /// <summary>Ana leaves money in her favor in cash, through the transaction of the pipeline (Fase 26D).</summary>
+        public async Task<Result<CustomerAccountDto>> DepositAsync(decimal amount, decimal expectedBalance)
+        {
+            var (tenant, user, clock) = Request();
+            await using var context = Context(tenant, user, clock);
+            var command = new AddCustomerDepositCommand
+            {
+                CustomerId = CustomerId, Amount = amount, Method = OrderPaymentMethod.Cash, ExpectedBalance = expectedBalance
+            };
+            var handler = new AddCustomerDepositCommandHandler(
+                context, tenant, user, new PhoneNormalizationService(), clock, new OrderCashService(context, user),
+                new CustomerCreditLock(context));
+
+            return await new TransactionBehavior<AddCustomerDepositCommand, Result<CustomerAccountDto>>(context)
+                .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
+        }
+
+        /// <summary>Part of Ana's balance given back in cash, through the transaction of the pipeline (Fase 26D).</summary>
+        public async Task<Result<CustomerAccountDto>> ReturnAsync(decimal amount, decimal expectedBalance)
+        {
+            var (tenant, user, clock) = Request();
+            await using var context = Context(tenant, user, clock);
+            var command = new ReturnCustomerBalanceCommand
+            {
+                CustomerId = CustomerId, Amount = amount, Method = OrderPaymentMethod.Cash, ExpectedBalance = expectedBalance
+            };
+            var handler = new ReturnCustomerBalanceCommandHandler(
+                context, tenant, user, new PhoneNormalizationService(), clock, new OrderCashService(context, user),
+                new CustomerCreditLock(context));
+
+            return await new TransactionBehavior<ReturnCustomerBalanceCommand, Result<CustomerAccountDto>>(context)
                 .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
         }
 

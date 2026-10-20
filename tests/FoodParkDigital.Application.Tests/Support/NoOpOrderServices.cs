@@ -1,6 +1,8 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Enums;
 
 namespace FoodParkDigital.Application.Tests.Support;
 
@@ -56,4 +58,15 @@ internal sealed class NoOpOrderCashService : IOrderCashService
 
     public Task<bool> RegisterOrderRefundAsync(Order order, OrderRefund refund, CancellationToken cancellationToken)
         => Task.FromResult(true);
+
+    public Task<Guid?> RegisterCustomerBalanceAsync(
+        Guid tenantId,
+        CashTransactionType transactionType,
+        decimal amount,
+        OrderPaymentMethod method,
+        DateTimeOffset occurredAt,
+        string? reference,
+        string? notes,
+        CancellationToken cancellationToken)
+        => Task.FromResult<Guid?>(Guid.NewGuid());
 }

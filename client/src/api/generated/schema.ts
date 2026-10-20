@@ -3153,6 +3153,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/account/balance/deposits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AddCustomerDepositCommand"];
+                    "text/json": components["schemas"]["AddCustomerDepositCommand"];
+                    "application/*+json": components["schemas"]["AddCustomerDepositCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAccountDto"];
+                        "application/json": components["schemas"]["CustomerAccountDto"];
+                        "text/json": components["schemas"]["CustomerAccountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/account/balance/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ReturnCustomerBalanceCommand"];
+                    "text/json": components["schemas"]["ReturnCustomerBalanceCommand"];
+                    "application/*+json": components["schemas"]["ReturnCustomerBalanceCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAccountDto"];
+                        "application/json": components["schemas"]["CustomerAccountDto"];
+                        "text/json": components["schemas"]["CustomerAccountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/account/write-offs": {
         parameters: {
             query?: never;
@@ -11625,6 +11711,18 @@ export interface components {
             reference?: string | null;
             notes?: string | null;
         };
+        AddCustomerDepositCommand: {
+            /** Format: uuid */
+            customerId?: string | null;
+            phone?: string | null;
+            /** Format: double */
+            amount: number;
+            method: components["schemas"]["OrderPaymentMethod"];
+            reference?: string | null;
+            notes?: string | null;
+            /** Format: double */
+            expectedBalance: number;
+        };
         AddOrderPaymentRequest: {
             /** Format: double */
             amount: number;
@@ -12096,7 +12194,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        CashTransactionType: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+        CashTransactionType: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
         CategoryDto: {
             /** Format: uuid */
             id: string;
@@ -12833,6 +12931,9 @@ export interface components {
             ordersCount: number;
             recentPayments: components["schemas"]["CustomerAccountPaymentDto"][];
             recentWriteOffs: components["schemas"]["CustomerAccountWriteOffDto"][];
+            /** Format: double */
+            creditBalance: number;
+            recentBalanceEntries: components["schemas"]["CustomerBalanceEntryDto"][];
         };
         CustomerAccountOrderDto: {
             /** Format: uuid */
@@ -12919,6 +13020,24 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        CustomerBalanceEntryDto: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["CustomerBalanceEntryKind"];
+            /** Format: double */
+            amount: number;
+            method?: components["schemas"]["OrderPaymentMethod"];
+            orderNumber?: string | null;
+            reference?: string | null;
+            notes?: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        CustomerBalanceEntryKind: 0 | 1 | 2 | 3;
         CustomerCardAppointmentDto: {
             /** Format: uuid */
             id: string;
@@ -12945,6 +13064,8 @@ export interface components {
             balance: number;
             /** Format: double */
             creditLimit?: number | null;
+            /** Format: double */
+            creditBalance: number;
             sellsOnCredit: boolean;
             /** Format: date-time */
             firstOrderAt?: string | null;
@@ -13082,6 +13203,20 @@ export interface components {
             onlinePaymentsCount: number;
             /** Format: double */
             onlineRefundsTotal: number;
+            /** Format: double */
+            customerBalanceTotal: number;
+            /** Format: int32 */
+            customerBalancePaymentsCount: number;
+            /** Format: double */
+            customerBalanceRefundsTotal: number;
+            /** Format: double */
+            customerDepositsTotal: number;
+            /** Format: double */
+            customerDepositReturnsTotal: number;
+            /** Format: double */
+            cashCustomerDepositsTotal: number;
+            /** Format: double */
+            cashCustomerDepositReturnsTotal: number;
             /** Format: double */
             tipsTotal: number;
             /** Format: double */
@@ -14246,7 +14381,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
         OrderPlatformDto: {
             externalOrderNumber: string;
             collectedBy: components["schemas"]["PlatformCollectedBy"];
@@ -14418,6 +14553,10 @@ export interface components {
             cashReceived?: number | null;
             /** Format: double */
             expectedOwed?: number | null;
+            /** @default false */
+            restInFavor: boolean;
+            /** Format: double */
+            expectedBalance?: number | null;
         };
         PendingCourierOrdersDto: {
             owed: components["schemas"]["CourierOrderDto"][];
@@ -15331,6 +15470,8 @@ export interface components {
             overdue: number;
             /** Format: int32 */
             ownCreditTermDays?: number | null;
+            /** Format: double */
+            creditBalance: number;
         };
         ReceivableDtoPaginatedList: {
             items: components["schemas"]["ReceivableDto"][];
@@ -15353,6 +15494,8 @@ export interface components {
             creditTermDays?: number | null;
             /** Format: int32 */
             creditReminderEveryDays?: number | null;
+            /** Format: double */
+            totalCreditBalance: number;
         };
         /**
          * Format: int32
@@ -15466,6 +15609,18 @@ export interface components {
             email: string;
             code: string;
             newPassword: string;
+        };
+        ReturnCustomerBalanceCommand: {
+            /** Format: uuid */
+            customerId?: string | null;
+            phone?: string | null;
+            /** Format: double */
+            amount: number;
+            method: components["schemas"]["OrderPaymentMethod"];
+            reference?: string | null;
+            notes?: string | null;
+            /** Format: double */
+            expectedBalance: number;
         };
         /**
          * Format: int32

@@ -245,5 +245,16 @@ public class CreateCourierSettlementCommandHandler
 
         public Task<bool> RegisterOrderRefundAsync(Order order, OrderRefund refund, CancellationToken cancellationToken)
             => throw new NotSupportedException("A settlement only charges orders.");
+
+        public Task<Guid?> RegisterCustomerBalanceAsync(
+            Guid tenantId,
+            CashTransactionType transactionType,
+            decimal amount,
+            OrderPaymentMethod method,
+            DateTimeOffset occurredAt,
+            string? reference,
+            string? notes,
+            CancellationToken cancellationToken)
+            => throw new NotSupportedException("A settlement only charges orders.");
     }
 }

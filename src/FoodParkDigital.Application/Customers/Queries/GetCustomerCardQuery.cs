@@ -54,6 +54,8 @@ public class CustomerCardDto
     public decimal Balance { get; set; }
     /// <summary>How much the business lets them owe, from the customer record; null when they are not sold on credit.</summary>
     public decimal? CreditLimit { get; set; }
+    /// <summary>What they have in their favor (Fase 26D): what they left and refunds to it, minus what they used or got back.</summary>
+    public decimal CreditBalance { get; set; }
     /// <summary>The business sells to them on credit now: an active customer record with a phone and a limit.</summary>
     public bool SellsOnCredit { get; set; }
     public DateTimeOffset? FirstOrderAt { get; set; }
@@ -178,6 +180,7 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
         }
 
         card.Balance = await Receivables.OwedAsync(_context.Orders.AsNoTracking(), key, cancellationToken);
+        card.CreditBalance = await CustomerBalances.OfAsync(_context, key, cancellationToken);
 
         card.RecentOrders = await _context.Orders.AsNoTracking()
             .Where(o => o.CustomerPhone != null && variants.Contains(o.CustomerPhone))

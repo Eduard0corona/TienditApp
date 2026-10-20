@@ -7,7 +7,9 @@
 // past it is overdue, by the business's calendar (America/Mexico_City, UTC-6). Fase 26C: a customer record's own term
 // (`creditTermDays`, the shortest when two share the phone) replaces the business's, and with the reminders on
 // (`data.creditReminders`, routes-p17) Por cobrar and the account say every how many days; `data.lastCreditReminders`
-// keeps the last reminder sent to each phone key.
+// keeps the last reminder sent to each phone key. Fase 26D: the balance in a customer's favor is the sum of
+// `data.balanceEntries` of their phone key ({ id, phone, kind, amount (signed), method?, orderNumber?, reference?, notes?,
+// occurredAt }); leaving it (POST .../balance/deposits) and giving it back (POST .../balance/returns) add one.
 import { NOW_ISO } from './data.mjs';
 
 // OrderStatus as the contract numbers it.
@@ -18,6 +20,13 @@ const RECENT_PAYMENTS = 10;
 
 const r2 = (value) => Math.round(value * 100) / 100;
 const RECENT_WRITE_OFFS = 10;
+const RECENT_BALANCE_ENTRIES = 10;
+// CustomerBalanceEntryKind as the contract numbers it.
+const DEPOSIT = 0;
+const APPLIED = 2;
+const RETURNED = 3;
+// OrderPaymentMethod.CustomerBalance as the contract numbers it.
+const CUSTOMER_BALANCE = 7;
 const TZ_OFFSET_MS = 6 * 3_600_000;
 
 /** What is still owed of an order: its total minus what was paid and what the business forgave (Order.Balance). */
@@ -80,6 +89,10 @@ export function recordOf(data, key) {
   return records.find((c) => c.isActive) ?? records.find((c) => c.creditLimit != null) ?? records[0] ?? null;
 }
 
+/** What a phone key has in its favor (CustomerBalances.OfAsync). */
+export const balanceOfAccount = (data, key) =>
+  r2((data.balanceEntries ?? []).filter((e) => e.phone === key).reduce((sum, e) => sum + e.amount, 0));
+
 /** The business sells to them on credit now: an active customer record with a phone and a limit. */
 export const sellsOnCredit = (record) => !!record && record.isActive && !!record.phone && record.creditLimit != null;
 
@@ -124,6 +137,15 @@ export function account(data, key, record) {
     ordersCount: orders.length,
     recentPayments: payments,
     recentWriteOffs: writeOffs,
+    creditBalance: balanceOfAccount(data, key),
+    recentBalanceEntries: (data.balanceEntries ?? [])
+      .filter((e) => e.phone === key)
+      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+      .slice(0, RECENT_BALANCE_ENTRIES)
+      .map((e) => ({
+        id: e.id, kind: e.kind, amount: e.amount, method: e.method ?? null, orderNumber: e.orderNumber ?? null,
+        reference: e.reference ?? null, notes: e.notes ?? null, occurredAt: e.occurredAt,
+      })),
   };
 }
 
@@ -161,6 +183,7 @@ function receivables(data, q, paginate) {
     totalOverdue: r2(rows.reduce((sum, row) => sum + row.overdue, 0)),
     creditTermDays: data.creditTermDays ?? null,
     creditReminderEveryDays: reminderEveryDays(data),
+    totalCreditBalance: r2((data.balanceEntries ?? []).reduce((sum, e) => sum + e.amount, 0)),
     page: {
       ...page,
       items: page.items.map((row) => {
@@ -170,7 +193,7 @@ function receivables(data, q, paginate) {
         return {
           phone: row.phone, name: record?.name ?? row.latest.customerName, customerId: record?.id ?? null, owed: row.owed,
           orders: row.orders, since: row.since, creditLimit: limit, overLimit: limit != null && row.owed > limit, overdue: row.overdue,
-          ownCreditTermDays: ownTermOf(data, row.phone),
+          ownCreditTermDays: ownTermOf(data, row.phone), creditBalance: balanceOfAccount(data, row.phone),
         };
       }),
     },
@@ -179,7 +202,9 @@ function receivables(data, q, paginate) {
 
 /**
  * A payment to the account, split over the orders owed from the oldest (change on the last part), as the server does. One
- * that expected another balance (sent twice, or after another one) is refused.
+ * that expected another balance (sent twice, or after another one) is refused. Fase 26D: paid with the balance, each part
+ * takes from it (Applied); with `restInFavor`, what is over what they owe stays in their favor (Deposit). One that finds
+ * the balance changed is refused too.
  */
 function pay(data, body) {
   const key = body?.customerId ? phoneKey(data.customers.find((c) => c.id === body.customerId)?.phone) : phoneKey(body?.phone);
@@ -188,6 +213,12 @@ function pay(data, body) {
   if (body?.expectedOwed != null && Math.abs(body.expectedOwed - owed) > 0.001) {
     return { status: 400, json: { code: 'bad_request', detail: `La cuenta cambió: ahora debe $${owed.toFixed(2)}. Revisa el estado de cuenta antes de cobrar.` } };
   }
+  const balance = balanceOfAccount(data, key);
+  if (body?.expectedBalance != null && Math.abs(body.expectedBalance - balance) > 0.001) {
+    return { status: 400, json: { code: 'bad_request', detail: `El saldo a favor cambió: ahora tiene $${balance.toFixed(2)}. Revisa el estado de cuenta antes de seguir.` } };
+  }
+  const entries = data.balanceEntries ?? (data.balanceEntries = []);
+  const withBalance = body?.method === CUSTOMER_BALANCE;
   let left = body?.amount ?? 0;
   for (const order of orders) {
     if (left <= 0) break;
@@ -196,7 +227,31 @@ function pay(data, body) {
     order.paidAmount = r2(order.paidAmount + part);
     order.balance = balanceOf(order);
     left = r2(left - part);
+    if (withBalance) {
+      entries.push({ id: `be-${entries.length + 1}`, phone: key, kind: APPLIED, amount: -part, orderNumber: order.orderNumber, occurredAt: NOW_ISO });
+    }
   }
+  if (left > 0 && body?.restInFavor) {
+    entries.push({
+      id: `be-${entries.length + 1}`, phone: key, kind: DEPOSIT, amount: left, method: body.method, reference: body.reference ?? null,
+      notes: body.notes ?? 'Lo que sobró de un abono', occurredAt: NOW_ISO,
+    });
+  }
+  return { status: 200, json: account(data, key, recordOf(data, key)) };
+}
+
+/** Leaving it in their favor or giving it back (Fase 26D): one movement more, refused when the balance is not the one seen. */
+function moveBalance(data, body, kind) {
+  const key = body?.customerId ? phoneKey(data.customers.find((c) => c.id === body.customerId)?.phone) : phoneKey(body?.phone);
+  const balance = balanceOfAccount(data, key);
+  if (body?.expectedBalance != null && Math.abs(body.expectedBalance - balance) > 0.001) {
+    return { status: 400, json: { code: 'bad_request', detail: `El saldo a favor cambió: ahora tiene $${balance.toFixed(2)}. Revisa el estado de cuenta antes de seguir.` } };
+  }
+  const entries = data.balanceEntries ?? (data.balanceEntries = []);
+  entries.push({
+    id: `be-${entries.length + 1}`, phone: key, kind, amount: kind === DEPOSIT ? body.amount : -body.amount, method: body.method,
+    reference: body.reference ?? null, notes: body.notes ?? null, occurredAt: NOW_ISO,
+  });
   return { status: 200, json: account(data, key, recordOf(data, key)) };
 }
 
@@ -210,6 +265,8 @@ export function phase26aRoutes(data, { ok, notFound, paginate }) {
       return ok(account(data, key, record ?? recordOf(data, key)));
     }],
     ['POST', /^\/customers\/account\/payments$/, (m, q, body) => pay(data, body)],
+    ['POST', /^\/customers\/account\/balance\/deposits$/, (m, q, body) => moveBalance(data, body, DEPOSIT)],
+    ['POST', /^\/customers\/account\/balance\/returns$/, (m, q, body) => moveBalance(data, body, RETURNED)],
     ['PUT', /^\/customers\/([^/]+)\/credit-limit$/, (m, q, body) => {
       const customer = data.customers.find((c) => c.id === m[1]);
       if (!customer) return notFound('Cliente');

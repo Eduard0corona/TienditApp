@@ -29,6 +29,7 @@ const COLUMNS = [
  * opens the customer's account, where whoever charges takes a payment. The customer card links here with ?cuenta=.
  * Fase 26B: with a term, what is overdue per customer and in total, and «Solo vencidos»; owners and admins set the term.
  * Fase 26C: a customer's own term in their row, and the WhatsApp reminders of what is overdue, which owners and admins set.
+ * Fase 26D: what a customer who owes also has in their favor, and what the business holds in favor of all its customers.
  */
 export default function ReceivablesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -72,6 +73,11 @@ export default function ReceivablesPage() {
                 )}
                 {data.totalOverdue > 0 && (
                   <> · <strong className="text-danger text-nowrap">Vencido <span className="ta-money">{formatMoney(data.totalOverdue)}</span></strong></>
+                )}
+                {data.totalCreditBalance > 0 && (
+                  <span className="d-block small text-muted">
+                    Tienes <span className="ta-money">{formatMoney(data.totalCreditBalance)}</span> a favor de tus clientes.
+                  </span>
                 )}
               </p>
               <div className="small text-muted d-flex flex-wrap column-gap-3 row-gap-1">
@@ -171,6 +177,9 @@ export default function ReceivablesPage() {
                   <span className="fw-semibold ta-money text-danger">{formatMoney(row.owed)}</span>
                   {row.overdue > 0 && (
                     <small className="d-block text-danger">Vencido <span className="ta-money">{formatMoney(row.overdue)}</span></small>
+                  )}
+                  {row.creditBalance > 0 && (
+                    <small className="d-block text-success">A favor <span className="ta-money">{formatMoney(row.creditBalance)}</span></small>
                   )}
                 </td>
                 <td className="text-center">{row.orders}</td>

@@ -609,6 +609,34 @@ La Fase 26C trae una migración, [`database/production/20261020055548_AddCustome
 - **Volver a la versión anterior:** funciona sin tocar la base, pero todos los clientes vuelven al plazo del negocio, y los recordatorios ya encolados (propósito 3) se mandarían sin revisar si sigue vencido. Si un negocio ya los encendió, vuelve a esta versión cuanto antes o apágalos antes de volver.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50028, sin cambiar nada, en cuanto un cliente tiene plazo propio, un negocio encendió los recordatorios o eligió su plantilla, o hay plantillas o mensajes de recordatorio del fiado: se perderían los plazos y quedarían mensajes con un propósito que la versión anterior no conoce. Sin ninguno, quita las columnas y las restricciones, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Saldo a favor del cliente (Fase 26D)
+
+La Fase 26D trae una migración, [`database/production/20261020145628_AddCustomerBalance`](../../database/production/20261020145628_AddCustomerBalance). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0036](../adr/0036-customer-balance.md)).
+
+- **La migración** agrega la tabla `CustomerBalanceEntries`, vacía: los movimientos del saldo a favor de cada cliente, que nunca se editan ni se borran. Lleva:
+  - `CK_CustomerBalanceEntries_Amount`: lo que deja o se le reembolsa suma, y lo que paga o se le devuelve resta;
+  - `CK_CustomerBalanceEntries_Ties`: lo que deja o se le devuelve va con su forma de pago y su caja; lo que paga, con su pedido y su pago; lo que se le reembolsa, con su pedido y su reembolso;
+  - el índice `(TenantId, Phone, OccurredAt)` con `Amount` incluida;
+  - índices únicos filtrados en `OrderPaymentId` y `OrderRefundId`.
+
+  No cambia ningún pedido, pago, caja ni saldo del fiado. Después de aplicarla, el `verify.sql` muestra la tabla, sus restricciones y sus índices. Su consulta 3 cuenta los movimientos de saldo, los pagos y reembolsos con la forma de pago 7 y los movimientos de caja de tipo 8 y 9 (todos en cero hasta desplegar), y la 4 los pagos, reembolsos y movimientos de caja de cada forma de pago y tipo, igual antes y después.
+- **Mientras se publica:** la versión de `master` (Fase 26C) no conoce la tabla y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:**
+  - El estado de cuenta suma «Dejar a favor» para quien cobra, y la ficha lleva a la cuenta aunque el cliente no deba ni tenga fiado.
+  - «Abonar» ofrece «Dejar el cambio a su favor», y Reembolsar ofrece «Saldo a favor» cuando el pedido tiene teléfono.
+  - Nada más cambia hasta que un cliente deja algo a su favor. Entonces se ven «A favor», «Usar saldo a favor», «Devolver saldo» (para quien también reembolsa), «Saldo a favor» en el cobro de Vender y sus líneas en el corte.
+- **El contrato solo agrega:**
+  - `POST /api/v1/customers/account/balance/deposits` y `POST /api/v1/customers/account/balance/returns`, los dos con el saldo que se veía (`expectedBalance`);
+  - `restInFavor` y `expectedBalance` en el abono a la cuenta: opcionales, salvo `expectedBalance` al pagar con el saldo o dejar el resto (un abono como los de la 26C no cambia);
+  - `creditBalance` y `recentBalanceEntries` en el estado de cuenta, `creditBalance` en las filas de Por cobrar y en la ficha, y `totalCreditBalance` en Por cobrar;
+  - `customerBalanceTotal`, `customerBalancePaymentsCount`, `customerBalanceRefundsTotal`, `customerDepositsTotal`, `customerDepositReturnsTotal`, `cashCustomerDepositsTotal` y `cashCustomerDepositReturnsTotal` en el corte del día;
+  - la forma de pago `CustomerBalance` (7), los movimientos de caja `CustomerDeposit` (8) y `CustomerDepositReturn` (9) y el enum `CustomerBalanceEntryKind`.
+
+  Nada se quita ni cambia de nombre. En el corte, lo pagado con saldo tiene su propio total (no va en `otherTotal`), y lo que dejaron y lo devuelto los suyos (no van en los movimientos a mano).
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base mientras nadie haya usado el saldo a favor. Después, esa versión no conoce la forma de pago 7 ni los movimientos de caja 8 y 9, y los mostraría mal en el pedido, la caja y el corte. Si ya se usó, vuelve a esta versión cuanto antes.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50029, sin cambiar nada, en cuanto hay movimientos de saldo, pagos o reembolsos con la forma de pago 7, o movimientos de caja de tipo 8 o 9 o con la forma de pago 7: se perdería lo que los clientes tienen a su favor. Sin ninguno, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

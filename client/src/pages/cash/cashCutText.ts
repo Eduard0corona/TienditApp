@@ -25,6 +25,16 @@ export function getDailyCutRows(cut: DailyCashCutDto): Array<[label: string, amo
   const platformRefundsTotal = cut.platformRefundsTotal ?? 0;
   if (platformTotal > 0) rows.push(['Cobrado por plataformas', platformTotal]);
   if (platformRefundsTotal > 0) rows.push(['Devuelto por plataformas', platformRefundsTotal]);
+  // The balance in customers' favor (Fase 26D): what they paid with it is part of "Cobrado" but entered when they left it;
+  // what they left and what was given back are money of the drawers, not sales.
+  const balanceTotal = cut.customerBalanceTotal ?? 0;
+  const balanceRefundsTotal = cut.customerBalanceRefundsTotal ?? 0;
+  const depositsTotal = cut.customerDepositsTotal ?? 0;
+  const depositReturnsTotal = cut.customerDepositReturnsTotal ?? 0;
+  if (balanceTotal > 0) rows.push(['Pagado con saldo a favor', balanceTotal]);
+  if (balanceRefundsTotal > 0) rows.push(['Reembolsado a saldo a favor', balanceRefundsTotal]);
+  if (depositsTotal > 0) rows.push(['Dejaron a favor', depositsTotal]);
+  if (depositReturnsTotal > 0) rows.push(['Saldo a favor devuelto', depositReturnsTotal]);
   rows.push(['Neto en efectivo', cut.netCashOnlyFlow]);
   // Tips are for the team: apart from what was sold.
   if (cut.tipsTotal > 0) rows.push(['Propinas', cut.tipsTotal], ['Propinas en efectivo', cut.cashTipsTotal]);

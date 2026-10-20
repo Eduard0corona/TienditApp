@@ -292,6 +292,28 @@ public class CashShiftTests
     }
 
     [Fact]
+    public async Task DailyCut_ShouldCountEachOfTwoEqualMovements()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
+        var drawer = await fixture.OpenCashSessionAsync(tenant);
+        // Two withdrawals of $500 and two deposits of $40 the same day are four movements, not two.
+        drawer.RegisterTransaction(CashTransactionType.Withdrawal, 500m, SalesTestFixture.Now);
+        drawer.RegisterTransaction(CashTransactionType.Withdrawal, 500m, SalesTestFixture.Now);
+        drawer.RegisterTransaction(CashTransactionType.Deposit, 40m, SalesTestFixture.Now);
+        drawer.RegisterTransaction(CashTransactionType.Deposit, 40m, SalesTestFixture.Now);
+        await fixture.Context.SaveChangesAsync();
+
+        var cut = await new GetDailyCashCutQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(new GetDailyCashCutQuery(), CancellationToken.None);
+
+        Assert.Equal((80m, 1000m), (cut.ManualIncomeTotal, cut.ManualExpenseTotal));
+        Assert.Equal((80m, 1000m), (cut.CashManualIncomeTotal, cut.CashManualExpenseTotal));
+        Assert.Equal(drawer.Inflows - drawer.Outflows, cut.NetCashOnlyFlow);
+        Assert.Equal(-920m, cut.NetCashFlow);
+    }
+
+    [Fact]
     public async Task DailyCut_ShouldShowWhatThePlatformsCharged_OutsideTheDrawers()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -337,7 +359,8 @@ public class CashShiftTests
         Assert.Equal(255m, cut.SalesPaymentsTotal);
         Assert.Equal(
             cut.SalesPaymentsTotal,
-            cut.CashTotal + cut.CardTotal + cut.TransferTotal + cut.WalletTotal + cut.OtherTotal + cut.PlatformTotal + cut.OnlineTotal);
+            cut.CashTotal + cut.CardTotal + cut.TransferTotal + cut.WalletTotal + cut.OtherTotal + cut.PlatformTotal + cut.OnlineTotal
+                + cut.CustomerBalanceTotal);
         var bucket = method switch
         {
             OrderPaymentMethod.Cash => cut.CashTotal,
@@ -346,6 +369,7 @@ public class CashShiftTests
             OrderPaymentMethod.DigitalWallet => cut.WalletTotal,
             OrderPaymentMethod.Platform => cut.PlatformTotal,
             OrderPaymentMethod.Online => cut.OnlineTotal,
+            OrderPaymentMethod.CustomerBalance => cut.CustomerBalanceTotal,
             _ => cut.OtherTotal
         };
         Assert.Equal(245m, bucket);
@@ -539,9 +563,11 @@ public class CashShiftTests
         var isOnline = method == OrderPaymentMethod.Online;
         var number = await fixture.Context.Orders.CountAsync() + 1;
         var channel = isPlatform ? OrderChannel.Rappi : isOnline ? OrderChannel.Online : OrderChannel.Counter;
+        // The balance in favor is the account of a customer (Fase 26D): the order carries their phone.
+        var phone = method == OrderPaymentMethod.CustomerBalance ? "+525512345678" : null;
         var order = new Order(
             tenant.Id, null, null, true, $"ORD-{number:000000}", BusinessType.Food, OrderType.Retail, "Público en general",
-            null, null, null, pricesIncludeTax: true, channel: channel, branchId: branch.Id);
+            phone, null, null, pricesIncludeTax: true, channel: channel, branchId: branch.Id);
         order.AddItem(Guid.NewGuid(), "Paquete", 1, amount);
         if (isPlatform)
         {

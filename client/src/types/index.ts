@@ -1053,13 +1053,30 @@ export interface DailyCashCutDto {
   cardTotal: number;
   transferTotal: number;
   walletTotal: number;
-  /** Every method without a bucket of its own: the buckets always add up to salesPaymentsTotal. */
+  /**
+   * Every method without a bucket of its own. Platforms, online payments and the balance in the customer's favor have theirs:
+   * with them, the buckets add up to salesPaymentsTotal.
+   */
   otherTotal: number;
   /** What the delivery platforms charged in their apps («Plataforma»): in no drawer and in no cashier's row. */
   platformTotal?: number;
   platformPaymentsCount?: number;
   /** What went back as «Plataforma» in the day: no drawer gave it. */
   platformRefundsTotal?: number;
+  /**
+   * What customers paid with their balance in their favor (Fase 26D): part of what was charged, in no drawer and no
+   * cashier's row, since it entered when they left it.
+   */
+  customerBalanceTotal?: number;
+  customerBalancePaymentsCount?: number;
+  /** What was refunded to customers' balances in the day: no drawer gave it. */
+  customerBalanceRefundsTotal?: number;
+  /** What customers left in their favor and what was given back of it, whatever the method: neither sales nor by hand. */
+  customerDepositsTotal?: number;
+  customerDepositReturnsTotal?: number;
+  /** The part of those in cash: in netCashOnlyFlow. */
+  cashCustomerDepositsTotal?: number;
+  cashCustomerDepositReturnsTotal?: number;
   /** Deposits, expenses, withdrawals and refunds of the day, whatever their method. */
   manualIncomeTotal: number;
   manualExpenseTotal: number;

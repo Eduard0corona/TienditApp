@@ -11,7 +11,7 @@ import { useDeliveryZones } from '../../api/deliveryZones';
 import { useCustomerAccount, useRefreshCustomerCredit } from '../../api/customerCredit';
 import { useFocusMode } from '../../components/layout/focusMode';
 import OpenDrawerModal from '../../components/cash/OpenDrawerModal';
-import ChargePanel, { type ChargeCredit, type ChargeResult } from '../../components/sales/ChargePanel';
+import ChargePanel, { type ChargeBalance, type ChargeCredit, type ChargeResult } from '../../components/sales/ChargePanel';
 import PendingSalesModal from '../../components/sales/PendingSalesModal';
 import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -24,7 +24,7 @@ import { buildOfflineTicketOrder } from '../../offline/offlineTicket';
 import { enqueueSale, isNetworkError } from '../../offline/saleQueue';
 import { newUuid } from '../../utils/uuid';
 import type { CreateOrderRequest, OrderDto, ProductDto } from '../../types';
-import { BusinessType, OrderChannel, OrderType, TenantCapability } from '../../types';
+import { BusinessType, OrderChannel, OrderPaymentMethod, OrderType, TenantCapability } from '../../types';
 import { getAccess } from '../../utils/access';
 import { formatDateTime, formatInBusinessZone } from '../../utils/dates';
 import {
@@ -686,6 +686,10 @@ export default function SellPage() {
   const credit: ChargeCredit | undefined = account?.sellsOnCredit && account.available != null
     ? { name: account.name ?? (details.customerName.trim() || 'El cliente'), available: account.available, overdue: account.overdue }
     : undefined;
+  // What the customer has in their favor (Fase 26D) pays like another method; the server checks it again as it charges.
+  const balance: ChargeBalance | undefined = account && account.creditBalance > 0
+    ? { name: account.name ?? (details.customerName.trim() || 'El cliente'), available: account.creditBalance }
+    : undefined;
 
   const submitSale = async (charge: ChargeResult | null) => {
     if (!validateSale()) {
@@ -698,8 +702,11 @@ export default function SellPage() {
     // (its pieces are picked up with the server's folio) or an order of a platform (checked against today's folios)
     // need the server.
     // The sale of an appointment needs the server too: it checks the appointment as it charges it.
-    // A sale on credit needs the server too: it checks the customer's limit as it sells.
-    const canQueue = !!charge && !charge.onCredit && !tabTarget && !chatOrigin && !hasServices && !platform && !delivery && !appointment;
+    // A sale on credit needs the server too: it checks the customer's limit as it sells, and so does one paid with the
+    // balance in the customer's favor (Fase 26D): it checks what they have left.
+    const usesBalance = !!charge?.payments.some((payment) => payment.method === OrderPaymentMethod.CustomerBalance);
+    const canQueue = !!charge && !charge.onCredit && !usesBalance && !tabTarget && !chatOrigin && !hasServices && !platform
+      && !delivery && !appointment;
     // The same key on a retry returns this sale instead of charging twice; another cart is another sale.
     const draft = toDraft(cart, details);
     const sale = describeSale(draft);
@@ -732,7 +739,7 @@ export default function SellPage() {
       if (stockWarning) toast.warning(stockWarning, { title: STOCK_WARNING_TITLE });
       clearSale();
       setChargeOpen(false);
-      if (charge?.onCredit) refreshCredit();
+      if (charge?.onCredit || usesBalance) refreshCredit();
       if (charge) {
         setCompletedSale({ order });
       } else if (isDeliveryPlatform(order.channel)) {
@@ -754,8 +761,9 @@ export default function SellPage() {
       if (!charge) toast.error(message);
       // A price or availability may have changed: refresh the catalog and the cart prices.
       void catalog.reload();
-      // Refused on credit: what the customer owes may have changed at another register, so the panel reads it again.
-      if (charge?.onCredit) refreshCredit();
+      // Refused on credit, or with the balance: what the customer owes or has may have changed at another register, so the
+      // panel reads it again.
+      if (charge?.onCredit || usesBalance) refreshCredit();
     } finally {
       setSubmitting(false);
     }
@@ -1029,6 +1037,7 @@ export default function SellPage() {
               // The tip of a platform's order is in its app, for the courier.
               allowTip={!platform}
               credit={credit}
+              balance={balance}
               onSubmit={(charge) => void submitSale(charge)}
               onCancel={() => setChargeOpen(false)}
               uploadEvidence={async (file) => {
