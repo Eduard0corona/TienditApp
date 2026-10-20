@@ -50,6 +50,13 @@ describe('getAccess', () => {
     expect(getAccess(user('TENANT_ADMIN'), FOOD_WITH_KITCHEN).settleCouriers).toBe(true);
   });
 
+  it('shows who owes (fiado) to whoever looks after customers or charges, as the API asks', () => {
+    expect(getAccess(user('STAFF', ['ManageCustomers']), FOOD_WITH_KITCHEN).receivables).toBe(true);
+    expect(getAccess(user('STAFF', ['ManageOrders', 'ChargeOrders']), FOOD_WITH_KITCHEN).receivables).toBe(true);
+    expect(getAccess(user('STAFF', ['ManageOrders']), FOOD_WITH_KITCHEN).receivables).toBe(false);
+    expect(getAccess(user('TENANT_ADMIN'), FOOD_WITH_KITCHEN).receivables).toBe(true);
+  });
+
   it('needs the module as well as the permission', () => {
     const withoutKitchen = getAccess(user('STAFF', ['ManageServiceBoard', 'ManageInventory']), TenantCapability.Retail);
 

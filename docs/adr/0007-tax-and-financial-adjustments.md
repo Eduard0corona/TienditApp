@@ -24,3 +24,7 @@ Primera etapa implementada: política de IVA por negocio (incluido o sumado), ta
 ## Actualización 2026-10-04 (Fase 2)
 
 Reembolsos implementados como compensación, no como edición: cada `OrderRefund` es inmutable, guarda importe, forma de pago, motivo, autor, fecha del servidor y las unidades devueltas; la orden acumula `RefundedAmount` y las líneas `ReturnedQuantity`, pero sus pagos y líneas no cambian. El efectivo devuelto es un movimiento de salida en la caja del cajero y los insumos devueltos son una entrada de inventario con referencia propia. Anular una venta es reembolsar el resto de cada pago y, si el estado lo permite, cancelarla. Siguen pendientes las notas de crédito fiscales, el saldo a favor, las cuentas por cobrar y la conciliación.
+
+## Actualización 2026-10-19 (Fase 26A)
+
+Primera parte de las cuentas por cobrar: el fiado ([ADR 0033](0033-customer-credit.md)). El dueño le pone a un cliente un límite de fiado; Vender vende fiado dentro de ese límite, revisado en el servidor con un candado por cliente; Clientes › Por cobrar dice quién debe; y un abono a la cuenta se reparte del pedido más viejo al más nuevo como pagos de cada pedido en la caja de quien cobra. No hay un libro de cuentas aparte: lo que se debe es el saldo de los pedidos entregados o vendidos fiado, y abonar es pagar, así que la caja, el corte y los reportes no cambian. Siguen pendientes condonar, el saldo a favor, intereses, plazos, recordatorios, Wallet y conciliación (Fase 26B en adelante).

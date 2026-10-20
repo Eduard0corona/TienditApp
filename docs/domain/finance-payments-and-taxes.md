@@ -155,6 +155,16 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
   - **Fuera de la caja:** un depósito no es un movimiento de caja ni de banco. Inicio, el corte y Ventas por canal siguen en base caja: lo que cobró la plataforma cuenta al registrar el pedido. «Por cobrar» de cada plataforma (Reportes › Liquidaciones) suma el neto esperado de sus pedidos pendientes, cada uno redondeado como en la liquidación, así que puede diferir por centavos de Ventas por canal, que redondea por fila.
 - **Pendiente:** importar el estado de cuenta de cada plataforma (hoy se captura a mano) y el CFDI de retenciones.
 
+## Fiado: cuentas por cobrar de clientes (Fase 26A)
+
+[ADR 0033](../adr/0033-customer-credit.md):
+
+- **Sin libro aparte:** lo que un cliente debe es el saldo (`Total − PaidAmount`) de sus pedidos no cancelados que se vendieron fiados o ya se entregaron, sin lo que el repartidor salió a cobrar en efectivo (`Receivables.IsOwed`). Fiar no mueve la caja; abonar es pagar.
+- **El límite** (`Customer.CreditLimit`, `decimal(18,2)`) se compara con lo que debe más lo que deja la venta (su total menos los pagos que la acompañan), en `decimal`, sin redondeos intermedios: la venta cabe si la suma no pasa del límite.
+- **El abono** se reparte en orden (el pedido más viejo primero, luego el folio): cada parte es `min(lo que queda del abono, saldo del pedido)`, un `OrderPayment` en la caja de quien cobra, con el método del abono. Las partes suman el abono exacto; con efectivo, `CashReceived` de la última parte es su monto más el cambio, así que el cambio del abono sale una vez. Un abono mayor que lo que debe se rechaza: no hay saldo a favor.
+- **Lo que no cambia:** el corte y los reportes (un abono es un pago con su método), el CFDI (un pedido con saldo ya se timbra PPD) y los cobros en Pedidos, que siguen siendo pago por pedido.
+- **Pendiente** (Fase 26B en adelante): condonar con un ajuste trazable, saldo a favor, intereses y plazos.
+
 ## Otros cálculos
 
 El reporte operativo calcula la utilidad bruta sin IVA (`NetRevenue` − costo de ventas), toma como costo de ventas los consumos de las mismas órdenes reconocidas como ingreso y, sin rango explícito, usa el mes en la zona horaria del tenant.
@@ -168,7 +178,7 @@ Compras redondean línea a 4 decimales y órdenes a 2, sin política transversal
 - Moneda, precisión, midpoint rounding, nivel de redondeo y orden de operaciones son explícitos.
 - No modificar/eliminar transacciones históricas para corregir saldo.
 - Correcciones futuras usan ajustes crédito/débito trazables, relacionados con orden, pago o movimiento original.
-- Los ajustes contemplan cuentas por cobrar, saldo a favor, Wallet y conciliación sin afirmar que esos módulos existan hoy.
+- Los ajustes contemplan cuentas por cobrar, saldo a favor, Wallet y conciliación. Hoy existe el fiado (Fase 26A), cuentas por cobrar sin ajustes; el saldo a favor, Wallet y la conciliación no existen.
 - Evidencias de pago se tratan como archivo sensible tenant-scoped: almacenamiento privado y descarga autorizada (Fase 8).
 - Pago, orden, caja y ubicación deben compartir tenant y correlación verificable.
 

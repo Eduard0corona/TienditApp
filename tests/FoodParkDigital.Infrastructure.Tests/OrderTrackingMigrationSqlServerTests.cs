@@ -46,7 +46,7 @@ public class OrderTrackingMigrationSqlServerTests
             previous.Orders.Add(NewOrder(tenant.Id));
             await previous.SaveChangesAsync();
         }
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeCustomerCredit.CreateContext(database, tenant.Id);
         var orders = await check.Orders.ToListAsync();
         Assert.Equal(2, orders.Count);
         Assert.All(orders, order => Assert.Null(order.TrackingToken));
@@ -60,7 +60,7 @@ public class OrderTrackingMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
         var other = await SeedTenantAsync(database);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCustomerCredit.CreateContext(database, tenant.Id))
         {
             var order = NewOrder(tenant.Id);
             order.IssueTrackingToken(Token);
@@ -74,7 +74,7 @@ public class OrderTrackingMigrationSqlServerTests
         Assert.Contains("CK_Orders_TrackingToken", tooShort.Message);
 
         // The same link in another business is still the same link: the index is not per business.
-        await using var neighbor = database.CreateContext(other.Id);
+        await using var neighbor = BeforeCustomerCredit.CreateContext(database, other.Id);
         var copy = NewOrder(other.Id);
         copy.IssueTrackingToken(Token);
         neighbor.Orders.Add(copy);
@@ -88,7 +88,7 @@ public class OrderTrackingMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCustomerCredit.CreateContext(database, tenant.Id))
         {
             var order = NewOrder(tenant.Id);
             order.IssueTrackingToken(Token);
@@ -97,7 +97,7 @@ public class OrderTrackingMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeTracking);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerCredit.CreateContext(database))
         {
             Assert.Equal(BeforeTracking, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 0, 1), (
@@ -110,7 +110,7 @@ public class OrderTrackingMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the order is there, without its link.
         await MigrateAsync(database, BeforeTracking);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeCustomerCredit.CreateContext(database, tenant.Id);
         Assert.Null((await forward.Orders.SingleAsync()).TrackingToken);
     }
 

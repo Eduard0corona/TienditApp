@@ -32,6 +32,8 @@ export interface Access {
   tables: boolean;
   serviceBoard: boolean;
   customers: boolean;
+  /** Who owes the business (fiado, Fase 26A): ManageCustomers or ChargeOrders, as the API asks. */
+  receivables: boolean;
   appointments: boolean;
   employees: boolean;
   /** WhatsApp chat: ManageWhatsApp. */
@@ -93,6 +95,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     tables: hasCapability(capabilities, TenantCapability.Food) && can('ManageOrders'),
     serviceBoard: hasCapability(capabilities, TenantCapability.Service) && can('ManageServiceBoard'),
     customers: commerce && can('ManageCustomers'),
+    receivables: commerce && (can('ManageCustomers') || can('ChargeOrders')),
     appointments: hasCapability(capabilities, TenantCapability.Appointments) && can('ManageAppointments'),
     employees: commerce && isAdmin,
     chat: commerce && can('ManageWhatsApp'),

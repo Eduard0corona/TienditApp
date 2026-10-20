@@ -309,7 +309,8 @@ public class SaleTransactionSqlServerTests
                 phones,
                 orderInventoryService: new OrderInventoryService(context, clock, folios, NullLogger<OrderInventoryService>.Instance),
                 orderCashService: new OrderCashService(context, user),
-                folios: folios);
+                folios: folios,
+                creditLock: new CustomerCreditLock(context));
 
             return await new TransactionBehavior<CreateOrderCommand, Result<OrderDto>>(context)
                 .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);

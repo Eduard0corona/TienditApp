@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import type { OrderPaymentMethod } from '../../types';
 import { OrderPaymentMethod as PaymentMethod } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
@@ -23,6 +23,14 @@ export interface ChargeResult {
   cashReceived: number;
   /** Tip given with the charge (0 without one). */
   tip: number;
+  /** The rest was sold on credit (fiado): the payments are what the customer paid now, possibly none. */
+  onCredit?: boolean;
+}
+
+/** The customer of the sale may owe the rest (fiado, Fase 26A): who, and how much they may still owe. */
+export interface ChargeCredit {
+  name: string;
+  available: number;
 }
 
 type TipChoice = 'none' | 10 | 15 | 'other';
@@ -48,6 +56,8 @@ interface ChargePanelProps {
   uploadEvidence?: (file: File) => Promise<{ url: string; fileName: string }>;
   /** Offers a tip on top of what is owed (the counter, the tables and the orders). */
   allowTip?: boolean;
+  /** Offers «Fiar» the rest to this customer, within what they may still owe (the server checks it again). */
+  credit?: ChargeCredit;
 }
 
 const METHODS: Array<{ value: OrderPaymentMethod; icon: string }> = [
@@ -86,6 +96,7 @@ export default function ChargePanel({
   onCancel,
   uploadEvidence,
   allowTip = true,
+  credit,
 }: ChargePanelProps) {
   const [added, setAdded] = useState<ChargePayment[]>([]);
   const [method, setMethod] = useState<OrderPaymentMethod>(PaymentMethod.Cash);
@@ -128,6 +139,19 @@ export default function ChargePanel({
   const canSubmit = !submitting && !uploading && currentIsValid && tipIsValid && tipFits
     && (allowPartial ? coveredCents > 0 : missingCents === 0);
   const canAddAnother = currentIsValid && currentCents > 0 && currentCents < remainingCents;
+  // On credit, what the customer pays now is what was added and typed: an empty field is no payment here (charging in
+  // full reads it as the exact amount). The rest is what they would owe; a tip has no payment to go with. Text that is
+  // not an amount is no payment either, so it never sells all of it on credit.
+  const cashIsValid = !cashTyped || parseMoneyInput(cashReceived) !== null;
+  const typedNowCents = !currentIsValid ? 0 : isCash ? (cashTyped ? cashAppliedCents : 0) : (amountInput.trim() === '' ? 0 : typedCents);
+  const creditCents = credit ? Math.max(0, dueCents - addedCents - typedNowCents) : 0;
+  const creditFits = !!credit && creditCents <= toCents(credit.available);
+  // The least the customer pays now for the rest to fit in their fiado: of the whole sale, so it does not change as the
+  // cashier types it.
+  const creditMinimumCents = credit ? Math.max(0, dueCents - toCents(credit.available)) : 0;
+  const canSellOnCredit = !!credit && !submitting && !uploading && currentIsValid && cashIsValid && tipIsValid
+    && creditCents > 0 && creditFits && tipCents === 0;
+  const creditNoticeId = useId();
   const suggestions = useMemo(() => getCashSuggestions(remainingCents + tipCents), [remainingCents, tipCents]);
 
   const resetCurrent = () => {
@@ -176,6 +200,18 @@ export default function ChargePanel({
       change: isCash ? changeCents / 100 : 0,
       cashReceived: isCash ? receivedCents / 100 : 0,
       tip: current?.tip ?? 0,
+    });
+  };
+
+  const submitOnCredit = () => {
+    if (!canSellOnCredit) return;
+    const current = typedNowCents > 0 ? buildCurrent() : null;
+    onSubmit({
+      payments: current ? [...added, current] : added,
+      change: isCash && current ? changeCents / 100 : 0,
+      cashReceived: isCash && current ? receivedCents / 100 : 0,
+      tip: 0,
+      onCredit: true,
     });
   };
 
@@ -401,6 +437,18 @@ export default function ChargePanel({
         </fieldset>
       )}
 
+      {credit && (
+        <p id={creditNoticeId} className="charge-credit small mt-3 mb-0" aria-live="polite">
+          <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>
+          <strong>{credit.name}</strong> tiene fiado: le quedan <span className="ta-money">{formatMoney(credit.available)}</span>.
+          {!creditFits && credit.available <= 0 && <> Ya no le queda fiado: cobra la venta completa.</>}
+          {!creditFits && credit.available > 0 && (
+            <> Para fiarle el resto, cobra al menos <span className="ta-money">{formatMoney(creditMinimumCents / 100)}</span>.</>
+          )}
+          {creditFits && tipCents > 0 && <> Para fiar, quita la propina.</>}
+        </p>
+      )}
+
       {(localError || error) && <div className="alert alert-danger py-2 mt-2 mb-0">{localError || error}</div>}
 
       <div className="charge-actions mt-3">
@@ -410,6 +458,18 @@ export default function ChargePanel({
         {canAddAnother && (
           <button type="button" className="btn btn-outline-primary btn-touch" onClick={addAnother} disabled={submitting}>
             <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar otro pago
+          </button>
+        )}
+        {/* Nothing left to owe: no «Fiar» to press, only the notice that says so. */}
+        {credit && credit.available > 0 && creditCents > 0 && (
+          <button
+            type="button"
+            className="btn btn-outline-primary btn-touch"
+            onClick={submitOnCredit}
+            disabled={!canSellOnCredit}
+            aria-describedby={creditNoticeId}
+          >
+            <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>Fiar <span className="ta-money">{formatMoney(creditCents / 100)}</span>
           </button>
         )}
         <button type="submit" className="btn btn-primary btn-touch btn-touch-lg flex-grow-1" disabled={!canSubmit}>

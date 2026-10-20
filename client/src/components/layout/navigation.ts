@@ -80,7 +80,9 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Clientes',
         icon: 'ri-team-line',
         pages: [
-          { label: 'Clientes', path: '/customers', icon: 'ri-team-line', area: 'customers' },
+          // Exact: Por cobrar hangs from its path.
+          { label: 'Clientes', path: '/customers', icon: 'ri-team-line', area: 'customers', exact: true },
+          { label: 'Por cobrar', path: '/customers/receivables', icon: 'ri-hand-coin-line', area: 'receivables', keywords: 'fiado fiar deudas debe abonos cuentas por cobrar estado de cuenta' },
           { label: 'Campañas', path: '/campaigns', icon: 'ri-megaphone-line', area: 'campaigns', keywords: 'promociones mensajes masivos whatsapp recordatorios de citas plantillas bajas' },
           { label: 'Reseñas', path: '/reviews', icon: 'ri-star-line', area: 'reviews', keywords: 'calificaciones opiniones estrellas responder reportar' },
         ],

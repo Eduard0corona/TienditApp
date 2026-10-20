@@ -56,6 +56,7 @@ public class GetCustomersQueryHandler : IRequestHandler<GetCustomersQuery, Pagin
             IsPublicGeneral = c.IsPublicGeneral,
             IsActive = c.IsActive,
             Notes = c.Notes,
+            CreditLimit = c.CreditLimit,
             CreatedAt = c.CreatedAt,
             UpdatedAt = c.UpdatedAt
         });

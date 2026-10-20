@@ -192,6 +192,7 @@ public static class DependencyInjection
         services.AddScoped<ITenantAccessService, TenantAccessService>();
         services.AddScoped<IFolioGenerator, FolioGenerator>();
         services.AddScoped<IAppointmentBookingLock, AppointmentBookingLock>();
+        services.AddScoped<ICustomerCreditLock, CustomerCreditLock>();
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();

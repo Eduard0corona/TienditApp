@@ -7,9 +7,9 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 /// <summary>
-/// The model without what Fase 24I added to existing tables (what was paid online in each day of the sales report): the
-/// app as deployed before it, and what a test needs to read the sales report on a database migrated to an earlier
-/// migration, where the column does not exist yet. Its new tables are not read there.
+/// The model without what Fase 24I added to existing tables (what was paid online in each day of the sales report), nor
+/// what came after it: the app as deployed before it, and what a test needs to read the sales report on a database
+/// migrated to an earlier migration, where the column does not exist yet. Its new tables are not read there.
 /// </summary>
 internal static class BeforeOnlinePayments
 {
@@ -20,6 +20,7 @@ internal static class BeforeOnlinePayments
     public static void Ignore(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<DailySalesSnapshot>().Ignore(s => s.OnlineAmount);
+        BeforeCustomerCredit.Ignore(modelBuilder);
     }
 
     private sealed class Context(

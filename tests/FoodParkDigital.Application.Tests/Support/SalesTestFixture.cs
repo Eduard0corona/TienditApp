@@ -172,7 +172,8 @@ internal sealed class SalesTestFixture : IAsyncDisposable
             phoneNormalization,
             orderInventoryService: orderInventoryService ?? NoOpOrderInventoryService.Instance,
             orderCashService: new OrderCashService(Context, CurrentUser),
-            folios: new FolioGenerator(Context));
+            folios: new FolioGenerator(Context),
+            creditLock: new CustomerCreditLock(Context));
     }
 
     public AddOrderPaymentCommandHandler AddPaymentHandler()

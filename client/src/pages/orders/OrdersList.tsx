@@ -662,6 +662,13 @@ export default function OrdersList() {
                           {isOnTheWay(order) && <span className="badge mt-1 ms-1 text-bg-info">En camino</span>}
                         </div>
                       )}
+                      {order.soldOnCredit && (
+                        <div>
+                          <span className="badge mt-1 bg-warning-subtle text-warning-emphasis">
+                            <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>Fiado
+                          </span>
+                        </div>
+                      )}
                       {isDeliveryPlatform(order.channel) && (
                         <div>
                           <ChannelBadge channel={order.channel} className="mt-1" />

@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Couriers;
+using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Application.OnlineMenu;
@@ -87,6 +88,22 @@ public class CourierSettlementFlowTests
             .Handle(new GetOrdersByBusinessQuery(), CancellationToken.None)).Items);
         Assert.True(detail.Delivery!.AwaitsCourierCash);
         Assert.Equal((true, 275m), (listed.Delivery!.AwaitsCourierCash, listed.Delivery.CashToCollect));
+    }
+
+    [Fact]
+    public async Task WhatTheCourierCollects_ShouldNotBeOwedByTheCustomer_UnlikeAnOrderHandedOverUnpaid()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (_, tacos) = await KitchenAsync(fixture);
+
+        // Delivered with the cash the courier collects: the courier owes it (Caja › Repartidores), not Ana (fiado, 26A).
+        await OwedOrderAsync(fixture, tacos, "PQ1");
+        var whileTheCourierOwes = await Receivables.OwedAsync(fixture.Context.Orders, "+525512345678", CancellationToken.None);
+        var handedOver = await SellAsync(fixture, Delivery(tacos));
+        await DeliverAsync(fixture, handedOver.Value.Id);
+
+        Assert.Equal(0m, whileTheCourierOwes);
+        Assert.Equal(275m, await Receivables.OwedAsync(fixture.Context.Orders, "+525512345678", CancellationToken.None));
     }
 
     [Fact]

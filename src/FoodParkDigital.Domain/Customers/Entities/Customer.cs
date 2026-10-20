@@ -7,6 +7,11 @@ public class Customer : AuditableEntity, ITenantScoped
 {
     public const int NotesMaxLength = 2000;
     public const int MaxAddresses = 10;
+    /// <summary>The most a business lets one customer owe (Fase 26A).</summary>
+    public const decimal MaxCreditLimit = 1_000_000m;
+    public const string CreditLimitRangeMessage = "El límite de fiado va de $1 a $1,000,000.";
+    public const string PublicGeneralCreditMessage = "A «Público en general» no se le fía: elige al cliente.";
+    public const string NoPhoneCreditMessage = "Para fiarle, el cliente necesita teléfono: con él se juntan sus pedidos.";
 
     private readonly List<CustomerAddress> _addresses = new();
 
@@ -36,6 +41,34 @@ public class Customer : AuditableEntity, ITenantScoped
     /// <summary>What the team should remember about the customer: preferences, allergies, how they pay.</summary>
     public string? Notes { get; private set; }
     public IReadOnlyCollection<CustomerAddress> Addresses => _addresses.AsReadOnly();
+
+    /// <summary>
+    /// How much the business lets the customer owe (fiado, Fase 26A, ADR 0033); null when it does not sell to them on credit.
+    /// What they owe is not kept here: it is the balance of their orders, matched by phone.
+    /// </summary>
+    public decimal? CreditLimit { get; private set; }
+
+    /// <summary>The business sells to them on credit now: active, with a limit and a phone to gather their orders by.</summary>
+    public bool SellsOnCredit => IsActive && !IsPublicGeneral && CreditLimit is not null && !string.IsNullOrWhiteSpace(Phone);
+
+    /// <summary>Sets how much the customer may owe, or stops selling to them on credit (null). Lowering it below what they owe
+    /// is allowed: it only stops the next sale on credit.</summary>
+    public void SetCreditLimit(decimal? limit)
+    {
+        if (limit is null)
+        {
+            CreditLimit = null;
+            return;
+        }
+
+        if (IsPublicGeneral)
+            throw new DomainException(PublicGeneralCreditMessage);
+        if (string.IsNullOrWhiteSpace(Phone))
+            throw new DomainException(NoPhoneCreditMessage);
+        if (limit < 1m || limit > MaxCreditLimit || decimal.Round(limit.Value, 2) != limit.Value)
+            throw new DomainException(CreditLimitRangeMessage);
+        CreditLimit = limit;
+    }
 
     public void Update(string name, string? phone, string? email)
     {

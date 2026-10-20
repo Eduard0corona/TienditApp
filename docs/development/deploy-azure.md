@@ -545,6 +545,27 @@ La Fase 24J trae una migración, [`database/production/20261019150436_AddOnlineB
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas, las citas en línea vuelven a usar las citas a la vez y las ya pedidas conservan a quién se asignaron.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50025, sin cambiar nada, en cuanto un negocio eligió a alguien: borrar las tablas perdería quiénes son, sus servicios y su horario. Sin personas, quita las dos tablas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Fiado (Fase 26A)
+
+La Fase 26A trae una migración, [`database/production/20261019202512_AddCustomerCredit`](../../database/production/20261019202512_AddCustomerCredit). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0033](../adr/0033-customer-credit.md)).
+
+- **La migración** agrega dos columnas y un índice:
+  - `Customers.CreditLimit` (`decimal(18,2)`, con nulos): el límite de fiado; nadie tiene uno al aplicarla;
+  - `Orders.SoldOnCredit` (`bit`, 0 por omisión): las ventas que se cerraron fiadas;
+  - el índice `IX_Orders_TenantId_CustomerPhone`, para leer lo que debe cada cliente por su teléfono.
+
+  No cambia ningún saldo. Después de aplicarla, el `verify.sql` muestra las columnas y el índice. Su consulta 3 cuenta los clientes con límite y las ventas fiadas (ninguno hasta desplegar), y la 4 los pedidos con saldo entregados (lo que aparecerá en Clientes › Por cobrar) y abiertos, igual antes y después.
+- **Mientras se publica:** la versión de `master` (Fase 24J) no conoce las columnas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:** «Debe» en la ficha del cliente deja de contar los pedidos en curso (solo lo entregado o fiado), y Clientes gana la pestaña «Por cobrar» con los pedidos entregados con saldo que ya existían.
+- **El contrato solo agrega:**
+  - `GET /api/v1/customers/receivables`, `GET /api/v1/customers/account`, `POST /api/v1/customers/account/payments` y `PUT /api/v1/customers/{id}/credit-limit`;
+  - `onCredit` en la venta, `soldOnCredit` en el pedido, `creditLimit` en el cliente y `creditLimit` y `sellsOnCredit` en la ficha.
+
+  Nada se quita ni cambia de nombre.
+- **Sin configuración ni servicios externos.** Mientras ningún negocio ponga un límite, Vender no ofrece «Fiar».
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las columnas, y lo fiado se sigue viendo como saldo que se cobra desde el pedido.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50026, sin cambiar nada, en cuanto un cliente tiene límite o una venta se cerró fiada: perdería a quién se le fía y qué se fió. Sin ninguno, quita las columnas y el índice, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

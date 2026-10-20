@@ -5,10 +5,15 @@ import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
+import CreditLimitModal from '../../components/customers/CreditLimitModal';
 import { customersApi } from '../../api/customersApi';
 import type { CreateCustomerRequest, CustomerDto, PaginatedList } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
+import { useAuth } from '../../hooks/useAuth';
+import { useTenant } from '../../hooks/useTenant';
+import { getAccess } from '../../utils/access';
+import { formatMoney } from '../../utils/money';
 
 const COLUMNS = [
   { header: 'Nombre' },
@@ -42,6 +47,11 @@ export default function CustomersList() {
   const [pageSize, setPageSize] = useState(10);
   const [filterActive, setFilterActive] = useState('');
   const [cardCustomer, setCardCustomer] = useState<CustomerDto | null>(null);
+  const [creditCustomer, setCreditCustomer] = useState<CustomerDto | null>(null);
+  const { user } = useAuth();
+  const { capabilities } = useTenant();
+  // How much a customer may owe is the owner's decision (owners and admins, as the API asks).
+  const canGiveCredit = getAccess(user, capabilities).isAdmin;
 
   const {
     register,
@@ -230,7 +240,12 @@ export default function CustomersList() {
                 }}
                 renderRow={(customer) => (
                   <>
-                    <td className="fw-semibold">{customer.name}</td>
+                    <td>
+                      <div className="fw-semibold">{customer.name}</div>
+                      {customer.creditLimit != null && (
+                        <span className="badge bg-warning-subtle text-warning-emphasis">Fiado hasta {formatMoney(customer.creditLimit)}</span>
+                      )}
+                    </td>
                     <td className="text-nowrap">{customer.phone || '-'}</td>
                     <td>{customer.email || '-'}</td>
                     <td className="text-center">
@@ -265,6 +280,17 @@ export default function CustomersList() {
                       >
                         Editar
                       </button>
+                      {canGiveCredit && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-light me-1"
+                          aria-label={`Fiado de ${customer.name}`}
+                          onClick={() => setCreditCustomer(customer)}
+                          disabled={customer.isPublicGeneral || !customer.phone}
+                        >
+                          Fiado
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn btn-sm btn-light me-1"
@@ -365,6 +391,15 @@ export default function CustomersList() {
 
       {cardCustomer && (
         <CustomerCardModal customerId={cardCustomer.id} name={cardCustomer.name} onClose={() => setCardCustomer(null)} />
+      )}
+      {creditCustomer && (
+        <CreditLimitModal
+          customer={creditCustomer}
+          onClose={() => {
+            setCreditCustomer(null);
+            void loadCustomers();
+          }}
+        />
       )}
     </>
   );

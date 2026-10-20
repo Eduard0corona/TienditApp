@@ -215,7 +215,8 @@ public class CoreBusinessFlowSmokeTests
                 new PhoneNormalizationService(),
                 orderInventoryService,
                 new OrderCashService(Context, _currentUserService),
-                new FolioGenerator(Context));
+                new FolioGenerator(Context),
+                new CustomerCreditLock(Context));
         }
 
         public UpdateOrderStatusCommandHandler CreateUpdateStatusHandler()

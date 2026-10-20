@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
@@ -26,13 +27,14 @@ namespace FoodParkDigital.Application.Orders.Commands;
 public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions, ITransactionalRequest
 {
     /// <summary>
-    /// Taking an order needs ManageOrders; charging it at once also needs ChargeOrders. The «Plataforma» payment of an
-    /// order a delivery platform charged is recorded by the server, outside every drawer: nobody charges it. The sale of an
-    /// appointment completes it in the agenda, so it also needs whoever books appointments (Fase 22E), as reading it does.
+    /// Taking an order needs ManageOrders; charging it at once, or selling it on credit, also needs ChargeOrders. The
+    /// «Plataforma» payment of an order a delivery platform charged is recorded by the server, outside every drawer: nobody
+    /// charges it. The sale of an appointment completes it in the agenda, so it also needs whoever books appointments
+    /// (Fase 22E), as reading it does.
     /// </summary>
     public IEnumerable<TenantPermission> RequiredPermissions()
     {
-        if (Payments is { Count: > 0 })
+        if (Payments is { Count: > 0 } || OnCredit)
             yield return TenantPermission.ChargeOrders;
         if (AppointmentId is not null)
             yield return TenantPermission.ManageAppointments;
@@ -102,6 +104,13 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
     /// counter, with connection; once per appointment, unless its sale was cancelled.
     /// </summary>
     public Guid? AppointmentId { get; init; }
+    /// <summary>
+    /// Sold on credit (Fase 26A): what the payments leave unpaid is what the customer owes, and the sale is handed over as
+    /// a paid one. Only a counter sale of the business, with connection, to a customer the business sells to on credit
+    /// whose limit takes it.
+    /// </summary>
+    [System.ComponentModel.DefaultValue(false)]
+    public bool OnCredit { get; init; }
 }
 
 public record CreateOrderPaymentDto
@@ -190,6 +199,7 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         "La venta de una cita la registra el negocio en el mostrador: sin plataforma, mesa, cuenta abierta ni envío.";
     public const string AppointmentWithConnectionMessage = "La venta de una cita se registra con conexión: la cita se revisa al cobrar.";
     public const string AppointmentNotFoundMessage = "La cita no existe.";
+    public const string CreditWithConnectionMessage = "Una venta fiada se registra con conexión: el límite del cliente se revisa al venderla.";
 
     public CreateOrderCommandValidator()
     {
@@ -323,6 +333,20 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             RuleFor(x => x.Delivery).Null().WithMessage(AppointmentSaleMessage);
             RuleFor(x => x.CapturedOfflineAt).Null().WithMessage(AppointmentWithConnectionMessage);
         });
+        // On credit (Fase 26A): a counter sale of the business to a customer with their phone, never a tab, an order to an
+        // address or one of a platform, and with connection, since the customer's limit is checked when it is sold.
+        When(x => x.OnCredit, () =>
+        {
+            RuleFor(x => x.CreatedByBusiness).Equal(true).WithMessage(Order.CreditOnlyCounterSaleMessage);
+            RuleFor(x => x.Channel).Must(channel => !OrderChannelRules.IsDeliveryPlatform(channel))
+                .WithMessage(Order.CreditOnlyCounterSaleMessage);
+            RuleFor(x => x.OpenTab).Equal(false).WithMessage(Order.CreditOnlyCounterSaleMessage);
+            RuleFor(x => x.DiningTableId).Null().WithMessage(Order.CreditOnlyCounterSaleMessage);
+            RuleFor(x => x.Delivery).Null().WithMessage(Order.CreditOnlyCounterSaleMessage);
+            RuleFor(x => x.CapturedOfflineAt).Null().WithMessage(CreditWithConnectionMessage);
+            RuleFor(x => x).Must(x => x.CustomerId.HasValue || !string.IsNullOrWhiteSpace(x.CustomerPhone))
+                .WithMessage(Order.CreditNeedsCustomerMessage);
+        });
         When(x => !OrderChannelRules.IsDeliveryPlatform(x.Channel), () =>
         {
             RuleFor(x => x.ExternalOrderNumber).Empty().WithMessage(PlatformFieldsOnlyForPlatformsMessage);
@@ -345,6 +369,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
     private readonly IOrderInventoryService _orderInventoryService;
     private readonly IOrderCashService _orderCashService;
     private readonly IFolioGenerator _folios;
+    private readonly ICustomerCreditLock _creditLock;
 
     public CreateOrderCommandHandler(
         IApplicationDbContext context,
@@ -355,7 +380,8 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         IPhoneNormalizationService phoneNormalizationService,
         IOrderInventoryService orderInventoryService,
         IOrderCashService orderCashService,
-        IFolioGenerator folios)
+        IFolioGenerator folios,
+        ICustomerCreditLock creditLock)
     {
         _context = context;
         _tenantService = tenantService;
@@ -366,6 +392,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         _orderInventoryService = orderInventoryService;
         _orderCashService = orderCashService;
         _folios = folios;
+        _creditLock = creditLock;
     }
 
     public async Task<Result<OrderDto>> Handle(CreateOrderCommand request, CancellationToken cancellationToken)
@@ -591,6 +618,28 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             return Result.Failure<OrderDto>(PlatformOrderErrors.PossibleDuplicate);
         }
 
+        // 11b. On credit: what the payments leave must fit in what the customer may still owe. Checked inside the
+        // customer's credit lock, taken before the folio's, so two sales on credit (or a sale and a payment) at once
+        // count each other and locks are always taken in the same order.
+        if (request.OnCredit)
+        {
+            var creditError = await CustomerCredit.CheckSaleAsync(
+                _context,
+                _creditLock,
+                _phoneNormalizationService,
+                _tenantService.TenantId,
+                request.CustomerId,
+                order.CustomerPhone,
+                order.Total - request.Payments.Sum(p => p.Amount),
+                cancellationToken);
+            // The same sale sent twice at once: this one waited on the lock while the other was recorded, and counted it in
+            // what the customer owes. The answer is the sale recorded, not a refusal of the limit.
+            if (request.IdempotencyKey is { } waitedKey && await ExistingSaleAsync(waitedKey, cancellationToken) is { } recorded)
+                return Result.Success(recorded);
+            if (creditError is not null)
+                return Result.Failure<OrderDto>(creditError);
+        }
+
         // 12. The folio, once the checks without side effects passed: payments and supplies name the order by it.
         order.AssignNumber(await _folios.NextOrderNumberAsync(_tenantService.TenantId, cancellationToken));
 
@@ -628,6 +677,10 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                     return Result.Failure<OrderDto>(payment.Error!);
             }
         }
+
+        // 14b. What is left to pay is what the customer owes: the sale is handed over as a paid one.
+        if (request.OnCredit)
+            order.SellOnCredit();
 
         // 15. A paid sale closes as at the counter (an order of a platform too: same machines, same closing).
         if (request.CreatedByBusiness)

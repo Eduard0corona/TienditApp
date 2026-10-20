@@ -3027,6 +3027,131 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/receivables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    search?: string;
+                    sort?: components["schemas"]["ReceivablesSort"];
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReceivablesDto"];
+                        "application/json": components["schemas"]["ReceivablesDto"];
+                        "text/json": components["schemas"]["ReceivablesDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    customerId?: string;
+                    phone?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAccountDto"];
+                        "application/json": components["schemas"]["CustomerAccountDto"];
+                        "text/json": components["schemas"]["CustomerAccountDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/account/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PayCustomerAccountCommand"];
+                    "text/json": components["schemas"]["PayCustomerAccountCommand"];
+                    "application/*+json": components["schemas"]["PayCustomerAccountCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAccountDto"];
+                        "application/json": components["schemas"]["CustomerAccountDto"];
+                        "text/json": components["schemas"]["CustomerAccountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/{id}": {
         parameters: {
             query?: never;
@@ -3153,6 +3278,51 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/api/v1/customers/{id}/credit-limit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateCustomerCreditLimitRequest"];
+                    "text/json": components["schemas"]["UpdateCustomerCreditLimitRequest"];
+                    "application/*+json": components["schemas"]["UpdateCustomerCreditLimitRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/customers/{id}/notes": {
@@ -12202,6 +12372,8 @@ export interface components {
             delivery?: components["schemas"]["OrderDeliveryInput"];
             /** Format: uuid */
             appointmentId?: string | null;
+            /** @default false */
+            onCredit: boolean;
         };
         CreateOrderItemDto: {
             /** Format: uuid */
@@ -12370,6 +12542,47 @@ export interface components {
             defaultCountry: string;
             items: components["schemas"]["CreateOrderItemDto"][];
         };
+        CustomerAccountDto: {
+            phone: string;
+            name?: string | null;
+            /** Format: uuid */
+            customerId?: string | null;
+            /** Format: double */
+            creditLimit?: number | null;
+            sellsOnCredit: boolean;
+            /** Format: double */
+            owed: number;
+            /** Format: double */
+            available?: number | null;
+            overLimit: boolean;
+            orders: components["schemas"]["CustomerAccountOrderDto"][];
+            /** Format: int32 */
+            ordersCount: number;
+            recentPayments: components["schemas"]["CustomerAccountPaymentDto"][];
+        };
+        CustomerAccountOrderDto: {
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            /** Format: date-time */
+            createdAt: string;
+            status: components["schemas"]["OrderStatus"];
+            soldOnCredit: boolean;
+            /** Format: double */
+            total: number;
+            /** Format: double */
+            paid: number;
+            /** Format: double */
+            balance: number;
+        };
+        CustomerAccountPaymentDto: {
+            orderNumber: string;
+            /** Format: date-time */
+            paidAt: string;
+            /** Format: double */
+            amount: number;
+            method: components["schemas"]["OrderPaymentMethod"];
+        };
         CustomerAddressDto: {
             /** Format: uuid */
             id: string;
@@ -12438,6 +12651,9 @@ export interface components {
             averageTicket: number;
             /** Format: double */
             balance: number;
+            /** Format: double */
+            creditLimit?: number | null;
+            sellsOnCredit: boolean;
             /** Format: date-time */
             firstOrderAt?: string | null;
             /** Format: date-time */
@@ -12482,6 +12698,8 @@ export interface components {
             isPublicGeneral: boolean;
             isActive: boolean;
             notes?: string | null;
+            /** Format: double */
+            creditLimit?: number | null;
             addresses: components["schemas"]["CustomerAddressDto"][];
             /** Format: date-time */
             createdAt: string;
@@ -13621,6 +13839,7 @@ export interface components {
             itemCancellations: components["schemas"]["OrderItemCancellationDto"][];
             isTab: boolean;
             isOpenTab: boolean;
+            soldOnCredit: boolean;
             /** Format: uuid */
             diningTableId?: string | null;
             kitchenTickets: components["schemas"]["KitchenTicketSummaryDto"][];
@@ -13859,6 +14078,21 @@ export interface components {
             otpTemplateName: string;
             otpTemplateLanguageCode: string;
             hasAccessToken: boolean;
+        };
+        PayCustomerAccountCommand: {
+            /** Format: uuid */
+            customerId?: string | null;
+            phone?: string | null;
+            /** Format: double */
+            amount: number;
+            method: components["schemas"]["OrderPaymentMethod"];
+            evidenceUrl?: string | null;
+            reference?: string | null;
+            notes?: string | null;
+            /** Format: double */
+            cashReceived?: number | null;
+            /** Format: double */
+            expectedOwed?: number | null;
         };
         PendingCourierOrdersDto: {
             owed: components["schemas"]["CourierOrderDto"][];
@@ -14752,6 +14986,42 @@ export interface components {
             /** Format: double */
             average?: number | null;
         };
+        ReceivableDto: {
+            phone: string;
+            name: string;
+            /** Format: uuid */
+            customerId?: string | null;
+            /** Format: double */
+            owed: number;
+            /** Format: int32 */
+            orders: number;
+            /** Format: date-time */
+            since: string;
+            /** Format: double */
+            creditLimit?: number | null;
+            overLimit: boolean;
+        };
+        ReceivableDtoPaginatedList: {
+            items: components["schemas"]["ReceivableDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        ReceivablesDto: {
+            page: components["schemas"]["ReceivableDtoPaginatedList"];
+            /** Format: double */
+            totalOwed: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        ReceivablesSort: 0 | 1;
         ReceivePurchaseOrderLineItemRequest: {
             /** Format: uuid */
             purchaseOrderLineId: string;
@@ -15563,6 +15833,10 @@ export interface components {
             phone?: string | null;
             email?: string | null;
             notes?: string | null;
+        };
+        UpdateCustomerCreditLimitRequest: {
+            /** Format: double */
+            creditLimit?: number | null;
         };
         UpdateCustomerNotesRequest: {
             notes?: string | null;

@@ -384,6 +384,18 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **El enlace de seguimiento** de un pedido pagado en línea solo aparece en el dispositivo que empezó el pago.
 - **Pagar otra vez el mismo carrito** desde la tienda vuelve al cobro que ya estaba abierto mientras le queda tiempo; un carrito distinto abre otro cobro.
 
+## Fiado (Fase 26A)
+
+[ADR 0033](../adr/0033-customer-credit.md):
+
+- **A quién se le fía:** a un cliente del negocio, activo, con teléfono y que no es «Público en general». El dueño o un administrador le pone un límite de $1 a $1,000,000, a centavos, o se lo quita; cada cambio queda en la actividad. Un cliente desactivado conserva su límite, pero no se le fía. Bajar el límite por debajo de lo que debe solo impide fiarle más.
+- **Qué se debe** (una sola regla para Por cobrar, el estado de cuenta, el límite y «Debe» en la ficha): el saldo de los pedidos no cancelados, con el teléfono del cliente, que se vendieron fiados o ya se entregaron. No se debe un pedido en curso ni lo que el repartidor salió a cobrar en efectivo (lo debe el repartidor). Los pedidos se juntan por teléfono: +52 y +521 son la misma persona.
+- **Fiar en Vender:** solo una venta de mostrador del negocio, con conexión, a un cliente al que se le fía, y la venta tiene que dejar saldo; el cliente puede dejar una parte. Lo que debe más lo que deja la venta no pasa de su límite: si pasa, el mensaje dice cuánto cobrar como mínimo, o que cobre la venta completa cuando ya debe su límite. El servidor lo revisa dentro de un candado por cliente, así que dos cajas que le venden a la vez se cuentan entre sí. La venta se entrega como una pagada (la comida con cocina, cuando está lista; un servicio, cuando sus piezas salen del taller) y queda marcada «Fiado» aunque luego se pague.
+- **Abonar a la cuenta:** un monto con un método que entra a caja, repartido del pedido más viejo al más nuevo como pagos de cada pedido en la caja de quien cobra, con la nota «Abono a la cuenta»; el cambio va con la última parte. Nunca más de lo que debe. Un abono que llega dos veces, o después de otro que la pantalla no vio, encuentra la cuenta cambiada y se rechaza.
+- **El estado de cuenta:** el límite, lo que debe y lo que le queda, los pedidos que debe (hasta 100, del más viejo) y sus últimos 10 pagos; «Enviar por WhatsApp» lo manda desde el dispositivo.
+- **Clientes › Por cobrar:** una fila por teléfono con lo que debe, cuántos pedidos y desde cuándo, su límite (si hoy se le fía) y si lo rebasa, y el total; busca por nombre o parte del teléfono y ordena por lo que debe o por lo más viejo.
+- **Sin** condonar, saldo a favor, intereses, plazos ni recordatorios (Fase 26B).
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.
