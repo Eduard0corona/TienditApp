@@ -211,6 +211,16 @@ public sealed class CrossTenantCustomerCreditSqlServerTests
         var mineTerm = await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"{Customers}/{customer}/credit-term", new { creditTermDays = 7 }));
         Assert.Equal(7, mineTerm.GetProperty("creditTermDays").GetInt32());
 
+        // What the reminders say is the owner's too: campaigns may write their own templates, not the fiado's.
+        const string templates = "/api/v1/messaging/templates";
+        Assert.Equal(HttpStatusCode.OK,
+            (await cashier.PostAsJsonAsync(templates, new { name = "Promo", purpose = 0, body = "Hola {nombre}" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await cashier.PostAsJsonAsync(templates, new { name = "Cobro", purpose = 3, body = "Debes {vencido}" })).StatusCode);
+        var ownersTemplate = await TwoBusinessesApi.IdAsync(mine.Client, templates, new { name = "Cobro", purpose = 3, body = "Hola {nombre}, debes {vencido}." });
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PutAsJsonAsync($"{templates}/{ownersTemplate}",
+            new { name = "Cobro", body = "Paga ya {vencido}", isActive = true })).StatusCode);
+
         // Without WhatsApp a business cannot turn them on; its settings are its own.
         var refused = await mine.Client.PutAsJsonAsync($"{Customers}/credit-reminders", new { enabled = true, everyDays = 5 });
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);

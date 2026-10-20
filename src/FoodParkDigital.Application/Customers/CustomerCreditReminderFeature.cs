@@ -165,7 +165,9 @@ public class GetCreditRemindersQueryHandler : IRequestHandler<GetCreditReminders
         {
             Enabled = settings?.CreditRemindersEnabled ?? false,
             EveryDays = settings?.CreditReminderEveryDays ?? TenantSettings.DefaultCreditReminderEveryDays,
-            TemplateId = settings?.CreditReminderTemplateId,
+            // A template retired after it was chosen sends the default text (CreditReminderPlanner): say so, and the screen
+            // saves without it instead of sending back one the update refuses.
+            TemplateId = templates.Any(t => t.Id == settings?.CreditReminderTemplateId) ? settings!.CreditReminderTemplateId : null,
             WhatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(_context, _tenant.TenantId, cancellationToken),
             CreditTermDays = settings?.CreditTermDays,
             CustomersWithOwnTerm = await _context.Customers.CountAsync(c => c.CreditTermDays != null, cancellationToken),

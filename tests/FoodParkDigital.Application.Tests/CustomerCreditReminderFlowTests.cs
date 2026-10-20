@@ -29,6 +29,7 @@ public class CustomerCreditReminderFlowTests
 {
     private const string AnaPhone = "+525512345678";
     private const string LuisPhone = "+525566667777";
+    private const string EvaPhone = "+525588889999";
     // Now is Sunday 4 Oct at 11:00 in Mexico City.
     private static readonly DateTimeOffset TenDaysAgo = new(2026, 9, 24, 12, 0, 0, TimeSpan.FromHours(-6));
 
@@ -152,10 +153,19 @@ public class CustomerCreditReminderFlowTests
         Assert.True(again.IsSuccess);
         var log = Assert.Single(await fixture.Context.AuditLogs.Where(l => l.Action == "CreditRemindersUpdated").ToListAsync());
         Assert.Contains("\"EveryDays\":5", log.Metadata);
+        // A template retired after it was chosen reads as the default text, which the reminders send instead: the screen
+        // sends that back, and the owner can still save.
+        credit.SetActive(false);
+        await fixture.Context.SaveChangesAsync();
+        var retiredChoice = await new GetCreditRemindersQueryHandler(fixture.Context, fixture.TenantService).Handle(new GetCreditRemindersQuery(), default);
+        Assert.Null(retiredChoice.TemplateId);
+        Assert.Empty(retiredChoice.Templates);
         // Turning them off needs no WhatsApp: a business that disconnected it can stop them.
         fixture.Context.WhatsAppConfigs.RemoveRange(fixture.Context.WhatsAppConfigs);
         await fixture.Context.SaveChangesAsync();
-        Assert.False((await handler.Handle(new UpdateCreditRemindersCommand { Enabled = false }, default)).Value.Enabled);
+        var off = await handler.Handle(new UpdateCreditRemindersCommand { Enabled = false, EveryDays = 5, TemplateId = retiredChoice.TemplateId }, default);
+        Assert.True(off.IsSuccess, off.Error);
+        Assert.False(off.Value.Enabled);
         Assert.True(typeof(UpdateCreditRemindersCommand).IsDefined(typeof(RequiresTenantManagerAttribute), false));
         Assert.True(typeof(GetCreditRemindersQuery).IsDefined(typeof(RequiresTenantManagerAttribute), false));
         Assert.False(new UpdateCreditRemindersCommandValidator().Validate(new UpdateCreditRemindersCommand { EveryDays = 31 }).IsValid);
@@ -194,6 +204,41 @@ public class CustomerCreditReminderFlowTests
         fixture.Clock.UtcNow = SalesTestFixture.Now.AddDays(3);
         Assert.Equal(1, await QueueAsync(fixture));
         Assert.Equal("credit:+525512345678:20261007", (await fixture.Context.OutgoingMessages.OrderByDescending(m => m.CreatedAt).FirstAsync()).DeduplicationKey);
+    }
+
+    [Fact]
+    public async Task Planner_ShouldReachEveryAccountPastTheLimitOfAPass_AndCountOnlyRemindersTheCustomerCouldGet()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, soap) = await ShopAsync(fixture);
+        await SetBusinessTermAsync(fixture, 7);
+        await TurnRemindersOnAsync(fixture, tenant, everyDays: 7);
+        // All three owe something overdue: Ana the most, then Luis, then Eva. Ana wrote BAJA.
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 1000m);
+        var luis = await AddCustomerAsync(fixture, tenant, "Luis Pérez", LuisPhone, creditLimit: 1000m);
+        var eva = await AddCustomerAsync(fixture, tenant, "Eva Ruiz", EvaPhone, creditLimit: 1000m);
+        await SellOnCreditAsync(fixture, ana, soap, quantity: 3, createdAt: TenDaysAgo);
+        await SellOnCreditAsync(fixture, luis, soap, quantity: 2, createdAt: TenDaysAgo);
+        await SellOnCreditAsync(fixture, eva, soap, quantity: 1, createdAt: TenDaysAgo);
+        fixture.Context.MessagingOptOuts.Add(new MessagingOptOut(tenant.Id, AnaPhone, OptOutSource.CustomerKeyword, SalesTestFixture.Now));
+        await fixture.Context.SaveChangesAsync();
+
+        // One per pass: who wrote BAJA or was reminded does not take the place of the rest.
+        Assert.Equal(1, await QueueAsync(fixture, passLimit: 1));
+        Assert.Equal(1, await QueueAsync(fixture, passLimit: 1));
+        Assert.Equal(0, await QueueAsync(fixture, passLimit: 1));
+        var reminders = await fixture.Context.OutgoingMessages.ToListAsync();
+        Assert.Equal([LuisPhone, EvaPhone], reminders.Select(m => m.Phone).Order());
+
+        // The next day: Luis's was skipped because the reminders were off, which he never got, so he is reminded again;
+        // Eva's failed to reach her, and she waits the days.
+        reminders.Single(m => m.Phone == LuisPhone).Skip(OutgoingMessageSender.CreditRemindersOffReason);
+        reminders.Single(m => m.Phone == EvaPhone).Fail("WhatsApp no lo entregó.");
+        await fixture.Context.SaveChangesAsync();
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddDays(1);
+        Assert.Equal(1, await QueueAsync(fixture));
+        Assert.Equal("credit:+525566667777:20261005",
+            (await fixture.Context.OutgoingMessages.OrderByDescending(m => m.CreatedAt).FirstAsync()).DeduplicationKey);
     }
 
     [Fact]
@@ -351,10 +396,10 @@ public class CustomerCreditReminderFlowTests
     }
 
     /// <summary>One pass of the planner, as the worker runs it, saved.</summary>
-    private static async Task<int> QueueAsync(SalesTestFixture fixture)
+    private static async Task<int> QueueAsync(SalesTestFixture fixture, int passLimit = CreditReminderPlanner.MaxPerPass)
     {
         var settings = await fixture.Context.TenantSettings.AsNoTracking().SingleAsync();
-        var queued = await new CreditReminderPlanner(fixture.Context, new PhoneNormalizationService(), fixture.Clock)
+        var queued = await new CreditReminderPlanner(fixture.Context, new PhoneNormalizationService(), fixture.Clock) { PassLimit = passLimit }
             .QueueDueAsync(settings, default);
         // The in-memory context leaves the date to the test: stamp it as the database would.
         foreach (var entry in fixture.Context.ChangeTracker.Entries<OutgoingMessage>().Where(e => e.State == EntityState.Added))

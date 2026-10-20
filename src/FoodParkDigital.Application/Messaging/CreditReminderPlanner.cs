@@ -1,3 +1,4 @@
+using System.Globalization;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers;
@@ -26,6 +27,7 @@ public sealed class CreditReminderPlanner
     /// <summary>A reminder still waiting at this hour of its day (the worker was stopped) is no longer sent.</summary>
     public static readonly TimeOnly SendUntil = new(20, 0);
     public const int MaxPerPass = 500;
+    private const string KeyPrefix = "credit:";
 
     private readonly IApplicationDbContext _context;
     private readonly IPhoneNormalizationService _phones;
@@ -38,7 +40,10 @@ public sealed class CreditReminderPlanner
         _clock = clock;
     }
 
-    public static string Key(string phoneKey, DateOnly businessDay) => $"credit:{phoneKey}:{businessDay:yyyyMMdd}";
+    /// <summary>Accounts queued per pass and business, at most: the rest go in the next passes.</summary>
+    internal int PassLimit { get; init; } = MaxPerPass;
+
+    public static string Key(string phoneKey, DateOnly businessDay) => $"{KeyPrefix}{phoneKey}:{businessDay:yyyyMMdd}";
 
     /// <returns>Reminders queued.</returns>
     public async Task<int> QueueDueAsync(TenantSettings settings, CancellationToken cancellationToken)
@@ -60,29 +65,31 @@ public sealed class CreditReminderPlanner
         var business = new CreditTerm.Settings(settings.CreditTermDays, settings.TimeZone);
         var lines = Receivables.Lines(_context.Orders.AsNoTracking());
         var overdue = await CreditTerm.OverdueAsync(_context, lines, business, now, cancellationToken);
-        var accounts = await overdue
+        var candidates = await overdue
             .GroupBy(l => l.Phone)
             .Select(g => new { Phone = g.Key, Overdue = g.Sum(l => l.Balance), OldestOwedSince = g.Min(l => l.OwedSince) })
             .OrderByDescending(a => a.Overdue)
             .ThenBy(a => a.Phone)
-            .Take(MaxPerPass)
             .ToListAsync(cancellationToken);
+        if (candidates.Count == 0)
+            return 0;
+
+        // Who was reminded within the days or wrote BAJA is left out before the limit: otherwise the same accounts, which
+        // get nothing, would take every place of every pass and the rest would never be reminded.
+        var reminded = await RemindedAsync(today, settings.CreditReminderEveryDays, now, cancellationToken);
+        var optedOut = (await _context.MessagingOptOuts.AsNoTracking()
+                .Where(o => o.ResubscribedAt == null)
+                .Select(o => o.Phone)
+                .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+        var accounts = candidates
+            .Where(a => !reminded.Contains(a.Phone) && !optedOut.Contains(a.Phone))
+            .Take(PassLimit)
+            .ToList();
         if (accounts.Count == 0)
             return 0;
 
         var phones = accounts.Select(a => a.Phone).ToList();
-        var keys = phones.Select(phone => Key(phone, today)).ToList();
-        var alreadyQueued = (await _context.OutgoingMessages.AsNoTracking()
-                .Where(m => m.DeduplicationKey != null && keys.Contains(m.DeduplicationKey))
-                .Select(m => m.DeduplicationKey!)
-                .ToListAsync(cancellationToken))
-            .ToHashSet(StringComparer.Ordinal);
-        var lastReminded = await LastRemindedAsync(phones, zone, cancellationToken);
-        var optedOut = (await _context.MessagingOptOuts.AsNoTracking()
-                .Where(o => o.ResubscribedAt == null && phones.Contains(o.Phone))
-                .Select(o => o.Phone)
-                .ToListAsync(cancellationToken))
-            .ToHashSet(StringComparer.Ordinal);
         var owed = await lines
             .Where(l => phones.Contains(l.Phone))
             .GroupBy(l => l.Phone)
@@ -104,18 +111,15 @@ public sealed class CreditReminderPlanner
         var queued = 0;
         foreach (var account in accounts)
         {
-            var key = Key(account.Phone, today);
-            if (alreadyQueued.Contains(key)
-                || optedOut.Contains(account.Phone)
-                || (lastReminded.TryGetValue(account.Phone, out var last) && last.AddDays(settings.CreditReminderEveryDays) > today)
+            // The oldest last day to pay that passed, by the customer's term: every order of theirs counts by the same one.
+            // None when their own term was removed since what is overdue was read and the business has none.
+            var term = business.For(ownTerms.TryGetValue(account.Phone, out var days) ? days : null);
+            if (term.DueOn(account.OldestOwedSince) is not { } dueOn
                 || !_phones.TryNormalizeToE164(account.Phone, "MX", out var phone))
                 continue;
 
-            // The oldest last day to pay that passed, by the customer's term: every order of theirs counts by the same one.
-            var term = business.For(ownTerms.TryGetValue(account.Phone, out var days) ? days : null);
             var name = names.GetValueOrDefault(account.Phone);
-            var values = Values(name, businessName, owed.GetValueOrDefault(account.Phone, account.Overdue), account.Overdue,
-                term.DueOn(account.OldestOwedSince)!.Value);
+            var values = Values(name, businessName, owed.GetValueOrDefault(account.Phone, account.Overdue), account.Overdue, dueOn);
             _context.OutgoingMessages.Add(new OutgoingMessage(
                 settings.TenantId,
                 MessagePurpose.CreditReminder,
@@ -126,7 +130,7 @@ public sealed class CreditReminderPlanner
                 template?.LanguageCode ?? MessageTemplate.DefaultLanguageCode,
                 MessageTemplateText.Parameters(body, values),
                 notBefore: now,
-                deduplicationKey: key));
+                deduplicationKey: Key(account.Phone, today)));
             queued++;
         }
 
@@ -144,23 +148,47 @@ public sealed class CreditReminderPlanner
         };
 
     /// <summary>
-    /// The business day of the last credit reminder queued to each phone (sent, failed or skipped: a customer who opted out
-    /// or could not be reached is not asked again every pass), by the phone key.
+    /// The phone keys that must wait: today's key is taken whatever became of its reminder (one per day), and within the
+    /// last <paramref name="everyDays"/> business days a reminder counts sent, failed or skipped, so a customer who could
+    /// not be reached is not asked again every pass. A cancelled one does not count, nor one skipped for the business's
+    /// own reasons (the reminders were off, or the worker was stopped past the hour): the customer never got it.
     /// </summary>
-    private async Task<Dictionary<string, DateOnly>> LastRemindedAsync(
-        IReadOnlyList<string> phones, TimeZoneInfo zone, CancellationToken cancellationToken)
+    private async Task<HashSet<string>> RemindedAsync(DateOnly today, int everyDays, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var variants = phones.SelectMany(MessagingPhone.Variants).Distinct().ToList();
+        var since = today.AddDays(1 - everyDays);
+        // The key's day decides; the date only bounds the read, with a day to spare for the time zone. The next attempt
+        // starts when the reminder is queued and only moves later.
+        var readFrom = now.AddDays(-(everyDays + 1));
         var reminders = await _context.OutgoingMessages.AsNoTracking()
-            .Where(m => m.Purpose == MessagePurpose.CreditReminder
-                && m.Status != OutgoingMessageStatus.Cancelled
-                && variants.Contains(m.Phone))
-            .GroupBy(m => m.Phone)
-            .Select(g => new { Phone = g.Key, Last = g.Max(m => m.CreatedAt) })
+            .Where(m => m.Purpose == MessagePurpose.CreditReminder && m.DeduplicationKey != null && m.NextAttemptAt >= readFrom)
+            .Select(m => new { Key = m.DeduplicationKey!, m.Status, m.LastError })
             .ToListAsync(cancellationToken);
-        return reminders
-            .GroupBy(r => MessagingPhone.ToKey(r.Phone))
-            .ToDictionary(g => g.Key, g => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(g.Max(r => r.Last), zone).Date));
+        var reminded = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var reminder in reminders)
+        {
+            if (!TryParseKey(reminder.Key, out var phone, out var day) || day < since)
+                continue;
+            if (day == today || CountsForCadence(reminder.Status, reminder.LastError))
+                reminded.Add(phone);
+        }
+
+        return reminded;
+    }
+
+    private static bool CountsForCadence(OutgoingMessageStatus status, string? reason)
+        => status != OutgoingMessageStatus.Cancelled
+            && !(status == OutgoingMessageStatus.Skipped
+                && reason is OutgoingMessageSender.CreditRemindersOffReason or OutgoingMessageSender.CreditReminderLateReason);
+
+    private static bool TryParseKey(string key, out string phone, out DateOnly day)
+    {
+        phone = string.Empty;
+        day = default;
+        var dayStart = key.LastIndexOf(':') + 1;
+        if (!key.StartsWith(KeyPrefix, StringComparison.Ordinal) || dayStart <= KeyPrefix.Length + 1)
+            return false;
+        phone = key[KeyPrefix.Length..(dayStart - 1)];
+        return DateOnly.TryParseExact(key[dayStart..], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out day);
     }
 
     /// <summary>The customer record's name for each phone, the active one first; else the name on their latest order owed.</summary>

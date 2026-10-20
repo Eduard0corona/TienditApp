@@ -198,8 +198,10 @@ public static class CreditTerm
         var order = Expression.Parameter(typeof(TermedOrder), "order");
         var own = Expression.Property(order, nameof(TermedOrder.OwnDays));
         var owedSince = Expression.Property(Expression.Property(order, nameof(TermedOrder.Line)), nameof(OwedOrder.OwedSince));
+        // Through a holder, as a captured variable: the database gets each instant as a parameter, and the query stays
+        // the same from one day (and business) to the next instead of a new one to compile.
         Expression OwedBefore(DateTimeOffset instant) =>
-            Expression.LessThan(owedSince, Expression.Constant(instant, typeof(DateTimeOffset)));
+            Expression.LessThan(owedSince, Expression.Property(Expression.Constant(new Instant(instant)), nameof(Instant.Value)));
 
         Expression? overdue = null;
         if (business.Days is not null)
@@ -213,6 +215,11 @@ public static class CreditTerm
         }
 
         return Expression.Lambda<Func<TermedOrder, bool>>(overdue ?? Expression.Constant(false), order);
+    }
+
+    private sealed class Instant(DateTimeOffset value)
+    {
+        public DateTimeOffset Value { get; } = value;
     }
 }
 

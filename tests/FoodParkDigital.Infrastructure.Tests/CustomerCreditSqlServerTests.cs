@@ -253,9 +253,37 @@ public class CustomerCreditSqlServerTests
             [("credit:+525512345678:20261019", "Ana López"), ("credit:+525566667777:20261019", "Luis Pérez")],
             messages.Select(m => (m.DeduplicationKey!, m.RecipientName!)));
         Assert.Contains("$100.00 venció el sábado 17 de octubre", messages[1].Body);
-        await using var again = database.CreateContext(shop.TenantId);
-        Assert.Equal(0, await new CreditReminderPlanner(again, new PhoneNormalizationService(), new Clock())
-            .QueueDueAsync(await again.TenantSettings.AsNoTracking().SingleAsync(), default));
+        await using (var again = database.CreateContext(shop.TenantId))
+        {
+            Assert.Equal(0, await new CreditReminderPlanner(again, new PhoneNormalizationService(), new Clock())
+                .QueueDueAsync(await again.TenantSettings.AsNoTracking().SingleAsync(), default));
+        }
+
+        // Without the business's term only the customers' own count, by the database too; without any, nothing is overdue.
+        await using (var context = database.CreateContext(shop.TenantId))
+        {
+            (await context.TenantSettings.SingleAsync()).SetCreditTermDays(null);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var read = database.CreateContext(shop.TenantId))
+        {
+            var onlyOwn = await new GetReceivablesQueryHandler(read, new PhoneNormalizationService(), new Clock())
+                .Handle(new GetReceivablesQuery { OverdueOnly = true }, default);
+            Assert.Equal((200m, (int?)null), (onlyOwn.TotalOverdue, onlyOwn.CreditTermDays));
+            Assert.Equal([AnaPhone, "+525566667777"], onlyOwn.Page.Items.Select(i => i.Phone).Order());
+        }
+
+        await using (var context = database.CreateContext(shop.TenantId))
+        {
+            foreach (var record in await context.Customers.ToListAsync())
+                record.SetCreditTermDays(null);
+            await context.SaveChangesAsync();
+        }
+
+        await using var none = database.CreateContext(shop.TenantId);
+        var noTerm = await new GetReceivablesQueryHandler(none, new PhoneNormalizationService(), new Clock()).Handle(new GetReceivablesQuery(), default);
+        Assert.Equal((300m, 0m), (noTerm.TotalOwed, noTerm.TotalOverdue));
     }
 
     /// <summary>A shop that sells soap at $100 (IVA included), with an open drawer and Ana, who may owe the limit given.</summary>
