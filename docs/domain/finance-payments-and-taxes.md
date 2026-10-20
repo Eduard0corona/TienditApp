@@ -163,7 +163,17 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
 - **El límite** (`Customer.CreditLimit`, `decimal(18,2)`) se compara con lo que debe más lo que deja la venta (su total menos los pagos que la acompañan), en `decimal`, sin redondeos intermedios: la venta cabe si la suma no pasa del límite.
 - **El abono** se reparte en orden (el pedido más viejo primero, luego el folio): cada parte es `min(lo que queda del abono, saldo del pedido)`, un `OrderPayment` en la caja de quien cobra, con el método del abono. Las partes suman el abono exacto; con efectivo, `CashReceived` de la última parte es su monto más el cambio, así que el cambio del abono sale una vez. Un abono mayor que lo que debe se rechaza: no hay saldo a favor.
 - **Lo que no cambia:** el corte y los reportes (un abono es un pago con su método), el CFDI (un pedido con saldo ya se timbra PPD) y los cobros en Pedidos, que siguen siendo pago por pedido.
-- **Pendiente** (Fase 26B en adelante): condonar con un ajuste trazable, saldo a favor, intereses y plazos.
+- **Pendiente** (Fase 26C en adelante): saldo a favor, intereses, recordatorios y un plazo por cliente.
+
+## Condonar y plazo del fiado (Fase 26B)
+
+[ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md):
+
+- **Condonar es un registro aparte** (`OrderWriteOff`, inmutable): monto (`decimal(18,2)`, mayor a cero, a centavos), motivo, nota, fecha y autor. El pedido acumula `WrittenOffAmount` y su saldo es `Total − PaidAmount − WrittenOffAmount`. La venta, sus pagos, sus impuestos y la caja no cambian: no es un pago ni un reembolso.
+- **El reparto** es como el de un abono: de un pedido, o del más viejo al más nuevo, cada parte `min(lo que queda, saldo del pedido)`. Nunca más que el saldo, y un pago posterior cubre solo lo que queda.
+- **El plazo** (`TenantSettings.CreditTermDays`, de 1 a 120 días o sin plazo) solo dice qué está vencido: un pedido vence al día siguiente de su día de venta más el plazo, en la zona horaria del negocio. No cobra intereses ni impide fiar.
+- **El CFDI va por el total:** lo condonado se queda como no pagado en el borrador (PPD si queda algo sin pagar), con un aviso de que requiere una nota de crédito (CFDI de egreso), que todavía no se genera.
+- **Lo que no cambia:** el corte, los reportes por cobros y las ventas. Lo condonado se ve en cada pedido, en la cuenta del cliente y en la actividad del negocio.
 
 ## Otros cálculos
 
@@ -178,7 +188,7 @@ Compras redondean línea a 4 decimales y órdenes a 2, sin política transversal
 - Moneda, precisión, midpoint rounding, nivel de redondeo y orden de operaciones son explícitos.
 - No modificar/eliminar transacciones históricas para corregir saldo.
 - Correcciones futuras usan ajustes crédito/débito trazables, relacionados con orden, pago o movimiento original.
-- Los ajustes contemplan cuentas por cobrar, saldo a favor, Wallet y conciliación. Hoy existe el fiado (Fase 26A), cuentas por cobrar sin ajustes; el saldo a favor, Wallet y la conciliación no existen.
+- Los ajustes contemplan cuentas por cobrar, saldo a favor, Wallet y conciliación. Hoy existen el fiado (Fase 26A) y condonar (Fase 26B), el primer ajuste de crédito; el saldo a favor, Wallet y la conciliación no existen.
 - Evidencias de pago se tratan como archivo sensible tenant-scoped: almacenamiento privado y descarga autorizada (Fase 8).
 - Pago, orden, caja y ubicación deben compartir tenant y correlación verificable.
 

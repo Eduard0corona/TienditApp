@@ -394,7 +394,18 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Abonar a la cuenta:** un monto con un método que entra a caja, repartido del pedido más viejo al más nuevo como pagos de cada pedido en la caja de quien cobra, con la nota «Abono a la cuenta»; el cambio va con la última parte. Nunca más de lo que debe. Un abono que llega dos veces, o después de otro que la pantalla no vio, encuentra la cuenta cambiada y se rechaza.
 - **El estado de cuenta:** el límite, lo que debe y lo que le queda, los pedidos que debe (hasta 100, del más viejo) y sus últimos 10 pagos; «Enviar por WhatsApp» lo manda desde el dispositivo.
 - **Clientes › Por cobrar:** una fila por teléfono con lo que debe, cuántos pedidos y desde cuándo, su límite (si hoy se le fía) y si lo rebasa, y el total; busca por nombre o parte del teléfono y ordena por lo que debe o por lo más viejo.
-- **Sin** condonar, saldo a favor, intereses, plazos ni recordatorios (Fase 26B).
+- **Sin** saldo a favor, intereses ni recordatorios (Fase 26C en adelante).
+
+## Condonar y plazo del fiado (Fase 26B)
+
+[ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md):
+
+- **Condonar:** el dueño o un administrador perdona todo o parte de lo que debe un cliente, desde su estado de cuenta: de un pedido o de toda la cuenta (del pedido más viejo al más nuevo), con un motivo (no se va a cobrar, error al registrar, cortesía u otro, que pide una nota). Cada parte queda en su pedido con monto, motivo, nota, fecha y quién lo hizo, y en la actividad del negocio. No mueve la caja ni cambia la venta ni sus pagos; baja lo que se debe. No se deshace.
+- **Qué se condona:** solo lo que el cliente debe (una venta fiada, o un pedido entregado o terminado sin cobrar), nunca lo que cobra un repartidor ni más que el saldo. Si la cuenta cambió desde que se abrió la pantalla (un abono o una venta fiada), se rechaza. Después de condonar, un pago cubre solo lo que queda.
+- **Plazo del fiado:** el dueño o un administrador le pone al negocio un plazo de 1 a 120 días, o lo quita. Un pedido vence al día siguiente de su último día para pagar (el día de la venta más el plazo, en la zona horaria del negocio). Solo dice qué está vencido: no cobra intereses ni impide fiar.
+- **Lo vencido se ve:** en Por cobrar (por cliente, el total y «Solo vencidos»), en el estado de cuenta (lo vencido y el día límite de cada pedido; el resumen para WhatsApp lo dice) y en Vender, que avisa antes de fiar.
+- **Lo que ve el cliente** de su pedido ya no le pide pagar lo condonado.
+- **Entregar sin cobrar** sigue igual: pide `ManageOrders` y cuenta como deuda.
 
 ## Cancelación y trazabilidad
 

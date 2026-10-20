@@ -48,7 +48,7 @@ function pastSale(data: DemoData, sale: PastSale) {
  * $360 (his limit was lowered) and Sofía up to $500 (she owes nothing). Juan Carlos owes the rest of this morning's
  * order without fiado, and Antonia, without a customer record, a sale delivered unpaid on Wednesday.
  */
-function withCredit(data: DemoData) {
+export function withCredit(data: DemoData) {
   const customer = (name: string) => data.customers.find((candidate: { name: string }) => candidate.name === name);
   const limits: Record<string, number> = {
     'María Fernanda López': 800, 'Oficinas Grupo Altavista': 5000, 'Roberto Sánchez Vega': 300, 'Sofía Ramírez Cruz': 500,

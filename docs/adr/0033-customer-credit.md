@@ -85,14 +85,14 @@ Es la primera parte de «Ajustes financieros», la única fila «Objetivo no imp
   - Lo que se fió deja de estar repartido en pedidos sueltos: hay una lista de quién debe y una cuenta por cliente que se abona de una vez.
   - La caja y los reportes no cambian: fiar no es cobrar y abonar sí lo es.
 - **Corrige de paso:** pagar un servicio en Pedidos ya no lo cierra mientras sus piezas siguen en el taller. El cobro no cargaba las piezas, así que el último pago de un servicio con anticipo lo cerraba; con el fiado pasaba con cualquier abono.
-- **Lo que limita** (queda para la 26B):
-  - Sin condonar una deuda ni devolver lo fiado sin dinero. Un pedido entregado no se cancela y un reembolso necesita algo pagado.
+- **Lo que limita** (la 26B, [ADR 0034](0034-customer-write-offs-and-credit-term.md), resolvió condonar y el plazo):
+  - Sin condonar una deuda ni devolver lo fiado sin dinero. Un pedido entregado no se cancela y un reembolso necesita algo pagado. *Resuelto en la 26B: condonar con un registro aparte.*
   - Sin saldo a favor: ni anticipos ni abonos de más.
-  - Sin intereses, plazos ni recordatorios automáticos.
+  - Sin intereses, plazos ni recordatorios automáticos. *La 26B agregó el plazo y lo vencido; intereses y recordatorios siguen fuera.*
   - Lo fiado va por teléfono: un cliente que cambia de número empieza otra cuenta, y una venta al cliente con otro teléfono se rechaza.
   - Sin conexión no se fía: el límite se revisa al vender.
   - Un pedido entregado sin pagar cuenta como deuda aunque no se haya vendido fiado, también contra el límite.
-  - Por esa misma regla, quien solo tiene `ManageOrders` puede guardar una venta sin cobrar y marcarla entregada: queda como deuda sin `ChargeOrders` y sin revisar el límite. Pasaba igual antes de la 26A (el saldo ya contaba en la ficha). La 26B decide si entregar sin cobrar pide `ChargeOrders` o revisa el límite.
+  - Por esa misma regla, quien solo tiene `ManageOrders` puede guardar una venta sin cobrar y marcarla entregada: queda como deuda sin `ChargeOrders` y sin revisar el límite. Pasaba igual antes de la 26A (el saldo ya contaba en la ficha). *La 26B lo deja así: el mesero y la cocina entregan antes de cobrar, el historial dice quién lo entregó, y el dueño ve lo vencido y puede condonarlo.*
 - **Reversibilidad:**
   - Volver a la versión anterior funciona sin tocar la base: no conoce las columnas, y los saldos fiados se siguen viendo como saldos que se cobran desde el pedido.
   - `rollback.sql` borra las columnas y el índice solo si ningún cliente tiene límite y ninguna venta se cerró fiada. En cuanto un negocio fía, se detiene con el error 50026 sin cambiar nada, y solo queda corregir hacia adelante.

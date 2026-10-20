@@ -292,7 +292,7 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
           {canWriteOff && account.owed > 0 && (
             <button
               type="button"
-              className="btn btn-outline-danger btn-touch"
+              className="btn btn-light text-danger btn-touch"
               onClick={() => {
                 setPartialNotice('');
                 setWriteOffError('');

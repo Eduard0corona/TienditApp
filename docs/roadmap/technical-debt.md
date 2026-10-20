@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-19 con la Fase 26A y antes con la 24J, la 24I, la 24H, la 24G, la 24F, la 24D-2, la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la 24H, la 24G, la 24F, la 24D-2, la 24E, la 24D-1, la 25, la 24C, la 24B, la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -159,17 +159,24 @@ Actualizada el 2026-10-19 con la Fase 26A y antes con la 24J, la 24I, la 24H, la
   - **«Te atiende»** lee el nombre para clientes de hoy: si el dueño lo cambia, las citas anteriores dicen el nuevo.
   - La 24J deja la primera visita en 178,773 B (+25 B, solo por las huellas en los nombres de los archivos de cada ruta) sin subir el presupuesto.
 - Fiado (Fase 26A, [ADR 0033](../adr/0033-customer-credit.md)):
-  - **Sin condonar ni devolver lo fiado sin dinero:** un pedido entregado no se cancela y un reembolso necesita algo pagado. Una deuda que no se va a cobrar se queda en Por cobrar (Fase 26B: ajuste trazable).
+  - Resuelto en la 26B: una deuda que no se va a cobrar se condona con un registro aparte ([ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md)).
   - **Sin saldo a favor:** ni anticipos ni abonos de más; un abono mayor que lo que debe se rechaza.
-  - **Sin intereses, plazos ni recordatorios automáticos:** el estado de cuenta se manda a mano por WhatsApp desde el dispositivo.
+  - **Sin intereses ni recordatorios automáticos:** el estado de cuenta se manda a mano por WhatsApp desde el dispositivo (la 26B agregó el plazo y lo vencido).
   - **La cuenta va por teléfono:** un cliente que cambia de número empieza otra cuenta, y una venta fiada al cliente con otro teléfono se rechaza.
   - **Sin conexión no se fía:** el límite se revisa al vender.
-  - **Entregar sin cobrar es deuda:** un pedido entregado con saldo cuenta como deuda aunque no se vendiera fiado, también contra el límite. Quien solo tiene `ManageOrders` puede guardar una venta sin cobrar y marcarla entregada, sin `ChargeOrders` ni revisión del límite (pasaba igual antes de la 26A, cuando el saldo ya contaba en la ficha). La 26B decide si entregar sin cobrar pide `ChargeOrders` o revisa el límite.
+  - **Entregar sin cobrar es deuda:** un pedido entregado con saldo cuenta como deuda aunque no se vendiera fiado, también contra el límite. Quien solo tiene `ManageOrders` puede guardar una venta sin cobrar y marcarla entregada, sin `ChargeOrders` ni revisión del límite (pasaba igual antes de la 26A, cuando el saldo ya contaba en la ficha). La 26B lo deja así a propósito: el mesero y la cocina entregan antes de cobrar; el dueño ve lo vencido y lo condona si no se cobra.
   - **El abono no tiene llave de idempotencia:** lo que lo protege de repetirse es lo que la cuenta debía en la pantalla (`ExpectedOwed`); un cliente que no lo manda (otra integración) puede registrar el mismo abono dos veces mientras quepa en lo que se debe. Los pagos en Pedidos tienen el mismo hueco desde antes.
   - **Dos clientes con el mismo teléfono** (no hay índice único, solo la revisión al guardar): el fiado, la ficha y Por cobrar eligen el mismo, el activo y luego el que tiene límite.
   - **Por cobrar lee hasta 50 clientes por nombre** al buscar; uno que no entra se encuentra por su teléfono.
   - **El estado de cuenta muestra hasta 100 pedidos** (el más viejo primero) y dice cuántos más debe; un abono reparte hasta 500.
   - La 26A deja la primera visita en 179,005 B (+232 B) y sube el presupuesto a 179,100 B: «Fiar» vive en el cobro de Vender.
+- Condonar y plazo del fiado (Fase 26B, [ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md)):
+  - **Sin nota de crédito fiscal:** lo condonado de una venta facturada requiere un CFDI de egreso que TienditApp no genera; el borrador de la factura lo avisa.
+  - **Sin «deshacer»:** una condonación equivocada se compensa hacia adelante (no hay un cargo de vuelta).
+  - **Sin vista de lo condonado en Reportes:** está en cada pedido, en la cuenta del cliente (las últimas 10) y en la actividad.
+  - **Un plazo para todo el negocio:** sin plazo por cliente ni recordatorios de lo vencido (Fase 26C).
+  - **Durante un swap con la versión anterior** (26A), esa versión no resta lo condonado y dejaría cobrarlo; un pago así deja el pedido con saldo negativo, que esta versión trata como pagado.
+  - La 26B deja la primera visita en 179,074 B (+69 B) dentro del presupuesto: las etiquetas de los motivos van en un módulo que solo cargan Clientes y Pedidos.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

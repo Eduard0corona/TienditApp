@@ -566,6 +566,27 @@ La Fase 26A trae una migración, [`database/production/20261019202512_AddCustome
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las columnas, y lo fiado se sigue viendo como saldo que se cobra desde el pedido.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50026, sin cambiar nada, en cuanto un cliente tiene límite o una venta se cerró fiada: perdería a quién se le fía y qué se fió. Sin ninguno, quita las columnas y el índice, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Condonar y plazo del fiado (Fase 26B)
+
+La Fase 26B trae una migración, [`database/production/20261020003342_AddCustomerWriteOffs`](../../database/production/20261020003342_AddCustomerWriteOffs). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md)).
+
+- **La migración** agrega una tabla, dos columnas y tres restricciones:
+  - la tabla `OrderWriteOffs` (vacía), con `CK_OrderWriteOffs_Amount`: lo que el negocio condona, un registro por pedido;
+  - `Orders.WrittenOffAmount` (`decimal(18,2)`, 0 por omisión), con `CK_Orders_WrittenOffAmount`: lo condonado de cada pedido;
+  - `TenantSettings.CreditTermDays` (`int`, con nulos), con `CK_TenantSettings_CreditTermDays` (de 1 a 120): el plazo del fiado; ningún negocio tiene uno al aplicarla.
+
+  No cambia ningún saldo. Después de aplicarla, el `verify.sql` muestra la tabla, las columnas y las restricciones. Su consulta 3 cuenta lo condonado y los negocios con plazo (ninguno hasta desplegar), y la 4 lo que se debe por la regla de la 26A, igual antes y después.
+- **Mientras se publica:** la versión de `master` (Fase 26A) no conoce la tabla ni las columnas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:** nada hasta que el dueño ponga un plazo o condone algo. El dueño y los administradores ven «Condonar» en el estado de cuenta y «Poner plazo» en Por cobrar.
+- **El contrato solo agrega:**
+  - `POST /api/v1/customers/account/write-offs`, `PUT /api/v1/customers/credit-term` y `overdueOnly` en `GET /api/v1/customers/receivables`;
+  - lo vencido y el plazo en Por cobrar y en el estado de cuenta, `writtenOffAmount` y `writeOffs` en el pedido, y `writtenOffAmount` en lo que ve el cliente de su pedido.
+
+  Nada se quita ni cambia de nombre.
+- **Sin configuración ni servicios externos.**
+- **Volver a la versión anterior:** funciona sin tocar la base, pero esa versión no resta lo condonado: lo vuelve a mostrar como saldo y dejaría cobrarlo. Si ya se condonó algo, vuelve a esta versión cuanto antes.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50027, sin cambiar nada, en cuanto un negocio condonó algo o puso plazo: lo condonado volvería a ser deuda y se perdería el plazo. Sin ninguno, quita la tabla, las columnas y las restricciones, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

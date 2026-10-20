@@ -2,7 +2,9 @@
 // account of a customer (GET /customers/account), a payment to it (POST /customers/account/payments) and how much they may
 // owe (PUT /customers/{id}/credit-limit). What is owed comes from `data.orders` by the server's rule (Receivables): not
 // cancelled, with a phone and a balance, and delivered or sold on credit, except what a courier still collects. The limit
-// is `creditLimit` of the customer in `data.customers`; without one, nobody is sold on credit.
+// is `creditLimit` of the customer in `data.customers`; without one, nobody is sold on credit. Fase 26B: what the business
+// forgave (`writtenOffAmount` and `writeOffs` of each order) is not owed, and with a term (`data.creditTermDays`) what is
+// past it is overdue, by the business's calendar (America/Mexico_City, UTC-6).
 import { NOW_ISO } from './data.mjs';
 
 // OrderStatus as the contract numbers it.
@@ -12,6 +14,28 @@ const CANCELLED = 99;
 const RECENT_PAYMENTS = 10;
 
 const r2 = (value) => Math.round(value * 100) / 100;
+const RECENT_WRITE_OFFS = 10;
+const TZ_OFFSET_MS = 6 * 3_600_000;
+
+/** What is still owed of an order: its total minus what was paid and what the business forgave (Order.Balance). */
+export const balanceOf = (order) => r2(order.total - order.paidAmount - (order.writtenOffAmount ?? 0));
+
+/** The business's calendar date of an instant ("2026-10-04"). */
+const businessDate = (iso) => new Date(new Date(iso).getTime() - TZ_OFFSET_MS).toISOString().slice(0, 10);
+
+/** The last day to pay an order with the business's term (CreditTerm.DueOn); null without a term. */
+function dueOn(data, order) {
+  if (data.creditTermDays == null) return null;
+  const day = new Date(`${businessDate(order.createdAt)}T12:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + data.creditTermDays);
+  return day.toISOString().slice(0, 10);
+}
+
+/** Its last day to pay has passed. */
+export const isOverdue = (data, order) => {
+  const due = dueOn(data, order);
+  return due != null && due < businessDate(NOW_ISO);
+};
 
 /** The phone the orders are grouped by: +52 and the last ten digits, as the server keys them. */
 export function phoneKey(phone) {
@@ -21,7 +45,7 @@ export function phoneKey(phone) {
 
 /** The server's rule of an order owed (Receivables.IsOwed). */
 export function isOwed(order) {
-  return order.status !== CANCELLED && !!phoneKey(order.customerPhone) && order.total > order.paidAmount
+  return order.status !== CANCELLED && !!phoneKey(order.customerPhone) && balanceOf(order) > 0
     && (!!order.soldOnCredit || order.status === DELIVERED || order.status === COMPLETED)
     && !(order.delivery?.cashToCollect != null && order.status === DELIVERED);
 }
@@ -29,7 +53,7 @@ export function isOwed(order) {
 /** What the orders with a phone owe, as the customer card and the account add it up. */
 export function owedBy(data, phone) {
   const key = phoneKey(phone);
-  return r2(data.orders.filter((o) => isOwed(o) && phoneKey(o.customerPhone) === key).reduce((sum, o) => sum + o.total - o.paidAmount, 0));
+  return r2(data.orders.filter((o) => isOwed(o) && phoneKey(o.customerPhone) === key).reduce((sum, o) => sum + balanceOf(o), 0));
 }
 
 /** The customer record of a phone: the active one first (CreditAccount.RecordAsync). */
@@ -41,17 +65,22 @@ export function recordOf(data, key) {
 /** The business sells to them on credit now: an active customer record with a phone and a limit. */
 export const sellsOnCredit = (record) => !!record && record.isActive && !!record.phone && record.creditLimit != null;
 
-function account(data, key, record) {
+export function account(data, key, record) {
   const orders = data.orders
     .filter((o) => isOwed(o) && phoneKey(o.customerPhone) === key)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const owed = r2(orders.reduce((sum, o) => sum + o.total - o.paidAmount, 0));
+  const owed = r2(orders.reduce((sum, o) => sum + balanceOf(o), 0));
   const limit = record?.creditLimit ?? null;
   const payments = data.orders
     .filter((o) => phoneKey(o.customerPhone) === key)
     .flatMap((o) => (o.payments ?? []).map((p) => ({ orderNumber: o.orderNumber, paidAt: p.paidAt, amount: p.amount, method: p.method })))
     .sort((a, b) => b.paidAt.localeCompare(a.paidAt))
     .slice(0, RECENT_PAYMENTS);
+  const writeOffs = data.orders
+    .filter((o) => phoneKey(o.customerPhone) === key && o.status !== CANCELLED)
+    .flatMap((o) => (o.writeOffs ?? []).map((w) => ({ orderNumber: o.orderNumber, writtenOffAt: w.writtenOffAt, amount: w.amount, reason: w.reason, notes: w.notes ?? null })))
+    .sort((a, b) => b.writtenOffAt.localeCompare(a.writtenOffAt))
+    .slice(0, RECENT_WRITE_OFFS);
   return {
     phone: key,
     name: record?.name ?? [...orders].reverse()[0]?.customerName ?? null,
@@ -61,12 +90,16 @@ function account(data, key, record) {
     owed,
     available: limit == null ? null : r2(Math.max(0, limit - owed)),
     overLimit: limit != null && owed > limit,
+    creditTermDays: data.creditTermDays ?? null,
+    overdue: r2(orders.filter((o) => isOverdue(data, o)).reduce((sum, o) => sum + balanceOf(o), 0)),
     orders: orders.map((o) => ({
       orderId: o.id, orderNumber: o.orderNumber, createdAt: o.createdAt, status: o.status, soldOnCredit: !!o.soldOnCredit,
-      total: o.total, paid: o.paidAmount, balance: r2(o.total - o.paidAmount),
+      total: o.total, paid: o.paidAmount, writtenOff: o.writtenOffAmount ?? 0, balance: balanceOf(o),
+      dueOn: dueOn(data, o), isOverdue: isOverdue(data, o),
     })),
     ordersCount: orders.length,
     recentPayments: payments,
+    recentWriteOffs: writeOffs,
   };
 }
 
@@ -81,10 +114,15 @@ function receivables(data, q, paginate) {
       .map(({ key }) => key));
     lines = lines.filter(({ key }) => matching.has(key));
   }
+  if (q.get('overdueOnly') === 'true') {
+    const overdue = new Set(lines.filter(({ order }) => isOverdue(data, order)).map(({ key }) => key));
+    lines = lines.filter(({ key }) => overdue.has(key));
+  }
   const byPhone = new Map();
   for (const { key, order } of lines) {
-    const row = byPhone.get(key) ?? { phone: key, owed: 0, orders: 0, since: order.createdAt, latest: order };
-    row.owed = r2(row.owed + order.total - order.paidAmount);
+    const row = byPhone.get(key) ?? { phone: key, owed: 0, overdue: 0, orders: 0, since: order.createdAt, latest: order };
+    row.owed = r2(row.owed + balanceOf(order));
+    if (isOverdue(data, order)) row.overdue = r2(row.overdue + balanceOf(order));
     row.orders += 1;
     if (order.createdAt < row.since) row.since = order.createdAt;
     if (order.createdAt > row.latest.createdAt) row.latest = order;
@@ -96,6 +134,8 @@ function receivables(data, q, paginate) {
   const page = paginate(rows, q, 20);
   return {
     totalOwed: r2(rows.reduce((sum, row) => sum + row.owed, 0)),
+    totalOverdue: r2(rows.reduce((sum, row) => sum + row.overdue, 0)),
+    creditTermDays: data.creditTermDays ?? null,
     page: {
       ...page,
       items: page.items.map((row) => {
@@ -104,7 +144,7 @@ function receivables(data, q, paginate) {
         const limit = sellsOnCredit(record) ? record.creditLimit : null;
         return {
           phone: row.phone, name: record?.name ?? row.latest.customerName, customerId: record?.id ?? null, owed: row.owed,
-          orders: row.orders, since: row.since, creditLimit: limit, overLimit: limit != null && row.owed > limit,
+          orders: row.orders, since: row.since, creditLimit: limit, overLimit: limit != null && row.owed > limit, overdue: row.overdue,
         };
       }),
     },
@@ -118,17 +158,17 @@ function receivables(data, q, paginate) {
 function pay(data, body) {
   const key = body?.customerId ? phoneKey(data.customers.find((c) => c.id === body.customerId)?.phone) : phoneKey(body?.phone);
   const orders = data.orders.filter((o) => isOwed(o) && phoneKey(o.customerPhone) === key).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const owed = r2(orders.reduce((sum, o) => sum + o.total - o.paidAmount, 0));
+  const owed = r2(orders.reduce((sum, o) => sum + balanceOf(o), 0));
   if (body?.expectedOwed != null && Math.abs(body.expectedOwed - owed) > 0.001) {
     return { status: 400, json: { code: 'bad_request', detail: `La cuenta cambió: ahora debe $${owed.toFixed(2)}. Revisa el estado de cuenta antes de cobrar.` } };
   }
   let left = body?.amount ?? 0;
   for (const order of orders) {
     if (left <= 0) break;
-    const part = r2(Math.min(left, order.total - order.paidAmount));
+    const part = r2(Math.min(left, balanceOf(order)));
     order.payments.push({ id: `pay-${order.payments.length + 1}-${order.id}`, amount: part, method: body.method, paidAt: NOW_ISO, reference: body.reference, notes: body.notes });
     order.paidAmount = r2(order.paidAmount + part);
-    order.balance = r2(order.total - order.paidAmount);
+    order.balance = balanceOf(order);
     left = r2(left - part);
   }
   return { status: 200, json: account(data, key, recordOf(data, key)) };

@@ -65,7 +65,7 @@ export default function ReceivablesPage() {
                   <span className="text-muted"> · {data.page.totalCount === 1 ? '1 cliente' : `${data.page.totalCount} clientes`}</span>
                 )}
                 {creditTerm != null && data.totalOverdue > 0 && (
-                  <> · <strong className="text-danger">Vencido <span className="ta-money">{formatMoney(data.totalOverdue)}</span></strong></>
+                  <> · <strong className="text-danger text-nowrap">Vencido <span className="ta-money">{formatMoney(data.totalOverdue)}</span></strong></>
                 )}
               </p>
               <span className="small text-muted">
