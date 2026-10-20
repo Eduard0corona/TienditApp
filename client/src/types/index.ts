@@ -23,6 +23,7 @@ import type {
   OrderPaymentMethod,
   OrderStatus,
   OrderType,
+  OrderWriteOffReason,
   OutgoingMessageStatus,
   PlatformCollectedBy,
   PurchaseOrderStatus,
@@ -1614,6 +1615,8 @@ export interface OrderDto {
   refundedAmount?: number;
   /** Paid minus refunded. */
   netPaidAmount?: number;
+  /** What the business forgave of what the customer owed (Fase 26B); the balance already leaves it out. */
+  writtenOffAmount?: number;
   /** Tips received with the payments; apart from the total. */
   tipTotal?: number;
   cancellationReason?: string;
@@ -1625,6 +1628,8 @@ export interface OrderDto {
   servicePieces: ServiceOrderPieceDto[];
   payments: OrderPaymentDto[];
   refunds?: OrderRefundDto[];
+  /** What the business forgave, each with its reason and who forgave it (Fase 26B). */
+  writeOffs?: OrderWriteOffDto[];
   /** Dishes of the tab cancelled after they went to the kitchen, with the reason and who cancelled them. */
   itemCancellations?: OrderItemCancellationDto[];
   /** The order is (or was) a tab: rounds added over time, charged when the table leaves. */
@@ -1728,6 +1733,21 @@ export interface OrderRefundDto {
   onlineStatus?: OnlinePaymentRefundStatus | null;
   /** What Mercado Pago answered when it refused it. */
   onlineFailure?: string | null;
+}
+
+export { OrderWriteOffReason } from '../api/generated/enums';
+
+/** What the business forgave of an order a customer owed (Fase 26B): no money moved. */
+export interface OrderWriteOffDto {
+  id: string;
+  amount: number;
+  reason: OrderWriteOffReason;
+  notes?: string | null;
+  writtenOffAt: string;
+  writtenOffBy: string;
+  /** When and by whom it was undone (owed again); null while it stands. */
+  reversedAt?: string | null;
+  reversedBy?: string | null;
 }
 
 /** Units of a dish of a tab cancelled after it went to the kitchen. */

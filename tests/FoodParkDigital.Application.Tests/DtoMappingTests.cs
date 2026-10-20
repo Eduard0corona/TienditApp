@@ -32,7 +32,15 @@ public class DtoMappingTests
     {
         var order = new EntityFiller(maxDepth: 3, seed).Create<Order>();
         Assert.NotNull(order.Delivery);
+        // What the business forgave, and a write-off undone (Fase 26B), map the same too.
+        Assert.NotEqual(0m, order.WrittenOffAmount);
+        Assert.NotEmpty(order.WriteOffs);
+        Assert.All(order.WriteOffs, w => Assert.NotNull(w.ReversedAt));
+        Assert.Equal(order.Total - order.PaidAmount - order.WrittenOffAmount, order.ToDto().Balance);
 
+        Same(order.ToDto(), Project(order, OrderMappings.AsDto));
+        EntityFiller.Set(order.WriteOffs.First(), nameof(OrderWriteOff.ReversedAt), null);
+        EntityFiller.Set(order.WriteOffs.First(), nameof(OrderWriteOff.ReversedBy), null);
         Same(order.ToDto(), Project(order, OrderMappings.AsDto));
         EntityFiller.Set(order, nameof(Order.ServiceDetail), null);
         Same(order.ToDto(), Project(order, OrderMappings.AsDto));
@@ -81,7 +89,9 @@ public class DtoMappingTests
         var listed = Project(order, OrderMappings.AsDto);
 
         Assert.True(dto.IsOpenTab);
-        Assert.Equal(order.Total - order.PaidAmount, listed.Balance);
+        // What the business forgave is not owed (Fase 26B).
+        Assert.Equal(order.Total - order.PaidAmount - order.WrittenOffAmount, listed.Balance);
+        Assert.Equal(order.Balance, listed.Balance);
         Assert.Equal(order.Payments.Sum(p => p.Tip), listed.TipTotal);
         Assert.Equal(20m, listed.Payments[0].Change);
         Assert.Equal(dto.KitchenTickets.OrderBy(t => t.Round).Select(t => t.Id), dto.KitchenTickets.Select(t => t.Id));

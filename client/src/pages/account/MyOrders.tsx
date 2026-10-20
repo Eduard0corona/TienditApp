@@ -11,12 +11,15 @@ import { useMyReviews } from '../../hooks/useMyReviews';
 import { useOrderAgain } from '../../hooks/useOrderAgain';
 import { MyOrdersScope, OrderStatus, OrderTrackingStep } from '../../types';
 import { formatDateTime } from '../../utils/dates';
-import { formatMoney } from '../../utils/money';
+import { formatMoney, toCents } from '../../utils/money';
 import { trackingRefresh } from '../../utils/orderTracking';
 
 const PAGE_SIZE = 10;
 /** The most the API gives in one page: orders in progress are few, and all of them show. */
 const IN_PROGRESS_PAGE_SIZE = 50;
+
+/** What is left to pay, in cents: what was paid and what the business forgave (Fase 26B) do not always add up in floats. */
+const toPayCents = (order: MyOrder) => toCents(order.total) - toCents(order.paidAmount) - toCents(order.writtenOffAmount);
 
 interface OrderCardProps {
   order: MyOrder;
@@ -51,8 +54,8 @@ function OrderCard({ order, onOrderAgain, reviewed, onReview }: OrderCardProps) 
         <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
           <span className="fw-semibold ta-money">
             {formatMoney(order.total)}
-            {order.paidAmount < order.total && !cancelled && (
-              <span className="d-block small text-danger fw-normal">Por pagar {formatMoney(order.total - order.paidAmount)}</span>
+            {toPayCents(order) > 0 && !cancelled && (
+              <span className="d-block small text-danger fw-normal">Por pagar {formatMoney(toPayCents(order) / 100)}</span>
             )}
           </span>
           <span className="d-flex flex-wrap gap-2">

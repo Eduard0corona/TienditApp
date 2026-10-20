@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { CustomerAccount } from '../../api/customerCredit';
-import { accountSummaryText, creditLimitProblem, daysSince, describeDays } from './customerAccount';
+import {
+  accountSummaryText, creditLimitProblem, creditTermProblem, daysSince, describeDays, describeDue, describeTerm, writeOffProblem,
+} from './customerAccount';
 
 function account(overrides: Partial<CustomerAccount> = {}): CustomerAccount {
   return {
@@ -67,5 +69,53 @@ describe('days since', () => {
     expect(describeDays(daysSince('2026-10-19T08:00:00Z', now))).toBe('hoy');
     expect(describeDays(daysSince('2026-10-18T08:00:00Z', now))).toBe('hace 1 día');
     expect(describeDays(daysSince('2026-10-09T12:00:00Z', now))).toBe('hace 10 días');
+  });
+});
+
+describe('term and overdue', () => {
+  it('says when each order is due, and nothing without a term', () => {
+    expect(describeDue({ dueOn: '2026-10-17', isOverdue: true })).toBe('Venció el 17 oct 2026');
+    expect(describeDue({ dueOn: '2026-10-22', isOverdue: false })).toBe('Vence el 22 oct 2026');
+    expect(describeDue({ dueOn: null, isOverdue: false })).toBeNull();
+    expect([describeTerm(1), describeTerm(15)]).toEqual(['1 día', '15 días']);
+  });
+
+  it('tells the customer what is overdue in the WhatsApp summary', () => {
+    const text = accountSummaryText(account({
+      creditTermDays: 7,
+      overdue: 100,
+      orders: [
+        { orderId: 'o1', orderNumber: 'ORD-000010', createdAt: '2026-10-10T18:00:00Z', status: 6, soldOnCredit: true, total: 100, paid: 0, writtenOff: 0, balance: 100, dueOn: '2026-10-17', isOverdue: true },
+      ],
+    }), 'Tiendita');
+
+    expect(text).toContain('• ORD-000010 del ');
+    expect(text).toContain(': $100.00 (venció el 17 oct 2026)');
+    expect(text).toContain('De eso, *$100.00* ya venció: el plazo para pagar es de 7 días.');
+  });
+
+  it.each([
+    ['', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
+    ['7.5', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
+    // Number() would take these as 10, 31 and 15: only digits are a term.
+    ['1e1', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
+    ['0x1F', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
+    ['15.0', 'Escribe en cuántos días te pagan, por ejemplo 15.'],
+    ['0', 'El plazo del fiado va de 1 a 120 días.'],
+    ['121', 'El plazo del fiado va de 1 a 120 días.'],
+  ])('refuses the term %j', (typed, problem) => {
+    expect(creditTermProblem(typed)).toBe(problem);
+  });
+
+  it.each(['1', '15', '120'])('accepts the term %j', (typed) => {
+    expect(creditTermProblem(typed)).toBeNull();
+  });
+
+  it('refuses to forgive nothing or more than is owed', () => {
+    expect(writeOffProblem('', 5000)).toBe('Escribe cuánto condonas, por ejemplo 50.');
+    expect(writeOffProblem('0', 5000)).toBe('Escribe cuánto condonas, por ejemplo 50.');
+    expect(writeOffProblem('10.005', 5000)).toBe('Escribe cuánto condonas, por ejemplo 50.');
+    expect(writeOffProblem('50.01', 5000)).toBe('No puedes condonar más de $50.00.');
+    expect(writeOffProblem('$50', 5000)).toBeNull();
   });
 });

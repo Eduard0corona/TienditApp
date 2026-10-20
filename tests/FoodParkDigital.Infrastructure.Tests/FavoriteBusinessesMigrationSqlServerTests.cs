@@ -44,7 +44,7 @@ public class FavoriteBusinessesMigrationSqlServerTests
         Assert.Equal(547, deleteBusiness.Number);
 
         await ExecuteAsync(database, $"DELETE FROM [AspNetUsers] WHERE [Id] = {userId}");
-        await using var check = database.CreateContext();
+        await using var check = BeforeCustomerWriteOffs.CreateContext(database);
         Assert.Equal(0, await CountAsync(check, $"SELECT COUNT(*) AS [Value] FROM [FavoriteBusinesses]"));
     }
 
@@ -58,7 +58,7 @@ public class FavoriteBusinessesMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeFavorites));
         Assert.Equal(50021, error.Number);
         Assert.Contains("Customer accounts saved favorite businesses", error.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [FavoriteBusinesses]"));
@@ -66,7 +66,7 @@ public class FavoriteBusinessesMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeFavorites);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(BeforeFavorites, await LatestMigrationAsync(context));
             Assert.Equal((0, 1, 1), (
@@ -78,7 +78,7 @@ public class FavoriteBusinessesMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the table is back.
         await MigrateAsync(database, BeforeFavorites);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext();
+        await using var forward = BeforeCustomerWriteOffs.CreateContext(database);
         Assert.Equal(1, await CountAsync(forward, $"SELECT COUNT(*) AS [Value] FROM sys.tables WHERE [name] = N'FavoriteBusinesses'"));
     }
 
@@ -89,7 +89,7 @@ public class FavoriteBusinessesMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var (userId, businessId) = await SeedAccountWithAFavoriteAsync(database);
         string slug;
-        await using (var seed = database.CreateContext())
+        await using (var seed = BeforeCustomerWriteOffs.CreateContext(database))
         {
             await seed.FavoriteBusinesses.ExecuteDeleteAsync();
             var settings = await seed.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == businessId);
@@ -99,11 +99,12 @@ public class FavoriteBusinessesMigrationSqlServerTests
         }
 
         // The same business kept from another tab after this save read that it was not among the favorites.
-        await using var racing = database.CreateProductionLikeContext(
+        await using var racing = BeforeCustomerWriteOffs.CreateProductionLikeContext(
+            database,
             new InMemoryApplicationDbContext.TestCurrentTenantService(), new InMemoryApplicationDbContext.NullMediator(),
             new SavedMeanwhile(async () =>
             {
-                await using var other = database.CreateContext();
+                await using var other = BeforeCustomerWriteOffs.CreateContext(database);
                 other.FavoriteBusinesses.Add(FavoriteBusiness.Create(userId, businessId, favoritesKept: 0));
                 await other.SaveChangesAsync();
             }));
@@ -112,14 +113,14 @@ public class FavoriteBusinessesMigrationSqlServerTests
 
         // The unique index kept the other one: keeping it again changes nothing, as the customer asked.
         Assert.True(result.IsSuccess);
-        await using var check = database.CreateContext();
+        await using var check = BeforeCustomerWriteOffs.CreateContext(database);
         Assert.Equal(1, await CountAsync(check, $"SELECT COUNT(*) AS [Value] FROM [FavoriteBusinesses]"));
     }
 
     /// <summary>A customer account that keeps a business among its favorites.</summary>
     private static async Task<(Guid UserId, Guid BusinessId)> SeedAccountWithAFavoriteAsync(SqlServerTestDatabase database)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCustomerWriteOffs.CreateContext(database);
         var slug = $"cafe-{Guid.NewGuid():N}"[..20];
         var tenant = new Tenant("Café Luna", slug, BusinessType.Food, $"{slug}@demo.com");
         var user = new ApplicationUser
@@ -151,7 +152,7 @@ public class FavoriteBusinessesMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, FormattableString sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCustomerWriteOffs.CreateContext(database);
         await context.Database.ExecuteSqlInterpolatedAsync(sql);
     }
 

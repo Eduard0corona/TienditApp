@@ -22,6 +22,7 @@ internal static class BeforeCustomerCredit
     {
         modelBuilder.Entity<Customer>().Ignore(c => c.CreditLimit);
         modelBuilder.Entity<Order>().Ignore(o => o.SoldOnCredit);
+        BeforeCustomerWriteOffs.Ignore(modelBuilder);
     }
 
     private sealed class Context(

@@ -292,6 +292,14 @@ export const OrderType = {
 } as const;
 export type OrderType = (typeof OrderType)[keyof typeof OrderType];
 
+export const OrderWriteOffReason = {
+  WontBeCollected: 1,
+  RecordingError: 2,
+  Courtesy: 3,
+  Other: 99,
+} as const;
+export type OrderWriteOffReason = (typeof OrderWriteOffReason)[keyof typeof OrderWriteOffReason];
+
 export const OutgoingMessageStatus = {
   Pending: 0,
   Sent: 1,

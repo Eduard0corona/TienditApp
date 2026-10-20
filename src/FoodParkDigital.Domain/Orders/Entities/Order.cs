@@ -20,6 +20,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     private readonly List<OrderStatusHistory> _statusHistory = new();
     private readonly List<OrderPayment> _payments = new();
     private readonly List<OrderRefund> _refunds = new();
+    private readonly List<OrderWriteOff> _writeOffs = new();
     private readonly List<ServiceOrderPiece> _servicePieces = new();
     private readonly List<ServiceOrderPhoto> _servicePhotos = new();
     private readonly List<KitchenTicket> _kitchenTickets = new();
@@ -139,9 +140,16 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>Money given back. Payments stay as they were: refunds compensate them.</summary>
     public decimal RefundedAmount { get; private set; }
 
+    /// <summary>
+    /// What the business forgave of what the customer owed (Fase 26B, ADR 0034): the sum of <see cref="WriteOffs"/>. The
+    /// sale and its payments stay as they were; only the balance goes down.
+    /// </summary>
+    public decimal WrittenOffAmount { get; private set; }
+
     /// <summary>What the business kept from this order: paid minus refunded.</summary>
     public decimal NetPaidAmount => PaidAmount - RefundedAmount;
-    public decimal Balance => Total - PaidAmount;
+    /// <summary>What is still owed: the total minus what was paid and what the business forgave.</summary>
+    public decimal Balance => Total - PaidAmount - WrittenOffAmount;
     /// <summary>Tips given with the payments: on top of the sale, never part of its total or balance.</summary>
     public decimal TipTotal => _payments.Sum(p => p.Tip);
     public string? CancellationReason { get; private set; }
@@ -173,6 +181,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public IReadOnlyCollection<OrderStatusHistory> StatusHistory => _statusHistory.AsReadOnly();
     public IReadOnlyCollection<OrderPayment> Payments => _payments.AsReadOnly();
     public IReadOnlyCollection<OrderRefund> Refunds => _refunds.AsReadOnly();
+    /// <summary>What the business forgave of the balance (<see cref="WriteOff"/>, Fase 26B). Loaded only when a query includes it.</summary>
+    public IReadOnlyCollection<OrderWriteOff> WriteOffs => _writeOffs.AsReadOnly();
     public IReadOnlyCollection<ServiceOrderPiece> ServicePieces => _servicePieces.AsReadOnly();
     /// <summary>Photos added after the order was received (<see cref="AddServicePhoto"/>, Fase 25).</summary>
     public IReadOnlyCollection<ServiceOrderPhoto> ServicePhotos => _servicePhotos.AsReadOnly();
@@ -656,6 +666,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (NetPaidAmount > 0)
             throw new DomainException(
                 "La orden tiene pagos sin reembolsar; reembólsalos antes de cancelarla.");
+        // Likewise what the business forgave (Fase 26B): it is undone first, so the order's history adds up.
+        if (WrittenOffAmount > 0)
+            throw new DomainException(CancelWrittenOffMessage);
 
         var previousStatus = Status;
         Status = OrderStatus.Cancelled;
@@ -1030,8 +1043,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException("No se pueden registrar pagos en una orden cancelada.");
 
         var newPaidAmount = PaidAmount + payment.Amount;
-        if (newPaidAmount > Total)
-            throw new DomainException("El pago excede el total de la orden.");
+        // What the business forgave is not owed anymore: a payment covers what is left, never more.
+        if (newPaidAmount + WrittenOffAmount > Total)
+            throw new DomainException(WrittenOffAmount > 0 ? PaymentAboveBalanceMessage : "El pago excede el total de la orden.");
         // The tip may come with a small last payment of a mixed charge, but more tip than bill is a typing mistake.
         if (TipTotal + payment.Tip > Total)
             throw new DomainException(TipAboveTotalMessage);
@@ -1039,6 +1053,67 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         _payments.Add(payment);
         PaidAmount = newPaidAmount;
         return payment;
+    }
+
+    public const string PaymentAboveBalanceMessage = "El pago excede lo que queda por pagar: parte de la orden se condonó.";
+    public const string WriteOffOnlyOwedMessage =
+        "Solo se condona lo que un cliente debe: una venta fiada, o un pedido entregado o terminado sin cobrar.";
+    public const string WriteOffCourierCashMessage =
+        "Este pedido lo cobra el repartidor: se liquida en Caja › Repartidores, no se condona.";
+
+    public const string CancelWrittenOffMessage = "La orden tiene algo condonado; deshazlo antes de cancelarla.";
+    public const string WriteOffNotFoundMessage = "Eso no se condonó en este pedido.";
+
+    public static string WriteOffAboveBalanceMessage(decimal balance) =>
+        $"No se puede condonar más de lo que debe el pedido (${balance.ToString("N2", CultureInfo.InvariantCulture)}).";
+
+    /// <summary>
+    /// The customer owes this order (Fase 26A, ADR 0033): it was sold on credit or already handed over (delivered or
+    /// completed), it was not cancelled, and a courier is not the one collecting it. Whether something is still owed is
+    /// <see cref="Balance"/>.
+    /// </summary>
+    public bool IsOwedByCustomer =>
+        Status != OrderStatus.Cancelled
+        && (SoldOnCredit || Status is OrderStatus.Delivered or OrderStatus.Completed)
+        && !(Delivery?.CashToCollect is not null && Status == OrderStatus.Delivered);
+
+    /// <summary>
+    /// Forgives part or all of what the customer owes for this order (Fase 26B, ADR 0034): a record apart, with its reason
+    /// and author, that lowers the balance. No money moves, and the sale, its payments and its taxes stay as they were.
+    /// </summary>
+    public OrderWriteOff WriteOff(
+        decimal amount,
+        OrderWriteOffReason reason,
+        string? notes,
+        DateTimeOffset writtenOffAt,
+        string writtenOffBy)
+    {
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException("La orden está cancelada: no hay nada que condonar.");
+        if (AwaitsCourierCash)
+            throw new DomainException(WriteOffCourierCashMessage);
+        if (!IsOwedByCustomer || Balance <= 0)
+            throw new DomainException(WriteOffOnlyOwedMessage);
+        if (amount > Balance)
+            throw new DomainException(WriteOffAboveBalanceMessage(Balance));
+
+        var writeOff = new OrderWriteOff(TenantId, Id, amount, reason, notes, writtenOffAt, writtenOffBy);
+        _writeOffs.Add(writeOff);
+        WrittenOffAmount += amount;
+        return writeOff;
+    }
+
+    /// <summary>
+    /// Undoes a write-off made by mistake (Fase 26B): its record stays, with when and who undid it, and what it forgave is
+    /// owed again. Once: a write-off undone is not undone again.
+    /// </summary>
+    public OrderWriteOff ReverseWriteOff(Guid writeOffId, DateTimeOffset reversedAt, string reversedBy)
+    {
+        var writeOff = _writeOffs.FirstOrDefault(w => w.Id == writeOffId)
+            ?? throw new DomainException(WriteOffNotFoundMessage);
+        writeOff.Reverse(reversedAt, reversedBy);
+        WrittenOffAmount -= writeOff.Amount;
+        return writeOff;
     }
 
     /// <summary>

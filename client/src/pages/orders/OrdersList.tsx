@@ -50,6 +50,7 @@ import {
   getOrderStatusLabel,
   getPaymentMethodLabel,
 } from '../../utils/labels';
+import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 import { describeOnlineRefund } from '../../utils/onlineRefunds';
 import { getApiErrorMessage } from '../../api/errors';
 import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
@@ -702,10 +703,13 @@ export default function OrdersList() {
                           ? `Por cobrar ${formatMoney(order.balance)}`
                           : chargedByPlatform(order)
                             ? `Cobró ${getCollectedByLabel(PlatformCollectedBy.Platform, order.channel)}`
-                            : 'Pagado'}
+                            : (order.writtenOffAmount ?? 0) > 0 ? 'Saldado' : 'Pagado'}
                       </small>
                       {(order.refundedAmount ?? 0) > 0 && (
                         <small className="d-block text-warning">Reembolsado {formatMoney(order.refundedAmount ?? 0)}</small>
+                      )}
+                      {(order.writtenOffAmount ?? 0) > 0 && (
+                        <small className="d-block text-muted">Condonado {formatMoney(order.writtenOffAmount ?? 0)}</small>
                       )}
                     </td>
                     <td className="text-center">
@@ -814,6 +818,9 @@ export default function OrdersList() {
                       <strong>Reembolsado:</strong> <span className="ta-money text-warning">{formatMoney(selectedOrder.refundedAmount ?? 0)}</span>
                       <span className="text-muted small"> · neto {formatMoney(selectedNetPaid)}</span>
                     </p>
+                  )}
+                  {(selectedOrder.writtenOffAmount ?? 0) > 0 && (
+                    <p className="mb-1"><strong>Condonado:</strong> <span className="ta-money">{formatMoney(selectedOrder.writtenOffAmount ?? 0)}</span></p>
                   )}
                   <p className="mb-1"><strong>Por cobrar:</strong> <span className="ta-money">{formatMoney(selectedOrder.balance)}</span></p>
                 </div>
@@ -1113,6 +1120,44 @@ export default function OrdersList() {
                               })}
                             </td>
                             <td className="text-end text-warning">−{formatMoney(refund.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {(selectedOrder.writeOffs ?? []).length > 0 && (
+                <div className="mt-3">
+                  <h5 className="mb-2">Condonado</h5>
+                  <p className="small text-muted mb-2">Lo que el negocio perdonó de lo que debía el cliente: no salió dinero de la caja.</p>
+                  <div className="table-responsive">
+                    <table className="table table-sm table-striped mb-0">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Motivo</th>
+                          <th className="text-end">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedOrder.writeOffs ?? []).map((writeOff) => (
+                          <tr key={writeOff.id}>
+                            <td>
+                              {toLocalDateTime(writeOff.writtenOffAt)}
+                              <div className="text-muted small">{writeOff.writtenOffBy}</div>
+                            </td>
+                            <td>
+                              {getWriteOffReasonLabel(writeOff.reason)}
+                              {writeOff.notes && <div className="text-muted small">{writeOff.notes}</div>}
+                            </td>
+                            <td className="text-end">
+                              <span className={writeOff.reversedAt ? 'text-muted text-decoration-line-through' : ''}>−{formatMoney(writeOff.amount)}</span>
+                              {writeOff.reversedAt && (
+                                <div className="text-muted small">Deshecho el {toLocalDateTime(writeOff.reversedAt)}{writeOff.reversedBy ? ` por ${writeOff.reversedBy}` : ''}</div>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

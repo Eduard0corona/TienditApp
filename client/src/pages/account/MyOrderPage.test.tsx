@@ -155,6 +155,16 @@ describe('MyOrderPage', () => {
     expect(screen.queryByText('Por pagar')).not.toBeInTheDocument();
   });
 
+  it('asks for nothing the business forgave', async () => {
+    // $45.70 paid and the other $99.30 forgiven by the business (Fase 26B): nothing left to pay, even in floats.
+    request.mockResolvedValue(detail({ paidAmount: 45.7, writtenOffAmount: 99.3 }) as never);
+    renderPage();
+
+    expect(await screen.findByText('Total')).toBeInTheDocument();
+    expect(screen.queryByText('Por pagar')).not.toBeInTheDocument();
+    expect(screen.getByText('Nada por pagar')).toBeInTheDocument();
+  });
+
   it('says so when the order is not the account\'s', async () => {
     request.mockRejectedValue({ isAxiosError: true, response: { status: 404, data: { detail: 'No encontramos ese pedido en tu cuenta.' } } });
 

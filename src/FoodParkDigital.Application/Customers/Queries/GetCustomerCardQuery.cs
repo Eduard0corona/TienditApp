@@ -191,7 +191,7 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
                 Status = o.Status,
                 Channel = o.Channel,
                 Total = o.Total,
-                Balance = o.Total - o.PaidAmount
+                Balance = o.Total - o.PaidAmount - o.WrittenOffAmount
             })
             .ToListAsync(cancellationToken);
         card.Name ??= await _context.Orders.AsNoTracking()

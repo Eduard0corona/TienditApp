@@ -47,6 +47,8 @@ public class OrderDto
     public decimal RefundedAmount { get; set; }
     /// <summary>Paid minus refunded.</summary>
     public decimal NetPaidAmount { get; set; }
+    /// <summary>What the business forgave of what the customer owed (Fase 26B); the balance already leaves it out.</summary>
+    public decimal WrittenOffAmount { get; set; }
     public string? CancellationReason { get; set; }
     public bool CanCancel { get; set; }
     public List<OrderStatus> AllowedTransitions { get; set; } = new();
@@ -58,6 +60,8 @@ public class OrderDto
     public List<ServiceOrderPieceDto> ServicePieces { get; set; } = new();
     public List<OrderPaymentDto> Payments { get; set; } = new();
     public List<OrderRefundDto> Refunds { get; set; } = new();
+    /// <summary>What the business forgave, each with its reason and who forgave it (Fase 26B).</summary>
+    public List<OrderWriteOffDto> WriteOffs { get; set; } = new();
     /// <summary>Dishes of the tab cancelled after they went to the kitchen, with the reason and who cancelled them.</summary>
     public List<OrderItemCancellationDto> ItemCancellations { get; set; } = new();
     /// <summary>The order is (or was) a tab: rounds added over time, charged when the table leaves.</summary>
@@ -165,6 +169,20 @@ public class OrderItemOptionDto
     public string GroupName { get; set; } = null!;
     public string OptionName { get; set; } = null!;
     public decimal PriceDelta { get; set; }
+}
+
+/// <summary>What the business forgave of an order a customer owed (Fase 26B, ADR 0034): no money moved.</summary>
+public class OrderWriteOffDto
+{
+    public Guid Id { get; set; }
+    public decimal Amount { get; set; }
+    public OrderWriteOffReason Reason { get; set; }
+    public string? Notes { get; set; }
+    public DateTimeOffset WrittenOffAt { get; set; }
+    public string WrittenOffBy { get; set; } = null!;
+    /// <summary>When it was undone and by whom (owed again); null while it stands.</summary>
+    public DateTimeOffset? ReversedAt { get; set; }
+    public string? ReversedBy { get; set; }
 }
 
 public class OrderRefundDto

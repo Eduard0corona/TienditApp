@@ -3039,6 +3039,7 @@ export interface paths {
                 query?: {
                     search?: string;
                     sort?: components["schemas"]["ReceivablesSort"];
+                    overdueOnly?: boolean;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -3146,6 +3147,131 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/account/write-offs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["WriteOffCustomerAccountCommand"];
+                    "text/json": components["schemas"]["WriteOffCustomerAccountCommand"];
+                    "application/*+json": components["schemas"]["WriteOffCustomerAccountCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAccountDto"];
+                        "application/json": components["schemas"]["CustomerAccountDto"];
+                        "text/json": components["schemas"]["CustomerAccountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/account/write-offs/{id}/reversal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAccountDto"];
+                        "application/json": components["schemas"]["CustomerAccountDto"];
+                        "text/json": components["schemas"]["CustomerAccountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/credit-term": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateCustomerCreditTermCommand"];
+                    "text/json": components["schemas"]["UpdateCustomerCreditTermCommand"];
+                    "application/*+json": components["schemas"]["UpdateCustomerCreditTermCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerCreditTermDto"];
+                        "application/json": components["schemas"]["CustomerCreditTermDto"];
+                        "text/json": components["schemas"]["CustomerCreditTermDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12555,10 +12681,15 @@ export interface components {
             /** Format: double */
             available?: number | null;
             overLimit: boolean;
+            /** Format: int32 */
+            creditTermDays?: number | null;
+            /** Format: double */
+            overdue: number;
             orders: components["schemas"]["CustomerAccountOrderDto"][];
             /** Format: int32 */
             ordersCount: number;
             recentPayments: components["schemas"]["CustomerAccountPaymentDto"][];
+            recentWriteOffs: components["schemas"]["CustomerAccountWriteOffDto"][];
         };
         CustomerAccountOrderDto: {
             /** Format: uuid */
@@ -12573,7 +12704,12 @@ export interface components {
             /** Format: double */
             paid: number;
             /** Format: double */
+            writtenOff: number;
+            /** Format: double */
             balance: number;
+            /** Format: date */
+            dueOn?: string | null;
+            isOverdue: boolean;
         };
         CustomerAccountPaymentDto: {
             orderNumber: string;
@@ -12582,6 +12718,19 @@ export interface components {
             /** Format: double */
             amount: number;
             method: components["schemas"]["OrderPaymentMethod"];
+        };
+        CustomerAccountWriteOffDto: {
+            /** Format: uuid */
+            id: string;
+            orderNumber: string;
+            /** Format: date-time */
+            writtenOffAt: string;
+            /** Format: double */
+            amount: number;
+            reason: components["schemas"]["OrderWriteOffReason"];
+            notes?: string | null;
+            /** Format: date-time */
+            reversedAt?: string | null;
         };
         CustomerAddressDto: {
             /** Format: uuid */
@@ -12688,6 +12837,10 @@ export interface components {
             productName: string;
             /** Format: double */
             quantity: number;
+        };
+        CustomerCreditTermDto: {
+            /** Format: int32 */
+            creditTermDays?: number | null;
         };
         CustomerDto: {
             /** Format: uuid */
@@ -13490,6 +13643,8 @@ export interface components {
             total: number;
             /** Format: double */
             paidAmount: number;
+            /** Format: double */
+            writtenOffAmount: number;
             cancellationReason?: string | null;
             tableNumber?: string | null;
             delivery?: components["schemas"]["MyOrderDeliveryDto"];
@@ -13509,6 +13664,8 @@ export interface components {
             total: number;
             /** Format: double */
             paidAmount: number;
+            /** Format: double */
+            writtenOffAmount: number;
             /** Format: date-time */
             createdAt: string;
             items: components["schemas"]["MyOrderItemDto"][];
@@ -13823,6 +13980,8 @@ export interface components {
             refundedAmount: number;
             /** Format: double */
             netPaidAmount: number;
+            /** Format: double */
+            writtenOffAmount: number;
             cancellationReason?: string | null;
             canCancel: boolean;
             allowedTransitions: components["schemas"]["OrderStatus"][];
@@ -13836,6 +13995,7 @@ export interface components {
             servicePieces: components["schemas"]["ServiceOrderPieceDto"][];
             payments: components["schemas"]["OrderPaymentDto"][];
             refunds: components["schemas"]["OrderRefundDto"][];
+            writeOffs: components["schemas"]["OrderWriteOffDto"][];
             itemCancellations: components["schemas"]["OrderItemCancellationDto"][];
             isTab: boolean;
             isOpenTab: boolean;
@@ -14023,6 +14183,25 @@ export interface components {
             /** Format: double */
             feeTaxRate: number;
         };
+        OrderWriteOffDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: double */
+            amount: number;
+            reason: components["schemas"]["OrderWriteOffReason"];
+            notes?: string | null;
+            /** Format: date-time */
+            writtenOffAt: string;
+            writtenOffBy: string;
+            /** Format: date-time */
+            reversedAt?: string | null;
+            reversedBy?: string | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OrderWriteOffReason: 1 | 2 | 3 | 99;
         OutgoingMessageDto: {
             /** Format: uuid */
             id: string;
@@ -14873,6 +15052,8 @@ export interface components {
             total: number;
             /** Format: double */
             paidAmount: number;
+            /** Format: double */
+            writtenOffAmount: number;
             cancellationReason?: string | null;
         };
         PublicOrderTrackingRequest: {
@@ -15000,6 +15181,8 @@ export interface components {
             /** Format: double */
             creditLimit?: number | null;
             overLimit: boolean;
+            /** Format: double */
+            overdue: number;
         };
         ReceivableDtoPaginatedList: {
             items: components["schemas"]["ReceivableDto"][];
@@ -15016,6 +15199,10 @@ export interface components {
             page: components["schemas"]["ReceivableDtoPaginatedList"];
             /** Format: double */
             totalOwed: number;
+            /** Format: double */
+            totalOverdue: number;
+            /** Format: int32 */
+            creditTermDays?: number | null;
         };
         /**
          * Format: int32
@@ -15838,6 +16025,10 @@ export interface components {
             /** Format: double */
             creditLimit?: number | null;
         };
+        UpdateCustomerCreditTermCommand: {
+            /** Format: int32 */
+            creditTermDays?: number | null;
+        };
         UpdateCustomerNotesRequest: {
             notes?: string | null;
         };
@@ -16223,6 +16414,19 @@ export interface components {
             displayPhoneNumber?: string | null;
             hasAccessToken: boolean;
             verifyToken?: string | null;
+        };
+        WriteOffCustomerAccountCommand: {
+            /** Format: uuid */
+            customerId?: string | null;
+            phone?: string | null;
+            /** Format: uuid */
+            orderId?: string | null;
+            /** Format: double */
+            amount: number;
+            reason: components["schemas"]["OrderWriteOffReason"];
+            notes?: string | null;
+            /** Format: double */
+            expectedOwed: number;
         };
     };
     responses: never;

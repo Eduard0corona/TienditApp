@@ -38,6 +38,23 @@ const order: OrderDto = {
 };
 
 describe('SaleTicket', () => {
+  it('prints what the business forgave, so the total less the payments is the balance (Fase 26B)', () => {
+    render(<SaleTicket
+      order={{
+        ...order,
+        paidAmount: 20,
+        writtenOffAmount: 30,
+        balance: 25,
+        payments: [{ id: 'p1', amount: 20, method: OrderPaymentMethod.Cash, paidAt: '2026-10-08T20:00:00Z' }],
+      } as OrderDto}
+      businessName="Fonda Lupita"
+    />);
+
+    const ticket = screen.getByLabelText('Ticket ORD-000007');
+    expect(ticket).toHaveTextContent('Condonado$30.00');
+    expect(ticket).toHaveTextContent('Saldo pendiente$25.00');
+  });
+
   it('prints the logo of the business above its name', () => {
     const { container } = render(<SaleTicket order={order} businessName="Fonda Lupita" logoUrl="https://cdn/lupita_sm.webp" />);
 

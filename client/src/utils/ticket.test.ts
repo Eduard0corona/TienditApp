@@ -94,6 +94,15 @@ describe('ticket of an order of a delivery platform', () => {
     expect(text).not.toMatch(/comisi[oó]n|retenci|neto/i);
   });
 
+  it('says what the business forgave, so the total less the payments is the balance (Fase 26B)', () => {
+    const forgiven: OrderDto = { ...rappi, channel: OrderChannel.Counter, platformOrder: null, payments: [], paidAmount: 0, writtenOffAmount: 30, balance: 45 } as OrderDto;
+
+    const text = buildTicketText(forgiven, { businessName: 'Fonda Lupita' });
+
+    expect(text).toContain('Condonado: $30.00');
+    expect(text).toContain('Saldo pendiente: $45.00');
+  });
+
   it('keeps the prices of an order the business collects, with what the courier still pays', () => {
     const didi: OrderDto = {
       ...rappi,

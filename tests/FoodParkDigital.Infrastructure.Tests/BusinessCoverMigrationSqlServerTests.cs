@@ -34,7 +34,7 @@ public class BusinessCoverMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             var stored = await context.Tenants.SingleAsync(t => t.Id == tenant.Id);
             Assert.Null(stored.CoverImageUrl);
@@ -50,7 +50,7 @@ public class BusinessCoverMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext();
+        await using var check = BeforeCustomerWriteOffs.CreateContext(database);
         var saved = await check.Tenants.SingleAsync(t => t.Id == tenant.Id);
         Assert.Equal(("Café Luna", "/uploads/logos/demo/logo", "/uploads/covers/demo/portada"),
             (saved.Name, saved.LogoUrl, saved.CoverImageUrl));
@@ -63,7 +63,7 @@ public class BusinessCoverMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var tenant = NewTenant();
         tenant.SetCoverImage("/uploads/covers/demo/portada");
-        await using (var seed = database.CreateContext())
+        await using (var seed = BeforeCustomerWriteOffs.CreateContext(database))
         {
             seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Food));
             await seed.SaveChangesAsync();
@@ -72,7 +72,7 @@ public class BusinessCoverMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeCover));
         Assert.Equal(50020, error.Number);
         Assert.Contains("Owners uploaded menu covers", error.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [Tenants] WHERE [CoverImageUrl] IS NOT NULL"));
@@ -81,7 +81,7 @@ public class BusinessCoverMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeCover);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(BeforeCover, await LatestMigrationAsync(context));
             Assert.Equal((0, 1), (
@@ -92,7 +92,7 @@ public class BusinessCoverMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the column is back, empty.
         await MigrateAsync(database, BeforeCover);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext();
+        await using var forward = BeforeCustomerWriteOffs.CreateContext(database);
         Assert.Null((await forward.Tenants.SingleAsync(t => t.Id == tenant.Id)).CoverImageUrl);
     }
 

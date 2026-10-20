@@ -12,7 +12,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// <summary>
 /// Fiado (Fase 26A) through the API: each business gives credit only to its own customers, sells on credit, lists who owes
 /// and takes account payments only over its own orders, even for the same phone; the owner sets the limit, and selling on
-/// credit or taking a payment needs ChargeOrders.
+/// credit or taking a payment needs ChargeOrders. Fase 26B: each business forgives only what its own customers owe it and
+/// keeps its own term, and only owners and admins forgive or set the term.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantCustomerCreditSqlServerTests
@@ -125,6 +126,62 @@ public sealed class CrossTenantCustomerCreditSqlServerTests
         var payment = new { customerId = customer, amount = owed, method = 1 };
         Assert.Equal(HttpStatusCode.Forbidden, (await looksAfterCustomers.PostAsJsonAsync($"{Account}/payments", payment)).StatusCode);
         Assert.Equal(0m, (await TwoBusinessesApi.ReadAsync(await cashier.PostAsJsonAsync($"{Account}/payments", payment))).GetProperty("owed").GetDecimal());
+    }
+
+    [SqlServerFact]
+    public async Task WriteOffsAndTerm_ShouldBeOnlyTheBusinesses_AndTheOwners()
+    {
+        var mine = await _api.SignUpAsync("condonar-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("condonar-b", TwoBusinessesApi.FoodBusiness);
+        var product = await ProductAsync(mine.Client, "Pan dulce");
+        var customer = await TwoBusinessesApi.IdAsync(mine.Client, Customers, new { name = "Ana López", phone = Phone });
+        await TwoBusinessesApi.IdAsync(theirs.Client, Customers, new { name = "Ana L.", phone = Phone });
+        await TwoBusinessesApi.IdAsync(mine.Client, "/api/v1/cash/open", new { openingAmount = 100m });
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"{Customers}/{customer}/credit-limit", new { creditLimit = 500m }));
+        var sale = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/orders", CreditSale(product, customer)));
+        var orderId = sale.GetProperty("id").GetGuid();
+        var owed = sale.GetProperty("balance").GetDecimal();
+        var cashier = await EmployeeAsync(mine, "ManageOrders", "ChargeOrders", "ManageCash", "ManageCustomers");
+
+        // Another business, for the same phone or naming my order, forgives nothing of mine: its Ana owes it nothing.
+        var byPhone = await theirs.Client.PostAsJsonAsync($"{Account}/write-offs", new { phone = Phone, amount = 10m, reason = 3, expectedOwed = owed });
+        var byOrder = await theirs.Client.PostAsJsonAsync($"{Account}/write-offs", new { phone = Phone, orderId, amount = 10m, reason = 3, expectedOwed = owed });
+        Assert.Equal((HttpStatusCode.BadRequest, WriteOffCustomerAccountCommandHandler.NothingOwedMessage), (byPhone.StatusCode, await DetailAsync(byPhone)));
+        Assert.Equal(HttpStatusCode.BadRequest, byOrder.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await theirs.Client.PostAsJsonAsync($"{Account}/write-offs", new { customerId = customer, amount = 10m, reason = 3, expectedOwed = owed })).StatusCode);
+
+        // Its term is its own.
+        var theirTerm = await TwoBusinessesApi.ReadAsync(await theirs.Client.PutAsJsonAsync($"{Customers}/credit-term", new { creditTermDays = 30 }));
+        Assert.Equal(30, theirTerm.GetProperty("creditTermDays").GetInt32());
+        Assert.Equal(JsonValueKind.Null,
+            (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(Receivables))).GetProperty("creditTermDays").ValueKind);
+
+        // Who charges and looks after customers neither forgives nor sets the term: owners and admins do.
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await cashier.PostAsJsonAsync($"{Account}/write-offs", new { customerId = customer, amount = 10m, reason = 3, expectedOwed = owed })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PutAsJsonAsync($"{Customers}/credit-term", new { creditTermDays = 7 })).StatusCode);
+
+        var forgiven = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"{Account}/write-offs",
+            new { customerId = customer, orderId, amount = 10m, reason = 99, notes = "Pan quemado", expectedOwed = owed }));
+        Assert.Equal(owed - 10m, forgiven.GetProperty("owed").GetDecimal());
+        var detail = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/orders/{orderId}"));
+        Assert.Equal((10m, owed - 10m), (detail.GetProperty("writtenOffAmount").GetDecimal(), detail.GetProperty("balance").GetDecimal()));
+        Assert.Equal("Pan quemado", Assert.Single(detail.GetProperty("writeOffs").EnumerateArray()).GetProperty("notes").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1/orders/{orderId}")).StatusCode);
+        Assert.Equal(0, await _api.QueryAsync(theirs.TenantId, db => db.OrderWriteOffs.CountAsync()));
+        Assert.Equal((1, 0), (
+            await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerAccountWrittenOff")),
+            await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerAccountWrittenOff"))));
+
+        // Undoing it is mine too: another business does not find it, and who charges cannot undo it.
+        var writeOffId = forgiven.GetProperty("recentWriteOffs")[0].GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"{Account}/write-offs/{writeOffId}/reversal", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsync($"{Account}/write-offs/{writeOffId}/reversal", null)).StatusCode);
+        var undone = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"{Account}/write-offs/{writeOffId}/reversal", null));
+        Assert.Equal(owed, undone.GetProperty("owed").GetDecimal());
+        Assert.Equal(JsonValueKind.String, undone.GetProperty("recentWriteOffs")[0].GetProperty("reversedAt").ValueKind);
+        Assert.Equal(0, await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerAccountWriteOffReversed")));
     }
 
     private static object CreditSale(Guid product, Guid customer) => new

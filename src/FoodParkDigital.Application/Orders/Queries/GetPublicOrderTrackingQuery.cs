@@ -57,6 +57,8 @@ public class PublicOrderTrackingDto
     public decimal Tax { get; set; }
     public decimal Total { get; set; }
     public decimal PaidAmount { get; set; }
+    /// <summary>What the business forgave (Fase 26B): not to pay anymore.</summary>
+    public decimal WrittenOffAmount { get; set; }
     /// <summary>What the business said when it cancelled it, as the customer heard it by WhatsApp.</summary>
     public string? CancellationReason { get; set; }
 }
@@ -124,6 +126,7 @@ public class GetPublicOrderTrackingQueryHandler : IRequestHandler<GetPublicOrder
             Tax = view.Tax,
             Total = view.Total,
             PaidAmount = view.PaidAmount,
+            WrittenOffAmount = view.WrittenOffAmount,
             CancellationReason = view.CancellationReason
         };
     }

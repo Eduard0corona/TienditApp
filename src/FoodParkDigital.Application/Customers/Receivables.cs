@@ -1,4 +1,6 @@
 using System.Linq.Expressions;
+using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -18,7 +20,8 @@ public static class Receivables
     public static readonly Expression<Func<Order, bool>> IsOwed = o =>
         o.Status != OrderStatus.Cancelled
         && o.CustomerPhone != null
-        && o.Total > o.PaidAmount
+        // Order.Balance above zero: what the business forgave is not owed (Fase 26B).
+        && o.Total > o.PaidAmount + o.WrittenOffAmount
         && (o.SoldOnCredit || o.Status == OrderStatus.Delivered || o.Status == OrderStatus.Completed)
         // Order.AwaitsCourierCash, written out so the database reads it.
         && !(o.Delivery != null && o.Delivery.CashToCollect != null && o.Status == OrderStatus.Delivered);
@@ -36,11 +39,19 @@ public static class Receivables
                 : o.CustomerPhone,
             CustomerName = o.CustomerName,
             CreatedAt = o.CreatedAt,
+            // Owed since it was sold on credit, else since it was first handed over: a service received days before
+            // it is picked up unpaid starts its term that day. Before the status history, since it was made.
+            OwedSince = o.SoldOnCredit
+                ? o.CreatedAt
+                : o.StatusHistory
+                    .Where(h => h.NewStatus == OrderStatus.Delivered || h.NewStatus == OrderStatus.Completed)
+                    .Min(h => (DateTimeOffset?)h.ChangedAt) ?? o.CreatedAt,
             Status = o.Status,
             SoldOnCredit = o.SoldOnCredit,
             Total = o.Total,
             Paid = o.PaidAmount,
-            Balance = o.Total - o.PaidAmount
+            WrittenOff = o.WrittenOffAmount,
+            Balance = o.Total - o.PaidAmount - o.WrittenOffAmount
         });
 
     /// <summary>The orders a customer owes, by the phone key.</summary>
@@ -64,9 +75,54 @@ public sealed class OwedOrder
     public string Phone { get; init; } = null!;
     public string? CustomerName { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
+    /// <summary>
+    /// When the customer started to owe it, which the term counts from (Fase 26B): when it was sold on credit (made), else
+    /// when it was first delivered or completed.
+    /// </summary>
+    public DateTimeOffset OwedSince { get; init; }
     public OrderStatus Status { get; init; }
     public bool SoldOnCredit { get; init; }
     public decimal Total { get; init; }
     public decimal Paid { get; init; }
+    /// <summary>What the business forgave of it (Fase 26B).</summary>
+    public decimal WrittenOff { get; init; }
     public decimal Balance { get; init; }
+}
+
+/// <summary>
+/// The term of the fiado (Fase 26B, ADR 0034): an order owed is overdue once its last day to pay, the business day the
+/// customer started to owe it (<see cref="OwedOrder.OwedSince"/>) plus the term, has passed in the business's time zone.
+/// Without a term nothing is overdue.
+/// </summary>
+public static class CreditTerm
+{
+    /// <summary>The business's term and time zone, as its settings keep them.</summary>
+    public sealed record Settings(int? Days, string? TimeZone)
+    {
+        /// <summary>
+        /// The orders owed since before this instant are overdue today: the start of the business day <see cref="Days"/>
+        /// days ago. Without a term, the earliest instant, so nothing is.
+        /// </summary>
+        public DateTimeOffset OverdueBefore(DateTimeOffset utcNow)
+        {
+            if (Days is not { } days)
+                return DateTimeOffset.MinValue;
+            var zone = TenantDateTimeResolver.Resolve(TimeZone);
+            var today = TimeZoneInfo.ConvertTime(utcNow, zone).Date;
+            // Not LocalDateBoundaryToUtc: a day without 00:00 would throw inside the payment or write-off that reads it.
+            return TenantDateTimeResolver.StartOfLocalDayUtc(today.AddDays(-days), zone);
+        }
+
+        /// <summary>The last day to pay an order owed since <paramref name="owedSince"/>, in the business's calendar.</summary>
+        public DateOnly? DueOn(DateTimeOffset owedSince) => Days is { } days
+            ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(owedSince, TenantDateTimeResolver.Resolve(TimeZone)).Date.AddDays(days))
+            : null;
+    }
+
+    /// <summary>The settings of the business of the request (the tenant filter picks them).</summary>
+    public static async Task<Settings> ReadAsync(IApplicationDbContext context, CancellationToken cancellationToken)
+        => await context.TenantSettings.AsNoTracking()
+            .Select(s => new Settings(s.CreditTermDays, s.TimeZone))
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? new Settings(null, null);
 }

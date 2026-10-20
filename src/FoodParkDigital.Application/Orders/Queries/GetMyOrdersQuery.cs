@@ -56,6 +56,8 @@ public class MyOrderDto
     public string StepLabel { get; set; } = null!;
     public decimal Total { get; set; }
     public decimal PaidAmount { get; set; }
+    /// <summary>What the business forgave (Fase 26B): not to pay anymore.</summary>
+    public decimal WrittenOffAmount { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public List<MyOrderItemDto> Items { get; set; } = [];
 }
@@ -115,6 +117,7 @@ public class GetMyOrdersQueryHandler : IRequestHandler<GetMyOrdersQuery, Paginat
                 OrderType = order.OrderType,
                 Total = order.Total,
                 PaidAmount = order.PaidAmount,
+                WrittenOffAmount = order.WrittenOffAmount,
                 CreatedAt = order.CreatedAt,
                 // Dishes cancelled from a tab were never served.
                 Items = order.Items

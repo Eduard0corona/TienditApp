@@ -81,6 +81,7 @@ export default function MyOrderPage() {
                   tax={order.tax}
                   total={order.total}
                   paidAmount={order.paidAmount}
+                  writtenOffAmount={order.writtenOffAmount}
                   cancelled={order.step === OrderTrackingStep.Cancelled}
                 />
                 {order.delivery && (

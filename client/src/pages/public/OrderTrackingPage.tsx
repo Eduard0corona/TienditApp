@@ -87,6 +87,7 @@ export default function OrderTrackingPage() {
                   tax={order.tax}
                   total={order.total}
                   paidAmount={order.paidAmount}
+                  writtenOffAmount={order.writtenOffAmount}
                   cancelled={order.step === OrderTrackingStep.Cancelled}
                 />
                 <div className="d-flex flex-wrap gap-2 mt-3">

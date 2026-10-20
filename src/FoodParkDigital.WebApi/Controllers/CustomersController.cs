@@ -58,6 +58,7 @@ public class CustomersController : ControllerBase
     public async Task<ActionResult<ReceivablesDto>> GetReceivables(
         [FromQuery] string? search,
         [FromQuery] ReceivablesSort sort = ReceivablesSort.Owed,
+        [FromQuery] bool overdueOnly = false,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -65,6 +66,7 @@ public class CustomersController : ControllerBase
         {
             Search = search,
             Sort = sort,
+            OverdueOnly = overdueOnly,
             PageNumber = pageNumber,
             PageSize = pageSize
         }, cancellationToken));
@@ -77,6 +79,24 @@ public class CustomersController : ControllerBase
     /// <summary>A payment to the account of a customer, split over the orders they owe from the oldest (needs an open drawer).</summary>
     [HttpPost("account/payments")]
     public async Task<ActionResult<CustomerAccountDto>> PayAccount([FromBody] PayCustomerAccountCommand command, CancellationToken cancellationToken)
+        => ToResult(await _mediator.Send(command, cancellationToken));
+
+    /// <summary>
+    /// Forgives part or all of what a customer owes (Fase 26B), on one order or from the oldest: a record apart on each
+    /// order, no money moves (owners and admins).
+    /// </summary>
+    [HttpPost("account/write-offs")]
+    public async Task<ActionResult<CustomerAccountDto>> WriteOffAccount([FromBody] WriteOffCustomerAccountCommand command, CancellationToken cancellationToken)
+        => ToResult(await _mediator.Send(command, cancellationToken));
+
+    /// <summary>Undoes a write-off made by mistake (Fase 26B): its record stays and what it forgave is owed again (owners and admins).</summary>
+    [HttpPost("account/write-offs/{id:guid}/reversal")]
+    public async Task<ActionResult<CustomerAccountDto>> ReverseWriteOff(Guid id, CancellationToken cancellationToken)
+        => ToResult(await _mediator.Send(new ReverseCustomerWriteOffCommand { WriteOffId = id }, cancellationToken));
+
+    /// <summary>How many days the business gives to pay what customers owe, or no term (Fase 26B; owners and admins).</summary>
+    [HttpPut("credit-term")]
+    public async Task<ActionResult<CustomerCreditTermDto>> UpdateCreditTerm([FromBody] UpdateCustomerCreditTermCommand command, CancellationToken cancellationToken)
         => ToResult(await _mediator.Send(command, cancellationToken));
 
     [HttpGet("{id:guid}")]
@@ -173,6 +193,9 @@ public class CustomersController : ControllerBase
         => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
 
     private ActionResult<CustomerAccountDto> ToResult(Result<CustomerAccountDto> result)
+        => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+
+    private ActionResult<CustomerCreditTermDto> ToResult(Result<CustomerCreditTermDto> result)
         => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
 }
 

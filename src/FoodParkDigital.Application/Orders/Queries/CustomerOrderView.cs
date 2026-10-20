@@ -43,6 +43,8 @@ internal sealed class CustomerOrderView
     public decimal Tax { get; init; }
     public decimal Total { get; init; }
     public decimal PaidAmount { get; init; }
+    /// <summary>What the business forgave (Fase 26B): not to pay anymore.</summary>
+    public decimal WrittenOffAmount { get; init; }
     public string? CancellationReason { get; init; }
     public string? TableNumber { get; init; }
     public bool HasDelivery { get; init; }
@@ -89,6 +91,7 @@ internal sealed class CustomerOrderView
                 Tax = order.Tax,
                 Total = order.Total,
                 PaidAmount = order.PaidAmount,
+                WrittenOffAmount = order.WrittenOffAmount,
                 CancellationReason = order.CancellationReason,
                 TableNumber = order.TableNumber,
                 HasDelivery = order.Delivery != null,

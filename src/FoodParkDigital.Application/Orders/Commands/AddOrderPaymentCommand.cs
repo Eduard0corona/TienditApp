@@ -121,6 +121,8 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
             .Include(o => o.PlatformDetail)
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
+            // What was forgiven stays in the order the screen swaps in (Fase 26B).
+            .Include(o => o.WriteOffs)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 

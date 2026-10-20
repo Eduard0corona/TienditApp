@@ -3510,6 +3510,14 @@
             }
           },
           {
+            "name": "overdueOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
@@ -3639,6 +3647,142 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/account/write-offs": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteOffCustomerAccountCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteOffCustomerAccountCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteOffCustomerAccountCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/account/write-offs/{id}/reversal": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/credit-term": {
+      "put": {
+        "tags": [
+          "Customers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerCreditTermCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerCreditTermCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerCreditTermCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerCreditTermDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerCreditTermDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerCreditTermDto"
                 }
               }
             }
@@ -17775,10 +17919,12 @@
         "required": [
           "orders",
           "ordersCount",
+          "overdue",
           "overLimit",
           "owed",
           "phone",
           "recentPayments",
+          "recentWriteOffs",
           "sellsOnCredit"
         ],
         "type": "object",
@@ -17815,6 +17961,15 @@
           "overLimit": {
             "type": "boolean"
           },
+          "creditTermDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "overdue": {
+            "type": "number",
+            "format": "double"
+          },
           "orders": {
             "type": "array",
             "items": {
@@ -17830,6 +17985,12 @@
             "items": {
               "$ref": "#/components/schemas/CustomerAccountPaymentDto"
             }
+          },
+          "recentWriteOffs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerAccountWriteOffDto"
+            }
           }
         },
         "additionalProperties": false
@@ -17838,12 +17999,14 @@
         "required": [
           "balance",
           "createdAt",
+          "isOverdue",
           "orderId",
           "orderNumber",
           "paid",
           "soldOnCredit",
           "status",
-          "total"
+          "total",
+          "writtenOff"
         ],
         "type": "object",
         "properties": {
@@ -17872,9 +18035,21 @@
             "type": "number",
             "format": "double"
           },
+          "writtenOff": {
+            "type": "number",
+            "format": "double"
+          },
           "balance": {
             "type": "number",
             "format": "double"
+          },
+          "dueOn": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "isOverdue": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -17901,6 +18076,46 @@
           },
           "method": {
             "$ref": "#/components/schemas/OrderPaymentMethod"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomerAccountWriteOffDto": {
+        "required": [
+          "amount",
+          "id",
+          "orderNumber",
+          "reason",
+          "writtenOffAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "writtenOffAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OrderWriteOffReason"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "reversedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -18266,6 +18481,17 @@
           "quantity": {
             "type": "number",
             "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomerCreditTermDto": {
+        "type": "object",
+        "properties": {
+          "creditTermDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -20890,7 +21116,8 @@
           "stepLabel",
           "steps",
           "tax",
-          "total"
+          "total",
+          "writtenOffAmount"
         ],
         "type": "object",
         "properties": {
@@ -20974,6 +21201,10 @@
             "type": "number",
             "format": "double"
           },
+          "writtenOffAmount": {
+            "type": "number",
+            "format": "double"
+          },
           "cancellationReason": {
             "type": "string",
             "nullable": true
@@ -21002,7 +21233,8 @@
           "status",
           "step",
           "stepLabel",
-          "total"
+          "total",
+          "writtenOffAmount"
         ],
         "type": "object",
         "properties": {
@@ -21039,6 +21271,10 @@
             "format": "double"
           },
           "paidAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "writtenOffAmount": {
             "type": "number",
             "format": "double"
           },
@@ -21981,7 +22217,9 @@
           "tax",
           "taxBreakdown",
           "tipTotal",
-          "total"
+          "total",
+          "writeOffs",
+          "writtenOffAmount"
         ],
         "type": "object",
         "properties": {
@@ -22092,6 +22330,10 @@
             "type": "number",
             "format": "double"
           },
+          "writtenOffAmount": {
+            "type": "number",
+            "format": "double"
+          },
           "cancellationReason": {
             "type": "string",
             "nullable": true
@@ -22145,6 +22387,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OrderRefundDto"
+            }
+          },
+          "writeOffs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderWriteOffDto"
             }
           },
           "itemCancellations": {
@@ -22766,6 +23014,66 @@
           }
         },
         "additionalProperties": false
+      },
+      "OrderWriteOffDto": {
+        "required": [
+          "amount",
+          "id",
+          "reason",
+          "writtenOffAt",
+          "writtenOffBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OrderWriteOffReason"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "writtenOffAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "writtenOffBy": {
+            "type": "string"
+          },
+          "reversedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "reversedBy": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrderWriteOffReason": {
+        "enum": [
+          1,
+          2,
+          3,
+          99
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "WontBeCollected",
+          "RecordingError",
+          "Courtesy",
+          "Other"
+        ]
       },
       "OutgoingMessageDto": {
         "required": [
@@ -25571,7 +25879,8 @@
           "steps",
           "tax",
           "toAddress",
-          "total"
+          "total",
+          "writtenOffAmount"
         ],
         "type": "object",
         "properties": {
@@ -25645,6 +25954,10 @@
             "format": "double"
           },
           "paidAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "writtenOffAmount": {
             "type": "number",
             "format": "double"
           },
@@ -26023,6 +26336,7 @@
         "required": [
           "name",
           "orders",
+          "overdue",
           "overLimit",
           "owed",
           "phone",
@@ -26060,6 +26374,10 @@
           },
           "overLimit": {
             "type": "boolean"
+          },
+          "overdue": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -26109,6 +26427,7 @@
       "ReceivablesDto": {
         "required": [
           "page",
+          "totalOverdue",
           "totalOwed"
         ],
         "type": "object",
@@ -26119,6 +26438,15 @@
           "totalOwed": {
             "type": "number",
             "format": "double"
+          },
+          "totalOverdue": {
+            "type": "number",
+            "format": "double"
+          },
+          "creditTermDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -28976,6 +29304,17 @@
         },
         "additionalProperties": false
       },
+      "UpdateCustomerCreditTermCommand": {
+        "type": "object",
+        "properties": {
+          "creditTermDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateCustomerNotesRequest": {
         "type": "object",
         "properties": {
@@ -30352,6 +30691,46 @@
           "verifyToken": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "WriteOffCustomerAccountCommand": {
+        "required": [
+          "amount",
+          "expectedOwed",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OrderWriteOffReason"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "expectedOwed": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false

@@ -68,6 +68,7 @@ public static class OrderMappings
         TipTotal = order.TipTotal,
         RefundedAmount = order.RefundedAmount,
         NetPaidAmount = order.NetPaidAmount,
+        WrittenOffAmount = order.WrittenOffAmount,
         CancellationReason = order.CancellationReason,
         CreatedAt = order.CreatedAt,
         UpdatedAt = order.UpdatedAt,
@@ -77,6 +78,7 @@ public static class OrderMappings
         ServicePieces = order.ServicePieces.Select(ToDto).ToList(),
         Payments = order.Payments.Select(ToDto).ToList(),
         Refunds = order.Refunds.Select(ToDto).ToList(),
+        WriteOffs = order.WriteOffs.OrderBy(w => w.WrittenOffAt).Select(ToDto).ToList(),
         ItemCancellations = order.ItemCancellations.OrderBy(c => c.CancelledAt).Select(ToDto).ToList(),
         IsTab = order.IsTab,
         IsOpenTab = order.IsOpenTab,
@@ -204,6 +206,18 @@ public static class OrderMappings
         Lines = refund.Lines.Select(l => new OrderRefundLineDto { OrderItemId = l.OrderItemId, Quantity = l.Quantity }).ToList()
     };
 
+    public static OrderWriteOffDto ToDto(this OrderWriteOff writeOff) => new()
+    {
+        Id = writeOff.Id,
+        Amount = writeOff.Amount,
+        Reason = writeOff.Reason,
+        Notes = writeOff.Notes,
+        WrittenOffAt = writeOff.WrittenOffAt,
+        WrittenOffBy = writeOff.WrittenOffBy,
+        ReversedAt = writeOff.ReversedAt,
+        ReversedBy = writeOff.ReversedBy
+    };
+
     public static OrderItemCancellationDto ToDto(this OrderItemCancellation cancellation) => new()
     {
         Id = cancellation.Id,
@@ -272,7 +286,7 @@ public static class OrderMappings
             CashToCollect = order.Delivery.CashToCollect,
             // Order.AwaitsCourierCash, written out so the database reads it.
             AwaitsCourierCash = order.Delivery.CashToCollect != null && order.Status == OrderStatus.Delivered
-                && order.Total > order.PaidAmount
+                && order.Total > order.PaidAmount + order.WrittenOffAmount
         },
         VisitCharge = order.VisitCharge == null ? null : new OrderVisitChargeDto
         {
@@ -287,10 +301,11 @@ public static class OrderMappings
         Tax = order.Tax,
         Total = order.Total,
         PaidAmount = order.PaidAmount,
-        Balance = order.Total - order.PaidAmount,
+        Balance = order.Total - order.PaidAmount - order.WrittenOffAmount,
         TipTotal = order.Payments.Sum(p => p.Tip),
         RefundedAmount = order.RefundedAmount,
         NetPaidAmount = order.PaidAmount - order.RefundedAmount,
+        WrittenOffAmount = order.WrittenOffAmount,
         CancellationReason = order.CancellationReason,
         CreatedAt = order.CreatedAt,
         UpdatedAt = order.UpdatedAt,
@@ -391,6 +406,17 @@ public static class OrderMappings
             Reference = refund.Reference,
             RestockItems = refund.RestockItems,
             Lines = refund.Lines.Select(l => new OrderRefundLineDto { OrderItemId = l.OrderItemId, Quantity = l.Quantity }).ToList()
+        }).ToList(),
+        WriteOffs = order.WriteOffs.OrderBy(w => w.WrittenOffAt).Select(writeOff => new OrderWriteOffDto
+        {
+            Id = writeOff.Id,
+            Amount = writeOff.Amount,
+            Reason = writeOff.Reason,
+            Notes = writeOff.Notes,
+            WrittenOffAt = writeOff.WrittenOffAt,
+            WrittenOffBy = writeOff.WrittenOffBy,
+            ReversedAt = writeOff.ReversedAt,
+            ReversedBy = writeOff.ReversedBy
         }).ToList(),
         ItemCancellations = order.ItemCancellations.OrderBy(c => c.CancelledAt).Select(cancellation => new OrderItemCancellationDto
         {

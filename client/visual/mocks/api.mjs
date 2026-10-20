@@ -21,6 +21,7 @@ import { phase24dRoutes } from './routes-p12.mjs';
 import { phase24fRoutes } from './routes-p13.mjs';
 import { phase24hRoutes } from './routes-p14.mjs';
 import { phase26aRoutes } from './routes-p15.mjs';
+import { phase26bRoutes } from './routes-p16.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 export { NOW_ISO };
@@ -228,6 +229,7 @@ function buildRoutes(data, token) {
   const NOW_LOCAL = localHhmmss(NOW_ISO);
 
   return [
+    ...phase26bRoutes(data, { ok }),
     ...phase26aRoutes(data, { ok, notFound, paginate }),
     ...phase24hRoutes(data, { ok }),
     ...phase24fRoutes(data, { ok }),
@@ -336,7 +338,7 @@ function buildRoutes(data, token) {
       o.payments.push(payment);
       o.tipTotal = Math.round(((o.tipTotal ?? 0) + payment.tip) * 100) / 100;
       o.paidAmount = Math.round((o.paidAmount + amount) * 100) / 100;
-      o.balance = Math.round((o.total - o.paidAmount) * 100) / 100;
+      o.balance = Math.round((o.total - o.paidAmount - (o.writtenOffAmount ?? 0)) * 100) / 100;
       o.canCancel = false;
       return ok(payment);
     }],

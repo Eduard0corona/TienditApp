@@ -11,7 +11,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
 {
     public void Configure(EntityTypeBuilder<Order> builder)
     {
-        builder.ToTable("Orders");
+        builder.ToTable("Orders", table =>
+            table.HasCheckConstraint("CK_Orders_WrittenOffAmount", "[WrittenOffAmount] >= 0"));
         // Mirrors the Order constructor: never both customer links, and only counter sales created by the
         // business (walk-in, without phone) may have neither.
         builder.ToTable(t => t.HasCheckConstraint(
@@ -42,6 +43,9 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.Total).HasColumnType("decimal(18,2)");
         builder.Property(o => o.PaidAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
         builder.Property(o => o.RefundedAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+        // Fase 26B (ADR 0034): the database default fills the orders that exist and those the previous version saves while
+        // this one is published; EF always writes the value.
+        builder.Property(o => o.WrittenOffAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m).ValueGeneratedNever();
         builder.Ignore(o => o.NetPaidAmount);
         builder.Ignore(o => o.TipTotal);
         builder.Ignore(o => o.IsOpenTab);
@@ -152,6 +156,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasForeignKey(r => r.OrderId)
             .OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(o => o.Refunds).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.HasMany(o => o.WriteOffs)
+            .WithOne()
+            .HasForeignKey(w => w.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(o => o.WriteOffs).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.ServicePieces).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.ServicePhotos).UsePropertyAccessMode(PropertyAccessMode.Field);
 

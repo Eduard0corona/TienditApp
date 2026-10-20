@@ -176,6 +176,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderStatusHistory> OrderStatusHistories => Set<OrderStatusHistory>();
     public DbSet<OrderPayment> OrderPayments => Set<OrderPayment>();
     public DbSet<OrderRefund> OrderRefunds => Set<OrderRefund>();
+    public DbSet<OrderWriteOff> OrderWriteOffs => Set<OrderWriteOff>();
     public DbSet<ServiceOrderDetail> ServiceOrderDetails => Set<ServiceOrderDetail>();
     public DbSet<PlatformOrderDetail> PlatformOrderDetails => Set<PlatformOrderDetail>();
     public DbSet<OrderDelivery> OrderDeliveries => Set<OrderDelivery>();

@@ -19,7 +19,7 @@ internal static class CourierSettlementReader
             && o.Delivery.Courier == courier
             && o.Delivery.CashToCollect != null
             && o.Status == OrderStatus.Delivered
-            && o.Total > o.PaidAmount
+            && o.Total > o.PaidAmount + o.WrittenOffAmount
             && !context.CourierSettlementOrders.Any(line => line.OrderId == o.Id));
 
     /// <summary>On its way for the courier to collect: neither delivered nor cancelled yet, nor paid meanwhile.</summary>
@@ -28,7 +28,7 @@ internal static class CourierSettlementReader
             && o.Delivery.Courier == courier
             && o.Delivery.DispatchedAt != null
             && o.Delivery.CashToCollect != null
-            && o.Total > o.PaidAmount
+            && o.Total > o.PaidAmount + o.WrittenOffAmount
             && o.Status != OrderStatus.Delivered
             && o.Status != OrderStatus.Completed
             && o.Status != OrderStatus.Cancelled);
@@ -44,7 +44,7 @@ internal static class CourierSettlementReader
             Status = o.Status,
             CashToCollect = o.Delivery.CashToCollect!.Value,
             PaysWith = o.Delivery.PaysWith,
-            Balance = o.Total - o.PaidAmount
+            Balance = o.Total - o.PaidAmount - o.WrittenOffAmount
         });
 
     public static async Task<CourierSettlementDetailDto> DetailAsync(

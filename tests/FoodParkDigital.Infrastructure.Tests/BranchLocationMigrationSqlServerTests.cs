@@ -39,7 +39,7 @@ public class BranchLocationMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database, tenant.Id))
         {
             var stored = await context.Branches.SingleAsync(b => b.Id == branch.Id);
             Assert.Null(stored.Location);
@@ -55,7 +55,7 @@ public class BranchLocationMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeCustomerWriteOffs.CreateContext(database, tenant.Id);
         var saved = await check.Branches.SingleAsync(b => b.Id == branch.Id);
         Assert.Equal(("Centro", "Av. Reforma 1", Zocalo), (saved.Name, saved.AddressLine1, saved.Location));
     }
@@ -67,7 +67,7 @@ public class BranchLocationMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var tenant = NewTenant();
         var branch = Branch.CreateDefault(tenant.Id);
-        await using (var seed = database.CreateContext())
+        await using (var seed = BeforeCustomerWriteOffs.CreateContext(database))
         {
             seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Food), branch);
             await seed.SaveChangesAsync();
@@ -83,14 +83,14 @@ public class BranchLocationMigrationSqlServerTests
                      "UPDATE [Branches] SET [Latitude] = 0, [Longitude] = 0 WHERE [Id] = {0}"
                  })
         {
-            await using var context = database.CreateContext();
+            await using var context = BeforeCustomerWriteOffs.CreateContext(database);
             var error = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(update, branch.Id));
             Assert.Equal(547, error.Number);
             Assert.Contains("CK_Branches_Location", error.Message);
         }
 
         // Either half alone may be 0: the equator and the meridian of Greenwich have places.
-        await using var check = database.CreateContext();
+        await using var check = BeforeCustomerWriteOffs.CreateContext(database);
         await check.Database.ExecuteSqlRawAsync("UPDATE [Branches] SET [Latitude] = 0, [Longitude] = -78.45 WHERE [Id] = {0}", branch.Id);
     }
 
@@ -102,7 +102,7 @@ public class BranchLocationMigrationSqlServerTests
         var tenant = NewTenant();
         var branch = Branch.CreateDefault(tenant.Id);
         branch.SetLocation(Zocalo);
-        await using (var seed = database.CreateContext())
+        await using (var seed = BeforeCustomerWriteOffs.CreateContext(database))
         {
             seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Food), branch);
             await seed.SaveChangesAsync();
@@ -111,7 +111,7 @@ public class BranchLocationMigrationSqlServerTests
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeLocation));
         Assert.Equal(50022, error.Number);
         Assert.Contains("Owners put branches on the map", error.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCustomerWriteOffs.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [Branches] WHERE [Latitude] IS NOT NULL"));
@@ -132,7 +132,7 @@ public class BranchLocationMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the columns are back, empty.
         await MigrateAsync(database, BeforeLocation);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeCustomerWriteOffs.CreateContext(database, tenant.Id);
         Assert.Null((await forward.Branches.SingleAsync(b => b.Id == branch.Id)).Location);
     }
 

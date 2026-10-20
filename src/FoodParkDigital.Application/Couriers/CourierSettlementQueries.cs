@@ -31,7 +31,7 @@ public class GetCourierReceivablesQueryHandler : IRequestHandler<GetCourierRecei
             var owed = await CourierSettlementReader.Owed(_context, courier)
                 .AsNoTracking()
                 .GroupBy(_ => 1)
-                .Select(g => new { Count = g.Count(), Amount = g.Sum(o => o.Total - o.PaidAmount), Oldest = g.Min(o => o.Delivery!.DispatchedAt) })
+                .Select(g => new { Count = g.Count(), Amount = g.Sum(o => o.Total - o.PaidAmount - o.WrittenOffAmount), Oldest = g.Min(o => o.Delivery!.DispatchedAt) })
                 .FirstOrDefaultAsync(cancellationToken);
             var onTheWay = await CourierSettlementReader.OnTheWay(_context, courier)
                 .AsNoTracking()
@@ -40,9 +40,9 @@ public class GetCourierReceivablesQueryHandler : IRequestHandler<GetCourierRecei
                 .Select(g => new
                 {
                     Count = g.Count(),
-                    Amount = g.Sum(o => o.Delivery!.CashToCollect!.Value < o.Total - o.PaidAmount
+                    Amount = g.Sum(o => o.Delivery!.CashToCollect!.Value < o.Total - o.PaidAmount - o.WrittenOffAmount
                         ? o.Delivery.CashToCollect.Value
-                        : o.Total - o.PaidAmount)
+                        : o.Total - o.PaidAmount - o.WrittenOffAmount)
                 })
                 .FirstOrDefaultAsync(cancellationToken);
             var lastSettledAt = await _context.CourierSettlements

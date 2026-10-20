@@ -47,6 +47,8 @@ public class MyOrderDetailDto
     public decimal Tax { get; set; }
     public decimal Total { get; set; }
     public decimal PaidAmount { get; set; }
+    /// <summary>What the business forgave (Fase 26B): not to pay anymore.</summary>
+    public decimal WrittenOffAmount { get; set; }
     /// <summary>What the business said when it cancelled it, as the customer heard it by WhatsApp.</summary>
     public string? CancellationReason { get; set; }
     /// <summary>The table it was ordered from («Mesa 4»).</summary>
@@ -112,6 +114,7 @@ public class GetMyOrderQueryHandler : IRequestHandler<GetMyOrderQuery, MyOrderDe
             Tax = order.Tax,
             Total = order.Total,
             PaidAmount = order.PaidAmount,
+            WrittenOffAmount = order.WrittenOffAmount,
             CancellationReason = order.CancellationReason,
             TableNumber = order.TableNumber,
             Delivery = order.HasDelivery

@@ -740,6 +740,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
             .Include(o => o.Refunds)
+            .Include(o => o.WriteOffs)
             .FirstOrDefaultAsync(o => o.ClientRequestId == idempotencyKey, cancellationToken);
         if (order is null)
             return null;

@@ -21,4 +21,23 @@ describe('OrderItemsSummary', () => {
     expect(screen.getByText('IVA').nextElementSibling).toHaveTextContent('$40.00');
     expect(screen.getByText('Por pagar').nextElementSibling).toHaveTextContent('$190.00');
   });
+
+  it.each([
+    [100.7, 50.4, 50.3],
+    [145.8, 45.7, 100.1],
+  ])('asks for nothing when what was paid and what the business forgave cover the total (%s = %s + %s)', (total, paid, writtenOff) => {
+    render(<OrderItemsSummary items={[haircut]} pricesIncludeTax tax={0} total={total} paidAmount={paid} writtenOffAmount={writtenOff} cancelled={false} />);
+
+    // In floats, 100.70 − 50.40 − 50.30 is not 0: in cents it is.
+    expect(screen.queryByText('Por pagar')).not.toBeInTheDocument();
+    // Nothing to pay, but not all of it was paid: it does not say «Pagado».
+    expect(screen.getByText('Nada por pagar')).toBeInTheDocument();
+    expect(screen.queryByText('Pagado')).not.toBeInTheDocument();
+  });
+
+  it('says what is left to pay after what the business forgave', () => {
+    render(<OrderItemsSummary items={[haircut]} pricesIncludeTax tax={0} total={250} paidAmount={100} writtenOffAmount={50} cancelled={false} />);
+
+    expect(screen.getByText('Por pagar').nextElementSibling).toHaveTextContent('$100.00');
+  });
 });

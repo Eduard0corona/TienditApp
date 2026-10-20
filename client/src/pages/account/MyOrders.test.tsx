@@ -36,6 +36,7 @@ function order(items: Line[], overrides: Record<string, unknown> = {}) {
     stepLabel: 'Entregado',
     total: 118,
     paidAmount: 118,
+    writtenOffAmount: 0,
     createdAt: '2026-10-12T19:00:00Z',
     items,
     ...overrides,
@@ -169,6 +170,22 @@ describe('MyOrders', () => {
 
     await userEvent.click(screen.getByRole('link', { name: 'Ver pedido T-1050 de Café Luna' }));
     expect(screen.getByTestId('store')).toHaveTextContent('/mis-pedidos/o2');
+  });
+
+  it('asks for nothing of an order that what was paid and what the business forgave cover', async () => {
+    request.mockImplementation(((_method: string, path: string, options: { query: { scope: number } }) => {
+      if (path === MY_REVIEWS) return Promise.resolve([]);
+      return Promise.resolve(options.query.scope === MyOrdersScope.InProgress
+        ? pageOf([])
+        // In floats, 100.70 − 50.40 − 50.30 is not 0.
+        : pageOf([order([{ productId: 'latte', productName: 'Latte', quantity: 1, optionIds: [] }], { total: 100.7, paidAmount: 50.4, writtenOffAmount: 50.3 })]));
+    }) as never);
+
+    renderOrders();
+
+    const past = await screen.findByRole('region', { name: 'Anteriores' });
+    expect(past).toHaveTextContent('T-1042');
+    expect(past).not.toHaveTextContent('Por pagar');
   });
 
   it('says there are no orders when the account has none', async () => {
