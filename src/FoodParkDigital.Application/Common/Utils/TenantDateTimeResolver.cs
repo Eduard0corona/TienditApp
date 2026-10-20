@@ -33,6 +33,18 @@ public static class TenantDateTimeResolver
         return new DateTimeOffset(utcDateTime, TimeSpan.Zero);
     }
 
+    /// <summary>
+    /// The instant a local day starts. Where the clocks jump forward at midnight (Santiago, Havana) that day has no 00:00,
+    /// and it starts at the first minute it does have.
+    /// </summary>
+    public static DateTimeOffset StartOfLocalDayUtc(DateTime localDate, TimeZoneInfo zone)
+    {
+        var start = DateTime.SpecifyKind(localDate.Date, DateTimeKind.Unspecified);
+        while (zone.IsInvalidTime(start))
+            start = start.AddMinutes(1);
+        return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(start, zone), TimeSpan.Zero);
+    }
+
     public static TimeSpan GetLocalTimeOfDay(DateTimeOffset utcNow, TimeZoneInfo zone)
     {
         return TimeZoneInfo.ConvertTime(utcNow, zone).TimeOfDay;

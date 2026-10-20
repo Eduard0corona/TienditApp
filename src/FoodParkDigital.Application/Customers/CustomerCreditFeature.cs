@@ -107,11 +107,14 @@ public class CustomerAccountOrderDto
 /// <summary>What the business forgave a customer of an order (Fase 26B, ADR 0034).</summary>
 public class CustomerAccountWriteOffDto
 {
+    public Guid Id { get; set; }
     public string OrderNumber { get; set; } = null!;
     public DateTimeOffset WrittenOffAt { get; set; }
     public decimal Amount { get; set; }
     public OrderWriteOffReason Reason { get; set; }
     public string? Notes { get; set; }
+    /// <summary>When it was undone (owed again); null while it stands.</summary>
+    public DateTimeOffset? ReversedAt { get; set; }
 }
 
 /// <summary>The term of the fiado of the business (Fase 26B).</summary>
@@ -255,7 +258,7 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
         if (request.OverdueOnly)
         {
             // Every order of a customer with something overdue stays: what they owe is all of it.
-            var overduePhones = lines.Where(l => l.CreatedAt < overdueBefore).Select(l => l.Phone);
+            var overduePhones = lines.Where(l => l.OwedSince < overdueBefore).Select(l => l.Phone);
             lines = lines.Where(l => overduePhones.Contains(l.Phone));
         }
 
@@ -265,7 +268,7 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
             {
                 Phone = g.Key,
                 Owed = g.Sum(l => l.Balance),
-                Overdue = g.Sum(l => l.CreatedAt < overdueBefore ? l.Balance : 0m),
+                Overdue = g.Sum(l => l.OwedSince < overdueBefore ? l.Balance : 0m),
                 Orders = g.Count(),
                 Since = g.Min(l => l.CreatedAt)
             });
@@ -276,7 +279,7 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
         var (pageNumber, pageSize) = Paging.Normalize(request.PageNumber, request.PageSize);
         var count = await customers.CountAsync(cancellationToken);
         var totalOwed = await lines.SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
-        var totalOverdue = await lines.Where(l => l.CreatedAt < overdueBefore).SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
+        var totalOverdue = await lines.Where(l => l.OwedSince < overdueBefore).SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
         var page = await ordered.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
 
         // The page's names and limits: the customer record with each phone, else the name on the latest order owed.
@@ -509,6 +512,9 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
     public static string OwedChangedMessage(decimal owed) =>
         $"La cuenta cambió: ahora debe {OrderStatusLabels.FormatMoney(owed)}. Revisa el estado de cuenta antes de cobrar.";
 
+    public static string AboveSplitMessage(decimal splittable) =>
+        $"Abona hasta {OrderStatusLabels.FormatMoney(splittable)} a la vez: la cuenta tiene más de {MaxOrders} pedidos.";
+
     public async Task<Result<CustomerAccountDto>> Handle(PayCustomerAccountCommand request, CancellationToken cancellationToken)
     {
         var resolved = await CreditAccount.ResolveAsync(_context, _phones, request.CustomerId, request.Phone, cancellationToken);
@@ -533,13 +539,16 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
             .Take(MaxOrders)
             .ToListAsync(cancellationToken);
 
-        var owed = orders.Sum(o => o.Balance);
+        // All of it, as the account shows it, though one payment splits over the oldest orders only.
+        var owed = await Receivables.OwedAsync(_context.Orders, account.Phone, cancellationToken);
         if (owed == 0)
             return Result.Failure<CustomerAccountDto>(NothingOwedMessage);
         if (request.ExpectedOwed is { } expected && expected != owed)
             return Result.Failure<CustomerAccountDto>(OwedChangedMessage(owed));
         if (request.Amount > owed)
             return Result.Failure<CustomerAccountDto>(AboveOwedMessage(owed));
+        if (request.Amount > orders.Sum(o => o.Balance))
+            return Result.Failure<CustomerAccountDto>(AboveSplitMessage(orders.Sum(o => o.Balance)));
 
         var settings = await TenantSalesSettings.ReadAsync(_context, _tenant.TenantId, cancellationToken);
         var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, _tenant.TenantId, cancellationToken);
@@ -699,28 +708,35 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
         var overdueBefore = term.OverdueBefore(utcNow);
         var lines = Receivables.OfCustomer(context.Orders.AsNoTracking(), Phone);
         var owed = await lines.SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
-        var overdue = await lines.Where(l => l.CreatedAt < overdueBefore).SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
+        var overdue = await lines.Where(l => l.OwedSince < overdueBefore).SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
         var count = await lines.CountAsync(cancellationToken);
-        var orders = await lines
+        var owedOrders = await lines
             .OrderBy(l => l.CreatedAt)
             .ThenBy(l => l.OrderNumber)
             .Take(GetCustomerAccountQuery.MaxOrders)
-            .Select(l => new CustomerAccountOrderDto
+            .Select(l => new
             {
-                OrderId = l.OrderId,
-                OrderNumber = l.OrderNumber,
-                CreatedAt = l.CreatedAt,
-                Status = l.Status,
-                SoldOnCredit = l.SoldOnCredit,
-                Total = l.Total,
-                Paid = l.Paid,
-                WrittenOff = l.WrittenOff,
-                Balance = l.Balance,
-                IsOverdue = l.CreatedAt < overdueBefore
+                Order = new CustomerAccountOrderDto
+                {
+                    OrderId = l.OrderId,
+                    OrderNumber = l.OrderNumber,
+                    CreatedAt = l.CreatedAt,
+                    Status = l.Status,
+                    SoldOnCredit = l.SoldOnCredit,
+                    Total = l.Total,
+                    Paid = l.Paid,
+                    WrittenOff = l.WrittenOff,
+                    Balance = l.Balance,
+                    IsOverdue = l.OwedSince < overdueBefore
+                },
+                l.OwedSince
             })
             .ToListAsync(cancellationToken);
-        foreach (var order in orders)
-            order.DueOn = term.DueOn(order.CreatedAt);
+        var orders = owedOrders.Select(o =>
+        {
+            o.Order.DueOn = term.DueOn(o.OwedSince);
+            return o.Order;
+        }).ToList();
 
         var variants = MessagingPhone.Variants(Phone).ToList();
         var payments = await context.OrderPayments.AsNoTracking()
@@ -743,11 +759,13 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
                 order => order.Id,
                 (writeOff, order) => new CustomerAccountWriteOffDto
                 {
+                    Id = writeOff.Id,
                     OrderNumber = order.OrderNumber,
                     WrittenOffAt = writeOff.WrittenOffAt,
                     Amount = writeOff.Amount,
                     Reason = writeOff.Reason,
-                    Notes = writeOff.Notes
+                    Notes = writeOff.Notes,
+                    ReversedAt = writeOff.ReversedAt
                 })
             .OrderByDescending(w => w.WrittenOffAt)
             .Take(GetCustomerAccountQuery.RecentWriteOffs)

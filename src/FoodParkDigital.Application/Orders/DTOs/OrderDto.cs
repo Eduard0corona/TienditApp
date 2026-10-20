@@ -180,6 +180,9 @@ public class OrderWriteOffDto
     public string? Notes { get; set; }
     public DateTimeOffset WrittenOffAt { get; set; }
     public string WrittenOffBy { get; set; } = null!;
+    /// <summary>When it was undone and by whom (owed again); null while it stands.</summary>
+    public DateTimeOffset? ReversedAt { get; set; }
+    public string? ReversedBy { get; set; }
 }
 
 public class OrderRefundDto

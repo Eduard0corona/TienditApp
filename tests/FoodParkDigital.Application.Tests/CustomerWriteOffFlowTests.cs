@@ -1,13 +1,17 @@
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers;
+using FoodParkDigital.Application.Customers.Queries;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
@@ -104,7 +108,7 @@ public class CustomerWriteOffFlowTests
         var nobody = await AddCustomerAsync(fixture, tenant, "Sofía Ramírez", "+525599990000");
         var nothing = await handler.Handle(WriteOff(nobody, 10m, expectedOwed: 10m), default);
 
-        Assert.Equal(PayCustomerAccountCommandHandler.OwedChangedMessage(100m), changed.Error);
+        Assert.Equal(WriteOffCustomerAccountCommandHandler.OwedChangedMessage(100m), changed.Error);
         Assert.Equal(WriteOffCustomerAccountCommandHandler.AboveOwedMessage(100m), above.Error);
         Assert.Equal(WriteOffCustomerAccountCommandHandler.OrderNotOwedMessage, otherCustomer.Error);
         Assert.Equal(WriteOffCustomerAccountCommandHandler.NothingOwedMessage, nothing.Error);
@@ -243,6 +247,137 @@ public class CustomerWriteOffFlowTests
         Assert.Null(new CreditTerm.Settings(null, null).DueOn(lateSale));
     }
 
+    [Fact]
+    public async Task Overdue_ShouldCountFromWhenItWasHandedOver_NotFromWhenItWasMade()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, soap) = await ShopAsync(fixture);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 1000m);
+        (await fixture.Context.TenantSettings.SingleAsync()).SetCreditTermDays(7);
+        await fixture.Context.SaveChangesAsync();
+        // Now is 4 Oct. Both were received on 14 Sep (a service picked up later); one was handed over unpaid on 3 Oct, the
+        // other on 20 Sep. Its term starts the day it was handed over: only the second is overdue.
+        var made = new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.FromHours(-6));
+        var pickedUpYesterday = await HandOverUnpaidAsync(fixture, ana, soap, made, new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.FromHours(-6)));
+        var pickedUpLongAgo = await HandOverUnpaidAsync(fixture, ana, soap, made, new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.FromHours(-6)));
+
+        var account = await AccountAsync(fixture, ana.Id);
+        var receivables = await new GetReceivablesQueryHandler(fixture.Context, new PhoneNormalizationService(), fixture.Clock)
+            .Handle(new GetReceivablesQuery(), default);
+
+        Assert.Equal(100m, account.Overdue);
+        Assert.Equal(
+            [(pickedUpYesterday.Id, new DateOnly(2026, 10, 10), false), (pickedUpLongAgo.Id, new DateOnly(2026, 9, 27), true)],
+            account.Orders.OrderBy(o => o.DueOn).Reverse().Select(o => (o.OrderId, o.DueOn!.Value, o.IsOverdue)));
+        Assert.Equal((200m, 100m), (receivables.TotalOwed, receivables.TotalOverdue));
+    }
+
+    [Fact]
+    public void CreditTerm_ShouldStartADayWithoutMidnight_AtItsFirstMinute()
+    {
+        // Clocks that jump from 00:00 to 01:00 on 6 Sep, as in Santiago or Havana: that day has no 00:00.
+        var jump = TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 0, 0, 0), 9, 6);
+        var back = TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 0, 0, 0), 4, 5);
+        var rule = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(DateTime.MinValue.Date, DateTime.MaxValue.Date, TimeSpan.FromHours(1), jump, back);
+        var zone = TimeZoneInfo.CreateCustomTimeZone("Midnight jump", TimeSpan.FromHours(-4), "Midnight jump", "Standard", "Daylight", [rule]);
+
+        var start = TenantDateTimeResolver.StartOfLocalDayUtc(new DateTime(2026, 9, 6), zone);
+
+        // 01:00 at UTC-3 (daylight), instead of throwing inside the payment or write-off that reads the account.
+        Assert.Equal(new DateTimeOffset(2026, 9, 6, 4, 0, 0, TimeSpan.Zero), start);
+        Assert.Equal(new DateTimeOffset(2026, 9, 7, 3, 0, 0, TimeSpan.Zero), TenantDateTimeResolver.StartOfLocalDayUtc(new DateTime(2026, 9, 7), zone));
+    }
+
+    [Fact]
+    public async Task Reverse_ShouldOweItAgain_KeepingTheRecord_Once()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, soap) = await ShopAsync(fixture);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 1000m);
+        var sale = await SellOnCreditAsync(fixture, ana, soap, quantity: 3, createdAt: SalesTestFixture.Now);
+        Assert.True((await WriteOffHandler(fixture).Handle(WriteOff(ana, 120m, expectedOwed: 300m), default)).IsSuccess);
+        var writeOff = await fixture.Context.OrderWriteOffs.SingleAsync();
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddHours(2);
+
+        var result = await ReverseHandler(fixture).Handle(new ReverseCustomerWriteOffCommand { WriteOffId = writeOff.Id }, default);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(300m, result.Value.Owed);
+        var line = Assert.Single(result.Value.Orders);
+        Assert.Equal((sale.OrderNumber, 0m, 300m), (line.OrderNumber, line.WrittenOff, line.Balance));
+        // The record stays, with when and who undid it.
+        var shown = Assert.Single(result.Value.RecentWriteOffs);
+        Assert.Equal((writeOff.Id, 120m, SalesTestFixture.Now.AddHours(2)), (shown.Id, shown.Amount, shown.ReversedAt!.Value));
+        var record = await fixture.Context.OrderWriteOffs.SingleAsync();
+        Assert.Equal((SalesTestFixture.Now.AddHours(2), fixture.CurrentUser.UserName), (record.ReversedAt!.Value, record.ReversedBy));
+        Assert.Equal(0m, (await fixture.Context.Orders.SingleAsync()).WrittenOffAmount);
+        var log = Assert.Single(await fixture.Context.AuditLogs.Where(l => l.Action == "CustomerAccountWriteOffReversed").ToListAsync());
+        Assert.Equal((nameof(Customer), ana.Id.ToString()), (log.EntityName, log.EntityId));
+
+        // Sent again, it undoes nothing more; one that does not exist here is not found.
+        var again = await ReverseHandler(fixture).Handle(new ReverseCustomerWriteOffCommand { WriteOffId = writeOff.Id }, default);
+        Assert.Equal(OrderWriteOff.AlreadyReversedMessage, again.Error);
+        Assert.Equal(300m, (await AccountAsync(fixture, ana.Id)).Owed);
+        await Assert.ThrowsAsync<EntityNotFoundException>(() =>
+            ReverseHandler(fixture).Handle(new ReverseCustomerWriteOffCommand { WriteOffId = Guid.NewGuid() }, default));
+        Assert.True(typeof(ReverseCustomerWriteOffCommand).IsDefined(typeof(RequiresTenantManagerAttribute), false));
+    }
+
+    [Fact]
+    public async Task OrderAnswers_ShouldKeepWhatWasForgiven_AfterACharge()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, soap) = await ShopAsync(fixture);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 1000m);
+        await fixture.OpenCashSessionAsync(tenant);
+        var sale = await SellOnCreditAsync(fixture, ana, soap, quantity: 2, createdAt: SalesTestFixture.Now);
+        Assert.True((await WriteOffHandler(fixture).Handle(WriteOff(ana, 50m, expectedOwed: 200m), default)).IsSuccess);
+
+        // Pedidos swaps in the order the charge answers: what was forgiven stays in it.
+        var charged = await fixture.AddPaymentHandler().Handle(new AddOrderPaymentCommand
+        {
+            OrderId = sale.Id,
+            Amount = 50m,
+            Method = OrderPaymentMethod.Cash
+        }, default);
+
+        Assert.True(charged.IsSuccess, charged.Error);
+        Assert.Equal((50m, 100m), (charged.Value.WrittenOffAmount, charged.Value.Balance));
+        Assert.Equal(50m, Assert.Single(charged.Value.WriteOffs).Amount);
+    }
+
+    [Fact]
+    public async Task WhatWasForgiven_ShouldNotBeOwed_InTheCardAndHome_ButTheInvoiceGoesForTheWholeSale()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, soap) = await ShopAsync(fixture);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 1000m);
+        await fixture.OpenCashSessionAsync(tenant);
+        var sale = await SellOnCreditAsync(fixture, ana, soap, quantity: 2, createdAt: SalesTestFixture.Now);
+        Assert.True((await PayHandler(fixture).Handle(new PayCustomerAccountCommand
+        {
+            CustomerId = ana.Id,
+            Amount = 50m,
+            Method = OrderPaymentMethod.Cash,
+            CashReceived = 50m
+        }, default)).IsSuccess);
+        Assert.True((await WriteOffHandler(fixture).Handle(WriteOff(ana, 100m, expectedOwed: 150m), default)).IsSuccess);
+
+        var card = await new GetCustomerCardQueryHandler(fixture.Context, new PhoneNormalizationService(), fixture.TenantService, fixture.Clock)
+            .Handle(new GetCustomerCardQuery { CustomerId = ana.Id }, default);
+        var home = await new GetDashboardMetricsQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(new GetDashboardMetricsQuery(), default);
+        var invoice = await new GetOrderCfdiDraftQueryHandler(fixture.Context).Handle(new GetOrderCfdiDraftQuery { OrderId = sale.Id }, default);
+
+        Assert.True(card.IsSuccess, card.Error);
+        Assert.Equal((50m, 50m), (card.Value.Balance, Assert.Single(card.Value.RecentOrders).Balance));
+        Assert.Equal((50m, 1), (home.OutstandingBalance, home.UnpaidOrders));
+        // The invoice goes for the $200 sale: the $150 not paid stays unpaid (PPD), and it says the $100 needs a credit note.
+        Assert.True(invoice.IsSuccess, invoice.Error);
+        Assert.Equal("PPD", invoice.Value.PaymentMethod);
+        Assert.Contains(GetOrderCfdiDraftQueryHandler.WrittenOffWarning(100m), invoice.Value.Warnings);
+    }
+
     private static async Task<(Tenant Tenant, Product Soap)> ShopAsync(SalesTestFixture fixture)
     {
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
@@ -276,6 +411,27 @@ public class CustomerWriteOffFlowTests
         return order;
     }
 
+    /// <summary>A sale of soap left unpaid, made on <paramref name="createdAt"/> and handed over on <paramref name="handedOverAt"/>.</summary>
+    private static async Task<Order> HandOverUnpaidAsync(
+        SalesTestFixture fixture, Customer customer, Product soap, DateTimeOffset createdAt, DateTimeOffset handedOverAt)
+    {
+        var sale = await fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+        {
+            CustomerId = customer.Id,
+            Items = [new CreateOrderItemDto { ProductId = soap.Id, Quantity = 1 }]
+        }, default);
+        Assert.True(sale.IsSuccess, sale.Error);
+        var order = await fixture.Context.Orders.Include(o => o.StatusHistory).SingleAsync(o => o.Id == sale.Value.Id);
+        order.CreatedAt = createdAt;
+        order.TransitionTo(OrderStatus.Delivered, OrderStateMachineFactory.Create(BusinessType.Retail, OrderType.Retail), "test");
+        await fixture.Context.SaveChangesAsync();
+        // The history stamps the real clock: the test says when it was handed over.
+        var delivered = order.StatusHistory.Single(h => h.NewStatus == OrderStatus.Delivered);
+        fixture.Context.Entry(delivered).Property(h => h.ChangedAt).CurrentValue = handedOverAt;
+        await fixture.Context.SaveChangesAsync();
+        return order;
+    }
+
     private static WriteOffCustomerAccountCommand WriteOff(Customer customer, decimal amount, decimal expectedOwed) => new()
     {
         CustomerId = customer.Id,
@@ -285,6 +441,14 @@ public class CustomerWriteOffFlowTests
     };
 
     private static WriteOffCustomerAccountCommandHandler WriteOffHandler(SalesTestFixture fixture) => new(
+        fixture.Context,
+        fixture.TenantService,
+        fixture.CurrentUser,
+        new PhoneNormalizationService(),
+        fixture.Clock,
+        new CustomerCreditLock(fixture.Context));
+
+    private static ReverseCustomerWriteOffCommandHandler ReverseHandler(SalesTestFixture fixture) => new(
         fixture.Context,
         fixture.TenantService,
         fixture.CurrentUser,

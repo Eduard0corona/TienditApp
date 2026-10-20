@@ -173,6 +173,15 @@ public sealed class CrossTenantCustomerCreditSqlServerTests
         Assert.Equal((1, 0), (
             await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerAccountWrittenOff")),
             await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerAccountWrittenOff"))));
+
+        // Undoing it is mine too: another business does not find it, and who charges cannot undo it.
+        var writeOffId = forgiven.GetProperty("recentWriteOffs")[0].GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"{Account}/write-offs/{writeOffId}/reversal", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsync($"{Account}/write-offs/{writeOffId}/reversal", null)).StatusCode);
+        var undone = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"{Account}/write-offs/{writeOffId}/reversal", null));
+        Assert.Equal(owed, undone.GetProperty("owed").GetDecimal());
+        Assert.Equal(JsonValueKind.String, undone.GetProperty("recentWriteOffs")[0].GetProperty("reversedAt").ValueKind);
+        Assert.Equal(0, await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerAccountWriteOffReversed")));
     }
 
     private static object CreditSale(Guid product, Guid customer) => new

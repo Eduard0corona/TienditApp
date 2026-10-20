@@ -7256,6 +7256,8 @@ BEGIN
         [Notes] nvarchar(500) NULL,
         [WrittenOffAt] datetimeoffset NOT NULL,
         [WrittenOffBy] nvarchar(256) NOT NULL,
+        [ReversedAt] datetimeoffset NULL,
+        [ReversedBy] nvarchar(256) NULL,
         [CreatedAt] datetimeoffset NOT NULL,
         [CreatedBy] nvarchar(max) NULL,
         [UpdatedAt] datetimeoffset NULL,

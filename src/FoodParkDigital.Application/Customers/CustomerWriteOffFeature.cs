@@ -91,6 +91,12 @@ public class WriteOffCustomerAccountCommandHandler : IRequestHandler<WriteOffCus
     public static string AboveOwedMessage(decimal owed) =>
         $"Debe {OrderStatusLabels.FormatMoney(owed)}: no se puede condonar más.";
 
+    public static string OwedChangedMessage(decimal owed) =>
+        $"La cuenta cambió: ahora debe {OrderStatusLabels.FormatMoney(owed)}. Revisa el estado de cuenta antes de condonar.";
+
+    public static string AboveSplitMessage(decimal splittable) =>
+        $"Condona hasta {OrderStatusLabels.FormatMoney(splittable)} a la vez: la cuenta tiene más de {MaxOrders} pedidos.";
+
     public async Task<Result<CustomerAccountDto>> Handle(WriteOffCustomerAccountCommand request, CancellationToken cancellationToken)
     {
         var resolved = await CreditAccount.ResolveAsync(_context, _phones, request.CustomerId, request.Phone, cancellationToken);
@@ -112,13 +118,16 @@ public class WriteOffCustomerAccountCommandHandler : IRequestHandler<WriteOffCus
             .Take(MaxOrders)
             .ToListAsync(cancellationToken);
 
-        var owed = orders.Sum(o => o.Balance);
+        // All of it, as the account shows it, though one write-off splits over the oldest orders only.
+        var owed = await Receivables.OwedAsync(_context.Orders, account.Phone, cancellationToken);
         if (owed == 0)
             return Result.Failure<CustomerAccountDto>(NothingOwedMessage);
         if (request.ExpectedOwed != owed)
-            return Result.Failure<CustomerAccountDto>(PayCustomerAccountCommandHandler.OwedChangedMessage(owed));
+            return Result.Failure<CustomerAccountDto>(OwedChangedMessage(owed));
         if (request.Amount > owed)
             return Result.Failure<CustomerAccountDto>(AboveOwedMessage(owed));
+        if (request.OrderId is null && request.Amount > orders.Sum(o => o.Balance))
+            return Result.Failure<CustomerAccountDto>(AboveSplitMessage(orders.Sum(o => o.Balance)));
 
         var targets = orders;
         if (request.OrderId is { } orderId)
@@ -160,6 +169,87 @@ public class WriteOffCustomerAccountCommandHandler : IRequestHandler<WriteOffCus
             action: "CustomerAccountWrittenOff",
             performedBy: by,
             metadata: JsonSerializer.Serialize(new { request.Amount, Reason = request.Reason.ToString(), Orders = parts })));
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(await account.ReadAsync(_context, now, cancellationToken));
+    }
+}
+
+/// <summary>
+/// Deshacer lo condonado (Fase 26B, ADR 0034): the owner or an admin undoes a write-off made by mistake. Its record stays,
+/// with when and who undid it, and what it forgave is owed again (<see cref="Order.ReverseWriteOff"/>). Once: a write-off
+/// undone is refused the second time, so sending it twice undoes it once. Inside the customer's credit lock, like a write-off.
+/// </summary>
+[RequiresTenantManager]
+public record ReverseCustomerWriteOffCommand : IRequest<Result<CustomerAccountDto>>, ITransactionalRequest
+{
+    public Guid WriteOffId { get; init; }
+}
+
+public class ReverseCustomerWriteOffCommandHandler : IRequestHandler<ReverseCustomerWriteOffCommand, Result<CustomerAccountDto>>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenant;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IPhoneNormalizationService _phones;
+    private readonly IDateTimeProvider _clock;
+    private readonly ICustomerCreditLock _creditLock;
+
+    public ReverseCustomerWriteOffCommandHandler(
+        IApplicationDbContext context,
+        ICurrentTenantService tenant,
+        ICurrentUserService currentUser,
+        IPhoneNormalizationService phones,
+        IDateTimeProvider clock,
+        ICustomerCreditLock creditLock)
+    {
+        _context = context;
+        _tenant = tenant;
+        _currentUser = currentUser;
+        _phones = phones;
+        _clock = clock;
+        _creditLock = creditLock;
+    }
+
+    public async Task<Result<CustomerAccountDto>> Handle(ReverseCustomerWriteOffCommand request, CancellationToken cancellationToken)
+    {
+        // The order it forgave, of this business (the tenant filter): another business's write-off is not found.
+        var target = await _context.Orders.AsNoTracking()
+            .Where(o => o.WriteOffs.Any(w => w.Id == request.WriteOffId))
+            .Select(o => new { o.Id, o.CustomerPhone })
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new EntityNotFoundException(nameof(OrderWriteOff), request.WriteOffId);
+
+        var resolved = await CreditAccount.ResolveAsync(_context, _phones, null, target.CustomerPhone, cancellationToken);
+        if (resolved.IsFailure)
+            return Result.Failure<CustomerAccountDto>(resolved.Error!);
+        var account = resolved.Value;
+
+        // A payment, a sale on credit or a write-off for the same customer waits: each one counts what the other left.
+        await _creditLock.AcquireAsync(_tenant.TenantId, account.Phone, cancellationToken);
+        var order = await _context.Orders
+            .Include(o => o.WriteOffs)
+            .FirstAsync(o => o.Id == target.Id, cancellationToken);
+
+        var by = _currentUser.UserName ?? "system";
+        var now = _clock.UtcNow;
+        OrderWriteOff reversed;
+        try
+        {
+            reversed = order.ReverseWriteOff(request.WriteOffId, now, by);
+        }
+        catch (DomainException refused)
+        {
+            return Result.Failure<CustomerAccountDto>(refused.Message);
+        }
+
+        _context.AuditLogs.Add(new AuditLog(
+            tenantId: _tenant.TenantId,
+            entityName: account.Customer is null ? nameof(Order) : nameof(Customer),
+            entityId: (account.Customer?.Id ?? order.Id).ToString(),
+            action: "CustomerAccountWriteOffReversed",
+            performedBy: by,
+            metadata: JsonSerializer.Serialize(new { order.OrderNumber, reversed.Amount, WriteOffId = reversed.Id })));
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result.Success(await account.ReadAsync(_context, now, cancellationToken));

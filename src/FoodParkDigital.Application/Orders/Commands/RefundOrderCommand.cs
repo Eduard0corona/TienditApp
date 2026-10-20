@@ -127,6 +127,8 @@ internal static class OrderRefundQueries
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
             .Include(o => o.Refunds).ThenInclude(r => r.Lines)
+            // What was forgiven stays in the order the screen swaps in (Fase 26B).
+            .Include(o => o.WriteOffs)
             .FirstAsync(o => o.Id == orderId, cancellationToken);
         var dto = order.ToDto();
         dto.ApplyStateMetadata();

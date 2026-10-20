@@ -213,7 +213,9 @@ public static class OrderMappings
         Reason = writeOff.Reason,
         Notes = writeOff.Notes,
         WrittenOffAt = writeOff.WrittenOffAt,
-        WrittenOffBy = writeOff.WrittenOffBy
+        WrittenOffBy = writeOff.WrittenOffBy,
+        ReversedAt = writeOff.ReversedAt,
+        ReversedBy = writeOff.ReversedBy
     };
 
     public static OrderItemCancellationDto ToDto(this OrderItemCancellation cancellation) => new()
@@ -412,7 +414,9 @@ public static class OrderMappings
             Reason = writeOff.Reason,
             Notes = writeOff.Notes,
             WrittenOffAt = writeOff.WrittenOffAt,
-            WrittenOffBy = writeOff.WrittenOffBy
+            WrittenOffBy = writeOff.WrittenOffBy,
+            ReversedAt = writeOff.ReversedAt,
+            ReversedBy = writeOff.ReversedBy
         }).ToList(),
         ItemCancellations = order.ItemCancellations.OrderBy(c => c.CancelledAt).Select(cancellation => new OrderItemCancellationDto
         {

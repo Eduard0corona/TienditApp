@@ -39,6 +39,13 @@ public static class Receivables
                 : o.CustomerPhone,
             CustomerName = o.CustomerName,
             CreatedAt = o.CreatedAt,
+            // Owed since it was sold on credit, else since it was first handed over: a service received days before
+            // it is picked up unpaid starts its term that day. Before the status history, since it was made.
+            OwedSince = o.SoldOnCredit
+                ? o.CreatedAt
+                : o.StatusHistory
+                    .Where(h => h.NewStatus == OrderStatus.Delivered || h.NewStatus == OrderStatus.Completed)
+                    .Min(h => (DateTimeOffset?)h.ChangedAt) ?? o.CreatedAt,
             Status = o.Status,
             SoldOnCredit = o.SoldOnCredit,
             Total = o.Total,
@@ -68,6 +75,11 @@ public sealed class OwedOrder
     public string Phone { get; init; } = null!;
     public string? CustomerName { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
+    /// <summary>
+    /// When the customer started to owe it, which the term counts from (Fase 26B): when it was sold on credit (made), else
+    /// when it was first delivered or completed.
+    /// </summary>
+    public DateTimeOffset OwedSince { get; init; }
     public OrderStatus Status { get; init; }
     public bool SoldOnCredit { get; init; }
     public decimal Total { get; init; }
@@ -78,8 +90,9 @@ public sealed class OwedOrder
 }
 
 /// <summary>
-/// The term of the fiado (Fase 26B, ADR 0034): an order owed is overdue once its last day to pay, the business day it was
-/// made plus the term, has passed in the business's time zone. Without a term nothing is overdue.
+/// The term of the fiado (Fase 26B, ADR 0034): an order owed is overdue once its last day to pay, the business day the
+/// customer started to owe it (<see cref="OwedOrder.OwedSince"/>) plus the term, has passed in the business's time zone.
+/// Without a term nothing is overdue.
 /// </summary>
 public static class CreditTerm
 {
@@ -87,8 +100,8 @@ public static class CreditTerm
     public sealed record Settings(int? Days, string? TimeZone)
     {
         /// <summary>
-        /// The orders made before this instant are overdue today: the start of the business day <see cref="Days"/> days
-        /// ago. Without a term, the earliest instant, so nothing is.
+        /// The orders owed since before this instant are overdue today: the start of the business day <see cref="Days"/>
+        /// days ago. Without a term, the earliest instant, so nothing is.
         /// </summary>
         public DateTimeOffset OverdueBefore(DateTimeOffset utcNow)
         {
@@ -96,12 +109,13 @@ public static class CreditTerm
                 return DateTimeOffset.MinValue;
             var zone = TenantDateTimeResolver.Resolve(TimeZone);
             var today = TimeZoneInfo.ConvertTime(utcNow, zone).Date;
-            return TenantDateTimeResolver.LocalDateBoundaryToUtc(today.AddDays(-days), startOfDay: true, zone);
+            // Not LocalDateBoundaryToUtc: a day without 00:00 would throw inside the payment or write-off that reads it.
+            return TenantDateTimeResolver.StartOfLocalDayUtc(today.AddDays(-days), zone);
         }
 
-        /// <summary>The last day to pay an order made at <paramref name="createdAt"/>, in the business's calendar.</summary>
-        public DateOnly? DueOn(DateTimeOffset createdAt) => Days is { } days
-            ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(createdAt, TenantDateTimeResolver.Resolve(TimeZone)).Date.AddDays(days))
+        /// <summary>The last day to pay an order owed since <paramref name="owedSince"/>, in the business's calendar.</summary>
+        public DateOnly? DueOn(DateTimeOffset owedSince) => Days is { } days
+            ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(owedSince, TenantDateTimeResolver.Resolve(TimeZone)).Date.AddDays(days))
             : null;
     }
 

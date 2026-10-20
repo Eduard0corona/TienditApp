@@ -61,14 +61,26 @@ public class CustomerWriteOffsMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(tenant.Id);
-        var order = await check.Orders.Include(o => o.WriteOffs).SingleAsync(o => o.Id == forgiven);
-        var writeOff = Assert.Single(order.WriteOffs);
-        Assert.Equal((25.50m, order.Total - 25.50m), (order.WrittenOffAmount, order.Balance));
-        Assert.Equal(
-            (tenant.Id, 25.50m, OrderWriteOffReason.Other, "Pagó con trabajo", Now, "dueno@tienda.mx"),
-            (writeOff.TenantId, writeOff.Amount, writeOff.Reason, writeOff.Notes, writeOff.WrittenOffAt, writeOff.WrittenOffBy));
-        Assert.Equal(15, (await check.TenantSettings.SingleAsync()).CreditTermDays);
+        await using (var check = database.CreateContext(tenant.Id))
+        {
+            var order = await check.Orders.Include(o => o.WriteOffs).SingleAsync(o => o.Id == forgiven);
+            var writeOff = Assert.Single(order.WriteOffs);
+            Assert.Equal((25.50m, order.Total - 25.50m), (order.WrittenOffAmount, order.Balance));
+            Assert.Equal(
+                (tenant.Id, 25.50m, OrderWriteOffReason.Other, "Pagó con trabajo", Now, "dueno@tienda.mx", (DateTimeOffset?)null),
+                (writeOff.TenantId, writeOff.Amount, writeOff.Reason, writeOff.Notes, writeOff.WrittenOffAt, writeOff.WrittenOffBy, writeOff.ReversedAt));
+            Assert.Equal(15, (await check.TenantSettings.SingleAsync()).CreditTermDays);
+
+            // Undone by mistake: the record stays, with when and who undid it, and the order owes it again.
+            order.ReverseWriteOff(writeOff.Id, Now.AddHours(1), "admin@tienda.mx");
+            await check.SaveChangesAsync();
+        }
+
+        await using var undone = database.CreateContext(tenant.Id);
+        var reversedOrder = await undone.Orders.Include(o => o.WriteOffs).SingleAsync(o => o.Id == forgiven);
+        var reversed = Assert.Single(reversedOrder.WriteOffs);
+        Assert.Equal((0m, reversedOrder.Total), (reversedOrder.WrittenOffAmount, reversedOrder.Balance));
+        Assert.Equal((25.50m, Now.AddHours(1), "admin@tienda.mx"), (reversed.Amount, reversed.ReversedAt!.Value, reversed.ReversedBy));
     }
 
     [SqlServerFact]

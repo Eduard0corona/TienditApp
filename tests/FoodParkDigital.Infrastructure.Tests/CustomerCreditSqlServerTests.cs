@@ -163,6 +163,11 @@ public class CustomerCreditSqlServerTests
             // Sold on 9 Oct in Mexico City: with 7 days it was due on 16 Oct, overdue on the 19th.
             await context.Database.ExecuteSqlAsync(
                 $"UPDATE [Orders] SET [CreatedAt] = {new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.FromHours(-6))} WHERE [Id] = {old.Value.Id}");
+            // Luis's was made on 1 Oct but handed over unpaid on 18 Oct: its term counts from the 18th, so nothing is overdue.
+            await context.Database.ExecuteSqlAsync(
+                $"UPDATE [Orders] SET [CreatedAt] = {new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.FromHours(-6))} WHERE [Id] = {luis.Value.Id}");
+            await context.Database.ExecuteSqlAsync(
+                $"UPDATE [OrderStatusHistory] SET [ChangedAt] = {new DateTimeOffset(2026, 10, 18, 12, 0, 0, TimeSpan.FromHours(-6))} WHERE [OrderId] = {luis.Value.Id} AND [NewStatus] = {(int)OrderStatus.Delivered}");
             (await context.TenantSettings.SingleAsync()).SetCreditTermDays(7);
             await context.SaveChangesAsync();
         }

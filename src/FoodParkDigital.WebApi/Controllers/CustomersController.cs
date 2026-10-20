@@ -89,6 +89,11 @@ public class CustomersController : ControllerBase
     public async Task<ActionResult<CustomerAccountDto>> WriteOffAccount([FromBody] WriteOffCustomerAccountCommand command, CancellationToken cancellationToken)
         => ToResult(await _mediator.Send(command, cancellationToken));
 
+    /// <summary>Undoes a write-off made by mistake (Fase 26B): its record stays and what it forgave is owed again (owners and admins).</summary>
+    [HttpPost("account/write-offs/{id:guid}/reversal")]
+    public async Task<ActionResult<CustomerAccountDto>> ReverseWriteOff(Guid id, CancellationToken cancellationToken)
+        => ToResult(await _mediator.Send(new ReverseCustomerWriteOffCommand { WriteOffId = id }, cancellationToken));
+
     /// <summary>How many days the business gives to pay what customers owe, or no term (Fase 26B; owners and admins).</summary>
     [HttpPut("credit-term")]
     public async Task<ActionResult<CustomerCreditTermDto>> UpdateCreditTerm([FromBody] UpdateCustomerCreditTermCommand command, CancellationToken cancellationToken)

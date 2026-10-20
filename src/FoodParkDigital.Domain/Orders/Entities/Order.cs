@@ -666,6 +666,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (NetPaidAmount > 0)
             throw new DomainException(
                 "La orden tiene pagos sin reembolsar; reembólsalos antes de cancelarla.");
+        // Likewise what the business forgave (Fase 26B): it is undone first, so the order's history adds up.
+        if (WrittenOffAmount > 0)
+            throw new DomainException(CancelWrittenOffMessage);
 
         var previousStatus = Status;
         Status = OrderStatus.Cancelled;
@@ -1058,6 +1061,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public const string WriteOffCourierCashMessage =
         "Este pedido lo cobra el repartidor: se liquida en Caja › Repartidores, no se condona.";
 
+    public const string CancelWrittenOffMessage = "La orden tiene algo condonado; deshazlo antes de cancelarla.";
+    public const string WriteOffNotFoundMessage = "Eso no se condonó en este pedido.";
+
     public static string WriteOffAboveBalanceMessage(decimal balance) =>
         $"No se puede condonar más de lo que debe el pedido (${balance.ToString("N2", CultureInfo.InvariantCulture)}).";
 
@@ -1094,6 +1100,19 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         var writeOff = new OrderWriteOff(TenantId, Id, amount, reason, notes, writtenOffAt, writtenOffBy);
         _writeOffs.Add(writeOff);
         WrittenOffAmount += amount;
+        return writeOff;
+    }
+
+    /// <summary>
+    /// Undoes a write-off made by mistake (Fase 26B): its record stays, with when and who undid it, and what it forgave is
+    /// owed again. Once: a write-off undone is not undone again.
+    /// </summary>
+    public OrderWriteOff ReverseWriteOff(Guid writeOffId, DateTimeOffset reversedAt, string reversedBy)
+    {
+        var writeOff = _writeOffs.FirstOrDefault(w => w.Id == writeOffId)
+            ?? throw new DomainException(WriteOffNotFoundMessage);
+        writeOff.Reverse(reversedAt, reversedBy);
+        WrittenOffAmount -= writeOff.Amount;
         return writeOff;
     }
 

@@ -3688,6 +3688,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("Reason")
                         .HasColumnType("int");
 
+                    b.Property<DateTimeOffset?>("ReversedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ReversedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 

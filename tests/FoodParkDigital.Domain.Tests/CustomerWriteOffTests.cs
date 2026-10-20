@@ -151,6 +151,43 @@ public class CustomerWriteOffTests
             Assert.Throws<DomainException>(() => order.WriteOff(10m, OrderWriteOffReason.Courtesy, null, Now, "dueno")).Message);
     }
 
+    [Fact]
+    public void Reverse_ShouldOweItAgain_KeepingTheRecord_Once()
+    {
+        var order = SoldOnCredit(paidNow: 30m);
+        var kept = order.WriteOff(20m, OrderWriteOffReason.Courtesy, null, Now, "dueno");
+        var mistake = order.WriteOff(50m, OrderWriteOffReason.WontBeCollected, null, Now, "dueno");
+
+        var reversed = order.ReverseWriteOff(mistake.Id, Now.AddHours(1), "admin");
+
+        Assert.Same(mistake, reversed);
+        Assert.Equal((20m, 50m), (order.WrittenOffAmount, order.Balance));
+        Assert.Equal(2, order.WriteOffs.Count);
+        Assert.Equal((Now.AddHours(1), "admin", true), (mistake.ReversedAt!.Value, mistake.ReversedBy, mistake.IsReversed));
+        Assert.False(kept.IsReversed);
+        Assert.Equal(OrderWriteOff.AlreadyReversedMessage,
+            Assert.Throws<DomainException>(() => order.ReverseWriteOff(mistake.Id, Now, "admin")).Message);
+        Assert.Equal(Order.WriteOffNotFoundMessage,
+            Assert.Throws<DomainException>(() => order.ReverseWriteOff(Guid.NewGuid(), Now, "admin")).Message);
+        Assert.Equal((20m, 50m), (order.WrittenOffAmount, order.Balance));
+    }
+
+    [Fact]
+    public void Cancel_ShouldWait_UntilWhatWasForgivenIsUndone()
+    {
+        // Sold on credit and not handed over yet (the kitchen still has it): it can still be cancelled.
+        var order = CounterSale();
+        order.SellOnCredit();
+        var writeOff = order.WriteOff(100m, OrderWriteOffReason.RecordingError, null, Now, "dueno");
+
+        Assert.Equal(Order.CancelWrittenOffMessage,
+            Assert.Throws<DomainException>(() => order.Cancel(new RetailOrderStateMachine(), "dueno", "No era de ella")).Message);
+
+        order.ReverseWriteOff(writeOff.Id, Now, "dueno");
+        order.Cancel(new RetailOrderStateMachine(), "dueno", "No era de ella");
+        Assert.Equal(OrderStatus.Cancelled, order.Status);
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(15)]

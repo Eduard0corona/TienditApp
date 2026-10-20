@@ -36,6 +36,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     Notes = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
                     WrittenOffAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     WrittenOffBy = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    ReversedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    ReversedBy = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),

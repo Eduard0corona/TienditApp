@@ -4,7 +4,10 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace FoodParkDigital.Infrastructure.Persistence.Configurations;
 
-/// <summary>What the business forgave of an order a customer owed (Fase 26B, ADR 0034): immutable, never deleted alone.</summary>
+/// <summary>
+/// What the business forgave of an order a customer owed (Fase 26B, ADR 0034): never deleted alone, and only marked once
+/// when a mistake is undone.
+/// </summary>
 public class OrderWriteOffConfiguration : IEntityTypeConfiguration<OrderWriteOff>
 {
     public void Configure(EntityTypeBuilder<OrderWriteOff> builder)
@@ -20,6 +23,8 @@ public class OrderWriteOffConfiguration : IEntityTypeConfiguration<OrderWriteOff
         builder.Property(x => x.Notes).HasMaxLength(OrderWriteOff.MaxNotesLength);
         builder.Property(x => x.WrittenOffAt).IsRequired();
         builder.Property(x => x.WrittenOffBy).HasMaxLength(256).IsRequired();
+        builder.Property(x => x.ReversedBy).HasMaxLength(256);
+        builder.Ignore(x => x.IsReversed);
 
         builder.HasIndex(x => new { x.TenantId, x.OrderId });
         builder.HasIndex(x => new { x.TenantId, x.WrittenOffAt });
