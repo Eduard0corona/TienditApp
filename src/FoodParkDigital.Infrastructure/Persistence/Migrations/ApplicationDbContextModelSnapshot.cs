@@ -1191,6 +1191,94 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("CustomerAddresses", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.CustomerBalanceEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("CashSessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Method")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("OrderPaymentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("OrderRefundId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("RecordedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderPaymentId")
+                        .IsUnique()
+                        .HasFilter("[OrderPaymentId] IS NOT NULL");
+
+                    b.HasIndex("OrderRefundId")
+                        .IsUnique()
+                        .HasFilter("[OrderRefundId] IS NOT NULL");
+
+                    b.HasIndex("TenantId", "Phone", "OccurredAt");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("TenantId", "Phone", "OccurredAt"), new[] { "Amount" });
+
+                    b.ToTable("CustomerBalanceEntries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CustomerBalanceEntries_Amount", "([Kind] IN (0, 1) AND [Amount] > 0) OR ([Kind] IN (2, 3) AND [Amount] < 0)");
+
+                            t.HasCheckConstraint("CK_CustomerBalanceEntries_Ties", "([Kind] IN (0, 3) AND [Method] IS NOT NULL AND [CashSessionId] IS NOT NULL) OR ([Kind] = 1 AND [OrderId] IS NOT NULL AND [OrderRefundId] IS NOT NULL) OR ([Kind] = 2 AND [OrderId] IS NOT NULL AND [OrderPaymentId] IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.CustomerProfile", b =>
                 {
                     b.Property<Guid>("UserId")
