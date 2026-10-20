@@ -12,6 +12,7 @@ public static class OrderPaymentMethodRules
     public const string CustomerBalanceNeverEntersADrawerMessage = "Lo que se paga con saldo a favor no entra a ninguna caja: entró cuando el cliente lo dejó.";
     public const string CustomerBalanceNeedsPhoneMessage = "El saldo a favor es de la cuenta de un cliente: el pedido necesita su teléfono.";
     public const string CustomerBalanceNoTipMessage = "La propina no se paga con saldo a favor.";
+    public const string CustomerBalanceFromAccountMessage = "El saldo a favor se usa al cobrar en Vender o desde el estado de cuenta del cliente.";
 
     /// <summary>
     /// Whether a payment or refund of the method goes through a drawer. Every method the business charges in person does;

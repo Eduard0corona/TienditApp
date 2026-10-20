@@ -3654,6 +3654,102 @@
         }
       }
     },
+    "/api/v1/customers/account/balance/deposits": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCustomerDepositCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCustomerDepositCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCustomerDepositCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/account/balance/returns": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnCustomerBalanceCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnCustomerBalanceCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnCustomerBalanceCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAccountDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/customers/account/write-offs": {
       "post": {
         "tags": [
@@ -14123,6 +14219,45 @@
         },
         "additionalProperties": false
       },
+      "AddCustomerDepositCommand": {
+        "required": [
+          "amount",
+          "method"
+        ],
+        "type": "object",
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OrderPaymentMethod"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "expectedBalance": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AddOrderPaymentRequest": {
         "required": [
           "amount",
@@ -15696,7 +15831,9 @@
           4,
           5,
           6,
-          7
+          7,
+          8,
+          9
         ],
         "type": "integer",
         "format": "int32",
@@ -15708,7 +15845,9 @@
           "Deposit",
           "OpeningAdjustment",
           "ClosingAdjustment",
-          "Tip"
+          "Tip",
+          "CustomerDeposit",
+          "CustomerDepositReturn"
         ]
       },
       "CategoryDto": {
@@ -18148,12 +18287,14 @@
       },
       "CustomerAccountDto": {
         "required": [
+          "creditBalance",
           "orders",
           "ordersCount",
           "overdue",
           "overLimit",
           "owed",
           "phone",
+          "recentBalanceEntries",
           "recentPayments",
           "recentWriteOffs",
           "sellsOnCredit"
@@ -18236,6 +18377,16 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CustomerAccountWriteOffDto"
+            }
+          },
+          "creditBalance": {
+            "type": "number",
+            "format": "double"
+          },
+          "recentBalanceEntries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerBalanceEntryDto"
             }
           }
         },
@@ -18528,6 +18679,64 @@
         },
         "additionalProperties": false
       },
+      "CustomerBalanceEntryDto": {
+        "required": [
+          "amount",
+          "id",
+          "kind",
+          "occurredAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CustomerBalanceEntryKind"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OrderPaymentMethod"
+          },
+          "orderNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomerBalanceEntryKind": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Deposit",
+          "Refund",
+          "Applied",
+          "Returned"
+        ]
+      },
       "CustomerCardAppointmentDto": {
         "required": [
           "id",
@@ -18559,6 +18768,7 @@
           "addresses",
           "averageTicket",
           "balance",
+          "creditBalance",
           "favoriteProducts",
           "optedOut",
           "ordersCount",
@@ -18616,6 +18826,10 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "creditBalance": {
+            "type": "number",
+            "format": "double"
           },
           "sellsOnCredit": {
             "type": "boolean"
@@ -18980,10 +19194,17 @@
           "byLocation",
           "byUser",
           "cardTotal",
+          "cashCustomerDepositReturnsTotal",
+          "cashCustomerDepositsTotal",
           "cashManualExpenseTotal",
           "cashManualIncomeTotal",
           "cashTipsTotal",
           "cashTotal",
+          "customerBalancePaymentsCount",
+          "customerBalanceRefundsTotal",
+          "customerBalanceTotal",
+          "customerDepositReturnsTotal",
+          "customerDepositsTotal",
           "date",
           "manualExpenseTotal",
           "manualIncomeTotal",
@@ -19057,6 +19278,34 @@
             "format": "int32"
           },
           "onlineRefundsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "customerBalanceTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "customerBalancePaymentsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "customerBalanceRefundsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "customerDepositsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "customerDepositReturnsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "cashCustomerDepositsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "cashCustomerDepositReturnsTotal": {
             "type": "number",
             "format": "double"
           },
@@ -22982,7 +23231,8 @@
           3,
           4,
           5,
-          6
+          6,
+          7
         ],
         "type": "integer",
         "format": "int32",
@@ -22993,7 +23243,8 @@
           "DigitalWallet",
           "Other",
           "Platform",
-          "Online"
+          "Online",
+          "CustomerBalance"
         ]
       },
       "OrderPlatformDto": {
@@ -23563,6 +23814,15 @@
             "nullable": true
           },
           "expectedOwed": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "restInFavor": {
+            "type": "boolean",
+            "default": false
+          },
+          "expectedBalance": {
             "type": "number",
             "format": "double",
             "nullable": true
@@ -26594,6 +26854,7 @@
       },
       "ReceivableDto": {
         "required": [
+          "creditBalance",
           "name",
           "orders",
           "overdue",
@@ -26643,6 +26904,10 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "creditBalance": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -26692,6 +26957,7 @@
       "ReceivablesDto": {
         "required": [
           "page",
+          "totalCreditBalance",
           "totalOverdue",
           "totalOwed"
         ],
@@ -26717,6 +26983,10 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "totalCreditBalance": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -27117,6 +27387,45 @@
           },
           "newPassword": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReturnCustomerBalanceCommand": {
+        "required": [
+          "amount",
+          "expectedBalance",
+          "method"
+        ],
+        "type": "object",
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OrderPaymentMethod"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "expectedBalance": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false

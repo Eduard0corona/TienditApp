@@ -46,6 +46,9 @@ public class AddOrderPaymentCommandValidator : AbstractValidator<AddOrderPayment
         // What the customer paid online is recorded when the payment places the order (Fase 24I).
         RuleFor(x => x.Method).NotEqual(OrderPaymentMethod.Online)
             .WithMessage(OrderPaymentMethodRules.OnlineOnlyOnCreationMessage);
+        // What the customer left in their favor is used inside their account's lock, in Vender or their account (Fase 26D).
+        RuleFor(x => x.Method).NotEqual(OrderPaymentMethod.CustomerBalance)
+            .WithMessage(OrderPaymentMethodRules.CustomerBalanceFromAccountMessage);
         RuleFor(x => x.EvidenceUrl).MaximumLength(1000);
         RuleFor(x => x.Reference).MaximumLength(120);
         RuleFor(x => x.Notes).MaximumLength(1000);

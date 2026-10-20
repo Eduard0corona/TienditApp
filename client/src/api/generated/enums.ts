@@ -96,6 +96,8 @@ export const CashTransactionType = {
   OpeningAdjustment: 5,
   ClosingAdjustment: 6,
   Tip: 7,
+  CustomerDeposit: 8,
+  CustomerDepositReturn: 9,
 } as const;
 export type CashTransactionType = (typeof CashTransactionType)[keyof typeof CashTransactionType];
 
@@ -112,6 +114,14 @@ export const CourierSettlementAdjustmentKind = {
   Other: 99,
 } as const;
 export type CourierSettlementAdjustmentKind = (typeof CourierSettlementAdjustmentKind)[keyof typeof CourierSettlementAdjustmentKind];
+
+export const CustomerBalanceEntryKind = {
+  Deposit: 0,
+  Refund: 1,
+  Applied: 2,
+  Returned: 3,
+} as const;
+export type CustomerBalanceEntryKind = (typeof CustomerBalanceEntryKind)[keyof typeof CustomerBalanceEntryKind];
 
 export const DayOfWeek = {
   Sunday: 0,
@@ -253,6 +263,7 @@ export const OrderPaymentMethod = {
   Other: 4,
   Platform: 5,
   Online: 6,
+  CustomerBalance: 7,
 } as const;
 export type OrderPaymentMethod = (typeof OrderPaymentMethod)[keyof typeof OrderPaymentMethod];
 

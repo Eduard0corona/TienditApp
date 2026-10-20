@@ -41,6 +41,8 @@ public class ReceivableDto
     public decimal Overdue { get; set; }
     /// <summary>The customer's own term (Fase 26C); null when the business's applies.</summary>
     public int? OwnCreditTermDays { get; set; }
+    /// <summary>What they have in their favor (Fase 26D) besides what they owe; 0 without any.</summary>
+    public decimal CreditBalance { get; set; }
 }
 
 public class ReceivablesDto
@@ -56,6 +58,8 @@ public class ReceivablesDto
     /// Every how many days the business reminds what is overdue on WhatsApp (Fase 26C); null while the reminders are off.
     /// </summary>
     public int? CreditReminderEveryDays { get; set; }
+    /// <summary>What the business holds in favor of all its customers (Fase 26D), whether they owe or not.</summary>
+    public decimal TotalCreditBalance { get; set; }
 }
 
 public enum ReceivablesSort
@@ -101,6 +105,10 @@ public class CustomerAccountDto
     public List<CustomerAccountPaymentDto> RecentPayments { get; set; } = [];
     /// <summary>What the business forgave them lately (Fase 26B), on any of their orders.</summary>
     public List<CustomerAccountWriteOffDto> RecentWriteOffs { get; set; } = [];
+    /// <summary>What they have in their favor (Fase 26D): what they left and refunds to it, minus what they used or got back.</summary>
+    public decimal CreditBalance { get; set; }
+    /// <summary>The latest movements of their balance in their favor, the newest first.</summary>
+    public List<CustomerBalanceEntryDto> RecentBalanceEntries { get; set; } = [];
 }
 
 public class CustomerAccountOrderDto
@@ -326,6 +334,7 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
                 .ToListAsync(cancellationToken))
             .GroupBy(l => l.Phone)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(l => l.CreatedAt).First().CustomerName);
+        var inFavor = await CustomerBalances.OfPhonesAsync(_context, phones, cancellationToken);
 
         var items = page.Select(c =>
         {
@@ -343,7 +352,8 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
                 CreditLimit = limit,
                 OverLimit = limit is { } value && c.Owed > value,
                 Overdue = c.Overdue,
-                OwnCreditTermDays = ownTerms.TryGetValue(c.Phone, out var days) ? days : null
+                OwnCreditTermDays = ownTerms.TryGetValue(c.Phone, out var days) ? days : null,
+                CreditBalance = inFavor.GetValueOrDefault(c.Phone)
             };
         }).ToList();
 
@@ -353,7 +363,8 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
             TotalOwed = totalOwed,
             TotalOverdue = totalOverdue,
             CreditTermDays = term.Days,
-            CreditReminderEveryDays = reminderEveryDays
+            CreditReminderEveryDays = reminderEveryDays,
+            TotalCreditBalance = await CustomerBalances.TotalAsync(_context, cancellationToken)
         };
     }
 
@@ -456,7 +467,9 @@ public class GetCustomerAccountQueryHandler : IRequestHandler<GetCustomerAccount
 /// <summary>
 /// A payment to the account of a customer (Fase 26A): one amount, split over the orders they owe from the oldest to the
 /// newest. Each part is a payment of its order in the drawer of whoever charges, like one taken in Pedidos, and the orders
-/// it settles close as a paid sale does. Never more than what they owe: there is no credit in their favor yet.
+/// it settles close as a paid sale does. Never more than what they owe, unless the rest stays in their favor (Fase 26D):
+/// then it enters the same drawer as what a customer leaves. With «Saldo a favor» (Fase 26D) it uses what they have in
+/// their favor instead, outside every drawer.
 /// </summary>
 [RequiresPermission(TenantPermission.ChargeOrders)]
 public record PayCustomerAccountCommand : IRequest<Result<CustomerAccountDto>>, ITransactionalRequest
@@ -479,6 +492,17 @@ public record PayCustomerAccountCommand : IRequest<Result<CustomerAccountDto>>, 
     /// no idempotency key).
     /// </summary>
     public decimal? ExpectedOwed { get; init; }
+    /// <summary>
+    /// What is paid beyond what they owe stays in their favor (Fase 26D) instead of being refused. Only with a method charged
+    /// in person; with nothing owed, all of it stays in their favor.
+    /// </summary>
+    [System.ComponentModel.DefaultValue(false)]
+    public bool RestInFavor { get; init; }
+    /// <summary>
+    /// Their balance in their favor as the screen showed it (Fase 26D). Like <see cref="ExpectedOwed"/>, a payment that finds
+    /// it changed is refused: one sent twice uses or leaves nothing twice.
+    /// </summary>
+    public decimal? ExpectedBalance { get; init; }
 }
 
 public class PayCustomerAccountCommandValidator : AbstractValidator<PayCustomerAccountCommand>
@@ -508,12 +532,22 @@ public class PayCustomerAccountCommandValidator : AbstractValidator<PayCustomerA
             .WithMessage(OrderPayment.CashReceivedShortMessage);
         RuleFor(x => x.ExpectedOwed!.Value).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
             .When(x => x.ExpectedOwed.HasValue).WithName(nameof(PayCustomerAccountCommand.ExpectedOwed));
+        RuleFor(x => x.ExpectedBalance!.Value).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
+            .When(x => x.ExpectedBalance.HasValue).WithName(nameof(PayCustomerAccountCommand.ExpectedBalance));
+        RuleFor(x => x.RestInFavor).Equal(false).When(x => !OrderPaymentMethodRules.EntersADrawer(x.Method))
+            .WithMessage(PayCustomerAccountCommandHandler.RestInFavorInPersonMessage);
+        RuleFor(x => x.EvidenceUrl).Null().When(x => x.Method == OrderPaymentMethod.CustomerBalance)
+            .WithMessage(PayCustomerAccountCommandHandler.BalanceWithoutEvidenceMessage);
     }
 }
 
 public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccountCommand, Result<CustomerAccountDto>>
 {
     public const string NothingOwedMessage = "No debe nada: no hay a qué abonar.";
+    public const string RestInFavorInPersonMessage =
+        "Lo que sobra queda a favor solo si se paga en persona: efectivo, tarjeta, transferencia, billetera u otro.";
+    public const string BalanceWithoutEvidenceMessage = "Lo que se paga con saldo a favor no lleva comprobante.";
+    public const string RestNote = "Lo que sobró de un abono";
     // Orders split in one payment: far more than a customer owes at once.
     private const int MaxOrders = 500;
 
@@ -578,22 +612,39 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
 
         // All of it, as the account shows it, though one payment splits over the oldest orders only.
         var owed = await Receivables.OwedAsync(_context.Orders, account.Phone, cancellationToken);
-        if (owed == 0)
+        if (owed == 0 && !request.RestInFavor)
             return Result.Failure<CustomerAccountDto>(NothingOwedMessage);
         if (request.ExpectedOwed is { } expected && expected != owed)
             return Result.Failure<CustomerAccountDto>(OwedChangedMessage(owed));
-        if (request.Amount > owed)
+        // What goes to the orders, and what stays in their favor when that was asked (Fase 26D).
+        var toOrders = Math.Min(request.Amount, owed);
+        var rest = request.Amount - toOrders;
+        if (rest > 0 && !request.RestInFavor)
             return Result.Failure<CustomerAccountDto>(AboveOwedMessage(owed));
-        if (request.Amount > orders.Sum(o => o.Balance))
+        if (toOrders > orders.Sum(o => o.Balance))
             return Result.Failure<CustomerAccountDto>(AboveSplitMessage(orders.Sum(o => o.Balance)));
+
+        var withBalance = request.Method == OrderPaymentMethod.CustomerBalance;
+        if (withBalance || request.ExpectedBalance.HasValue)
+        {
+            var balance = await CustomerBalances.OfAsync(_context, account.Phone, cancellationToken);
+            if (request.ExpectedBalance is { } expectedBalance && expectedBalance != balance)
+                return Result.Failure<CustomerAccountDto>(CustomerBalances.ChangedMessage(balance));
+            if (withBalance && balance <= 0)
+                return Result.Failure<CustomerAccountDto>(CustomerBalances.NothingInFavorMessage);
+            if (withBalance && request.Amount > balance)
+                return Result.Failure<CustomerAccountDto>(
+                    string.Format(CustomerBalanceEntry.NotEnoughMessage, OrderStatusLabels.FormatMoney(balance)));
+        }
 
         var settings = await TenantSalesSettings.ReadAsync(_context, _tenant.TenantId, cancellationToken);
         var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, _tenant.TenantId, cancellationToken);
         var registrar = new OrderPaymentRegistrar(_context, _orderCash, _clock);
+        var by = _currentUser.UserName ?? "system";
         // The change of what was handed over goes with the last part, so the parts add up to what the drawer received.
         var change = request.CashReceived is { } received ? received - request.Amount : 0m;
         var notes = string.IsNullOrWhiteSpace(request.Notes) ? PayCustomerAccountCommand.DefaultNote : request.Notes;
-        var remaining = request.Amount;
+        var remaining = toOrders;
         var parts = new List<object>();
         foreach (var order in orders)
         {
@@ -602,18 +653,21 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
 
             var part = Math.Min(remaining, order.Balance);
             remaining -= part;
-            var payment = await registrar.RegisterAsync(
-                order,
-                new OrderPaymentInput(
-                    part,
-                    request.Method,
-                    InventoryLocationId: null,
-                    request.EvidenceUrl,
-                    request.Reference,
-                    notes,
-                    Tip: 0,
-                    CashReceived: remaining == 0 && request.CashReceived.HasValue ? part + change : null),
-                cancellationToken);
+            var payment = withBalance
+                // Paid with what they left before: the sale now, outside every drawer, and the movement of their balance.
+                ? await registrar.ApplyCustomerBalanceAsync(order, part, notes, account.Phone, account.Customer?.Id, by, cancellationToken)
+                : await registrar.RegisterAsync(
+                    order,
+                    new OrderPaymentInput(
+                        part,
+                        request.Method,
+                        InventoryLocationId: null,
+                        request.EvidenceUrl,
+                        request.Reference,
+                        notes,
+                        Tip: 0,
+                        CashReceived: remaining == 0 && request.CashReceived.HasValue ? part + change : null),
+                    cancellationToken);
             if (payment.IsFailure)
                 return Result.Failure<CustomerAccountDto>(payment.Error!);
 
@@ -622,14 +676,25 @@ public class PayCustomerAccountCommandHandler : IRequestHandler<PayCustomerAccou
             parts.Add(new { order.OrderNumber, Amount = part });
         }
 
-        // Under the customer record, or the first order paid when the business has none for the phone.
+        // The rest stays in their favor (Fase 26D): it enters the same drawer as what a customer leaves.
+        CustomerBalanceEntry? inFavor = null;
+        if (rest > 0)
+        {
+            inFavor = await CustomerBalanceDeposits.LeaveAsync(
+                _context, _orderCash, _tenant.TenantId, account, rest, request.Method, request.Reference,
+                string.IsNullOrWhiteSpace(request.Notes) ? RestNote : request.Notes, _clock.UtcNow, by, cancellationToken);
+            if (inFavor is null)
+                return Result.Failure<CustomerAccountDto>(CustomerBalances.NoOpenDrawerMessage);
+        }
+
+        // Under the customer record, else the first order paid, else what stayed in their favor.
         _context.AuditLogs.Add(new AuditLog(
             tenantId: _tenant.TenantId,
-            entityName: account.Customer is null ? nameof(Order) : nameof(Customer),
-            entityId: (account.Customer?.Id ?? orders[0].Id).ToString(),
+            entityName: account.Customer is not null ? nameof(Customer) : orders.Count > 0 ? nameof(Order) : nameof(CustomerBalanceEntry),
+            entityId: (account.Customer?.Id ?? (orders.Count > 0 ? orders[0].Id : inFavor!.Id)).ToString(),
             action: "CustomerAccountPaid",
-            performedBy: _currentUser.UserName ?? "system",
-            metadata: JsonSerializer.Serialize(new { request.Amount, Method = request.Method.ToString(), Orders = parts })));
+            performedBy: by,
+            metadata: JsonSerializer.Serialize(new { request.Amount, Method = request.Method.ToString(), Orders = parts, InFavor = rest })));
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result.Success(await account.ReadAsync(_context, _clock.UtcNow, cancellationToken));
@@ -840,7 +905,9 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
             Orders = orders,
             OrdersCount = count,
             RecentPayments = payments,
-            RecentWriteOffs = writeOffs
+            RecentWriteOffs = writeOffs,
+            CreditBalance = await CustomerBalances.OfAsync(context, Phone, cancellationToken),
+            RecentBalanceEntries = await CustomerBalances.RecentAsync(context, Phone, cancellationToken)
         };
     }
 }

@@ -9,7 +9,9 @@ using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Dining.Entities;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -200,6 +202,9 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
     public const string AppointmentWithConnectionMessage = "La venta de una cita se registra con conexión: la cita se revisa al cobrar.";
     public const string AppointmentNotFoundMessage = "La cita no existe.";
     public const string CreditWithConnectionMessage = "Una venta fiada se registra con conexión: el límite del cliente se revisa al venderla.";
+    public const string CustomerBalanceSaleMessage = "El saldo a favor se usa en una venta del negocio en el mostrador.";
+    public const string CustomerBalanceWithConnectionMessage =
+        "El saldo a favor se usa con conexión: lo que le queda al cliente se revisa al cobrar.";
 
     public CreateOrderCommandValidator()
     {
@@ -257,6 +262,23 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
                 .When(p => p.CashReceived.HasValue && p.Method == OrderPaymentMethod.Cash)
                 .WithName(nameof(CreateOrderPaymentDto.CashReceived))
                 .WithMessage(OrderPayment.CashReceivedShortMessage);
+            // What the customer left in their favor before (Fase 26D): the sale, without a tip or a voucher.
+            payment.RuleFor(p => p.Tip).Equal(0).When(p => p.Method == OrderPaymentMethod.CustomerBalance)
+                .WithMessage(OrderPaymentMethodRules.CustomerBalanceNoTipMessage);
+            payment.RuleFor(p => p.EvidenceUrl).Null().When(p => p.Method == OrderPaymentMethod.CustomerBalance)
+                .WithMessage(PayCustomerAccountCommandHandler.BalanceWithoutEvidenceMessage);
+        });
+        // Paid with the balance in the customer's favor (Fase 26D): a sale the business makes at the counter, to a customer
+        // with their phone (the balance is their account's), with connection, since what they have is checked when it is
+        // charged; never an order of a platform.
+        When(x => x.Payments.Any(p => p.Method == OrderPaymentMethod.CustomerBalance), () =>
+        {
+            RuleFor(x => x.CreatedByBusiness).Equal(true).WithMessage(CustomerBalanceSaleMessage);
+            RuleFor(x => x.Channel).Must(channel => !OrderChannelRules.IsDeliveryPlatform(channel))
+                .WithMessage(CustomerBalanceSaleMessage);
+            RuleFor(x => x.CapturedOfflineAt).Null().WithMessage(CustomerBalanceWithConnectionMessage);
+            RuleFor(x => x).Must(x => x.CustomerId.HasValue || !string.IsNullOrWhiteSpace(x.CustomerPhone))
+                .WithMessage(OrderPaymentMethodRules.CustomerBalanceNeedsPhoneMessage);
         });
         RuleFor(x => x.ExpectedTotal)
             .GreaterThanOrEqualTo(0)
@@ -640,6 +662,29 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 return Result.Failure<OrderDto>(creditError);
         }
 
+        // 11c. Paid with the balance in the customer's favor (Fase 26D): it must cover all of it, read inside the customer's
+        // lock, taken before the folio's as for credit, so two sales (or a sale and a payment) at once count each other.
+        var fromBalance = request.Payments.Where(p => p.Method == OrderPaymentMethod.CustomerBalance).Sum(p => p.Amount);
+        string? balancePhone = null;
+        Guid? balanceCustomerId = null;
+        if (fromBalance > 0)
+        {
+            if (string.IsNullOrWhiteSpace(order.CustomerPhone))
+                return Result.Failure<OrderDto>(OrderPaymentMethodRules.CustomerBalanceNeedsPhoneMessage);
+            balancePhone = MessagingPhone.ToKey(order.CustomerPhone);
+            await _creditLock.AcquireAsync(_tenantService.TenantId, balancePhone, cancellationToken);
+            // The same sale sent twice at once: this one waited while the other used the balance. The answer is that sale.
+            if (request.IdempotencyKey is { } waitedKey && await ExistingSaleAsync(waitedKey, cancellationToken) is { } recorded)
+                return Result.Success(recorded);
+            var balance = await CustomerBalances.OfAsync(_context, balancePhone, cancellationToken);
+            if (balance <= 0)
+                return Result.Failure<OrderDto>(CustomerBalances.NothingInFavorMessage);
+            if (fromBalance > balance)
+                return Result.Failure<OrderDto>(string.Format(CustomerBalanceEntry.NotEnoughMessage, OrderStatusLabels.FormatMoney(balance)));
+            balanceCustomerId = request.CustomerId
+                ?? (await CreditAccount.RecordAsync(_context, balancePhone, cancellationToken, tracked: false))?.Id;
+        }
+
         // 12. The folio, once the checks without side effects passed: payments and supplies name the order by it.
         order.AssignNumber(await _folios.NextOrderNumberAsync(_tenantService.TenantId, cancellationToken));
 
@@ -655,24 +700,30 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 await BranchRules.StockLocationIdAsync(_context, _tenantService.TenantId, order.BranchId, cancellationToken));
         }
 
-        // 14. What the business charged now (when the business collects an order of a platform, too): into a drawer.
+        // 14. What the business charged now (when the business collects an order of a platform, too): into a drawer, but
+        // what the customer pays with their balance in their favor.
         if (request.Payments.Count > 0)
         {
             var registrar = new OrderPaymentRegistrar(_context, _orderCashService, _dateTimeProvider);
             foreach (var paymentDto in request.Payments)
             {
-                var payment = await registrar.RegisterAsync(
-                    order,
-                    new OrderPaymentInput(
-                        paymentDto.Amount,
-                        paymentDto.Method,
-                        paymentDto.InventoryLocationId,
-                        paymentDto.EvidenceUrl,
-                        paymentDto.Reference,
-                        paymentDto.Notes,
-                        paymentDto.Tip,
-                        paymentDto.CashReceived),
-                    cancellationToken);
+                var payment = paymentDto.Method == OrderPaymentMethod.CustomerBalance
+                    // What the customer left before (Fase 26D): the sale now, outside every drawer, taken from their balance.
+                    ? await registrar.ApplyCustomerBalanceAsync(
+                        order, paymentDto.Amount, paymentDto.Notes, balancePhone!, balanceCustomerId,
+                        _currentUserService.UserName ?? "system", cancellationToken)
+                    : await registrar.RegisterAsync(
+                        order,
+                        new OrderPaymentInput(
+                            paymentDto.Amount,
+                            paymentDto.Method,
+                            paymentDto.InventoryLocationId,
+                            paymentDto.EvidenceUrl,
+                            paymentDto.Reference,
+                            paymentDto.Notes,
+                            paymentDto.Tip,
+                            paymentDto.CashReceived),
+                        cancellationToken);
                 if (payment.IsFailure)
                     return Result.Failure<OrderDto>(payment.Error!);
             }

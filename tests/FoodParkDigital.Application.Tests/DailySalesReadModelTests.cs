@@ -231,9 +231,11 @@ public class DailySalesReadModelTests
         var isOnline = method == OrderPaymentMethod.Online;
         var number = await fixture.Context.Orders.CountAsync() + 1;
         var channel = isPlatform ? OrderChannel.Rappi : isOnline ? OrderChannel.Online : OrderChannel.Counter;
+        // The balance in favor is the account of a customer (Fase 26D): the order carries their phone.
+        var phone = method == OrderPaymentMethod.CustomerBalance ? "+525512345678" : null;
         var order = new Order(
             tenant.Id, null, null, true, $"ORD-{number:000000}", BusinessType.Food, OrderType.Retail, "Público en general",
-            null, null, null, pricesIncludeTax: true, channel: channel, branchId: branch.Id);
+            phone, null, null, pricesIncludeTax: true, channel: channel, branchId: branch.Id);
         order.AddItem(Guid.NewGuid(), "Paquete", 1, amount);
         if (isPlatform)
         {

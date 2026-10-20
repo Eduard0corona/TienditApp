@@ -337,7 +337,8 @@ public class CashShiftTests
         Assert.Equal(255m, cut.SalesPaymentsTotal);
         Assert.Equal(
             cut.SalesPaymentsTotal,
-            cut.CashTotal + cut.CardTotal + cut.TransferTotal + cut.WalletTotal + cut.OtherTotal + cut.PlatformTotal + cut.OnlineTotal);
+            cut.CashTotal + cut.CardTotal + cut.TransferTotal + cut.WalletTotal + cut.OtherTotal + cut.PlatformTotal + cut.OnlineTotal
+                + cut.CustomerBalanceTotal);
         var bucket = method switch
         {
             OrderPaymentMethod.Cash => cut.CashTotal,
@@ -346,6 +347,7 @@ public class CashShiftTests
             OrderPaymentMethod.DigitalWallet => cut.WalletTotal,
             OrderPaymentMethod.Platform => cut.PlatformTotal,
             OrderPaymentMethod.Online => cut.OnlineTotal,
+            OrderPaymentMethod.CustomerBalance => cut.CustomerBalanceTotal,
             _ => cut.OtherTotal
         };
         Assert.Equal(245m, bucket);
@@ -539,9 +541,11 @@ public class CashShiftTests
         var isOnline = method == OrderPaymentMethod.Online;
         var number = await fixture.Context.Orders.CountAsync() + 1;
         var channel = isPlatform ? OrderChannel.Rappi : isOnline ? OrderChannel.Online : OrderChannel.Counter;
+        // The balance in favor is the account of a customer (Fase 26D): the order carries their phone.
+        var phone = method == OrderPaymentMethod.CustomerBalance ? "+525512345678" : null;
         var order = new Order(
             tenant.Id, null, null, true, $"ORD-{number:000000}", BusinessType.Food, OrderType.Retail, "Público en general",
-            null, null, null, pricesIncludeTax: true, channel: channel, branchId: branch.Id);
+            phone, null, null, pricesIncludeTax: true, channel: channel, branchId: branch.Id);
         order.AddItem(Guid.NewGuid(), "Paquete", 1, amount);
         if (isPlatform)
         {

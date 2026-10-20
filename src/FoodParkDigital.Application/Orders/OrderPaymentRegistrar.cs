@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -27,7 +28,9 @@ public sealed record OrderPaymentInput(
 /// payments are stored together or not at all. Every charge the business receives enters a drawer, whatever
 /// its method: a payment no open drawer takes is refused, so none is left out of a cut. What a delivery
 /// platform charged in its app («Plataforma») is not received by the business: the order records it when it
-/// is created (<see cref="Order.RegisterPlatformOrder"/>), outside every drawer, and this registrar refuses it.
+/// is created (<see cref="Order.RegisterPlatformOrder"/>), outside every drawer, and this registrar refuses it. What a
+/// customer pays with their balance in their favor entered a drawer when they left it (Fase 26D): it goes through
+/// <see cref="ApplyCustomerBalanceAsync"/>, never through <see cref="RegisterAsync"/>.
 /// </summary>
 public sealed class OrderPaymentRegistrar
 {
@@ -35,6 +38,7 @@ public sealed class OrderPaymentRegistrar
     private readonly IOrderCashService _orderCashService;
     private readonly IDateTimeProvider _dateTimeProvider;
     public const string NoOpenDrawerMessage = "Abre tu caja para cobrar: todo cobro se registra en una caja.";
+    private const string CancelledMessage = "No se pueden registrar pagos en una orden cancelada.";
 
     private readonly Dictionary<Guid, Guid?> _stockLocationByBranch = [];
     private Guid? _defaultLocationId;
@@ -57,10 +61,12 @@ public sealed class OrderPaymentRegistrar
     {
         // The validators refuse it first; this keeps a charge that no drawer takes out of every other path.
         if (!OrderPaymentMethodRules.EntersADrawer(input.Method))
-            return Result.Failure<OrderPayment>(OrderPaymentMethodRules.PlatformOnlyOnCreationMessage);
+            return Result.Failure<OrderPayment>(input.Method == OrderPaymentMethod.CustomerBalance
+                ? OrderPaymentMethodRules.CustomerBalanceFromAccountMessage
+                : OrderPaymentMethodRules.PlatformOnlyOnCreationMessage);
 
         if (order.Status == OrderStatus.Cancelled)
-            return Result.Failure<OrderPayment>("No se pueden registrar pagos en una orden cancelada.");
+            return Result.Failure<OrderPayment>(CancelledMessage);
 
         // The evidence is a private file uploaded for this tenant, opened by its staff through the API.
         if (!OrderUploadRules.TryGetPaymentEvidencePath(input.EvidenceUrl, order.TenantId, out var evidencePath))
@@ -105,6 +111,40 @@ public sealed class OrderPaymentRegistrar
         if (!await _orderCashService.RegisterOrderPaymentAsync(order, payment, cancellationToken))
             return Result.Failure<OrderPayment>(NoOpenDrawerMessage);
 
+        return Result.Success(payment);
+    }
+
+    /// <summary>
+    /// Pays part of an order with the customer's balance in their favor (Fase 26D): the sale is recorded now, outside every
+    /// drawer, at the stock location of its branch, and the movement that takes it from their balance is tied to the
+    /// payment. The caller holds the customer's credit lock and has checked that their balance covers everything it applies
+    /// in the request; everything is left to its SaveChanges.
+    /// </summary>
+    /// <param name="phoneKey">The account: the phone key of the order's customer (<c>MessagingPhone.ToKey</c>).</param>
+    public async Task<Result<OrderPayment>> ApplyCustomerBalanceAsync(
+        Order order,
+        decimal amount,
+        string? notes,
+        string phoneKey,
+        Guid? customerId,
+        string recordedBy,
+        CancellationToken cancellationToken)
+    {
+        if (order.Status == OrderStatus.Cancelled)
+            return Result.Failure<OrderPayment>(CancelledMessage);
+        if (amount > order.Balance)
+            return Result.Failure<OrderPayment>("El pago excede el saldo pendiente de la orden.");
+
+        var payment = order.RegisterPayment(
+            amount: amount,
+            method: OrderPaymentMethod.CustomerBalance,
+            paidAt: _dateTimeProvider.UtcNow,
+            inventoryLocationId: await GetLocationOfBranchAsync(order, cancellationToken),
+            evidenceUrl: null,
+            reference: null,
+            notes: notes?.Trim());
+        _context.CustomerBalanceEntries.Add(CustomerBalanceEntry.Applied(
+            order.TenantId, phoneKey, customerId, amount, order.Id, payment.Id, payment.PaidAt, recordedBy));
         return Result.Success(payment);
     }
 

@@ -82,6 +82,22 @@ public class CustomersController : ControllerBase
         => ToResult(await _mediator.Send(command, cancellationToken));
 
     /// <summary>
+    /// What a customer leaves in their favor (Fase 26D): it adds to their balance and enters the drawer of whoever charges as
+    /// a movement of its own, not a sale (needs an open drawer).
+    /// </summary>
+    [HttpPost("account/balance/deposits")]
+    public async Task<ActionResult<CustomerAccountDto>> AddDeposit([FromBody] AddCustomerDepositCommand command, CancellationToken cancellationToken)
+        => ToResult(await _mediator.Send(command, cancellationToken));
+
+    /// <summary>
+    /// Gives a customer back part or all of their balance in their favor (Fase 26D), out of the drawer of whoever gives it
+    /// (needs an open drawer and who may refund).
+    /// </summary>
+    [HttpPost("account/balance/returns")]
+    public async Task<ActionResult<CustomerAccountDto>> ReturnBalance([FromBody] ReturnCustomerBalanceCommand command, CancellationToken cancellationToken)
+        => ToResult(await _mediator.Send(command, cancellationToken));
+
+    /// <summary>
     /// Forgives part or all of what a customer owes (Fase 26B), on one order or from the oldest: a record apart on each
     /// order, no money moves (owners and admins).
     /// </summary>
