@@ -41,7 +41,7 @@ function withTermsAndReminders(data: DemoData) {
   p2.messages.push(
     reminder('cr-1', 'Roberto Sánchez Vega', 'Hola Roberto, en Café La Esquina tienes $360.00 vencido desde el sábado 3 de octubre, de un saldo de $360.00. Si ya pagaste, ignora este mensaje. Escribe BAJA si no quieres recibir recordatorios.',
       SENT, yesterday, { sentAt: yesterday, deliveredAt: yesterday }),
-    reminder('cr-2', 'María Fernanda López', 'Hola María, en Café La Esquina tienes $150.00 vencido desde el sábado 3 de octubre, de un saldo de $316.00. Si ya pagaste, ignora este mensaje. Escribe BAJA si no quieres recibir recordatorios.',
+    reminder('cr-2', 'María Fernanda López', 'Hola María, en Café La Esquina tienes $146.00 vencido desde el sábado 3 de octubre, de un saldo de $316.00. Si ya pagaste, ignora este mensaje. Escribe BAJA si no quieres recibir recordatorios.',
       FAILED, at(10, 5, 0), { lastError: 'WhatsApp no lo entregó: el cliente no escribió en las últimas 24 horas. Usa una plantilla aprobada en Meta.' }),
     reminder('cr-3', 'Juan Carlos Hernández', 'Hola Juan, en Café La Esquina tienes $85.00 vencido desde el martes 29 de septiembre, de un saldo de $85.00. Si ya pagaste, ignora este mensaje. Escribe BAJA si no quieres recibir recordatorios.',
       SKIPPED, at(10, 5, -2), { lastError: 'Ya no tiene nada vencido.' }),

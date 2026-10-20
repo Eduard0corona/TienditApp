@@ -131,7 +131,7 @@ export default function CreditLimitModal({ customer, onClose }: CreditLimitModal
                 </span>
               </label>
             </div>
-            <div className="form-check d-flex flex-wrap align-items-center gap-2">
+            <div className="form-check">
               <input
                 id={ids.ownTerm}
                 type="radio"
@@ -143,7 +143,7 @@ export default function CreditLimitModal({ customer, onClose }: CreditLimitModal
               />
               <label className="form-check-label" htmlFor={ids.ownTerm}>Un plazo para este cliente</label>
               {ownTerm && (
-                <div className="input-group input-group-sm" style={{ maxWidth: '9rem' }}>
+                <div className="input-group input-group-sm d-inline-flex align-middle ms-2" style={{ width: '9rem' }}>
                   <input
                     id={ids.days}
                     className={`form-control ${showTermProblem ? 'is-invalid' : ''}`}
