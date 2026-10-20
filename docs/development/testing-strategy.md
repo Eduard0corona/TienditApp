@@ -862,6 +862,47 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Lo que cambia y por qué:** 7 escenas de `fiado.spec.ts`. Por cobrar dice «Sin plazo · Poner plazo» al dueño, y su estado de cuenta suma «Condonar»: Por cobrar en escritorio, teléfono y oscuro, los tres estados de cuenta y abonar, con Por cobrar detrás.
     - **Resultado:** la comparación contra `master` dio 543 escenas iguales, 14 nuevas y 7 que cambian. Con esas capturas pasaron las 564 escenas, y los cuatro archivos tocados con la cobertura de rutas (105 escenas) pasaron una segunda corrida contra el mismo build.
     - **Lo que encontraron las escenas:** Mis pedidos dejaba de decir «Por pagar» porque la API simulada no mandaba `writtenOffAmount`, que el contrato siempre trae. La simulación ahora lo manda, y esas pantallas quedan iguales a `master`.
+- Fase 26C, plazo por cliente y recordatorios del fiado ([ADR 0035](../adr/0035-customer-credit-term-and-reminders.md)):
+  - **Domain:** `CustomerCreditReminderTests` (13):
+    - el plazo de un cliente va de 1 a 120 días o el del negocio, necesita teléfono y no es para «Público en general»;
+    - los recordatorios empiezan apagados, cada 7 días y con el texto predeterminado, y van cada 1 a 30 días;
+    - el uso «Recordatorio del fiado» acepta `{monto}`, `{vencido}` y `{fecha}` y rechaza las variables de las citas.
+  - **Application** `CustomerCreditReminderFlowTests` (9):
+    - **el plazo propio:** decide lo vencido en Por cobrar y en la cuenta en lugar del del negocio; con dos fichas, aunque una tenga diez dígitos, cuenta el más corto; es del dueño, queda en la actividad y vuelve al del negocio;
+    - **los recordatorios:** piden WhatsApp y una plantilla del fiado activa, quedan en la actividad, y una plantilla desactivada se lee como el texto predeterminado (se puede apagar sin ella);
+    - **el planificador:**
+      - uno por cuenta con algo vencido, con lo que debe, y luego cada N días;
+      - espera al día del negocio y a WhatsApp, y nunca a quien escribió BAJA;
+      - usa la plantilla aprobada con sus parámetros;
+      - llega a todas las cuentas aunque pasen del tope de una pasada;
+      - no cuenta un recordatorio omitido porque se apagaron, y sí uno que falló;
+    - **al mandarlo:** se omite si ya pagó o se le condonó, si se apagaron o si ya es tarde.
+  - **Infrastructure:**
+    - `CustomerCreditRemindersMigrationSqlServerTests` (3): las columnas y sus valores por omisión, que la 26B no escribe; las restricciones; y revertir se detiene con 50028 con un plazo, los recordatorios, una plantilla o un mensaje del fiado, y sin ellos quita solo lo que agregó.
+    - `CustomerCreditSqlServerTests` (+1): los plazos propios, lo vencido y el planificador los lee la base (con una ficha de diez dígitos), también sin plazo del negocio y sin ningún plazo.
+    - `MessagingWorkerTests` (+1): el worker encola solo donde están encendidos y los manda en su negocio.
+    - Las pruebas de migraciones anteriores usan `BeforeCustomerCreditReminders`.
+  - **WebApi:**
+    - `CrossTenantCustomerCreditSqlServerTests` (+1), sobre la API real: un negocio no le pone plazo al cliente de otro ni ve sus recordatorios; el plazo y los recordatorios son del dueño y los administradores; y las plantillas del fiado también (403 para quien solo gestiona campañas).
+    - `TenantFilterBypassAllowlistTests`: el worker de mensajes tiene un `IgnoreQueryFilters` más, el de los negocios con recordatorios.
+  - **Ensayo de los scripts:** sobre una copia de la base de la 26B:
+    - `apply.sql` dos veces, y la 26B sigue escribiendo sin plazo propio y con los recordatorios apagados cada 7 días;
+    - la base rechaza un plazo de 0 o 121 días y recordatorios cada 0 o 31 días;
+    - `rollback.sql` se detiene con 50028 con un plazo propio, con solo los recordatorios encendidos y con solo una plantilla del fiado;
+    - sin ellos, `rollback.sql` corre dos veces y conserva los clientes, y `apply.sql` otra vez.
+  - **Cliente:**
+    - `CreditLimitModal.test.tsx` (6, nuevas): el plazo propio sin tocar el límite; volver al del negocio; el límite y el plazo juntos y un plazo fuera de rango; el motivo del servidor ligado a los días; el límite guardado cuando el plazo se rechaza, con el reintento que manda solo el plazo; y nada que guardar, con «Quitar fiado» que deja el plazo propio.
+    - `ReceivablesPage.test.tsx` (14, +6): lo vencido por un plazo propio sin plazo del negocio; el dueño enciende los recordatorios viendo el mensaje; sin WhatsApp no deja encenderlos y lleva a WhatsApp, a Plantillas y a lo que se mandó; una plantilla desactivada no impide apagarlos; «Solo vencidos» sigue mientras una búsqueda no encuentra nada vencido; quien cobra no los cambia.
+    - `CustomerAccountModal.test.tsx` (+1) y `customerAccount.test.ts` (+4): el plazo «solo para este cliente», el último recordatorio, la vista previa del mensaje y los días entre recordatorios (también con el rango del servidor).
+  - **Cliente en total:** 137 archivos y 907 pruebas.
+  - **Primera visita:** 179,059 B de 179,100 B (−6 B contra `master`).
+  - **Escenas visuales:** `recordatorios.spec.ts` (12, nuevas): Por cobrar con plazos propios y recordatorios (escritorio, teléfono y oscuro), los recordatorios con su plantilla, el estado de cuenta con su recordatorio, Clientes y «Fiado de…» con el plazo propio, el plazo de un cliente sin fiado en el teléfono, Campañas › Recordatorios del fiado y la plantilla del fiado, y sin WhatsApp: Por cobrar sin plazo del negocio y los recordatorios en el teléfono.
+    - **Lo que cambia y por qué:** 22 escenas.
+      - Por cobrar suma la línea de los recordatorios («Sin recordatorios · Activar» para el dueño): 8 de `fiado.spec.ts` y 10 de `condonar.spec.ts`, contando las que tienen Por cobrar detrás.
+      - «Fiado de…» suma «Te paga en».
+      - Campañas suma la pestaña «Recordatorios del fiado»: 4 de `clientes-mensajes.spec.ts`.
+    - **Resultado:** la comparación contra `master` dio 542 escenas iguales, 12 nuevas y 22 que cambian. Con esas capturas pasaron las 576 escenas, y los cuatro archivos tocados con la cobertura de rutas (86 escenas) pasaron una segunda corrida contra el mismo build.
+    - **Lo que encontraron las escenas:** en «Fiado de…» el radio del plazo propio quedaba corrido respecto al del negocio; el campo de días ahora va en línea después de su etiqueta.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
