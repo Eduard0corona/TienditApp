@@ -587,6 +587,28 @@ La Fase 26B trae una migración, [`database/production/20261020003342_AddCustome
 - **Volver a la versión anterior:** funciona sin tocar la base, pero esa versión no resta lo condonado: lo vuelve a mostrar como saldo y dejaría cobrarlo. Si ya se condonó algo, vuelve a esta versión cuanto antes.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50027, sin cambiar nada, en cuanto un negocio condonó algo (aunque lo haya deshecho) o puso plazo: lo condonado volvería a ser deuda y se perdería el plazo. Sin ninguno, quita la tabla, las columnas y las restricciones, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Plazo por cliente y recordatorios del fiado (Fase 26C)
+
+La Fase 26C trae una migración, [`database/production/20261020055548_AddCustomerCreditReminders`](../../database/production/20261020055548_AddCustomerCreditReminders). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0035](../adr/0035-customer-credit-term-and-reminders.md)).
+
+- **La migración** agrega cuatro columnas y dos restricciones:
+  - `Customers.CreditTermDays` (`int`, con nulos), con `CK_Customers_CreditTermDays` (de 1 a 120): el plazo propio del cliente; nadie tiene uno al aplicarla y todos siguen con el del negocio;
+  - `TenantSettings.CreditRemindersEnabled` (`bit`, 0 por omisión): los recordatorios del fiado, apagados en todos los negocios;
+  - `TenantSettings.CreditReminderEveryDays` (`int`, 7 por omisión), con `CK_TenantSettings_CreditReminderEveryDays` (de 1 a 30): cada cuántos días se repiten;
+  - `TenantSettings.CreditReminderTemplateId` (`uniqueidentifier`, con nulos): la plantilla elegida; ninguna al aplicarla.
+
+  No cambia ningún saldo ni el plazo de ningún negocio. Después de aplicarla, el `verify.sql` muestra las columnas y las restricciones. Su consulta 3 cuenta los clientes con plazo propio, los negocios con recordatorios o plantilla, y las plantillas y mensajes de recordatorio del fiado (todos en cero hasta desplegar), y la 4 es la misma referencia de lo que se debe de la 26B, igual antes y después.
+- **Mientras se publica:** la versión de `master` (Fase 26B) no conoce las columnas y sigue funcionando: guarda clientes y ajustes con los valores por omisión y no manda recordatorios. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:** nada hasta que el dueño le ponga plazo a un cliente o encienda los recordatorios. El dueño y los administradores ven «Te paga en» en «Fiado de…» y la línea de los recordatorios en Por cobrar («Sin recordatorios» con «Activar»); Campañas gana la pestaña «Recordatorios del fiado», y Plantillas el uso «Recordatorio del fiado», que solo el dueño y los administradores crean o cambian.
+- **El contrato solo agrega:**
+  - `GET` y `PUT /api/v1/customers/credit-reminders` y `PUT /api/v1/customers/{id}/credit-term`;
+  - `creditTermDays` en el cliente; `ownCreditTermDays` en las filas de Por cobrar y `creditReminderEveryDays` en Por cobrar; `ownCreditTermDays`, `creditReminderEveryDays` y `lastReminderAt` en el estado de cuenta; `creditReminderPlaceholders` en los ajustes de mensajes, y el propósito `CreditReminder` (3) en las plantillas y el registro de mensajes.
+
+  Nada se quita ni cambia de nombre. `creditTermDays` en el estado de cuenta sigue siendo el plazo con el que vence ese cliente: ahora el suyo si lo tiene.
+- **Sin configuración nueva.** Los recordatorios usan el WhatsApp del negocio: encenderlos pide WhatsApp conectado y, para que lleguen a quien no escribió en las últimas 24 horas, una plantilla aprobada en Meta con el uso «Recordatorio del fiado». Se encolan de 10:00 a 19:00 del negocio, a la par de los recordatorios de citas.
+- **Volver a la versión anterior:** funciona sin tocar la base, pero todos los clientes vuelven al plazo del negocio, y los recordatorios ya encolados (propósito 3) se mandarían sin revisar si sigue vencido. Si un negocio ya los encendió, vuelve a esta versión cuanto antes o apágalos antes de volver.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50028, sin cambiar nada, en cuanto un cliente tiene plazo propio, un negocio encendió los recordatorios o eligió su plantilla, o hay plantillas o mensajes de recordatorio del fiado: se perderían los plazos y quedarían mensajes con un propósito que la versión anterior no conoce. Sin ninguno, quita las columnas y las restricciones, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

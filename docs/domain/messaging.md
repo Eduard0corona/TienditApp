@@ -4,8 +4,8 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 
 ## Plantillas
 
-- `MessageTemplate` guarda nombre, uso (`Campaign` o `AppointmentReminder`), texto con variables y, opcionalmente, el nombre de la plantilla aprobada en Meta (`ProviderTemplateName`) y su idioma (`es_MX` por defecto). Los avisos de citas (`AppointmentNotice`) no tienen plantilla: los escribe el sistema con la cita completa.
-- Variables: `{nombre}` (primer nombre del cliente o "cliente") y `{negocio}`; los recordatorios suman `{servicio}`, `{fecha}` ("lunes 5 de octubre") y `{hora}` ("4:30 p. m."), en la zona horaria del negocio. Una variable que no aplica al uso se rechaza.
+- `MessageTemplate` guarda nombre, uso (`Campaign`, `AppointmentReminder` o `CreditReminder`, Fase 26C), texto con variables y, opcionalmente, el nombre de la plantilla aprobada en Meta (`ProviderTemplateName`) y su idioma (`es_MX` por defecto). Los avisos de citas (`AppointmentNotice`) no tienen plantilla: los escribe el sistema con la cita completa.
+- Variables: `{nombre}` (primer nombre del cliente o "cliente") y `{negocio}`; los recordatorios de citas suman `{servicio}`, `{fecha}` ("lunes 5 de octubre") y `{hora}` ("4:30 p. m."), en la zona horaria del negocio; los del fiado, `{monto}` (lo que debe), `{vencido}` (lo vencido) y `{fecha}` (el último día para pagar que ya pasó). Una variable que no aplica al uso se rechaza.
 - WhatsApp solo entrega texto libre a quien escribió en las últimas 24 horas. Fuera de esa ventana hace falta una plantilla aprobada en Meta: el mensaje se envía como plantilla y las variables se mandan como parámetros en el orden en que aparecen en el texto (`{nombre}` → `{{1}}`…). Sin nombre de Meta se envía el texto; si Meta lo rechaza por la ventana (código 131047) el mensaje queda como fallido con esa explicación.
 - Editar una plantilla no cambia los mensajes ya encolados: cada mensaje guarda su texto y parámetros.
 
@@ -26,6 +26,16 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 - Cada 5 minutos el worker encola el recordatorio de las citas agendadas o confirmadas que empiezan dentro de la ventana (y en más de 15 minutos). La clave incluye la hora de la cita: si se reagenda, se encola uno nuevo y el anterior se omite.
 - Antes de enviar se revisa que la cita siga vigente, a la misma hora y en el futuro.
 
+## Recordatorios del fiado (Fase 26C)
+
+[ADR 0035](../adr/0035-customer-credit-term-and-reminders.md):
+
+- Configurables por negocio (`TenantSettings`) desde Clientes › Por cobrar, por el dueño o un administrador: encendidos o no (apagados por defecto), cada cuántos días (1 a 30, 7 por defecto) y plantilla (o el texto predeterminado). Encenderlos pide WhatsApp conectado.
+- Cada 5 minutos, junto a los de citas, el worker encola uno por cada cuenta (teléfono) con algo vencido por su plazo (el del cliente o el del negocio), de 10:00 a 19:00 del negocio y con WhatsApp conectado. El primero sale cuando algo vence y luego cada N días mientras siga vencido. La clave `credit:{teléfono}:{día del negocio}` evita duplicados aunque dos instancias pasen a la vez. Quien escribió BAJA no recibe ninguno. Tope: 500 cuentas por pasada y negocio, de la que más debe vencido a la que menos; quien no toca (ya recordado dentro de los días, o con baja) se descarta antes del tope. La cadencia cuenta el recordatorio enviado, fallido u omitido, pero no uno cancelado ni uno omitido porque se apagaron o se pasó la hora.
+- Antes de enviar se revisa que los recordatorios sigan encendidos, que siga siendo el día en que se encoló y antes de las 20:00, y que todavía deba algo vencido: si pagó o se le condonó, se omite ("Ya no tiene nada vencido").
+- Como los de citas, sin plantilla aprobada en Meta solo llegan a quien escribió en las últimas 24 horas. Las plantillas «Recordatorio del fiado» solo las crea o cambia el dueño o un administrador; una desactivada deja el texto predeterminado.
+- Campañas › Recordatorios del fiado muestra los últimos con su resultado y su motivo.
+
 ## Avisos de citas (Fase 6)
 
 - Al agendar, reprogramar, confirmar o cancelar una cita se encola un `OutgoingMessage` con uso `AppointmentNotice` en el mismo guardado que el cambio (no hay aviso sin cambio ni cambio sin aviso) y se despierta al worker. Antes se enviaba dentro de la solicitud, sin reintentos (`AppointmentNotices` reemplaza a `AppointmentNotifier`).
@@ -38,7 +48,7 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 
 - Un mensaje entrante que es solo "BAJA", "STOP", "ALTO" o "darme de baja" registra la baja del número y se responde con una confirmación; "ALTA" o "START" la revierte. No se usa la respuesta automática para esos mensajes. Frases como "quiero cancelar mi pedido" no cuentan.
 - El negocio también puede registrar o reactivar una baja a petición del cliente (permiso `ManageCampaigns` o `ManageCustomers`). Cada cambio se audita.
-- La baja aplica a campañas y recordatorios y se revisa al enviar cada mensaje. Los avisos de pedidos (confirmación, cambios de estado) y de citas siguen llegando: el cliente los pidió al hacer el pedido o la cita, y la confirmación de la baja se lo dice. Qué pedidos los reciben lo decide la [política de avisos del negocio](order-lifecycles.md#avisos-al-cliente-fase-4): por defecto, ninguna venta de mostrador. Un pedido de Rappi, Uber Eats o DiDi Food nunca los recibe, con cualquier política (Fase 22F).
+- La baja aplica a campañas y recordatorios (de citas y del fiado) y se revisa al enviar cada mensaje. Los avisos de pedidos (confirmación, cambios de estado) y de citas siguen llegando: el cliente los pidió al hacer el pedido o la cita, y la confirmación de la baja se lo dice. Qué pedidos los reciben lo decide la [política de avisos del negocio](order-lifecycles.md#avisos-al-cliente-fase-4): por defecto, ninguna venta de mostrador. Un pedido de Rappi, Uber Eats o DiDi Food nunca los recibe, con cualquier política (Fase 22F).
 
 ## Chat y respuestas automáticas (Fase 4)
 
@@ -83,4 +93,4 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 
 - Retención del historial de `OutgoingMessages` (hoy se conserva todo).
 - Plantillas de Meta con encabezado, botones o multimedia; hoy solo cuerpo con parámetros de texto.
-- Ventanas de envío por horario del negocio (no enviar de noche).
+- Ventanas de envío por horario del negocio (no enviar de noche). Los recordatorios del fiado ya tienen una ventana fija, de 10:00 a 19:00 (Fase 26C).

@@ -174,11 +174,22 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - **Sin nota de crédito fiscal:** lo condonado de una venta facturada requiere un CFDI de egreso que TienditApp no genera; el borrador de la factura lo avisa.
   - **Deshacer es una vez:** una condonación deshecha no se rehace; se condona otra vez con su propio registro.
   - **Sin vista de lo condonado en Reportes:** está en cada pedido, en la cuenta del cliente (las últimas 10) y en la actividad.
-  - **Un plazo para todo el negocio:** sin plazo por cliente ni recordatorios de lo vencido (Fase 26C).
+  - Resuelto en la 26C: cada cliente puede tener su plazo, y lo vencido se recuerda por WhatsApp ([ADR 0035](../adr/0035-customer-credit-term-and-reminders.md)).
   - **Durante un swap con la versión anterior** (26A), esa versión no resta lo condonado y dejaría cobrarlo; un pago así deja el pedido con saldo negativo, que esta versión trata como pagado.
   - **Sin restricción de base para pagado más condonado:** durante un regreso a la 26A, un pago de más deja el pedido con saldo negativo, que esta versión trata como pagado (ADR 0034).
   - **Un pago en Pedidos no lleva lo que debía la pantalla:** el abono y la condonación de la cuenta sí (`expectedOwed`, con la cuenta como estaba al abrir el panel); el cobro de un pedido sigue protegido por la versión del pedido (409), como antes.
   - La 26B deja la primera visita en 179,065 B (+60 B) dentro del presupuesto: las etiquetas de los motivos van en un módulo que solo cargan Clientes y Pedidos.
+- Plazo por cliente y recordatorios del fiado (Fase 26C, [ADR 0035](../adr/0035-customer-credit-term-and-reminders.md)):
+  - **Sin plantilla aprobada en Meta,** el recordatorio solo llega a quien escribió en las últimas 24 horas; los demás quedan fallidos en el registro de mensajes. La plantilla se aprueba en Meta, fuera de TienditApp, y debe llevar los parámetros en el orden en que aparecen en el texto.
+  - **Ventana de envío fija** (de 10:00 a 19:00 del negocio): no lee el horario del negocio ni sus días cerrados.
+  - **Sin aviso antes de vencer** ni recordatorios por SMS o correo.
+  - **Sin pausa por cliente:** para que a alguien no le lleguen, el negocio registra su baja en Mensajes (que también detiene las campañas).
+  - **Dos fichas con el mismo teléfono:** el plazo que cuenta es el más corto de las dos.
+  - **Hasta 500 cuentas por pasada y negocio:** las demás reciben el suyo en la pasada siguiente (cada 5 minutos); quien ya fue recordado o escribió BAJA no ocupa lugar.
+  - **La revisión corre en el ciclo del worker de mensajes:** de 10:00 a 19:00, cada pasada vuelve a leer lo vencido de cada negocio con recordatorios antes de mandar lo pendiente. Con muchos negocios convendría recordar por negocio y día que ya no queda nadie, o pasarla a su propio ciclo.
+  - **El texto se arma al encolar:** un reintento del mismo día sale con lo que debía en la mañana aunque después haya pagado una parte (si pagó todo lo vencido, se omite).
+  - **Una plantilla desactivada** deja el texto predeterminado, que no está aprobado en Meta: fuera de las 24 horas esos recordatorios fallan, y la cadencia los cuenta.
+  - **Durante un regreso a la 26B, o mientras conviven las dos versiones en un despliegue,** todos vuelven al plazo del negocio y los recordatorios ya encolados salen sin la revisión de lo vencido.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

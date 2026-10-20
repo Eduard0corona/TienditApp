@@ -78,7 +78,7 @@ Tomé las decisiones de la Fase 26B con la autorización permanente del dueño d
 - **Lo que limita:**
   - Los reportes no tienen todavía una vista de lo condonado en un periodo. Está en cada pedido, en la cuenta del cliente y en la actividad.
   - Sin nota de crédito: lo condonado de una venta facturada se resuelve fuera de TienditApp, con el contador.
-  - Un solo plazo para todo el negocio. Un plazo por cliente y los recordatorios automáticos quedan para la 26C; el saldo a favor (anticipos), para la 26D.
+  - Un solo plazo para todo el negocio. Un plazo por cliente y los recordatorios automáticos quedan para la 26C ([ADR 0035](0035-customer-credit-term-and-reminders.md)); el saldo a favor (anticipos), para la 26D.
   - Una condonación deshecha no se rehace: si hace falta, se condona otra vez, con su propio registro.
   - Condonar «no se va a cobrar» libera el límite: el cliente puede volver a fiar hasta su límite. Si no se le quiere fiar más, el dueño le quita el límite.
 - **Compatibilidad durante el despliegue:**
