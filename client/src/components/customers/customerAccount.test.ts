@@ -147,6 +147,11 @@ describe('credit reminders', () => {
     expect(reminderEveryDaysProblem(typed)).toBeNull();
   });
 
+  it('follows the range the server reports', () => {
+    expect(reminderEveryDaysProblem('45', 1, 60)).toBeNull();
+    expect(reminderEveryDaysProblem('3', 5, 60)).toBe('Los recordatorios se repiten cada 5 a 60 días.');
+  });
+
   it('shows the message with made-up amounts and the business name, and leaves what it does not know', () => {
     expect(previewReminder('Hola {nombre}, en {Negocio} debes {monto}; {vencido} venció el {fecha}. {cupon}', 'Tiendita'))
       .toBe('Hola Ana, en Tiendita debes $1,160.00; $500.00 venció el lunes 5 de octubre. {cupon}');

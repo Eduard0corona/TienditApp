@@ -27,7 +27,9 @@ export default function CreditLimitModal({ customer, onClose }: CreditLimitModal
   const [typed, setTyped] = useState(customer.creditLimit != null ? String(customer.creditLimit) : '');
   const [ownTerm, setOwnTerm] = useState(customer.creditTermDays != null);
   const [typedDays, setTypedDays] = useState(customer.creditTermDays != null ? String(customer.creditTermDays) : '');
-  const [error, setError] = useState('');
+  // A limit saved before the term was refused: a retry sends only what is missing.
+  const [savedLimit, setSavedLimit] = useState<number | null>(null);
+  const [error, setError] = useState<{ field: 'limit' | 'term'; message: string } | null>(null);
   const busy = updateLimit.isPending || setTerm.isPending;
   // A customer without fiado may still owe orders handed over unpaid: their term can change without a limit.
   const limitProblem = typed.trim() === '' && customer.creditLimit == null ? null : creditLimitProblem(typed);
@@ -37,33 +39,46 @@ export default function CreditLimitModal({ customer, onClose }: CreditLimitModal
   const termDays = ownTerm && !termProblem ? Number(typedDays.trim()) : null;
 
   const save = async () => {
-    setError('');
+    setError(null);
     const limit = typed.trim() === '' ? null : parseMoneyInput(typed);
     const changes: string[] = [];
+    let limitSaved = false;
     try {
-      if (limit != null && limit !== customer.creditLimit) {
+      if (limit != null && limit !== (savedLimit ?? customer.creditLimit)) {
         await updateLimit.mutateAsync({ customerId: customer.id, creditLimit: limit });
+        setSavedLimit(limit);
+        limitSaved = true;
         changes.push(`puede deber hasta ${formatMoney(limit)}`);
       }
+    } catch (err: unknown) {
+      setError({ field: 'limit', message: getApiErrorMessage(err, 'No se pudo guardar el límite de fiado.') });
+      return;
+    }
+    try {
       if (termDays !== (customer.creditTermDays ?? null)) {
         await setTerm.mutateAsync({ customerId: customer.id, creditTermDays: termDays });
         changes.push(termDays != null ? `paga en ${describeTerm(termDays)}` : 'paga en el plazo del negocio');
       }
-      if (changes.length > 0) toast.success(`${customer.name} ${changes.join(' y ')}.`);
-      onClose();
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo guardar el fiado.'));
+      const reason = getApiErrorMessage(err, 'No se pudo guardar el plazo.');
+      setError({ field: 'term', message: limitSaved ? `Se guardó el límite de ${formatMoney(limit ?? 0)}, pero el plazo no. ${reason}` : reason });
+      return;
     }
+    if (changes.length > 0) toast.success(`${customer.name} ${changes.join(' y ')}.`);
+    onClose();
   };
 
   const removeCredit = async () => {
-    setError('');
+    setError(null);
     try {
       await updateLimit.mutateAsync({ customerId: customer.id, creditLimit: null });
-      toast.success(`${customer.name} ya no tiene fiado.`);
+      // Their own term stays: it also counts for orders handed over unpaid.
+      toast.success(customer.creditTermDays != null
+        ? `${customer.name} ya no tiene fiado. Lo que deba lo sigue pagando en ${describeTerm(customer.creditTermDays)}.`
+        : `${customer.name} ya no tiene fiado.`);
       onClose();
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo guardar el límite de fiado.'));
+      setError({ field: 'limit', message: getApiErrorMessage(err, 'No se pudo guardar el límite de fiado.') });
     }
   };
 
@@ -89,8 +104,8 @@ export default function CreditLimitModal({ customer, onClose }: CreditLimitModal
             value={typed}
             onChange={(event) => setTyped(event.target.value)}
             disabled={busy}
-            aria-invalid={showLimitProblem || !!error}
-            aria-describedby={['credit-limit-help', showLimitProblem && 'credit-limit-problem', error && 'credit-limit-error'].filter(Boolean).join(' ')}
+            aria-invalid={showLimitProblem || error?.field === 'limit'}
+            aria-describedby={['credit-limit-help', showLimitProblem && 'credit-limit-problem', error?.field === 'limit' && 'credit-limit-error'].filter(Boolean).join(' ')}
           />
           {showLimitProblem && <div id="credit-limit-problem" className="invalid-feedback">{limitProblem}</div>}
           <div id="credit-limit-help" className="form-text">
@@ -140,8 +155,8 @@ export default function CreditLimitModal({ customer, onClose }: CreditLimitModal
                     disabled={busy}
                     autoFocus={customer.creditTermDays == null}
                     aria-label="Días para pagar"
-                    aria-invalid={showTermProblem}
-                    aria-describedby={showTermProblem ? ids.termProblem : undefined}
+                    aria-invalid={showTermProblem || error?.field === 'term'}
+                    aria-describedby={[showTermProblem && ids.termProblem, error?.field === 'term' && 'credit-limit-error'].filter(Boolean).join(' ') || undefined}
                   />
                   <span className="input-group-text">días</span>
                 </div>
@@ -153,7 +168,7 @@ export default function CreditLimitModal({ customer, onClose }: CreditLimitModal
               ve como vencido y, si tienes recordatorios, se le recuerda por WhatsApp.
             </div>
           </fieldset>
-          {error && <div id="credit-limit-error" className="alert alert-danger py-2 mt-3 mb-0" role="alert">{error}</div>}
+          {error && <div id="credit-limit-error" className="alert alert-danger py-2 mt-3 mb-0" role="alert">{error.message}</div>}
         </Modal.Body>
         <Modal.Footer className="flex-wrap">
           {customer.creditLimit != null && (

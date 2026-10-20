@@ -208,7 +208,7 @@ describe('ReceivablesPage', () => {
     const ana = (await screen.findByText('Ana López')).closest('tr')!;
     expect(within(ana).getByText('Paga en 7 días')).toBeInTheDocument();
     expect(within(ana).getByText('$120.00')).toBeInTheDocument();
-    expect(screen.getByText('Sin plazo')).toBeInTheDocument();
+    expect(screen.getByText('Sin plazo del negocio')).toBeInTheDocument();
     expect(screen.getAllByText('Vencido')).toHaveLength(2);
     expect(screen.getByLabelText('Solo vencidos')).toBeInTheDocument();
     // Who looks after customers sees no reminders to turn on.
@@ -230,7 +230,7 @@ describe('ReceivablesPage', () => {
     renderPage();
 
     expect(await screen.findByText('Sin recordatorios')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Activar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Activar los recordatorios' }));
     const dialog = await screen.findByRole('dialog', { name: 'Recordatorios del fiado' });
     expect(await within(dialog).findByText(/Hola Ana, te recordamos que en Tiendita tienes un saldo de \$1,160\.00/)).toBeInTheDocument();
     expect(within(dialog).getByText(/Sin plantilla aprobada en Meta/)).toBeInTheDocument();
@@ -254,13 +254,60 @@ describe('ReceivablesPage', () => {
       : path === '/api/v1/customers/receivables' ? RECEIVABLES : LUIS_ACCOUNT)) as never);
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Activar' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Activar los recordatorios' }));
     const dialog = await screen.findByRole('dialog', { name: 'Recordatorios del fiado' });
     expect(await within(dialog).findByRole('link', { name: 'Ir a WhatsApp' })).toHaveAttribute('href', '/settings/whatsapp');
-    expect(within(dialog).getByText('Sin plazo nada vence: pon un plazo para que haya a quién recordarle.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: 'Campañas › Plantillas' })).toHaveAttribute('href', '/campaigns?tab=templates');
+    expect(within(dialog).getByRole('link', { name: 'Ver los que se mandaron' })).toHaveAttribute('href', '/campaigns?tab=creditReminders');
+    expect(within(dialog).getByText('Sin plazo, nada vence: pon un plazo para que haya a quién recordarle.')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByLabelText('Recordar lo vencido por WhatsApp'));
 
     expect(within(dialog).getByRole('button', { name: 'Guardar' })).toBeDisabled();
+  });
+
+  it('saves without a template retired since it was chosen, so the owner can turn the reminders off', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role: 'TenantAdmin', permissions: [] } } as unknown as ReturnType<typeof useAuth>);
+    const approved = { id: 't2', name: 'Saldo vencido', body: 'Hola {nombre}, debes {vencido} en {negocio}.', providerTemplateName: 'saldo_vencido' };
+    request.mockImplementation(((method: string, path: string, options?: { body?: { enabled: boolean } }) => {
+      if (path === '/api/v1/customers/credit-reminders') {
+        return Promise.resolve(method === 'put'
+          ? { ...REMINDERS, enabled: options?.body?.enabled ?? false }
+          : { ...REMINDERS, enabled: true, templateId: 'retired', templates: [approved] });
+      }
+      return Promise.resolve(path === '/api/v1/customers/receivables'
+        ? { ...RECEIVABLES, creditTermDays: 15, creditReminderEveryDays: 7 }
+        : LUIS_ACCOUNT);
+    }) as never);
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Cambiar los recordatorios' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Recordatorios del fiado' });
+    expect(await within(dialog).findByLabelText('Mensaje')).toHaveValue('');
+    // An approved template reaches who did not write in 24 hours: no warning, and the preview is its text.
+    await userEvent.selectOptions(within(dialog).getByLabelText('Mensaje'), 't2');
+    expect(within(dialog).getByText(/Hola Ana, debes \$/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Sin plantilla aprobada en Meta/)).not.toBeInTheDocument();
+    await userEvent.selectOptions(within(dialog).getByLabelText('Mensaje'), '');
+    await userEvent.click(within(dialog).getByLabelText('Recordar lo vencido por WhatsApp'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+
+    expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/credit-reminders', { body: { enabled: false, everyDays: 7, templateId: null } });
+    expect(useToast().success).toHaveBeenCalledWith('Los recordatorios del fiado están apagados.');
+  });
+
+  it('keeps «Solo vencidos» on without a term of the business while a search finds nothing overdue', async () => {
+    const overdueAna = { ...RECEIVABLES.page.items[0], overdue: 120, ownCreditTermDays: 7 };
+    request.mockImplementation(((_method: string, path: string, options?: { query?: { search?: string } }) => Promise.resolve(
+      path !== '/api/v1/customers/receivables' ? LUIS_ACCOUNT
+        : options?.query?.search ? { ...RECEIVABLES, page: { ...RECEIVABLES.page, items: [], totalCount: 0 } }
+          : { ...RECEIVABLES, totalOverdue: 120, page: { ...RECEIVABLES.page, items: [overdueAna] } })) as never);
+    renderPage();
+
+    await userEvent.click(await screen.findByLabelText('Solo vencidos'));
+    await userEvent.type(screen.getByPlaceholderText('Nombre o teléfono'), 'Luis');
+
+    expect(await screen.findByText('No se encontraron resultados.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Solo vencidos')).toBeChecked();
   });
 
   it('tells whoever charges that reminders go out, without letting them change it', async () => {
@@ -271,7 +318,7 @@ describe('ReceivablesPage', () => {
     renderPage();
 
     expect(await screen.findByText('Recordatorios cada 7 días')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Cambiar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cambiar los recordatorios' })).not.toBeInTheDocument();
   });
 
   it('opens the account the customer card linked to', async () => {

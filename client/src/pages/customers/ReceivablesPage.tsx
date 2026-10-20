@@ -76,7 +76,8 @@ export default function ReceivablesPage() {
               </p>
               <div className="small text-muted d-flex flex-wrap column-gap-3 row-gap-1">
                 <span>
-                  {creditTerm != null ? `Plazo de ${describeTerm(creditTerm)}` : 'Sin plazo'}
+                  {/* Without the business's term, what is overdue goes by the customers' own. */}
+                  {creditTerm != null ? `Plazo de ${describeTerm(creditTerm)}` : data.totalOverdue > 0 ? 'Sin plazo del negocio' : 'Sin plazo'}
                   {canSetTerm && (
                     <button type="button" className="btn btn-link btn-sm align-baseline p-0 ms-2" onClick={() => setEditingTerm(true)}>
                       {creditTerm != null ? 'Cambiar plazo' : 'Poner plazo'}
@@ -87,7 +88,12 @@ export default function ReceivablesPage() {
                   <span>
                     {reminderEveryDays != null ? `Recordatorios cada ${describeTerm(reminderEveryDays)}` : 'Sin recordatorios'}
                     {canSetTerm && (
-                      <button type="button" className="btn btn-link btn-sm align-baseline p-0 ms-2" onClick={() => setEditingReminders(true)}>
+                      <button
+                        type="button"
+                        className="btn btn-link btn-sm align-baseline p-0 ms-2"
+                        onClick={() => setEditingReminders(true)}
+                        aria-label={reminderEveryDays != null ? 'Cambiar los recordatorios' : 'Activar los recordatorios'}
+                      >
                         {reminderEveryDays != null ? 'Cambiar' : 'Activar'}
                       </button>
                     )}

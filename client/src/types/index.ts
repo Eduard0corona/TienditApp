@@ -1330,6 +1330,8 @@ export interface MessagingSettingsDto {
   maxReminderHoursBefore: number;
   campaignPlaceholders: string[];
   reminderPlaceholders: string[];
+  /** Fase 26C: the variables of a reminder of the fiado. */
+  creditReminderPlaceholders: string[];
 }
 
 export interface UpdateAppointmentRemindersRequest {

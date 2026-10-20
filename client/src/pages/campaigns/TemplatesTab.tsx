@@ -21,6 +21,13 @@ const PLACEHOLDERS: Record<MessagePurpose, string[]> = {
   [MessagePurpose.CreditReminder]: ['nombre', 'negocio', 'monto', 'vencido', 'fecha'],
 };
 
+const BODY_EXAMPLE: Record<MessagePurpose, string> = {
+  [MessagePurpose.Campaign]: 'Hola {nombre}, este fin de semana tenemos 2x1 en {negocio}.',
+  [MessagePurpose.AppointmentReminder]: 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora}.',
+  [MessagePurpose.AppointmentNotice]: '',
+  [MessagePurpose.CreditReminder]: 'Hola {nombre}, en {negocio} tienes un saldo de {monto}; {vencido} venció el {fecha}.',
+};
+
 type Draft = {
   id?: string;
   name: string;
@@ -132,7 +139,7 @@ export default function TemplatesTab() {
         {loading ? (
           <p className="text-muted mb-0">Cargando…</p>
         ) : templates.length === 0 ? (
-          <p className="text-muted mb-0">Todavía no hay plantillas. Crea una para tu primera campaña.</p>
+          <p className="text-muted mb-0">Todavía no hay plantillas. Crea una para tu primera campaña o tus recordatorios.</p>
         ) : (
           <div className="table-responsive">
             <table className="table table-sm align-middle mb-0">
@@ -221,9 +228,7 @@ export default function TemplatesTab() {
               </div>
               <textarea id="template-body" ref={bodyRef} className="form-control" rows={4} maxLength={1000} required
                 value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })}
-                placeholder={draft.purpose === MessagePurpose.Campaign
-                  ? 'Hola {nombre}, este fin de semana tenemos 2x1 en {negocio}.'
-                  : 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora}.'} />
+                placeholder={BODY_EXAMPLE[draft.purpose]} />
               <div className="form-text">{draft.body.length}/1000. Incluye cómo darse de baja: «Escribe BAJA si no quieres recibir mensajes».</div>
 
               <div className="row g-2 mt-2">
@@ -248,7 +253,7 @@ export default function TemplatesTab() {
                 <div className="form-check form-switch mt-3">
                   <input id="template-active" type="checkbox" role="switch" className="form-check-input" checked={draft.isActive}
                     onChange={(event) => setDraft({ ...draft, isActive: event.target.checked })} />
-                  <label className="form-check-label" htmlFor="template-active">Activa (se puede elegir en campañas nuevas)</label>
+                  <label className="form-check-label" htmlFor="template-active">Activa (se puede elegir en campañas y recordatorios)</label>
                 </div>
               )}
               {formError && <div className="alert alert-danger mt-3 mb-0">{formError}</div>}

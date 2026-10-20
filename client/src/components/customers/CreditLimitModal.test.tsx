@@ -86,5 +86,47 @@ describe('CreditLimitModal', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('El plazo de un cliente va de 1 a 120 días, o el del negocio.');
     expect(onClose).not.toHaveBeenCalled();
+    // The refusal belongs to the days, not to the limit.
+    expect(screen.getByLabelText('Días para pagar')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Le fías hasta')).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  it('says the limit was saved when the term is refused, and a retry sends only the term', async () => {
+    let termTries = 0;
+    request.mockImplementation(((method: string, path: string) => {
+      if (method === 'put' && path === '/api/v1/customers/{id}/credit-term' && termTries++ === 0) {
+        return Promise.reject({ isAxiosError: true, response: { status: 400, data: { detail: 'No se pudo guardar.' } } });
+      }
+      return Promise.resolve(path === '/api/v1/customers/credit-reminders' ? { creditTermDays: 15 } : {});
+    }) as never);
+    const onClose = renderModal({ creditLimit: null });
+
+    await userEvent.type(screen.getByLabelText('Le fías hasta'), '800');
+    await userEvent.click(screen.getByLabelText('Un plazo para este cliente'));
+    await userEvent.type(screen.getByLabelText('Días para pagar'), '30');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Se guardó el límite de $800.00, pero el plazo no. No se pudo guardar.');
+    expect(onClose).not.toHaveBeenCalled();
+    request.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(request).not.toHaveBeenCalledWith('put', '/api/v1/customers/{id}/credit-limit', expect.anything());
+    expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/{id}/credit-term', { path: { id: 'c1' }, body: { creditTermDays: 30 } });
+    expect(toast.success).toHaveBeenCalledWith('Ana López paga en 30 días.');
+  });
+
+  it('closes without a request when nothing changed, and keeps the own term when the fiado is removed', async () => {
+    const onClose = renderModal({ creditLimit: 500, creditTermDays: 7 });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(request).not.toHaveBeenCalledWith('put', expect.anything(), expect.anything());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar fiado' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
+    expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/{id}/credit-limit', { path: { id: 'c1' }, body: { creditLimit: null } });
+    expect(toast.success).toHaveBeenCalledWith('Ana López ya no tiene fiado. Lo que deba lo sigue pagando en 7 días.');
   });
 });

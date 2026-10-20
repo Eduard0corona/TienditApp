@@ -6,6 +6,7 @@ import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import CreditLimitModal from '../../components/customers/CreditLimitModal';
+import { describeTerm } from '../../components/customers/customerAccount';
 import { customersApi } from '../../api/customersApi';
 import type { CreateCustomerRequest, CustomerDto, PaginatedList } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
@@ -247,7 +248,7 @@ export default function CustomersList() {
                       )}
                       {customer.creditTermDays != null && (
                         <span className="badge bg-secondary-subtle text-secondary-emphasis ms-1">
-                          Paga en {customer.creditTermDays === 1 ? '1 día' : `${customer.creditTermDays} días`}
+                          Paga en {describeTerm(customer.creditTermDays)}
                         </span>
                       )}
                     </td>

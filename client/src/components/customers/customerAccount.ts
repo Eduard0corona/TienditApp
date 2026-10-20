@@ -85,11 +85,11 @@ export function writeOffProblem(typed: string, maxCents: number): string | null 
 export const MIN_REMINDER_EVERY_DAYS = 1;
 export const MAX_REMINDER_EVERY_DAYS = 30;
 
-/** What the days between reminders typed mean; null when they can be saved. */
-export function reminderEveryDaysProblem(typed: string): string | null {
-  if (!/^\d{1,2}$/.test(typed.trim())) return 'Escribe cada cuántos días, por ejemplo 7.';
+/** What the days between reminders typed mean, within the range the server reports; null when they can be saved. */
+export function reminderEveryDaysProblem(typed: string, min = MIN_REMINDER_EVERY_DAYS, max = MAX_REMINDER_EVERY_DAYS): string | null {
+  if (!/^\d{1,3}$/.test(typed.trim())) return 'Escribe cada cuántos días, por ejemplo 7.';
   const days = Number(typed.trim());
-  if (days < MIN_REMINDER_EVERY_DAYS || days > MAX_REMINDER_EVERY_DAYS) return 'Los recordatorios se repiten cada 1 a 30 días.';
+  if (days < min || days > max) return `Los recordatorios se repiten cada ${min} a ${max} días.`;
   return null;
 }
 
