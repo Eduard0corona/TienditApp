@@ -110,4 +110,6 @@ public class MessagingSettingsDto
     public int MaxReminderHoursBefore { get; set; }
     public List<string> CampaignPlaceholders { get; set; } = [];
     public List<string> ReminderPlaceholders { get; set; } = [];
+    /// <summary>The placeholders of credit reminder templates (Fase 26C).</summary>
+    public List<string> CreditReminderPlaceholders { get; set; } = [];
 }

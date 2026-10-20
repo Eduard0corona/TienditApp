@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -92,13 +93,17 @@ public sealed class OwedOrder
 /// <summary>
 /// The term of the fiado (Fase 26B, ADR 0034): an order owed is overdue once its last day to pay, the business day the
 /// customer started to owe it (<see cref="OwedOrder.OwedSince"/>) plus the term, has passed in the business's time zone.
-/// Without a term nothing is overdue.
+/// A customer may have a term of their own instead of the business's (Fase 26C, ADR 0035); without either, nothing is
+/// overdue.
 /// </summary>
 public static class CreditTerm
 {
     /// <summary>The business's term and time zone, as its settings keep them.</summary>
     public sealed record Settings(int? Days, string? TimeZone)
     {
+        /// <summary>The same settings with a customer's own term, when they have one.</summary>
+        public Settings For(int? ownDays) => ownDays is null ? this : this with { Days = ownDays };
+
         /// <summary>
         /// The orders owed since before this instant are overdue today: the start of the business day <see cref="Days"/>
         /// days ago. Without a term, the earliest instant, so nothing is.
@@ -125,4 +130,102 @@ public static class CreditTerm
             .Select(s => new Settings(s.CreditTermDays, s.TimeZone))
             .FirstOrDefaultAsync(cancellationToken)
             ?? new Settings(null, null);
+
+    /// <summary>
+    /// The term of the customer with this phone key (Fase 26C): their customer record's own, or the shortest when two records
+    /// share the phone; null when the business's applies (or there is no record).
+    /// </summary>
+    public static Task<int?> OwnDaysAsync(IApplicationDbContext context, string phoneKey, CancellationToken cancellationToken)
+    {
+        var forms = CustomerPhones.StoredForms(phoneKey);
+        return context.Customers.AsNoTracking()
+            .Where(c => !c.IsPublicGeneral && c.Phone != null && forms.Contains(c.Phone))
+            .MinAsync(c => c.CreditTermDays, cancellationToken);
+    }
+
+    /// <summary>Whether the customer with this phone key owes something past their term now (Fase 26C).</summary>
+    public static async Task<bool> HasOverdueAsync(
+        IApplicationDbContext context, string phoneKey, Settings business, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        var before = business.For(await OwnDaysAsync(context, phoneKey, cancellationToken)).OverdueBefore(utcNow);
+        return await Receivables.OfCustomer(context.Orders.AsNoTracking(), phoneKey).AnyAsync(l => l.OwedSince < before, cancellationToken);
+    }
+
+    /// <summary>
+    /// The customers' own terms by the phone key their orders are grouped by (<see cref="Receivables.Lines"/>): a record saved
+    /// before phones were normalized (ten digits) counts as +52, and the shortest wins when two records share the phone.
+    /// </summary>
+    public static IQueryable<PhoneTerm> OwnTerms(IQueryable<Customer> customers) => customers
+        .Where(c => !c.IsPublicGeneral && c.Phone != null && c.CreditTermDays != null)
+        // CustomerPhones.StoredForms read backwards, written out so the database groups by it.
+        .Select(c => new
+        {
+            Phone = c.Phone!.Length == 10
+                ? "+52" + c.Phone
+                : c.Phone.Length == 14 && c.Phone.StartsWith("+521") ? "+52" + c.Phone.Substring(4, 10) : c.Phone,
+            Days = c.CreditTermDays!.Value
+        })
+        .GroupBy(c => c.Phone)
+        .Select(g => new PhoneTerm { Phone = g.Key, Days = g.Min(c => c.Days) });
+
+    /// <summary>
+    /// The orders of <paramref name="lines"/> that are overdue now, each by the term of its customer: their own, else the
+    /// business's. Read by the database: each term in use is one condition with its own instant.
+    /// </summary>
+    public static async Task<IQueryable<OwedOrder>> OverdueAsync(
+        IApplicationDbContext context,
+        IQueryable<OwedOrder> lines,
+        Settings business,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
+    {
+        var ownTerms = OwnTerms(context.Customers.AsNoTracking());
+        var ownDays = await ownTerms.Select(t => t.Days).Distinct().ToListAsync(cancellationToken);
+        var termed =
+            from line in lines
+            join term in ownTerms on line.Phone equals term.Phone into terms
+            from term in terms.DefaultIfEmpty()
+            select new TermedOrder { Line = line, OwnDays = (int?)term.Days };
+        return termed.Where(IsOverdue(business, ownDays, utcNow)).Select(t => t.Line);
+    }
+
+    /// <summary>
+    /// Overdue by its customer's own term when they have one, else by the business's: one branch per term in use, each with
+    /// the start of the business day it reaches back to.
+    /// </summary>
+    private static Expression<Func<TermedOrder, bool>> IsOverdue(Settings business, IEnumerable<int> ownDays, DateTimeOffset utcNow)
+    {
+        var order = Expression.Parameter(typeof(TermedOrder), "order");
+        var own = Expression.Property(order, nameof(TermedOrder.OwnDays));
+        var owedSince = Expression.Property(Expression.Property(order, nameof(TermedOrder.Line)), nameof(OwedOrder.OwedSince));
+        Expression OwedBefore(DateTimeOffset instant) =>
+            Expression.LessThan(owedSince, Expression.Constant(instant, typeof(DateTimeOffset)));
+
+        Expression? overdue = null;
+        if (business.Days is not null)
+            overdue = Expression.AndAlso(Expression.Equal(own, Expression.Constant(null, typeof(int?))), OwedBefore(business.OverdueBefore(utcNow)));
+        foreach (var days in ownDays.Distinct().Order())
+        {
+            var branch = Expression.AndAlso(
+                Expression.Equal(own, Expression.Constant(days, typeof(int?))),
+                OwedBefore(business.For(days).OverdueBefore(utcNow)));
+            overdue = overdue is null ? branch : Expression.OrElse(overdue, branch);
+        }
+
+        return Expression.Lambda<Func<TermedOrder, bool>>(overdue ?? Expression.Constant(false), order);
+    }
+}
+
+/// <summary>A customer's own term, by the phone key their orders are grouped by.</summary>
+public sealed class PhoneTerm
+{
+    public string Phone { get; init; } = null!;
+    public int Days { get; init; }
+}
+
+/// <summary>An order owed with its customer's own term, if they have one.</summary>
+public sealed class TermedOrder
+{
+    public OwedOrder Line { get; init; } = null!;
+    public int? OwnDays { get; init; }
 }

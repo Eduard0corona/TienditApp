@@ -3278,6 +3278,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/credit-reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreditRemindersDto"];
+                        "application/json": components["schemas"]["CreditRemindersDto"];
+                        "text/json": components["schemas"]["CreditRemindersDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateCreditRemindersCommand"];
+                    "text/json": components["schemas"]["UpdateCreditRemindersCommand"];
+                    "application/*+json": components["schemas"]["UpdateCreditRemindersCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreditRemindersDto"];
+                        "application/json": components["schemas"]["CreditRemindersDto"];
+                        "text/json": components["schemas"]["CreditRemindersDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/{id}": {
         parameters: {
             query?: never;
@@ -3428,6 +3492,51 @@ export interface paths {
                     "application/json": components["schemas"]["UpdateCustomerCreditLimitRequest"];
                     "text/json": components["schemas"]["UpdateCustomerCreditLimitRequest"];
                     "application/*+json": components["schemas"]["UpdateCustomerCreditLimitRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/{id}/credit-term": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetCustomerCreditTermRequest"];
+                    "text/json": components["schemas"]["SetCustomerCreditTermRequest"];
+                    "application/*+json": components["schemas"]["SetCustomerCreditTermRequest"];
                 };
             };
             responses: {
@@ -12668,6 +12777,34 @@ export interface components {
             defaultCountry: string;
             items: components["schemas"]["CreateOrderItemDto"][];
         };
+        CreditReminderTemplateDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            body: string;
+            providerTemplateName?: string | null;
+        };
+        CreditRemindersDto: {
+            enabled: boolean;
+            /** Format: int32 */
+            everyDays: number;
+            /** Format: uuid */
+            templateId?: string | null;
+            whatsAppConnected: boolean;
+            /** Format: int32 */
+            creditTermDays?: number | null;
+            /** Format: int32 */
+            customersWithOwnTerm: number;
+            defaultBody: string;
+            placeholders: string[];
+            templates: components["schemas"]["CreditReminderTemplateDto"][];
+            /** Format: int32 */
+            minEveryDays: number;
+            /** Format: int32 */
+            maxEveryDays: number;
+            sendFrom: string;
+            sendUntil: string;
+        };
         CustomerAccountDto: {
             phone: string;
             name?: string | null;
@@ -12683,8 +12820,14 @@ export interface components {
             overLimit: boolean;
             /** Format: int32 */
             creditTermDays?: number | null;
+            /** Format: int32 */
+            ownCreditTermDays?: number | null;
             /** Format: double */
             overdue: number;
+            /** Format: int32 */
+            creditReminderEveryDays?: number | null;
+            /** Format: date-time */
+            lastReminderAt?: string | null;
             orders: components["schemas"]["CustomerAccountOrderDto"][];
             /** Format: int32 */
             ordersCount: number;
@@ -12853,6 +12996,8 @@ export interface components {
             notes?: string | null;
             /** Format: double */
             creditLimit?: number | null;
+            /** Format: int32 */
+            creditTermDays?: number | null;
             addresses: components["schemas"]["CustomerAddressDto"][];
             /** Format: date-time */
             createdAt: string;
@@ -13525,7 +13670,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        MessagePurpose: 0 | 1 | 2;
+        MessagePurpose: 0 | 1 | 2 | 3;
         MessageTemplateDto: {
             /** Format: uuid */
             id: string;
@@ -13578,6 +13723,7 @@ export interface components {
             maxReminderHoursBefore: number;
             campaignPlaceholders: string[];
             reminderPlaceholders: string[];
+            creditReminderPlaceholders: string[];
         };
         MoveTabRequest: {
             /** Format: uuid */
@@ -15183,6 +15329,8 @@ export interface components {
             overLimit: boolean;
             /** Format: double */
             overdue: number;
+            /** Format: int32 */
+            ownCreditTermDays?: number | null;
         };
         ReceivableDtoPaginatedList: {
             items: components["schemas"]["ReceivableDto"][];
@@ -15203,6 +15351,8 @@ export interface components {
             totalOverdue: number;
             /** Format: int32 */
             creditTermDays?: number | null;
+            /** Format: int32 */
+            creditReminderEveryDays?: number | null;
         };
         /**
          * Format: int32
@@ -15591,6 +15741,10 @@ export interface components {
         };
         SetCustomerActiveRequest: {
             isActive: boolean;
+        };
+        SetCustomerCreditTermRequest: {
+            /** Format: int32 */
+            creditTermDays?: number | null;
         };
         SetEmployeeActiveRequest: {
             isActive: boolean;
@@ -16012,6 +16166,13 @@ export interface components {
             description?: string | null;
             /** Format: int32 */
             sortOrder: number;
+        };
+        UpdateCreditRemindersCommand: {
+            enabled: boolean;
+            /** Format: int32 */
+            everyDays: number;
+            /** Format: uuid */
+            templateId?: string | null;
         };
         UpdateCustomerCommand: {
             /** Format: uuid */

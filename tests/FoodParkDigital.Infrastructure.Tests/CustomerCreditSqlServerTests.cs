@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Customers.Queries;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Inventory;
+using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Branches.Entities;
@@ -29,7 +30,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// Fiado (Fase 26A) in SQL Server set up as in production: the receivables rule and its grouping by phone are read by the
 /// database, and the customer's credit lock keeps sales on credit and account payments sent at the same time from passing
 /// the limit or paying more than is owed. Fase 26B: what is overdue and what was forgiven are read by the database too, and
-/// the same lock keeps a write-off and a payment at once from forgiving or paying more than is owed.
+/// the same lock keeps a write-off and a payment at once from forgiving or paying more than is owed. Fase 26C: each
+/// customer's own term, and the reminders of what is overdue, are read by the database as well.
 /// </summary>
 public class CustomerCreditSqlServerTests
 {
@@ -189,6 +191,71 @@ public class CustomerCreditSqlServerTests
             account.Orders.Select(o => (o.DueOn!.Value, o.IsOverdue, o.WrittenOff, o.Balance)));
         var record = Assert.Single(account.RecentWriteOffs);
         Assert.Equal((30m, OrderWriteOffReason.Courtesy, Now), (record.Amount, record.Reason, record.WrittenOffAt));
+    }
+
+    [SqlServerFact]
+    public async Task OwnTermsAndCreditReminders_ShouldBeReadByTheDatabase()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var shop = await Shop.OpenAsync(database, creditLimit: 500m);
+        var ana = await shop.SellAsync(shop.CreditSale());
+        var luis = await shop.SellAsync(shop.Sale("Luis Pérez", "5566667777"));
+        var sofia = await shop.SellAsync(shop.Sale("Sofía Ramírez", "5599990000"));
+        await shop.DeliverAsync(luis.Value.Id, sofia.Value.Id);
+        await using (var context = database.CreateContext(shop.TenantId))
+        {
+            // Ana sold on 9 Oct, with her own 7 days: due on 16 Oct, overdue on the 19th. Luis and Sofía were handed over
+            // unpaid on 14 Oct: Luis's record, saved with ten digits before phones were normalized, gives him 3 days (due on
+            // the 17th, overdue); Sofía has no record and the business's 15 days (due on the 29th).
+            await context.Database.ExecuteSqlAsync(
+                $"UPDATE [Orders] SET [CreatedAt] = {new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.FromHours(-6))} WHERE [Id] = {ana.Value.Id}");
+            await context.Database.ExecuteSqlAsync(
+                $"UPDATE [OrderStatusHistory] SET [ChangedAt] = {new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.FromHours(-6))} WHERE [NewStatus] = {(int)OrderStatus.Delivered}");
+            (await context.TenantSettings.SingleAsync()).SetCreditTermDays(15);
+            (await context.Customers.SingleAsync()).SetCreditTermDays(7);
+            var luisRecord = new Customer(shop.TenantId, "Luis Pérez", "5566667777", null);
+            luisRecord.SetCreditTermDays(3);
+            context.Customers.Add(luisRecord);
+            var config = new WhatsAppConfig(shop.TenantId);
+            config.Update(true, "token", "123456", "waba", "+52 55 0000 0000");
+            context.WhatsAppConfigs.Add(config);
+            (await context.TenantSettings.SingleAsync()).UpdateCreditReminders(true, 7, null);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var read = database.CreateContext(shop.TenantId))
+        {
+            var receivables = new GetReceivablesQueryHandler(read, new PhoneNormalizationService(), new Clock());
+            var all = await receivables.Handle(new GetReceivablesQuery { Sort = ReceivablesSort.Oldest }, default);
+            var overdue = await receivables.Handle(new GetReceivablesQuery { OverdueOnly = true }, default);
+
+            Assert.Equal((300m, 200m, (int?)15, (int?)7), (all.TotalOwed, all.TotalOverdue, all.CreditTermDays, all.CreditReminderEveryDays));
+            Assert.Equal(
+                [(AnaPhone, 100m, (int?)7), ("+525566667777", 100m, (int?)3), ("+525599990000", 0m, (int?)null)],
+                all.Page.Items.Select(i => (i.Phone, i.Overdue, i.OwnCreditTermDays)));
+            Assert.Equal([AnaPhone, "+525566667777"], overdue.Page.Items.Select(i => i.Phone).Order());
+            var account = await shop.AccountAsync();
+            Assert.Equal((7, (int?)7, 100m, new DateOnly(2026, 10, 16)), (account.CreditTermDays!.Value, account.OwnCreditTermDays, account.Overdue, account.Orders[0].DueOn!.Value));
+        }
+
+        // The planner reads the same by the database: one reminder each to Ana and Luis, none to Sofía.
+        await using (var context = database.CreateContext(shop.TenantId))
+        {
+            var settings = await context.TenantSettings.AsNoTracking().SingleAsync();
+            var queued = await new CreditReminderPlanner(context, new PhoneNormalizationService(), new Clock()).QueueDueAsync(settings, default);
+            await context.SaveChangesAsync();
+            Assert.Equal(2, queued);
+        }
+
+        await using var check = database.CreateContext(shop.TenantId);
+        var messages = await check.OutgoingMessages.OrderBy(m => m.Phone).ToListAsync();
+        Assert.Equal(
+            [("credit:+525512345678:20261019", "Ana López"), ("credit:+525566667777:20261019", "Luis Pérez")],
+            messages.Select(m => (m.DeduplicationKey!, m.RecipientName!)));
+        Assert.Contains("$100.00 venció el sábado 17 de octubre", messages[1].Body);
+        await using var again = database.CreateContext(shop.TenantId);
+        Assert.Equal(0, await new CreditReminderPlanner(again, new PhoneNormalizationService(), new Clock())
+            .QueueDueAsync(await again.TenantSettings.AsNoTracking().SingleAsync(), default));
     }
 
     /// <summary>A shop that sells soap at $100 (IVA included), with an open drawer and Ana, who may owe the limit given.</summary>

@@ -99,6 +99,16 @@ public class CustomersController : ControllerBase
     public async Task<ActionResult<CustomerCreditTermDto>> UpdateCreditTerm([FromBody] UpdateCustomerCreditTermCommand command, CancellationToken cancellationToken)
         => ToResult(await _mediator.Send(command, cancellationToken));
 
+    /// <summary>The reminders of what is overdue and what setting them up needs (Fase 26C; owners and admins).</summary>
+    [HttpGet("credit-reminders")]
+    public async Task<ActionResult<CreditRemindersDto>> GetCreditReminders(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetCreditRemindersQuery(), cancellationToken));
+
+    /// <summary>Turns the WhatsApp reminders of what is overdue on or off, every how many days and with which template (Fase 26C).</summary>
+    [HttpPut("credit-reminders")]
+    public async Task<ActionResult<CreditRemindersDto>> UpdateCreditReminders([FromBody] UpdateCreditRemindersCommand command, CancellationToken cancellationToken)
+        => ToResult(await _mediator.Send(command, cancellationToken));
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<CustomerDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
@@ -158,6 +168,11 @@ public class CustomersController : ControllerBase
     public async Task<ActionResult<CustomerDto>> UpdateCreditLimit(Guid id, [FromBody] UpdateCustomerCreditLimitRequest request, CancellationToken cancellationToken)
         => ToResult(await _mediator.Send(new UpdateCustomerCreditLimitCommand { CustomerId = id, CreditLimit = request.CreditLimit }, cancellationToken));
 
+    /// <summary>The customer's own term to pay what they owe; null gives them the business's (Fase 26C; owners and admins).</summary>
+    [HttpPut("{id:guid}/credit-term")]
+    public async Task<ActionResult<CustomerDto>> SetCreditTerm(Guid id, [FromBody] SetCustomerCreditTermRequest request, CancellationToken cancellationToken)
+        => ToResult(await _mediator.Send(new SetCustomerCreditTermCommand { CustomerId = id, CreditTermDays = request.CreditTermDays }, cancellationToken));
+
     [HttpPut("{id:guid}/notes")]
     public async Task<ActionResult<CustomerDto>> UpdateNotes(Guid id, [FromBody] UpdateCustomerNotesRequest request, CancellationToken cancellationToken)
         => ToResult(await _mediator.Send(new UpdateCustomerNotesCommand(id, request.Notes), cancellationToken));
@@ -197,6 +212,9 @@ public class CustomersController : ControllerBase
 
     private ActionResult<CustomerCreditTermDto> ToResult(Result<CustomerCreditTermDto> result)
         => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+
+    private ActionResult<CreditRemindersDto> ToResult(Result<CreditRemindersDto> result)
+        => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
 }
 
 public record SetCustomerActiveRequest(bool IsActive);
@@ -204,6 +222,8 @@ public record SetCustomerActiveRequest(bool IsActive);
 public record UpdateCustomerNotesRequest(string? Notes);
 
 public record UpdateCustomerCreditLimitRequest(decimal? CreditLimit);
+
+public record SetCustomerCreditTermRequest(int? CreditTermDays);
 
 public record CustomerAddressRequest(string AddressLine, string? Label = null, string? References = null, bool IsDefault = false);
 

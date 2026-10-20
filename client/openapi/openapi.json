@@ -3790,6 +3790,81 @@
         }
       }
     },
+    "/api/v1/customers/credit-reminders": {
+      "get": {
+        "tags": [
+          "Customers"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditRemindersDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditRemindersDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditRemindersDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Customers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCreditRemindersCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCreditRemindersCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCreditRemindersCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditRemindersDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditRemindersDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditRemindersDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/customers/{id}": {
       "get": {
         "tags": [
@@ -3981,6 +4056,65 @@
             "application/*+json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateCustomerCreditLimitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/{id}/credit-term": {
+      "put": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCustomerCreditTermRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCustomerCreditTermRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCustomerCreditTermRequest"
               }
             }
           }
@@ -17915,6 +18049,103 @@
         },
         "additionalProperties": false
       },
+      "CreditReminderTemplateDto": {
+        "required": [
+          "body",
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "providerTemplateName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreditRemindersDto": {
+        "required": [
+          "customersWithOwnTerm",
+          "defaultBody",
+          "enabled",
+          "everyDays",
+          "maxEveryDays",
+          "minEveryDays",
+          "placeholders",
+          "sendFrom",
+          "sendUntil",
+          "templates",
+          "whatsAppConnected"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "everyDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "templateId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "whatsAppConnected": {
+            "type": "boolean"
+          },
+          "creditTermDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "customersWithOwnTerm": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "defaultBody": {
+            "type": "string"
+          },
+          "placeholders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "templates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreditReminderTemplateDto"
+            }
+          },
+          "minEveryDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxEveryDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sendFrom": {
+            "type": "string"
+          },
+          "sendUntil": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "CustomerAccountDto": {
         "required": [
           "orders",
@@ -17966,9 +18197,24 @@
             "format": "int32",
             "nullable": true
           },
+          "ownCreditTermDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
           "overdue": {
             "type": "number",
             "format": "double"
+          },
+          "creditReminderEveryDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "lastReminderAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           },
           "orders": {
             "type": "array",
@@ -18535,6 +18781,11 @@
           "creditLimit": {
             "type": "number",
             "format": "double",
+            "nullable": true
+          },
+          "creditTermDays": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           },
           "addresses": {
@@ -20777,14 +21028,16 @@
         "enum": [
           0,
           1,
-          2
+          2,
+          3
         ],
         "type": "integer",
         "format": "int32",
         "x-enum-varnames": [
           "Campaign",
           "AppointmentReminder",
-          "AppointmentNotice"
+          "AppointmentNotice",
+          "CreditReminder"
         ]
       },
       "MessageTemplateDto": {
@@ -20924,6 +21177,7 @@
           "appointmentRemindersEnabled",
           "appointmentsEnabled",
           "campaignPlaceholders",
+          "creditReminderPlaceholders",
           "defaultReminderBody",
           "maxReminderHoursBefore",
           "minReminderHoursBefore",
@@ -20968,6 +21222,12 @@
             }
           },
           "reminderPlaceholders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "creditReminderPlaceholders": {
             "type": "array",
             "items": {
               "type": "string"
@@ -26378,6 +26638,11 @@
           "overdue": {
             "type": "number",
             "format": "double"
+          },
+          "ownCreditTermDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -26444,6 +26709,11 @@
             "format": "double"
           },
           "creditTermDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "creditReminderEveryDays": {
             "type": "integer",
             "format": "int32",
             "nullable": true
@@ -27768,6 +28038,17 @@
         "properties": {
           "isActive": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetCustomerCreditTermRequest": {
+        "type": "object",
+        "properties": {
+          "creditTermDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -29260,6 +29541,28 @@
           "sortOrder": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateCreditRemindersCommand": {
+        "required": [
+          "enabled",
+          "everyDays"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "everyDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "templateId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false

@@ -56,7 +56,7 @@ public class TenantFilterBypassAllowlistTests
         // webhook token, what is due). The work itself runs in that business's scope (BackgroundScopes).
         ["src/FoodParkDigital.Application/WhatsApp/Queries/VerifyWhatsAppWebhookTokenQuery.cs"] = 1,
         ["src/FoodParkDigital.Infrastructure/BackgroundJobs/BackgroundQueuesHealthCheck.cs"] = 1,
-        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Messaging/MessagingWorker.cs"] = 5,
+        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Messaging/MessagingWorker.cs"] = 6,
         ["src/FoodParkDigital.Infrastructure/Services/WhatsAppWebhookProcessor.cs"] = 1,
         // Online payments (Fase 24I): the Mercado Pago notification finds the businesses that connected the account it
         // names, and the sweep the businesses with payments in course or a key to renew; each one is then applied in its

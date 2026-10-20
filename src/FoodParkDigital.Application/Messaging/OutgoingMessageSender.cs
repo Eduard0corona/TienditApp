@@ -1,5 +1,8 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +12,7 @@ namespace FoodParkDigital.Application.Messaging;
 public enum OutgoingSendDecision
 {
     Sent = 0,
-    /// <summary>Not sent on purpose: opt-out, or the appointment changed.</summary>
+    /// <summary>Not sent on purpose: opt-out, the appointment changed, or nothing is overdue anymore.</summary>
     Skipped = 1,
     /// <summary>Its campaign was cancelled.</summary>
     Cancelled = 2,
@@ -22,8 +25,8 @@ public sealed record OutgoingSendOutcome(OutgoingSendDecision Decision, string? 
 
 /// <summary>
 /// Sends one queued message in its business's context, checking first that it still applies: the customer has
-/// not opted out (campaigns and reminders), the campaign was not cancelled, the appointment did not change and no
-/// newer notice of the same appointment is waiting. The worker records the outcome and retries transient failures.
+/// not opted out (campaigns and reminders), the campaign was not cancelled, the appointment did not change, no
+/// newer notice of the same appointment is waiting, and the customer still owes something overdue (Fase 26C). The worker records the outcome and retries transient failures.
 /// </summary>
 public sealed class OutgoingMessageSender
 {
@@ -31,6 +34,9 @@ public sealed class OutgoingMessageSender
     public const string AppointmentChangedReason = "La cita cambió, se canceló o ya pasó.";
     public const string NoticeSupersededReason = "Hay un aviso más reciente de la misma cita.";
     public const string NoticeExpiredReason = "El aviso esperó demasiado para enviarse.";
+    public const string NothingOverdueReason = "Ya no tiene nada vencido.";
+    public const string CreditRemindersOffReason = "Los recordatorios del fiado se apagaron.";
+    public const string CreditReminderLateReason = "El recordatorio ya no se mandó: se pasó la hora de ese día.";
 
     /// <summary>A notice that could not go out in this time (the worker was stopped) is no longer news.</summary>
     public static readonly TimeSpan NoticeLifetime = TimeSpan.FromHours(24);
@@ -96,6 +102,10 @@ public sealed class OutgoingMessageSender
                 return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: NoticeSupersededReason);
         }
 
+        if (message.Purpose == MessagePurpose.CreditReminder
+            && await CreditReminderSkipReasonAsync(message, cancellationToken) is { } skipped)
+            return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: skipped);
+
         // An opt-out stops promotions and reminders; notices of the customer's own orders and appointments still go out.
         if (message.Purpose != MessagePurpose.AppointmentNotice
             && await _consent.IsOptedOutAsync(message.TenantId, message.Phone, cancellationToken))
@@ -117,5 +127,31 @@ public sealed class OutgoingMessageSender
         return new OutgoingSendOutcome(
             result.IsTransient ? OutgoingSendDecision.TransientFailure : OutgoingSendDecision.Rejected,
             Reason: result.Error);
+    }
+
+    /// <summary>
+    /// A credit reminder (Fase 26C) goes out only the business day it was queued, before night, while the reminders are on
+    /// and the customer still owes something overdue: a payment or a write-off since it was queued makes it stale.
+    /// </summary>
+    private async Task<string?> CreditReminderSkipReasonAsync(OutgoingMessage message, CancellationToken cancellationToken)
+    {
+        var settings = await _context.TenantSettings
+            .AsNoTracking()
+            .Select(s => new { s.CreditRemindersEnabled, s.CreditTermDays, s.TimeZone })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (settings is not { CreditRemindersEnabled: true })
+            return CreditRemindersOffReason;
+
+        var now = _clock.UtcNow;
+        var zone = TenantDateTimeResolver.Resolve(settings.TimeZone);
+        var local = TimeZoneInfo.ConvertTime(now, zone);
+        if (local.Date != TimeZoneInfo.ConvertTime(message.CreatedAt, zone).Date
+            || TimeOnly.FromDateTime(local.DateTime) >= CreditReminderPlanner.SendUntil)
+            return CreditReminderLateReason;
+
+        var business = new CreditTerm.Settings(settings.CreditTermDays, settings.TimeZone);
+        return await CreditTerm.HasOverdueAsync(_context, MessagingPhone.ToKey(message.Phone), business, now, cancellationToken)
+            ? null
+            : NothingOverdueReason;
     }
 }

@@ -59,7 +59,7 @@ public class CreateMessageTemplateCommandValidator : AbstractValidator<CreateMes
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(MessageTemplate.MaxNameLength);
         RuleFor(x => x.Purpose)
-            .Must(purpose => purpose is MessagePurpose.Campaign or MessagePurpose.AppointmentReminder)
+            .Must(purpose => purpose is MessagePurpose.Campaign or MessagePurpose.AppointmentReminder or MessagePurpose.CreditReminder)
             .WithMessage(MessageTemplate.TemplatePurposeError);
         RuleFor(x => x.Body).NotEmpty().MaximumLength(MessageTemplate.MaxBodyLength);
         RuleFor(x => x.ProviderTemplateName).MaximumLength(MessageTemplate.MaxProviderTemplateNameLength);
