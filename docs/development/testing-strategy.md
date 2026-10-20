@@ -938,6 +938,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `cashCutText.test.ts`, `customerAccount.test.ts` y `ReceivablesPage.test.tsx`: las líneas del corte, los movimientos y el resumen para WhatsApp, y «A favor» en Por cobrar.
   - **Cliente en total:** 138 archivos y 923 pruebas.
   - **Primera visita:** 179,066 B de 179,100 B (−8 B contra `master`): las etiquetas toman los nombres de los enums generados y la regla de «Devolver saldo» vive en el estado de cuenta.
+  - **Escenas visuales:** `saldo-a-favor.spec.ts` (17, nuevas): Por cobrar con saldo a favor (escritorio, teléfono y oscuro), el estado de cuenta con su saldo (escritorio y teléfono), dejar a favor (escritorio y teléfono), lo dejado, usarlo, devolverlo, el cambio de un abono a su favor, la ficha y la cuenta de quien no debe, cobrar con saldo en Vender (escritorio y teléfono), la venta cobrada y reembolsar a él. En `caja-config.spec.ts`, el corte del día con saldo a favor y su impreso (1, nueva).
+    - **Lo que cambia y por qué:** 15 escenas.
+      - El estado de cuenta suma «Dejar a favor» para quien cobra: 3 de `fiado.spec.ts`, 5 de `condonar.spec.ts` y 1 de `recordatorios.spec.ts`.
+      - Abonar con efectivo de más ofrece «Dejar el cambio a su favor»: abonar en el teléfono de `fiado.spec.ts`.
+      - La ficha muestra la línea del fiado («Sin fiado · Ver cuenta») a quien cobra: 5 de `clientes-mensajes.spec.ts`.
+    - **Resultado:** la comparación contra `master` dio 561 escenas iguales, 18 nuevas y 15 que cambian; «auditoría escritorio-oscuro» difirió una vez por el desplazamiento de la barra de pestañas de Configuración y pasó dos veces seguidas al repetirla, sin cambios de esta fase. Con esas capturas, los seis archivos tocados con la cobertura de rutas (196 escenas) pasaron dos corridas seguidas contra el mismo build.
+    - **Lo que encontraron las escenas:** la ficha simulada no leía `customerId`, así que la ficha de Sofía abría la de María Fernanda; ahora busca al cliente como lo pide Clientes, y las fichas de María Fernanda quedan iguales.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
