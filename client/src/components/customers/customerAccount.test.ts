@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { CustomerAccount } from '../../api/customerCredit';
 import {
-  accountSummaryText, creditLimitProblem, creditTermProblem, daysSince, describeDays, describeDue, describeTerm, writeOffProblem,
+  accountSummaryText, creditLimitProblem, creditTermProblem, daysSince, describeDays, describeDue, describeReminder, describeTerm,
+  previewReminder, reminderEveryDaysProblem, writeOffProblem,
 } from './customerAccount';
 
 function account(overrides: Partial<CustomerAccount> = {}): CustomerAccount {
@@ -117,5 +118,42 @@ describe('term and overdue', () => {
     expect(writeOffProblem('10.005', 5000)).toBe('Escribe cuánto condonas, por ejemplo 50.');
     expect(writeOffProblem('50.01', 5000)).toBe('No puedes condonar más de $50.00.');
     expect(writeOffProblem('$50', 5000)).toBeNull();
+  });
+});
+
+describe('credit reminders', () => {
+  it('says when the last one went out, and whether more will while something stays overdue', () => {
+    expect(describeReminder({ lastReminderAt: '2026-10-12T17:00:00Z', creditReminderEveryDays: 7, overdue: 100 }))
+      .toBe('Último recordatorio por WhatsApp: 12 oct 2026. Se repite cada 7 días mientras deba algo vencido.');
+    expect(describeReminder({ lastReminderAt: '2026-10-12T17:00:00Z', creditReminderEveryDays: null, overdue: 100 }))
+      .toBe('Último recordatorio por WhatsApp: 12 oct 2026.');
+    expect(describeReminder({ lastReminderAt: null, creditReminderEveryDays: 1, overdue: 100 }))
+      .toBe('Se le recordará lo vencido por WhatsApp. Se repite cada 1 día mientras deba algo vencido.');
+    // Nothing overdue, or no reminders and none sent: nothing to say.
+    expect(describeReminder({ lastReminderAt: null, creditReminderEveryDays: 7, overdue: 0 })).toBeNull();
+    expect(describeReminder({ lastReminderAt: null, creditReminderEveryDays: null, overdue: 100 })).toBeNull();
+  });
+
+  it.each([
+    ['', 'Escribe cada cuántos días, por ejemplo 7.'],
+    ['7.5', 'Escribe cada cuántos días, por ejemplo 7.'],
+    ['0', 'Los recordatorios se repiten cada 1 a 30 días.'],
+    ['31', 'Los recordatorios se repiten cada 1 a 30 días.'],
+  ])('refuses reminders every %j days', (typed, problem) => {
+    expect(reminderEveryDaysProblem(typed)).toBe(problem);
+  });
+
+  it.each(['1', '7', '30'])('accepts reminders every %j days', (typed) => {
+    expect(reminderEveryDaysProblem(typed)).toBeNull();
+  });
+
+  it('follows the range the server reports', () => {
+    expect(reminderEveryDaysProblem('45', 1, 60)).toBeNull();
+    expect(reminderEveryDaysProblem('3', 5, 60)).toBe('Los recordatorios se repiten cada 5 a 60 días.');
+  });
+
+  it('shows the message with made-up amounts and the business name, and leaves what it does not know', () => {
+    expect(previewReminder('Hola {nombre}, en {Negocio} debes {monto}; {vencido} venció el {fecha}. {cupon}', 'Tiendita'))
+      .toBe('Hola Ana, en Tiendita debes $1,160.00; $500.00 venció el lunes 5 de octubre. {cupon}');
   });
 });

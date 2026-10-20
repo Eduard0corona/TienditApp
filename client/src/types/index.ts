@@ -1330,6 +1330,8 @@ export interface MessagingSettingsDto {
   maxReminderHoursBefore: number;
   campaignPlaceholders: string[];
   reminderPlaceholders: string[];
+  /** Fase 26C: the variables of a reminder of the fiado. */
+  creditReminderPlaceholders: string[];
 }
 
 export interface UpdateAppointmentRemindersRequest {
@@ -1359,6 +1361,8 @@ export interface CustomerDto {
   notes?: string | null;
   /** How much the business lets them owe (fiado); null when they are not sold on credit. */
   creditLimit?: number | null;
+  /** Their own term to pay what they owe (Fase 26C); null when the business's applies. */
+  creditTermDays?: number | null;
   /** Only in the detail of one customer. */
   addresses?: CustomerAddressDto[];
   createdAt: string;

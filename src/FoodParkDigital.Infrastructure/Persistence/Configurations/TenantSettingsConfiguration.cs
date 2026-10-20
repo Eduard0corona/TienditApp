@@ -19,6 +19,9 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
                 "CK_TenantSettings_CreditTermDays",
                 $"[CreditTermDays] IS NULL OR ([CreditTermDays] >= {TenantSettings.MinCreditTermDays} AND [CreditTermDays] <= {TenantSettings.MaxCreditTermDays})");
             table.HasCheckConstraint(
+                "CK_TenantSettings_CreditReminderEveryDays",
+                $"[CreditReminderEveryDays] >= {TenantSettings.MinCreditReminderEveryDays} AND [CreditReminderEveryDays] <= {TenantSettings.MaxCreditReminderEveryDays}");
+            table.HasCheckConstraint(
                 "CK_TenantSettings_OnlineBookingCapacity",
                 $"[OnlineBookingCapacity] >= 1 AND [OnlineBookingCapacity] <= {OnlineBookingRules.MaxCapacity}");
         });
@@ -60,6 +63,16 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             .IsRequired();
         builder.Property(s => s.OnlineBookingCapacity)
             .HasDefaultValue(OnlineBookingRules.DefaultCapacity)
+            .ValueGeneratedNever()
+            .IsRequired();
+        // Fase 26C (ADR 0035): credit reminders start off, every 7 days; the database defaults fill the rows that exist and
+        // those the previous version saves while this one is published. EF always writes the values.
+        builder.Property(s => s.CreditRemindersEnabled)
+            .HasDefaultValue(false)
+            .ValueGeneratedNever()
+            .IsRequired();
+        builder.Property(s => s.CreditReminderEveryDays)
+            .HasDefaultValue(TenantSettings.DefaultCreditReminderEveryDays)
             .ValueGeneratedNever()
             .IsRequired();
         // Null until the owner sets the hours: the version this one replaces does not map it.

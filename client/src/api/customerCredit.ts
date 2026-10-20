@@ -3,7 +3,8 @@ import type { ReceivablesSort } from './generated/enums';
 import { apiRequest, type Schemas } from './typedClient';
 
 // Fiado (Fase 26A): Clientes › Por cobrar, the account of a customer, its payments and the limit; what the business
-// forgives and the term of its fiado (Fase 26B). Kept out of queries.ts, which the first visit loads.
+// forgives and the term of its fiado (Fase 26B); a customer's own term and the reminders of what is overdue (Fase 26C).
+// Kept out of queries.ts, which the first visit loads.
 
 export type Receivable = Schemas['ReceivableDto'];
 export type Receivables = Schemas['ReceivablesDto'];
@@ -12,6 +13,8 @@ export type PayCustomerAccountBody = Schemas['PayCustomerAccountCommand'];
 export type WriteOffCustomerAccountBody = Schemas['WriteOffCustomerAccountCommand'];
 export type CustomerAccountOrder = Schemas['CustomerAccountOrderDto'];
 export type CustomerAccountWriteOff = Schemas['CustomerAccountWriteOffDto'];
+export type CreditReminders = Schemas['CreditRemindersDto'];
+export type UpdateCreditRemindersBody = Schemas['UpdateCreditRemindersCommand'];
 
 /** Whose account: the customer record, or only the phone of the orders. */
 export interface AccountOf {
@@ -33,6 +36,7 @@ export const creditKeys = {
   all: ['customer-credit'] as const,
   receivables: (filter: ReceivablesFilter) => ['customer-credit', 'receivables', filter] as const,
   account: (of: AccountOf) => ['customer-credit', 'account', of.customerId ?? '', of.phone ?? ''] as const,
+  reminders: ['customer-credit', 'reminders'] as const,
 };
 
 /** Who owes the business, a row per customer, with the total. */
@@ -116,6 +120,38 @@ export function useUpdateCreditTerm() {
     mutationFn: (creditTermDays: number | null) =>
       apiRequest('put', '/api/v1/customers/credit-term', { body: { creditTermDays } }),
     onSuccess: refresh,
+  });
+}
+
+/** The customer's own term to pay; null gives them the business's again (Fase 26C; owners and admins). */
+export function useSetCustomerCreditTerm() {
+  const refresh = useRefreshCredit();
+  return useMutation({
+    mutationFn: ({ customerId, creditTermDays }: { customerId: string; creditTermDays: number | null }) =>
+      apiRequest('put', '/api/v1/customers/{id}/credit-term', { path: { id: customerId }, body: { creditTermDays } }),
+    onSuccess: refresh,
+  });
+}
+
+/** The reminders of what is overdue and what setting them up needs (Fase 26C; owners and admins). */
+export function useCreditReminders(enabled = true) {
+  return useQuery({
+    queryKey: creditKeys.reminders,
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/customers/credit-reminders', { signal }),
+    enabled,
+  });
+}
+
+/** Turns the WhatsApp reminders of what is overdue on or off, every how many days and with which template (Fase 26C). */
+export function useUpdateCreditReminders() {
+  const client = useQueryClient();
+  const refresh = useRefreshCredit();
+  return useMutation({
+    mutationFn: (body: UpdateCreditRemindersBody) => apiRequest('put', '/api/v1/customers/credit-reminders', { body }),
+    onSuccess: (reminders) => {
+      client.setQueryData(creditKeys.reminders, reminders);
+      refresh();
+    },
   });
 }
 

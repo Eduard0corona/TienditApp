@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Entities;
 
 namespace FoodParkDigital.Domain.Customers.Entities;
 
@@ -12,6 +13,9 @@ public class Customer : AuditableEntity, ITenantScoped
     public const string CreditLimitRangeMessage = "El límite de fiado va de $1 a $1,000,000.";
     public const string PublicGeneralCreditMessage = "A «Público en general» no se le fía: elige al cliente.";
     public const string NoPhoneCreditMessage = "Para fiarle, el cliente necesita teléfono: con él se juntan sus pedidos.";
+    public const string CreditTermRangeMessage = "El plazo de un cliente va de 1 a 120 días, o el del negocio.";
+    public const string PublicGeneralCreditTermMessage = "«Público en general» no tiene plazo propio: elige al cliente.";
+    public const string NoPhoneCreditTermMessage = "Para darle un plazo, el cliente necesita teléfono: con él se juntan sus pedidos.";
 
     private readonly List<CustomerAddress> _addresses = new();
 
@@ -48,6 +52,12 @@ public class Customer : AuditableEntity, ITenantScoped
     /// </summary>
     public decimal? CreditLimit { get; private set; }
 
+    /// <summary>
+    /// How many days the customer has to pay what they owe (Fase 26C, ADR 0035), instead of the business's term; null when
+    /// the business's term applies. Like that one, it only tells what is overdue.
+    /// </summary>
+    public int? CreditTermDays { get; private set; }
+
     /// <summary>The business sells to them on credit now: active, with a limit and a phone to gather their orders by.</summary>
     public bool SellsOnCredit => IsActive && !IsPublicGeneral && CreditLimit is not null && !string.IsNullOrWhiteSpace(Phone);
 
@@ -68,6 +78,24 @@ public class Customer : AuditableEntity, ITenantScoped
         if (limit < 1m || limit > MaxCreditLimit || decimal.Round(limit.Value, 2) != limit.Value)
             throw new DomainException(CreditLimitRangeMessage);
         CreditLimit = limit;
+    }
+
+    /// <summary>Gives the customer a term of their own, or the business's again (null).</summary>
+    public void SetCreditTermDays(int? days)
+    {
+        if (days is null)
+        {
+            CreditTermDays = null;
+            return;
+        }
+
+        if (IsPublicGeneral)
+            throw new DomainException(PublicGeneralCreditTermMessage);
+        if (string.IsNullOrWhiteSpace(Phone))
+            throw new DomainException(NoPhoneCreditTermMessage);
+        if (days is < TenantSettings.MinCreditTermDays or > TenantSettings.MaxCreditTermDays)
+            throw new DomainException(CreditTermRangeMessage);
+        CreditTermDays = days;
     }
 
     public void Update(string name, string? phone, string? email)

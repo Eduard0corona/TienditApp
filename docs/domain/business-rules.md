@@ -394,7 +394,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Abonar a la cuenta:** un monto con un método que entra a caja, repartido del pedido más viejo al más nuevo como pagos de cada pedido en la caja de quien cobra, con la nota «Abono a la cuenta»; el cambio va con la última parte. Nunca más de lo que debe. Un abono que llega dos veces, o después de otro que la pantalla no vio, encuentra la cuenta cambiada y se rechaza.
 - **El estado de cuenta:** el límite, lo que debe y lo que le queda, los pedidos que debe (hasta 100, del más viejo) y sus últimos 10 pagos; «Enviar por WhatsApp» lo manda desde el dispositivo.
 - **Clientes › Por cobrar:** una fila por teléfono con lo que debe, cuántos pedidos y desde cuándo, su límite (si hoy se le fía) y si lo rebasa, y el total; busca por nombre o parte del teléfono y ordena por lo que debe o por lo más viejo.
-- **Sin** saldo a favor, intereses ni recordatorios (Fase 26C en adelante).
+- **Sin** saldo a favor ni intereses. El plazo y los recordatorios llegaron en la 26B y la 26C.
 
 ## Condonar y plazo del fiado (Fase 26B)
 
@@ -407,6 +407,21 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Lo vencido se ve:** en Por cobrar (por cliente, el total y «Solo vencidos»), en el estado de cuenta (lo vencido y el día límite de cada pedido; el resumen para WhatsApp lo dice) y en Vender, que avisa antes de fiar.
 - **Lo que ve el cliente** de su pedido ya no le pide pagar lo condonado.
 - **Entregar sin cobrar** sigue igual: pide `ManageOrders` y cuenta como deuda.
+
+## Plazo por cliente y recordatorios del fiado (Fase 26C)
+
+[ADR 0035](../adr/0035-customer-credit-term-and-reminders.md):
+
+- **Plazo por cliente:** el dueño o un administrador le da a un cliente su propio plazo, de 1 a 120 días, o le deja el del negocio, desde «Fiado de…» en Clientes. Cada cambio queda en la actividad. No necesita límite: también cuenta para los pedidos entregados sin cobrar.
+- **Qué plazo cuenta:** el del cliente, si no el del negocio. Sale de su ficha por teléfono (una guardada con diez dígitos es la misma persona); si dos fichas comparten teléfono, el más corto. Una cuenta sin ficha usa el del negocio.
+- **Lo vencido** se cuenta con el plazo de cada cliente en Por cobrar, el estado de cuenta, Vender y los recordatorios, aunque el negocio no tenga plazo.
+- **Recordatorios por WhatsApp:**
+  - Los enciende el dueño o un administrador en Por cobrar, con WhatsApp conectado, cada 1 a 30 días (7 por omisión) y con el texto por omisión o una plantilla «Recordatorio del fiado». Apagados en todos al migrar; cada cambio queda en la actividad.
+  - A cada cuenta con algo vencido, tenga ficha o no: el primero cuando algo vence, y luego cada N días mientras siga vencido. Uno por cuenta y día.
+  - Se encolan de 10:00 a 19:00 del negocio. Al mandarse se omiten si se apagaron, si ya es otro día o pasan de las 20:00, o si ya no debe nada vencido.
+  - Nunca a quien escribió BAJA.
+  - Sin plantilla aprobada en Meta solo llegan a quien escribió en las últimas 24 horas.
+- **Se ve:** «Paga en N días» en Clientes y en Por cobrar; en el estado de cuenta, si el plazo es solo para ese cliente y el último recordatorio.
 
 ## Cancelación y trazabilidad
 

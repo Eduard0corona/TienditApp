@@ -43,6 +43,7 @@ public sealed class MessagingWorkerService : BackgroundService
                 if (DateTimeOffset.UtcNow >= nextReminderScan)
                 {
                     await _worker.QueueAppointmentRemindersAsync(stoppingToken);
+                    await _worker.QueueCreditRemindersAsync(stoppingToken);
                     nextReminderScan = DateTimeOffset.UtcNow.Add(reminderInterval);
                 }
 

@@ -9,6 +9,7 @@ using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Messaging;
+using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -38,6 +39,8 @@ public class ReceivableDto
     public bool OverLimit { get; set; }
     /// <summary>What of it is past the term of the fiado (Fase 26B); 0 without a term.</summary>
     public decimal Overdue { get; set; }
+    /// <summary>The customer's own term (Fase 26C); null when the business's applies.</summary>
+    public int? OwnCreditTermDays { get; set; }
 }
 
 public class ReceivablesDto
@@ -49,6 +52,10 @@ public class ReceivablesDto
     public decimal TotalOverdue { get; set; }
     /// <summary>How many days the business gives to pay (Fase 26B); null without a term.</summary>
     public int? CreditTermDays { get; set; }
+    /// <summary>
+    /// Every how many days the business reminds what is overdue on WhatsApp (Fase 26C); null while the reminders are off.
+    /// </summary>
+    public int? CreditReminderEveryDays { get; set; }
 }
 
 public enum ReceivablesSort
@@ -72,10 +79,20 @@ public class CustomerAccountDto
     /// <summary>What they may still owe (never below 0); null without a limit.</summary>
     public decimal? Available { get; set; }
     public bool OverLimit { get; set; }
-    /// <summary>How many days the business gives to pay (Fase 26B); null without a term.</summary>
+    /// <summary>
+    /// How many days they have to pay (Fase 26B): their own term (Fase 26C), else the business's; null without either.
+    /// </summary>
     public int? CreditTermDays { get; set; }
+    /// <summary>Their own term (Fase 26C); null when the business's applies.</summary>
+    public int? OwnCreditTermDays { get; set; }
     /// <summary>What of what they owe is past the term (Fase 26B); 0 without a term.</summary>
     public decimal Overdue { get; set; }
+    /// <summary>
+    /// Every how many days the business reminds what is overdue on WhatsApp (Fase 26C); null while the reminders are off.
+    /// </summary>
+    public int? CreditReminderEveryDays { get; set; }
+    /// <summary>When the last reminder of what they owe went out to them (Fase 26C); null if none did.</summary>
+    public DateTimeOffset? LastReminderAt { get; set; }
     /// <summary>The orders owed, the oldest first (at most <see cref="GetCustomerAccountQuery.MaxOrders"/>).</summary>
     public List<CustomerAccountOrderDto> Orders { get; set; } = [];
     /// <summary>How many orders they owe, also beyond the ones listed.</summary>
@@ -98,7 +115,7 @@ public class CustomerAccountOrderDto
     /// <summary>What the business forgave of it (Fase 26B).</summary>
     public decimal WrittenOff { get; set; }
     public decimal Balance { get; set; }
-    /// <summary>The last day to pay it, in the business's calendar (Fase 26B); null without a term.</summary>
+    /// <summary>The last day to pay it by the customer's term, in the business's calendar (Fase 26B); null without a term.</summary>
     public DateOnly? DueOn { get; set; }
     /// <summary>Its last day to pay has passed.</summary>
     public bool IsOverdue { get; set; }
@@ -251,27 +268,41 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
     public async Task<ReceivablesDto> Handle(GetReceivablesQuery request, CancellationToken cancellationToken)
     {
         var term = await CreditTerm.ReadAsync(_context, cancellationToken);
-        var overdueBefore = term.OverdueBefore(_clock.UtcNow);
         var lines = Receivables.Lines(_context.Orders.AsNoTracking());
         if (!string.IsNullOrWhiteSpace(request.Search))
             lines = await MatchingAsync(lines, request.Search.Trim(), cancellationToken);
+        // Each customer's orders by their own term, else the business's (Fase 26C).
+        var overdue = await CreditTerm.OverdueAsync(_context, lines, term, _clock.UtcNow, cancellationToken);
         if (request.OverdueOnly)
         {
             // Every order of a customer with something overdue stays: what they owe is all of it.
-            var overduePhones = lines.Where(l => l.OwedSince < overdueBefore).Select(l => l.Phone);
+            var overduePhones = overdue.Select(l => l.Phone);
             lines = lines.Where(l => overduePhones.Contains(l.Phone));
         }
 
-        var customers = lines
+        var overdueByPhone = overdue
             .GroupBy(l => l.Phone)
-            .Select(g => new
+            .Select(g => new { Phone = g.Key, Overdue = g.Sum(l => l.Balance) });
+        var customers =
+            from customer in lines
+                .GroupBy(l => l.Phone)
+                .Select(g => new
+                {
+                    Phone = g.Key,
+                    Owed = g.Sum(l => l.Balance),
+                    Orders = g.Count(),
+                    Since = g.Min(l => l.CreatedAt)
+                })
+            join late in overdueByPhone on customer.Phone equals late.Phone into lates
+            from late in lates.DefaultIfEmpty()
+            select new
             {
-                Phone = g.Key,
-                Owed = g.Sum(l => l.Balance),
-                Overdue = g.Sum(l => l.OwedSince < overdueBefore ? l.Balance : 0m),
-                Orders = g.Count(),
-                Since = g.Min(l => l.CreatedAt)
-            });
+                customer.Phone,
+                customer.Owed,
+                Overdue = (decimal?)late.Overdue ?? 0m,
+                customer.Orders,
+                customer.Since
+            };
         var ordered = request.Sort == ReceivablesSort.Oldest
             ? customers.OrderBy(c => c.Since).ThenBy(c => c.Phone)
             : customers.OrderByDescending(c => c.Owed).ThenBy(c => c.Phone);
@@ -279,12 +310,16 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
         var (pageNumber, pageSize) = Paging.Normalize(request.PageNumber, request.PageSize);
         var count = await customers.CountAsync(cancellationToken);
         var totalOwed = await lines.SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
-        var totalOverdue = await lines.Where(l => l.OwedSince < overdueBefore).SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
+        var totalOverdue = await overdue.SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
         var page = await ordered.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        var reminderEveryDays = await CreditReminders.EveryDaysAsync(_context, cancellationToken);
 
-        // The page's names and limits: the customer record with each phone, else the name on the latest order owed.
+        // The page's names, limits and terms: the customer record with each phone, else the name on the latest order owed.
         var phones = page.Select(c => c.Phone).ToList();
         var records = await RecordsAsync(phones, cancellationToken);
+        var ownTerms = await CreditTerm.OwnTerms(_context.Customers.AsNoTracking())
+            .Where(t => phones.Contains(t.Phone))
+            .ToDictionaryAsync(t => t.Phone, t => t.Days, cancellationToken);
         var latestNames = (await lines
                 .Where(l => phones.Contains(l.Phone))
                 .Select(l => new { l.Phone, l.CustomerName, l.CreatedAt })
@@ -307,7 +342,8 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
                 Since = c.Since,
                 CreditLimit = limit,
                 OverLimit = limit is { } value && c.Owed > value,
-                Overdue = c.Overdue
+                Overdue = c.Overdue,
+                OwnCreditTermDays = ownTerms.TryGetValue(c.Phone, out var days) ? days : null
             };
         }).ToList();
 
@@ -316,7 +352,8 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
             Page = new PaginatedList<ReceivableDto>(items, count, pageNumber, pageSize),
             TotalOwed = totalOwed,
             TotalOverdue = totalOverdue,
-            CreditTermDays = term.Days
+            CreditTermDays = term.Days,
+            CreditReminderEveryDays = reminderEveryDays
         };
     }
 
@@ -704,7 +741,9 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
 
     public async Task<CustomerAccountDto> ReadAsync(IApplicationDbContext context, DateTimeOffset utcNow, CancellationToken cancellationToken)
     {
-        var term = await CreditTerm.ReadAsync(context, cancellationToken);
+        // Their own term (Fase 26C), else the business's.
+        var ownDays = await CreditTerm.OwnDaysAsync(context, Phone, cancellationToken);
+        var term = (await CreditTerm.ReadAsync(context, cancellationToken)).For(ownDays);
         var overdueBefore = term.OverdueBefore(utcNow);
         var lines = Receivables.OfCustomer(context.Orders.AsNoTracking(), Phone);
         var owed = await lines.SumAsync(l => (decimal?)l.Balance, cancellationToken) ?? 0m;
@@ -771,6 +810,12 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
             .Take(GetCustomerAccountQuery.RecentWriteOffs)
             .ToListAsync(cancellationToken);
 
+        var lastReminderAt = await context.OutgoingMessages.AsNoTracking()
+            .Where(m => m.Purpose == MessagePurpose.CreditReminder
+                && m.Status == OutgoingMessageStatus.Sent
+                && variants.Contains(m.Phone))
+            .MaxAsync(m => m.SentAt, cancellationToken);
+
         var name = Customer?.Name ?? await context.Orders.AsNoTracking()
             .Where(o => o.CustomerPhone != null && variants.Contains(o.CustomerPhone))
             .OrderByDescending(o => o.CreatedAt)
@@ -788,7 +833,10 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
             Available = limit is { } value ? Math.Max(0m, value - owed) : null,
             OverLimit = limit is { } max && owed > max,
             CreditTermDays = term.Days,
+            OwnCreditTermDays = ownDays,
             Overdue = overdue,
+            CreditReminderEveryDays = await CreditReminders.EveryDaysAsync(context, cancellationToken),
+            LastReminderAt = lastReminderAt,
             Orders = orders,
             OrdersCount = count,
             RecentPayments = payments,

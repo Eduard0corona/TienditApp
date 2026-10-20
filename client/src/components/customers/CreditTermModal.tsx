@@ -69,8 +69,9 @@ export default function CreditTermModal({ creditTermDays, onSaved, onClose }: Cr
           </div>
           {showProblem && <div id={ids.problem} className="invalid-feedback d-block">{problem}</div>}
           <div id={ids.help} className="form-text">
-            Se cuentan desde el día de la venta. Lo que pase del plazo se ve como vencido en Por cobrar, el estado de cuenta y
-            Vender; no cobra intereses ni impide fiar.
+            Se cuentan desde que el cliente empieza a deber: el día de la venta fiada o de la entrega sin cobrar. Lo que pase
+            del plazo se ve como vencido en Por cobrar, el estado de cuenta y Vender; no cobra intereses ni impide fiar. A un
+            cliente le puedes dar su propio plazo en Clientes, con «Fiado» en su fila.
           </div>
           {error && <div id={ids.error} className="alert alert-danger py-2 mt-3 mb-0" role="alert">{error}</div>}
         </Modal.Body>

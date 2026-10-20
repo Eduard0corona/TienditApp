@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -41,6 +42,19 @@ public class GetMessageTemplatesQueryHandler : IRequestHandler<GetMessageTemplat
 public static class MessageTemplateLimits
 {
     public const int MaxPerBusiness = 100;
+
+    public const string CreditReminderManagersOnlyMessage =
+        "Solo el dueño o un administrador escribe los recordatorios del fiado.";
+
+    /// <summary>
+    /// What a reminder of the fiado says to the customers who owe is the owner's decision (Fase 26C, ADR 0035), like
+    /// turning the reminders on: managing campaigns is not enough to write or change one.
+    /// </summary>
+    public static async Task EnsureCanWriteAsync(MessagePurpose purpose, CurrentAccessContext access, CancellationToken cancellationToken)
+    {
+        if (purpose == MessagePurpose.CreditReminder && !await access.IsTenantManagerAsync(cancellationToken))
+            throw new ForbiddenAccessException(CreditReminderManagersOnlyMessage);
+    }
 }
 
 [RequiresPermission(TenantPermission.ManageCampaigns)]
@@ -59,7 +73,7 @@ public class CreateMessageTemplateCommandValidator : AbstractValidator<CreateMes
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(MessageTemplate.MaxNameLength);
         RuleFor(x => x.Purpose)
-            .Must(purpose => purpose is MessagePurpose.Campaign or MessagePurpose.AppointmentReminder)
+            .Must(purpose => purpose is MessagePurpose.Campaign or MessagePurpose.AppointmentReminder or MessagePurpose.CreditReminder)
             .WithMessage(MessageTemplate.TemplatePurposeError);
         RuleFor(x => x.Body).NotEmpty().MaximumLength(MessageTemplate.MaxBodyLength);
         RuleFor(x => x.ProviderTemplateName).MaximumLength(MessageTemplate.MaxProviderTemplateNameLength);
@@ -71,15 +85,18 @@ public class CreateMessageTemplateCommandHandler : IRequestHandler<CreateMessage
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenant;
+    private readonly CurrentAccessContext _access;
 
-    public CreateMessageTemplateCommandHandler(IApplicationDbContext context, ICurrentTenantService tenant)
+    public CreateMessageTemplateCommandHandler(IApplicationDbContext context, ICurrentTenantService tenant, CurrentAccessContext access)
     {
         _context = context;
         _tenant = tenant;
+        _access = access;
     }
 
     public async Task<Result<MessageTemplateDto>> Handle(CreateMessageTemplateCommand request, CancellationToken cancellationToken)
     {
+        await MessageTemplateLimits.EnsureCanWriteAsync(request.Purpose, _access, cancellationToken);
         if (await _context.MessageTemplates.CountAsync(cancellationToken) >= MessageTemplateLimits.MaxPerBusiness)
             return Result.Failure<MessageTemplateDto>($"Un negocio puede tener hasta {MessageTemplateLimits.MaxPerBusiness} plantillas.");
 
@@ -132,14 +149,20 @@ public class UpdateMessageTemplateCommandValidator : AbstractValidator<UpdateMes
 public class UpdateMessageTemplateCommandHandler : IRequestHandler<UpdateMessageTemplateCommand, Result<MessageTemplateDto>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly CurrentAccessContext _access;
 
-    public UpdateMessageTemplateCommandHandler(IApplicationDbContext context) => _context = context;
+    public UpdateMessageTemplateCommandHandler(IApplicationDbContext context, CurrentAccessContext access)
+    {
+        _context = context;
+        _access = access;
+    }
 
     public async Task<Result<MessageTemplateDto>> Handle(UpdateMessageTemplateCommand request, CancellationToken cancellationToken)
     {
         var template = await _context.MessageTemplates.FirstOrDefaultAsync(t => t.Id == request.Id, cancellationToken);
         if (template is null)
             return Result.Failure<MessageTemplateDto>("La plantilla no existe.");
+        await MessageTemplateLimits.EnsureCanWriteAsync(template.Purpose, _access, cancellationToken);
 
         try
         {

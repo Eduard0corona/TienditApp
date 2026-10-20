@@ -187,6 +187,67 @@ public sealed class MessagingWorker
         return queued;
     }
 
+    /// <summary>
+    /// Queues the reminders of what customers owe past their term (Fase 26C) in each business that turned them on; the
+    /// planner decides whether it is the business's hour and who is due.
+    /// </summary>
+    /// <returns>Reminders queued.</returns>
+    public async Task<int> QueueCreditRemindersAsync(CancellationToken cancellationToken)
+    {
+        List<Guid> tenants;
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            // Which businesses have credit reminders on, before entering each one's scope below.
+            tenants = await context.TenantSettings
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(s => s.CreditRemindersEnabled
+                    && context.Tenants.Any(t => t.Id == s.TenantId && t.Status == TenantStatus.Active))
+                .Select(s => s.TenantId)
+                .ToListAsync(cancellationToken);
+        }
+
+        var queued = 0;
+        foreach (var tenantId in tenants)
+        {
+            try
+            {
+                await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
+                var services = scope.ServiceProvider;
+                var context = services.GetRequiredService<ApplicationDbContext>();
+                var settings = await context.TenantSettings.AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
+                if (settings is null)
+                    continue;
+
+                var count = await services.GetRequiredService<CreditReminderPlanner>().QueueDueAsync(settings, cancellationToken);
+                if (count == 0)
+                    continue;
+
+                await context.SaveChangesAsync(cancellationToken);
+                queued += count;
+            }
+            catch (DbUpdateException ex)
+            {
+                // Another instance queued some of them at the same time (unique key); the next pass adds the rest.
+                _logger.LogInformation(
+                    LogRedaction.RedactDatabaseMessages(ex),
+                    "Credit reminders of tenant {TenantId} were not queued in this pass",
+                    tenantId);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(
+                    LogRedaction.RedactDatabaseMessages(ex),
+                    "Credit reminders of tenant {TenantId} could not be queued",
+                    tenantId);
+            }
+        }
+
+        return queued;
+    }
+
     /// <returns>Messages claimed; zero when nothing was due.</returns>
     public async Task<int> DispatchDueAsync(CancellationToken cancellationToken)
     {

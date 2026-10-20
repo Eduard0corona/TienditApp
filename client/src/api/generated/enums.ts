@@ -183,6 +183,7 @@ export const MessagePurpose = {
   Campaign: 0,
   AppointmentReminder: 1,
   AppointmentNotice: 2,
+  CreditReminder: 3,
 } as const;
 export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
 

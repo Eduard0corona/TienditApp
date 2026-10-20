@@ -15,6 +15,14 @@ public static class MessagingDefaults
         => "Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora} a domicilio (CP " + postalCode
             + ") con {negocio}. Si necesitas cambiarla, respóndenos este mensaje. Escribe BAJA si no quieres recibir recordatorios.";
 
+    /// <summary>
+    /// Used while the business has not chosen a credit reminder template (Fase 26C): what the customer owes in all and what
+    /// of it is past its last day to pay.
+    /// </summary>
+    public const string CreditReminderBody =
+        "Hola {nombre}, te recordamos que en {negocio} tienes un saldo de {monto}; {vencido} venció el {fecha}. "
+        + "Si ya pagaste, ignora este mensaje. Escribe BAJA si no quieres recibir recordatorios.";
+
     public const string OptOutReply =
         "Listo, ya no te enviaremos promociones ni recordatorios. Seguirás recibiendo los avisos de tus pedidos y citas. "
         + "Escribe ALTA si quieres volver a recibirlos.";

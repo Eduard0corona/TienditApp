@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { messagingApi } from '../../api/messagingApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -13,9 +13,10 @@ import {
 import { formatDateTime } from '../../utils/dates';
 import { MESSAGE_STATUS } from './campaignLabels';
 
-function MessageHistory({ title, hint, empty, history }: {
+/** The last messages of one purpose and what happened to each: sent, failed or skipped, with why. */
+export function MessageHistory({ title, hint, empty, history }: {
   title: string;
-  hint?: string;
+  hint?: ReactNode;
   empty: string;
   history: PaginatedList<OutgoingMessageDto> | null;
 }) {

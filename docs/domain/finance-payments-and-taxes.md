@@ -163,7 +163,7 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
 - **El límite** (`Customer.CreditLimit`, `decimal(18,2)`) se compara con lo que debe más lo que deja la venta (su total menos los pagos que la acompañan), en `decimal`, sin redondeos intermedios: la venta cabe si la suma no pasa del límite.
 - **El abono** se reparte en orden (el pedido más viejo primero, luego el folio): cada parte es `min(lo que queda del abono, saldo del pedido)`, un `OrderPayment` en la caja de quien cobra, con el método del abono. Las partes suman el abono exacto; con efectivo, `CashReceived` de la última parte es su monto más el cambio, así que el cambio del abono sale una vez. Un abono mayor que lo que debe se rechaza: no hay saldo a favor.
 - **Lo que no cambia:** el corte y los reportes (un abono es un pago con su método), el CFDI (un pedido con saldo ya se timbra PPD) y los cobros en Pedidos, que siguen siendo pago por pedido.
-- **Pendiente** (Fase 26C en adelante): saldo a favor, intereses, recordatorios y un plazo por cliente.
+- **Pendiente:** saldo a favor (Fase 26D) e intereses. El plazo llegó en la 26B; el plazo por cliente y los recordatorios, en la 26C.
 
 ## Condonar y plazo del fiado (Fase 26B)
 
@@ -175,6 +175,15 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
 - **El plazo** (`TenantSettings.CreditTermDays`, de 1 a 120 días o sin plazo) solo dice qué está vencido: un pedido vence al día siguiente de su último día para pagar, el día en que se empezó a deber más el plazo, en la zona horaria del negocio. Una venta fiada se debe desde que se vendió; un pedido entregado sin cobrar, desde que se entregó. No cobra intereses ni impide fiar.
 - **El CFDI va por el total:** lo condonado se queda como no pagado en el borrador (PPD si queda algo sin pagar), con un aviso de que requiere una nota de crédito (CFDI de egreso), que todavía no se genera.
 - **Lo que no cambia:** el corte, los reportes por cobros y las ventas. Lo condonado se ve en cada pedido, en la cuenta del cliente y en la actividad del negocio.
+
+## Plazo por cliente y recordatorios del fiado (Fase 26C)
+
+[ADR 0035](../adr/0035-customer-credit-term-and-reminders.md):
+
+- **El plazo que cuenta** es el del cliente (`Customer.CreditTermDays`, de 1 a 120 días) o, si no tiene, el del negocio, con la misma cuenta de la 26B: un pedido vence al día siguiente del día en que se empezó a deber más el plazo, en la zona horaria del negocio.
+- **Lo vencido lo suma la base** (`CreditTerm.OverdueAsync`): los pedidos que se deben se juntan con el plazo propio de su teléfono, y cada plazo en uso es una condición con su propio instante. Los saldos siguen en `decimal`.
+- **El recordatorio** dice lo que se debe en total (`{monto}`), lo vencido (`{vencido}`) y el último día para pagar que ya pasó (`{fecha}`). Las cantidades se escriben como `$1,234.50`, igual en cualquier servidor.
+- **Lo que no cambia:** ni el saldo, ni la caja, ni el CFDI. Recordar no cobra intereses ni impide fiar.
 
 ## Otros cálculos
 

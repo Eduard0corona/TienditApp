@@ -13,7 +13,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// Fiado (Fase 26A) through the API: each business gives credit only to its own customers, sells on credit, lists who owes
 /// and takes account payments only over its own orders, even for the same phone; the owner sets the limit, and selling on
 /// credit or taking a payment needs ChargeOrders. Fase 26B: each business forgives only what its own customers owe it and
-/// keeps its own term, and only owners and admins forgive or set the term.
+/// keeps its own term, and only owners and admins forgive or set the term. Fase 26C: each business gives terms only to its
+/// own customers and keeps its own credit reminders, and only owners and admins set either.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantCustomerCreditSqlServerTests
@@ -182,6 +183,58 @@ public sealed class CrossTenantCustomerCreditSqlServerTests
         Assert.Equal(owed, undone.GetProperty("owed").GetDecimal());
         Assert.Equal(JsonValueKind.String, undone.GetProperty("recentWriteOffs")[0].GetProperty("reversedAt").ValueKind);
         Assert.Equal(0, await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerAccountWriteOffReversed")));
+    }
+
+    [SqlServerFact]
+    public async Task CustomerTermsAndReminders_ShouldBeOnlyTheBusinesses_AndTheOwners()
+    {
+        var mine = await _api.SignUpAsync("recordar-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("recordar-b", TwoBusinessesApi.FoodBusiness);
+        var customer = await TwoBusinessesApi.IdAsync(mine.Client, Customers, new { name = "Ana López", phone = Phone });
+        var theirCustomer = await TwoBusinessesApi.IdAsync(theirs.Client, Customers, new { name = "Ana L.", phone = Phone });
+        var cashier = await EmployeeAsync(mine, "ManageOrders", "ChargeOrders", "ManageCash", "ManageCustomers", "ManageCampaigns");
+
+        // Another business does not find my customer to give her a term; its own Ana keeps its own.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await theirs.Client.PutAsJsonAsync($"{Customers}/{customer}/credit-term", new { creditTermDays = 3 })).StatusCode);
+        var theirTerm = await TwoBusinessesApi.ReadAsync(await theirs.Client.PutAsJsonAsync($"{Customers}/{theirCustomer}/credit-term", new { creditTermDays = 3 }));
+        Assert.Equal(3, theirTerm.GetProperty("creditTermDays").GetInt32());
+        Assert.Equal(JsonValueKind.Null,
+            (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"{Customers}/{customer}"))).GetProperty("creditTermDays").ValueKind);
+
+        // Who charges and looks after customers (and runs campaigns) neither gives a term nor sets the reminders.
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await cashier.PutAsJsonAsync($"{Customers}/{customer}/credit-term", new { creditTermDays = 7 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync($"{Customers}/credit-reminders")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await cashier.PutAsJsonAsync($"{Customers}/credit-reminders", new { enabled = false, everyDays = 7 })).StatusCode);
+        var mineTerm = await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"{Customers}/{customer}/credit-term", new { creditTermDays = 7 }));
+        Assert.Equal(7, mineTerm.GetProperty("creditTermDays").GetInt32());
+
+        // What the reminders say is the owner's too: campaigns may write their own templates, not the fiado's.
+        const string templates = "/api/v1/messaging/templates";
+        Assert.Equal(HttpStatusCode.OK,
+            (await cashier.PostAsJsonAsync(templates, new { name = "Promo", purpose = 0, body = "Hola {nombre}" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await cashier.PostAsJsonAsync(templates, new { name = "Cobro", purpose = 3, body = "Debes {vencido}" })).StatusCode);
+        var ownersTemplate = await TwoBusinessesApi.IdAsync(mine.Client, templates, new { name = "Cobro", purpose = 3, body = "Hola {nombre}, debes {vencido}." });
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PutAsJsonAsync($"{templates}/{ownersTemplate}",
+            new { name = "Cobro", body = "Paga ya {vencido}", isActive = true })).StatusCode);
+
+        // Without WhatsApp a business cannot turn them on; its settings are its own.
+        var refused = await mine.Client.PutAsJsonAsync($"{Customers}/credit-reminders", new { enabled = true, everyDays = 5 });
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var theirReminders = await TwoBusinessesApi.ReadAsync(await theirs.Client.PutAsJsonAsync($"{Customers}/credit-reminders", new { enabled = false, everyDays = 3 }));
+        Assert.Equal(3, theirReminders.GetProperty("everyDays").GetInt32());
+        var myReminders = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"{Customers}/credit-reminders"));
+        Assert.Equal((false, 7, 1), (myReminders.GetProperty("enabled").GetBoolean(), myReminders.GetProperty("everyDays").GetInt32(),
+            myReminders.GetProperty("customersWithOwnTerm").GetInt32()));
+        Assert.Equal((1, 1), (
+            await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerCreditTermUpdated")),
+            await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CustomerCreditTermUpdated"))));
+        Assert.Equal((0, 1), (
+            await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CreditRemindersUpdated")),
+            await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CreditRemindersUpdated"))));
     }
 
     private static object CreditSale(Guid product, Guid customer) => new

@@ -30,6 +30,7 @@ internal static class BeforeCustomerWriteOffs
         modelBuilder.Entity<Order>().Ignore(o => o.WrittenOffAmount);
         modelBuilder.Ignore<OrderWriteOff>();
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.CreditTermDays);
+        BeforeCustomerCreditReminders.Ignore(modelBuilder);
     }
 
     private sealed class Context(

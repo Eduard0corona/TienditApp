@@ -13,6 +13,8 @@ public class CustomerDto
     public string? Notes { get; set; }
     /// <summary>How much the business lets them owe (Fase 26A); null when they are not sold on credit.</summary>
     public decimal? CreditLimit { get; set; }
+    /// <summary>Their own term to pay what they owe (Fase 26C); null when the business's applies.</summary>
+    public int? CreditTermDays { get; set; }
     /// <summary>Only in the detail of one customer (the list leaves it empty).</summary>
     public List<CustomerAddressDto> Addresses { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
@@ -29,6 +31,7 @@ public class CustomerDto
         IsActive = customer.IsActive,
         Notes = customer.Notes,
         CreditLimit = customer.CreditLimit,
+        CreditTermDays = customer.CreditTermDays,
         Addresses = customer.Addresses
             .OrderByDescending(a => a.IsDefault)
             .ThenBy(a => a.CreatedAt)

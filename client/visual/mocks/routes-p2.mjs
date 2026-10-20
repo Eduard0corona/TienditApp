@@ -35,6 +35,7 @@ export function phase2Data(data) {
     whatsAppConnected: true, appointmentsEnabled: true, appointmentRemindersEnabled: true, appointmentReminderHoursBefore: 24,
     appointmentReminderTemplateId: 't-cita', defaultReminderBody: 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora} en {negocio}. Si no puedes venir, respóndenos este mensaje. Escribe BAJA si no quieres recibir recordatorios.',
     minReminderHoursBefore: 1, maxReminderHoursBefore: 72, campaignPlaceholders: ['nombre', 'negocio'], reminderPlaceholders: ['nombre', 'negocio', 'servicio', 'fecha', 'hora'],
+    creditReminderPlaceholders: ['nombre', 'negocio', 'monto', 'vencido', 'fecha'],
   };
   return { templates, campaigns, messages, optOuts, settings };
 }

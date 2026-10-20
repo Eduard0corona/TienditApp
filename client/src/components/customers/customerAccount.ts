@@ -81,6 +81,45 @@ export function writeOffProblem(typed: string, maxCents: number): string | null 
   return null;
 }
 
+/** The days between two reminders the server takes (TenantSettings.MinCreditReminderEveryDays and MaxCreditReminderEveryDays). */
+export const MIN_REMINDER_EVERY_DAYS = 1;
+export const MAX_REMINDER_EVERY_DAYS = 30;
+
+/** What the days between reminders typed mean, within the range the server reports; null when they can be saved. */
+export function reminderEveryDaysProblem(typed: string, min = MIN_REMINDER_EVERY_DAYS, max = MAX_REMINDER_EVERY_DAYS): string | null {
+  if (!/^\d{1,3}$/.test(typed.trim())) return 'Escribe cada cuántos días, por ejemplo 7.';
+  const days = Number(typed.trim());
+  if (days < min || days > max) return `Los recordatorios se repiten cada ${min} a ${max} días.`;
+  return null;
+}
+
+/**
+ * The reminder of what is overdue as a customer would read it (Fase 26C), with made-up amounts: the server fills in the
+ * real ones of each customer.
+ */
+export function previewReminder(body: string, businessName: string): string {
+  const sample: Record<string, string> = {
+    nombre: 'Ana',
+    negocio: businessName,
+    monto: formatMoney(1160),
+    vencido: formatMoney(500),
+    fecha: 'lunes 5 de octubre',
+  };
+  return body.replace(/\{([a-zA-Z_]+)\}/g, (match, name: string) => sample[name.toLowerCase()] ?? match);
+}
+
+/**
+ * What the account says of the WhatsApp reminders (Fase 26C): when the last one went out, and whether more will while
+ * something stays overdue; null when there is nothing to say.
+ */
+export function describeReminder(account: Pick<CustomerAccount, 'lastReminderAt' | 'creditReminderEveryDays' | 'overdue'>): string | null {
+  const every = account.creditReminderEveryDays;
+  const repeats = every != null && account.overdue > 0 ? ` Se repite cada ${describeTerm(every)} mientras deba algo vencido.` : '';
+  if (account.lastReminderAt) return `Último recordatorio por WhatsApp: ${formatDate(account.lastReminderAt)}.${repeats}`;
+  if (repeats) return `Se le recordará lo vencido por WhatsApp.${repeats}`;
+  return null;
+}
+
 /** What the limit typed means, in the owner's words; null when it can be saved. */
 export function creditLimitProblem(typed: string): string | null {
   const limit = parseMoneyInput(typed);

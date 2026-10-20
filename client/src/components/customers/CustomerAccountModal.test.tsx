@@ -165,6 +165,21 @@ describe('CustomerAccountModal', () => {
     expect(screen.queryByRole('button', { name: /^Deshacer/ })).not.toBeInTheDocument();
   });
 
+  it('says the term is the customer\'s own, and when the last reminder went out', async () => {
+    signIn(['ManageCustomers']);
+    request.mockResolvedValue({
+      ...WITH_TERM,
+      ownCreditTermDays: 7,
+      creditReminderEveryDays: 3,
+      lastReminderAt: '2026-10-19T17:00:00Z',
+    } as never);
+    renderModal();
+
+    expect(await screen.findByText('Plazo de 7 días (solo para este cliente) ·')).toBeInTheDocument();
+    expect(screen.getByText('Último recordatorio por WhatsApp: 19 oct 2026. Se repite cada 3 días mientras deba algo vencido.'))
+      .toBeInTheDocument();
+  });
+
   it('lets an owner undo a write-off made by mistake, after asking, and shows it undone', async () => {
     signIn([], 'TenantAdmin');
     confirm.mockResolvedValue(true);

@@ -4,12 +4,13 @@ import { messagingApi } from '../../api/messagingApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useToast } from '../../hooks/useToast';
 import { MessagePurpose, type MessageTemplateDto } from '../../types';
-import { PLACEHOLDER_HELP } from './campaignLabels';
+import { CREDIT_PLACEHOLDER_HELP, PLACEHOLDER_HELP } from './campaignLabels';
 
 const PURPOSE_LABEL: Record<MessagePurpose, string> = {
   [MessagePurpose.Campaign]: 'Campaña',
   [MessagePurpose.AppointmentReminder]: 'Recordatorio de cita',
   [MessagePurpose.AppointmentNotice]: 'Aviso de cita',
+  [MessagePurpose.CreditReminder]: 'Recordatorio del fiado',
 };
 
 // Appointment notices are written by the system: no template uses them.
@@ -17,6 +18,14 @@ const PLACEHOLDERS: Record<MessagePurpose, string[]> = {
   [MessagePurpose.Campaign]: ['nombre', 'negocio'],
   [MessagePurpose.AppointmentReminder]: ['nombre', 'negocio', 'servicio', 'fecha', 'hora'],
   [MessagePurpose.AppointmentNotice]: [],
+  [MessagePurpose.CreditReminder]: ['nombre', 'negocio', 'monto', 'vencido', 'fecha'],
+};
+
+const BODY_EXAMPLE: Record<MessagePurpose, string> = {
+  [MessagePurpose.Campaign]: 'Hola {nombre}, este fin de semana tenemos 2x1 en {negocio}.',
+  [MessagePurpose.AppointmentReminder]: 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora}.',
+  [MessagePurpose.AppointmentNotice]: '',
+  [MessagePurpose.CreditReminder]: 'Hola {nombre}, en {negocio} tienes un saldo de {monto}; {vencido} venció el {fecha}.',
 };
 
 type Draft = {
@@ -130,7 +139,7 @@ export default function TemplatesTab() {
         {loading ? (
           <p className="text-muted mb-0">Cargando…</p>
         ) : templates.length === 0 ? (
-          <p className="text-muted mb-0">Todavía no hay plantillas. Crea una para tu primera campaña.</p>
+          <p className="text-muted mb-0">Todavía no hay plantillas. Crea una para tu primera campaña o tus recordatorios.</p>
         ) : (
           <div className="table-responsive">
             <table className="table table-sm align-middle mb-0">
@@ -204,13 +213,14 @@ export default function TemplatesTab() {
                     onChange={(event) => setDraft({ ...draft, purpose: Number(event.target.value) as MessagePurpose })}>
                     <option value={MessagePurpose.Campaign}>Campaña</option>
                     <option value={MessagePurpose.AppointmentReminder}>Recordatorio de cita</option>
+                    <option value={MessagePurpose.CreditReminder}>Recordatorio del fiado</option>
                   </select>
                 </div>
               </div>
               <label className="form-label" htmlFor="template-body">Mensaje</label>
               <div className="d-flex flex-wrap gap-1 mb-1">
                 {PLACEHOLDERS[draft.purpose].map((name) => (
-                  <button key={name} type="button" className="btn btn-sm btn-soft-primary" title={PLACEHOLDER_HELP[name]}
+                  <button key={name} type="button" className="btn btn-sm btn-soft-primary" title={(draft.purpose === MessagePurpose.CreditReminder ? CREDIT_PLACEHOLDER_HELP : PLACEHOLDER_HELP)[name]}
                     onClick={() => insertPlaceholder(name)}>
                     {`{${name}}`}
                   </button>
@@ -218,9 +228,7 @@ export default function TemplatesTab() {
               </div>
               <textarea id="template-body" ref={bodyRef} className="form-control" rows={4} maxLength={1000} required
                 value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })}
-                placeholder={draft.purpose === MessagePurpose.Campaign
-                  ? 'Hola {nombre}, este fin de semana tenemos 2x1 en {negocio}.'
-                  : 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora}.'} />
+                placeholder={BODY_EXAMPLE[draft.purpose]} />
               <div className="form-text">{draft.body.length}/1000. Incluye cómo darse de baja: «Escribe BAJA si no quieres recibir mensajes».</div>
 
               <div className="row g-2 mt-2">
@@ -245,7 +253,7 @@ export default function TemplatesTab() {
                 <div className="form-check form-switch mt-3">
                   <input id="template-active" type="checkbox" role="switch" className="form-check-input" checked={draft.isActive}
                     onChange={(event) => setDraft({ ...draft, isActive: event.target.checked })} />
-                  <label className="form-check-label" htmlFor="template-active">Activa (se puede elegir en campañas nuevas)</label>
+                  <label className="form-check-label" htmlFor="template-active">Activa (se puede elegir en campañas y recordatorios)</label>
                 </div>
               )}
               {formError && <div className="alert alert-danger mt-3 mb-0">{formError}</div>}

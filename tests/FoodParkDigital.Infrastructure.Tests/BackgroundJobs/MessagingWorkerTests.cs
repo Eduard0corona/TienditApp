@@ -98,6 +98,39 @@ public class MessagingWorkerTests
         Assert.Equal(0, await worker.CompleteFinishedCampaignsAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task CreditReminders_ShouldBeQueuedOnlyWhereTurnedOn_AndSentInTheirBusiness()
+    {
+        await using var host = CreateHost(out var whatsApp);
+        var on = await SeedOverdueAsync(host, "a", "+525511111111", remindersOn: true);
+        await SeedOverdueAsync(host, "b", "+525522222222", remindersOn: false);
+        var suspended = await SeedOverdueAsync(host, "c", "+525533333333", remindersOn: true);
+        await host.InScopeAsync(async services =>
+        {
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            (await context.Tenants.IgnoreQueryFilters().SingleAsync(t => t.Id == suspended)).SetStatus(TenantStatus.Suspended);
+            return await context.SaveChangesAsync();
+        });
+        var worker = host.Get<MessagingWorker>();
+
+        var queued = await worker.QueueCreditRemindersAsync(CancellationToken.None);
+        var again = await worker.QueueCreditRemindersAsync(CancellationToken.None);
+        // The auditing interceptor of production stamps when it was queued: a reminder goes out only that business day.
+        await host.InScopeAsync(async services =>
+        {
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            foreach (var queuedMessage in await context.OutgoingMessages.IgnoreQueryFilters().ToListAsync())
+                queuedMessage.CreatedAt = host.Clock.UtcNow;
+            return await context.SaveChangesAsync();
+        });
+        var dispatched = await worker.DispatchDueAsync(CancellationToken.None);
+
+        Assert.Equal((1, 0, 1), (queued, again, dispatched));
+        Assert.Equal((on, "+525511111111"), Assert.Single(whatsApp.Sent));
+        var message = Assert.Single(await AllAsync(host, c => c.OutgoingMessages));
+        Assert.Equal((MessagePurpose.CreditReminder, OutgoingMessageStatus.Sent), (message.Purpose, message.Status));
+    }
+
     private static OutboxTestHost CreateHost(out FakeWhatsApp whatsApp, int maxAttempts = 6)
     {
         var fake = new FakeWhatsApp();
@@ -115,6 +148,7 @@ public class MessagingWorkerTests
             services.AddScoped<CampaignAudienceResolver>();
             services.AddScoped<CampaignLauncher>();
             services.AddScoped<AppointmentReminderPlanner>();
+            services.AddScoped<CreditReminderPlanner>();
             services.AddScoped<OutgoingMessageSender>();
             services.AddSingleton<MessagingSignal>();
             services.AddSingleton<MessagingWorker>();
@@ -144,6 +178,41 @@ public class MessagingWorkerTests
             await context.SaveChangesAsync();
             return (tenant.Id, campaign.Id);
         });
+
+    /// <summary>
+    /// A business with a 7-day term, WhatsApp connected and a customer who owes a sale on credit of 20 days ago (Fase 26C).
+    /// </summary>
+    private static async Task<Guid> SeedOverdueAsync(OutboxTestHost host, string slug, string phone, bool remindersOn)
+    {
+        var (tenantId, orderId) = await host.InScopeAsync(async services =>
+        {
+            var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
+            services.GetRequiredService<ICurrentTenantService>().SetTenant(tenant.Id);
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            var settings = new TenantSettings(tenant.Id, TenantCapability.Retail);
+            settings.SetCreditTermDays(7);
+            settings.UpdateCreditReminders(remindersOn, 7, null);
+            var config = new WhatsAppConfig(tenant.Id);
+            config.Update(true, "token", $"phone-{slug}", "waba", "+52 55 0000 0000");
+            var stateMachine = new RetailOrderStateMachine();
+            var order = new Order(tenant.Id, null, null, true, $"V-{slug}-1", BusinessType.Retail, OrderType.Retail, "Ana", phone, null, null);
+            order.AddItem(Guid.NewGuid(), "Jabón", 1, 100m);
+            order.TransitionTo(OrderStatus.Confirmed, stateMachine, "cajero");
+            order.SellOnCredit();
+            order.CloseIfPaidCounterSale(stateMachine, waitsForKitchen: false, "cajero");
+            context.AddRange(tenant, settings, config, order);
+            await context.SaveChangesAsync();
+            return (tenant.Id, order.Id);
+        });
+        await host.InScopeAsync(async services =>
+        {
+            services.GetRequiredService<ICurrentTenantService>().SetTenant(tenantId);
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            (await context.Orders.SingleAsync(o => o.Id == orderId)).CreatedAt = host.Clock.UtcNow.AddDays(-20);
+            return await context.SaveChangesAsync();
+        });
+        return tenantId;
+    }
 
     private static Task<List<T>> AllAsync<T>(OutboxTestHost host, Func<ApplicationDbContext, IQueryable<T>> set)
         where T : class

@@ -15,15 +15,25 @@ public static partial class MessageTemplateText
     public const string Service = "servicio";
     public const string Date = "fecha";
     public const string Time = "hora";
+    /// <summary>What the customer owes in all (Fase 26C).</summary>
+    public const string Amount = "monto";
+    /// <summary>What of it is past the term (Fase 26C).</summary>
+    public const string Overdue = "vencido";
 
     private static readonly string[] CampaignPlaceholders = [Name, Business];
     private static readonly string[] ReminderPlaceholders = [Name, Business, Service, Date, Time];
+    // {fecha} is the oldest last day to pay that passed.
+    private static readonly string[] CreditReminderPlaceholders = [Name, Business, Amount, Overdue, Date];
 
     [GeneratedRegex(@"\{([a-zA-Z_]+)\}")]
     private static partial Regex PlaceholderPattern();
 
-    public static IReadOnlyList<string> AllowedPlaceholders(MessagePurpose purpose)
-        => purpose == MessagePurpose.AppointmentReminder ? ReminderPlaceholders : CampaignPlaceholders;
+    public static IReadOnlyList<string> AllowedPlaceholders(MessagePurpose purpose) => purpose switch
+    {
+        MessagePurpose.AppointmentReminder => ReminderPlaceholders,
+        MessagePurpose.CreditReminder => CreditReminderPlaceholders,
+        _ => CampaignPlaceholders
+    };
 
     /// <summary>The placeholders of the text, once each, in the order they first appear.</summary>
     public static IReadOnlyList<string> GetPlaceholders(string body)

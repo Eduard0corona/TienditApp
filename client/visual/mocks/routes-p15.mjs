@@ -4,7 +4,10 @@
 // cancelled, with a phone and a balance, and delivered or sold on credit, except what a courier still collects. The limit
 // is `creditLimit` of the customer in `data.customers`; without one, nobody is sold on credit. Fase 26B: what the business
 // forgave (`writtenOffAmount` and `writeOffs` of each order) is not owed, and with a term (`data.creditTermDays`) what is
-// past it is overdue, by the business's calendar (America/Mexico_City, UTC-6).
+// past it is overdue, by the business's calendar (America/Mexico_City, UTC-6). Fase 26C: a customer record's own term
+// (`creditTermDays`, the shortest when two share the phone) replaces the business's, and with the reminders on
+// (`data.creditReminders`, routes-p17) Por cobrar and the account say every how many days; `data.lastCreditReminders`
+// keeps the last reminder sent to each phone key.
 import { NOW_ISO } from './data.mjs';
 
 // OrderStatus as the contract numbers it.
@@ -23,11 +26,26 @@ export const balanceOf = (order) => r2(order.total - order.paidAmount - (order.w
 /** The business's calendar date of an instant ("2026-10-04"). */
 const businessDate = (iso) => new Date(new Date(iso).getTime() - TZ_OFFSET_MS).toISOString().slice(0, 10);
 
-/** The last day to pay an order with the business's term (CreditTerm.DueOn); null without a term. */
+/** The term of a customer of their own (CreditTerm.OwnTerms): the shortest of the records with the phone key; else null. */
+export function ownTermOf(data, key) {
+  const terms = data.customers
+    .filter((c) => !c.isPublicGeneral && c.creditTermDays != null && phoneKey(c.phone) === key)
+    .map((c) => c.creditTermDays);
+  return terms.length > 0 ? Math.min(...terms) : null;
+}
+
+/** The term the orders of a phone key fall due with: their own, else the business's. */
+const termOf = (data, key) => ownTermOf(data, key) ?? data.creditTermDays ?? null;
+
+/** Every how many days the reminders repeat (CreditReminders.EveryDaysAsync); null while they are off. */
+export const reminderEveryDays = (data) => (data.creditReminders?.enabled ? data.creditReminders.everyDays : null);
+
+/** The last day to pay an order with its customer's term (CreditTerm.DueOn); null without a term. */
 function dueOn(data, order) {
-  if (data.creditTermDays == null) return null;
+  const term = termOf(data, phoneKey(order.customerPhone));
+  if (term == null) return null;
   const day = new Date(`${businessDate(order.createdAt)}T12:00:00Z`);
-  day.setUTCDate(day.getUTCDate() + data.creditTermDays);
+  day.setUTCDate(day.getUTCDate() + term);
   return day.toISOString().slice(0, 10);
 }
 
@@ -93,8 +111,11 @@ export function account(data, key, record) {
     owed,
     available: limit == null ? null : r2(Math.max(0, limit - owed)),
     overLimit: limit != null && owed > limit,
-    creditTermDays: data.creditTermDays ?? null,
+    creditTermDays: termOf(data, key),
+    ownCreditTermDays: ownTermOf(data, key),
     overdue: r2(orders.filter((o) => isOverdue(data, o)).reduce((sum, o) => sum + balanceOf(o), 0)),
+    creditReminderEveryDays: reminderEveryDays(data),
+    lastReminderAt: data.lastCreditReminders?.[key] ?? null,
     orders: orders.map((o) => ({
       orderId: o.id, orderNumber: o.orderNumber, createdAt: o.createdAt, status: o.status, soldOnCredit: !!o.soldOnCredit,
       total: o.total, paid: o.paidAmount, writtenOff: o.writtenOffAmount ?? 0, balance: balanceOf(o),
@@ -139,6 +160,7 @@ function receivables(data, q, paginate) {
     totalOwed: r2(rows.reduce((sum, row) => sum + row.owed, 0)),
     totalOverdue: r2(rows.reduce((sum, row) => sum + row.overdue, 0)),
     creditTermDays: data.creditTermDays ?? null,
+    creditReminderEveryDays: reminderEveryDays(data),
     page: {
       ...page,
       items: page.items.map((row) => {
@@ -148,6 +170,7 @@ function receivables(data, q, paginate) {
         return {
           phone: row.phone, name: record?.name ?? row.latest.customerName, customerId: record?.id ?? null, owed: row.owed,
           orders: row.orders, since: row.since, creditLimit: limit, overLimit: limit != null && row.owed > limit, overdue: row.overdue,
+          ownCreditTermDays: ownTermOf(data, row.phone),
         };
       }),
     },
