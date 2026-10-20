@@ -36,6 +36,7 @@ function order(items: Line[], overrides: Record<string, unknown> = {}) {
     stepLabel: 'Entregado',
     total: 118,
     paidAmount: 118,
+    writtenOffAmount: 0,
     createdAt: '2026-10-12T19:00:00Z',
     items,
     ...overrides,

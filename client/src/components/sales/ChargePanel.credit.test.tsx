@@ -26,6 +26,13 @@ describe('ChargePanel on credit (fiado)', () => {
     expect(onSubmit).toHaveBeenCalledWith({ payments: [], change: 0, cashReceived: 0, tip: 0, onCredit: true });
   });
 
+  it('tells the cashier what the customer has overdue before selling more on credit', () => {
+    renderPanel({ name: 'Ana López', available: 500, overdue: 80 });
+
+    expect(screen.getByText(/tiene fiado: le quedan/)).toHaveTextContent('Ana López tiene fiado: le quedan $500.00. Tiene $80.00 vencido.');
+    expect(screen.getByRole('button', { name: 'Fiar $116.00' })).toBeEnabled();
+  });
+
   it('takes what the customer leaves now and sells the rest on credit', async () => {
     const onSubmit = renderPanel({ name: 'Ana López', available: 500 });
 

@@ -2,13 +2,15 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import type { ReceivablesSort } from './generated/enums';
 import { apiRequest, type Schemas } from './typedClient';
 
-// Fiado (Fase 26A): Clientes › Por cobrar, the account of a customer, its payments and the limit. Kept out of queries.ts,
-// which the first visit loads.
+// Fiado (Fase 26A): Clientes › Por cobrar, the account of a customer, its payments and the limit; what the business
+// forgives and the term of its fiado (Fase 26B). Kept out of queries.ts, which the first visit loads.
 
 export type Receivable = Schemas['ReceivableDto'];
 export type Receivables = Schemas['ReceivablesDto'];
 export type CustomerAccount = Schemas['CustomerAccountDto'];
 export type PayCustomerAccountBody = Schemas['PayCustomerAccountCommand'];
+export type WriteOffCustomerAccountBody = Schemas['WriteOffCustomerAccountCommand'];
+export type CustomerAccountOrder = Schemas['CustomerAccountOrderDto'];
 
 /** Whose account: the customer record, or only the phone of the orders. */
 export interface AccountOf {
@@ -19,6 +21,8 @@ export interface AccountOf {
 export interface ReceivablesFilter {
   search: string;
   sort: ReceivablesSort;
+  /** Only who has something past the term of the fiado. */
+  overdueOnly: boolean;
   page: number;
   pageSize: number;
 }
@@ -38,6 +42,7 @@ export function useReceivables(filter: ReceivablesFilter) {
       query: {
         search: filter.search || undefined,
         sort: filter.sort,
+        overdueOnly: filter.overdueOnly || undefined,
         pageNumber: filter.page,
         pageSize: filter.pageSize,
       },
@@ -75,6 +80,28 @@ export function usePayCustomerAccount() {
   return useMutation({
     mutationFn: (body: PayCustomerAccountBody) => apiRequest('post', '/api/v1/customers/account/payments', { body }),
     onSettled: refresh,
+  });
+}
+
+/**
+ * Forgives part or all of what the customer owes (Fase 26B), on one order or from the oldest: no money moves, and each
+ * part stays on its order with the reason (owners and admins).
+ */
+export function useWriteOffCustomerAccount() {
+  const refresh = useRefreshCredit();
+  return useMutation({
+    mutationFn: (body: WriteOffCustomerAccountBody) => apiRequest('post', '/api/v1/customers/account/write-offs', { body }),
+    onSettled: refresh,
+  });
+}
+
+/** How many days the business gives to pay what customers owe; null takes the term away (owners and admins). */
+export function useUpdateCreditTerm() {
+  const refresh = useRefreshCredit();
+  return useMutation({
+    mutationFn: (creditTermDays: number | null) =>
+      apiRequest('put', '/api/v1/customers/credit-term', { body: { creditTermDays } }),
+    onSuccess: refresh,
   });
 }
 

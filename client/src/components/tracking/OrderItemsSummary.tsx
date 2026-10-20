@@ -12,13 +12,17 @@ interface OrderItemsSummaryProps {
   tax: number;
   total: number;
   paidAmount: number;
+  /** What the business forgave (Fase 26B): not to pay anymore. */
+  writtenOffAmount?: number;
   /** A cancelled order owes nothing: «Por pagar» is not said. */
   cancelled: boolean;
 }
 
 /** What the order carries and what it costs, as the server totals it (Fase 24C). */
-export default function OrderItemsSummary({ items, deliveryFee, visitFee, pricesIncludeTax, tax, total, paidAmount, cancelled }: OrderItemsSummaryProps) {
-  const toPay = total - paidAmount;
+export default function OrderItemsSummary({
+  items, deliveryFee, visitFee, pricesIncludeTax, tax, total, paidAmount, writtenOffAmount = 0, cancelled,
+}: OrderItemsSummaryProps) {
+  const toPay = total - paidAmount - writtenOffAmount;
   return (
     <>
       <ul className="list-unstyled mb-3">

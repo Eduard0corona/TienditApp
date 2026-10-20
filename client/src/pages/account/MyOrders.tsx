@@ -51,8 +51,10 @@ function OrderCard({ order, onOrderAgain, reviewed, onReview }: OrderCardProps) 
         <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
           <span className="fw-semibold ta-money">
             {formatMoney(order.total)}
-            {order.paidAmount < order.total && !cancelled && (
-              <span className="d-block small text-danger fw-normal">Por pagar {formatMoney(order.total - order.paidAmount)}</span>
+            {order.paidAmount + order.writtenOffAmount < order.total && !cancelled && (
+              <span className="d-block small text-danger fw-normal">
+                Por pagar {formatMoney(order.total - order.paidAmount - order.writtenOffAmount)}
+              </span>
             )}
           </span>
           <span className="d-flex flex-wrap gap-2">

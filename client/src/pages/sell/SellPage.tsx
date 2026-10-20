@@ -684,7 +684,7 @@ export default function SellPage() {
   const refreshCredit = useRefreshCustomerCredit();
   const account = creditAccount.data;
   const credit: ChargeCredit | undefined = account?.sellsOnCredit && account.available != null
-    ? { name: account.name ?? (details.customerName.trim() || 'El cliente'), available: account.available }
+    ? { name: account.name ?? (details.customerName.trim() || 'El cliente'), available: account.available, overdue: account.overdue }
     : undefined;
 
   const submitSale = async (charge: ChargeResult | null) => {

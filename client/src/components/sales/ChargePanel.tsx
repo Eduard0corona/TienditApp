@@ -31,6 +31,8 @@ export interface ChargeResult {
 export interface ChargeCredit {
   name: string;
   available: number;
+  /** What of what they owe is past the business's term (Fase 26B): the cashier sees it before selling more on credit. */
+  overdue?: number;
 }
 
 type TipChoice = 'none' | 10 | 15 | 'other';
@@ -441,6 +443,9 @@ export default function ChargePanel({
         <p id={creditNoticeId} className="charge-credit small mt-3 mb-0" aria-live="polite">
           <i className="ri-hand-coin-line me-1" aria-hidden="true"></i>
           <strong>{credit.name}</strong> tiene fiado: le quedan <span className="ta-money">{formatMoney(credit.available)}</span>.
+          {!!credit.overdue && credit.overdue > 0 && (
+            <> <strong className="text-danger">Tiene <span className="ta-money">{formatMoney(credit.overdue)}</span> vencido.</strong></>
+          )}
           {!creditFits && credit.available <= 0 && <> Ya no le queda fiado: cobra la venta completa.</>}
           {!creditFits && credit.available > 0 && (
             <> Para fiarle el resto, cobra al menos <span className="ta-money">{formatMoney(creditMinimumCents / 100)}</span>.</>
