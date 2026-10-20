@@ -23,7 +23,10 @@ const RECENT_WRITE_OFFS = 10;
 const RECENT_BALANCE_ENTRIES = 10;
 // CustomerBalanceEntryKind as the contract numbers it.
 const DEPOSIT = 0;
+const APPLIED = 2;
 const RETURNED = 3;
+// OrderPaymentMethod.CustomerBalance as the contract numbers it.
+const CUSTOMER_BALANCE = 7;
 const TZ_OFFSET_MS = 6 * 3_600_000;
 
 /** What is still owed of an order: its total minus what was paid and what the business forgave (Order.Balance). */
@@ -199,7 +202,9 @@ function receivables(data, q, paginate) {
 
 /**
  * A payment to the account, split over the orders owed from the oldest (change on the last part), as the server does. One
- * that expected another balance (sent twice, or after another one) is refused.
+ * that expected another balance (sent twice, or after another one) is refused. Fase 26D: paid with the balance, each part
+ * takes from it (Applied); with `restInFavor`, what is over what they owe stays in their favor (Deposit). One that finds
+ * the balance changed is refused too.
  */
 function pay(data, body) {
   const key = body?.customerId ? phoneKey(data.customers.find((c) => c.id === body.customerId)?.phone) : phoneKey(body?.phone);
@@ -208,6 +213,12 @@ function pay(data, body) {
   if (body?.expectedOwed != null && Math.abs(body.expectedOwed - owed) > 0.001) {
     return { status: 400, json: { code: 'bad_request', detail: `La cuenta cambió: ahora debe $${owed.toFixed(2)}. Revisa el estado de cuenta antes de cobrar.` } };
   }
+  const balance = balanceOfAccount(data, key);
+  if (body?.expectedBalance != null && Math.abs(body.expectedBalance - balance) > 0.001) {
+    return { status: 400, json: { code: 'bad_request', detail: `El saldo a favor cambió: ahora tiene $${balance.toFixed(2)}. Revisa el estado de cuenta antes de seguir.` } };
+  }
+  const entries = data.balanceEntries ?? (data.balanceEntries = []);
+  const withBalance = body?.method === CUSTOMER_BALANCE;
   let left = body?.amount ?? 0;
   for (const order of orders) {
     if (left <= 0) break;
@@ -216,6 +227,15 @@ function pay(data, body) {
     order.paidAmount = r2(order.paidAmount + part);
     order.balance = balanceOf(order);
     left = r2(left - part);
+    if (withBalance) {
+      entries.push({ id: `be-${entries.length + 1}`, phone: key, kind: APPLIED, amount: -part, orderNumber: order.orderNumber, occurredAt: NOW_ISO });
+    }
+  }
+  if (left > 0 && body?.restInFavor) {
+    entries.push({
+      id: `be-${entries.length + 1}`, phone: key, kind: DEPOSIT, amount: left, method: body.method, reference: body.reference ?? null,
+      notes: body.notes ?? 'Lo que sobró de un abono', occurredAt: NOW_ISO,
+    });
   }
   return { status: 200, json: account(data, key, recordOf(data, key)) };
 }

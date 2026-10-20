@@ -673,7 +673,7 @@ Saldo a favor del cliente (Fase 26D, [ADR 0036](../adr/0036-customer-balance.md)
   - El monto vacío toma lo que tiene o lo que falta, lo que sea menos, y no deja más. No lleva referencia ni propina: con propina, el aviso lo dice y no deja cobrar.
   - `SellPage` toma el saldo de la misma cuenta que lee para el fiado (`creditBalance`). La venta con saldo nunca va a la cola del dispositivo, y después vuelve a pedir la cuenta, también si el servidor la rechaza.
 - **Reembolsar (`RefundOrderModal`):** «Saldo a favor» entre las formas de devolver si el pedido tiene teléfono, con «Queda a favor del cliente para su próxima compra; no sale de tu caja».
-- **Corte del día (`DailyCut`, `cashCutText`):** las cifras «Saldo a favor» (con lo reembolsado) y «Dejaron a favor» (con lo devuelto), y en el impreso y el WhatsApp «Pagado con saldo a favor», «Reembolsado a saldo a favor», «Saldo a favor que dejaron» y «Saldo a favor devuelto». La caja nombra sus movimientos 8 y 9 («Saldo a favor», «Saldo a favor devuelto», `cashFormat`).
+- **Corte del día (`DailyCut`, `cashCutText`):** las cifras «Pagado con saldo a favor» (con lo reembolsado) y «Dejaron a favor» (con lo devuelto), y en el impreso y el WhatsApp las mismas palabras: «Pagado con saldo a favor», «Reembolsado a saldo a favor», «Dejaron a favor» y «Saldo a favor devuelto». La caja nombra sus movimientos 8 y 9 «Dejó a favor» y «Saldo a favor devuelto» (`cashFormat`).
 - **Ficha y Por cobrar:**
   - La ficha muestra su línea de fiado («Sin fiado» o lo que le queda) también a quien cobra, con «A favor $X» y «Ver cuenta».
   - Por cobrar dice «Tienes $X a favor de tus clientes» y «A favor $Y» bajo lo que debe cada uno.

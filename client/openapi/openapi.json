@@ -14222,6 +14222,7 @@
       "AddCustomerDepositCommand": {
         "required": [
           "amount",
+          "expectedBalance",
           "method"
         ],
         "type": "object",
@@ -14252,8 +14253,7 @@
           },
           "expectedBalance": {
             "type": "number",
-            "format": "double",
-            "nullable": true
+            "format": "double"
           }
         },
         "additionalProperties": false

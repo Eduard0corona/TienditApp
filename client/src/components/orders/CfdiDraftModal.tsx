@@ -36,6 +36,8 @@ const PAYMENT_FORMS: Record<string, string> = {
   '03': 'Transferencia',
   '04': 'Tarjeta',
   '06': 'Dinero electrónico',
+  // Paid with the balance in the customer's favor (Fase 26D): an advance applied.
+  '30': 'Aplicación de anticipos',
   '99': 'Por definir',
 };
 

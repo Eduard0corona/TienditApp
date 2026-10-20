@@ -54,23 +54,22 @@ export default function BalanceMovementPanel({ kind, max, submitting, error, onS
   const [method, setMethod] = useState<OrderPaymentMethod>(PaymentMethod.Cash);
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
-  const [localError, setLocalError] = useState('');
   const inPerson = kind !== 'use';
-  const maxCents = max != null ? toCents(max) : MAX_AMOUNT_CENTS;
+  const limitCents = Math.min(max != null ? toCents(max) : MAX_AMOUNT_CENTS, MAX_AMOUNT_CENTS);
 
-  // Empty takes all of what it may move (using or giving back); a deposit needs an amount.
+  // Empty pays all it may with the balance (what they owe or have); leaving it and giving it back, money that changes
+  // hands, need the amount written.
   const typed = amountInput.trim();
-  const amountCents = typed === '' ? (max != null ? maxCents : 0) : toCents(parseMoneyInput(typed) ?? -1);
-  const amountIsValid = amountCents > 0 && amountCents <= Math.min(maxCents, MAX_AMOUNT_CENTS);
+  const amountCents = typed === '' ? (kind === 'use' ? limitCents : 0) : toCents(parseMoneyInput(typed) ?? -1);
+  const amountIsValid = amountCents > 0 && amountCents <= limitCents;
+  const amountProblem = typed === '' || amountIsValid
+    ? ''
+    : amountCents <= 0
+      ? 'Escribe un monto válido, por ejemplo 200 o 150.50.'
+      : `No puede ser mayor a ${formatMoney(limitCents / 100)}.`;
 
   const submit = () => {
-    if (!amountIsValid) {
-      setLocalError(amountCents <= 0
-        ? 'Escribe un monto válido, por ejemplo 200 o 150.50.'
-        : `El monto no puede ser mayor a ${formatMoney(Math.min(maxCents, MAX_AMOUNT_CENTS) / 100)}.`);
-      return;
-    }
-    setLocalError('');
+    if (!amountIsValid) return;
     onSubmit({
       amount: amountCents / 100,
       method: inPerson ? method : PaymentMethod.CustomerBalance,
@@ -92,15 +91,18 @@ export default function BalanceMovementPanel({ kind, max, submitting, error, onS
         <label className="form-label fw-semibold" htmlFor={`${ids}-amount`}>Monto</label>
         <input
           id={`${ids}-amount`}
-          className={`form-control form-control-lg ta-money ${typed !== '' && !amountIsValid ? 'is-invalid' : ''}`}
+          className={`form-control form-control-lg ta-money ${amountProblem ? 'is-invalid' : ''}`}
+          aria-invalid={amountProblem ? true : undefined}
+          aria-describedby={amountProblem ? `${ids}-amount-problem` : undefined}
           inputMode="decimal"
           autoComplete="off"
           autoFocus
-          placeholder={max != null ? (maxCents / 100).toFixed(2) : '0.00'}
+          placeholder={kind === 'use' ? (limitCents / 100).toFixed(2) : '0.00'}
           value={amountInput}
           onChange={(event) => setAmountInput(event.target.value)}
           disabled={submitting}
         />
+        {amountProblem && <div id={`${ids}-amount-problem`} className="invalid-feedback">{amountProblem}</div>}
         {max != null && (
           <div className="form-text">
             {kind === 'use' ? 'Hasta' : 'Tiene'} <span className="ta-money">{formatMoney(max)}</span>
@@ -155,7 +157,7 @@ export default function BalanceMovementPanel({ kind, max, submitting, error, onS
         </>
       )}
 
-      {(localError || error) && <div className="alert alert-danger py-2 mt-3 mb-0">{localError || error}</div>}
+      {error && <div className="alert alert-danger py-2 mt-3 mb-0">{error}</div>}
 
       <div className="charge-actions mt-3">
         <button type="button" className="btn btn-light btn-touch" onClick={onCancel} disabled={submitting}>

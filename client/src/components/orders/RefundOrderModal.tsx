@@ -6,6 +6,7 @@ import { getPlatformName, isDeliveryPlatform } from '../../utils/deliveryPlatfor
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney, parseMoneyInput, toCents } from '../../utils/money';
 import { allowsFractions, formatQuantity, parseQuantity, roundQuantity } from '../../utils/units';
+import { remainingByMethod } from './voidRemainders';
 
 type RefundModalProps = {
   order: OrderDto;
@@ -27,16 +28,6 @@ const METHODS: OrderPaymentMethod[] = [
   PaymentMethod.DigitalWallet,
   PaymentMethod.Other,
 ];
-
-/** What each payment method still has to give back: paid with it minus refunded with it. */
-function remainingByMethod(order: OrderDto): Array<{ method: OrderPaymentMethod; amount: number }> {
-  const cents = new Map<OrderPaymentMethod, number>();
-  for (const payment of order.payments) cents.set(payment.method, (cents.get(payment.method) ?? 0) + toCents(payment.amount));
-  for (const refund of order.refunds ?? []) {
-    if (cents.has(refund.method)) cents.set(refund.method, (cents.get(refund.method) ?? 0) - toCents(refund.amount));
-  }
-  return [...cents.entries()].filter(([, value]) => value > 0).map(([method, value]) => ({ method, amount: value / 100 }));
-}
 
 /**
  * Refund (money back, optionally for returned units) or void (everything back and the sale cancelled).

@@ -1053,7 +1053,10 @@ export interface DailyCashCutDto {
   cardTotal: number;
   transferTotal: number;
   walletTotal: number;
-  /** Every method without a bucket of its own: the buckets always add up to salesPaymentsTotal. */
+  /**
+   * Every method without a bucket of its own. Platforms, online payments and the balance in the customer's favor have theirs:
+   * with them, the buckets add up to salesPaymentsTotal.
+   */
   otherTotal: number;
   /** What the delivery platforms charged in their apps («Plataforma»): in no drawer and in no cashier's row. */
   platformTotal?: number;

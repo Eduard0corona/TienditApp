@@ -63,7 +63,9 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
   const access = getAccess(user, capabilities);
   const canCharge = access.charge;
   const canWriteOff = access.isAdmin;
-  const canReturnBalance = access.returnBalance;
+  // Giving it back takes money out like a refund: whoever charges here (as Abonar, access.charge) and also refunds. The API
+  // asks ChargeOrders + ProcessRefunds; like every charge, the screen also asks ManageOrders.
+  const canReturnBalance = access.charge && access.refunds;
   const { data: account, error, isPending } = useCustomerAccount(of);
   const reminder = account ? describeReminder(account) : null;
   const pay = usePayCustomerAccount();
@@ -467,7 +469,7 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
           )}
           {canReturnBalance && account.creditBalance > 0 && (
             <button type="button" className="btn btn-light btn-touch" onClick={() => open('return')}>
-              Devolver
+              Devolver saldo
             </button>
           )}
           {canCharge && (

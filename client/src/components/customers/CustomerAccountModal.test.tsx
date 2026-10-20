@@ -328,7 +328,7 @@ describe('CustomerAccountModal', () => {
     // Looking after customers moves no money: neither leaving it, using it nor giving it back.
     expect(screen.queryByRole('button', { name: /Dejar a favor/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Usar saldo a favor' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Devolver' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Devolver saldo' })).not.toBeInTheDocument();
   });
 
   it('keeps the three tiles of the fiado while she has nothing in her favor', async () => {
@@ -372,6 +372,9 @@ describe('CustomerAccountModal', () => {
     expect(screen.queryByRole('radio', { name: /Efectivo/ })).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Monto'), '90');
     expect(screen.getByRole('button', { name: 'Usar $0.00' })).toBeDisabled();
+    // Why, next to the amount: what she owes or has, whichever is less.
+    expect(screen.getByLabelText('Monto')).toHaveAccessibleDescription('No puede ser mayor a $80.00.');
+    expect(screen.getByLabelText('Monto')).toHaveAttribute('aria-invalid', 'true');
     await userEvent.clear(screen.getByLabelText('Monto'));
     await userEvent.click(screen.getByRole('button', { name: 'Usar $80.00' }));
 
@@ -388,13 +391,15 @@ describe('CustomerAccountModal', () => {
     request.mockResolvedValue(IN_FAVOR as never);
     const { unmount } = renderModal();
     expect(await screen.findByRole('button', { name: /Dejar a favor/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Devolver' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Devolver saldo' })).not.toBeInTheDocument();
     unmount();
 
     signIn(['ManageOrders', 'ChargeOrders', 'ProcessRefunds']);
     request.mockImplementation(((method: string) => Promise.resolve(method === 'post' ? { ...IN_FAVOR, creditBalance: 30 } : IN_FAVOR)) as never);
     renderModal();
-    await userEvent.click(await screen.findByRole('button', { name: 'Devolver' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Devolver saldo' }));
+    // Money that leaves: never all of it with one click, the amount is written.
+    expect(screen.getByRole('button', { name: 'Devolver $0.00' })).toBeDisabled();
     await userEvent.type(screen.getByLabelText('Monto'), '50');
     await userEvent.click(screen.getByRole('button', { name: 'Devolver $50.00' }));
 

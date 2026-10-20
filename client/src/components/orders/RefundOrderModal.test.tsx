@@ -11,6 +11,7 @@ import {
   type OrderDto,
 } from '../../types';
 import RefundOrderModal from './RefundOrderModal';
+import { remainingByMethod } from './voidRemainders';
 
 const sale: OrderDto = {
   id: 'o1',
@@ -161,6 +162,33 @@ describe('RefundOrderModal', () => {
     expect(screen.getByText('Anula el pedido si DiDi Food lo canceló o si lo registraste dos veces.')).toBeInTheDocument();
     expect(screen.queryByText(/no sale de tu caja/)).not.toBeInTheDocument();
     expect(screen.getByText('Efectivo: $350.00')).toBeInTheDocument();
+  });
+
+  it('voids what is left after a refund to the balance, taken from the largest payment as the server does (Fase 26D)', () => {
+    const refunded: OrderDto = {
+      ...sale,
+      customerPhone: '+525512345678',
+      payments: [
+        { id: 'p1', amount: 100, method: OrderPaymentMethod.Cash, paidAt: '2026-10-10T18:00:00Z' },
+        { id: 'p2', amount: 250, method: OrderPaymentMethod.Card, paidAt: '2026-10-10T18:00:00Z' },
+      ],
+      refunds: [
+        { id: 'r1', amount: 30, method: OrderPaymentMethod.CustomerBalance, reason: 'Ajuste', refundedAt: '2026-10-10T19:00:00Z', refundedBy: 'ana' },
+        { id: 'r2', amount: 20.1, method: OrderPaymentMethod.Cash, reason: 'Ajuste', refundedAt: '2026-10-10T19:00:00Z', refundedBy: 'ana' },
+      ],
+    } as OrderDto;
+
+    expect(remainingByMethod(refunded)).toEqual([
+      { method: OrderPaymentMethod.Cash, amount: 79.9 },
+      { method: OrderPaymentMethod.Card, amount: 220 },
+    ]);
+    // More given to the balance than the largest payment had: the rest comes out of the next one.
+    expect(remainingByMethod({ ...refunded, refunds: [{ ...refunded.refunds![0], amount: 300 }] } as OrderDto))
+      .toEqual([{ method: OrderPaymentMethod.Cash, amount: 50 }]);
+
+    render(<RefundOrderModal mode="void" order={refunded} submitting={false} error="" onClose={vi.fn()} onSubmit={vi.fn()} />);
+    expect(screen.getByText('Efectivo: $79.90')).toBeInTheDocument();
+    expect(screen.getByText('Tarjeta: $220.00')).toBeInTheDocument();
   });
 
   it('voids a counter sale as always, with the supplies back to inventory', () => {

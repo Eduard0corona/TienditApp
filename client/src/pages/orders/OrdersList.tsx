@@ -14,6 +14,7 @@ import OrderDeliveryPanel from '../../components/orders/OrderDeliveryPanel';
 import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
+import { useRefreshCustomerCredit } from '../../api/customerCredit';
 import { queryKeys, useDeliveryPlatformChannels } from '../../api/queries';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { getServicePriorityLabel, parseChecklist } from '../../utils/serviceDetail';
@@ -197,6 +198,7 @@ export default function OrdersList() {
   const { tenant, capabilities } = useTenant();
   const { confirm, prompt } = useConfirm();
   const toast = useToast();
+  const refreshCredit = useRefreshCustomerCredit();
   // Selling, charging, changing status and cancelling are counter actions (OrdersController); kitchen
   // roles can read orders but move food orders from the kitchen board. Refunds also need ProcessRefunds.
   const access = getAccess(user, capabilities);
@@ -418,6 +420,8 @@ export default function OrdersList() {
       toast.success(request.mode === 'void'
         ? `Venta ${order.orderNumber} anulada.`
         : `Reembolso de ${formatMoney(request.data.amount)} registrado en ${order.orderNumber}.`);
+      // A refund (or a void) to the balance in the customer's favor changes their account, card and what Vender offers.
+      if (order.customerPhone) refreshCredit();
       await loadOrders();
     } catch (err: unknown) {
       setRefundError(getApiErrorMessage(err, request.mode === 'void' ? 'No se pudo anular la venta.' : 'No se pudo registrar el reembolso.'));

@@ -131,7 +131,10 @@ test.describe('Por cobrar con saldo a favor', () => {
 
   test('devolver saldo a favor', async ({ page }) => {
     await open(page, '/customers/receivables');
-    const panel = await openMovement(page, 'María Fernanda López', 'Devolver', 'Devolver saldo a favor');
+    const panel = await openMovement(page, 'María Fernanda López', 'Devolver saldo', 'Devolver saldo a favor');
+    // Money that leaves: the amount is written, never all of it with one click.
+    await expect(panel.getByRole('button', { name: 'Devolver $0.00' })).toBeDisabled();
+    await panel.getByLabel('Monto').fill('150');
     await expect(panel.getByRole('button', { name: 'Devolver $150.00' })).toBeEnabled();
     await snapScreen(page, 'por-cobrar-devolver-saldo-a-favor');
   });

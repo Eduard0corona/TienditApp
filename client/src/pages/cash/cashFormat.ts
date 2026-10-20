@@ -22,7 +22,7 @@ export function getTransactionTypeLabel(type: CashTransactionType): string {
     case CashTransactionTypeConst.ClosingAdjustment: return 'Ajuste cierre';
     case CashTransactionTypeConst.Tip: return 'Propina';
     // What a customer left in their favor and what was given back to them (Fase 26D).
-    case CashTransactionTypeConst.CustomerDeposit: return 'Saldo a favor';
+    case CashTransactionTypeConst.CustomerDeposit: return 'Dejó a favor';
     case CashTransactionTypeConst.CustomerDepositReturn: return 'Saldo a favor devuelto';
     default: return String(type);
   }

@@ -75,7 +75,7 @@ export default function DailyCut({ branches }: DailyCutProps) {
     // Paid with the balance customers left before (Fase 26D): part of "Cobrado", in no drawer, since it entered then.
     ...(balanceTotal > 0 || balanceRefundsTotal > 0
       ? [{
-        label: 'Saldo a favor',
+        label: 'Pagado con saldo a favor',
         value: balanceTotal,
         detail: 'Pagado con lo que dejaron antes: no entra a la caja',
         note: balanceRefundsTotal > 0 ? `Reembolsado a su saldo: ${formatMoney(balanceRefundsTotal)}` : undefined,
@@ -86,7 +86,7 @@ export default function DailyCut({ branches }: DailyCutProps) {
       ? [{
         label: 'Dejaron a favor',
         value: depositsTotal,
-        detail: 'Entró a la caja: no es venta',
+        detail: 'Lo recibió una caja: no es venta',
         note: depositReturnsTotal > 0 ? `Devuelto: ${formatMoney(depositReturnsTotal)}` : undefined,
       }]
       : []),

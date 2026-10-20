@@ -24,7 +24,6 @@ const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   99: 'Cancelada',
 };
 
-
 export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   0: 'Venta',
   1: 'Servicio',
@@ -44,7 +43,6 @@ const PAYMENT_METHOD_LABELS: Record<OrderPaymentMethod, string> = {
   7: 'Saldo a favor',
 };
 
-
 /** The couriers a business asks for the trip of an order sent to an address (Fase 22C). */
 export const DELIVERY_COURIER_LABELS: Record<DeliveryCourier, string> = {
   [DeliveryCourier.Paquetenvia]: 'Paquetenvia',
@@ -60,7 +58,6 @@ export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
   5: 'DiDi Food',
 };
 
-
 /** Rappi, Uber Eats and DiDi Food, in the order of the enum (OrderChannelRules.DeliveryPlatforms); utils/deliveryPlatforms builds on it. */
 export const DELIVERY_PLATFORM_CHANNELS = [OrderChannel.Rappi, OrderChannel.UberEats, OrderChannel.DidiFood] as const;
 
@@ -70,14 +67,12 @@ const COLLECTED_BY_LABELS: Record<PlatformCollectedBy, string> = {
   1: 'El negocio',
 };
 
-
 export const SERVICE_PIECE_STATUS_LABELS: Record<ServiceOrderPieceStatus, string> = {
   0: 'Aceptada',
   1: 'En progreso',
   2: 'Completada',
   99: 'Cancelada',
 };
-
 
 const CATALOG_ITEM_TYPE_LABELS: Record<string, string> = {
   Product: 'Producto',

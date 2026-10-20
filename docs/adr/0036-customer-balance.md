@@ -57,7 +57,7 @@ Tomé las decisiones de la Fase 26D con la autorización permanente del dueño d
 7. **El corte del día**:
    - Lo pagado con saldo es parte de «Cobrado» y de cada sucursal, pero no de la fila de ningún cajero ni del flujo neto, porque ya entró con el anticipo. Va en su línea, «Pagado con saldo a favor».
    - Lo reembolsado al saldo va en «Reembolsado a saldo a favor».
-   - Lo que dejaron y lo devuelto son dinero de las cajas, no ventas. Van en sus líneas («Saldo a favor que dejaron» y «Saldo a favor devuelto»), fuera de los movimientos a mano. Sí entran al flujo neto, y al de efectivo solo su parte en efectivo.
+   - Lo que dejaron y lo devuelto son dinero de las cajas, no ventas. Van en sus líneas («Dejaron a favor» y «Saldo a favor devuelto»), fuera de los movimientos a mano. Sí entran al flujo neto, y al de efectivo solo su parte en efectivo.
    - Se mantienen las cuentas del corte: `NetCashFlow` es la suma de lo que entró y salió de cada caja (fuera o dentro de ella), y `NetCashOnlyFlow` la del efectivo.
 8. **CFDI**: lo pagado con saldo usa la forma de pago 30 (aplicación de anticipos), y el borrador de la factura avisa (`CustomerBalanceWarning`). El CFDI del anticipo y su egreso los hace el contador: TienditApp no los genera.
 9. **Los reportes diarios**: lo pagado con saldo cuenta en «Otros» de la foto diaria. Sus columnas son fijas y no hay una propia: agregarla pediría migrar las fotos guardadas.

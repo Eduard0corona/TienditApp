@@ -174,7 +174,7 @@ describe('cut with the balance in customers\' favor (Fase 26D)', () => {
     expect(rows).toEqual(expect.arrayContaining([
       ['Pagado con saldo a favor', 100],
       ['Reembolsado a saldo a favor', 10],
-      ['Saldo a favor que dejaron', 250],
+      ['Dejaron a favor', 250],
       ['Saldo a favor devuelto', 30],
     ]));
     // Before the net of the drawers, as the platforms.
@@ -183,7 +183,7 @@ describe('cut with the balance in customers\' favor (Fase 26D)', () => {
   });
 
   it('shows none of it without movements of the balance', () => {
-    expect(getDailyCutRows(cut()).map(([label]) => label).filter((label) => label.includes('saldo a favor') || label.includes('Saldo a favor')))
+    expect(getDailyCutRows(cut()).map(([label]) => label).filter((label) => label.includes('a favor')))
       .toEqual([]);
   });
 });

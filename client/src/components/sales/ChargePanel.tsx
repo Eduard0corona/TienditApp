@@ -151,6 +151,8 @@ export default function ChargePanel({
   // Card, transfer and others: the amount typed, never above what is owed (there is no change). With the balance in their
   // favor, never above what they have left either.
   const maxTypedCents = isBalance ? Math.min(remainingCents, balanceLeftCents) : remainingCents;
+  // Which of the two stops a typed amount paid with the balance: what they have, when it is less than what is missing.
+  const balanceIsTheLimit = isBalance && balanceLeftCents < remainingCents;
   const typedCents = amountInput.trim() === '' ? maxTypedCents : toCents(parseMoneyInput(amountInput) ?? -1);
   const currentCents = isCash ? cashAppliedCents : typedCents;
   const currentIsValid = isCash ? true : typedCents >= 0 && typedCents <= maxTypedCents;
@@ -194,8 +196,9 @@ export default function ChargePanel({
     return {
       method,
       amount: currentCents / 100,
-      reference: reference.trim() || undefined,
-      evidenceUrl: evidence?.url,
+      reference: isBalance ? undefined : reference.trim() || undefined,
+      // Only a transfer carries its receipt: one that finished uploading after switching to another method stays out.
+      evidenceUrl: method === PaymentMethod.Transfer ? evidence?.url : undefined,
       tip: tip > 0 ? tip / 100 : undefined,
       // What was handed over for this payment: typed, or exactly the amount plus the tip.
       cashReceived: isCash ? (cashTyped ? receivedCents : currentCents + tip) / 100 : undefined,
@@ -213,7 +216,7 @@ export default function ChargePanel({
 
   const submit = () => {
     if (!canSubmit) {
-      if (!currentIsValid && isBalance && typedCents > balanceLeftCents) {
+      if (!currentIsValid && balanceIsTheLimit) {
         setLocalError(`Tiene ${formatMoney(balanceLeftCents / 100)} a favor: no puede pagar más con su saldo.`);
       } else if (!currentIsValid) setLocalError('El monto no puede ser mayor a lo que falta por cobrar.');
       else if (tipWithBalance) setLocalError('La propina no se paga con saldo a favor: cóbrala con otra forma de pago.');
@@ -406,7 +409,7 @@ export default function ChargePanel({
             />
             {!currentIsValid && (
               <div className="invalid-feedback">
-                {isBalance && typedCents > balanceLeftCents ? 'No puede ser mayor a su saldo a favor.' : 'No puede ser mayor a lo que falta.'}
+                {balanceIsTheLimit ? 'No puede ser mayor a su saldo a favor.' : 'No puede ser mayor a lo que falta.'}
               </div>
             )}
           </div>

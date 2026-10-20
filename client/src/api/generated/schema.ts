@@ -11721,7 +11721,7 @@ export interface components {
             reference?: string | null;
             notes?: string | null;
             /** Format: double */
-            expectedBalance?: number | null;
+            expectedBalance: number;
         };
         AddOrderPaymentRequest: {
             /** Format: double */
