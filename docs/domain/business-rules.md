@@ -437,7 +437,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   No en Pedidos ni a mano en la caja. Sin propina. No entra a ninguna caja, porque ya entró cuando lo dejó.
 - **Reembolsar a él:** «Saldo a favor» en Reembolsar, si el pedido tiene teléfono. Queda a favor de ese teléfono y no sale de la caja. Anular una venta pagada con saldo lo regresa al saldo.
 - **Devolverlo** (quien cobra y reembolsa, `ChargeOrders` y `ProcessRefunds`): hasta lo que tiene, con un método en persona; sale de la caja de quien lo devuelve. Queda en la actividad.
-- **Nunca dos veces:** cada pantalla manda el saldo que mostraba (y la cuenta lo que debía). Si cambió (otro cajero, un reintento), se rechaza con el saldo nuevo. Todo lo que toma del saldo se revisa en el servidor dentro del candado del cliente.
+- **Nunca dos veces:** cada pantalla manda el saldo que mostraba (obligatorio para todo lo que lo mueve) y la cuenta lo que debía. Si cambió (otro cajero, un reintento), se rechaza con el saldo nuevo. Todo lo que toma del saldo se revisa en el servidor dentro del candado del cliente.
 - **Se ve:**
   - «A favor $X» en el estado de cuenta (con sus últimos 10 movimientos), la ficha, Por cobrar y el aviso de Vender;
   - el total a favor de los clientes en Por cobrar;

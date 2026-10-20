@@ -195,7 +195,9 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - **En los reportes por día cuenta como «Otros»:** la foto diaria tiene columnas fijas y no hay una para el saldo; el corte sí lo separa.
   - **Sin conexión no se paga con saldo:** solo el servidor lo sabe. Tampoco se usa desde Pedidos (se cobra desde la cuenta o en Vender).
   - **La cuenta va por teléfono,** como el fiado: un cliente con dos teléfonos tiene dos saldos, y sin teléfono no hay saldo.
-  - **Dejar a favor y devolverlo no tienen llave de idempotencia:** los protege el saldo que veía la pantalla (`ExpectedBalance`, obligatorio al devolver). Dejar a favor sin mandarlo (otra integración) podría registrar dos veces el mismo anticipo.
+  - **Dejar a favor, devolverlo y el abono no tienen llave de idempotencia:** los protege el saldo que veía la pantalla (`ExpectedBalance`), obligatorio al dejar, al devolver y al pagar con el saldo o dejar el resto. Dos anticipos iguales seguidos con el saldo nuevo cada vez son dos anticipos.
+  - **Sin claves foráneas en `CustomerBalanceEntries`:** los movimientos nunca se borran y los escribe solo la aplicación, que los liga a su caja, pago o reembolso; la base revisa el signo y a qué va ligado, no que exista.
+  - **«Devolver saldo» pide también `ManageOrders`,** como todo cobro de la cuenta («Abonar», «Dejar a favor»): un rol con `ChargeOrders` y `ProcessRefunds` sin `ManageOrders` no lo ve, aunque la API lo permitiría.
   - **Durante un regreso a la 26C, o mientras conviven las dos versiones,** esa versión no conoce la forma de pago 7 ni los movimientos de caja 8 y 9; una vez usados, `rollback.sql` se detiene con 50029 y solo queda corregir hacia adelante.
   - La 26D deja la primera visita en 179,063 B (−11 B contra `master`): las etiquetas toman los nombres de los enums generados en lugar de copiarlos, lo que compensa la forma de pago y la regla de acceso nuevas.
 

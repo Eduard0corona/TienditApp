@@ -624,10 +624,10 @@ La Fase 26D trae una migración, [`database/production/20261020145628_AddCustome
 - **Lo que cambia para los negocios al desplegar:**
   - El estado de cuenta suma «Dejar a favor» para quien cobra, y la ficha lleva a la cuenta aunque el cliente no deba ni tenga fiado.
   - «Abonar» ofrece «Dejar el cambio a su favor», y Reembolsar ofrece «Saldo a favor» cuando el pedido tiene teléfono.
-  - Nada más cambia hasta que un cliente deja algo a su favor. Entonces se ven «A favor», «Usar saldo a favor», «Devolver» (para quien también reembolsa), «Saldo a favor» en el cobro de Vender y sus líneas en el corte.
+  - Nada más cambia hasta que un cliente deja algo a su favor. Entonces se ven «A favor», «Usar saldo a favor», «Devolver saldo» (para quien también reembolsa), «Saldo a favor» en el cobro de Vender y sus líneas en el corte.
 - **El contrato solo agrega:**
-  - `POST /api/v1/customers/account/balance/deposits` y `POST /api/v1/customers/account/balance/returns`;
-  - `restInFavor` y `expectedBalance` en el abono a la cuenta (los dos opcionales);
+  - `POST /api/v1/customers/account/balance/deposits` y `POST /api/v1/customers/account/balance/returns`, los dos con el saldo que se veía (`expectedBalance`);
+  - `restInFavor` y `expectedBalance` en el abono a la cuenta: opcionales, salvo `expectedBalance` al pagar con el saldo o dejar el resto (un abono como los de la 26C no cambia);
   - `creditBalance` y `recentBalanceEntries` en el estado de cuenta, `creditBalance` en las filas de Por cobrar y en la ficha, y `totalCreditBalance` en Por cobrar;
   - `customerBalanceTotal`, `customerBalancePaymentsCount`, `customerBalanceRefundsTotal`, `customerDepositsTotal`, `customerDepositReturnsTotal`, `cashCustomerDepositsTotal` y `cashCustomerDepositReturnsTotal` en el corte del día;
   - la forma de pago `CustomerBalance` (7), los movimientos de caja `CustomerDeposit` (8) y `CustomerDepositReturn` (9) y el enum `CustomerBalanceEntryKind`.

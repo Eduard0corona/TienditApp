@@ -33,7 +33,7 @@ Tomé las decisiones de la Fase 26D con la autorización permanente del dueño d
    El saldo es la suma de sus movimientos. Ninguno se edita ni se borra: un error se compensa con otro movimiento.
 2. **El saldo nunca queda negativo ni se usa dos veces.**
    - Lo que toma del saldo lo lee y lo escribe dentro del candado del cliente (`ICustomerCreditLock`, `sp_getapplock`) y en una transacción (`ITransactionalRequest`).
-   - Las pantallas mandan el saldo que mostraban (`ExpectedBalance`), y la cuenta lo que debía (`ExpectedOwed`). Si cambió, la petición se rechaza con el saldo nuevo («El saldo a favor cambió: ahora tiene…»). Así, un reintento o dos cajeros a la vez no dejan, usan ni devuelven dos veces.
+   - Las pantallas mandan el saldo que mostraban (`ExpectedBalance`, obligatorio al dejar, al devolver y al pagar con el saldo o dejar el resto de un abono), y la cuenta lo que debía (`ExpectedOwed`). Si cambió, la petición se rechaza con el saldo nuevo («El saldo a favor cambió: ahora tiene…»). Así, un reintento o dos cajeros a la vez no dejan, usan ni devuelven dos veces.
    - La venta de Vender que paga con saldo usa además su llave de idempotencia: un reintento devuelve la venta que ya existe y no vuelve a tomar del saldo.
 3. **Dejar a favor** (`AddCustomerDepositCommand`, con `ChargeOrders`, como cobrar).
    - Se elige el monto (hasta $1,000,000), cómo entra (efectivo, tarjeta, transferencia, billetera u otro), una referencia y una nota.
@@ -62,7 +62,7 @@ Tomé las decisiones de la Fase 26D con la autorización permanente del dueño d
 8. **CFDI**: lo pagado con saldo usa la forma de pago 30 (aplicación de anticipos), y el borrador de la factura avisa (`CustomerBalanceWarning`). El CFDI del anticipo y su egreso los hace el contador: TienditApp no los genera.
 9. **Los reportes diarios**: lo pagado con saldo cuenta en «Otros» de la foto diaria. Sus columnas son fijas y no hay una propia: agregarla pediría migrar las fotos guardadas.
 10. **Se ve:**
-    - **Estado de cuenta:** «A favor $X», los últimos 10 movimientos con su nota, y «Dejar a favor», «Usar saldo a favor» (si debe y tiene) y «Devolver» (para quien también reembolsa).
+    - **Estado de cuenta:** «A favor $X», los últimos 10 movimientos con su nota, y «Dejar a favor», «Usar saldo a favor» (si debe y tiene) y «Devolver saldo» (para quien también reembolsa, con el monto escrito).
     - **Abonar:** «Dejar el cambio a su favor», con lo que queda a su favor en lugar del cambio.
     - **Ficha del cliente:** «A favor $X». La cuenta se abre aunque no deba ni tenga fiado, para quien cobra.
     - **Vender:** «Saldo a favor» como forma de pago, con lo que le queda y el aviso «{nombre} tiene $X a favor».

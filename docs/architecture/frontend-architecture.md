@@ -661,7 +661,7 @@ Saldo a favor del cliente (Fase 26D, [ADR 0036](../adr/0036-customer-balance.md)
 - **`api/customerCredit.ts`:** `useAddCustomerDeposit` y `useReturnCustomerBalance`, que dejan la cuenta que responde el servidor en la caché (`setQueryData`) y vuelven a pedir las listas, las cuentas y las fichas como un abono.
 - **Estado de cuenta (`components/customers/CustomerAccountModal`):**
   - con saldo o con movimientos, un cuarto mosaico «A favor» (`col-6 col-md-3`) y la lista «Saldo a favor» con los últimos 10 (`describeBalanceEntry`: «Dejó a favor · Efectivo», «Pagó con saldo a favor · ORD-…», «Se le devolvió · Efectivo», «Reembolso a su favor · ORD-…») y su nota;
-  - «Dejar a favor» para quien cobra, «Usar saldo a favor» si además debe y tiene, y «Devolver» con `access.returnBalance` (comercio, `ChargeOrders` y `ProcessRefunds`, como la API);
+  - «Dejar a favor» para quien cobra, «Usar saldo a favor» si además debe y tiene, y «Devolver saldo» para quien cobra y reembolsa (`access.charge` y `access.refunds`: la API pide `ChargeOrders` y `ProcessRefunds`, y como todo cobro la pantalla también `ManageOrders`). Devolverlo pide escribir el monto; usarlo, vacío, toma todo lo que puede;
   - el resumen para WhatsApp dice «Tienes *$X* a tu favor».
 - **`components/customers/BalanceMovementPanel`:** el panel de los tres movimientos.
   - Lleva el monto en centavos, hasta $1,000,000 o hasta lo que puede mover. Vacío al usar o devolver toma todo; al dejar pide un monto.
