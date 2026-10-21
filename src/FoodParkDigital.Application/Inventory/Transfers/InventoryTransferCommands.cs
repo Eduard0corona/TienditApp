@@ -92,6 +92,8 @@ public class CreateInventoryTransferCommandHandler : IRequestHandler<CreateInven
 {
     public const string SoldMeanwhileMessage =
         "Se vendió o se movió un artículo mientras se transfería: revisa lo que hay en el origen y vuelve a intentarlo.";
+    public const string KeyUsedMessage =
+        "Esa transferencia ya se hizo con lo primero que mandaste: revísala en la lista y, si falta algo, haz otra.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenant;
@@ -123,14 +125,14 @@ public class CreateInventoryTransferCommandHandler : IRequestHandler<CreateInven
     {
         // The same key again (a retry, a double tap): the transfer is already made.
         if (await MadeAsync(request.IdempotencyKey, cancellationToken) is { } made)
-            return Result.Success(made);
+            return Replay(request, made);
 
-        // Both locations, in order of their id: two transfers between the same two never wait for each other. Read again
-        // once in line: the request this one waited for may be the same transfer.
+        // Both locations, in order of their id: two transfers between the same two take turns and never deadlock. Read
+        // again once in line: the request this one waited for may be the same transfer.
         foreach (var locationId in new[] { request.FromLocationId, request.ToLocationId }.Order())
             await _locationLock.AcquireAsync(_tenant.TenantId, locationId, cancellationToken);
         if (await MadeAsync(request.IdempotencyKey, cancellationToken) is { } waited)
-            return Result.Success(waited);
+            return Replay(request, waited);
 
         var locations = await _context.InventoryLocations.AsNoTracking()
             .Where(l => l.Id == request.FromLocationId || l.Id == request.ToLocationId)
@@ -172,7 +174,7 @@ public class CreateInventoryTransferCommandHandler : IRequestHandler<CreateInven
             .Where(l => onHand.GetValueOrDefault(l.SupplyItemId) < l.Quantity)
             .Select(l => supplies[l.SupplyItemId])
             .OrderBy(s => s.Name)
-            .Select(s => $"{s.Name} (hay {UnitTypeRules.FormatQuantity(Math.Max(onHand.GetValueOrDefault(s.Id), 0), s.Unit)})")
+            .Select(s => $"{s.Name} (hay {UnitTypeRules.FormatQuantity(onHand.GetValueOrDefault(s.Id), s.Unit)})")
             .ToList();
         if (missing.Count > 0)
             return Result.Failure<InventoryTransferDto>($"No hay suficiente en {origin.Name}: {string.Join(", ", missing)}.");
@@ -207,7 +209,7 @@ public class CreateInventoryTransferCommandHandler : IRequestHandler<CreateInven
         var user = _currentUser.UserName ?? "system";
         var transfer = new InventoryTransfer(
             transferId, _tenant.TenantId, transferNumber, request.IdempotencyKey, origin.Id, destination.Id, now, user,
-            exit.Value.Id, entry.Value.Id, request.Lines.Count, exit.Value.TotalAmount, request.Notes);
+            exit.Value.Id, entry.Value.Id, request.Lines.Count, decimal.Round(exit.Value.TotalAmount, 4), request.Notes);
         _context.InventoryTransfers.Add(transfer);
         _context.AuditLogs.Add(new AuditLog(
             tenantId: _tenant.TenantId,
@@ -236,11 +238,24 @@ public class CreateInventoryTransferCommandHandler : IRequestHandler<CreateInven
             // (IX_InventoryTransfers_TenantId_IdempotencyKey): this copy is undone whole and the stored one is the answer.
             await _context.DiscardUnitOfWorkAsync(cancellationToken);
             if (await MadeAsync(request.IdempotencyKey, cancellationToken) is { } stored)
-                return Result.Success(stored);
+                return Replay(request, stored);
             throw;
         }
 
         return Result.Success((await InventoryTransferReads.TransferAsync(_context, transfer.Id, cancellationToken))!);
+    }
+
+    /// <summary>
+    /// The transfer the key already made, when it is the one asked for. With other locations or items it is not: the app
+    /// lost the answer and the person changed the transfer, so they are told it was made with what was sent first.
+    /// </summary>
+    private static Result<InventoryTransferDto> Replay(CreateInventoryTransferCommand request, InventoryTransferDto made)
+    {
+        var asked = request.Lines.Select(l => (l.SupplyItemId, l.Quantity)).Order();
+        var moved = made.Lines.Select(l => (l.SupplyItemId, l.Quantity)).Order();
+        return made.FromLocationId == request.FromLocationId && made.ToLocationId == request.ToLocationId && asked.SequenceEqual(moved)
+            ? Result.Success(made)
+            : Result.Failure<InventoryTransferDto>(KeyUsedMessage);
     }
 
     private async Task<InventoryTransferDto?> MadeAsync(Guid idempotencyKey, CancellationToken cancellationToken)

@@ -48,7 +48,8 @@ WHERE i.[object_id] = OBJECT_ID(N'dbo.InventoryTransfers')
 ORDER BY [Indice];
 
 -- 3. Después: cuántas transferencias hay, con cuántos artículos y cuánto valían, y cuántos
---    movimientos son piernas de una transferencia (referencia externa TRF:, dos por transferencia).
+--    movimientos llevan la referencia externa TRF: (dos por transferencia; mientras conviven las
+--    versiones, la anterior todavía acepta esa referencia en un movimiento manual).
 --    rollback.sql se detiene con 50031 si hay alguna. Justo después de aplicar: ninguna. Antes de
 --    aplicar y después de rollback.sql la tabla no existe y la consulta no corre.
 IF OBJECT_ID(N'dbo.InventoryTransfers', N'U') IS NOT NULL

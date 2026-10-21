@@ -47,8 +47,9 @@ public class InventoryTransfersController : ControllerBase
     {
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
-            return result.Error == CreateInventoryTransferCommandHandler.SoldMeanwhileMessage
-                // A sale took the stock while transferring: nothing moved, and the client reads the stock again.
+            return result.Error is CreateInventoryTransferCommandHandler.SoldMeanwhileMessage or CreateInventoryTransferCommandHandler.KeyUsedMessage
+                // A sale took the stock while transferring (nothing moved), or the key already made another transfer: the
+                // client reads the stock and the list again.
                 ? this.ApiError(StatusCodes.Status409Conflict, result.Error, ApiErrorCodes.Conflict)
                 : this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 

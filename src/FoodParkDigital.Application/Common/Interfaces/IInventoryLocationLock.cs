@@ -10,7 +10,7 @@ public interface IInventoryLocationLock
 {
     /// <summary>
     /// Holds the lock of the location until the request's transaction ends. A request that needs two locations takes
-    /// them in order of their id, so two requests that need the same two never wait for each other.
+    /// them in order of their id, so two requests that need the same two take turns and never deadlock.
     /// </summary>
     Task AcquireAsync(Guid tenantId, Guid inventoryLocationId, CancellationToken cancellationToken);
 }

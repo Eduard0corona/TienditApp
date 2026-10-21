@@ -97,8 +97,6 @@ public class InventoryMovementCommandTests
     [InlineData("Salida / Consumo", 2, 4, 7)]
     [InlineData("Ajuste (+) / Conteo fisico", 3, 7, 13)]
     [InlineData("Ajuste (-) / Merma", 4, 5, 7)]
-    [InlineData("Transferencia entrada / Otro", 5, 99, 13)]
-    [InlineData("Transferencia salida / Otro", 6, 99, 7)]
     [InlineData("Devolucion produccion / Produccion", 7, 3, 13)]
     [InlineData("Devolucion proveedor / Devolucion", 8, 9, 7)]
     public async Task MovementPostedByTheInventoryScreen_ShouldMoveStockInTheDirectionOfItsType(
@@ -120,28 +118,19 @@ public class InventoryMovementCommandTests
         Assert.Equal(movementReason, (int)movement.MovementReason);
     }
 
-    [Fact]
-    public async Task TransferPostedByTheInventoryScreen_ShouldMoveStockFromOriginToDestination()
+    // The screen before Fase 27B recorded a transfer as "Transferencia salida" at the origin plus "Transferencia entrada" at
+    // the destination, one leg at a time. Now a transfer has its own use case: neither leg is a manual movement.
+    [Theory]
+    [InlineData(6, 99)]
+    [InlineData(5, 99)]
+    [InlineData(3, 11)]
+    public void TransferLegPostedByTheOldScreen_ShouldBeRejected(int movementType, int movementReason)
     {
-        var setup = await SeedSupplyWithStockAsync(onHand: 10);
-        await using var context = setup.Context;
-        var destination = new InventoryLocation(setup.Supply.TenantId, "Sucursal norte", "NORTH");
-        context.InventoryLocations.Add(destination);
-        await context.SaveChangesAsync();
+        var command = DeserializeScreenBody(movementType, movementReason, Guid.NewGuid(), Guid.NewGuid(), quantity: 4);
 
-        // The screen records a transfer as "Transferencia salida" at the origin plus "Transferencia entrada"
-        // at the destination.
-        var transferOut = await setup.Handler.Handle(
-            DeserializeScreenBody(6, 99, setup.Supply.Id, setup.Origin.Id, quantity: 4), CancellationToken.None);
-        var transferIn = await setup.Handler.Handle(
-            DeserializeScreenBody(5, 99, setup.Supply.Id, destination.Id, quantity: 4), CancellationToken.None);
+        var validation = new CreateInventoryMovementCommandValidator().Validate(command);
 
-        Assert.True(transferOut.IsSuccess, transferOut.Error);
-        Assert.True(transferIn.IsSuccess, transferIn.Error);
-        var stocks = await context.InventoryStocks.AsNoTracking().ToDictionaryAsync(x => x.InventoryLocationId, x => x.OnHandQuantity);
-        Assert.Equal(6, stocks[setup.Origin.Id]);
-        Assert.Equal(4, stocks[destination.Id]);
-        Assert.Equal(5, (await context.SupplyItems.AsNoTracking().SingleAsync()).AverageCost);
+        Assert.Contains(validation.Errors, x => x.ErrorMessage == CreateInventoryMovementCommandValidator.TransfersElsewhereMessage);
     }
 
     [Fact]

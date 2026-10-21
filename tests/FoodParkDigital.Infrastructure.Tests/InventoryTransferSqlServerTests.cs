@@ -17,8 +17,9 @@ namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
 /// Transferencias (Fase 27B, ADR 0038) in SQL Server set up as in production: the lock of the locations keeps transfers
-/// made at once from the same origin from taking more than there is, transfers both ways at once never wait for each other,
-/// the same transfer sent twice at once moves the stock once, and the folios never repeat.
+/// made at once from the same origin from taking more than there is, transfers both ways at once take turns without
+/// deadlocking, the same transfer sent twice at once moves the stock once (also one key sent at once for two pairs of
+/// locations), and the folios never repeat.
 /// </summary>
 public class InventoryTransferSqlServerTests
 {
@@ -44,7 +45,7 @@ public class InventoryTransferSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task Transfers_BothWays_AtOnce_ShouldAllBeMade_WithoutWaitingForEachOther()
+    public async Task Transfers_BothWays_AtOnce_ShouldAllBeMade_WithoutDeadlocking()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
         var shop = await Shop.OpenAsync(database, extraLocations: 1);
@@ -77,6 +78,32 @@ public class InventoryTransferSqlServerTests
         await using var context = database.CreateContext(shop.TenantId);
         Assert.Equal(1, await context.InventoryTransfers.CountAsync());
         Assert.Equal([5m, 19m], (await context.InventoryStocks.Where(s => s.SupplyItemId == shop.Soda).Select(s => s.OnHandQuantity).ToListAsync()).Order());
+    }
+
+    [SqlServerFact]
+    public async Task OneKey_SentAtOnce_ForTwoPairsOfLocations_ShouldMakeOneTransfer()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var shop = await Shop.OpenAsync(database, extraLocations: 3);
+        Assert.True((await shop.SendAsync(shop.Warehouse, shop.Locations[2], 10m)).IsSuccess);
+        var first = shop.Command(shop.Warehouse, shop.Locations[1], 5m);
+        // Four other locations, so neither waits for the other's lock: the counter of the folio puts them in line and the
+        // unique index of the key refuses the second, which is undone whole.
+        var second = first with { FromLocationId = shop.Locations[2], ToLocationId = shop.Locations[3] };
+
+        var sent = await Task.WhenAll(shop.SendAsync(first), shop.SendAsync(second));
+
+        Assert.Single(sent, s => s.IsSuccess);
+        Assert.Equal(CreateInventoryTransferCommandHandler.KeyUsedMessage, Assert.Single(sent, s => s.IsFailure).Error);
+        await using var context = database.CreateContext(shop.TenantId);
+        Assert.Equal(2, await context.InventoryTransfers.CountAsync());
+        Assert.Equal(4, await context.InventoryMovements.CountAsync(m => m.MovementReason == InventoryMovementReason.Transfer));
+        var sodas = await context.InventoryStocks.Where(s => s.SupplyItemId == shop.Soda)
+            .ToDictionaryAsync(s => s.InventoryLocationId, s => s.OnHandQuantity);
+        var moved = sent.Single(s => s.IsSuccess).Value;
+        Assert.Equal(24m, sodas.Values.Sum());
+        Assert.Equal(moved.ToLocationId == shop.Locations[1] ? (9m, 5m, 10m) : (14m, 0m, 5m),
+            (sodas[shop.Warehouse], sodas.GetValueOrDefault(shop.Locations[1]), sodas[shop.Locations[2]]));
     }
 
     [SqlServerFact]

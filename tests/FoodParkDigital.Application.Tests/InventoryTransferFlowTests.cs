@@ -114,7 +114,7 @@ public class InventoryTransferFlowTests
     }
 
     [Fact]
-    public async Task TheSameKey_SentAgain_ShouldAnswerTheSameTransfer_WithoutMovingAnything()
+    public async Task TheSameKey_SentAgain_ShouldAnswerTheSameTransfer_WithoutMovingAnything_AndRefuseAnotherOne()
     {
         await using var host = await SqliteTestHost.CreateAsync();
         var shop = await SeedShopAsync(host);
@@ -122,11 +122,14 @@ public class InventoryTransferFlowTests
 
         var first = await SendAsync(host, command);
         var again = await SendAsync(host, command);
-        // Even with other items: the key is the transfer.
+        // The answer was lost and the person changed it: the key already made the first one, which is said, not repeated.
         var changed = await SendAsync(host, command with { Lines = [new InventoryTransferLineRequest { SupplyItemId = shop.Chips, Quantity = 1m }] });
+        var elsewhere = await SendAsync(host, command with { ToLocationId = shop.Warehouse, FromLocationId = shop.Counter });
 
         Assert.True(first.IsSuccess, first.Error);
-        Assert.Equal((first.Value.Id, first.Value.Id), (again.Value.Id, changed.Value.Id));
+        Assert.Equal(first.Value.Id, again.Value.Id);
+        Assert.Equal((CreateInventoryTransferCommandHandler.KeyUsedMessage, CreateInventoryTransferCommandHandler.KeyUsedMessage),
+            (changed.Error, elsewhere.Error));
         Assert.Equal(1, await host.QueryAsync(db => db.InventoryTransfers.CountAsync()));
         Assert.Equal(2, await host.QueryAsync(db => db.InventoryMovements.CountAsync(m => m.MovementReason == InventoryMovementReason.Transfer)));
         Assert.Equal([10m, 15m, 20m], await StocksAsync(host, shop.Warehouse));

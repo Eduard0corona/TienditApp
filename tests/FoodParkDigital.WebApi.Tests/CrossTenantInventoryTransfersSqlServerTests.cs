@@ -42,8 +42,9 @@ public sealed class CrossTenantInventoryTransfersSqlServerTests
         var made = await mine.Client.PostAsJsonAsync(Transfers, request);
         Assert.Equal(HttpStatusCode.Created, made.StatusCode);
         var myTransfer = (await TwoBusinessesApi.ReadAsync(made)).GetProperty("id").GetGuid();
-        // The same key again is the same transfer; mine, even if they send it.
+        // The same key again is the same transfer. The key is of the business: theirs, with my key, finds nothing of mine.
         Assert.Equal(myTransfer, (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(Transfers, request))).GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.BadRequest, (await theirs.Client.PostAsJsonAsync(Transfers, request)).StatusCode);
         var theirTransfer = await TwoBusinessesApi.IdAsync(theirs.Client, Transfers, Transfer(theirWarehouse, theirStore, theirSupply, 1m));
 
         Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"{Transfers}/{myTransfer}")).StatusCode);
