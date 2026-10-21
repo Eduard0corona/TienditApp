@@ -8,6 +8,8 @@ import { describeLedgerEvent, formatSignedQuantity } from './ledgerGaps';
 interface LedgerGapModalProps {
   item: InventoryReconciliationItem;
   reconciling: boolean;
+  /** Why the last reconciliation from here failed (a 409 says what changed). */
+  error: string;
   onHide: () => void;
   onReconcile: (item: InventoryReconciliationItem) => void;
 }
@@ -16,7 +18,7 @@ interface LedgerGapModalProps {
  * Por qué no cuadra (Fase 27C): where the history of one stock stops adding up to it, oldest first, each place with what
  * it adds to the difference.
  */
-export default function LedgerGapModal({ item, reconciling, onHide, onReconcile }: LedgerGapModalProps) {
+export default function LedgerGapModal({ item, reconciling, error, onHide, onReconcile }: LedgerGapModalProps) {
   const titleId = useId();
   const detail = useReconciliationDetail(item.supplyItemId, item.inventoryLocationId);
   const data = detail.data;
@@ -28,6 +30,7 @@ export default function LedgerGapModal({ item, reconciling, onHide, onReconcile 
         <Modal.Title id={titleId}>Por qué no cuadra</Modal.Title>
       </Modal.Header>
       <Modal.Body>
+        {error && <div className="alert alert-danger" role="alert">{error}</div>}
         <p className="mb-2">
           <span className="fw-semibold">{item.supplyItemName}</span> en {item.inventoryLocationName}
         </p>

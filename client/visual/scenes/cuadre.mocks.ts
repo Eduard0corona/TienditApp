@@ -5,8 +5,8 @@ type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 
 /**
  * What does not add up at Café La Esquina (Fase 27C): someone loaded 2 L of milk in Roma Norte without a movement after
- * this morning's sale, and between two movements of last week 0.25 kg of coffee went missing from Roma Norte without
- * one. The other 22 stocks are what their movements add up to.
+ * this morning's reception, and between two movements of last week 0.25 kg of coffee went missing from Roma Norte
+ * without one. The other 22 stocks are what their movements add up to.
  */
 function withGaps(data: DemoData) {
   const supplyOf = (code: string) => data.supplies.find((s: { code: string }) => s.code === code);
@@ -50,7 +50,7 @@ function withGaps(data: DemoData) {
         eventCount: 1,
         events: [{
           kind: 5, quantity: 2, quantityFrom: 12, quantityTo: 14,
-          movementId: uuid('mov:INV-20261004-0003'), movementNumber: 'INV-20261004-0003', movementDate: at(12, 55),
+          movementId: uuid('mov:INV-20261004-0001'), movementNumber: 'INV-20261004-0001', movementDate: at(8, 30),
         }],
       },
     },

@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { getApiErrorMessage } from '../../api/errors';
 import {
-  INITIAL_RECONCILIATION_FILTER,
   useInventoryReconciliation,
   useReconcileInventoryLedger,
   type InventoryReconciliationFilter,
@@ -28,17 +27,23 @@ const COLUMNS = [
 
 interface LedgerReviewProps {
   locations: InventoryLocationDto[];
+  /** Kept by the page, so leaving the tab and coming back finds the review as it was. */
+  filter: InventoryReconciliationFilter;
+  onFilterChange: Dispatch<SetStateAction<InventoryReconciliationFilter>>;
   onBack: () => void;
+  /** A reconciliation starts: the message of the previous one goes. */
+  onStart: () => void;
   /** A reconciliation recorded something: the message, and the history is read again. */
   onReconciled: (message: string) => void;
 }
+
+const count = (n: number) => n.toLocaleString('es-MX');
 
 /**
  * Revisar que cuadre (Fase 27C, ADR 0039): the stocks that are not what their movements add up to, why, and recording
  * the difference in the history without moving the stock.
  */
-export default function LedgerReview({ locations, onBack, onReconciled }: LedgerReviewProps) {
-  const [filter, setFilter] = useState<InventoryReconciliationFilter>(INITIAL_RECONCILIATION_FILTER);
+export default function LedgerReview({ locations, filter, onFilterChange: setFilter, onBack, onStart, onReconciled }: LedgerReviewProps) {
   const [openItem, setOpenItem] = useState<InventoryReconciliationItem | null>(null);
   const [error, setError] = useState('');
   const review = useInventoryReconciliation(filter);
@@ -47,14 +52,31 @@ export default function LedgerReview({ locations, onBack, onReconciled }: Ledger
   const headingRef = useRef<HTMLHeadingElement>(null);
   const items = review.data?.mismatches.items ?? [];
   const location = locations.find((l) => l.id === filter.locationId);
-  const change = (patch: Partial<InventoryReconciliationFilter>) => setFilter((current) => ({ ...current, page: 1, ...patch }));
+  const change = (patch: Partial<InventoryReconciliationFilter>) => {
+    setError('');
+    setFilter((current) => ({ ...current, page: 1, ...patch }));
+  };
+  // Only what this location shows now: never the rows of the previous filter while the new one loads.
+  const bulk = location && !review.isPlaceholderData && !review.isFetching && items.length > 1
+    && items.every((item) => item.inventoryLocationId === location.id)
+    ? items
+    : null;
 
-  // The screen changes under the button that opened it: the focus goes to the review.
+  // The screen changes under the button that opened it: the focus goes to the review. Also after reconciling, once the
+  // review is read again: the row of the button that was pressed is gone.
+  const focusReview = useRef(true);
   useEffect(() => {
+    if (!focusReview.current || review.isFetching) return;
+    focusReview.current = false;
     headingRef.current?.focus();
-  }, []);
+  }, [review.isFetching]);
 
-  const run = async (toReconcile: InventoryReconciliationItem[]) => {
+  const open = (item: InventoryReconciliationItem) => {
+    setError('');
+    setOpenItem(item);
+  };
+
+  const run = async (toReconcile: InventoryReconciliationItem[], locationId: string) => {
     const [first] = toReconcile;
     const single = toReconcile.length === 1;
     const accepted = await confirm({
@@ -67,17 +89,24 @@ export default function LedgerReview({ locations, onBack, onReconciled }: Ledger
     if (!accepted) return;
 
     setError('');
+    onStart();
     try {
       const result = await reconcile.mutateAsync({
-        inventoryLocationId: first.inventoryLocationId,
+        inventoryLocationId: locationId,
         lines: toReconcile.map((item) => ({ supplyItemId: item.supplyItemId, expectedDifference: item.difference })),
       });
       setOpenItem(null);
-      onReconciled(result.reconciledCount === 0
-        ? 'Ya cuadraba: no se anotó nada.'
-        : `Listo: el historial de ${result.reconciledCount === 1 ? first.supplyItemName : `${result.reconciledCount} artículos`} ya suma su existencia (${result.movements.map((m) => m.movementNumber).join(' y ')}).`);
+      // What was reconciled leaves the list: back to its first page, with the focus on the review.
+      setFilter((current) => ({ ...current, page: 1 }));
+      focusReview.current = true;
+      const recorded = result.reconciledCount;
+      const what = single ? first.supplyItemName : recorded === 1 ? '1 artículo' : `${recorded} artículos`;
+      onReconciled(recorded === 0
+        ? (single ? 'Ya cuadraba: no se anotó nada.' : 'Ya cuadraban: no se anotó nada.')
+        : `Listo: el historial de ${what} ya suma su existencia (${result.movements.map((m) => m.movementNumber).join(' y ')}).`);
     } catch (err: unknown) {
-      // What does not add up changed since it was read (409), or the request failed: the review is read again.
+      // What does not add up changed since it was read (409), or the request failed: the review is read again. Said
+      // where the person is: in the detail when it is open.
       setError(getApiErrorMessage(err, 'No se pudo cuadrar el historial. Vuelve a intentarlo.'));
     }
   };
@@ -85,6 +114,7 @@ export default function LedgerReview({ locations, onBack, onReconciled }: Ledger
   const total = review.data?.mismatches.totalCount ?? 0;
   const checked = review.data?.checkedCount ?? 0;
   const filtered = filter.search.trim() !== '';
+  const where = location ? ` de ${location.name}` : '';
 
   return (
     <div>
@@ -96,19 +126,25 @@ export default function LedgerReview({ locations, onBack, onReconciled }: Ledger
         Cada existencia debe ser lo que suman sus entradas y salidas. Si algo la cambió sin un movimiento, aquí aparece con
         la diferencia y por qué. Cuadrar anota esa diferencia en el historial; la existencia no cambia.
       </p>
-      {error && <div className="alert alert-danger" role="alert">{error}</div>}
+      {error && !openItem && <div className="alert alert-danger" role="alert">{error}</div>}
       {review.isError && (
         <div className="alert alert-danger" role="alert">{getApiErrorMessage(review.error, 'No se pudo revisar el historial.')}</div>
       )}
       {review.isSuccess && (
-        total === 0 && !filtered ? (
+        checked === 0 ? (
+          <p className="mb-2" role="status">No hay existencias que revisar{where}.</p>
+        ) : filtered ? (
+          <p className="mb-2" role="status">
+            {total === 1 ? '1 que no cuadra coincide' : `${count(total)} que no cuadran coinciden`} con la búsqueda.
+          </p>
+        ) : total === 0 ? (
           <div className="alert alert-success" role="status">
-            Todo cuadra: {checked === 1 ? 'la existencia revisada es' : `las ${checked.toLocaleString('es-MX')} existencias revisadas son`} lo que suman sus movimientos.
+            Todo cuadra: {checked === 1 ? 'la existencia revisada es' : `las ${count(checked)} existencias revisadas son`} lo que suman sus movimientos.
           </div>
         ) : (
           <p className="mb-2" role="status">
-            Se revisaron {checked.toLocaleString('es-MX')} existencias{location ? ` de ${location.name}` : ''}:{' '}
-            {total === 1 ? '1 no cuadra' : `${total.toLocaleString('es-MX')} no cuadran`} con su historial.
+            {checked === 1 ? 'Se revisó 1 existencia' : `Se revisaron ${count(checked)} existencias`}{where}:{' '}
+            {total === 1 ? '1 no cuadra' : `${count(total)} no cuadran`} con su historial.
           </p>
         )
       )}
@@ -117,7 +153,7 @@ export default function LedgerReview({ locations, onBack, onReconciled }: Ledger
         columns={COLUMNS}
         keyExtractor={(item) => `${item.supplyItemId}:${item.inventoryLocationId}`}
         loading={review.isLoading}
-        emptyMessage={filtered ? 'Nada que no cuadre coincide con la búsqueda.' : 'Todo cuadra.'}
+        emptyMessage={review.isError ? 'No se pudo revisar el historial.' : filtered ? 'Nada que no cuadre coincide con la búsqueda.' : 'Todo cuadra.'}
         searchPlaceholder="Buscar artículo o ubicación"
         filters={(
           <DataTableFilter label="Ubicación" htmlFor="cuadre-ubicacion">
@@ -134,9 +170,9 @@ export default function LedgerReview({ locations, onBack, onReconciled }: Ledger
             </select>
           </DataTableFilter>
         )}
-        toolbarEnd={location && items.length > 1 ? (
-          <button type="button" className="btn btn-sm btn-primary text-nowrap" onClick={() => run(items)} disabled={reconcile.isPending}>
-            Cuadrar las {items.length} que se ven
+        toolbarEnd={bulk && location ? (
+          <button type="button" className="btn btn-sm btn-primary text-nowrap" onClick={() => run(bulk, location.id)} disabled={reconcile.isPending}>
+            Cuadrar las {bulk.length} que se ven
           </button>
         ) : undefined}
         serverSide={{
@@ -167,7 +203,7 @@ export default function LedgerReview({ locations, onBack, onReconciled }: Ledger
                   type="button"
                   className="btn btn-sm btn-light text-nowrap"
                   aria-label={`Por qué no cuadra ${item.supplyItemName} en ${item.inventoryLocationName}`}
-                  onClick={() => setOpenItem(item)}
+                  onClick={() => open(item)}
                 >
                   Por qué
                 </button>
@@ -175,7 +211,7 @@ export default function LedgerReview({ locations, onBack, onReconciled }: Ledger
                   type="button"
                   className="btn btn-sm btn-light text-nowrap"
                   aria-label={`Cuadrar ${item.supplyItemName} en ${item.inventoryLocationName}`}
-                  onClick={() => run([item])}
+                  onClick={() => run([item], item.inventoryLocationId)}
                   disabled={reconcile.isPending}
                 >
                   Cuadrar
@@ -190,8 +226,12 @@ export default function LedgerReview({ locations, onBack, onReconciled }: Ledger
           key={`${openItem.supplyItemId}:${openItem.inventoryLocationId}`}
           item={openItem}
           reconciling={reconcile.isPending}
-          onHide={() => setOpenItem(null)}
-          onReconcile={(item) => run([item])}
+          error={error}
+          onHide={() => {
+            setError('');
+            setOpenItem(null);
+          }}
+          onReconcile={(item) => run([item], item.inventoryLocationId)}
         />
       )}
     </div>

@@ -4,7 +4,8 @@ import { SIZES, dialog, open, snap } from '../helpers';
 import { CON_DIFERENCIAS, RECONCILIATION_ROUTES } from './cuadre.mocks';
 
 // Inventario › Historial por insumo › Revisar que cuadre (Fase 27C): the two stocks of Café La Esquina that are not what
-// their movements add up to, why one of them does not, and confirming the reconciliation (cuadre.mocks).
+// their movements add up to, those of one location with «Cuadrar las 2 que se ven», why one of them does not, and the
+// question before reconciling (cuadre.mocks).
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -43,6 +44,13 @@ for (const look of LOOKS) {
     }
 
     if (look.suffix === 'escritorio') {
+      test(`revisar que cuadre por ubicacion ${look.suffix}`, async ({ page }) => {
+        await openReview(page);
+        await page.getByLabel('Ubicación').selectOption({ label: 'Sucursal Roma Norte' });
+        await expect(page.getByRole('button', { name: 'Cuadrar las 2 que se ven' })).toBeVisible();
+        await snap(page, `revisar-que-cuadre-por-ubicacion-${look.suffix}`);
+      });
+
       test(`cuadrar ${look.suffix}`, async ({ page }) => {
         await openReview(page);
         await page.getByRole('button', { name: 'Cuadrar Leche entera en Sucursal Roma Norte' }).click();

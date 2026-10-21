@@ -4,6 +4,7 @@ import TabRow from '../../components/common/TabRow';
 import { getApiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventoryApi';
 import { INITIAL_COUNTS_FILTER, type InventoryCountsFilter } from '../../api/inventoryCounts';
+import { INITIAL_RECONCILIATION_FILTER, type InventoryReconciliationFilter } from '../../api/inventoryReconciliation';
 import { INITIAL_TRANSFERS_FILTER, type InventoryTransfersFilter } from '../../api/inventoryTransfers';
 import type { InventoryAlertsDto, InventoryLocationDto, InventoryMovementDto, SupplyItemDto } from '../../types';
 import AlertsTab from './AlertsTab';
@@ -95,6 +96,7 @@ export default function InventoryManagement() {
   const [transfersFilter, setTransfersFilter] = useState<InventoryTransfersFilter>(INITIAL_TRANSFERS_FILTER);
   const [openCountId, setOpenCountId] = useState<string | null>(null);
   const [reviewingLedger, setReviewingLedger] = useState(false);
+  const [reconciliationFilter, setReconciliationFilter] = useState<InventoryReconciliationFilter>(INITIAL_RECONCILIATION_FILTER);
   const [countsFilter, setCountsFilter] = useState<InventoryCountsFilter>(INITIAL_COUNTS_FILTER);
   const [movementDetail, setMovementDetail] = useState<{
     show: boolean;
@@ -223,7 +225,7 @@ export default function InventoryManagement() {
       )}
 
       {success && (
-        <div className="alert alert-success alert-dismissible fade show">
+        <div className="alert alert-success alert-dismissible fade show" role="status">
           {success}
           <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setSuccess('')}></button>
         </div>
@@ -348,7 +350,10 @@ export default function InventoryManagement() {
               {activeTab === 'kardex' && reviewingLedger && (
                 <LedgerReview
                   locations={locations}
+                  filter={reconciliationFilter}
+                  onFilterChange={setReconciliationFilter}
                   onBack={() => setReviewingLedger(false)}
+                  onStart={() => setSuccess('')}
                   onReconciled={(message) => {
                     setError('');
                     setSuccess(message);

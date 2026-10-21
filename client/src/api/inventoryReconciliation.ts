@@ -44,6 +44,7 @@ export function useInventoryReconciliation(filter: InventoryReconciliationFilter
     }),
     placeholderData: keepPreviousData,
     staleTime: 0,
+    gcTime: 0,
   });
 }
 
@@ -57,6 +58,7 @@ export function useReconciliationDetail(supplyItemId: string, locationId: string
     }),
     retry: false,
     staleTime: 0,
+    gcTime: 0,
   });
 }
 
