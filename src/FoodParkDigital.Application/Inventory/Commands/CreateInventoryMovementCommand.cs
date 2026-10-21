@@ -50,6 +50,8 @@ public class CreateInventoryMovementCommandValidator : AbstractValidator<CreateI
             .WithMessage(TransfersElsewhereMessage);
         RuleFor(x => x.MovementReason).IsInEnum();
         RuleFor(x => x.MovementReason).NotEqual(InventoryMovementReason.Transfer).WithMessage(TransfersElsewhereMessage);
+        // A reconciliation records a gap without moving the stock (Fase 27C, ADR 0039): a manual movement always moves it.
+        RuleFor(x => x.MovementReason).NotEqual(InventoryMovementReason.LedgerReconciliation).WithMessage(ReconciliationElsewhereMessage);
         RuleFor(x => x.ReferenceNumber).MaximumLength(100);
         RuleFor(x => x.ExternalReference)
             .MaximumLength(100)
@@ -65,6 +67,9 @@ public class CreateInventoryMovementCommandValidator : AbstractValidator<CreateI
         RuleFor(x => x.Lines).NotEmpty().WithMessage("Debes agregar al menos un detalle.");
         RuleForEach(x => x.Lines).SetValidator(new CreateInventoryMovementLineRequestValidator());
     }
+
+    public const string ReconciliationElsewhereMessage =
+        "El cuadre del historial se hace en Inventario › Historial por insumo › Revisar que cuadre.";
 
     public const string TransfersElsewhereMessage =
         "Las transferencias se hacen en Inventario › Transferencias: así salen de una ubicación y entran a la otra juntas.";
