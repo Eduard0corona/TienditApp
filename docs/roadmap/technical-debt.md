@@ -209,7 +209,7 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - **Sin aprobación de otra persona:** quien tiene `ManageInventory` cuenta y aplica. Un permiso para aplicar, o una segunda firma, sería una fase aparte.
   - **Sin conteo por lote ni sin conexión:** las existencias no son por lote, y la hoja necesita la API para tomar el sistema de cada artículo.
   - **Aplicar en una tienda abierta puede chocar con una venta** del mismo artículo (409, token de la existencia, o «Se vendió o se movió un artículo mientras se aplicaba el conteo» si la dejaría en negativo): se vuelve a intentar sin perder nada, porque es todo o nada. No hay reintento automático ni una prueba que fuerce esa carrera; leer las existencias con `UPDLOCK` la quitaría, pero haría esperar (o fallar) a las ventas.
-  - **El kardex no se compara con la existencia guardada:** el conteo reconcilia con el anaquel, no detecta un movimiento que haya escrito mal su saldo.
+  - **El kardex no se compara con la existencia guardada:** el conteo reconcilia con el anaquel, no detecta un movimiento que haya escrito mal su saldo. Resuelto en la Fase 27C (abajo).
   - **Durante un regreso a la 26D, o mientras conviven las dos versiones,** la anterior no enseña los conteos y acepta una referencia externa `COUNT:` en un movimiento manual (el índice único la sigue protegiendo). Con un conteo creado, `rollback.sql` se detiene con 50030.
 - Transferencias entre ubicaciones (Fase 27B, [ADR 0038](../adr/0038-inventory-transfers.md)):
   - **Sin «en tránsito»:** lo que sale entra al mismo tiempo. Si en el destino llega menos, se corrige con un conteo o un ajuste allí; enviar y recibir por separado, con sus diferencias, sería una fase aparte.
@@ -222,6 +222,15 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - **Sin pedidos de una sucursal a la bodega, remito impreso ni aprobación de otra persona.**
   - **Los movimientos de transferencia manuales de antes de la 27B** siguen en el historial sin una transferencia que los una; no se reparan.
   - **Durante un regreso a la 27A, o mientras conviven las dos versiones,** la anterior no enseña las transferencias, enseña el motivo nuevo como «11» y todavía acepta transferencias manuales de una pierna y una referencia `TRF:` (el índice único la sigue protegiendo). Con una transferencia hecha, `rollback.sql` se detiene con 50031.
+- Revisar que el historial cuadre (Fase 27C, [ADR 0039](../adr/0039-ledger-reconciliation.md)):
+  - **Cuadrar no dice cuánto hay:** toma la existencia guardada como la que cuenta y anota en el historial lo que le faltaba. Para saber cuánto hay en el anaquel se cuenta.
+  - **Un cuadre no lleva costo:** el historial anota la cantidad, no su valor. No hay una revisión del valor del historial ni del costo promedio.
+  - **No se revisa solo ni avisa:** se abre a mano en «Historial por insumo». Cada vez suma todo el historial del negocio, o de la ubicación, agrupado por artículo, ubicación y tipo; para revisar a cada venta o desde Inicio haría falta un resumen guardado.
+  - **El detalle lee hasta 50,000 líneas** del artículo en la ubicación, las más recientes: lo anterior queda como un solo lugar, «de antes de lo revisado». Lista los 50 lugares más recientes.
+  - **El orden del historial** es el de guardado y, en el mismo instante, el del folio (más de 9,999 movimientos en un día lo romperían en ese instante). Dos líneas del mismo artículo y ubicación en un movimiento se encadenan por su saldo.
+  - **No repara el saldo antes y después** de cada línea: un movimiento que lo escribió mal sigue diciéndolo, y la revisión lo señala con su cuadre.
+  - **Sin revisión entre negocios desde la plataforma.**
+  - **Durante un regreso a la 27B, o mientras conviven las dos versiones,** la anterior enseña el motivo nuevo como «12» y no tiene la revisión. No hay migración.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

@@ -684,6 +684,22 @@ La Fase 27B trae una migración, [`database/production/20261021040954_AddInvento
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla, y las piernas de una transferencia son movimientos de inventario comunes que sabe leer; el motivo nuevo lo enseña como «11». Deja de enseñar las transferencias y vuelve a permitir transferencias manuales de una pierna.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50031, sin cambiar nada, en cuanto hay una transferencia: cada pierna quedaría como un movimiento suelto. Sin ninguna, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Revisar que el historial cuadre (Fase 27C)
+
+La Fase 27C no trae migración ni `apply.sql`: el motivo nuevo «Cuadre del historial» (`LedgerReconciliation`, 12) va en la misma columna entera de los demás, que no tiene restricción, y lo demás son lecturas y movimientos comunes ([ADR 0039](../adr/0039-ledger-reconciliation.md)). El merge despliega sin pasos en la base, y `/health/schema` sigue sano.
+
+- **Lo que cambia para los negocios al desplegar:**
+  - Inventario › Historial por insumo suma «Revisar que cuadre», para quien maneja el inventario. Dice qué existencias no son lo que suman sus movimientos, por qué y las cuadra.
+  - Un cuadre aparece en «Entradas y salidas» y en el historial como un ajuste de motivo «Cuadre del historial», sin costo y con la existencia igual antes y después.
+  - «Registrar movimiento» no ofrece ese motivo, y la API lo rechaza en un movimiento manual.
+- **El contrato agrega y restringe:**
+  - agrega `GET` y `POST /api/v1/inventory/reconciliation`, `GET /api/v1/inventory/reconciliation/{supplyItemId}/{inventoryLocationId}`, el motivo `LedgerReconciliation` (12) de `InventoryMovementReason` y el enum `InventoryReconciliationEventKind`;
+  - `POST /api/v1/inventory/movements` ahora rechaza (400) el motivo `LedgerReconciliation`.
+
+  Nada se quita ni cambia de nombre.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base. Los cuadres hechos son ajustes comunes que la 27B sabe leer, y enseña su motivo como «12». Deja de tener la revisión.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

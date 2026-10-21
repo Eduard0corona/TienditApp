@@ -719,6 +719,17 @@ Inventario › Transferencias (Fase 27B, [ADR 0038](../adr/0038-inventory-transf
 - **Lo que decide el cliente:** `transferForm.ts` (con pruebas) solo evita un viaje por lo que está claro que falla: las dos ubicaciones, al menos un artículo, cantidades con las reglas de `parseQuantity` y no más de lo que hay. Lo que hay, lo que vale cada artículo y si alcanza lo decide la API dentro del candado.
 - **Movimientos manuales:** `MovementModal` ofrece `MANUAL_MOVEMENT_TYPE_OPTIONS` y `MANUAL_MOVEMENT_REASON_OPTIONS`, sin los tipos de transferencia ni el motivo «Transferencia», y dice que las transferencias van en su pestaña. Los filtros del historial siguen con todos.
 
+Inventario › Historial por insumo › «Revisar que cuadre» (Fase 27C, [ADR 0039](../adr/0039-ledger-reconciliation.md)):
+
+- **Datos:** `api/inventoryReconciliation.ts` lee la revisión y el detalle de una existencia con TanStack Query (`reconciliationKeys`, sin caché: se leen otra vez cada vez que se abren) y cuadra con `useReconcileInventoryLedger`, que invalida la revisión salga bien o mal. Fuera de `api/queries.ts`, como los conteos y las transferencias.
+- **Pantallas:**
+  - `LedgerReview`: una vista dentro de la pestaña, con regreso a «Historial por insumo», y no una pestaña más. Muestra el resumen («Se revisaron N existencias: M no cuadran» o «Todo cuadra») y la tabla de lo que no cuadra, con la ubicación y la búsqueda en el servidor. En el teléfono enseña el artículo con su ubicación, la diferencia y las acciones.
+    - «Cuadrar», por artículo o «Cuadrar las N que se ven» con una ubicación elegida, confirma con `useConfirm` que la existencia no cambia y que para saber cuánto hay se cuenta, y manda la diferencia revisada de cada artículo.
+    - Un 409 (la diferencia cambió) muestra el mensaje de la API y la revisión se lee otra vez.
+  - `LedgerGapModal`: «Por qué no cuadra», cada lugar del historial en palabras (`ledgerGaps.ts`, con pruebas) con lo que suma a la diferencia, y avisa cuando se revisaron solo los movimientos más recientes. Su «Cuadrar» manda la diferencia que acaba de leer.
+  - `InventoryManagement`: «Revisar que cuadre» va junto a «Actualizar» en la pestaña. Al cuadrar dice qué se anotó y vuelve a leer el historial y las entradas y salidas.
+- **Lo que decide la API:** qué no cuadra, por cuánto y dónde; el cliente solo lo muestra y manda lo que se revisó. El motivo «Cuadre del historial» no se ofrece en los movimientos manuales (`MANUAL_MOVEMENT_REASON_OPTIONS`).
+
 ## Guardrails
 
 - Backend decide estados, totales, impuestos, saldos y existencias finales.

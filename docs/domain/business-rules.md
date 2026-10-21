@@ -476,6 +476,10 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
   - La salida y la entrada valen lo mismo: el costo promedio del artículo, si no el último, si no el de referencia. El costo promedio no cambia.
   - La misma llave de la app contesta la transferencia ya hecha, sin mover nada; con otras ubicaciones o artículos se rechaza (409), porque ya hizo otra.
   - Un movimiento manual no puede ser una pierna de transferencia (tipos de transferencia ni motivo «Transferencia»).
+- Revisar que el historial cuadre (Fase 27C, [ADR 0039](../adr/0039-ledger-reconciliation.md)):
+  - Cada existencia debe ser lo que suman sus movimientos: lo que entra menos lo que sale. La diferencia es la existencia menos el historial.
+  - Cuadrar anota esa diferencia en el historial con un ajuste de motivo «Cuadre del historial», sin costo, que no mueve la existencia ni el costo promedio. Solo ese motivo anota sin mover, y solo como ajuste.
+  - Se cuadra lo que se revisó: si la diferencia cambió, no se anota nada (409); si ya es 0, se salta. Un movimiento manual no toma ese motivo.
 - Una compra no repite insumo+ubicación, no recibe más de lo pendiente y distingue recepción parcial/total; un borrador se envía, y solo una compra sin nada recibido se cancela.
 - Una caja cerrada no recibe movimientos y no puede cerrarse dos veces; el monto contado al cerrar no puede ser negativo.
 - El tipo de movimiento de caja define su signo; los importes capturados son positivos. Solo el efectivo forma parte del saldo esperado.
