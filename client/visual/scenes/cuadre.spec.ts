@@ -46,7 +46,7 @@ for (const look of LOOKS) {
     if (look.suffix === 'escritorio') {
       test(`revisar que cuadre por ubicacion ${look.suffix}`, async ({ page }) => {
         await openReview(page);
-        await page.getByLabel('Ubicación').selectOption({ label: 'Sucursal Roma Norte' });
+        await page.getByLabel('Ubicación', { exact: true }).selectOption({ label: 'Sucursal Roma Norte' });
         await expect(page.getByRole('button', { name: 'Cuadrar las 2 que se ven' })).toBeVisible();
         await snap(page, `revisar-que-cuadre-por-ubicacion-${look.suffix}`);
       });
