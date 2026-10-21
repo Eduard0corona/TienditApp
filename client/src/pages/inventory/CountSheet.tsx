@@ -16,6 +16,9 @@ const COLUMNS = [
   { header: 'Contado', width: '9rem' },
 ];
 
+// How long «Guardado» stays under a box.
+const SAVED_FOR_MS = 4000;
+
 type LineState = { kind: 'saving' } | { kind: 'saved' } | { kind: 'error'; message: string };
 
 function without<T>(record: Record<string, T>, key: string): Record<string, T> {
@@ -24,79 +27,141 @@ function without<T>(record: Record<string, T>, key: string): Record<string, T> {
   return rest;
 }
 
+const isCode = (line: InventoryCountLine, term: string) =>
+  [line.supplyCode, line.supplySku, line.supplyBarcode].some((code) => code?.toLowerCase() === term);
+
 interface CountSheetProps {
   countId: string;
 }
 
 /**
  * The sheet of an open count (Fase 27A): each item with a box for what is on the shelf, saved when the box is left or
- * with Enter (which goes to the next one). It does not show what the system has: counting blind, nobody copies it. A
- * scanned code that matches one item puts the cursor in its box.
+ * with Enter (which goes to the next one, or back to the search after a scan). It does not show what the system has:
+ * counting blind, nobody copies it. A scanned code that is one item's puts the cursor in its box.
  */
 export default function CountSheet({ countId }: CountSheetProps) {
   const [filter, setFilter] = useState<InventoryCountLinesFilter>({ search: '', pending: false, withDifference: false, page: 1, pageSize: 50 });
   const lines = useInventoryCountLines(countId, filter);
   const record = useRecordInventoryCount(countId);
-  // What was typed and not saved yet, what the API answered for each saved item, and how each save went.
+  // What was typed and not saved yet, and how each save went. What was saved is in the items themselves.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [saved, setSaved] = useState<Record<string, number | null>>({});
   const [states, setStates] = useState<Record<string, LineState>>({});
+  // The text each item is saving: leaving the box after Enter does not save it twice.
+  const saving = useRef<Record<string, string>>({});
+  const timers = useRef<Record<string, number>>({});
+  // Something was counted while showing what is left: the next page is read from the first one.
+  const countedWhilePending = useRef(false);
   const tableRef = useRef<HTMLDivElement>(null);
   const items = useMemo(() => lines.data?.items ?? [], [lines.data]);
 
-  const counted = (line: InventoryCountLine) => (line.id in saved ? saved[line.id] : line.countedQuantity ?? null);
+  useEffect(() => {
+    const pending = timers.current;
+    return () => Object.values(pending).forEach((timer) => window.clearTimeout(timer));
+  }, []);
+
   const textOf = (line: InventoryCountLine) => {
     if (line.id in drafts) return drafts[line.id];
-    const value = counted(line);
-    return value === null ? '' : String(value);
+    return line.countedQuantity === null || line.countedQuantity === undefined ? '' : String(line.countedQuantity);
   };
 
-  // A scanned code that is exactly one item's: straight to its box.
+  // A scanned code that is exactly one item's: straight to its box, once per code (saving it changes the items too).
+  const scanned = useRef('');
   useEffect(() => {
     const term = filter.search.trim().toLowerCase();
-    if (!term || items.length !== 1) return;
-    const [line] = items;
-    if (![line.supplyCode, line.supplySku, line.supplyBarcode].some((code) => code?.toLowerCase() === term)) return;
-    tableRef.current?.querySelector<HTMLInputElement>(`[data-count-line="${line.id}"]`)?.focus();
+    if (!term || term === scanned.current) return;
+    const found = items.filter((line) => isCode(line, term));
+    if (found.length !== 1) return;
+    scanned.current = term;
+    tableRef.current?.querySelector<HTMLInputElement>(`[data-count-line="${found[0].id}"]`)?.focus();
   }, [filter.search, items]);
+
+  const showSaved = (lineId: string) => {
+    window.clearTimeout(timers.current[lineId]);
+    setStates((current) => ({ ...current, [lineId]: { kind: 'saved' } }));
+    timers.current[lineId] = window.setTimeout(() => {
+      setStates((current) => (current[lineId]?.kind === 'saved' ? without(current, lineId) : current));
+    }, SAVED_FOR_MS);
+  };
+
+  /** Checks what was typed; a quantity the unit does not take stays in its box with why. */
+  const check = (line: InventoryCountLine) => {
+    if (!(line.id in drafts)) return true;
+    const parsed = parseCountedQuantity(drafts[line.id], line.unit);
+    if ('error' in parsed) {
+      setStates((current) => ({ ...current, [line.id]: { kind: 'error', message: parsed.error } }));
+      return false;
+    }
+    return true;
+  };
 
   const save = async (line: InventoryCountLine) => {
     if (!(line.id in drafts)) return;
-    const parsed = parseCountedQuantity(drafts[line.id], line.unit);
+    const text = drafts[line.id];
+    const parsed = parseCountedQuantity(text, line.unit);
     if ('error' in parsed) {
       setStates((current) => ({ ...current, [line.id]: { kind: 'error', message: parsed.error } }));
       return;
     }
-    if (parsed.value === counted(line)) {
-      setDrafts((current) => without(current, line.id));
+    if (parsed.value === (line.countedQuantity ?? null)) {
+      setDrafts((current) => (current[line.id] === text ? without(current, line.id) : current));
       setStates((current) => without(current, line.id));
       return;
     }
+    if (saving.current[line.id] === text) return;
 
+    saving.current[line.id] = text;
     setStates((current) => ({ ...current, [line.id]: { kind: 'saving' } }));
     try {
-      const result = await record.mutateAsync([{ lineId: line.id, countedQuantity: parsed.value }]);
-      const answered = result.lines.find((item) => item.id === line.id);
-      setSaved((current) => ({ ...current, [line.id]: answered?.countedQuantity ?? null }));
-      setDrafts((current) => without(current, line.id));
-      setStates((current) => ({ ...current, [line.id]: { kind: 'saved' } }));
+      await record.mutateAsync([{ lineId: line.id, countedQuantity: parsed.value }]);
+      if (filter.pending) countedWhilePending.current = true;
+      // What was typed while it saved stays in the box, to be saved too.
+      setDrafts((current) => (current[line.id] === text ? without(current, line.id) : current));
+      showSaved(line.id);
     } catch (err: unknown) {
       setStates((current) => ({ ...current, [line.id]: { kind: 'error', message: getApiErrorMessage(err, 'No se pudo guardar.') } }));
+    } finally {
+      if (saving.current[line.id] === text) delete saving.current[line.id];
     }
   };
 
   const next = (event: KeyboardEvent<HTMLInputElement>, line: InventoryCountLine) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    void save(line);
+    if (!check(line)) return;
+
+    // Leaving the box saves it. After a scan, back to the search, ready for the next code; otherwise the next box.
+    const search = tableRef.current?.querySelector<HTMLInputElement>('input[type="search"]');
     const boxes = [...(tableRef.current?.querySelectorAll<HTMLInputElement>('[data-count-line]') ?? [])];
-    boxes[boxes.indexOf(event.currentTarget) + 1]?.focus();
+    const following = boxes[boxes.indexOf(event.currentTarget) + 1];
+    if (filter.search.trim() && search) {
+      search.focus();
+      search.select();
+    } else if (following) {
+      following.focus();
+    } else {
+      void save(line);
+    }
   };
+
+  const goToPage = (page: number) => {
+    // What was counted left the pages of what is left: the items that come next are on the first one now.
+    if (filter.pending && countedWhilePending.current) {
+      countedWhilePending.current = false;
+      if (filter.page === 1) void lines.refetch();
+      setFilter((current) => ({ ...current, page: 1 }));
+      return;
+    }
+    setFilter((current) => ({ ...current, page }));
+  };
+
 
   return (
     <div ref={tableRef}>
       {lines.isError && (
         <div className="alert alert-danger" role="alert">{getApiErrorMessage(lines.error, 'Error al cargar los artículos del conteo.')}</div>
+      )}
+      {!lines.isLoading && items.length === 0 && filter.search.trim() && (
+        <p className="text-muted small mb-2">Si apareció en el anaquel y no está en el conteo, súmalo con «Agregar artículos».</p>
       )}
       <DataTable
         data={items}
@@ -111,7 +176,10 @@ export default function CountSheet({ countId }: CountSheetProps) {
               id="conteo-mostrar"
               className="form-select form-select-sm"
               value={filter.pending ? 'pending' : 'all'}
-              onChange={(e) => setFilter((current) => ({ ...current, page: 1, pending: e.target.value === 'pending' }))}
+              onChange={(e) => {
+                countedWhilePending.current = false;
+                setFilter((current) => ({ ...current, page: 1, pending: e.target.value === 'pending' }));
+              }}
             >
               <option value="all">Todos</option>
               <option value="pending">Sin contar</option>
@@ -122,7 +190,7 @@ export default function CountSheet({ countId }: CountSheetProps) {
           totalCount: lines.data?.totalCount ?? 0,
           page: filter.page,
           pageSize: filter.pageSize,
-          onPageChange: (page) => setFilter((current) => ({ ...current, page })),
+          onPageChange: goToPage,
           onPageSizeChange: (pageSize) => setFilter((current) => ({ ...current, page: 1, pageSize })),
           onSearchChange: (search) => setFilter((current) => ({ ...current, page: 1, search })),
         }}
@@ -146,6 +214,7 @@ export default function CountSheet({ countId }: CountSheetProps) {
                   data-count-line={line.id}
                   type="text"
                   inputMode="decimal"
+                  enterKeyHint="next"
                   autoComplete="off"
                   className={`form-control form-control-sm${state?.kind === 'error' ? ' is-invalid' : ''}`}
                   placeholder="Sin contar"
@@ -155,6 +224,7 @@ export default function CountSheet({ countId }: CountSheetProps) {
                   onChange={(e) => {
                     const { value } = e.target;
                     setDrafts((current) => ({ ...current, [line.id]: value }));
+                    if (state?.kind === 'error') setStates((current) => without(current, line.id));
                   }}
                   onBlur={() => void save(line)}
                   onKeyDown={(e) => next(e, line)}

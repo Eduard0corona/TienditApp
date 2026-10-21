@@ -69,7 +69,7 @@ describe('NewCountModal', () => {
     const user = userEvent.setup();
     renderModal();
 
-    await user.click(screen.getByLabelText('Solo los artículos que elija'));
+    await user.click(screen.getByLabelText('Solo los artículos que elijas'));
     await user.click(screen.getByRole('button', { name: 'Empezar conteo' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Elige al menos un artículo.');
 

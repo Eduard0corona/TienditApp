@@ -3,6 +3,7 @@ import PageTitle from '../../components/common/PageTitle';
 import TabRow from '../../components/common/TabRow';
 import { getApiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventoryApi';
+import { INITIAL_COUNTS_FILTER, type InventoryCountsFilter } from '../../api/inventoryCounts';
 import type { InventoryAlertsDto, InventoryLocationDto, InventoryMovementDto, SupplyItemDto } from '../../types';
 import AlertsTab from './AlertsTab';
 import CountDetail from './CountDetail';
@@ -84,6 +85,7 @@ export default function InventoryManagement() {
   const movementDialog = useDialog();
   const newCountDialog = useDialog();
   const [openCountId, setOpenCountId] = useState<string | null>(null);
+  const [countsFilter, setCountsFilter] = useState<InventoryCountsFilter>(INITIAL_COUNTS_FILTER);
   const [movementDetail, setMovementDetail] = useState<{
     show: boolean;
     loading: boolean;
@@ -286,7 +288,9 @@ export default function InventoryManagement() {
               )}
               {activeTab === 'stocks' && <StocksTab list={stocks} locations={locations} />}
               {activeTab === 'movements' && <MovementsTab list={movements} onOpenDetail={openMovementDetail} />}
-              {activeTab === 'counts' && !openCountId && <CountsTab locations={locations} onOpen={setOpenCountId} />}
+              {activeTab === 'counts' && !openCountId && (
+                <CountsTab locations={locations} filter={countsFilter} onFilterChange={setCountsFilter} onOpen={setOpenCountId} />
+              )}
               {activeTab === 'counts' && openCountId && (
                 <CountDetail
                   key={openCountId}

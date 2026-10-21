@@ -654,6 +654,8 @@ La Fase 27A trae una migración, [`database/production/20261021002749_AddInvento
   - el enum `InventoryCountStatus`.
 
   Nada se quita ni cambia de nombre. Un movimiento manual con una referencia externa que empieza con `COUNT:` ahora se rechaza, como los de `ORDER:` y `PO:`.
+
+  En toda la API, un candado que no llega a tiempo (conteo, fiado o citas) responde ahora 409 `conflict` («Alguien más está cambiando lo mismo…») en lugar de 500, y un número de página enorme se recorta en lugar de fallar.
 - **Sin configuración nueva.**
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas, y los ajustes de un conteo son movimientos de inventario comunes que sabe leer. Solo deja de enseñar los conteos.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50030, sin cambiar nada, en cuanto hay un conteo (abierto, aplicado o cancelado): se perdería lo que se contó, quién y contra qué. Sin ninguno, quita las tablas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.

@@ -687,19 +687,24 @@ Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y
 
 Inventario › Conteos (Fase 27A, [ADR 0037](../adr/0037-inventory-counts.md)):
 
-- **Datos:** `api/inventoryCounts.ts` lee y cambia los conteos con TanStack Query (`countKeys`), fuera de `api/queries.ts`, que carga la primera visita. Guardar una cantidad pone en la caché el conteo que contesta la API y no vuelve a pedir la hoja, para que los campos no salten mientras se escribe. Agregar, aplicar o cancelar invalidan todos los conteos.
+- **Datos:** `api/inventoryCounts.ts` lee y cambia los conteos con TanStack Query (`countKeys`), fuera de `api/queries.ts`, que carga la primera visita.
+  - Guardar una cantidad pone en la caché el conteo que contesta la API (si no hay uno más nuevo) y sus artículos en cada página ya leída, sin volver a pedirlas, para que los campos no salten mientras se escribe; esas páginas quedan viejas y la siguiente que se muestra se lee otra vez. Un 409 vuelve a leer el conteo, y la hoja se cierra si otra persona lo aplicó o canceló.
+  - Agregar, aplicar o cancelar invalidan todos los conteos.
 - **Pantallas:**
   - `CountsTab`: la lista, con estado, ubicación y búsqueda en el servidor.
   - `NewCountModal`: la ubicación y qué se cuenta. Los artículos se eligen con `SupplyPicker`, que también usa `AddCountItemsModal`.
-  - `CountDetail`: el conteo. «Contar» abre `CountSheet` y «Revisar diferencias» abre el resumen y `CountDifferences`; el conteo aplicado enseña sus ajustes (abren `MovementDetailModal`) y el cancelado su motivo (`CancelCountModal`).
-  - `InventoryManagement`: guarda el conteo abierto mientras se visita otra pestaña.
+  - `CountDetail`: el conteo. «Contar» enseña `CountSheet` y «Revisar diferencias» el resumen y `CountDifferences`; la hoja se queda montada (oculta) mientras se revisa, con su búsqueda, su página y cualquier campo con error. El conteo aplicado enseña sus ajustes («Ver entrada…», «Ver salida…», que abren `MovementDetailModal`) y el cancelado su motivo (`CancelCountModal`).
+  - `InventoryManagement`: guarda el conteo abierto y los filtros de la lista mientras se visita otra pestaña o se abre un conteo.
 - **La hoja (`CountSheet`):**
   - Es a ciegas: no muestra lo que dice el sistema.
-  - Cada cantidad se guarda al salir del campo o con Enter, que pasa al siguiente. Un código escaneado que es exactamente el de un artículo pone el cursor en su campo.
+  - Cada cantidad se guarda al salir del campo, una vez; Enter pasa al siguiente o, después de escanear, regresa al buscador con el código seleccionado, listo para el siguiente. Un código escaneado que es exactamente el de un artículo pone el cursor en su campo, una vez por código.
+  - Lo escrito mientras se guardaba se queda en el campo; «Guardado» se quita a los 4 segundos.
+  - En «Sin contar», después de contar algo, la página siguiente se lee desde la primera: lo contado ya no está y no se salta ningún artículo.
   - Dice junto al campo por qué no toma una cantidad (`countEntry.ts`, el mismo límite que la API) o qué contestó la API.
   - Tiene dos columnas para que el campo quepa junto al artículo en el teléfono: la unidad va debajo del nombre.
 - **Lo que decide la API:** las diferencias, en qué quedará cada artículo y lo que valen los calcula el servidor; el cliente solo los muestra.
-- **Aplicar:** «Aplicar conteo» es la única acción principal de la revisión. Pregunta antes, y manda la revisión del conteo que la pantalla leyó al abrir la revisión.
+- **Revisar:** espera a que se guarde lo escrito («Guardando lo contado…») y lee otra vez el conteo y sus diferencias. «Volver a contar» borra lo contado de un artículo para contarlo contra el sistema de ese momento. En el teléfono la tabla enseña el artículo, lo contado y la diferencia, y «Volver a contar» va bajo el artículo.
+- **Aplicar:** «Aplicar conteo» es la única acción principal de la revisión. Se habilita cuando el conteo y la página de diferencias tienen la misma revisión, pregunta antes y manda esa revisión; un 409 lee todo otra vez y lo dice.
 
 ## Guardrails
 

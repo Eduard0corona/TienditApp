@@ -170,8 +170,9 @@ function toLine(data: DemoData, count: any, line: CountLine) {
     countedQuantity: line.countedQuantity,
     systemQuantity: line.systemQuantity,
     difference,
-    currentQuantity: count.status === IN_PROGRESS || moved ? line.currentQuantity : null,
-    resultingQuantity: count.status === IN_PROGRESS || moved ? line.resultingQuantity : null,
+    // Counting blind: an item not counted yet carries nothing of what the system has.
+    currentQuantity: (count.status === IN_PROGRESS && line.countedQuantity !== null) || moved ? line.currentQuantity : null,
+    resultingQuantity: (count.status === IN_PROGRESS && line.countedQuantity !== null) || moved ? line.resultingQuantity : null,
     differenceValue: count.status === CANCELLED ? null : valueOf(data, line),
     countedAt: line.countedAt,
     countedBy: line.countedBy,
@@ -211,7 +212,7 @@ const countRoutes: ExtraRoutes = (data, { ok, paginate }) => {
       if (q.get('pending') === 'true') rows = rows.filter((l: any) => l.countedQuantity === null);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (q.get('withDifference') === 'true') rows = rows.filter((l: any) => l.difference !== null && l.difference !== 0);
-      return ok(paginate(rows, q, 50));
+      return ok({ ...paginate(rows, q, 50), revision: count.revision });
     }],
     ['PUT', /^\/inventory\/counts\/([^/]+)\/lines$/, (m, _q, body) => {
       const count = find(m[1]);
@@ -219,9 +220,10 @@ const countRoutes: ExtraRoutes = (data, { ok, paginate }) => {
       const saved = (body?.lines ?? []).map((entry: { lineId: string; countedQuantity: number | null }) => {
         const line = count.lines.find((l: CountLine) => l.id === entry.lineId);
         const counted = entry.countedQuantity ?? null;
+        // A correction keeps what the system had when it was first counted.
         Object.assign(line, {
           countedQuantity: counted,
-          systemQuantity: counted === null ? null : line.currentQuantity,
+          systemQuantity: counted === null ? null : line.systemQuantity ?? line.currentQuantity,
           resultingQuantity: counted,
           countedAt: counted === null ? null : at(13, 25),
           countedBy: counted === null ? null : OWNER,

@@ -7,13 +7,16 @@ import SupplyPicker from './SupplyPicker';
 
 interface AddCountItemsModalProps {
   countId: string;
+  /** The items the count has now. */
+  lineCount: number;
   supplyOptions: SupplyItemDto[];
   onHide: () => void;
-  onAdded: (count: number) => void;
+  /** How many it has more: those it already had are not added again. */
+  onAdded: (added: number) => void;
 }
 
 /** What turned up on the shelf and the count does not have; what it has already stays as it is. */
-export default function AddCountItemsModal({ countId, supplyOptions, onHide, onAdded }: AddCountItemsModalProps) {
+export default function AddCountItemsModal({ countId, lineCount, supplyOptions, onHide, onAdded }: AddCountItemsModalProps) {
   const titleId = useId();
   const add = useAddInventoryCountItems(countId);
   const [chosen, setChosen] = useState<string[]>([]);
@@ -26,8 +29,8 @@ export default function AddCountItemsModal({ countId, supplyOptions, onHide, onA
       return;
     }
     try {
-      await add.mutateAsync(chosen);
-      onAdded(chosen.length);
+      const updated = await add.mutateAsync(chosen);
+      onAdded(updated.lineCount - lineCount);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudieron agregar los artículos.'));
     }

@@ -5456,9 +5456,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["InventoryCountLineDtoPaginatedList"];
-                        "application/json": components["schemas"]["InventoryCountLineDtoPaginatedList"];
-                        "text/json": components["schemas"]["InventoryCountLineDtoPaginatedList"];
+                        "text/plain": components["schemas"]["InventoryCountLinesPage"];
+                        "application/json": components["schemas"]["InventoryCountLinesPage"];
+                        "text/json": components["schemas"]["InventoryCountLinesPage"];
                     };
                 };
             };
@@ -13942,7 +13942,7 @@ export interface components {
             countedBy?: string | null;
             notes?: string | null;
         };
-        InventoryCountLineDtoPaginatedList: {
+        InventoryCountLinesPage: {
             items: components["schemas"]["InventoryCountLineDto"][];
             /** Format: int32 */
             pageNumber: number;
@@ -13952,6 +13952,8 @@ export interface components {
             readonly totalCount: number;
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
+            /** Format: int32 */
+            revision: number;
         };
         InventoryCountListItemDto: {
             /** Format: uuid */

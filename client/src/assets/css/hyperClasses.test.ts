@@ -44,7 +44,7 @@ function wordsInCode(): Map<string, string> {
  * a type name, a key, an attribute value. A class added to this list needs a rule instead.
  */
 const NOT_CLASSES = new Set([
-  'available', 'bottom', 'code', 'content', 'dark', 'day', 'function', 'logo', 'new', 'number', 'off', 'pointer',
+  'available', 'bottom', 'code', 'content', 'dark', 'day', 'function', 'logo', 'new', 'next', 'number', 'off', 'pointer',
   'string', 'token', 'url',
 ]);
 

@@ -19,9 +19,9 @@ interface NewCountModalProps {
 export default function NewCountModal({ show, activeLocations, supplyOptions, onHide, onStarted }: NewCountModalProps) {
   const titleId = useId();
   const start = useStartInventoryCount();
-  const [locationId, setLocationId] = useState(
-    () => (activeLocations.find((location) => location.isDefault) ?? activeLocations[0])?.id ?? '',
-  );
+  // Until one is chosen, the main location: also when the locations arrive after the dialog opened.
+  const [chosenLocationId, setLocationId] = useState('');
+  const locationId = chosenLocationId || ((activeLocations.find((location) => location.isDefault) ?? activeLocations[0])?.id ?? '');
   const [scope, setScope] = useState<Scope>('all');
   const [category, setCategory] = useState('');
   const [chosen, setChosen] = useState<string[]>([]);
@@ -99,7 +99,7 @@ export default function NewCountModal({ show, activeLocations, supplyOptions, on
           <div className="form-check">
             <input id="nuevo-conteo-elegidos" type="radio" name="nuevo-conteo-alcance" className="form-check-input"
               checked={scope === 'chosen'} onChange={() => setScope('chosen')} />
-            <label htmlFor="nuevo-conteo-elegidos" className="form-check-label">Solo los artículos que elija</label>
+            <label htmlFor="nuevo-conteo-elegidos" className="form-check-label">Solo los artículos que elijas</label>
           </div>
         </fieldset>
 

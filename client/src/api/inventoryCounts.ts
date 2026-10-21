@@ -1,4 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSyncExternalStore } from 'react';
+import { getApiErrorStatus } from './errors';
 import type { InventoryCountStatus } from './generated/enums';
 import { apiRequest, type Schemas } from './typedClient';
 
@@ -8,6 +10,7 @@ import { apiRequest, type Schemas } from './typedClient';
 export type InventoryCountListItem = Schemas['InventoryCountListItemDto'];
 export type InventoryCount = Schemas['InventoryCountDto'];
 export type InventoryCountLine = Schemas['InventoryCountLineDto'];
+export type InventoryCountLinesPage = Schemas['InventoryCountLinesPage'];
 export type InventoryCountEntry = Schemas['InventoryCountEntry'];
 export type RecordedInventoryCount = Schemas['RecordedInventoryCountDto'];
 export type StartInventoryCountBody = Schemas['StartInventoryCountCommand'];
@@ -22,6 +25,9 @@ export interface InventoryCountsFilter {
   page: number;
   pageSize: number;
 }
+
+/** The list as it opens: every count, the newest first. */
+export const INITIAL_COUNTS_FILTER: InventoryCountsFilter = { status: '', locationId: '', search: '', page: 1, pageSize: 10 };
 
 export interface InventoryCountLinesFilter {
   /** Name, code, SKU or barcode: a scanner types it. */
@@ -39,7 +45,11 @@ export const countKeys = {
   all: ['inventory-counts'] as const,
   list: (filter: InventoryCountsFilter) => ['inventory-counts', 'list', filter] as const,
   count: (id: string) => ['inventory-counts', 'count', id] as const,
+  /** Every page of the items of a count, whatever its filter. */
+  linesOf: (id: string) => ['inventory-counts', 'count-lines', id] as const,
   lines: (id: string, filter: InventoryCountLinesFilter) => ['inventory-counts', 'count-lines', id, filter] as const,
+  /** The saves of a count in flight: the review waits for them. */
+  record: (id: string) => ['inventory-counts', 'record', id] as const,
 };
 
 /** The counts of the business, the newest first. */
@@ -69,9 +79,10 @@ export function useInventoryCount(id: string) {
   });
 }
 
-/** The items of a count by name, a page at a time. */
-export function useInventoryCountLines(id: string, filter: InventoryCountLinesFilter) {
+/** The items of a count by name, a page at a time, with the revision of the count they were read at. */
+export function useInventoryCountLines(id: string, filter: InventoryCountLinesFilter, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: countKeys.lines(id, filter),
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/inventory/counts/{id}/lines', {
       path: { id },
@@ -103,19 +114,49 @@ export function useStartInventoryCount() {
 }
 
 /**
- * Saves what was counted of some items, each with what the system has of it right now. The count it answers replaces the
- * one in the cache; the lists of items are left as they are, so the inputs being typed in do not jump.
+ * Saves what was counted of some items. The items it answers replace theirs in every page already read, without reading
+ * the pages again, so the boxes being typed in do not jump; those pages are left stale, and the next one shown (the
+ * review, or the sheet again) is read anew. The count is replaced only by a newer revision: an answer that arrives late
+ * changes nothing and the pages are read again.
  */
 export function useRecordInventoryCount(id: string) {
   const client = useQueryClient();
   return useMutation({
+    mutationKey: countKeys.record(id),
     mutationFn: (lines: InventoryCountEntry[]) =>
       apiRequest('put', '/api/v1/inventory/counts/{id}/lines', { path: { id }, body: { lines } }),
     onSuccess: (recorded) => {
-      client.setQueryData(countKeys.count(id), recorded.count);
+      const cached = client.getQueryData<InventoryCount>(countKeys.count(id));
+      if (cached && cached.revision > recorded.count.revision) {
+        void client.invalidateQueries({ queryKey: countKeys.linesOf(id) });
+      } else {
+        client.setQueryData(countKeys.count(id), recorded.count);
+        const answered = new Map(recorded.lines.map((line) => [line.id, line]));
+        client.setQueriesData<InventoryCountLinesPage>({ queryKey: countKeys.linesOf(id) }, (page) => page && {
+          ...page,
+          items: page.items.map((line) => answered.get(line.id) ?? line),
+        });
+        void client.invalidateQueries({ queryKey: countKeys.linesOf(id), refetchType: 'none' });
+      }
       void client.invalidateQueries({ queryKey: ['inventory-counts', 'list'] });
     },
+    // Posted or cancelled by someone else: reading the count again closes the sheet.
+    onError: (err) => {
+      if (getApiErrorStatus(err) === 409) void client.invalidateQueries({ queryKey: countKeys.count(id) });
+    },
   });
+}
+
+/**
+ * How many saves of the count are in flight: the review waits for them. What `useIsMutating` does, over the query client
+ * the first visit already loads, so its code stays out of that visit.
+ */
+export function useSavingInventoryCount(id: string) {
+  const client = useQueryClient();
+  return useSyncExternalStore(
+    (notify) => client.getMutationCache().subscribe(notify),
+    () => client.isMutating({ mutationKey: countKeys.record(id) }),
+  );
 }
 
 /** Adds what turned up on the shelf; an item the count already has stays as it is. */

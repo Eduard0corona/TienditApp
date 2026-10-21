@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { getApiErrorMessage } from '../../api/errors';
 import { useInventoryCounts, type InventoryCountsFilter } from '../../api/inventoryCounts';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -16,13 +16,16 @@ const COLUMNS = [
 
 interface CountsTabProps {
   locations: InventoryLocationDto[];
+  /** Kept by the page, so opening a count and coming back finds the list as it was. */
+  filter: InventoryCountsFilter;
+  onFilterChange: Dispatch<SetStateAction<InventoryCountsFilter>>;
   onOpen: (countId: string) => void;
 }
 
 /** The physical counts of the business (Fase 27A): open ones to keep counting, and those posted or cancelled. */
-export default function CountsTab({ locations, onOpen }: CountsTabProps) {
-  const [filter, setFilter] = useState<InventoryCountsFilter>({ status: '', locationId: '', search: '', page: 1, pageSize: 10 });
+export default function CountsTab({ locations, filter, onFilterChange: setFilter, onOpen }: CountsTabProps) {
   const counts = useInventoryCounts(filter);
+  const filtered = filter.status !== '' || filter.locationId !== '' || filter.search.trim() !== '';
   const change = (patch: Partial<InventoryCountsFilter>) => setFilter((current) => ({ ...current, page: 1, ...patch }));
 
   return (
@@ -35,7 +38,9 @@ export default function CountsTab({ locations, onOpen }: CountsTabProps) {
         columns={COLUMNS}
         keyExtractor={(item) => item.id}
         loading={counts.isLoading}
-        emptyMessage="Todavía no hay conteos. Empieza uno para cuadrar lo que hay en el anaquel con lo que dice el sistema."
+        emptyMessage={filtered
+          ? 'Ningún conteo coincide con los filtros.'
+          : 'Todavía no hay conteos. Empieza uno para cuadrar lo que hay en el anaquel con lo que dice el sistema.'}
         searchPlaceholder="Buscar por folio o ubicación"
         filters={(
           <>

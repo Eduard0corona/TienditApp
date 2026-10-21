@@ -47,14 +47,14 @@ for (const look of LOOKS) {
     test(`conteo revisar ${look.suffix}`, async ({ page }) => {
       await openCount(page, 'Contar', OPEN_COUNT);
       await page.getByRole('button', { name: 'Revisar diferencias' }).click();
-      await expect(page.getByText('Faltan contar 5 artículos: se quedan como están.')).toBeVisible();
-      await expect(page.getByRole('cell', { name: 'Hielo en bolsa 5 kg' })).toBeVisible();
+      await expect(page.getByText('Faltan por contar 5 artículos: se quedan como están.')).toBeVisible();
+      await expect(page.getByRole('cell', { name: /^Hielo en bolsa 5 kg/ })).toBeVisible();
       await snap(page, `conteo-revisar-${look.suffix}`);
     });
 
     test(`conteo aplicado ${look.suffix}`, async ({ page }) => {
       await openCount(page, 'Ver', POSTED_COUNT);
-      await expect(page.getByRole('button', { name: 'Ver el ajuste de salida INV-20261002-0001' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Ver salida INV-20261002-0001' })).toBeVisible();
       await expect(page.getByRole('cell', { name: /Azúcar mascabado/ })).toBeVisible();
       await snap(page, `conteo-aplicado-${look.suffix}`);
     });
@@ -64,7 +64,7 @@ for (const look of LOOKS) {
         await openCounts(page);
         await page.getByRole('button', { name: 'Nuevo conteo' }).click();
         const modal = await dialog(page, 'Nuevo conteo');
-        await modal.getByLabel('Solo los artículos que elija').check();
+        await modal.getByLabel('Solo los artículos que elijas').check();
         await modal.getByLabel(/Totopos para chilaquiles/).check();
         await expect(modal.getByText('1 artículo elegido')).toBeVisible();
         await snap(page, `nuevo-conteo-${look.suffix}`, { fullPage: false });
