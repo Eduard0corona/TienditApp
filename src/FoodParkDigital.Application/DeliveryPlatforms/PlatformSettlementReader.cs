@@ -240,7 +240,7 @@ internal static class PlatformSettlementReader
         VoidReason = settlement.VoidReason
     };
 
-    private static PlatformSettlementOrderDto ToDto(PlatformOrderRow row, decimal expectedNet, DateOnly periodFrom, TimeZoneInfo zone)
+    internal static PlatformSettlementOrderDto ToDto(PlatformOrderRow row, decimal expectedNet, DateOnly periodFrom, TimeZoneInfo zone)
     {
         var registeredOn = DailySalesReadModel.LocalDate(row.RegisteredAt, zone);
         return new PlatformSettlementOrderDto

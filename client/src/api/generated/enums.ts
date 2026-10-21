@@ -376,6 +376,17 @@ export const PlatformSettlementStatus = {
 } as const;
 export type PlatformSettlementStatus = (typeof PlatformSettlementStatus)[keyof typeof PlatformSettlementStatus];
 
+export const PlatformStatementMatchStatus = {
+  InThisSettlement: 1,
+  Pending: 2,
+  AfterPeriod: 3,
+  Settled: 4,
+  NothingExpected: 5,
+  Ambiguous: 6,
+  Unknown: 7,
+} as const;
+export type PlatformStatementMatchStatus = (typeof PlatformStatementMatchStatus)[keyof typeof PlatformStatementMatchStatus];
+
 export const ProductCatalogItemType = {
   Product: 0,
   Service: 1,

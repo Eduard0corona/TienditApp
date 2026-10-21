@@ -17,7 +17,7 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// their cents, in its business and its adjustments in their order, the database holds one open settlement per platform
 /// and one settlement in force per order (and the use cases answer a save that loses that race as someone else's), a
 /// stale edit is refused, a settled order is never deleted from under its settlement, and the checks keep every row one
-/// the domain could write.
+/// the domain could write. A statement finds its folios among thousands of lines, repeated ones too (Fase 22H).
 /// </summary>
 public class PlatformSettlementsSqlServerTests
 {
@@ -366,6 +366,40 @@ public class PlatformSettlementsSqlServerTests
         Assert.Equal((2, 2, 1122.96m), (stored.Revision, stored.Orders.Count, stored.OrdersTotal));
     }
 
+    [SqlServerFact]
+    public async Task StatementMatch_ShouldFindRepeatedFolios_AmongManyLines_InItsBusinessOnly()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, other) = await SeedAsync(database);
+        var (first, second) = await SeedOrdersAsync(database, tenant.Id);
+        // Rappi gave BC001 to another order a week before; another business has its own BC002.
+        var earlier = await SeedOrderAsync(database, tenant.Id, "ORD-000003", "BC001", Now.AddDays(-7));
+        await SeedOrderAsync(database, other.Id, "ORD-000001", "BC002", Now);
+        var lines = new List<PlatformStatementLineRequest>
+        {
+            new() { Row = 2, Folio = "bc001", Amount = 561.48m },
+            new() { Row = 3, Folio = "BC002", Amount = 561.48m },
+            new() { Row = 4, Concept = "Publicidad", Amount = -99.99m }
+        };
+        lines.AddRange(Enumerable.Range(0, 2_997).Select(index => new PlatformStatementLineRequest { Row = 5 + index, Folio = $"X{index}", Amount = 0.01m }));
+
+        await using var context = database.CreateContext(tenant.Id);
+        var match = await new MatchPlatformStatementQueryHandler(context, Tenant(tenant.Id)).Handle(new MatchPlatformStatementQuery
+        {
+            Channel = OrderChannel.Rappi,
+            PeriodFrom = Monday,
+            PeriodTo = Sunday,
+            Lines = lines
+        }, CancellationToken.None);
+
+        Assert.Equal(2_999, match.Folios.Count);
+        Assert.Equal(PlatformStatementMatchStatus.Ambiguous, match.Folios[0].Status);
+        Assert.Equal([first, earlier], match.Folios[0].Orders.Select(order => order.OrderId));
+        Assert.Equal((PlatformStatementMatchStatus.Pending, second, 0m), (match.Folios[1].Status, match.Folios[1].Orders.Single().OrderId, match.Folios[1].Difference));
+        Assert.All(match.Folios.Skip(2), folio => Assert.Equal(PlatformStatementMatchStatus.Unknown, folio.Status));
+        Assert.Equal((-99.99m, 561.48m, 561.48m + 29.97m), (match.ConceptsTotal, match.MatchedTotal, match.UnmatchedTotal));
+    }
+
     private static PlatformSettlementOrderInput Line(Guid orderId, decimal expectedNet)
         => new(orderId, OrderChannel.Rappi, DateOnly.FromDateTime(Now.UtcDateTime), expectedNet);
 
@@ -425,6 +459,28 @@ public class PlatformSettlementsSqlServerTests
         await context.SaveChangesAsync();
         Assert.All(orders, order => Assert.Equal(561.48m, order.PlatformDetail!.ExpectedSettlement));
         return (orders[0].Id, orders[1].Id);
+    }
+
+    /// <summary>One more order of Rappi of $1,000 charged by the platform, with its folio and when it was registered.</summary>
+    private static async Task<Guid> SeedOrderAsync(SqlServerTestDatabase database, Guid tenantId, string number, string folio, DateTimeOffset at)
+    {
+        await using var context = database.CreateContext(tenantId);
+        var setting = await context.DeliveryPlatformSettings.SingleOrDefaultAsync(s => s.Channel == OrderChannel.Rappi);
+        if (setting is null)
+        {
+            setting = new DeliveryPlatformSetting(
+                tenantId, OrderChannel.Rappi, isActive: true, new PlatformTerms(30m, PlatformCommissionBase.TotalWithTax, 16m, 2.5m, 50m));
+            context.DeliveryPlatformSettings.Add(setting);
+        }
+        var order = new Order(
+            tenantId, null, null, true, number, BusinessType.Food, OrderType.Retail, "Juan", null, null, null,
+            pricesIncludeTax: true, channel: OrderChannel.Rappi);
+        order.AddItem(Guid.NewGuid(), "Paquete familiar", 1, 1000m);
+        order.RegisterPlatformOrder(setting, PlatformOrderNumber.From(folio), PlatformCollectedBy.Platform, at, null);
+        order.MarkAsCreated();
+        context.Orders.Add(order);
+        await context.SaveChangesAsync();
+        return order.Id;
     }
 
     // Rows written straight to the tables, past the app's own checks.

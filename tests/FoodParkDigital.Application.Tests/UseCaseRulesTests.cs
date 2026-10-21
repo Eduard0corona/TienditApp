@@ -91,6 +91,8 @@ public class UseCaseRulesTests
         { typeof(GetPlatformSettlementQuery), "Permission(ViewReports)" },
         { typeof(GetPendingPlatformOrdersQuery), "Permission(ViewReports)" },
         { typeof(GetPlatformReceivablesQuery), "Permission(ViewReports)" },
+        // Comparing a statement with the orders is part of saving one (Fase 22H).
+        { typeof(MatchPlatformStatementQuery), "Manager" },
         { typeof(CreatePlatformSettlementCommand), "Manager" },
         { typeof(UpdatePlatformSettlementCommand), "Manager" },
         { typeof(ClosePlatformSettlementCommand), "Manager" },
