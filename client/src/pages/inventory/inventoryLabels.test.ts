@@ -18,4 +18,10 @@ describe('movement options', () => {
     expect(MOVEMENT_REASON_OPTIONS.map((option) => option.value)).toContain(InventoryMovementReason.Transfer);
     expect(getMovementReasonLabel(InventoryMovementReason.Transfer)).toBe('Transferencia');
   });
+
+  it('leave the reconciliation of the history out of a manual movement, and keep it in the history filters', () => {
+    expect(MANUAL_MOVEMENT_REASON_OPTIONS.map((option) => option.value)).not.toContain(InventoryMovementReason.LedgerReconciliation);
+    expect(MOVEMENT_REASON_OPTIONS.map((option) => option.value)).toContain(InventoryMovementReason.LedgerReconciliation);
+    expect(getMovementReasonLabel(InventoryMovementReason.LedgerReconciliation)).toBe('Cuadre del historial');
+  });
 });
