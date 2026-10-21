@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Inventory.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,11 +16,18 @@ public sealed record StockAgainstHistory(
 
 public static class InventoryReconciliationReads
 {
+    /// <summary>The movements whose lines add to their stock, built from <see cref="InventoryMovementTypes.Inbound"/>.</summary>
+    private static readonly Expression<Func<InventoryMovement, bool>> Inbound = BuildInbound();
+
     /// <summary>
     /// Every stock (of a location and of some items, when given) beside what its movements add up to, including a
     /// history without a stock row and a stock without history. Every correct movement changes both alike, so only
     /// something that touched a stock without a movement, or a movement that wrote its balance wrong, separates them.
-    /// The history is summed per movement type and signed here, with the sign the ledger applies.
+    /// <para>
+    /// Each stock and its history are read in the same statement, so a sale saved meanwhile is in both or in neither
+    /// (with read committed snapshot, as in Azure SQL; the reconciliation also holds the movement counter). The history
+    /// is what enters, with the sign the ledger applies (<see cref="InventoryMovementTypes"/>), minus what leaves.
+    /// </para>
     /// </summary>
     public static async Task<List<StockAgainstHistory>> CompareAsync(
         IApplicationDbContext context,
@@ -26,10 +35,8 @@ public static class InventoryReconciliationReads
         IReadOnlyCollection<Guid>? supplyIds,
         CancellationToken cancellationToken)
     {
-        var lines =
-            from line in context.InventoryMovementLines.AsNoTracking()
-            join movement in context.InventoryMovements.AsNoTracking() on line.MovementId equals movement.Id
-            select new { line.SupplyItemId, line.InventoryLocationId, line.Quantity, movement.MovementType };
+        var lines = context.InventoryMovementLines.AsNoTracking();
+        var inboundLines = lines.Join(context.InventoryMovements.AsNoTracking().Where(Inbound), l => l.MovementId, m => m.Id, (l, _) => l);
         var stocks = context.InventoryStocks.AsNoTracking();
         if (locationId is { } location)
         {
@@ -42,25 +49,44 @@ public static class InventoryReconciliationReads
             stocks = stocks.Where(s => supplyIds.Contains(s.SupplyItemId));
         }
 
-        var sums = await lines
+        // History = what enters − what leaves = 2 × what enters − everything.
+        var withStock = await stocks
+            .Select(s => new
+            {
+                s.SupplyItemId,
+                s.InventoryLocationId,
+                s.OnHandQuantity,
+                All = lines.Where(l => l.SupplyItemId == s.SupplyItemId && l.InventoryLocationId == s.InventoryLocationId).Sum(l => l.Quantity),
+                In = inboundLines.Where(l => l.SupplyItemId == s.SupplyItemId && l.InventoryLocationId == s.InventoryLocationId).Sum(l => l.Quantity),
+                Count = lines.Count(l => l.SupplyItemId == s.SupplyItemId && l.InventoryLocationId == s.InventoryLocationId)
+            })
+            .ToListAsync(cancellationToken);
+
+        // A history without its stock row: the ledger always creates the row, so this only finds what something else left.
+        var withoutStock = await lines
+            .Where(l => !context.InventoryStocks.Any(s => s.SupplyItemId == l.SupplyItemId && s.InventoryLocationId == l.InventoryLocationId))
+            .Join(context.InventoryMovements.AsNoTracking(), l => l.MovementId, m => m.Id, (l, m) => new { l.SupplyItemId, l.InventoryLocationId, l.Quantity, m.MovementType })
             .GroupBy(l => new { l.SupplyItemId, l.InventoryLocationId, l.MovementType })
             .Select(g => new { g.Key.SupplyItemId, g.Key.InventoryLocationId, g.Key.MovementType, Quantity = g.Sum(l => l.Quantity), Count = g.Count() })
             .ToListAsync(cancellationToken);
-        var history = sums
-            .GroupBy(s => (s.SupplyItemId, s.InventoryLocationId))
-            .ToDictionary(
-                g => g.Key,
-                g => (Quantity: g.Sum(s => InventoryMovementTypes.Signed(s.MovementType, s.Quantity)), Count: g.Sum(s => s.Count)));
-        var onHand = await stocks
-            .Select(s => new { s.SupplyItemId, s.InventoryLocationId, s.OnHandQuantity })
-            .ToDictionaryAsync(s => (s.SupplyItemId, s.InventoryLocationId), s => s.OnHandQuantity, cancellationToken);
 
-        return onHand.Keys.Union(history.Keys)
-            .Select(key =>
-            {
-                var (quantity, count) = history.GetValueOrDefault(key);
-                return new StockAgainstHistory(key.SupplyItemId, key.InventoryLocationId, onHand.GetValueOrDefault(key), quantity, count);
-            })
+        return withStock
+            .Select(s => new StockAgainstHistory(s.SupplyItemId, s.InventoryLocationId, s.OnHandQuantity, 2 * s.In - s.All, s.Count))
+            .Concat(withoutStock
+                .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
+                .Select(g => new StockAgainstHistory(
+                    g.Key.SupplyItemId, g.Key.InventoryLocationId, 0,
+                    g.Sum(l => InventoryMovementTypes.Signed(l.MovementType, l.Quantity)), g.Sum(l => l.Count))))
             .ToList();
+    }
+
+    private static Expression<Func<InventoryMovement, bool>> BuildInbound()
+    {
+        var movement = Expression.Parameter(typeof(InventoryMovement), "m");
+        var type = Expression.Property(movement, nameof(InventoryMovement.MovementType));
+        var body = InventoryMovementTypes.Inbound
+            .Select(inbound => (Expression)Expression.Equal(type, Expression.Constant(inbound)))
+            .Aggregate(Expression.OrElse);
+        return Expression.Lambda<Func<InventoryMovement, bool>>(body, movement);
     }
 }

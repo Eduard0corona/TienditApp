@@ -34,7 +34,7 @@ Tomé las decisiones de la Fase 27C con la autorización permanente del dueño d
    - un cambio después del último movimiento;
    - los cuadres anteriores.
 
-   Lo que suma cada lugar da la diferencia. Lee hasta las 50,000 líneas más recientes, y lo anterior queda como un solo lugar, «de antes de lo revisado». Lista los 50 lugares más recientes.
+   Lo que suma cada lugar da la diferencia. Dos líneas del mismo movimiento se ponen una tras otra por su saldo: primero la que empieza donde terminó la anterior. Lee hasta las 50,000 líneas más recientes, y lo anterior queda como un solo lugar, «de antes de lo revisado», calculado con la suma de todo el historial. Lista los 50 lugares más recientes.
 3. **Cuadrar** (`POST /api/v1/inventory/reconciliation`) anota en el historial lo que le faltaba para sumar la existencia, sin mover la existencia.
    - Recibe una ubicación y de 1 a 200 artículos, cada uno con la diferencia que se revisó.
    - Genera hasta dos movimientos del motivo nuevo «Cuadre del historial» (`LedgerReconciliation`, 12): un `AdjustmentIncrease` con lo que le faltaba al historial y un `AdjustmentDecrease` con lo que le sobraba.
@@ -43,12 +43,17 @@ Tomé las decisiones de la Fase 27C con la autorización permanente del dueño d
    - La existencia, su token de concurrencia, su último movimiento y el costo promedio no cambian.
    - El movimiento solo acepta este motivo como ajuste, y solo este motivo anota sin mover la existencia (`InventoryMovement.AddReconciliationLine`).
    - El cuadre queda en la actividad (`InventoryLedgerReconciled`) con la ubicación, los folios y la existencia, el historial y la diferencia de cada artículo.
-4. **La diferencia se calcula otra vez al cuadrar**, dentro del candado de la ubicación (`IInventoryLocationLock`, el de los conteos y las transferencias):
+4. **La diferencia se calcula otra vez al cuadrar**, en fila con lo que mueve la ubicación:
+   - **Candado de la ubicación** (`IInventoryLocationLock`, el de los conteos y las transferencias): dos cuadres de la misma ubicación van uno tras otro.
+   - **Contador de folios `INV` del día:** el cuadre lo toma sin gastar un número (`IFolioGenerator.HoldInventoryMovementNumbersAsync`) hasta que termina su transacción. Las ventas no toman el candado de la ubicación, pero toman su folio dentro de su transacción. Así el cuadre espera a la venta que se está guardando, y la venta que llega después espera al cuadre.
+   - **Una sola consulta:** la existencia y su historial se leen juntos. Con *read committed snapshot*, como en Azure SQL, una venta guardada en ese momento queda en los dos o en ninguno.
+
+   Con lo que se leyó:
    - **ya en 0:** el artículo se salta, porque otro cuadre llegó primero o fue un doble toque;
    - **distinta de la revisada:** no se anota nada y responde 409, nombrando el artículo y su diferencia nueva;
-   - **igual:** se anota.
+   - **igual:** se anota con la existencia de ese momento.
 
-   Un movimiento correcto cambia la existencia y el historial por igual, así que una venta que no espera el candado no cambia lo que se cuadra. No hace falta llave de idempotencia: mandar lo mismo otra vez encuentra todo cuadrado.
+   Un movimiento correcto cambia la existencia y el historial por igual, así que la diferencia no cambia con las ventas. La fila sirve para otra cosa: que el cuadre anote la existencia que quedó después de la venta y no la de antes. Si anotara la de antes, «Por qué no cuadra» mostraría dos lugares que se cancelan. No hace falta llave de idempotencia: mandar lo mismo otra vez encuentra todo cuadrado.
 5. **Los movimientos manuales** rechazan el motivo «Cuadre del historial», y «Registrar movimiento» no lo ofrece. El historial y sus filtros lo enseñan como cualquier motivo.
 6. **Permisos:** `ManageInventory` y la capacidad de inventario, como los movimientos, los conteos y las transferencias.
 7. **Se ve** en Inventario › Historial por insumo › «Revisar que cuadre», una vista dentro de la pestaña. Tiene:
@@ -74,7 +79,14 @@ Tomé las decisiones de la Fase 27C con la autorización permanente del dueño d
   - Cuadrar no dice cuánto hay en el anaquel: toma la existencia guardada como la que cuenta. Para saber cuánto hay se cuenta ([ADR 0037](0037-inventory-counts.md)), antes o después.
   - Un cuadre no lleva costo. El historial anota la cantidad que le faltaba, pero no su valor; el valor de la existencia sigue siendo la existencia por el costo promedio.
   - El orden del historial es el de guardado y, en el mismo instante, el del folio. Dos líneas del mismo artículo y ubicación en el mismo movimiento se encadenan por su saldo. Más de 9,999 movimientos en un día romperían el orden del folio dentro de un mismo instante.
-  - Revisar lee las sumas de todo el historial del negocio, o de la ubicación, cada vez que se abre. Es una consulta agrupada sobre el índice de las líneas por artículo y ubicación, para abrir de vez en cuando y no a cada venta.
+  - La fila con las ventas es la del contador del día en que se cuadra (UTC). No alcanza a:
+    - una venta que tomó el folio del día anterior justo antes de la medianoche y sigue guardándose;
+    - un movimiento de otra fecha;
+    - lo que se consume al cambiar el estado de un pedido, que toma su folio fuera de una transacción.
+
+    Si uno de ellos se guarda justo entre la lectura y el cuadre, la diferencia que se anota sigue siendo la correcta. Solo «Por qué no cuadra» muestra después dos lugares que se cancelan.
+  - Sin *read committed snapshot*, la existencia y el historial de una misma consulta pueden leerse en momentos distintos. Azure SQL lo trae encendido; otro SQL Server debe encenderlo.
+  - Revisar suma todo el historial del negocio, o de la ubicación, cada vez que se abre: una suma por existencia sobre el índice de las líneas por artículo y ubicación. Es para abrir de vez en cuando, no a cada venta.
   - Quien maneja el inventario puede cuadrar. Esa persona no puede separar la existencia del historial, así que un cuadre no esconde una merma; la actividad lo registra.
 - **Compatibilidad durante el despliegue:**
   - La versión anterior (27B) funciona igual: no hay cambios en la base.

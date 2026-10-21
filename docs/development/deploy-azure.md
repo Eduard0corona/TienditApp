@@ -697,7 +697,7 @@ La Fase 27C no trae migración ni `apply.sql`: el motivo nuevo «Cuadre del hist
   - `POST /api/v1/inventory/movements` ahora rechaza (400) el motivo `LedgerReconciliation`.
 
   Nada se quita ni cambia de nombre.
-- **Sin configuración nueva.**
+- **Sin configuración nueva.** La revisión lee cada existencia con su historial en una sola consulta y supone *read committed snapshot*, que Azure SQL Database trae encendido. Para confirmarlo: `SELECT is_read_committed_snapshot_on FROM sys.databases WHERE name = DB_NAME();` debe dar `1`.
 - **Volver a la versión anterior:** funciona sin tocar la base. Los cuadres hechos son ajustes comunes que la 27B sabe leer, y enseña su motivo como «12». Deja de tener la revisión.
 
 ## Slot de staging con swap y aprobación

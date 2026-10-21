@@ -18,8 +18,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
 /// Revisar que cuadre (Fase 27C, ADR 0039) in SQL Server set up as in production: the history adds up with the sign of the
-/// ledger and four decimals, the same reconciliation sent at once records the gap once (the lock of the location), and a
-/// transfer from the location at the same time does not change what is reconciled.
+/// ledger and four decimals, the same reconciliation sent at once records the gap once (the lock of the location), and
+/// neither a transfer from the location nor a sale saving at the same time changes what is reconciled.
 /// </summary>
 public class InventoryReconciliationSqlServerTests
 {
@@ -83,6 +83,36 @@ public class InventoryReconciliationSqlServerTests
         Assert.Equal((3, 0), await shop.ReviewCountsAsync());
     }
 
+    [SqlServerFact]
+    public async Task ASaleSavingWhenTheReconciliationStarts_ShouldBeInWhatIsReconciled()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync(readCommittedSnapshot: true);
+        var shop = await Shop.OpenAsync(database);
+        await shop.SetStockAsync(shop.Soda, shop.Warehouse, 26m);
+        var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var commit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // A sale does not take the lock of the location: it has saved its 3 sodas and not committed yet.
+        var sale = shop.SellAsync(shop.Soda, shop.Warehouse, 3m, saved, commit.Task);
+        await saved.Task;
+        var reconcile = shop.ReconcileAsync(shop.Soda, shop.Warehouse, 2m);
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        commit.SetResult();
+        await Task.WhenAll(sale, reconcile);
+
+        Assert.True((await sale).IsSuccess, (await sale).Error);
+        Assert.True((await reconcile).IsSuccess, (await reconcile).Error);
+        // The reconciliation waited for it and wrote the stock after it, so nothing else shows in the history.
+        var detail = await shop.DetailAsync(shop.Soda, shop.Warehouse);
+        Assert.Equal((23m, 23m, 0m), (detail.OnHandQuantity, detail.HistoryQuantity, detail.Difference));
+        Assert.Equal(
+            [
+                (InventoryReconciliationEventKind.BetweenMovements, 2m, (decimal?)24m, (decimal?)26m),
+                (InventoryReconciliationEventKind.Reconciled, -2m, 23m, 23m)
+            ],
+            detail.Events.Select(e => (e.Kind, e.Quantity, e.QuantityFrom, e.QuantityTo)));
+    }
+
     private sealed class Shop
     {
         private readonly SqlServerTestDatabase _database;
@@ -137,6 +167,27 @@ public class InventoryReconciliationSqlServerTests
                 [new InventoryPostingLine(supply, location, quantity) { UnitCost = unitCost }]), CancellationToken.None);
             Assert.True(posted.IsSuccess, posted.Error);
             await context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// A sale as the orders post it: in its transaction, with its folio and without the lock of the location. It
+        /// tells <paramref name="saved"/> once its rows are written and commits when <paramref name="commit"/> ends.
+        /// </summary>
+        public async Task<Result<InventoryMovement>> SellAsync(Guid supply, Guid location, decimal quantity, TaskCompletionSource saved, Task commit)
+        {
+            var (tenant, user, clock) = Request();
+            await using var context = Context(tenant, user, clock);
+            return await new TransactionBehavior<Sale, Result<InventoryMovement>>(context).Handle(new Sale(), async () =>
+            {
+                var posted = await new InventoryLedger(context, new FolioGenerator(context)).PostAsync(TenantId, new InventoryPosting(
+                    InventoryMovementType.Exit, InventoryMovementReason.Sale, Now, [new InventoryPostingLine(supply, location, quantity)]),
+                    CancellationToken.None);
+                if (posted.IsSuccess)
+                    await context.SaveChangesAsync();
+                saved.TrySetResult();
+                await commit;
+                return posted;
+            }, CancellationToken.None);
         }
 
         /// <summary>What a script or an old version could leave: the stock changed without a movement.</summary>
@@ -216,6 +267,8 @@ public class InventoryReconciliationSqlServerTests
                 new AuditableEntityInterceptor(user, clock),
                 new TenantSaveChangesInterceptor(tenant));
     }
+
+    private sealed record Sale : ITransactionalRequest;
 
     private sealed class Clerk : ICurrentUserService
     {

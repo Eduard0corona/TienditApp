@@ -225,10 +225,12 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
 - Revisar que el historial cuadre (Fase 27C, [ADR 0039](../adr/0039-ledger-reconciliation.md)):
   - **Cuadrar no dice cuánto hay:** toma la existencia guardada como la que cuenta y anota en el historial lo que le faltaba. Para saber cuánto hay en el anaquel se cuenta.
   - **Un cuadre no lleva costo:** el historial anota la cantidad, no su valor. No hay una revisión del valor del historial ni del costo promedio.
-  - **No se revisa solo ni avisa:** se abre a mano en «Historial por insumo». Cada vez suma todo el historial del negocio, o de la ubicación, agrupado por artículo, ubicación y tipo; para revisar a cada venta o desde Inicio haría falta un resumen guardado.
+  - **No se revisa solo ni avisa:** se abre a mano en «Historial por insumo». Cada vez suma todo el historial del negocio, o de la ubicación, una suma por existencia; para revisar a cada venta o desde Inicio haría falta un resumen guardado.
   - **El detalle lee hasta 50,000 líneas** del artículo en la ubicación, las más recientes: lo anterior queda como un solo lugar, «de antes de lo revisado». Lista los 50 lugares más recientes.
   - **El orden del historial** es el de guardado y, en el mismo instante, el del folio (más de 9,999 movimientos en un día lo romperían en ese instante). Dos líneas del mismo artículo y ubicación en un movimiento se encadenan por su saldo.
   - **No repara el saldo antes y después** de cada línea: un movimiento que lo escribió mal sigue diciéndolo, y la revisión lo señala con su cuadre.
+  - **La fila con las ventas** es la del contador de folios `INV` del día en que se cuadra. No alcanza a una venta del día anterior que sigue guardándose después de la medianoche (UTC), a un movimiento de otra fecha ni a lo que se consume al cambiar el estado de un pedido (toma su folio fuera de una transacción). Si uno de ellos se guarda entre la lectura y el cuadre, lo anotado sigue siendo correcto, y solo «Por qué no cuadra» muestra dos lugares que se cancelan.
+  - **Supone *read committed snapshot*** para leer la existencia y su historial en el mismo momento. Azure SQL lo trae encendido.
   - **Sin revisión entre negocios desde la plataforma.**
   - **Durante un regreso a la 27B, o mientras conviven las dos versiones,** la anterior enseña el motivo nuevo como «12» y no tiene la revisión. No hay migración.
 

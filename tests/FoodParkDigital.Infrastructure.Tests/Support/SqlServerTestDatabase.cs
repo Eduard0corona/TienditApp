@@ -56,11 +56,17 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
     /// <summary>The connection to this database, for an API host under test.</summary>
     public string ConnectionString => _connectionString;
 
-    public static async Task<SqlServerTestDatabase> CreateAsync()
+    /// <param name="readCommittedSnapshot">
+    /// Each statement reads what was committed when it started instead of waiting for the writers, as in Azure SQL
+    /// Database (read committed snapshot is on there), for a test of what a request reads while another one saves.
+    /// </param>
+    public static async Task<SqlServerTestDatabase> CreateAsync(bool readCommittedSnapshot = false)
     {
         var database = CreateEmpty();
         await using var context = database.CreateContext();
         await context.Database.EnsureCreatedAsync();
+        if (readCommittedSnapshot)
+            await context.Database.ExecuteSqlRawAsync("ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;");
         return database;
     }
 

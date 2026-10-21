@@ -1,4 +1,6 @@
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Inventory.Commands;
 using FoodParkDigital.Application.Inventory.Reconciliation;
 using FoodParkDigital.Application.Tests.Support;
@@ -111,6 +113,92 @@ public class InventoryReconciliationFlowTests
             ],
             detail.Events.Select(e => (e.Kind, e.Quantity, e.QuantityFrom, e.QuantityTo, e.MovementNumber!, e.PreviousMovementNumber, e.MovementQuantity)));
         Assert.Equal(detail.Difference, detail.Events.Sum(e => e.Quantity));
+    }
+
+    [Fact]
+    public async Task Review_ShouldAddUpEveryKindOfMovement_WithTheSignOfTheLedger()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var shop = await SeedShopAsync(host);
+        // Each kind once over the 24 sodas of the warehouse, each with its own quantity, so a wrong sign shows.
+        foreach (var (type, quantity) in new[]
+                 {
+                     (InventoryMovementType.Exit, 2m), (InventoryMovementType.AdjustmentIncrease, 3m),
+                     (InventoryMovementType.AdjustmentDecrease, 1m), (InventoryMovementType.TransferIn, 5m),
+                     (InventoryMovementType.TransferOut, 4m), (InventoryMovementType.ReturnFromProduction, 1m),
+                     (InventoryMovementType.ReturnToSupplier, 3m)
+                 })
+            await PostAsync(host, type, new InventoryPostingLine(shop.Soda, shop.Warehouse, quantity));
+
+        Assert.Equal(23m, await host.QueryAsync(db => db.InventoryStocks
+            .Where(s => s.SupplyItemId == shop.Soda && s.InventoryLocationId == shop.Warehouse)
+            .Select(s => s.OnHandQuantity)
+            .SingleAsync()));
+        var addedUp = await ReviewAsync(host);
+        Assert.Equal((4, 0), (addedUp.CheckedCount, addedUp.Mismatches.TotalCount));
+        var detail = await DetailAsync(host, shop.Soda, shop.Warehouse);
+        Assert.Equal((23m, 23m, 0m, 8, 0), (detail.OnHandQuantity, detail.HistoryQuantity, detail.Difference, detail.MovementCount, detail.EventCount));
+
+        // Without its stock row, the same history adds up apart, kind by kind.
+        await host.QueryAsync(db => db.InventoryStocks
+            .Where(s => s.SupplyItemId == shop.Soda && s.InventoryLocationId == shop.Warehouse)
+            .ExecuteDeleteAsync());
+        var review = await ReviewAsync(host);
+        var soda = Assert.Single(review.Mismatches.Items);
+        Assert.Equal((4, shop.Soda, 0m, 23m, -23m, 8),
+            (review.CheckedCount, soda.SupplyItemId, soda.OnHandQuantity, soda.HistoryQuantity, soda.Difference, soda.MovementCount));
+    }
+
+    [Fact]
+    public async Task Detail_OfALongHistory_ShouldSayWhatComesFromBeforeWhatWasReviewed()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var shop = await SeedShopAsync(host);                                                     // 0001: 0 → 24
+        await SetStockAsync(host, shop.Soda, shop.Warehouse, 30m);                                // 24 → 30 without a movement
+        await MoveAsync(host, InventoryMovementType.Exit, shop.Soda, shop.Warehouse, 2m);         // 0005: 30 → 28
+        await MoveAsync(host, InventoryMovementType.Exit, shop.Soda, shop.Warehouse, 1m);         // 0006: 28 → 27
+        await SetStockAsync(host, shop.Soda, shop.Warehouse, 25m);                                // 27 → 25 after the last one
+
+        var lastTwo = await DetailAsync(host, shop.Soda, shop.Warehouse, maxReviewedLines: 2);
+        var everyLine = await DetailAsync(host, shop.Soda, shop.Warehouse, maxReviewedLines: 3);
+
+        // The 6 from before the two lines walked comes from the whole history, added up in the database.
+        Assert.Equal((25m, 21m, 4m, 3, 2, 2),
+            (lastTwo.OnHandQuantity, lastTwo.HistoryQuantity, lastTwo.Difference, lastTwo.MovementCount, lastTwo.ReviewedCount, lastTwo.EventCount));
+        Assert.Equal(
+            [
+                (InventoryReconciliationEventKind.BeforeReviewedHistory, 6m, (decimal?)null, (decimal?)30m, "INV-20260216-0005"),
+                (InventoryReconciliationEventKind.AfterLastMovement, -2m, 27m, 25m, "INV-20260216-0006")
+            ],
+            lastTwo.Events.Select(e => (e.Kind, e.Quantity, e.QuantityFrom, e.QuantityTo, e.MovementNumber!)));
+        // With every line walked, the same 6 is a gap between two movements.
+        Assert.Equal((21m, 4m, 3, 3), (everyLine.HistoryQuantity, everyLine.Difference, everyLine.MovementCount, everyLine.ReviewedCount));
+        Assert.Equal(
+            [
+                (InventoryReconciliationEventKind.BetweenMovements, 6m, (decimal?)24m, (decimal?)30m, "INV-20260216-0005"),
+                (InventoryReconciliationEventKind.AfterLastMovement, -2m, 27m, 25m, "INV-20260216-0006")
+            ],
+            everyLine.Events.Select(e => (e.Kind, e.Quantity, e.QuantityFrom, e.QuantityTo, e.MovementNumber!)));
+    }
+
+    [Fact]
+    public async Task Detail_OfAMovementWithTheSameItemTwice_ShouldWalkItsLinesInTheOrderTheyMoved()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var shop = await SeedShopAsync(host);
+        await SetStockAsync(host, shop.Soda, shop.Warehouse, 30m);                                // 24 → 30 without a movement
+        // One sale with the sodas twice (30 → 28 → 25), then another (25 → 24 → 23): their lines come in any order.
+        await PostAsync(host, InventoryMovementType.Exit,
+            new InventoryPostingLine(shop.Soda, shop.Warehouse, 2m), new InventoryPostingLine(shop.Soda, shop.Warehouse, 3m));
+        await PostAsync(host, InventoryMovementType.Exit,
+            new InventoryPostingLine(shop.Soda, shop.Warehouse, 1m), new InventoryPostingLine(shop.Soda, shop.Warehouse, 1m));
+
+        var detail = await DetailAsync(host, shop.Soda, shop.Warehouse);
+
+        Assert.Equal((23m, 17m, 6m, 5), (detail.OnHandQuantity, detail.HistoryQuantity, detail.Difference, detail.ReviewedCount));
+        Assert.Equal(
+            [(InventoryReconciliationEventKind.BetweenMovements, 6m, (decimal?)24m, (decimal?)30m, "INV-20260216-0005", (string?)"INV-20260216-0001")],
+            detail.Events.Select(e => (e.Kind, e.Quantity, e.QuantityFrom, e.QuantityTo, e.MovementNumber!, e.PreviousMovementNumber)));
     }
 
     [Fact]
@@ -304,9 +392,23 @@ public class InventoryReconciliationFlowTests
         => host.HandleAsync<GetInventoryReconciliationQueryHandler, InventoryReconciliationDto>(h => h.Handle(
             new GetInventoryReconciliationQuery { InventoryLocationId = locationId, Search = search }, default));
 
-    private static Task<InventoryReconciliationDetailDto> DetailAsync(SqliteTestHost host, Guid supplyId, Guid locationId)
-        => host.HandleAsync<GetInventoryReconciliationDetailQueryHandler, InventoryReconciliationDetailDto>(h => h.Handle(
-            new GetInventoryReconciliationDetailQuery(supplyId, locationId), default));
+    private static Task<InventoryReconciliationDetailDto> DetailAsync(
+        SqliteTestHost host, Guid supplyId, Guid locationId, int maxReviewedLines = GetInventoryReconciliationDetailQueryHandler.DefaultMaxReviewedLines)
+        => host.InScopeAsync(services => new GetInventoryReconciliationDetailQueryHandler(services.GetRequiredService<IApplicationDbContext>(), maxReviewedLines)
+            .Handle(new GetInventoryReconciliationDetailQuery(supplyId, locationId), default));
+
+    /// <summary>Through the ledger, as sales, purchases and transfers post: with any kind and the same item twice.</summary>
+    private static Task PostAsync(SqliteTestHost host, InventoryMovementType type, params InventoryPostingLine[] lines)
+        => host.InScopeAsync(async services =>
+        {
+            var db = services.GetRequiredService<ApplicationDbContext>();
+            var posted = await ActivatorUtilities.CreateInstance<InventoryLedger>(services).PostAsync(
+                (await db.Tenants.SingleAsync()).Id,
+                new InventoryPosting(type, type == InventoryMovementType.Exit ? InventoryMovementReason.Sale : InventoryMovementReason.Other, Today, lines),
+                default);
+            Assert.True(posted.IsSuccess, posted.Error);
+            await db.SaveChangesAsync();
+        });
 
     private static Task<Result<InventoryReconciliationResultDto>> ReconcileAsync(
         SqliteTestHost host, Guid locationId, params (Guid SupplyId, decimal Difference)[] lines)

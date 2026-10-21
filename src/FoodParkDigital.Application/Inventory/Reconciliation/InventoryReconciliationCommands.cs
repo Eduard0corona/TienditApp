@@ -93,9 +93,12 @@ public class ReconcileInventoryLedgerCommandHandler
     public async Task<Result<InventoryReconciliationResultDto>> Handle(ReconcileInventoryLedgerCommand request, CancellationToken cancellationToken)
     {
         // In line with the counts and transfers of the location, and with another reconciliation of it: the second of two
-        // at once finds the first one's work done. A correct movement changes a stock and its history alike, so a sale
-        // that does not wait does not change what is reconciled.
+        // at once finds the first one's work done. Then in line with the movements of the day, which take the folio
+        // counter in their transaction (sales do not take the lock of the location): what is compared next is not a
+        // sale halfway, and no sale comes in between the comparison and the reconciliation.
         await _locationLock.AcquireAsync(_tenant.TenantId, request.InventoryLocationId, cancellationToken);
+        var now = _clock.UtcNow;
+        await _folios.HoldInventoryMovementNumbersAsync(_tenant.TenantId, now, cancellationToken);
 
         var location = await _context.InventoryLocations.AsNoTracking()
             .Where(l => l.Id == request.InventoryLocationId)
@@ -132,7 +135,6 @@ public class ReconcileInventoryLedgerCommandHandler
             return Result.Failure<InventoryReconciliationResultDto>(
                 $"{ChangedMessagePrefix}: {string.Join(", ", changed)}. Vuelve a revisar antes de cuadrar.");
 
-        var now = _clock.UtcNow;
         var movements = new List<InventoryMovement>();
         foreach (var (type, gaps) in new[]
                  {

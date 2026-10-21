@@ -104,15 +104,23 @@ public class GetInventoryReconciliationDetailQueryHandler
     : IRequestHandler<GetInventoryReconciliationDetailQuery, InventoryReconciliationDetailDto>
 {
     /// <summary>The most recent lines walked; what comes from before them is one place, «before what was reviewed».</summary>
-    public const int MaxReviewedLines = 50_000;
+    public const int DefaultMaxReviewedLines = 50_000;
     /// <summary>The most recent places listed.</summary>
     public const int MaxEvents = 50;
 
     private readonly IApplicationDbContext _context;
+    private readonly int _maxReviewedLines;
 
     public GetInventoryReconciliationDetailQueryHandler(IApplicationDbContext context)
+        : this(context, DefaultMaxReviewedLines)
+    {
+    }
+
+    /// <summary>With fewer lines to walk, so a test reaches «before what was reviewed».</summary>
+    internal GetInventoryReconciliationDetailQueryHandler(IApplicationDbContext context, int maxReviewedLines)
     {
         _context = context;
+        _maxReviewedLines = maxReviewedLines;
     }
 
     public async Task<InventoryReconciliationDetailDto> Handle(GetInventoryReconciliationDetailQuery request, CancellationToken cancellationToken)
@@ -131,25 +139,30 @@ public class GetInventoryReconciliationDetailQueryHandler
         var compared = (await InventoryReconciliationReads.CompareAsync(_context, location.Id, [supply.Id], cancellationToken))
             .SingleOrDefault() ?? new StockAgainstHistory(supply.Id, location.Id, 0, 0, 0);
 
-        // The most recent lines, newest first, then walked oldest first.
+        // The most recent lines, newest first, then walked oldest first: by movement, in the order they were saved.
         var recent = await (
                 from line in _context.InventoryMovementLines.AsNoTracking()
                 join movement in _context.InventoryMovements.AsNoTracking() on line.MovementId equals movement.Id
                 where line.SupplyItemId == supply.Id && line.InventoryLocationId == location.Id
-                orderby line.CreatedAt descending, movement.MovementNumber descending, line.Id descending
+                orderby movement.CreatedAt descending, movement.MovementNumber descending, movement.Id descending, line.Id descending
                 select new HistoryLine(
-                    line.Id, line.CreatedAt, movement.Id, movement.MovementNumber, movement.MovementDate, movement.MovementType,
+                    line.Id, movement.Id, movement.MovementNumber, movement.MovementDate, movement.MovementType,
                     movement.MovementReason, line.Quantity, line.QuantityBefore, line.QuantityAfter))
-            .Take(MaxReviewedLines)
+            .Take(_maxReviewedLines)
             .ToListAsync(cancellationToken);
         recent.Reverse();
         var walked = InRecordedOrder(recent);
+        var truncated = recent.Count >= _maxReviewedLines && compared.MovementCount > recent.Count;
+        // A whole history is added up from the lines walked, so its places always add up to the difference shown, even
+        // if a sale saved between this read and the stock's.
+        var history = truncated ? compared.HistoryQuantity : walked.Sum(l => InventoryMovementTypes.Signed(l.MovementType, l.Quantity));
+        var difference = compared.OnHandQuantity - history;
 
         var events = Walk(walked, compared.OnHandQuantity);
-        if (walked.Count > 0 && walked.Count < compared.MovementCount)
+        if (truncated)
         {
             // What the walked lines do not explain comes from before them: the identity of the gaps gives it exactly.
-            var before = compared.Difference - events.Sum(e => e.Quantity);
+            var before = difference - events.Sum(e => e.Quantity);
             if (before != 0)
                 events.Insert(0, new InventoryReconciliationEventDto
                 {
@@ -184,9 +197,9 @@ public class GetInventoryReconciliationDetailQueryHandler
             InventoryLocationId = location.Id,
             InventoryLocationName = location.Name,
             OnHandQuantity = compared.OnHandQuantity,
-            HistoryQuantity = compared.HistoryQuantity,
-            Difference = compared.Difference,
-            MovementCount = compared.MovementCount,
+            HistoryQuantity = history,
+            Difference = difference,
+            MovementCount = truncated ? compared.MovementCount : walked.Count,
             ReviewedCount = walked.Count,
             EventCount = events.Count,
             Events = events.Skip(Math.Max(0, events.Count - MaxEvents)).ToList()
@@ -263,9 +276,10 @@ public class GetInventoryReconciliationDetailQueryHandler
     }
 
     /// <summary>
-    /// Lines are recorded in order of when they were saved, then of their folio (taken in the transaction, in turn per
-    /// business and day). Lines saved together with the same folio are put one after the other by their balances, so a
-    /// movement with the same item twice does not look like a gap.
+    /// Lines come in the order their movements were saved (then by folio, taken in the transaction, in turn per business
+    /// and day). The lines of one movement with the same item twice are put one after the other by their balances: first
+    /// the one that starts where the previous line ended, else the one no other of them leads to, so they do not look like
+    /// a gap.
     /// </summary>
     private static List<HistoryLine> InRecordedOrder(List<HistoryLine> lines)
     {
@@ -274,13 +288,15 @@ public class GetInventoryReconciliationDetailQueryHandler
         while (i < lines.Count)
         {
             var j = i + 1;
-            while (j < lines.Count && lines[j].CreatedAt == lines[i].CreatedAt && lines[j].MovementNumber == lines[i].MovementNumber)
+            while (j < lines.Count && lines[j].MovementId == lines[i].MovementId)
                 j++;
             var tied = lines.GetRange(i, j - i);
             while (tied.Count > 0)
             {
                 var after = ordered.Count > 0 ? ordered[^1].QuantityAfter : (decimal?)null;
-                var next = tied.FirstOrDefault(l => l.QuantityBefore == after) ?? tied[0];
+                var next = tied.FirstOrDefault(l => l.QuantityBefore == after)
+                    ?? tied.FirstOrDefault(l => !tied.Any(other => other != l && other.QuantityAfter == l.QuantityBefore))
+                    ?? tied[0];
                 ordered.Add(next);
                 tied.Remove(next);
             }
@@ -291,7 +307,6 @@ public class GetInventoryReconciliationDetailQueryHandler
 
     private sealed record HistoryLine(
         Guid LineId,
-        DateTimeOffset CreatedAt,
         Guid MovementId,
         string MovementNumber,
         DateTimeOffset MovementDate,
