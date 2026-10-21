@@ -3,14 +3,18 @@ import PageTitle from '../../components/common/PageTitle';
 import TabRow from '../../components/common/TabRow';
 import { getApiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventoryApi';
+import { INITIAL_COUNTS_FILTER, type InventoryCountsFilter } from '../../api/inventoryCounts';
 import type { InventoryAlertsDto, InventoryLocationDto, InventoryMovementDto, SupplyItemDto } from '../../types';
 import AlertsTab from './AlertsTab';
+import CountDetail from './CountDetail';
+import CountsTab from './CountsTab';
 import KardexTab from './KardexTab';
 import LocationModal from './LocationModal';
 import LocationsTab from './LocationsTab';
 import MovementDetailModal from './MovementDetailModal';
 import MovementModal from './MovementModal';
 import MovementsTab from './MovementsTab';
+import NewCountModal from './NewCountModal';
 import RecipesTab from './RecipesTab';
 import StocksTab from './StocksTab';
 import SuppliesTab from './SuppliesTab';
@@ -18,12 +22,13 @@ import SupplyModal from './SupplyModal';
 import { useKardexList, useMovementList, useStockList, useSupplyList } from './inventoryLists';
 import { useRecipeEditor } from './useRecipeEditor';
 
-type InventoryTab = 'supplies' | 'stocks' | 'movements' | 'locations' | 'recipes' | 'kardex' | 'alerts';
+type InventoryTab = 'supplies' | 'stocks' | 'movements' | 'counts' | 'locations' | 'recipes' | 'kardex' | 'alerts';
 
 const TABS: Array<{ key: InventoryTab; label: string }> = [
   { key: 'supplies', label: 'Insumos' },
   { key: 'stocks', label: 'Existencias' },
   { key: 'movements', label: 'Entradas y salidas' },
+  { key: 'counts', label: 'Conteos' },
   { key: 'kardex', label: 'Historial por insumo' },
   { key: 'recipes', label: 'Recetas' },
   { key: 'locations', label: 'Ubicaciones' },
@@ -55,8 +60,9 @@ function useDialog<T = never>() {
 }
 
 /**
- * Supplies, stock, movements, locations, recipes, kardex and alerts. The screen holds the state of every tab, so
- * filters and unsaved recipe changes stay while another tab is open; each tab and dialog has its own file.
+ * Supplies, stock, movements, physical counts, locations, recipes, kardex and alerts. The screen holds the state of every
+ * tab, so filters, unsaved recipe changes and the count being counted stay while another tab is open; each tab and dialog
+ * has its own file.
  */
 export default function InventoryManagement() {
   const [activeTab, setActiveTab] = useState<InventoryTab>('supplies');
@@ -77,6 +83,9 @@ export default function InventoryManagement() {
   const supplyDialog = useDialog<SupplyItemDto>();
   const locationDialog = useDialog<InventoryLocationDto>();
   const movementDialog = useDialog();
+  const newCountDialog = useDialog();
+  const [openCountId, setOpenCountId] = useState<string | null>(null);
+  const [countsFilter, setCountsFilter] = useState<InventoryCountsFilter>(INITIAL_COUNTS_FILTER);
   const [movementDetail, setMovementDetail] = useState<{
     show: boolean;
     loading: boolean;
@@ -177,6 +186,13 @@ export default function InventoryManagement() {
     }
   };
 
+  // A posted count moved the stock: the lists that show it are read again.
+  const countPosted = (message: string) => {
+    setError('');
+    setSuccess(message);
+    Promise.all([stocks.reload(), movements.reload(), supplies.reload(), kardex.reload(), loadSupplyOptions()]);
+  };
+
   // After a dialog saves: its message, and the lists that show what it changed.
   const saved = (message: string, hide: () => void, reloads: Array<() => Promise<unknown>>) => {
     setError('');
@@ -235,6 +251,11 @@ export default function InventoryManagement() {
                     <i className="ri-exchange-funds-line me-1" aria-hidden="true"></i>Registrar movimiento
                   </button>
                 )}
+                {activeTab === 'counts' && !openCountId && (
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => newCountDialog.show()}>
+                    <i className="ri-list-check-3 me-1" aria-hidden="true"></i>Nuevo conteo
+                  </button>
+                )}
                 {activeTab === 'locations' && (
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => locationDialog.show()}>
                     <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva ubicación
@@ -267,6 +288,23 @@ export default function InventoryManagement() {
               )}
               {activeTab === 'stocks' && <StocksTab list={stocks} locations={locations} />}
               {activeTab === 'movements' && <MovementsTab list={movements} onOpenDetail={openMovementDetail} />}
+              {activeTab === 'counts' && !openCountId && (
+                <CountsTab locations={locations} filter={countsFilter} onFilterChange={setCountsFilter} onOpen={setOpenCountId} />
+              )}
+              {activeTab === 'counts' && openCountId && (
+                <CountDetail
+                  key={openCountId}
+                  countId={openCountId}
+                  supplyOptions={supplyOptions}
+                  onBack={() => setOpenCountId(null)}
+                  onOpenMovement={openMovementDetail}
+                  onPosted={countPosted}
+                  onMessage={(message) => {
+                    setError('');
+                    setSuccess(message);
+                  }}
+                />
+              )}
               {activeTab === 'recipes' && (
                 <RecipesTab
                   editor={recipe}
@@ -317,6 +355,20 @@ export default function InventoryManagement() {
           movementDialog.hide,
           [movements.reload, stocks.reload, supplies.reload, loadSupplyOptions],
         )}
+      />
+
+      <NewCountModal
+        key={`count-${newCountDialog.key}`}
+        show={newCountDialog.isOpen}
+        activeLocations={activeLocations}
+        supplyOptions={supplyOptions}
+        onHide={newCountDialog.hide}
+        onStarted={(count) => {
+          newCountDialog.hide();
+          setError('');
+          setSuccess(`Conteo ${count.countNumber} empezado: ${count.lineCount === 1 ? '1 artículo' : `${count.lineCount} artículos`} por contar.`);
+          setOpenCountId(count.id);
+        }}
       />
 
       <MovementDetailModal

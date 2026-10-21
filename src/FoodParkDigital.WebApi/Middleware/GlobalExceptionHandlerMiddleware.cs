@@ -50,6 +50,7 @@ public class GlobalExceptionHandlerMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
+        var lockNotGranted = LogRedaction.GetSqlErrorNumber(exception) == ApplicationLocks.NotGrantedErrorNumber;
         var (statusCode, title, code) = exception switch
         {
             InvalidOrderStateTransitionException => (StatusCodes.Status409Conflict, "Invalid State Transition", ApiErrorCodes.InvalidStateTransition),
@@ -61,6 +62,8 @@ public class GlobalExceptionHandlerMiddleware
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized", ApiErrorCodes.Unauthorized),
             ForbiddenAccessException { ModuleDisabled: true } => (StatusCodes.Status403Forbidden, "Tenant capability denied", ApiErrorCodes.ModuleDisabled),
             ForbiddenAccessException => (StatusCodes.Status403Forbidden, "Forbidden", ApiErrorCodes.Forbidden),
+            // Another request held the same lock (a count, a customer's credit, a booking) longer than the wait.
+            _ when lockNotGranted => (StatusCodes.Status409Conflict, "Busy", ApiErrorCodes.Conflict),
             _ => (StatusCodes.Status500InternalServerError, "Internal Server Error", ApiErrorCodes.ServerError)
         };
 
@@ -103,6 +106,7 @@ public class GlobalExceptionHandlerMiddleware
                 EntityNotFoundException => "No se encontró el registro. Es posible que ya no exista.",
                 TenantMismatchException => "No tienes acceso a este registro.",
                 DbUpdateConcurrencyException => "Alguien más modificó este registro al mismo tiempo. Recarga e intenta de nuevo.",
+                _ when lockNotGranted => "Alguien más está cambiando lo mismo en este momento. Espera unos segundos e intenta de nuevo.",
                 _ => exception.Message
             },
             Instance = context.Request.Path

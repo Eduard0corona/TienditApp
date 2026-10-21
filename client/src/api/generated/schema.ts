@@ -5317,6 +5317,324 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventory/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    status?: components["schemas"]["InventoryCountStatus"];
+                    inventoryLocationId?: string;
+                    search?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryCountListItemDtoPaginatedList"];
+                        "application/json": components["schemas"]["InventoryCountListItemDtoPaginatedList"];
+                        "text/json": components["schemas"]["InventoryCountListItemDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StartInventoryCountCommand"];
+                    "text/json": components["schemas"]["StartInventoryCountCommand"];
+                    "application/*+json": components["schemas"]["StartInventoryCountCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryCountDto"];
+                        "application/json": components["schemas"]["InventoryCountDto"];
+                        "text/json": components["schemas"]["InventoryCountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/counts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryCountDto"];
+                        "application/json": components["schemas"]["InventoryCountDto"];
+                        "text/json": components["schemas"]["InventoryCountDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/counts/{id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    search?: string;
+                    pending?: boolean;
+                    withDifference?: boolean;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryCountLinesPage"];
+                        "application/json": components["schemas"]["InventoryCountLinesPage"];
+                        "text/json": components["schemas"]["InventoryCountLinesPage"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RecordInventoryCountRequest"];
+                    "text/json": components["schemas"]["RecordInventoryCountRequest"];
+                    "application/*+json": components["schemas"]["RecordInventoryCountRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RecordedInventoryCountDto"];
+                        "application/json": components["schemas"]["RecordedInventoryCountDto"];
+                        "text/json": components["schemas"]["RecordedInventoryCountDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/counts/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AddInventoryCountItemsRequest"];
+                    "text/json": components["schemas"]["AddInventoryCountItemsRequest"];
+                    "application/*+json": components["schemas"]["AddInventoryCountItemsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryCountDto"];
+                        "application/json": components["schemas"]["InventoryCountDto"];
+                        "text/json": components["schemas"]["InventoryCountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/counts/{id}/post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PostInventoryCountRequest"];
+                    "text/json": components["schemas"]["PostInventoryCountRequest"];
+                    "application/*+json": components["schemas"]["PostInventoryCountRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryCountDto"];
+                        "application/json": components["schemas"]["InventoryCountDto"];
+                        "text/json": components["schemas"]["InventoryCountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/counts/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CancelInventoryCountRequest"];
+                    "text/json": components["schemas"]["CancelInventoryCountRequest"];
+                    "application/*+json": components["schemas"]["CancelInventoryCountRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryCountDto"];
+                        "application/json": components["schemas"]["InventoryCountDto"];
+                        "text/json": components["schemas"]["InventoryCountDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kitchen/orders": {
         parameters: {
             query?: never;
@@ -11723,6 +12041,9 @@ export interface components {
             /** Format: double */
             expectedBalance: number;
         };
+        AddInventoryCountItemsRequest: {
+            supplyItemIds: string[];
+        };
         AddOrderPaymentRequest: {
             /** Format: double */
             amount: number;
@@ -12084,6 +12405,9 @@ export interface components {
          * @enum {integer}
          */
         CampaignStatus: 0 | 1 | 2 | 3;
+        CancelInventoryCountRequest: {
+            reason?: string | null;
+        };
         CancelOrderRequest: {
             reason?: string | null;
             restockItems?: boolean | null;
@@ -13543,6 +13867,131 @@ export interface components {
             missingRecipeProductCount: number;
             items: components["schemas"]["InventoryAlertItemDto"][];
         };
+        InventoryCountDto: {
+            /** Format: uuid */
+            id: string;
+            countNumber: string;
+            /** Format: uuid */
+            inventoryLocationId: string;
+            inventoryLocationName: string;
+            status: components["schemas"]["InventoryCountStatus"];
+            categoryName?: string | null;
+            notes?: string | null;
+            /** Format: date-time */
+            startedAt: string;
+            startedBy: string;
+            /** Format: date-time */
+            postedAt?: string | null;
+            postedBy?: string | null;
+            /** Format: date-time */
+            cancelledAt?: string | null;
+            cancelledBy?: string | null;
+            cancelReason?: string | null;
+            /** Format: int32 */
+            lineCount: number;
+            /** Format: int32 */
+            countedLineCount: number;
+            /** Format: int32 */
+            differenceLineCount: number;
+            /** Format: double */
+            surplusValue?: number | null;
+            /** Format: double */
+            shortageValue?: number | null;
+            /** Format: int32 */
+            revision: number;
+            /** Format: uuid */
+            increaseMovementId?: string | null;
+            increaseMovementNumber?: string | null;
+            /** Format: uuid */
+            decreaseMovementId?: string | null;
+            decreaseMovementNumber?: string | null;
+        };
+        InventoryCountEntry: {
+            /** Format: uuid */
+            lineId: string;
+            /** Format: double */
+            countedQuantity?: number | null;
+            notes?: string | null;
+        };
+        InventoryCountLineDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            supplyItemId: string;
+            supplyItemName: string;
+            supplyCode?: string | null;
+            supplySku?: string | null;
+            supplyBarcode?: string | null;
+            categoryName?: string | null;
+            unit: components["schemas"]["UnitType"];
+            isSupplyActive: boolean;
+            /** Format: double */
+            countedQuantity?: number | null;
+            /** Format: double */
+            systemQuantity?: number | null;
+            /** Format: double */
+            difference?: number | null;
+            /** Format: double */
+            currentQuantity?: number | null;
+            /** Format: double */
+            resultingQuantity?: number | null;
+            /** Format: double */
+            differenceValue?: number | null;
+            /** Format: date-time */
+            countedAt?: string | null;
+            countedBy?: string | null;
+            notes?: string | null;
+        };
+        InventoryCountLinesPage: {
+            items: components["schemas"]["InventoryCountLineDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+            /** Format: int32 */
+            revision: number;
+        };
+        InventoryCountListItemDto: {
+            /** Format: uuid */
+            id: string;
+            countNumber: string;
+            /** Format: uuid */
+            inventoryLocationId: string;
+            inventoryLocationName: string;
+            status: components["schemas"]["InventoryCountStatus"];
+            categoryName?: string | null;
+            /** Format: date-time */
+            startedAt: string;
+            startedBy: string;
+            /** Format: date-time */
+            postedAt?: string | null;
+            /** Format: date-time */
+            cancelledAt?: string | null;
+            /** Format: int32 */
+            lineCount: number;
+            /** Format: int32 */
+            countedLineCount: number;
+        };
+        InventoryCountListItemDtoPaginatedList: {
+            items: components["schemas"]["InventoryCountListItemDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        InventoryCountStatus: 1 | 2 | 3;
         InventoryKardexEntryDto: {
             /** Format: uuid */
             movementLineId: string;
@@ -14903,6 +15352,10 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        PostInventoryCountRequest: {
+            /** Format: int32 */
+            expectedRevision: number;
+        };
         PreviewCampaignQuery: {
             /** Format: uuid */
             templateId: string;
@@ -15517,6 +15970,13 @@ export interface components {
             /** Format: uuid */
             idempotencyKey?: string | null;
         };
+        RecordInventoryCountRequest: {
+            lines: components["schemas"]["InventoryCountEntry"][];
+        };
+        RecordedInventoryCountDto: {
+            count: components["schemas"]["InventoryCountDto"];
+            lines: components["schemas"]["InventoryCountLineDto"][];
+        };
         RefundItemDto: {
             /** Format: uuid */
             orderItemId: string;
@@ -15957,6 +16417,13 @@ export interface components {
         SpecialOpeningDto: {
             opens: string;
             closes: string;
+        };
+        StartInventoryCountCommand: {
+            /** Format: uuid */
+            inventoryLocationId: string;
+            categoryName?: string | null;
+            supplyItemIds: string[];
+            notes?: string | null;
         };
         StarterCatalogDto: {
             id: string;

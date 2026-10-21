@@ -1941,6 +1941,169 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("RefreshTokens", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryCount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CancelledBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("CategoryName")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("CountNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<int>("CountedLineCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("DecreaseMovementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("IncreaseMovementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("InventoryLocationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("LineCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("PostedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PostedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("StartedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DecreaseMovementId");
+
+                    b.HasIndex("IncreaseMovementId");
+
+                    b.HasIndex("InventoryLocationId");
+
+                    b.HasIndex("TenantId", "CountNumber")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "InventoryLocationId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InventoryCounts_TenantId_InventoryLocationId_Open")
+                        .HasFilter("[Status] = 1");
+
+                    b.HasIndex("TenantId", "StartedAt");
+
+                    b.ToTable("InventoryCounts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InventoryCounts_Lines", "[LineCount] >= 0 AND [CountedLineCount] >= 0 AND [CountedLineCount] <= [LineCount]");
+
+                            t.HasCheckConstraint("CK_InventoryCounts_Status", "([Status] = 1 AND [PostedAt] IS NULL AND [CancelledAt] IS NULL) OR ([Status] = 2 AND [PostedAt] IS NOT NULL AND [PostedBy] IS NOT NULL AND [CancelledAt] IS NULL) OR ([Status] = 3 AND [CancelledAt] IS NOT NULL AND [CancelledBy] IS NOT NULL AND [PostedAt] IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryCountLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CountId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("CountedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CountedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<decimal?>("CountedQuantity")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<Guid>("SupplyItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("SystemQuantity")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupplyItemId");
+
+                    b.HasIndex("CountId", "SupplyItemId")
+                        .IsUnique();
+
+                    b.ToTable("InventoryCountLines", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InventoryCountLines_Counted", "([CountedQuantity] IS NULL AND [SystemQuantity] IS NULL AND [CountedAt] IS NULL AND [CountedBy] IS NULL) OR ([CountedQuantity] >= 0 AND [SystemQuantity] IS NOT NULL AND [CountedAt] IS NOT NULL AND [CountedBy] IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5856,6 +6019,40 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryCount", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryMovement", null)
+                        .WithMany()
+                        .HasForeignKey("DecreaseMovementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryMovement", null)
+                        .WithMany()
+                        .HasForeignKey("IncreaseMovementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryCountLine", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryCount", null)
+                        .WithMany()
+                        .HasForeignKey("CountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.SupplyItem", null)
+                        .WithMany()
+                        .HasForeignKey("SupplyItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", b =>

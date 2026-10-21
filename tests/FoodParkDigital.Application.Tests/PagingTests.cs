@@ -9,12 +9,14 @@ public class PagingTests
     [InlineData(-5, 20, 1, 20)]
     [InlineData(3, 1_000_000, 3, Paging.MaxPageSize)]
     [InlineData(2, 50, 2, 50)]
+    [InlineData(int.MaxValue, Paging.MaxPageSize, Paging.MaxPageNumber, Paging.MaxPageSize)]
     public void Normalize_ShouldClampPageNumberAndSize(int pageNumber, int pageSize, int expectedPage, int expectedSize)
     {
         var (page, size) = Paging.Normalize(pageNumber, pageSize);
 
         Assert.Equal(expectedPage, page);
         Assert.Equal(expectedSize, size);
+        Assert.True((page - 1) * size >= 0);
     }
 
     [Fact]

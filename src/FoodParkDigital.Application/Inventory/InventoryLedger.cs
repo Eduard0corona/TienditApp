@@ -139,22 +139,32 @@ public sealed class InventoryLedger
         };
 
     private static decimal? UnitCost(InventoryMovementType type, decimal? requestedUnitCost, decimal delta, SupplyItem supply)
-    {
-        if (requestedUnitCost.HasValue)
-            return requestedUnitCost;
+        => requestedUnitCost ?? DefaultUnitCost(type, delta, supply.AverageCost, supply.LastCost, supply.DefaultCost);
 
+    /// <summary>
+    /// What an adjustment of a physical count is valued at (Fase 27A): the cost its movement gets here, so the count shows
+    /// before posting the value its adjustments will have. Null when the item has no cost to value it with.
+    /// </summary>
+    public static decimal? AdjustmentUnitCost(decimal difference, decimal averageCost, decimal lastCost, decimal defaultCost)
+        => DefaultUnitCost(
+            difference < 0 ? InventoryMovementType.AdjustmentDecrease : InventoryMovementType.AdjustmentIncrease,
+            difference, averageCost, lastCost, defaultCost);
+
+    private static decimal? DefaultUnitCost(
+        InventoryMovementType type, decimal delta, decimal averageCost, decimal lastCost, decimal defaultCost)
+    {
         // Outbound and internal inbound movements are valued at the current average cost.
         if (delta < 0 || type != InventoryMovementType.Entry)
         {
-            if (supply.AverageCost > 0)
-                return supply.AverageCost;
+            if (averageCost > 0)
+                return averageCost;
             if (delta < 0)
                 return null;
         }
 
-        if (supply.LastCost > 0)
-            return supply.LastCost;
+        if (lastCost > 0)
+            return lastCost;
 
-        return supply.DefaultCost > 0 ? supply.DefaultCost : null;
+        return defaultCost > 0 ? defaultCost : null;
     }
 }

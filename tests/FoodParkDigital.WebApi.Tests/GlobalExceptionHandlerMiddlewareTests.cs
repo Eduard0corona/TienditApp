@@ -161,6 +161,24 @@ public class GlobalExceptionHandlerMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_WhenALockWasNotGranted_AsksToTryAgainWithAConflict()
+    {
+        var logger = new CapturingLogger<GlobalExceptionHandlerMiddleware>();
+        var context = NewHttpContext();
+        // What the count, credit and booking locks throw once their wait runs out.
+        var middleware = CreateMiddleware(Environments.Production, logger,
+            _ => throw SqlExceptionFactory.Create(ApplicationLocks.NotGrantedErrorNumber, "The count lock of the location was not granted."));
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
+        var problem = ReadProblem(context);
+        Assert.Equal("conflict", problem.GetProperty("code").GetString());
+        Assert.Equal("Alguien más está cambiando lo mismo en este momento. Espera unos segundos e intenta de nuevo.", problem.GetProperty("detail").GetString());
+        Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
+    }
+
+    [Fact]
     public async Task InvokeAsync_WhenTheClientLeft_StopsWithoutAFailure()
     {
         using var activity = new Activity("request").Start();

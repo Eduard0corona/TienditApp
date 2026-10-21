@@ -23,6 +23,13 @@ Reglas vigentes:
   - Mientras lo controla: la receta conserva ese artículo, el producto no cambia de unidad (el artículo se cuenta igual), el artículo sigue el nombre del producto y no se desactiva ni cambia de unidad desde Inventario. Un servicio no tiene existencias.
   - El catálogo y Vender leen la existencia del libro mayor (`ProductStockReader`): `TracksStock`, `OnHand` (todas las ubicaciones), `ReorderPoint` e `IsLowStock` (existencia en o bajo el punto de reorden, agotado incluido). Vender marca "Quedan N" y "Agotado".
   - `Product.StockQuantity` y `LowStockThreshold` eran lo que se capturaba a mano y nunca se movió. Desde la Fase 12 el modelo y la API ya no los tienen y la existencia inicial se cuenta al empezar a controlar.
+- Conteo físico (Fase 27A, [ADR 0037](../adr/0037-inventory-counts.md)): `InventoryCount` es el conteo de una ubicación (folio `CNT-yyyyMMdd-nnnn`, abierto, aplicado o cancelado) e `InventoryCountLine` lo contado de cada artículo con lo que el sistema tenía cuando se contó por primera vez: corregir la cantidad no lo cambia, volver a contar (borrarla y contarla) sí.
+  - Una ubicación tiene un solo conteo abierto (índice único filtrado), y un conteo tiene hasta 2,000 artículos.
+  - La hoja es a ciegas, y la API no manda las existencias de lo que falta por contar (quien cuenta las ve en «Existencias»: no es un control). Aplicar (`PostInventoryCountCommand`) mueve la existencia de ese momento por cada diferencia con un `AdjustmentIncrease` y un `AdjustmentDecrease` de motivo `InventoryCount`, con folio `INV`, la referencia del conteo y `ExternalReference` `COUNT:{id}:IN` / `COUNT:{id}:OUT`: el índice único impide aplicarlo dos veces. `COUNT:` queda reservado para los movimientos manuales.
+  - Se valoran al costo promedio, que no cambia. Lo no contado no se ajusta, y nada puede quedar en negativo.
+  - Un candado por ubicación (`IInventoryCountLock`, `sp_getapplock`) pone en fila empezar, capturar, agregar, aplicar y cancelar; si no llega en 10 segundos, 409. Aplicar exige la revisión que se revisó (`Revision`, token de concurrencia; 409 `concurrency_conflict`), y la página de artículos dice con qué revisión se leyó.
+  - Empezar, agregar artículos, corregir o borrar lo contado, aplicar y cancelar quedan en `AuditLogs`.
+  - `GET/POST /api/v1/inventory/counts` y sus acciones piden `ManageInventory`. En el cliente es Inventario › Conteos.
 - `InventoryStock.OnHandQuantity`, `SupplyItem.AverageCost` y `PurchaseOrderLine.ReceivedQuantity` son tokens de concurrencia: dos operaciones simultáneas sobre el mismo stock, costo o línea ya no se sobrescriben; la segunda falla con 409 (el comando de piezas de servicio reintenta).
 
 ## Guardrails
@@ -36,7 +43,7 @@ Reglas vigentes:
 - No se permite negativo salvo regla explícita y auditada.
 - Protege stock, folios y recepciones frente a concurrencia.
 - Valida que insumo, ubicación, proveedor, compra y orden pertenezcan al mismo tenant.
-- Diferencias entre stock calculado por kardex y almacenado se detectan/reconcilian mediante ajuste trazable.
+- Diferencias entre stock calculado por kardex y almacenado se detectan/reconcilian mediante ajuste trazable. Desde la Fase 27A, el conteo físico reconcilia lo que hay en el anaquel con un ajuste por diferencia ligado al conteo; comparar el kardex con la existencia guardada sigue pendiente.
 
 ## Deuda actual
 

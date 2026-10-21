@@ -100,7 +100,7 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Application/Customers/Services/TemporaryCustomerClaimService.cs"] = 2,
         // The folio counters of the business named by the document (also the online menu, which has no business in
         // context): the counter and the folios it continues after, filtered by that tenant.
-        ["src/FoodParkDigital.Infrastructure/Services/FolioGenerator.cs"] = 4,
+        ["src/FoodParkDigital.Infrastructure/Services/FolioGenerator.cs"] = 5,
         // Development seed data.
         ["src/FoodParkDigital.Infrastructure/Persistence/Seeds/SeedData.cs"] = 9,
     };

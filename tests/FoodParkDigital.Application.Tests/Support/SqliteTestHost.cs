@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Identity.EventHandlers;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -80,6 +81,8 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
         services.AddScoped<IFolioGenerator, FolioGenerator>();
         services.AddScoped<ICustomerCreditLock, CustomerCreditLock>();
+        services.AddScoped<IInventoryCountLock, InventoryCountLock>();
+        services.AddScoped<InventoryLedger>();
         // Sales here are about customers and phones: supplies and the cash drawer stay out, explicitly.
         services.AddSingleton(NoOpOrderInventoryService.Instance);
         services.AddSingleton<IOrderCashService>(NoOpOrderCashService.Instance);

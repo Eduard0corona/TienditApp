@@ -154,6 +154,13 @@ export const InsufficientStockPolicy = {
 } as const;
 export type InsufficientStockPolicy = (typeof InsufficientStockPolicy)[keyof typeof InsufficientStockPolicy];
 
+export const InventoryCountStatus = {
+  InProgress: 1,
+  Posted: 2,
+  Cancelled: 3,
+} as const;
+export type InventoryCountStatus = (typeof InventoryCountStatus)[keyof typeof InventoryCountStatus];
+
 export const InventoryMovementReason = {
   Purchase: 1,
   Sale: 2,

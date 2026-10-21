@@ -3,8 +3,8 @@ using FoodParkDigital.Domain.Inventory.Enums;
 namespace FoodParkDigital.Domain.Tests;
 
 /// <summary>
-/// Movement types and reasons are stored as integers and travel to the client as numbers. Renumbering them,
-/// even to match a client, reinterprets every movement already saved, so the values are fixed.
+/// Movement types and reasons, and the states of a physical count, are stored as integers and travel to the client as
+/// numbers. Renumbering them, even to match a client, reinterprets every movement already saved, so the values are fixed.
 /// </summary>
 public class InventoryEnumValuesTests
 {
@@ -45,5 +45,13 @@ public class InventoryEnumValuesTests
                 ("Other", 99)
             },
             Enum.GetValues<InventoryMovementReason>().Select(x => (x.ToString(), (int)x)));
+    }
+
+    [Fact]
+    public void CountStatuses_ShouldKeepTheirPersistedValues()
+    {
+        Assert.Equal(
+            new[] { ("InProgress", 1), ("Posted", 2), ("Cancelled", 3) },
+            Enum.GetValues<InventoryCountStatus>().Select(x => (x.ToString(), (int)x)));
     }
 }
