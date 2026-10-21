@@ -1,9 +1,10 @@
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
-import { LIQUIDACIONES_ROUTES, RAPPI_CLOSED_ID, UBER_OPEN_ID } from './liquidaciones.mocks';
+import { LIQUIDACIONES_ROUTES, RAPPI_CLOSED_ID, STATEMENT_CSV, UBER_OPEN_ID } from './liquidaciones.mocks';
 
 // Reportes › Liquidaciones: what each delivery platform owes and the settlements of its deposits. The list and an open
-// settlement at the three base looks; then a new one, a closed one and the dialog to void it. A dialog is taken at the size
+// settlement at the three base looks; then a new one, a closed one, the dialog to void it and the import of a statement
+// (its columns and the comparison on the desktop and the phone, and the settlement once applied). A dialog is taken at the size
 // of the screen (not the whole page): it is fixed over the page, and the shot shows it where the person sees it.
 
 const LOOKS = [
@@ -28,6 +29,26 @@ for (const look of LOOKS) {
       await snap(page, `liquidaciones-${look.suffix}`);
     });
 
+    if (look.suffix !== 'escritorio-oscuro') {
+      test(`liquidación abierta, importar estado de cuenta ${look.suffix}`, async ({ page }) => {
+        await open(page, `/reports/settlements/${UBER_OPEN_ID}`);
+        await page.getByRole('button', { name: 'Importar estado de cuenta' }).click();
+        const importing = await dialog(page, 'Importar estado de cuenta');
+        await importing.getByLabel('Archivo CSV').setInputFiles({
+          name: 'uber-eats-semana-38.csv',
+          mimeType: 'text/csv',
+          buffer: Buffer.from(STATEMENT_CSV),
+        });
+        await expect(importing.getByLabel('Folio del pedido')).toHaveValue('1');
+        await expect(importing.getByText(/^Línea 2: folio A7K2P/)).toBeVisible();
+        await snap(page, `liquidacion-importar-columnas-${look.suffix}`, { fullPage: false });
+
+        await importing.getByRole('button', { name: 'Comparar con mis pedidos' }).click();
+        await expect(importing.getByText(/El estado de cuenta suma/)).toBeVisible();
+        await snap(page, `liquidacion-importar-comparacion-${look.suffix}`, { fullPage: false });
+      });
+    }
+
     test(`liquidación abierta ${look.suffix}`, async ({ page }) => {
       // Its five orders and two adjustments leave $42.30 to explain; a pending order of before waits unchecked.
       await open(page, `/reports/settlements/${UBER_OPEN_ID}`);
@@ -50,6 +71,20 @@ test.describe('Liquidaciones', () => {
     await page.getByLabel('Lo que depositó').fill('650.50');
     await expect(page.getByText(/Llegó \$25\.00 menos de lo esperado/)).toBeVisible();
     await snap(page, 'liquidacion-nueva');
+  });
+
+  test('liquidación abierta, estado de cuenta aplicado', async ({ page }) => {
+    // The statement's orders in, the one it does not bring (H8N3R) out, and its adjustments after those written by hand.
+    await open(page, `/reports/settlements/${UBER_OPEN_ID}`);
+    await page.getByRole('button', { name: 'Importar estado de cuenta' }).click();
+    const importing = await dialog(page, 'Importar estado de cuenta');
+    await importing.getByLabel('Archivo CSV').setInputFiles({ name: 'uber-eats-semana-38.csv', mimeType: 'text/csv', buffer: Buffer.from(STATEMENT_CSV) });
+    await importing.getByRole('button', { name: 'Comparar con mis pedidos' }).click();
+    await importing.getByRole('button', { name: 'Aplicar a la liquidación' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: 'Incluir el pedido J5W1B (ORD-000188)' })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Incluir el pedido H8N3R (ORD-000247)' })).not.toBeChecked();
+    await snap(page, 'liquidacion-estado-de-cuenta-aplicado');
   });
 
   test('liquidación cerrada', async ({ page }) => {

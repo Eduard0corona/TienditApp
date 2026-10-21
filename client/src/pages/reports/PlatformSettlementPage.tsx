@@ -227,8 +227,8 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
   const pick = (orderIds: string[], value: boolean) =>
     setForm((current) => ({ ...current, picks: { ...current.picks, ...Object.fromEntries(orderIds.map((orderId) => [orderId, value])) } }));
 
-  // The statement's orders go in and those it does not bring leave; its adjustments replace the ones imported before. The
-  // orders of a folio with several stay as the person had them (one of the settlement, included), for the person to pick.
+  // The statement's orders go in and those it does not bring leave; its adjustments replace the ones imported before. Of a
+  // folio with several orders, only one the person marked or saved stays included: the person picks, none goes in alone.
   const applyStatement = (proposal: StatementProposal) => {
     const brought = new Set(proposal.orderIds);
     const ambiguous = new Set(proposal.ambiguousOrders.map((order) => order.orderId));
