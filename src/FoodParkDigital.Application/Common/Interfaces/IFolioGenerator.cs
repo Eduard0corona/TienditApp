@@ -14,4 +14,7 @@ public interface IFolioGenerator
 
     /// <summary>PO-20261005-0002, numbered by the UTC day of the order.</summary>
     Task<string> NextPurchaseOrderNumberAsync(Guid tenantId, DateTimeOffset orderedAt, CancellationToken cancellationToken);
+
+    /// <summary>CNT-20261021-0001, numbered by the UTC day the physical count started.</summary>
+    Task<string> NextInventoryCountNumberAsync(Guid tenantId, DateTimeOffset startedAt, CancellationToken cancellationToken);
 }

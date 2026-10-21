@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Inventory.Counts;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Enums;
@@ -47,7 +48,7 @@ public class CreateInventoryMovementCommandValidator : AbstractValidator<CreateI
         RuleFor(x => x.ExternalReference)
             .MaximumLength(100)
             .Must(reference => !IsReservedExternalReference(reference))
-            .WithMessage("La referencia externa usa un prefijo reservado por el sistema (ORDER: o PO:).");
+            .WithMessage("La referencia externa usa un prefijo reservado por el sistema (ORDER:, PO: o COUNT:).");
         RuleFor(x => x.MovementDate)
             .LessThanOrEqualTo(_ => DateTimeOffset.UtcNow.AddMinutes(5))
             .When(x => x.MovementDate.HasValue)
@@ -59,12 +60,13 @@ public class CreateInventoryMovementCommandValidator : AbstractValidator<CreateI
         RuleForEach(x => x.Lines).SetValidator(new CreateInventoryMovementLineRequestValidator());
     }
 
-    // System movements use these prefixes as idempotency keys (order consumption, reversal and purchase
-    // receipts). A manual reference with the same key could suppress or fake those movements.
+    // System movements use these prefixes as idempotency keys (order consumption, reversal, purchase receipts and the
+    // adjustments of a physical count). A manual reference with the same key could suppress or fake those movements.
     private static bool IsReservedExternalReference(string? reference) =>
         reference is not null
         && (reference.Trim().StartsWith("ORDER:", StringComparison.OrdinalIgnoreCase)
-            || reference.Trim().StartsWith("PO:", StringComparison.OrdinalIgnoreCase));
+            || reference.Trim().StartsWith("PO:", StringComparison.OrdinalIgnoreCase)
+            || reference.Trim().StartsWith(InventoryCountPostings.ReferencePrefix, StringComparison.OrdinalIgnoreCase));
 }
 
 public class CreateInventoryMovementLineRequestValidator : AbstractValidator<CreateInventoryMovementLineRequest>

@@ -38,6 +38,12 @@ public sealed class FolioGenerator : IFolioGenerator
         return Folios.DailyNumber(scope, await NextAsync(tenantId, scope, FolioKind.PurchaseOrder, cancellationToken));
     }
 
+    public async Task<string> NextInventoryCountNumberAsync(Guid tenantId, DateTimeOffset startedAt, CancellationToken cancellationToken)
+    {
+        var scope = Folios.InventoryCountScope(startedAt);
+        return Folios.DailyNumber(scope, await NextAsync(tenantId, scope, FolioKind.InventoryCount, cancellationToken));
+    }
+
     private async Task<long> NextAsync(Guid tenantId, string scope, FolioKind kind, CancellationToken cancellationToken)
     {
         if (tenantId == Guid.Empty)
@@ -100,6 +106,16 @@ public sealed class FolioGenerator : IFolioGenerator
                     WHERE [TenantId] = {tenantId} AND [OrderNumber] LIKE {scope + "-%"};
                 COMMIT TRANSACTION;
                 """, cancellationToken),
+            FolioKind.InventoryCount => _context.Database.ExecuteSqlAsync($"""
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+                IF NOT EXISTS (SELECT 1 FROM [FolioSequences] WITH (UPDLOCK, HOLDLOCK) WHERE [TenantId] = {tenantId} AND [Scope] = {scope})
+                    INSERT INTO [FolioSequences] ([TenantId], [Scope], [LastNumber])
+                    SELECT {tenantId}, {scope}, ISNULL(MAX(TRY_CAST(SUBSTRING([CountNumber], {scope.Length + 2}, 18) AS bigint)), 0)
+                    FROM [InventoryCounts]
+                    WHERE [TenantId] = {tenantId} AND [CountNumber] LIKE {scope + "-%"};
+                COMMIT TRANSACTION;
+                """, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
         });
 
@@ -135,6 +151,10 @@ public sealed class FolioGenerator : IFolioGenerator
                 .Where(p => p.TenantId == tenantId && p.OrderNumber.StartsWith(prefix))
                 .Select(p => p.OrderNumber)
                 .ToListAsync(cancellationToken),
+            FolioKind.InventoryCount => await _context.InventoryCounts.IgnoreQueryFilters()
+                .Where(c => c.TenantId == tenantId && c.CountNumber.StartsWith(prefix))
+                .Select(c => c.CountNumber)
+                .ToListAsync(cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
         };
 
@@ -148,6 +168,7 @@ public sealed class FolioGenerator : IFolioGenerator
     {
         Order,
         InventoryMovement,
-        PurchaseOrder
+        PurchaseOrder,
+        InventoryCount
     }
 }
