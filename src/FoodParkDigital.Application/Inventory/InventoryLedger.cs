@@ -99,7 +99,7 @@ public sealed class InventoryLedger
             var supply = supplies[line.SupplyItemId];
             var quantityBeforeLocation = stock.OnHandQuantity;
             var quantityBeforeSupply = onHandBySupply.GetValueOrDefault(line.SupplyItemId);
-            var delta = Delta(posting.Type, line.Quantity);
+            var delta = InventoryMovementTypes.Signed(posting.Type, line.Quantity);
             var unitCost = UnitCost(posting.Type, line.UnitCost, delta, supply);
 
             stock.ApplyMovement(delta, unitCost, posting.MovementDate);
@@ -127,16 +127,6 @@ public sealed class InventoryLedger
         _context.InventoryMovements.Add(movement);
         return Result.Success(movement);
     }
-
-    private static decimal Delta(InventoryMovementType type, decimal quantity)
-        => type switch
-        {
-            InventoryMovementType.Exit
-                or InventoryMovementType.AdjustmentDecrease
-                or InventoryMovementType.TransferOut
-                or InventoryMovementType.ReturnToSupplier => -quantity,
-            _ => quantity
-        };
 
     private static decimal? UnitCost(InventoryMovementType type, decimal? requestedUnitCost, decimal delta, SupplyItem supply)
         => requestedUnitCost ?? DefaultUnitCost(type, delta, supply.AverageCost, supply.LastCost, supply.DefaultCost);
