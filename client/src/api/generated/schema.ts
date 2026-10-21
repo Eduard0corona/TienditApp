@@ -5635,6 +5635,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventory/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    inventoryLocationId?: string;
+                    search?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryTransferListItemDtoPaginatedList"];
+                        "application/json": components["schemas"]["InventoryTransferListItemDtoPaginatedList"];
+                        "text/json": components["schemas"]["InventoryTransferListItemDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateInventoryTransferCommand"];
+                    "text/json": components["schemas"]["CreateInventoryTransferCommand"];
+                    "application/*+json": components["schemas"]["CreateInventoryTransferCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryTransferDto"];
+                        "application/json": components["schemas"]["InventoryTransferDto"];
+                        "text/json": components["schemas"]["InventoryTransferDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/transfers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryTransferDto"];
+                        "application/json": components["schemas"]["InventoryTransferDto"];
+                        "text/json": components["schemas"]["InventoryTransferDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kitchen/orders": {
         parameters: {
             query?: never;
@@ -12980,6 +13088,16 @@ export interface components {
             expirationDate?: string | null;
             notes?: string | null;
         };
+        CreateInventoryTransferCommand: {
+            /** Format: uuid */
+            idempotencyKey: string;
+            /** Format: uuid */
+            fromLocationId: string;
+            /** Format: uuid */
+            toLocationId: string;
+            notes?: string | null;
+            lines: components["schemas"]["InventoryTransferLineRequest"][];
+        };
         CreateMessageTemplateCommand: {
             name: string;
             purpose: components["schemas"]["MessagePurpose"];
@@ -14160,6 +14278,87 @@ export interface components {
         };
         InventoryStockDtoPaginatedList: {
             items: components["schemas"]["InventoryStockDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        InventoryTransferDto: {
+            /** Format: uuid */
+            id: string;
+            transferNumber: string;
+            /** Format: uuid */
+            fromLocationId: string;
+            fromLocationName: string;
+            /** Format: uuid */
+            toLocationId: string;
+            toLocationName: string;
+            /** Format: date-time */
+            transferredAt: string;
+            transferredBy: string;
+            /** Format: int32 */
+            lineCount: number;
+            /** Format: double */
+            totalCost: number;
+            notes?: string | null;
+            /** Format: uuid */
+            outMovementId: string;
+            outMovementNumber: string;
+            /** Format: uuid */
+            inMovementId: string;
+            inMovementNumber: string;
+            lines: components["schemas"]["InventoryTransferLineDto"][];
+        };
+        InventoryTransferLineDto: {
+            /** Format: uuid */
+            supplyItemId: string;
+            supplyItemName: string;
+            unit: components["schemas"]["UnitType"];
+            /** Format: double */
+            quantity: number;
+            /** Format: double */
+            unitCost?: number | null;
+            /** Format: double */
+            totalCost?: number | null;
+            /** Format: double */
+            fromQuantityBefore: number;
+            /** Format: double */
+            fromQuantityAfter: number;
+            /** Format: double */
+            toQuantityBefore: number;
+            /** Format: double */
+            toQuantityAfter: number;
+        };
+        InventoryTransferLineRequest: {
+            /** Format: uuid */
+            supplyItemId: string;
+            /** Format: double */
+            quantity: number;
+        };
+        InventoryTransferListItemDto: {
+            /** Format: uuid */
+            id: string;
+            transferNumber: string;
+            /** Format: uuid */
+            fromLocationId: string;
+            fromLocationName: string;
+            /** Format: uuid */
+            toLocationId: string;
+            toLocationName: string;
+            /** Format: date-time */
+            transferredAt: string;
+            transferredBy: string;
+            /** Format: int32 */
+            lineCount: number;
+            /** Format: double */
+            totalCost: number;
+        };
+        InventoryTransferListItemDtoPaginatedList: {
+            items: components["schemas"]["InventoryTransferListItemDto"][];
             /** Format: int32 */
             pageNumber: number;
             /** Format: int32 */

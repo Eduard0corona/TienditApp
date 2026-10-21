@@ -44,6 +44,12 @@ public sealed class FolioGenerator : IFolioGenerator
         return Folios.DailyNumber(scope, await NextAsync(tenantId, scope, FolioKind.InventoryCount, cancellationToken));
     }
 
+    public async Task<string> NextInventoryTransferNumberAsync(Guid tenantId, DateTimeOffset transferredAt, CancellationToken cancellationToken)
+    {
+        var scope = Folios.InventoryTransferScope(transferredAt);
+        return Folios.DailyNumber(scope, await NextAsync(tenantId, scope, FolioKind.InventoryTransfer, cancellationToken));
+    }
+
     private async Task<long> NextAsync(Guid tenantId, string scope, FolioKind kind, CancellationToken cancellationToken)
     {
         if (tenantId == Guid.Empty)
@@ -116,6 +122,16 @@ public sealed class FolioGenerator : IFolioGenerator
                     WHERE [TenantId] = {tenantId} AND [CountNumber] LIKE {scope + "-%"};
                 COMMIT TRANSACTION;
                 """, cancellationToken),
+            FolioKind.InventoryTransfer => _context.Database.ExecuteSqlAsync($"""
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+                IF NOT EXISTS (SELECT 1 FROM [FolioSequences] WITH (UPDLOCK, HOLDLOCK) WHERE [TenantId] = {tenantId} AND [Scope] = {scope})
+                    INSERT INTO [FolioSequences] ([TenantId], [Scope], [LastNumber])
+                    SELECT {tenantId}, {scope}, ISNULL(MAX(TRY_CAST(SUBSTRING([TransferNumber], {scope.Length + 2}, 18) AS bigint)), 0)
+                    FROM [InventoryTransfers]
+                    WHERE [TenantId] = {tenantId} AND [TransferNumber] LIKE {scope + "-%"};
+                COMMIT TRANSACTION;
+                """, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
         });
 
@@ -155,6 +171,10 @@ public sealed class FolioGenerator : IFolioGenerator
                 .Where(c => c.TenantId == tenantId && c.CountNumber.StartsWith(prefix))
                 .Select(c => c.CountNumber)
                 .ToListAsync(cancellationToken),
+            FolioKind.InventoryTransfer => await _context.InventoryTransfers.IgnoreQueryFilters()
+                .Where(t => t.TenantId == tenantId && t.TransferNumber.StartsWith(prefix))
+                .Select(t => t.TransferNumber)
+                .ToListAsync(cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
         };
 
@@ -169,6 +189,7 @@ public sealed class FolioGenerator : IFolioGenerator
         Order,
         InventoryMovement,
         PurchaseOrder,
-        InventoryCount
+        InventoryCount,
+        InventoryTransfer
     }
 }

@@ -247,15 +247,13 @@ public class OrderInventoryRegressionTests
         context.InventoryLocations.Add(location);
         await context.SaveChangesAsync();
 
-        var result = await NewMovementHandler(context, tenant).Handle(new CreateInventoryMovementCommand
-        {
-            MovementType = InventoryMovementType.TransferIn,
-            MovementReason = InventoryMovementReason.Other,
-            Lines =
-            [
-                new CreateInventoryMovementLineRequest { SupplyItemId = supply.Id, InventoryLocationId = location.Id, Quantity = 5 }
-            ]
-        }, CancellationToken.None);
+        // The entry leg of a transfer (Fase 27B) through the ledger; manual movements no longer take it.
+        var result = await new InventoryLedger(context, new FolioGenerator(context)).PostAsync(tenant.TenantId, new InventoryPosting(
+            InventoryMovementType.TransferIn,
+            InventoryMovementReason.Transfer,
+            DateTimeOffset.UtcNow,
+            [new InventoryPostingLine(supply.Id, location.Id, 5)]), CancellationToken.None);
+        await context.SaveChangesAsync();
 
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal(10m, (await context.SupplyItems.AsNoTracking().SingleAsync()).AverageCost);
@@ -263,8 +261,25 @@ public class OrderInventoryRegressionTests
     }
 
     [Theory]
+    [InlineData(InventoryMovementType.TransferIn, InventoryMovementReason.Other)]
+    [InlineData(InventoryMovementType.TransferOut, InventoryMovementReason.Other)]
+    [InlineData(InventoryMovementType.AdjustmentIncrease, InventoryMovementReason.Transfer)]
+    public void ManualMovement_ShouldNotBeOneLegOfATransfer(InventoryMovementType type, InventoryMovementReason reason)
+    {
+        var result = new CreateInventoryMovementCommandValidator().Validate(new CreateInventoryMovementCommand
+        {
+            MovementType = type,
+            MovementReason = reason,
+            Lines = [new CreateInventoryMovementLineRequest { SupplyItemId = Guid.NewGuid(), InventoryLocationId = Guid.NewGuid(), Quantity = 1 }]
+        });
+
+        Assert.Contains(result.Errors, e => e.ErrorMessage == CreateInventoryMovementCommandValidator.TransfersElsewhereMessage);
+    }
+
+    [Theory]
     [InlineData("ORDER:abc:CONSUMPTION")]
     [InlineData(" po:123:RECEIPT")]
+    [InlineData(" trf:0123456789abcdef0123456789abcdef:IN")]
     public void ManualMovement_ShouldRejectReservedExternalReferences(string reference)
     {
         var result = new CreateInventoryMovementCommandValidator().Validate(new CreateInventoryMovementCommand

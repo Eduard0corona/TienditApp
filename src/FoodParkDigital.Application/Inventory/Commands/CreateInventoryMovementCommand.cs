@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.Counts;
 using FoodParkDigital.Application.Inventory.DTOs;
+using FoodParkDigital.Application.Inventory.Transfers;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -43,12 +44,17 @@ public class CreateInventoryMovementCommandValidator : AbstractValidator<CreateI
     public CreateInventoryMovementCommandValidator()
     {
         RuleFor(x => x.MovementType).IsInEnum();
+        // A transfer leaves one location and enters the other at once (Fase 27B, ADR 0038): one leg alone is not one.
+        RuleFor(x => x.MovementType)
+            .Must(type => type is not (InventoryMovementType.TransferIn or InventoryMovementType.TransferOut))
+            .WithMessage(TransfersElsewhereMessage);
         RuleFor(x => x.MovementReason).IsInEnum();
+        RuleFor(x => x.MovementReason).NotEqual(InventoryMovementReason.Transfer).WithMessage(TransfersElsewhereMessage);
         RuleFor(x => x.ReferenceNumber).MaximumLength(100);
         RuleFor(x => x.ExternalReference)
             .MaximumLength(100)
             .Must(reference => !IsReservedExternalReference(reference))
-            .WithMessage("La referencia externa usa un prefijo reservado por el sistema (ORDER:, PO: o COUNT:).");
+            .WithMessage("La referencia externa usa un prefijo reservado por el sistema (ORDER:, PO:, COUNT: o TRF:).");
         RuleFor(x => x.MovementDate)
             .LessThanOrEqualTo(_ => DateTimeOffset.UtcNow.AddMinutes(5))
             .When(x => x.MovementDate.HasValue)
@@ -60,13 +66,18 @@ public class CreateInventoryMovementCommandValidator : AbstractValidator<CreateI
         RuleForEach(x => x.Lines).SetValidator(new CreateInventoryMovementLineRequestValidator());
     }
 
-    // System movements use these prefixes as idempotency keys (order consumption, reversal, purchase receipts and the
-    // adjustments of a physical count). A manual reference with the same key could suppress or fake those movements.
+    public const string TransfersElsewhereMessage =
+        "Las transferencias se hacen en Inventario › Transferencias: así salen de una ubicación y entran a la otra juntas.";
+
+    // System movements use these prefixes as idempotency keys (order consumption, reversal, purchase receipts, the
+    // adjustments of a physical count and the legs of a transfer). A manual reference with the same key could suppress or
+    // fake those movements.
     private static bool IsReservedExternalReference(string? reference) =>
         reference is not null
         && (reference.Trim().StartsWith("ORDER:", StringComparison.OrdinalIgnoreCase)
             || reference.Trim().StartsWith("PO:", StringComparison.OrdinalIgnoreCase)
-            || reference.Trim().StartsWith(InventoryCountPostings.ReferencePrefix, StringComparison.OrdinalIgnoreCase));
+            || reference.Trim().StartsWith(InventoryCountPostings.ReferencePrefix, StringComparison.OrdinalIgnoreCase)
+            || reference.Trim().StartsWith(InventoryTransferPostings.ReferencePrefix, StringComparison.OrdinalIgnoreCase));
 }
 
 public class CreateInventoryMovementLineRequestValidator : AbstractValidator<CreateInventoryMovementLineRequest>

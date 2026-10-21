@@ -6927,6 +6927,156 @@
         }
       }
     },
+    "/api/v1/inventory/transfers": {
+      "get": {
+        "tags": [
+          "InventoryTransfers"
+        ],
+        "parameters": [
+          {
+            "name": "inventoryLocationId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryTransferListItemDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryTransferListItemDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryTransferListItemDtoPaginatedList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "InventoryTransfers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInventoryTransferCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInventoryTransferCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInventoryTransferCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryTransferDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryTransferDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryTransferDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inventory/transfers/{id}": {
+      "get": {
+        "tags": [
+          "InventoryTransfers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryTransferDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryTransferDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryTransferDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/kitchen/orders": {
       "get": {
         "tags": [
@@ -17942,6 +18092,40 @@
         },
         "additionalProperties": false
       },
+      "CreateInventoryTransferCommand": {
+        "required": [
+          "fromLocationId",
+          "idempotencyKey",
+          "lines",
+          "toLocationId"
+        ],
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fromLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "toLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryTransferLineRequest"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateMessageTemplateCommand": {
         "required": [
           "body",
@@ -21854,6 +22038,259 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/InventoryStockDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryTransferDto": {
+        "required": [
+          "fromLocationId",
+          "fromLocationName",
+          "id",
+          "inMovementId",
+          "inMovementNumber",
+          "lineCount",
+          "lines",
+          "outMovementId",
+          "outMovementNumber",
+          "toLocationId",
+          "toLocationName",
+          "totalCost",
+          "transferNumber",
+          "transferredAt",
+          "transferredBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "transferNumber": {
+            "type": "string"
+          },
+          "fromLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fromLocationName": {
+            "type": "string"
+          },
+          "toLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "toLocationName": {
+            "type": "string"
+          },
+          "transferredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "transferredBy": {
+            "type": "string"
+          },
+          "lineCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCost": {
+            "type": "number",
+            "format": "double"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "outMovementId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "outMovementNumber": {
+            "type": "string"
+          },
+          "inMovementId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inMovementNumber": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryTransferLineDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryTransferLineDto": {
+        "required": [
+          "fromQuantityAfter",
+          "fromQuantityBefore",
+          "quantity",
+          "supplyItemId",
+          "supplyItemName",
+          "toQuantityAfter",
+          "toQuantityBefore",
+          "unit"
+        ],
+        "type": "object",
+        "properties": {
+          "supplyItemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supplyItemName": {
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "unitCost": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "totalCost": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "fromQuantityBefore": {
+            "type": "number",
+            "format": "double"
+          },
+          "fromQuantityAfter": {
+            "type": "number",
+            "format": "double"
+          },
+          "toQuantityBefore": {
+            "type": "number",
+            "format": "double"
+          },
+          "toQuantityAfter": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryTransferLineRequest": {
+        "required": [
+          "quantity",
+          "supplyItemId"
+        ],
+        "type": "object",
+        "properties": {
+          "supplyItemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryTransferListItemDto": {
+        "required": [
+          "fromLocationId",
+          "fromLocationName",
+          "id",
+          "lineCount",
+          "toLocationId",
+          "toLocationName",
+          "totalCost",
+          "transferNumber",
+          "transferredAt",
+          "transferredBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "transferNumber": {
+            "type": "string"
+          },
+          "fromLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fromLocationName": {
+            "type": "string"
+          },
+          "toLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "toLocationName": {
+            "type": "string"
+          },
+          "transferredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "transferredBy": {
+            "type": "string"
+          },
+          "lineCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCost": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryTransferListItemDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryTransferListItemDto"
             }
           },
           "pageNumber": {

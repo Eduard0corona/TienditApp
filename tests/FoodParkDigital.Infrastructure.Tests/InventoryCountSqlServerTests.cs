@@ -16,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// Conteo físico (Fase 27A, ADR 0037) in SQL Server set up as in production: the location's count lock keeps two starts
+/// Conteo físico (Fase 27A, ADR 0037) in SQL Server set up as in production: the location's lock keeps two starts
 /// from opening two counts, the same post sent twice from moving the stock twice, and a capture from slipping into a
 /// count being posted; the folios of counts started at once never repeat, and the items of a count are read by the base.
 /// </summary>
@@ -219,15 +219,15 @@ public class InventoryCountSqlServerTests
 
         public Task<Result<InventoryCountDto>> SendAsync(StartInventoryCountCommand command)
             => InTransactionAsync(command, (context, tenant, user, clock) => new StartInventoryCountCommandHandler(
-                context, tenant, user, clock, new FolioGenerator(context), new InventoryCountLock(context)).Handle(command, CancellationToken.None));
+                context, tenant, user, clock, new FolioGenerator(context), new InventoryLocationLock(context)).Handle(command, CancellationToken.None));
 
         public Task<Result<RecordedInventoryCountDto>> SendAsync(RecordInventoryCountCommand command)
             => InTransactionAsync(command, (context, tenant, user, clock) => new RecordInventoryCountCommandHandler(
-                context, tenant, user, clock, new InventoryCountLock(context)).Handle(command, CancellationToken.None));
+                context, tenant, user, clock, new InventoryLocationLock(context)).Handle(command, CancellationToken.None));
 
         public Task<Result<InventoryCountDto>> SendAsync(PostInventoryCountCommand command)
             => InTransactionAsync(command, (context, tenant, user, clock) => new PostInventoryCountCommandHandler(
-                context, tenant, user, clock, new InventoryCountLock(context), new InventoryLedger(context, new FolioGenerator(context)))
+                context, tenant, user, clock, new InventoryLocationLock(context), new InventoryLedger(context, new FolioGenerator(context)))
                 .Handle(command, CancellationToken.None));
 
         public async Task<List<InventoryCountLineDto>> LinesAsync(Guid countId, string? search = null, bool? pending = null, bool? withDifference = null)
