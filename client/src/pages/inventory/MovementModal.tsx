@@ -10,7 +10,7 @@ import {
   type MovementFormState,
   type MovementLineFormState,
 } from './inventoryForms';
-import { MOVEMENT_REASON_OPTIONS, MOVEMENT_TYPE_OPTIONS } from './inventoryLabels';
+import { MANUAL_MOVEMENT_REASON_OPTIONS, MANUAL_MOVEMENT_TYPE_OPTIONS } from './inventoryLabels';
 
 interface MovementModalProps {
   show: boolean;
@@ -21,7 +21,7 @@ interface MovementModalProps {
   onSaved: (message: string) => void;
 }
 
-/** An entry, exit, adjustment or transfer with one line per supply and location. */
+/** An entry, exit, adjustment or return with one line per supply and location; transfers have their own tab. */
 export default function MovementModal({ show, supplyOptions, activeLocations, onHide, onSaved }: MovementModalProps) {
   const titleId = useId();
   const [form, setForm] = useState<MovementFormState>(buildEmptyMovementForm);
@@ -72,6 +72,7 @@ export default function MovementModal({ show, supplyOptions, activeLocations, on
       </Modal.Header>
       <Modal.Body>
         {error && <div className="alert alert-danger" role="alert">{error}</div>}
+        <p className="form-text mt-0">Para llevar artículos de una ubicación a otra usa «Transferencias»: salen y entran juntos.</p>
         <div className="row mb-2">
           <div className="col-md-3 mb-2">
             <label htmlFor="inventorymanagement-tipo-2" className="form-label">Tipo *</label>
@@ -80,7 +81,7 @@ export default function MovementModal({ show, supplyOptions, activeLocations, on
               value={form.movementType}
               onChange={(e) => change({ movementType: Number(e.target.value) as InventoryMovementType })}
             >
-              {MOVEMENT_TYPE_OPTIONS.map((option) => (
+              {MANUAL_MOVEMENT_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
@@ -92,7 +93,7 @@ export default function MovementModal({ show, supplyOptions, activeLocations, on
               value={form.movementReason}
               onChange={(e) => change({ movementReason: Number(e.target.value) as InventoryMovementReason })}
             >
-              {MOVEMENT_REASON_OPTIONS.map((option) => (
+              {MANUAL_MOVEMENT_REASON_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>

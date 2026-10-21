@@ -49,6 +49,12 @@ export const UNIT_OPTIONS = toOptions(UNIT_LABELS, Object.values(UnitType));
 export const MOVEMENT_TYPE_OPTIONS = toOptions(MOVEMENT_TYPE_LABELS, Object.values(InventoryMovementType));
 export const MOVEMENT_REASON_OPTIONS = toOptions(MOVEMENT_REASON_LABELS, Object.values(InventoryMovementReason));
 
+// A transfer leaves one location and enters the other at once (Fase 27B): a manual movement is never one of its legs. The
+// history and its filters still show them.
+const TRANSFER_TYPES: readonly InventoryMovementType[] = [InventoryMovementType.TransferIn, InventoryMovementType.TransferOut];
+export const MANUAL_MOVEMENT_TYPE_OPTIONS = MOVEMENT_TYPE_OPTIONS.filter((option) => !TRANSFER_TYPES.includes(option.value));
+export const MANUAL_MOVEMENT_REASON_OPTIONS = MOVEMENT_REASON_OPTIONS.filter((option) => option.value !== InventoryMovementReason.Transfer);
+
 export const COUNT_STATUS_OPTIONS = toOptions(COUNT_STATUS_LABELS, Object.values(InventoryCountStatus));
 
 export const getCountStatusLabel = (status: InventoryCountStatus) => COUNT_STATUS_LABELS[status] ?? String(status);

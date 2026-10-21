@@ -4,6 +4,7 @@ import TabRow from '../../components/common/TabRow';
 import { getApiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventoryApi';
 import { INITIAL_COUNTS_FILTER, type InventoryCountsFilter } from '../../api/inventoryCounts';
+import { INITIAL_TRANSFERS_FILTER, type InventoryTransfersFilter } from '../../api/inventoryTransfers';
 import type { InventoryAlertsDto, InventoryLocationDto, InventoryMovementDto, SupplyItemDto } from '../../types';
 import AlertsTab from './AlertsTab';
 import CountDetail from './CountDetail';
@@ -15,19 +16,23 @@ import MovementDetailModal from './MovementDetailModal';
 import MovementModal from './MovementModal';
 import MovementsTab from './MovementsTab';
 import NewCountModal from './NewCountModal';
+import NewTransferModal from './NewTransferModal';
 import RecipesTab from './RecipesTab';
 import StocksTab from './StocksTab';
 import SuppliesTab from './SuppliesTab';
 import SupplyModal from './SupplyModal';
+import TransferDetail from './TransferDetail';
+import TransfersTab from './TransfersTab';
 import { useKardexList, useMovementList, useStockList, useSupplyList } from './inventoryLists';
 import { useRecipeEditor } from './useRecipeEditor';
 
-type InventoryTab = 'supplies' | 'stocks' | 'movements' | 'counts' | 'locations' | 'recipes' | 'kardex' | 'alerts';
+type InventoryTab = 'supplies' | 'stocks' | 'movements' | 'transfers' | 'counts' | 'locations' | 'recipes' | 'kardex' | 'alerts';
 
 const TABS: Array<{ key: InventoryTab; label: string }> = [
   { key: 'supplies', label: 'Insumos' },
   { key: 'stocks', label: 'Existencias' },
   { key: 'movements', label: 'Entradas y salidas' },
+  { key: 'transfers', label: 'Transferencias' },
   { key: 'counts', label: 'Conteos' },
   { key: 'kardex', label: 'Historial por insumo' },
   { key: 'recipes', label: 'Recetas' },
@@ -60,9 +65,9 @@ function useDialog<T = never>() {
 }
 
 /**
- * Supplies, stock, movements, physical counts, locations, recipes, kardex and alerts. The screen holds the state of every
- * tab, so filters, unsaved recipe changes and the count being counted stay while another tab is open; each tab and dialog
- * has its own file.
+ * Supplies, stock, movements, transfers, physical counts, locations, recipes, kardex and alerts. The screen holds the state
+ * of every tab, so filters, unsaved recipe changes and the count being counted stay while another tab is open; each tab
+ * and dialog has its own file.
  */
 export default function InventoryManagement() {
   const [activeTab, setActiveTab] = useState<InventoryTab>('supplies');
@@ -84,6 +89,9 @@ export default function InventoryManagement() {
   const locationDialog = useDialog<InventoryLocationDto>();
   const movementDialog = useDialog();
   const newCountDialog = useDialog();
+  const newTransferDialog = useDialog();
+  const [openTransferId, setOpenTransferId] = useState<string | null>(null);
+  const [transfersFilter, setTransfersFilter] = useState<InventoryTransfersFilter>(INITIAL_TRANSFERS_FILTER);
   const [openCountId, setOpenCountId] = useState<string | null>(null);
   const [countsFilter, setCountsFilter] = useState<InventoryCountsFilter>(INITIAL_COUNTS_FILTER);
   const [movementDetail, setMovementDetail] = useState<{
@@ -186,8 +194,8 @@ export default function InventoryManagement() {
     }
   };
 
-  // A posted count moved the stock: the lists that show it are read again.
-  const countPosted = (message: string) => {
+  // A posted count or a transfer moved the stock: the lists that show it are read again.
+  const stockMoved = (message: string) => {
     setError('');
     setSuccess(message);
     Promise.all([stocks.reload(), movements.reload(), supplies.reload(), kardex.reload(), loadSupplyOptions()]);
@@ -251,6 +259,11 @@ export default function InventoryManagement() {
                     <i className="ri-exchange-funds-line me-1" aria-hidden="true"></i>Registrar movimiento
                   </button>
                 )}
+                {activeTab === 'transfers' && !openTransferId && (
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => newTransferDialog.show()}>
+                    <i className="ri-arrow-left-right-line me-1" aria-hidden="true"></i>Nueva transferencia
+                  </button>
+                )}
                 {activeTab === 'counts' && !openCountId && (
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => newCountDialog.show()}>
                     <i className="ri-list-check-3 me-1" aria-hidden="true"></i>Nuevo conteo
@@ -288,6 +301,17 @@ export default function InventoryManagement() {
               )}
               {activeTab === 'stocks' && <StocksTab list={stocks} locations={locations} />}
               {activeTab === 'movements' && <MovementsTab list={movements} onOpenDetail={openMovementDetail} />}
+              {activeTab === 'transfers' && !openTransferId && (
+                <TransfersTab locations={locations} filter={transfersFilter} onFilterChange={setTransfersFilter} onOpen={setOpenTransferId} />
+              )}
+              {activeTab === 'transfers' && openTransferId && (
+                <TransferDetail
+                  key={openTransferId}
+                  transferId={openTransferId}
+                  onBack={() => setOpenTransferId(null)}
+                  onOpenMovement={openMovementDetail}
+                />
+              )}
               {activeTab === 'counts' && !openCountId && (
                 <CountsTab locations={locations} filter={countsFilter} onFilterChange={setCountsFilter} onOpen={setOpenCountId} />
               )}
@@ -298,7 +322,7 @@ export default function InventoryManagement() {
                   supplyOptions={supplyOptions}
                   onBack={() => setOpenCountId(null)}
                   onOpenMovement={openMovementDetail}
-                  onPosted={countPosted}
+                  onPosted={stockMoved}
                   onMessage={(message) => {
                     setError('');
                     setSuccess(message);
@@ -368,6 +392,19 @@ export default function InventoryManagement() {
           setError('');
           setSuccess(`Conteo ${count.countNumber} empezado: ${count.lineCount === 1 ? '1 artículo' : `${count.lineCount} artículos`} por contar.`);
           setOpenCountId(count.id);
+        }}
+      />
+
+      <NewTransferModal
+        key={`transfer-${newTransferDialog.key}`}
+        show={newTransferDialog.isOpen}
+        activeLocations={activeLocations}
+        onHide={newTransferDialog.hide}
+        onCreated={(transfer) => {
+          newTransferDialog.hide();
+          stockMoved(`Transferencia ${transfer.transferNumber} hecha: `
+            + `${transfer.lineCount === 1 ? '1 artículo' : `${transfer.lineCount} artículos`} de ${transfer.fromLocationName} a ${transfer.toLocationName}.`);
+          setOpenTransferId(transfer.id);
         }}
       />
 
