@@ -25,6 +25,7 @@ public class InventoryCountsController : ControllerBase
     public async Task<ActionResult<PaginatedList<InventoryCountListItemDto>>> GetCounts(
         [FromQuery] InventoryCountStatus? status,
         [FromQuery] Guid? inventoryLocationId,
+        [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -32,6 +33,7 @@ public class InventoryCountsController : ControllerBase
         {
             Status = status,
             InventoryLocationId = inventoryLocationId,
+            Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
         }, cancellationToken));

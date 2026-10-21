@@ -568,6 +568,7 @@ export interface UpdateCategoryRequest extends CreateCategoryRequest {
 export { InventoryMovementType } from '../api/generated/enums';
 
 export { InventoryMovementReason } from '../api/generated/enums';
+export { InventoryCountStatus } from '../api/generated/enums';
 
 export interface SupplyItemDto {
   id: string;

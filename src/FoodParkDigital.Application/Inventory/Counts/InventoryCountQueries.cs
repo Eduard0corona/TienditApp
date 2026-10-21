@@ -17,6 +17,8 @@ public record GetInventoryCountsQuery : IRequest<PaginatedList<InventoryCountLis
 {
     public InventoryCountStatus? Status { get; init; }
     public Guid? InventoryLocationId { get; init; }
+    /// <summary>Folio or location, over every page.</summary>
+    public string? Search { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }
@@ -41,7 +43,6 @@ public class GetInventoryCountsQueryHandler : IRequestHandler<GetInventoryCounts
         var query =
             from count in counts
             join location in _context.InventoryLocations.AsNoTracking() on count.InventoryLocationId equals location.Id
-            orderby count.StartedAt descending, count.CountNumber descending
             select new InventoryCountListItemDto
             {
                 Id = count.Id,
@@ -57,6 +58,13 @@ public class GetInventoryCountsQueryHandler : IRequestHandler<GetInventoryCounts
                 LineCount = count.LineCount,
                 CountedLineCount = count.CountedLineCount
             };
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(c => c.CountNumber.ToLower().Contains(search) || c.InventoryLocationName.ToLower().Contains(search));
+        }
+
+        query = query.OrderByDescending(c => c.StartedAt).ThenByDescending(c => c.CountNumber);
         return PaginatedList<InventoryCountListItemDto>.CreateAsync(query, request.PageNumber, request.PageSize, cancellationToken);
     }
 }

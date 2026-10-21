@@ -5329,6 +5329,7 @@ export interface paths {
                 query?: {
                     status?: components["schemas"]["InventoryCountStatus"];
                     inventoryLocationId?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };

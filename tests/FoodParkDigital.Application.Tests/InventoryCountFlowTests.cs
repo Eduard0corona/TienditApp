@@ -263,6 +263,12 @@ public class InventoryCountFlowTests
         var list = await host.HandleAsync<GetInventoryCountsQueryHandler, PaginatedList<InventoryCountListItemDto>>(
             h => h.Handle(new GetInventoryCountsQuery { Status = InventoryCountStatus.Cancelled }, default));
         Assert.Equal((CountFolio, "Bodega", 3, 1), (list.Items.Single().CountNumber, list.Items.Single().InventoryLocationName, list.Items.Single().LineCount, list.Items.Single().CountedLineCount));
+        var byLocation = await host.HandleAsync<GetInventoryCountsQueryHandler, PaginatedList<InventoryCountListItemDto>>(
+            h => h.Handle(new GetInventoryCountsQuery { Search = "bode" }, default));
+        var byFolio = await host.HandleAsync<GetInventoryCountsQueryHandler, PaginatedList<InventoryCountListItemDto>>(
+            h => h.Handle(new GetInventoryCountsQuery { Search = "0002" }, default));
+        Assert.Equal([CountFolio], byLocation.Items.Select(c => c.CountNumber));
+        Assert.Empty(byFolio.Items);
     }
 
     [Fact]

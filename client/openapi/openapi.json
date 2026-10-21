@@ -6479,6 +6479,13 @@
             }
           },
           {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
