@@ -3,13 +3,19 @@ namespace FoodParkDigital.Application.DeliveryPlatforms;
 /// <summary>What a folio of a platform's statement is in TienditApp (Fase 22H, ADR 0040).</summary>
 public enum PlatformStatementMatchStatus
 {
-    /// <summary>Its order is already in this settlement.</summary>
+    /// <summary>
+    /// Its order is already in this settlement and registered by the end of the period. One order of the folio in it is the
+    /// one the person chose, even if another of the folio is pending.
+    /// </summary>
     InThisSettlement = 1,
 
     /// <summary>Its order is pending and registered by the end of the period: the settlement can take it.</summary>
     Pending = 2,
 
-    /// <summary>Its order is pending but was registered after the period: a later settlement takes it.</summary>
+    /// <summary>
+    /// Its order was registered after the period: a later settlement takes it, or this one with a longer period. Also an
+    /// order already in this settlement whose period was shortened.
+    /// </summary>
     AfterPeriod = 3,
 
     /// <summary>Its order is already in another settlement in force.</summary>
@@ -18,7 +24,10 @@ public enum PlatformStatementMatchStatus
     /// <summary>Its order brings nothing: given back whole, or not collected yet by the business.</summary>
     NothingExpected = 5,
 
-    /// <summary>Several pending orders have the folio (Uber Eats and DiDi Food repeat them): the person picks.</summary>
+    /// <summary>
+    /// Several orders the settlement could take have the folio (Uber Eats and DiDi Food repeat them), none or more than one
+    /// already in it: the person picks.
+    /// </summary>
     Ambiguous = 6,
 
     /// <summary>No order of the platform has the folio.</summary>
@@ -49,7 +58,10 @@ public class PlatformStatementMatchDto
     /// <summary>What the lines without a folio add up to.</summary>
     public decimal ConceptsTotal { get; set; }
 
-    /// <summary>What the folios this settlement cannot take add up to, and the lines whose folio cannot be read.</summary>
+    /// <summary>
+    /// What the other folios add up to (those it cannot take, and those with several orders to pick from), and the lines
+    /// whose folio cannot be read.
+    /// </summary>
     public decimal UnmatchedTotal { get; set; }
 }
 

@@ -13,7 +13,7 @@ export type CreatePlatformSettlementBody = Schemas['CreatePlatformSettlementRequ
 export type UpdatePlatformSettlementBody = Schemas['UpdatePlatformSettlementRequest'];
 export type PlatformStatementMatch = Schemas['PlatformStatementMatchDto'];
 export type PlatformStatementFolio = Schemas['PlatformStatementFolioDto'];
-export type PlatformStatementLine = Schemas['PlatformStatementLineBody'];
+export type PlatformStatementLine = Schemas['PlatformStatementLineRequest'];
 export type MatchPlatformStatementBody = Schemas['MatchPlatformStatementRequest'];
 
 /** Cache keys of the settlements: every change reads the lists and what each platform owes again. */

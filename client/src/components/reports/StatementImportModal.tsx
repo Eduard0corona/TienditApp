@@ -1,25 +1,26 @@
-import { useId, useState, type ChangeEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ChangeEvent, type RefObject } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
 import { useMatchPlatformStatement, type PlatformStatementMatch } from '../../api/platformSettlements';
 import { PlatformStatementMatchStatus } from '../../types';
-import { CSV_EMPTY_MESSAGE, CSV_TOO_BIG_MESSAGE, MAX_CSV_BYTES, decodeCsv, parseCsv } from '../../utils/csv';
+import { CSV_EMPTY_MESSAGE, CSV_NOT_TEXT_MESSAGE, CSV_TOO_BIG_MESSAGE, MAX_CSV_BYTES, decodeCsv, parseCsv, splitHeader } from '../../utils/csv';
 import { getPlatformName, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
 import { formatMoney, formatSignedMoney, toCents } from '../../utils/money';
-import { parseSignedAmount, MAX_DEPOSITED_AMOUNT, MAX_ADJUSTMENTS, type SettlementForm } from './settlementEdits';
+import { parseSignedAmount, MAX_DEPOSITED_AMOUNT, type SettlementForm } from './settlementEdits';
 import { ADJUSTMENT_KIND_LABELS, STATEMENT_STATUS_LABELS } from './settlementLabels';
 import {
   CHOOSE_COLUMNS_MESSAGE,
   MAX_STATEMENT_LINES,
   NO_LINES_MESSAGE,
-  STATEMENT_PREFIX,
   TOO_MANY_LINES_MESSAGE,
   guessColumns,
   kindForConcept,
   proposeFromMatch,
   readStatement,
+  readingAddsUp,
   rememberedColumns,
   takesFolio,
+  TOTAL_ROW_REASON,
   type StatementColumns,
   type StatementProposal,
   type StatementReading,
@@ -44,13 +45,16 @@ interface LoadedFile {
 
 /** The most folios each group of the comparison names; the rest are counted. */
 const SHOWN = 10;
+/** The rows the preview reads to show the first lines that can be read. */
+const PREVIEWED_ROWS = 20;
 const STORAGE_KEY = 'tienditapp.settlement.statement-columns';
 
 function loadRemembered(platform: DeliveryPlatform): { folio: string; amount: string; concept: string } | null {
   try {
     const value: unknown = JSON.parse(window.localStorage.getItem(`${STORAGE_KEY}.${platform}`) ?? 'null');
-    if (value && typeof value === 'object' && 'folio' in value && 'amount' in value && 'concept' in value) {
-      return value as { folio: string; amount: string; concept: string };
+    if (value && typeof value === 'object') {
+      const { folio, amount, concept } = value as Record<string, unknown>;
+      if (typeof folio === 'string' && typeof amount === 'string' && typeof concept === 'string') return { folio, amount, concept };
     }
   } catch {
     // Without storage (private window, blocked site data) the columns are guessed every time.
@@ -86,6 +90,15 @@ export default function StatementImportModal({ platform, settlementId, form, pic
   const [columns, setColumns] = useState<StatementColumns>({ folio: -1, amount: -1, concept: -1 });
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ match: PlatformStatementMatch; reading: StatementReading } | null>(null);
+  // The button pressed leaves the screen: the focus goes to what replaced it, so the keyboard and the reader follow.
+  const [focusFile, setFocusFile] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const summaryRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (result) summaryRef.current?.focus();
+    else if (focusFile) fileRef.current?.focus();
+  }, [result, focusFile]);
 
   const choose = async (event: ChangeEvent<HTMLInputElement>) => {
     const chosen = event.target.files?.[0];
@@ -98,13 +111,19 @@ export default function StatementImportModal({ platform, settlementId, form, pic
       setError(CSV_TOO_BIG_MESSAGE);
       return;
     }
-    const [header, ...rows] = parseCsv(decodeCsv(await chosen.arrayBuffer()));
-    if (!header || rows.length === 0) {
+    const text = decodeCsv(await chosen.arrayBuffer());
+    if (text === null) {
+      setFile(null);
+      setError(CSV_NOT_TEXT_MESSAGE);
+      return;
+    }
+    const table = splitHeader(parseCsv(text));
+    if (!table) {
       setFile(null);
       setError(CSV_EMPTY_MESSAGE);
       return;
     }
-    const loaded = { name: chosen.name, headers: header.cells.map((cell) => cell.trim()), rows };
+    const loaded = { name: chosen.name, headers: table.header, rows: table.rows };
     setFile(loaded);
     setColumns(rememberedColumns(loaded.headers, loadRemembered(platform)) ?? guessColumns(loaded.headers));
   };
@@ -140,8 +159,11 @@ export default function StatementImportModal({ platform, settlementId, form, pic
     }
   };
 
-  const proposal = result && file ? proposeFromMatch(result.match, form, file.name, result.reading.lines.length) : null;
-  const preview = file ? readStatement(file.rows.slice(0, 3), columns) : null;
+  const proposal = result && file
+    ? proposeFromMatch(result.match, form, file.name, result.reading.lines.length, readingAddsUp(result.reading))
+    : null;
+  const chosenColumns = columns.folio >= 0 && columns.amount >= 0 && columns.folio !== columns.amount;
+  const preview = file && chosenColumns ? readStatement(file.rows.slice(0, PREVIEWED_ROWS), columns).lines.slice(0, 3) : null;
   const column = (label: string, key: keyof StatementColumns, optional = false) => (
     <div className="col-12 col-sm-4">
       <label className="form-label" htmlFor={`${id}-${key}`}>{label}</label>
@@ -173,7 +195,14 @@ export default function StatementImportModal({ platform, settlementId, form, pic
               solo se comparan sus renglones con tus pedidos por folio: no se guarda nada hasta que guardes la liquidación.
             </p>
             <label className="form-label" htmlFor={`${id}-file`}>Archivo CSV</label>
-            <input id={`${id}-file`} type="file" className="form-control" accept=".csv,text/csv,text/plain" onChange={(event) => void choose(event)} />
+            <input
+              ref={fileRef}
+              id={`${id}-file`}
+              type="file"
+              className="form-control"
+              accept=".csv,text/csv,text/plain"
+              onChange={(event) => void choose(event)}
+            />
             {file && (
               <>
                 <p className="small text-muted mt-2 mb-3">
@@ -184,11 +213,14 @@ export default function StatementImportModal({ platform, settlementId, form, pic
                   {column('Importe', 'amount')}
                   {column('Concepto (opcional)', 'concept', true)}
                 </div>
-                {preview && preview.lines.length > 0 && (
+                {preview && preview.length === 0 && (
+                  <p className="small text-muted mt-3 mb-0">Con estas columnas, los primeros renglones no tienen un importe que se lea.</p>
+                )}
+                {preview && preview.length > 0 && (
                   <>
                     <p className="small fw-semibold mt-3 mb-1">Así se leen los primeros renglones</p>
                     <ul className="list-unstyled small mb-0">
-                      {preview.lines.map((line) => (
+                      {preview.map((line) => (
                         <li key={line.row}>
                           Línea {line.row}: {line.folio ? `folio ${line.folio}` : 'sin folio'} · {formatMoney(line.amount)}
                           {line.concept ? ` · ${line.concept}` : ''}
@@ -200,19 +232,36 @@ export default function StatementImportModal({ platform, settlementId, form, pic
               </>
             )}
           </>
-        ) : proposal && <Comparison name={name} result={result} proposal={proposal} form={form} pickedIds={pickedIds} />}
+        ) : proposal && (
+          <Comparison name={name} result={result} proposal={proposal} form={form} pickedIds={pickedIds} summaryRef={summaryRef} />
+        )}
       </Modal.Body>
       <Modal.Footer>
         {result ? (
           <>
-            <button type="button" className="btn btn-light me-auto" onClick={() => setResult(null)}>Elegir otro archivo</button>
+            <button
+              type="button"
+              className="btn btn-light me-auto"
+              onClick={() => {
+                setFocusFile(true);
+                setResult(null);
+              }}
+            >
+              Elegir otro archivo
+            </button>
             <button type="button" className="btn btn-light" onClick={onHide}>Cancelar</button>
             <button type="button" className="btn btn-primary" onClick={() => proposal && onApply(proposal)}>Aplicar a la liquidación</button>
           </>
         ) : (
           <>
             <button type="button" className="btn btn-light" onClick={onHide}>Cancelar</button>
-            <button type="button" className="btn btn-primary" disabled={!file || matching.isPending} onClick={() => void compare()}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!file || matching.isPending}
+              aria-busy={matching.isPending}
+              onClick={() => void compare()}
+            >
               {matching.isPending ? 'Comparando…' : 'Comparar con mis pedidos'}
             </button>
           </>
@@ -228,10 +277,15 @@ interface ComparisonProps {
   proposal: StatementProposal;
   form: SettlementForm;
   pickedIds: string[];
+  summaryRef: RefObject<HTMLParagraphElement | null>;
+}
+
+function count(n: number, one: string, many: string): string {
+  return n === 1 ? one : `${n.toLocaleString('es-MX')} ${many}`;
 }
 
 /** What the statement says against the orders, and what applying it does. */
-function Comparison({ name, result, proposal, form, pickedIds }: ComparisonProps) {
+function Comparison({ name, result, proposal, form, pickedIds, summaryRef }: ComparisonProps) {
   const { match, reading } = result;
   const taken = match.folios.filter((folio) => takesFolio(folio.status));
   const differing = taken.filter((folio) => toCents(folio.difference ?? 0) !== 0);
@@ -243,17 +297,32 @@ function Comparison({ name, result, proposal, form, pickedIds }: ComparisonProps
     PlatformStatementMatchStatus.Unknown,
   ].map((status) => ({ status, folios: match.folios.filter((folio) => folio.status === status).map((folio) => folio.folio) }))
     .filter((group) => group.folios.length > 0);
-  const replaced = form.adjustments.some((row) => row.description.startsWith(STATEMENT_PREFIX));
   const typed = parseSignedAmount(form.depositedText, MAX_DEPOSITED_AMOUNT);
   const statementCents = toCents(match.statementTotal);
-  const brought = new Set(proposal.orderIds);
+  const brought = new Set([...proposal.orderIds, ...proposal.ambiguousOrders.map((order) => order.orderId)]);
   const leaving = pickedIds.filter((orderId) => !brought.has(orderId)).length;
+  const missed = reading.skipped.filter((line) => line.reason !== TOTAL_ROW_REASON).length;
+  const fileTotalDiffers = reading.fileTotal !== undefined && reading.fileTotal.cents !== reading.totalCents;
+  const orderCount = proposal.orderIds.length;
+
+  const applying = [
+    orderCount === 0
+      ? 'Al aplicar no se incluye ningún pedido'
+      : orderCount === 1 ? 'Al aplicar se incluye el pedido que entra' : `Al aplicar se incluyen los ${orderCount} pedidos que entran`,
+    proposal.importedAdjustments > 0
+      ? ` y se ${proposal.importedAdjustments === 1 ? 'agrega 1 ajuste' : `agregan ${proposal.importedAdjustments} ajustes`} con lo demás`
+      : '',
+    proposal.replacedAdjustments > 0
+      ? `${proposal.importedAdjustments > 0 ? ', en lugar de' : '; se quitan'} ${proposal.replacedAdjustments === 1 ? 'el ajuste' : `los ${proposal.replacedAdjustments} ajustes`} del estado de cuenta que ya habías importado`
+      : '',
+    '.',
+  ].join('');
 
   return (
     <>
-      <p className="mb-2">
+      <p ref={summaryRef} tabIndex={-1} className="mb-2">
         El estado de cuenta suma <span className="fw-semibold">{formatMoney(match.statementTotal)}</span> en{' '}
-        {reading.lines.length === 1 ? '1 renglón' : `${reading.lines.length.toLocaleString('es-MX')} renglones`}.
+        {count(reading.lines.length, '1 renglón', 'renglones')}.
       </p>
       {reading.skipped.length > 0 && (
         <details className="small mb-2">
@@ -270,7 +339,7 @@ function Comparison({ name, result, proposal, form, pickedIds }: ComparisonProps
         <p className="small text-muted">Ningún folio es un pedido de {name} que esta liquidación pueda tomar.</p>
       ) : (
         <p className="small mb-1">
-          {taken.length === 1 ? '1 pedido' : `${taken.length} pedidos`}: el estado de cuenta paga {formatMoney(match.matchedTotal)} y
+          {count(taken.length, '1 pedido', 'pedidos')}: el estado de cuenta paga {formatMoney(match.matchedTotal)} y
           TienditApp espera {formatMoney(match.expectedTotal)}.
           {differing.length > 0 && ` ${differing.length === 1 ? 'Uno trae' : `${differing.length} traen`} una diferencia:`}
         </p>
@@ -315,17 +384,29 @@ function Comparison({ name, result, proposal, form, pickedIds }: ComparisonProps
         </>
       )}
 
+      {(missed > 0 || fileTotalDiffers) && (
+        <div className="alert alert-warning small mt-3 mb-0">
+          {missed > 0 && `${missed === 1 ? 'Un renglón con importe no se tomó' : `${missed} renglones con importe no se tomaron`} (arriba dice por qué). `}
+          {fileTotalDiffers && reading.fileTotal && (
+            `El renglón de totales del archivo (línea ${reading.fileTotal.line}) dice ${formatMoney(reading.fileTotal.cents / 100)}, `
+            + `y lo que se tomó suma ${formatMoney(reading.totalCents / 100)}. `
+          )}
+          Lo depositado no se llena solo: escríbelo como llegó al banco, y la diferencia dirá lo que falta.
+        </div>
+      )}
+
       <div className="alert alert-info small mt-3 mb-0">
-        Al aplicar se incluyen {proposal.orderIds.length === 1 ? 'el pedido que entra' : `los ${proposal.orderIds.length} pedidos que entran`}
-        {proposal.importedAdjustments > 0
-          ? ` y se agregan ${proposal.importedAdjustments === 1 ? '1 ajuste' : `${proposal.importedAdjustments} ajustes`} con lo demás`
-          : ''}
-        {replaced ? ', en lugar de los del estado de cuenta que ya habías importado' : ''}.
+        {applying}
         {leaving > 0 && ` ${leaving === 1 ? 'Sale 1 pedido incluido' : `Salen ${leaving} pedidos incluidos`} que el estado de cuenta no trae: siguen pendientes.`}
-        {proposal.adjustments.length >= MAX_ADJUSTMENTS && ' Una liquidación lleva hasta 100 ajustes: los conceptos que no cupieron van juntos.'}
+        {proposal.ambiguousFolios.length > 0 && (
+          ` ${proposal.ambiguousFolios.length === 1 ? 'Un folio tiene' : `${proposal.ambiguousFolios.length} folios tienen`} varios pedidos: elige en la lista cuál incluir.`
+        )}
+        {proposal.mergedConcepts > 0 && ` Una liquidación lleva hasta 100 ajustes: ${proposal.mergedConcepts} conceptos van juntos en uno.`}
+        {proposal.droppedAdjustments > 0 && ' La liquidación ya tiene 100 ajustes escritos a mano: los del estado de cuenta no caben.'}
+        {proposal.overLimit && ' Un ajuste pasa de $1,000,000, lo más que lleva uno: pártelo en dos antes de guardar.'}
         {' '}
         {form.depositedText.trim() === ''
-          ? `Lo depositado será ${formatMoney(match.statementTotal)}.`
+          ? (proposal.depositedText.trim() !== '' ? `Lo depositado será ${formatMoney(match.statementTotal)}.` : '')
           : typed !== undefined && toCents(typed) !== statementCents
             ? `Lo depositado (${formatMoney(typed)}) no es lo que suma el estado de cuenta: revísalo.`
             : ''}

@@ -375,30 +375,59 @@ public class PlatformSettlementsSqlServerTests
         // Rappi gave BC001 to another order a week before; another business has its own BC002.
         var earlier = await SeedOrderAsync(database, tenant.Id, "ORD-000003", "BC001", Now.AddDays(-7));
         await SeedOrderAsync(database, other.Id, "ORD-000001", "BC002", Now);
-        var lines = new List<PlatformStatementLineRequest>
+        // BC010 twice in a closed settlement, three and two weeks ago; BC011 not collected yet by the business.
+        var oldest = await SeedOrderAsync(database, tenant.Id, "ORD-000004", "BC010", Now.AddDays(-21));
+        var newest = await SeedOrderAsync(database, tenant.Id, "ORD-000005", "BC010", Now.AddDays(-14));
+        var closedId = await OpenAsync(database, tenant.Id, [Line(oldest, 561.48m), Line(newest, 561.48m)], [], 1122.96m);
+        await using (var closing = database.CreateContext(tenant.Id))
+        {
+            (await LoadAsync(closing, closedId)).Close(Now);
+            await closing.SaveChangesAsync();
+        }
+        var uncollected = await SeedOrderAsync(database, tenant.Id, "ORD-000006", "BC011", Now, PlatformCollectedBy.Business);
+        var lines = new List<PlatformStatementLineInput>
         {
             new() { Row = 2, Folio = "bc001", Amount = 561.48m },
             new() { Row = 3, Folio = "BC002", Amount = 561.48m },
-            new() { Row = 4, Concept = "Publicidad", Amount = -99.99m }
+            new() { Row = 4, Concept = "Publicidad", Amount = -99.99m },
+            new() { Row = 5, Folio = "BC010", Amount = 561.48m },
+            new() { Row = 6, Folio = "BC011", Amount = 10m }
         };
-        lines.AddRange(Enumerable.Range(0, 2_997).Select(index => new PlatformStatementLineRequest { Row = 5 + index, Folio = $"X{index}", Amount = 0.01m }));
+        lines.AddRange(Enumerable.Range(0, 2_995).Select(index => new PlatformStatementLineInput { Row = 7 + index, Folio = $"X{index}", Amount = 0.01m }));
 
         await using var context = database.CreateContext(tenant.Id);
-        var match = await new MatchPlatformStatementQueryHandler(context, Tenant(tenant.Id)).Handle(new MatchPlatformStatementQuery
-        {
-            Channel = OrderChannel.Rappi,
-            PeriodFrom = Monday,
-            PeriodTo = Sunday,
-            Lines = lines
-        }, CancellationToken.None);
+        var match = await Match(context, tenant.Id, null, lines);
 
         Assert.Equal(2_999, match.Folios.Count);
         Assert.Equal(PlatformStatementMatchStatus.Ambiguous, match.Folios[0].Status);
         Assert.Equal([first, earlier], match.Folios[0].Orders.Select(order => order.OrderId));
         Assert.Equal((PlatformStatementMatchStatus.Pending, second, 0m), (match.Folios[1].Status, match.Folios[1].Orders.Single().OrderId, match.Folios[1].Difference));
-        Assert.All(match.Folios.Skip(2), folio => Assert.Equal(PlatformStatementMatchStatus.Unknown, folio.Status));
-        Assert.Equal((-99.99m, 561.48m, 561.48m + 29.97m), (match.ConceptsTotal, match.MatchedTotal, match.UnmatchedTotal));
+        // Of its history, only the newest order of each folio is read to say why.
+        Assert.Equal((PlatformStatementMatchStatus.Settled, newest, (Guid?)closedId),
+            (match.Folios[2].Status, match.Folios[2].Orders.Single().OrderId, match.Folios[2].SettlementId));
+        Assert.Equal((PlatformStatementMatchStatus.NothingExpected, uncollected), (match.Folios[3].Status, match.Folios[3].Orders.Single().OrderId));
+        Assert.All(match.Folios.Skip(4), folio => Assert.Equal(PlatformStatementMatchStatus.Unknown, folio.Status));
+        Assert.Equal((-99.99m, 561.48m, 561.48m + 561.48m + 10m + 29.95m), (match.ConceptsTotal, match.MatchedTotal, match.UnmatchedTotal));
+
+        // With the open settlement that has the first BC001, that one is the folio's: the person chose it.
+        var openId = await OpenAsync(database, tenant.Id, [Line(first, 561.48m)], []);
+        await using var reading = database.CreateContext(tenant.Id);
+        var again = await Match(reading, tenant.Id, openId, lines.Take(2).ToList());
+        Assert.Equal(
+            [(PlatformStatementMatchStatus.InThisSettlement, first), (PlatformStatementMatchStatus.Pending, second)],
+            again.Folios.Select(folio => (folio.Status, folio.Orders.Single().OrderId)));
     }
+
+    private static Task<PlatformStatementMatchDto> Match(
+        ApplicationDbContext context, Guid tenantId, Guid? settlementId, List<PlatformStatementLineInput> lines)
+        => new MatchPlatformStatementQueryHandler(context, Tenant(tenantId), new FixedClock()).Handle(new MatchPlatformStatementQuery
+        {
+            Channel = OrderChannel.Rappi,
+            SettlementId = settlementId,
+            PeriodFrom = Monday,
+            PeriodTo = Sunday,
+            Lines = lines
+        }, CancellationToken.None);
 
     private static PlatformSettlementOrderInput Line(Guid orderId, decimal expectedNet)
         => new(orderId, OrderChannel.Rappi, DateOnly.FromDateTime(Now.UtcDateTime), expectedNet);
@@ -461,8 +490,14 @@ public class PlatformSettlementsSqlServerTests
         return (orders[0].Id, orders[1].Id);
     }
 
-    /// <summary>One more order of Rappi of $1,000 charged by the platform, with its folio and when it was registered.</summary>
-    private static async Task<Guid> SeedOrderAsync(SqlServerTestDatabase database, Guid tenantId, string number, string folio, DateTimeOffset at)
+    /// <summary>One more order of Rappi of $1,000, charged by the platform unless told otherwise, with its folio and when it was registered.</summary>
+    private static async Task<Guid> SeedOrderAsync(
+        SqlServerTestDatabase database,
+        Guid tenantId,
+        string number,
+        string folio,
+        DateTimeOffset at,
+        PlatformCollectedBy collectedBy = PlatformCollectedBy.Platform)
     {
         await using var context = database.CreateContext(tenantId);
         var setting = await context.DeliveryPlatformSettings.SingleOrDefaultAsync(s => s.Channel == OrderChannel.Rappi);
@@ -476,7 +511,7 @@ public class PlatformSettlementsSqlServerTests
             tenantId, null, null, true, number, BusinessType.Food, OrderType.Retail, "Juan", null, null, null,
             pricesIncludeTax: true, channel: OrderChannel.Rappi);
         order.AddItem(Guid.NewGuid(), "Paquete familiar", 1, 1000m);
-        order.RegisterPlatformOrder(setting, PlatformOrderNumber.From(folio), PlatformCollectedBy.Platform, at, null);
+        order.RegisterPlatformOrder(setting, PlatformOrderNumber.From(folio), collectedBy, at, null);
         order.MarkAsCreated();
         context.Orders.Add(order);
         await context.SaveChangesAsync();

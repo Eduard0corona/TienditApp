@@ -23169,7 +23169,7 @@
           "lines": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/PlatformStatementLineBody"
+              "$ref": "#/components/schemas/PlatformStatementLineRequest"
             }
           }
         },
@@ -26804,7 +26804,7 @@
         },
         "additionalProperties": false
       },
-      "PlatformStatementLineBody": {
+      "PlatformStatementLineRequest": {
         "required": [
           "amount",
           "row"

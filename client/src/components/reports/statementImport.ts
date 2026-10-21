@@ -2,6 +2,7 @@ import type { PlatformSettlementOrder, PlatformStatementLine, PlatformStatementM
 import { PlatformSettlementAdjustmentKind, PlatformStatementMatchStatus } from '../../types';
 import { toCents } from '../../utils/money';
 import {
+  MAX_ADJUSTMENT_AMOUNT,
   MAX_ADJUSTMENTS,
   MAX_DEPOSITED_AMOUNT,
   MAX_DESCRIPTION_LENGTH,
@@ -76,47 +77,78 @@ export function rememberedColumns(headers: string[], remembered: { folio: string
   return columns.folio >= 0 && columns.amount >= 0 ? columns : null;
 }
 
+/** The decimal separator of a column of amounts: the one its values use with one or two decimals, if only one does. */
+export type DecimalSeparator = ',' | '.';
+
+/** What a column of amounts uses as decimal separator: «1,234» is 1234 in one file and unreadable in another. */
+export function decimalSeparatorOf(texts: string[]): DecimalSeparator | undefined {
+  let comma = false;
+  let dot = false;
+  for (const text of texts) {
+    const digits = text.replace(/[^\d.,]/g, '');
+    if (/\d,\d{1,2}$/.test(digits)) comma = true;
+    if (/\d\.\d{1,2}$/.test(digits)) dot = true;
+  }
+  return comma === dot ? undefined : comma ? ',' : '.';
+}
+
 /**
- * An amount as a statement writes it: «$1,234.56», «-1,234.56», «(1,234.56)», «1.234,56», «12,5» or «1234.5 MXN».
- * Undefined when it is not one, when it has more than two decimals or when it goes past what a deposit holds.
+ * An amount as a statement writes it: «$1,234.56», «-1,234.56», «(1,234.56)», «+12», «$-12», «1.234,56», «12,5»,
+ * «MX$12.00» or «1234.5 MXN». With the decimal separator of its column, a lone «1,234» or «1.234» is read by it; without
+ * it, three digits after the separator group thousands. Undefined when it is not one, when it has more than two decimals
+ * or when it goes past what a deposit holds.
  */
-export function parseStatementAmount(text: string): number | undefined {
-  let value = text.replace(/\s/g, '').replace(/MXN/gi, '');
+export function parseStatementAmount(text: string, decimal?: DecimalSeparator): number | undefined {
+  let value = text.replace(/\s/g, '').replace(/MXN/gi, '').replace(/MX\$/gi, '$');
   if (value === '') return undefined;
   let negative = false;
+  let parenthesized = false;
   if (/^\(.*\)$/.test(value)) {
     negative = true;
+    parenthesized = true;
     value = value.slice(1, -1);
   }
-  if (/^[-−–]/.test(value)) {
-    negative = !negative;
-    value = value.slice(1);
-  } else if (/[-−–]$/.test(value)) {
+  // A sign and a $ sign, in either order, before the digits; or a sign after them («80-»).
+  let signs = 0;
+  let dollars = 0;
+  for (;;) {
+    if (/^[-−–+]/.test(value)) {
+      if (value[0] !== '+') negative = !negative;
+      value = value.slice(1);
+      signs += 1;
+    } else if (value.startsWith('$')) {
+      value = value.slice(1);
+      dollars += 1;
+    } else break;
+  }
+  if (/[-−–]$/.test(value)) {
     negative = !negative;
     value = value.slice(0, -1);
+    signs += 1;
   }
-  value = value.replace(/^\$/, '');
+  if (signs > 1 || dollars > 1 || (parenthesized && signs > 0)) return undefined;
   if (!/^[\d.,]+$/.test(value) || !/\d/.test(value)) return undefined;
 
   const lastDot = value.lastIndexOf('.');
   const lastComma = value.lastIndexOf(',');
   let plain: string;
   if (lastDot >= 0 && lastComma >= 0) {
-    // Both: the last one is the decimal point.
-    const [thousands, decimal] = lastDot > lastComma ? [',', '.'] : ['.', ','];
-    const [whole, cents = ''] = [value.slice(0, value.lastIndexOf(decimal)), value.slice(value.lastIndexOf(decimal) + 1)];
-    if (whole.includes(decimal) || !groupsOfThree(whole, thousands)) return undefined;
-    plain = `${whole.split(thousands).join('')}.${cents}`;
-  } else if (lastComma >= 0) {
-    const decimals = value.length - lastComma - 1;
-    // One comma with one or two digits after it is a decimal comma («12,5»); otherwise it groups thousands («1,234»).
-    if (value.indexOf(',') === lastComma && decimals >= 1 && decimals <= 2) plain = value.replace(',', '.');
-    else if (groupsOfThree(value, ',')) plain = value.split(',').join('');
+    // Both: the last one is the decimal point, and it has to be the column's.
+    const [thousands, point] = lastDot > lastComma ? [',', '.'] : ['.', ','];
+    if (decimal && point !== decimal) return undefined;
+    const whole = value.slice(0, value.lastIndexOf(point));
+    if (whole.includes(point) || !groupsOfThree(whole, thousands)) return undefined;
+    plain = `${whole.split(thousands).join('')}.${value.slice(value.lastIndexOf(point) + 1)}`;
+  } else if (lastDot >= 0 || lastComma >= 0) {
+    const separator = lastDot >= 0 ? '.' : ',';
+    const several = value.indexOf(separator) !== value.lastIndexOf(separator);
+    const decimals = value.length - value.lastIndexOf(separator) - 1;
+    // The column's decimal separator or, without one, a comma with one or two digits after it («12,5») or a lone dot
+    // («12.5»; «12.345» is unreadable): any other groups thousands («1,234», «1.234.567»).
+    const isPoint = decimal ? separator === decimal : !several && (separator === '.' || (decimals >= 1 && decimals <= 2));
+    if (isPoint && !several) plain = value.replace(separator, '.');
+    else if (!isPoint && groupsOfThree(value, separator)) plain = value.split(separator).join('');
     else return undefined;
-  } else if (value.indexOf('.') !== lastDot) {
-    // Several dots only group thousands («1.234.567»).
-    if (!groupsOfThree(value, '.')) return undefined;
-    plain = value.split('.').join('');
   } else {
     plain = value;
   }
@@ -127,9 +159,11 @@ export function parseStatementAmount(text: string): number | undefined {
   return negative && amount !== 0 ? -amount : amount;
 }
 
+/** Thousands grouped by three, the first group of one to three digits and not starting with 0 («0,500» is no amount). */
 function groupsOfThree(value: string, separator: string): boolean {
   const groups = value.split(separator);
-  return groups.length === 1 || (groups[0].length >= 1 && groups[0].length <= 3 && groups.slice(1).every((group) => /^\d{3}$/.test(group)));
+  return groups.length === 1
+    || (/^[1-9]\d{0,2}$/.test(groups[0]) && groups.slice(1).every((group) => /^\d{3}$/.test(group)));
 }
 
 /** A line of the file the screen did not send, and why. */
@@ -143,30 +177,52 @@ export interface StatementReading {
   lines: PlatformStatementLine[];
   skipped: SkippedLine[];
   totalCents: number;
+  /** The last row of totals of the file (not a subtotal) with an amount that can be read, to check the lines against. */
+  fileTotal?: { line: number; cents: number };
 }
 
-const TOTAL_ROW = /^(sub ?)?total(es)?( general)?$/;
+export const TOTAL_ROW_REASON = 'Es un renglón de totales del archivo.';
+
+// «Total», «Total:», «TOTAL A PAGAR», «Totales», «Total general», «Gran total», «Subtotal» or «Sub-total».
+const TOTAL_ROW = /^(gran |sub[ -]?)?total(es)?\b/;
+const SUBTOTAL_ROW = /^sub[ -]?total/;
+
+function totalLabel(text: string): string {
+  return normalizeHeader(text).replace(/[\s:.]+$/, '');
+}
+
+/** A text cut to what fits, without splitting a character in two (an emoji is two units of UTF-16, as the API counts). */
+export function cutText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const end = /[\uD800-\uDBFF]/.test(text[max - 1]) ? max - 1 : max;
+  return text.slice(0, end);
+}
 
 /**
  * The lines of a statement (the rows after its header) with the columns chosen. A row without an amount that can be read is
- * left out and said; so is a row of totals of the file («Total» in a cell, and no folio but that word), which would count
- * everything twice.
+ * left out and said; so is a row of totals of the file (a cell with «Total», «Subtotal» or «Gran total», and no folio but
+ * that word), which would count everything twice.
  */
 export function readStatement(rows: { line: number; cells: string[] }[], columns: StatementColumns): StatementReading {
   const lines: PlatformStatementLine[] = [];
   const skipped: SkippedLine[] = [];
   let totalCents = 0;
+  let fileTotal: StatementReading['fileTotal'];
+  const cellOf = (row: { cells: string[] }, index: number) => (index >= 0 ? (row.cells[index] ?? '').trim() : '');
+  const decimal = decimalSeparatorOf(rows.map((row) => cellOf(row, columns.amount)));
   for (const row of rows) {
-    const cell = (index: number) => (index >= 0 ? (row.cells[index] ?? '').trim() : '');
-    const folio = cell(columns.folio);
-    const amountText = cell(columns.amount);
-    const concept = cell(columns.concept).replace(/\s+/g, ' ');
+    const folio = cellOf(row, columns.folio);
+    const amountText = cellOf(row, columns.amount);
+    const concept = cellOf(row, columns.concept).replace(/\s+/g, ' ');
     if (folio === '' && amountText === '' && concept === '') continue;
-    if ((folio === '' || TOTAL_ROW.test(normalizeHeader(folio))) && row.cells.some((value) => TOTAL_ROW.test(normalizeHeader(value)))) {
-      skipped.push({ line: row.line, reason: 'Es un renglón de totales del archivo.' });
+    const label = row.cells.map(totalLabel).find((value) => TOTAL_ROW.test(value));
+    if ((folio === '' || TOTAL_ROW.test(totalLabel(folio))) && label !== undefined) {
+      skipped.push({ line: row.line, reason: TOTAL_ROW_REASON });
+      const amount = parseStatementAmount(amountText, decimal);
+      if (amount !== undefined && !SUBTOTAL_ROW.test(label)) fileTotal = { line: row.line, cents: toCents(amount) };
       continue;
     }
-    const amount = parseStatementAmount(amountText);
+    const amount = parseStatementAmount(amountText, decimal);
     if (amount === undefined) {
       skipped.push({ line: row.line, reason: amountText === '' ? 'No tiene importe.' : `No se pudo leer el importe «${amountText}».` });
       continue;
@@ -175,10 +231,19 @@ export function readStatement(rows: { line: number; cells: string[] }[], columns
       skipped.push({ line: row.line, reason: 'Su folio es demasiado largo para ser de la plataforma.' });
       continue;
     }
-    lines.push({ row: row.line, folio: folio || null, amount, concept: concept.slice(0, MAX_CONCEPT_LENGTH) || null });
+    lines.push({ row: row.line, folio: folio || null, amount, concept: cutText(concept, MAX_CONCEPT_LENGTH) || null });
     totalCents += toCents(amount);
   }
-  return { lines, skipped, totalCents };
+  return { lines, skipped, totalCents, fileTotal };
+}
+
+/**
+ * Whether what the lines add up to is what the file says it deposits: no line was left out but the rows of totals, and the
+ * file's own total, if it has one, is the same. Only then the deposit is filled with it.
+ */
+export function readingAddsUp(reading: StatementReading): boolean {
+  return reading.skipped.every((line) => line.reason === TOTAL_ROW_REASON)
+    && (reading.fileTotal === undefined || reading.fileTotal.cents === reading.totalCents);
 }
 
 /** The reason an adjustment of a concept of the statement most likely has: the person may change it. */
@@ -204,19 +269,27 @@ export interface StatementProposal {
   /** The orders to include, and the orders themselves (one may not be on the screen yet). */
   orderIds: string[];
   orders: PlatformSettlementOrder[];
+  /** The orders of the folios with several to pick from: they stay as they are, for the person to pick. */
+  ambiguousOrders: PlatformSettlementOrder[];
   /** The adjustments of the settlement: those written by hand, and the statement's in place of any imported before. */
   adjustments: AdjustmentRow[];
-  /** How many of the statement's adjustments there are. */
+  /** How many of the statement's adjustments there are, and how many imported before they replace. */
   importedAdjustments: number;
-  /** Lo depositado, when its box was empty. */
+  replacedAdjustments: number;
+  /** How many concepts went together in one adjustment, and how many did not fit at all (100 written by hand). */
+  mergedConcepts: number;
+  droppedAdjustments: number;
+  /** Whether one of the statement's adjustments goes past what one holds ($1,000,000): the person splits it. */
+  overLimit: boolean;
+  /** Lo depositado: the statement's total when its box was empty and the file adds up; otherwise as it was. */
   depositedText: string;
   notes: string;
-  /** Folios with several pending orders: the person picks which one. */
+  /** Folios with several orders to pick from. */
   ambiguousFolios: string[];
 }
 
 function cut(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+  return text.length <= max ? text : `${cutText(text, max - 1)}…`;
 }
 
 /**
@@ -226,11 +299,19 @@ function cut(text: string, max: number): string {
  * - one with the folios it cannot take here (of another settlement, after the period, that bring nothing or of no order)
  *   and the lines whose folio cannot be read;
  * - one per concept of the lines without a folio, with the reason its words suggest.
- * Folios with several pending orders are left for the person to pick. Never past 100 adjustments: the concepts that do not
- * fit go together in one.
+ * Folios with several orders to pick from are left for the person, and their amount in no adjustment. Never past 100
+ * adjustments: the concepts that do not fit go together in one. The deposit is filled only when the file adds up
+ * (`fillDeposit`): a line left out, or a total of the file that is not what the lines add up to, would balance it wrong.
  */
-export function proposeFromMatch(match: PlatformStatementMatch, form: SettlementForm, fileName: string, lineCount: number): StatementProposal {
+export function proposeFromMatch(
+  match: PlatformStatementMatch,
+  form: SettlementForm,
+  fileName: string,
+  lineCount: number,
+  fillDeposit = true,
+): StatementProposal {
   const taken = match.folios.filter((folio) => takesFolio(folio.status) && folio.orders.length > 0);
+  const ambiguous = match.folios.filter((folio) => folio.status === PlatformStatementMatchStatus.Ambiguous);
   const kept = form.adjustments.filter((row) => !row.description.startsWith(STATEMENT_PREFIX));
 
   const proposals: { kind: PlatformSettlementAdjustmentKind; description: string; cents: number }[] = [];
@@ -266,9 +347,11 @@ export function proposeFromMatch(match: PlatformStatementMatch, form: Settlement
 
   const room = Math.max(0, MAX_ADJUSTMENTS - kept.length);
   let fitting = proposals;
-  if (proposals.length > room) {
-    const rest = proposals.slice(Math.max(0, room - 1));
-    fitting = room === 0 ? [] : [
+  let mergedConcepts = 0;
+  if (proposals.length > room && room > 0) {
+    const rest = proposals.slice(room - 1);
+    mergedConcepts = rest.length;
+    fitting = [
       ...proposals.slice(0, room - 1),
       {
         kind: PlatformSettlementAdjustmentKind.Other,
@@ -276,6 +359,8 @@ export function proposeFromMatch(match: PlatformStatementMatch, form: Settlement
         cents: rest.reduce((sum, proposal) => sum + proposal.cents, 0),
       },
     ].filter((proposal) => proposal.cents !== 0);
+  } else if (proposals.length > room) {
+    fitting = [];
   }
   const imported = fitting.map<AdjustmentRow>((proposal) => ({
     key: newAdjustmentKey(),
@@ -291,10 +376,15 @@ export function proposeFromMatch(match: PlatformStatementMatch, form: Settlement
   return {
     orderIds: taken.map((folio) => folio.orders[0].orderId),
     orders: taken.map((folio) => folio.orders[0]),
+    ambiguousOrders: ambiguous.flatMap((folio) => folio.orders),
     adjustments: [...kept, ...imported],
     importedAdjustments: imported.length,
-    depositedText: form.depositedText.trim() === '' ? centsToText(statementCents) : form.depositedText,
+    replacedAdjustments: form.adjustments.length - kept.length,
+    mergedConcepts,
+    droppedAdjustments: proposals.length > 0 && room === 0 ? proposals.length : 0,
+    overLimit: fitting.some((proposal) => Math.abs(proposal.cents) > MAX_ADJUSTMENT_AMOUNT * 100),
+    depositedText: fillDeposit && form.depositedText.trim() === '' ? centsToText(statementCents) : form.depositedText,
     notes: notes.length <= MAX_NOTES_LENGTH ? notes : form.notes,
-    ambiguousFolios: match.folios.filter((folio) => folio.status === PlatformStatementMatchStatus.Ambiguous).map((folio) => folio.folio),
+    ambiguousFolios: ambiguous.map((folio) => folio.folio),
   };
 }

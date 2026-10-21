@@ -14711,7 +14711,7 @@ export interface components {
             periodFrom: string;
             /** Format: date */
             periodTo: string;
-            lines: components["schemas"]["PlatformStatementLineBody"][];
+            lines: components["schemas"]["PlatformStatementLineRequest"][];
         };
         /**
          * Format: int32
@@ -15798,7 +15798,7 @@ export interface components {
             /** Format: uuid */
             settlementId?: string | null;
         };
-        PlatformStatementLineBody: {
+        PlatformStatementLineRequest: {
             /** Format: int32 */
             row: number;
             folio?: string | null;

@@ -67,6 +67,8 @@ public class PlatformSettlementsController : ControllerBase
     /// nothing; the settlement is saved as always.
     /// </summary>
     [HttpPost("statement-matches")]
+    // 5,000 lines with their longest folio and concept, escaped, fit in 8 MB; the server's 30 MB would be a million lines.
+    [RequestSizeLimit(8 * 1024 * 1024)]
     public async Task<ActionResult<PlatformStatementMatchDto>> MatchStatement(
         [FromBody] MatchPlatformStatementRequest request,
         CancellationToken cancellationToken)
@@ -81,7 +83,7 @@ public class PlatformSettlementsController : ControllerBase
             PeriodFrom = request.PeriodFrom,
             PeriodTo = request.PeriodTo,
             Lines = request.Lines
-                .Select(line => new PlatformStatementLineRequest { Row = line.Row, Folio = line.Folio, Amount = line.Amount, Concept = line.Concept })
+                .Select(line => new PlatformStatementLineInput { Row = line.Row, Folio = line.Folio, Amount = line.Amount, Concept = line.Concept })
                 .ToList()
         }, cancellationToken));
     }
@@ -234,10 +236,10 @@ public record MatchPlatformStatementRequest(
     Guid? SettlementId,
     [property: JsonRequired] DateOnly PeriodFrom,
     [property: JsonRequired] DateOnly PeriodTo,
-    [property: JsonRequired] IReadOnlyList<PlatformStatementLineBody> Lines);
+    [property: JsonRequired] IReadOnlyList<PlatformStatementLineRequest> Lines);
 
 /// <summary>A line of the statement: the line of the file it came in, its folio (none for a fee), its amount and concept.</summary>
-public record PlatformStatementLineBody(
+public record PlatformStatementLineRequest(
     [property: JsonRequired] int Row,
     string? Folio,
     [property: JsonRequired] decimal Amount,

@@ -284,6 +284,65 @@ describe('PlatformSettlementPage', () => {
     expect(toast.success).toHaveBeenCalledWith('Estado de cuenta aplicado. Revisa los ajustes y guarda la liquidación.');
   });
 
+  it('leaves a folio with several orders for the person to pick, keeps the one saved, and saves what was applied', async () => {
+    const user = userEvent.setup();
+    // Rappi gave 152390 again to an order of Thursday that the screen did not offer.
+    const TWIN = order('t', '152390', '2026-10-08');
+    serve({
+      'get /api/v1/platform-settlements/{id}': () => Promise.resolve(detail()),
+      'post /api/v1/platform-settlements/statement-matches': () => Promise.resolve({
+        folios: [
+          { folio: '152390', rows: [2], statementAmount: 561.48, status: PlatformStatementMatchStatus.Ambiguous, orders: [TWIN, IN_PERIOD] },
+          { folio: '152777', rows: [3], statementAmount: -348, status: PlatformStatementMatchStatus.InThisSettlement, orders: [COLLECTED], expectedNet: -348, difference: 0 },
+          { folio: '152001', rows: [4], statementAmount: 561.48, status: PlatformStatementMatchStatus.Pending, orders: [EARLIER], expectedNet: 561.48, difference: 0 },
+        ],
+        concepts: [],
+        unreadable: [],
+        statementTotal: 774.96,
+        matchedTotal: 213.48,
+        expectedTotal: 213.48,
+        conceptsTotal: 0,
+        unmatchedTotal: 561.48,
+      }),
+      'put /api/v1/platform-settlements/{id}': () => Promise.reject(apiError(409, 'conflict', 'Otra liquidación ya tiene el pedido 152001.')),
+    });
+    renderAt('/reports/settlements/s1');
+
+    await user.click(await screen.findByRole('button', { name: 'Importar estado de cuenta' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Importar estado de cuenta' });
+    const csv = 'Folio,Importe\n152390,561.48\n152777,-348.00\n152001,561.48\n';
+    await user.upload(within(dialog).getByLabelText('Archivo CSV'), new File([csv], 'rappi.csv', { type: 'text/csv' }));
+    await user.click(await within(dialog).findByRole('button', { name: 'Comparar con mis pedidos' }));
+
+    // The summary takes the focus from the button that left; the folio with two orders is the person's to pick.
+    await waitFor(() => expect(within(dialog).getByText(/El estado de cuenta suma/)).toHaveFocus());
+    expect(within(dialog).getByText(/Al aplicar se incluyen los 2 pedidos que entran\./)).toHaveTextContent('Un folio tiene varios pedidos: elige en la lista cuál incluir.');
+    expect(within(dialog).queryByText(/Sale 1 pedido incluido/)).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Aplicar a la liquidación' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    expect(screen.getByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-b)' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-t)' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Incluir el pedido 152001 (ORD-a)' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Incluir el pedido 152777 (ORD-c)' })).toBeChecked();
+    await user.click(screen.getByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-t)' }));
+
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(calls('put', '/api/v1/platform-settlements/{id}')[0][2]).toMatchObject({
+      path: { id: 's1' },
+      body: {
+        revision: 1,
+        depositedAmount: 163.48,
+        notes: 'Estado de cuenta: rappi.csv, 3 renglones.',
+        orderIds: ['a', 'b', 't', 'c'],
+        adjustments: [{ kind: PlatformSettlementAdjustmentKind.Other, description: 'Diferencia sin identificar', amount: -50 }],
+      },
+    });
+    // Another settlement took an order meanwhile: the list read again is the one to trust, without the statement's.
+    expect(await screen.findByText(/Otra liquidación tomó uno de los pedidos/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-t)' })).not.toBeInTheDocument());
+  });
+
   it('marks what the API would refuse and does not save until it is fixed', async () => {
     const user = userEvent.setup();
     serve({

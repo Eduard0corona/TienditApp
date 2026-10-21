@@ -133,6 +133,78 @@ public class PlatformStatementMatchFlowTests
     }
 
     [Fact]
+    public async Task Match_ShouldKeepTheOrdersTheSettlementHas_AndTakeOnlyThoseOfItsPeriod()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        var chosen = await SellAtAsync(fixture, At(Monday, 10), Rappi(shop, "R7"));
+        var twin = await SellAtAsync(fixture, At(Monday.AddDays(1), 10), Rappi(shop, "R7"));
+        var bothA = await SellAtAsync(fixture, At(Monday, 11), Rappi(shop, "R9"));
+        var bothB = await SellAtAsync(fixture, At(Monday.AddDays(1), 11), Rappi(shop, "R9"));
+        var saturday = await SellAtAsync(fixture, At(Sunday.AddDays(-1), 12), Rappi(shop, "R3"));
+        var givenBack = await SellAtAsync(fixture, At(Monday.AddDays(2), 12), Rappi(shop, "R4"));
+        var lastMinute = await SellAtAsync(fixture, At(Sunday, 23, 59), Rappi(shop, "R5"));
+        var nextDay = await SellAtAsync(fixture, At(Sunday.AddDays(1), 0), Rappi(shop, "R6"));
+        var open = (await CreateAsync(fixture, Command(Monday, Sunday, PlatformNet,
+            [chosen.Id, bothA.Id, bothB.Id, saturday.Id, givenBack.Id]))).Value;
+        await RefundAsync(fixture, givenBack.Id, 1000m);
+
+        var match = await MatchAsync(fixture, OrderChannel.Rappi, open.Settlement.Id,
+            Line(1, "R7", 561.48m), Line(2, "R9", 561.48m), Line(3, "R3", 561.48m), Line(4, "R4", 30m), Line(5, "R5", 561.48m), Line(6, "R6", 561.48m));
+
+        Assert.Equal(
+            [
+                ("R7", PlatformStatementMatchStatus.InThisSettlement, (decimal?)0m),
+                ("R9", PlatformStatementMatchStatus.Ambiguous, null),
+                ("R3", PlatformStatementMatchStatus.InThisSettlement, 0m),
+                // Given back after the settlement took it: it stays, in 0, and the statement says what it paid.
+                ("R4", PlatformStatementMatchStatus.InThisSettlement, 30m),
+                // The last minute of Sunday, of the business, is in the period; midnight is the next one's.
+                ("R5", PlatformStatementMatchStatus.Pending, 0m),
+                ("R6", PlatformStatementMatchStatus.AfterPeriod, null)
+            ],
+            match.Folios.Select(f => (f.Folio, f.Status, f.Difference)));
+        // The one the person chose, not the other order of the folio; both of the settlement, for the person to pick.
+        Assert.Equal([chosen.Id], match.Folios[0].Orders.Select(o => o.OrderId));
+        Assert.Equal([bothB.Id, bothA.Id], match.Folios[1].Orders.Select(o => o.OrderId));
+        Assert.Equal((0m, givenBack.Id), (match.Folios[3].ExpectedNet, match.Folios[3].Orders.Single().OrderId));
+        Assert.Equal([(lastMinute.Id, true)], match.Folios[4].Orders.Select(o => (o.OrderId, o.InPeriod)));
+        Assert.Equal([(nextDay.Id, false)], match.Folios[5].Orders.Select(o => (o.OrderId, o.InPeriod)));
+        Assert.DoesNotContain(match.Folios.SelectMany(f => f.Orders), o => o.OrderId == twin.Id);
+
+        // A shorter period leaves out Saturday's order, though the settlement has it: saving would refuse it.
+        var shorter = await MatchAsync(fixture, OrderChannel.Rappi, open.Settlement.Id, Monday, Sunday.AddDays(-2), Line(3, "R3", 561.48m));
+        var friday = Assert.Single(shorter.Folios);
+        Assert.Equal((PlatformStatementMatchStatus.AfterPeriod, saturday.Id, false), (friday.Status, friday.Orders.Single().OrderId, friday.Orders.Single().InPeriod));
+    }
+
+    [Fact]
+    public async Task Match_ShouldRefuseWhatSavingTheSettlementWouldRefuse()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        var order = await SellAtAsync(fixture, At(Monday, 12), Rappi(shop, "R1"));
+        var created = (await CreateAsync(fixture, Command(Monday, Sunday, PlatformNet, [order.Id]))).Value;
+
+        // A period that ends after today, of the business.
+        var future = await Assert.ThrowsAsync<ValidationException>(
+            () => MatchAsync(fixture, OrderChannel.Rappi, created.Settlement.Id, Today, Today.AddDays(1), Line(1, "R1", 1m)));
+        Assert.Contains(future.Errors, e => e.ErrorMessage == PlatformSettlement.PeriodInTheFutureMessage);
+        // A new settlement while another of the platform is open.
+        var another = await Assert.ThrowsAsync<ValidationException>(
+            () => MatchAsync(fixture, OrderChannel.Rappi, null, Line(1, "R1", 1m)));
+        Assert.Contains(another.Errors, e => e.ErrorMessage == PlatformSettlementErrors.OpenExists(OrderChannel.Rappi));
+        // A voided one.
+        Assert.True((await VoidAsync(fixture, created.Settlement.Id, created.Settlement.Revision)).IsSuccess);
+        var voided = await Assert.ThrowsAsync<ValidationException>(
+            () => MatchAsync(fixture, OrderChannel.Rappi, created.Settlement.Id, Line(1, "R1", 1m)));
+        Assert.Contains(voided.Errors, e => e.ErrorMessage == MatchPlatformStatementQueryHandler.NotOpenMessage);
+        // Voided, its order is pending again for a new one.
+        var renewed = await MatchAsync(fixture, OrderChannel.Rappi, null, Line(1, "R1", 561.48m));
+        Assert.Equal(PlatformStatementMatchStatus.Pending, renewed.Folios.Single().Status);
+    }
+
+    [Fact]
     public void Validator_ShouldRefuseWhatCannotBeCompared()
     {
         var validator = new MatchPlatformStatementQueryValidator();
@@ -154,14 +226,18 @@ public class PlatformStatementMatchFlowTests
             (Valid() with { Lines = [] }, MatchPlatformStatementQueryValidator.NoLinesMessage),
             (Valid() with { Lines = Enumerable.Range(1, 5_001).Select(row => Line(row, "R1", 1m)).ToList() }, MatchPlatformStatementQueryValidator.TooManyLinesMessage),
             (Valid() with { Lines = [null!] }, MatchPlatformStatementQueryValidator.MissingLineMessage),
-            (Valid() with { Lines = [Line(0, "R1", 1m)] }, "Cada renglón dice en qué línea del archivo venía."),
-            (Valid() with { Lines = [Line(7, "R1", 1.005m)] }, "El importe de la línea 7 no es válido."),
-            (Valid() with { Lines = [Line(7, "R1", 10_000_000.01m)] }, "El importe de la línea 7 no es válido."),
-            (Valid() with { Lines = [Line(7, new string('9', 61), 1m)] }, "El folio de la línea 7 es demasiado largo."),
-            (Valid() with { Lines = [Line(7, "R1", 1m, new string('c', 201))] }, "El concepto de la línea 7 es demasiado largo.")
+            (Valid() with { Lines = [Line(0, "R1", 1m)] }, MatchPlatformStatementQueryValidator.RowMessage),
+            (Valid() with { Lines = [Line(3, "R1", 1m), Line(7, "R2", 1m), Line(7, "R3", 1m)] }, MatchPlatformStatementQueryValidator.RepeatedRowMessage(7)),
+            (Valid() with { Lines = [Line(7, "R1", 1.005m)] }, MatchPlatformStatementQueryValidator.AmountMessage(7)),
+            (Valid() with { Lines = [Line(7, "R1", 10_000_000.01m)] }, MatchPlatformStatementQueryValidator.AmountMessage(7)),
+            (Valid() with { Lines = [Line(7, new string('9', 61), 1m)] }, MatchPlatformStatementQueryValidator.FolioTooLongMessage(7)),
+            (Valid() with { Lines = [Line(7, "R1", 1m, new string('c', 201))] }, MatchPlatformStatementQueryValidator.ConceptTooLongMessage(7))
         };
         foreach (var (query, message) in refusals)
             Assert.Contains(validator.Validate(query).Errors, error => error.ErrorMessage == message);
+        // Past the limit, the lines are not checked one by one: one message, not one per wrong line.
+        var tooMany = validator.Validate(Valid() with { Lines = Enumerable.Range(1, 6_000).Select(_ => Line(0, "R1", 0.001m)).ToList() });
+        Assert.Equal([MatchPlatformStatementQueryValidator.TooManyLinesMessage], tooMany.Errors.Select(error => error.ErrorMessage));
         Assert.True(validator.Validate(Valid() with { Lines = [Line(1, null, -10_000_000m, new string('c', 200))] }).IsValid);
     }
 
@@ -182,7 +258,7 @@ public class PlatformStatementMatchFlowTests
     private static CreateOrderCommand Uber(Shop shop, string folio)
         => SalesTestFixture.PlatformOrder(OrderChannel.UberEats, folio, shop.Pack.Id);
 
-    private static PlatformStatementLineRequest Line(int row, string? folio, decimal amount, string? concept = null)
+    private static PlatformStatementLineInput Line(int row, string? folio, decimal amount, string? concept = null)
         => new() { Row = row, Folio = folio, Amount = amount, Concept = concept };
 
     /// <summary>A local time of Mexico City.</summary>
@@ -233,14 +309,23 @@ public class PlatformStatementMatchFlowTests
             .Handle(new GetPlatformSettlementQuery(id), CancellationToken.None));
 
     private static Task<PlatformStatementMatchDto> MatchAsync(
-        SalesTestFixture fixture, OrderChannel channel, Guid? settlementId, params PlatformStatementLineRequest[] lines)
-        => AtTodayAsync(fixture, () => new MatchPlatformStatementQueryHandler(fixture.Context, fixture.TenantService)
+        SalesTestFixture fixture, OrderChannel channel, Guid? settlementId, params PlatformStatementLineInput[] lines)
+        => MatchAsync(fixture, channel, settlementId, Monday, Sunday, lines);
+
+    private static Task<PlatformStatementMatchDto> MatchAsync(
+        SalesTestFixture fixture, OrderChannel channel, Guid? settlementId, DateOnly from, DateOnly to, params PlatformStatementLineInput[] lines)
+        => AtTodayAsync(fixture, () => new MatchPlatformStatementQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
             .Handle(new MatchPlatformStatementQuery
             {
                 Channel = channel,
                 SettlementId = settlementId,
-                PeriodFrom = Monday,
-                PeriodTo = Sunday,
+                PeriodFrom = from,
+                PeriodTo = to,
                 Lines = lines.ToList()
             }, CancellationToken.None));
+
+    private static Task<FoodParkDigital.Application.Common.Models.Result<PlatformSettlementDetailDto>> VoidAsync(
+        SalesTestFixture fixture, Guid id, int revision)
+        => AtTodayAsync(fixture, () => new VoidPlatformSettlementCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock)
+            .Handle(new VoidPlatformSettlementCommand(id, revision, "Se capturó dos veces"), CancellationToken.None));
 }

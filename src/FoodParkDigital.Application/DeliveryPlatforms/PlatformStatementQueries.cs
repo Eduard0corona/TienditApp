@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.DeliveryPlatforms;
 
 /// <summary>One line of a platform's statement, as the person's file read it.</summary>
-public record PlatformStatementLineRequest
+public record PlatformStatementLineInput
 {
     /// <summary>The line of the file it came in, from 1, so the person finds it.</summary>
     public int Row { get; init; }
@@ -46,7 +46,7 @@ public record MatchPlatformStatementQuery : IRequest<PlatformStatementMatchDto>
 
     public DateOnly? PeriodFrom { get; init; }
     public DateOnly? PeriodTo { get; init; }
-    public List<PlatformStatementLineRequest> Lines { get; init; } = [];
+    public List<PlatformStatementLineInput> Lines { get; init; } = [];
 }
 
 public class MatchPlatformStatementQueryValidator : AbstractValidator<MatchPlatformStatementQuery>
@@ -54,6 +54,12 @@ public class MatchPlatformStatementQueryValidator : AbstractValidator<MatchPlatf
     public const string NoLinesMessage = "El estado de cuenta no tiene renglones.";
     public const string TooManyLinesMessage = "Se importan hasta 5,000 renglones a la vez.";
     public const string MissingLineMessage = "Falta un renglón del estado de cuenta.";
+    public const string RowMessage = "Cada renglón lleva la línea del archivo en que venía, desde 1.";
+
+    public static string RepeatedRowMessage(int row) => $"La línea {row} del archivo viene dos veces.";
+    public static string AmountMessage(int row) => $"El importe de la línea {row} va de -$10,000,000 a $10,000,000, con dos decimales.";
+    public static string FolioTooLongMessage(int row) => $"El folio de la línea {row} admite hasta 60 caracteres.";
+    public static string ConceptTooLongMessage(int row) => $"El concepto de la línea {row} admite hasta 200 caracteres.";
 
     public MatchPlatformStatementQueryValidator()
     {
@@ -74,20 +80,37 @@ public class MatchPlatformStatementQueryValidator : AbstractValidator<MatchPlatf
             .NotNull().WithMessage(NoLinesMessage)
             .NotEmpty().WithMessage(NoLinesMessage)
             .Must(lines => lines.Count <= MatchPlatformStatementQuery.MaxLines).WithMessage(TooManyLinesMessage)
-            .Must(lines => lines.All(line => line is not null)).WithMessage(MissingLineMessage);
-        RuleForEach(x => x.Lines).Where(line => line is not null).ChildRules(line =>
+            .Must(lines => lines.All(line => line is not null)).WithMessage(MissingLineMessage)
+            .Must(lines => RepeatedRow(lines) is null).WithMessage(x => RepeatedRowMessage(RepeatedRow(x.Lines) ?? 0));
+        // Each line is checked only within the limit: a body of a million wrong lines answers with one message, not millions.
+        RuleForEach(x => x.Lines)
+            .Where(line => line is not null)
+            .ChildRules(line =>
+            {
+                line.RuleFor(l => l.Row).GreaterThan(0).WithMessage(RowMessage);
+                line.RuleFor(l => l.Amount)
+                    .Must(amount => Math.Abs(amount) <= PlatformSettlement.MaxDepositedAmount && decimal.Round(amount, 2) == amount)
+                    .WithMessage(l => AmountMessage(l.Row));
+                line.RuleFor(l => l.Folio)
+                    .Must(folio => folio is null || folio.Length <= PlatformOrderNumber.MaxInputLength)
+                    .WithMessage(l => FolioTooLongMessage(l.Row));
+                line.RuleFor(l => l.Concept)
+                    .Must(concept => concept is null || concept.Length <= MatchPlatformStatementQuery.MaxConceptLength)
+                    .WithMessage(l => ConceptTooLongMessage(l.Row));
+            })
+            .When(x => x.Lines is not null && x.Lines.Count <= MatchPlatformStatementQuery.MaxLines);
+    }
+
+    /// <summary>The first line of the file that comes twice, if any.</summary>
+    private static int? RepeatedRow(IEnumerable<PlatformStatementLineInput> lines)
+    {
+        var seen = new HashSet<int>();
+        foreach (var line in lines)
         {
-            line.RuleFor(l => l.Row).GreaterThan(0).WithMessage("Cada renglón dice en qué línea del archivo venía.");
-            line.RuleFor(l => l.Amount)
-                .Must(amount => Math.Abs(amount) <= PlatformSettlement.MaxDepositedAmount && decimal.Round(amount, 2) == amount)
-                .WithMessage(l => $"El importe de la línea {l.Row} no es válido.");
-            line.RuleFor(l => l.Folio)
-                .Must(folio => folio is null || folio.Length <= PlatformOrderNumber.MaxInputLength)
-                .WithMessage(l => $"El folio de la línea {l.Row} es demasiado largo.");
-            line.RuleFor(l => l.Concept)
-                .Must(concept => concept is null || concept.Length <= MatchPlatformStatementQuery.MaxConceptLength)
-                .WithMessage(l => $"El concepto de la línea {l.Row} es demasiado largo.");
-        });
+            if (line is not null && !seen.Add(line.Row))
+                return line.Row;
+        }
+        return null;
     }
 }
 
@@ -101,11 +124,13 @@ public class MatchPlatformStatementQueryHandler : IRequestHandler<MatchPlatformS
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IDateTimeProvider _clock;
 
-    public MatchPlatformStatementQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public MatchPlatformStatementQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider clock)
     {
         _context = context;
         _tenantService = tenantService;
+        _clock = clock;
     }
 
     public async Task<PlatformStatementMatchDto> Handle(MatchPlatformStatementQuery request, CancellationToken cancellationToken)
@@ -114,40 +139,53 @@ public class MatchPlatformStatementQueryHandler : IRequestHandler<MatchPlatformS
         if (request.Channel is not { } channel || request.PeriodFrom is not { } from || request.PeriodTo is not { } to)
             return new PlatformStatementMatchDto();
 
-        if (request.SettlementId is { } settlementId)
+        var zone = await PlatformSettlementReader.ZoneAsync(_context, _tenantService.TenantId, cancellationToken);
+        // What saving the settlement would refuse, refused before comparing: a period that ends after today (the
+        // business's), and a new settlement while another of the platform is open.
+        if (to > DailySalesReadModel.LocalToday(zone, _clock.UtcNow))
+            throw new ValidationException([new ValidationFailure(nameof(request.PeriodTo), PlatformSettlement.PeriodInTheFutureMessage)]);
+        var settlementId = request.SettlementId;
+        if (settlementId is { } id)
         {
             var settlement = await _context.PlatformSettlements
                 .AsNoTracking()
-                .Where(s => s.Id == settlementId)
+                .Where(s => s.Id == id)
                 .Select(s => new { s.Channel, s.Status })
                 .FirstOrDefaultAsync(cancellationToken)
-                ?? throw new EntityNotFoundException(nameof(PlatformSettlement), settlementId);
+                ?? throw new EntityNotFoundException(nameof(PlatformSettlement), id);
             if (settlement.Channel != channel)
                 throw new ValidationException([new ValidationFailure(nameof(request.SettlementId), AnotherPlatformMessage)]);
             if (settlement.Status != PlatformSettlementStatus.Open)
                 throw new ValidationException([new ValidationFailure(nameof(request.SettlementId), NotOpenMessage)]);
         }
+        else if (await _context.PlatformSettlements.AnyAsync(
+                     s => s.Channel == channel && s.Status == PlatformSettlementStatus.Open, cancellationToken))
+        {
+            throw new ValidationException([new ValidationFailure(nameof(request.SettlementId), PlatformSettlementErrors.OpenExists(channel))]);
+        }
 
         var statement = StatementLines.Read(request.Lines);
-        var zone = await PlatformSettlementReader.ZoneAsync(_context, _tenantService.TenantId, cancellationToken);
         var endUtc = DailySalesReadModel.EndUtc(to, zone);
-
-        // Every order of the platform with one of the folios: Uber Eats and DiDi Food repeat folios, so a folio can be
-        // several orders, of other weeks.
         var folios = statement.Folios.Select(folio => folio.Folio).ToList();
-        var rows = folios.Count == 0
+        var ofTheFolios = PlatformSettlementReader.Orders(_context)
+            .Where(row => row.Channel == channel && folios.Contains(row.ExternalOrderNumber));
+
+        // The orders the settlement could take, of any date: its own and the pending ones (in no other settlement in force,
+        // and bringing something), as the save reads them. Pending orders do not pile up: a settlement takes them.
+        var own = folios.Count == 0 || settlementId is null
             ? []
-            : await PlatformSettlementReader.Orders(_context)
+            : await ofTheFolios
+                .Where(row => _context.PlatformSettlementOrders.Any(line =>
+                    line.OrderId == row.OrderId && line.IsActive && line.SettlementId == settlementId))
+                .ToListAsync(cancellationToken);
+        var pending = folios.Count == 0
+            ? []
+            : await PlatformSettlementReader.Pending(_context, settlementId)
                 .Where(row => row.Channel == channel && folios.Contains(row.ExternalOrderNumber))
                 .ToListAsync(cancellationToken);
-        var orderIds = rows.Select(row => row.OrderId).ToList();
-        var settledIn = orderIds.Count == 0
-            ? []
-            : await _context.PlatformSettlementOrders
-                .AsNoTracking()
-                .Where(line => line.IsActive && orderIds.Contains(line.OrderId))
-                .ToDictionaryAsync(line => line.OrderId, line => line.SettlementId, cancellationToken);
-        var byFolio = rows.ToLookup(row => row.ExternalOrderNumber, StringComparer.Ordinal);
+        var ownIds = own.Select(row => row.OrderId).ToHashSet();
+        var open = own.Concat(pending.Where(row => !ownIds.Contains(row.OrderId)))
+            .ToLookup(row => row.ExternalOrderNumber, StringComparer.Ordinal);
 
         var result = new PlatformStatementMatchDto
         {
@@ -156,73 +194,124 @@ public class MatchPlatformStatementQueryHandler : IRequestHandler<MatchPlatformS
             StatementTotal = request.Lines.Sum(line => line.Amount),
             ConceptsTotal = statement.Concepts.Sum(concept => concept.Amount)
         };
+        var unexplained = new List<PlatformStatementFolioDto>();
         foreach (var folio in statement.Folios)
-            result.Folios.Add(Match(folio, byFolio[folio.Folio], settledIn, request.SettlementId, endUtc));
+        {
+            var match = Match(folio, open[folio.Folio]);
+            result.Folios.Add(match);
+            if (match.Status == PlatformStatementMatchStatus.Unknown)
+                unexplained.Add(match);
+        }
+
+        // A folio no order of the settlement can explain: its newest order in another settlement in force says why or, if
+        // none, its newest order at all (it brings nothing); read only for those folios, one order each.
+        if (unexplained.Count > 0)
+        {
+            var left = unexplained.Select(match => match.Folio).ToList();
+            var settled = await NewestAsync(PlatformSettlementReader.Orders(_context).Where(row =>
+                row.Channel == channel
+                && left.Contains(row.ExternalOrderNumber)
+                && _context.PlatformSettlementOrders.Any(line =>
+                    line.OrderId == row.OrderId && line.IsActive && (settlementId == null || line.SettlementId != settlementId))),
+                cancellationToken);
+            var settledIds = settled.Values.Select(row => row.OrderId).ToList();
+            var settledIn = settledIds.Count == 0
+                ? []
+                : await _context.PlatformSettlementOrders
+                    .AsNoTracking()
+                    .Where(line => line.IsActive && settledIds.Contains(line.OrderId))
+                    .ToDictionaryAsync(line => line.OrderId, line => line.SettlementId, cancellationToken);
+            var rest = left.Where(folio => !settled.ContainsKey(folio)).ToList();
+            var any = rest.Count == 0
+                ? []
+                : await NewestAsync(PlatformSettlementReader.Orders(_context).Where(row =>
+                    row.Channel == channel && rest.Contains(row.ExternalOrderNumber)), cancellationToken);
+            foreach (var match in unexplained)
+            {
+                if (settled.TryGetValue(match.Folio, out var elsewhere))
+                {
+                    match.Status = PlatformStatementMatchStatus.Settled;
+                    match.Orders = [Dto(elsewhere)];
+                    match.SettlementId = settledIn.GetValueOrDefault(elsewhere.OrderId);
+                }
+                else if (any.TryGetValue(match.Folio, out var nothing))
+                {
+                    match.Status = PlatformStatementMatchStatus.NothingExpected;
+                    match.Orders = [Dto(nothing)];
+                }
+            }
+        }
+
         result.MatchedTotal = result.Folios.Where(Takes).Sum(match => match.StatementAmount);
         result.ExpectedTotal = result.Folios.Where(Takes).Sum(match => match.ExpectedNet ?? 0);
         result.UnmatchedTotal = result.Folios.Where(match => !Takes(match)).Sum(match => match.StatementAmount)
             + statement.Unreadable.Sum(line => line.Amount);
         return result;
 
-        PlatformStatementFolioDto Match(
-            StatementLines.FolioLines folio,
-            IEnumerable<PlatformSettlementReader.PlatformOrderRow> candidates,
-            IReadOnlyDictionary<Guid, Guid> settled,
-            Guid? settlementId,
-            DateTimeOffset periodEndUtc)
+        PlatformSettlementOrderDto Dto(PlatformSettlementReader.PlatformOrderRow row)
+            => PlatformSettlementReader.ToDto(row, row.ExpectedNet, from, zone, to);
+
+        // What a folio is among the orders the settlement could take; Unknown until the rest of its orders are read.
+        PlatformStatementFolioDto Match(StatementLines.FolioLines folio, IEnumerable<PlatformSettlementReader.PlatformOrderRow> candidates)
         {
             var newestFirst = candidates
                 .OrderByDescending(row => row.RegisteredAt)
                 .ThenByDescending(row => row.OrderId)
                 .ToList();
-            bool InThis(PlatformSettlementReader.PlatformOrderRow row)
-                => settlementId is { } id && settled.TryGetValue(row.OrderId, out var other) && other == id;
-            bool Elsewhere(PlatformSettlementReader.PlatformOrderRow row)
-                => settled.TryGetValue(row.OrderId, out var other) && other != settlementId;
-            // As a pending order: net paid and expected settlement not zero, and not rounded to zero either.
-            bool Brings(PlatformSettlementReader.PlatformOrderRow row)
-                => row.NetPaidAmount != 0 && row.ExpectedSettlement != 0 && row.ExpectedNet != 0;
+            bool Own(PlatformSettlementReader.PlatformOrderRow row) => ownIds.Contains(row.OrderId);
+            // Its own orders stay even in 0 (given back after it took them); a pending one, rounded to 0, brings nothing.
+            bool Takable(PlatformSettlementReader.PlatformOrderRow row)
+                => row.RegisteredAt <= endUtc && (Own(row) || row.ExpectedNet != 0);
 
-            var match = new PlatformStatementFolioDto { Folio = folio.Folio, Rows = folio.Rows, StatementAmount = folio.Amount };
-            var takable = newestFirst
-                .Where(row => InThis(row) || (!Elsewhere(row) && Brings(row) && row.RegisteredAt <= periodEndUtc))
-                .ToList();
-            if (takable.Count == 1)
+            var match = new PlatformStatementFolioDto
             {
-                var order = takable[0];
-                match.Status = InThis(order) ? PlatformStatementMatchStatus.InThisSettlement : PlatformStatementMatchStatus.Pending;
-                match.Orders = [PlatformSettlementReader.ToDto(order, order.ExpectedNet, from, zone)];
-                match.ExpectedNet = order.ExpectedNet;
-                match.Difference = folio.Amount - order.ExpectedNet;
-                return match;
+                Folio = folio.Folio,
+                Rows = folio.Rows,
+                StatementAmount = folio.Amount,
+                Status = PlatformStatementMatchStatus.Unknown
+            };
+            var takable = newestFirst.Where(Takable).ToList();
+            // One of the folio already in the settlement is the one the person chose; with none, or several, the person picks.
+            var chosen = takable.Where(Own).ToList();
+            var single = chosen.Count == 1 ? chosen[0] : chosen.Count == 0 && takable.Count == 1 ? takable[0] : null;
+            if (single is not null)
+            {
+                match.Status = Own(single) ? PlatformStatementMatchStatus.InThisSettlement : PlatformStatementMatchStatus.Pending;
+                match.Orders = [Dto(single)];
+                match.ExpectedNet = single.ExpectedNet;
+                match.Difference = folio.Amount - single.ExpectedNet;
             }
-            if (takable.Count > 1)
+            else if (takable.Count > 1)
             {
                 match.Status = PlatformStatementMatchStatus.Ambiguous;
-                match.Orders = takable
-                    .Take(MaxOrdersPerFolio)
-                    .Select(order => PlatformSettlementReader.ToDto(order, order.ExpectedNet, from, zone))
-                    .ToList();
-                return match;
+                match.Orders = takable.Take(MaxOrdersPerFolio).Select(Dto).ToList();
             }
-
-            // None the settlement can take: the most recent order that says why.
-            var afterPeriod = newestFirst.FirstOrDefault(row => !Elsewhere(row) && Brings(row));
-            var elsewhere = newestFirst.FirstOrDefault(Elsewhere);
-            var (status, explaining) = afterPeriod is not null
-                ? (PlatformStatementMatchStatus.AfterPeriod, afterPeriod)
-                : elsewhere is not null
-                    ? (PlatformStatementMatchStatus.Settled, elsewhere)
-                    : newestFirst.Count > 0
-                        ? (PlatformStatementMatchStatus.NothingExpected, newestFirst[0])
-                        : (PlatformStatementMatchStatus.Unknown, null);
-            match.Status = status;
-            if (explaining is not null)
-                match.Orders = [PlatformSettlementReader.ToDto(explaining, explaining.ExpectedNet, from, zone)];
-            if (status == PlatformStatementMatchStatus.Settled && explaining is not null)
-                match.SettlementId = settled[explaining.OrderId];
+            else if (newestFirst.FirstOrDefault(row => row.RegisteredAt > endUtc && row.ExpectedNet != 0) is { } later)
+            {
+                match.Status = PlatformStatementMatchStatus.AfterPeriod;
+                match.Orders = [Dto(later)];
+            }
             return match;
         }
+    }
+
+    /// <summary>The newest order of each folio among <paramref name="rows"/>: one row per folio read, not its history.</summary>
+    private static async Task<Dictionary<string, PlatformSettlementReader.PlatformOrderRow>> NewestAsync(
+        IQueryable<PlatformSettlementReader.PlatformOrderRow> rows,
+        CancellationToken cancellationToken)
+    {
+        var newest = rows
+            .GroupBy(row => row.ExternalOrderNumber)
+            .Select(group => new { Folio = group.Key, RegisteredAt = group.Max(row => row.RegisteredAt) });
+        var found = await (
+                from row in rows
+                join last in newest on new { Folio = row.ExternalOrderNumber, row.RegisteredAt } equals new { last.Folio, last.RegisteredAt }
+                select row)
+            .ToListAsync(cancellationToken);
+        // Two orders of a folio registered at the same instant: the same one every time.
+        return found
+            .GroupBy(row => row.ExternalOrderNumber, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.MaxBy(row => row.OrderId)!, StringComparer.Ordinal);
     }
 
     private static bool Takes(PlatformStatementFolioDto match)
@@ -244,7 +333,7 @@ internal static class StatementLines
     /// what they deduct from it (a promotion, a claim); and the lines without a folio by concept, trimmed and without
     /// telling capitals apart. A folio without a letter or a digit («-», «—») is no folio.
     /// </summary>
-    public static Grouped Read(IReadOnlyList<PlatformStatementLineRequest> lines)
+    public static Grouped Read(IReadOnlyList<PlatformStatementLineInput> lines)
     {
         var folios = new List<FolioLines>();
         var folioIndex = new Dictionary<string, int>(StringComparer.Ordinal);
