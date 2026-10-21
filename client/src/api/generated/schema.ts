@@ -5635,6 +5635,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventory/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    inventoryLocationId?: string;
+                    search?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryReconciliationDto"];
+                        "application/json": components["schemas"]["InventoryReconciliationDto"];
+                        "text/json": components["schemas"]["InventoryReconciliationDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ReconcileInventoryLedgerCommand"];
+                    "text/json": components["schemas"]["ReconcileInventoryLedgerCommand"];
+                    "application/*+json": components["schemas"]["ReconcileInventoryLedgerCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryReconciliationResultDto"];
+                        "application/json": components["schemas"]["InventoryReconciliationResultDto"];
+                        "text/json": components["schemas"]["InventoryReconciliationResultDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/reconciliation/{supplyItemId}/{inventoryLocationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    supplyItemId: string;
+                    inventoryLocationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InventoryReconciliationDetailDto"];
+                        "application/json": components["schemas"]["InventoryReconciliationDetailDto"];
+                        "text/json": components["schemas"]["InventoryReconciliationDetailDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inventory/transfers": {
         parameters: {
             query?: never;
@@ -14236,12 +14345,114 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        InventoryMovementReason: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 99;
+        InventoryMovementReason: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 99;
         /**
          * Format: int32
          * @enum {integer}
          */
         InventoryMovementType: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+        InventoryReconciliationDetailDto: {
+            /** Format: uuid */
+            supplyItemId: string;
+            supplyItemName: string;
+            unit: components["schemas"]["UnitType"];
+            isActive: boolean;
+            /** Format: uuid */
+            inventoryLocationId: string;
+            inventoryLocationName: string;
+            /** Format: double */
+            onHandQuantity: number;
+            /** Format: double */
+            historyQuantity: number;
+            /** Format: double */
+            difference: number;
+            /** Format: int32 */
+            movementCount: number;
+            /** Format: int32 */
+            reviewedCount: number;
+            /** Format: int32 */
+            eventCount: number;
+            events: components["schemas"]["InventoryReconciliationEventDto"][];
+        };
+        InventoryReconciliationDto: {
+            /** Format: int32 */
+            checkedCount: number;
+            mismatches: components["schemas"]["InventoryReconciliationItemDtoPaginatedList"];
+        };
+        InventoryReconciliationEventDto: {
+            kind: components["schemas"]["InventoryReconciliationEventKind"];
+            /** Format: double */
+            quantity: number;
+            /** Format: double */
+            quantityFrom?: number | null;
+            /** Format: double */
+            quantityTo?: number | null;
+            /** Format: uuid */
+            movementId?: string | null;
+            movementNumber?: string | null;
+            /** Format: date-time */
+            movementDate?: string | null;
+            /** Format: double */
+            movementQuantity?: number | null;
+            /** Format: uuid */
+            previousMovementId?: string | null;
+            previousMovementNumber?: string | null;
+            /** Format: date-time */
+            previousMovementDate?: string | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        InventoryReconciliationEventKind: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+        InventoryReconciliationItemDto: {
+            /** Format: uuid */
+            supplyItemId: string;
+            supplyItemName: string;
+            unit: components["schemas"]["UnitType"];
+            isActive: boolean;
+            /** Format: uuid */
+            inventoryLocationId: string;
+            inventoryLocationName: string;
+            /** Format: double */
+            onHandQuantity: number;
+            /** Format: double */
+            historyQuantity: number;
+            /** Format: double */
+            difference: number;
+            /** Format: int32 */
+            movementCount: number;
+        };
+        InventoryReconciliationItemDtoPaginatedList: {
+            items: components["schemas"]["InventoryReconciliationItemDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        InventoryReconciliationLineRequest: {
+            /** Format: uuid */
+            supplyItemId: string;
+            /** Format: double */
+            expectedDifference: number;
+        };
+        InventoryReconciliationMovementDto: {
+            /** Format: uuid */
+            id: string;
+            movementNumber: string;
+            movementType: components["schemas"]["InventoryMovementType"];
+        };
+        InventoryReconciliationResultDto: {
+            /** Format: int32 */
+            reconciledCount: number;
+            /** Format: int32 */
+            alreadyAddedUpCount: number;
+            movements: components["schemas"]["InventoryReconciliationMovementDto"][];
+        };
         InventoryStockDto: {
             /** Format: uuid */
             stockId: string;
@@ -16168,6 +16379,11 @@ export interface components {
             lines: components["schemas"]["ReceivePurchaseOrderLineItemRequest"][];
             /** Format: uuid */
             idempotencyKey?: string | null;
+        };
+        ReconcileInventoryLedgerCommand: {
+            /** Format: uuid */
+            inventoryLocationId: string;
+            lines: components["schemas"]["InventoryReconciliationLineRequest"][];
         };
         RecordInventoryCountRequest: {
             lines: components["schemas"]["InventoryCountEntry"][];

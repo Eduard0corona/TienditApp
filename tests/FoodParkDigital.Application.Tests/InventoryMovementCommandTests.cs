@@ -133,6 +133,19 @@ public class InventoryMovementCommandTests
         Assert.Contains(validation.Errors, x => x.ErrorMessage == CreateInventoryMovementCommandValidator.TransfersElsewhereMessage);
     }
 
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void ReconciliationOfTheHistory_ShouldNotBeAManualMovement(int movementType)
+    {
+        // A reconciliation records a gap without moving the stock (Fase 27C): a manual movement always moves it.
+        var command = DeserializeScreenBody(movementType, 12, Guid.NewGuid(), Guid.NewGuid(), quantity: 2);
+
+        var validation = new CreateInventoryMovementCommandValidator().Validate(command);
+
+        Assert.Contains(validation.Errors, x => x.ErrorMessage == CreateInventoryMovementCommandValidator.ReconciliationElsewhereMessage);
+    }
+
     [Fact]
     public void BodyWithTheOldClientNumbering_ShouldBeRejected()
     {

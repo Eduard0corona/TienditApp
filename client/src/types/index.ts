@@ -569,6 +569,7 @@ export { InventoryMovementType } from '../api/generated/enums';
 
 export { InventoryMovementReason } from '../api/generated/enums';
 export { InventoryCountStatus } from '../api/generated/enums';
+export { InventoryReconciliationEventKind } from '../api/generated/enums';
 
 export interface SupplyItemDto {
   id: string;

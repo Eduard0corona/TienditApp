@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Common;
+using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Enums;
 
 namespace FoodParkDigital.Domain.Inventory.Entities;
@@ -21,6 +22,10 @@ public class InventoryMovement : AuditableEntity, ITenantScoped
         string? documentNumber = null,
         string? notes = null)
     {
+        if (movementReason == InventoryMovementReason.LedgerReconciliation
+            && movementType is not (InventoryMovementType.AdjustmentIncrease or InventoryMovementType.AdjustmentDecrease))
+            throw new DomainException("Un cuadre del historial es un ajuste: suma o resta al historial.");
+
         TenantId = tenantId;
         MovementNumber = movementNumber;
         MovementType = movementType;
@@ -70,6 +75,21 @@ public class InventoryMovement : AuditableEntity, ITenantScoped
 
         _lines.Add(line);
         RecalculateTotalAmount();
+        return line;
+    }
+
+    /// <summary>
+    /// A line of a reconciliation of the history (Fase 27C, ADR 0039): it records what the history of a stock was missing
+    /// to add up to it and does not move the stock, so it keeps the stock before and after and carries no cost.
+    /// </summary>
+    public InventoryMovementLine AddReconciliationLine(
+        Guid tenantId, Guid supplyItemId, Guid inventoryLocationId, decimal quantity, decimal onHand, string? notes = null)
+    {
+        if (MovementReason != InventoryMovementReason.LedgerReconciliation)
+            throw new DomainException("Solo un cuadre del historial anota sin mover la existencia.");
+
+        var line = AddLine(tenantId, supplyItemId, inventoryLocationId, quantity, notes: notes);
+        line.SetBalances(onHand, onHand);
         return line;
     }
 

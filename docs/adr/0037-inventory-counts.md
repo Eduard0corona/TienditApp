@@ -78,7 +78,7 @@ Tomé las decisiones de la Fase 27A con la autorización permanente del dueño d
     - congelar las ventas mientras se cuenta;
     - contar sin conexión;
     - imprimir la hoja;
-    - comparar el kardex con la existencia guardada;
+    - comparar el kardex con la existencia guardada ([ADR 0039](0039-ledger-reconciliation.md));
     - las transferencias entre ubicaciones ([ADR 0038](0038-inventory-transfers.md)).
 13. **La migración** `20261021002749_AddInventoryCounts` agrega las tablas `InventoryCounts` e `InventoryCountLines`:
     - tienen llaves foráneas (sin borrado en cascada) a ubicaciones, artículos, conteos y movimientos;

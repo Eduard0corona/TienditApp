@@ -32,6 +32,21 @@ public sealed class FolioGenerator : IFolioGenerator
         return Folios.DailyNumber(scope, await NextAsync(tenantId, scope, FolioKind.InventoryMovement, cancellationToken));
     }
 
+    public async Task HoldInventoryMovementNumbersAsync(Guid tenantId, DateTimeOffset movementDate, CancellationToken cancellationToken)
+    {
+        if (tenantId == Guid.Empty)
+            throw new ArgumentException("Un folio es de un negocio.", nameof(tenantId));
+        // The same lock the next number takes, held to the end of the request's transaction; on a counter not used yet
+        // that day, the range where it would go. Other providers (tests) have no concurrent requests to hold back.
+        if (!_context.Database.IsSqlServer())
+            return;
+
+        var scope = Folios.InventoryMovementScope(movementDate);
+        await _context.Database.ExecuteSqlAsync(
+            $"SELECT 1 FROM [FolioSequences] WITH (UPDLOCK, HOLDLOCK) WHERE [TenantId] = {tenantId} AND [Scope] = {scope};",
+            cancellationToken);
+    }
+
     public async Task<string> NextPurchaseOrderNumberAsync(Guid tenantId, DateTimeOffset orderedAt, CancellationToken cancellationToken)
     {
         var scope = Folios.PurchaseOrderScope(orderedAt);

@@ -11,7 +11,7 @@ Un negocio con bodega y sucursales lleva mercancía de una ubicación a otra tod
 - nada decía qué salida y qué entrada eran el mismo traslado;
 - la salida se valoraba al costo promedio (o sin costo si no había promedio) y la entrada al promedio, al último costo o al de referencia: con promedio en cero, las dos piernas valían distinto.
 
-El roadmap de Inventario pedía «concurrencia robusta, transferencias atómicas y reconciliación del kardex», y el guardrail del dominio dice que las transferencias «identifican origen y destino y se ejecutan como unidad coordinada». La reconciliación llegó con el conteo físico ([ADR 0037](0037-inventory-counts.md)); esta fase hace las transferencias.
+El roadmap de Inventario pedía «concurrencia robusta, transferencias atómicas y reconciliación del kardex», y el guardrail del dominio dice que las transferencias «identifican origen y destino y se ejecutan como unidad coordinada». La reconciliación con el anaquel llegó con el conteo físico ([ADR 0037](0037-inventory-counts.md)); esta fase hace las transferencias, y la del kardex con la existencia guardada llegó después ([ADR 0039](0039-ledger-reconciliation.md)).
 
 Tomé las decisiones de la Fase 27B con la autorización permanente del dueño del producto, sin esperar su respuesta a cada una.
 

@@ -6927,6 +6927,165 @@
         }
       }
     },
+    "/api/v1/inventory/reconciliation": {
+      "get": {
+        "tags": [
+          "InventoryReconciliation"
+        ],
+        "parameters": [
+          {
+            "name": "inventoryLocationId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReconciliationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReconciliationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReconciliationDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "InventoryReconciliation"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileInventoryLedgerCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileInventoryLedgerCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileInventoryLedgerCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReconciliationResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReconciliationResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReconciliationResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inventory/reconciliation/{supplyItemId}/{inventoryLocationId}": {
+      "get": {
+        "tags": [
+          "InventoryReconciliation"
+        ],
+        "parameters": [
+          {
+            "name": "supplyItemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryLocationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReconciliationDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReconciliationDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReconciliationDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/inventory/transfers": {
       "get": {
         "tags": [
@@ -21877,6 +22036,7 @@
           9,
           10,
           11,
+          12,
           99
         ],
         "type": "integer",
@@ -21893,6 +22053,7 @@
           "Return",
           "ManualAdjustment",
           "Transfer",
+          "LedgerReconciliation",
           "Other"
         ]
       },
@@ -21919,6 +22080,336 @@
           "ReturnFromProduction",
           "ReturnToSupplier"
         ]
+      },
+      "InventoryReconciliationDetailDto": {
+        "required": [
+          "difference",
+          "eventCount",
+          "events",
+          "historyQuantity",
+          "inventoryLocationId",
+          "inventoryLocationName",
+          "isActive",
+          "movementCount",
+          "onHandQuantity",
+          "reviewedCount",
+          "supplyItemId",
+          "supplyItemName",
+          "unit"
+        ],
+        "type": "object",
+        "properties": {
+          "supplyItemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supplyItemName": {
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "inventoryLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inventoryLocationName": {
+            "type": "string"
+          },
+          "onHandQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "historyQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "difference": {
+            "type": "number",
+            "format": "double"
+          },
+          "movementCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "reviewedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "eventCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryReconciliationEventDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryReconciliationDto": {
+        "required": [
+          "checkedCount",
+          "mismatches"
+        ],
+        "type": "object",
+        "properties": {
+          "checkedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "mismatches": {
+            "$ref": "#/components/schemas/InventoryReconciliationItemDtoPaginatedList"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryReconciliationEventDto": {
+        "required": [
+          "kind",
+          "quantity"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/InventoryReconciliationEventKind"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "quantityFrom": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "quantityTo": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "movementId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "movementNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "movementDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "movementQuantity": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "previousMovementId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "previousMovementNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "previousMovementDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryReconciliationEventKind": {
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "NoHistory",
+          "BeforeFirstMovement",
+          "BetweenMovements",
+          "InMovement",
+          "AfterLastMovement",
+          "Reconciled",
+          "BeforeReviewedHistory"
+        ]
+      },
+      "InventoryReconciliationItemDto": {
+        "required": [
+          "difference",
+          "historyQuantity",
+          "inventoryLocationId",
+          "inventoryLocationName",
+          "isActive",
+          "movementCount",
+          "onHandQuantity",
+          "supplyItemId",
+          "supplyItemName",
+          "unit"
+        ],
+        "type": "object",
+        "properties": {
+          "supplyItemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supplyItemName": {
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "inventoryLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inventoryLocationName": {
+            "type": "string"
+          },
+          "onHandQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "historyQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "difference": {
+            "type": "number",
+            "format": "double"
+          },
+          "movementCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryReconciliationItemDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryReconciliationItemDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryReconciliationLineRequest": {
+        "required": [
+          "expectedDifference",
+          "supplyItemId"
+        ],
+        "type": "object",
+        "properties": {
+          "supplyItemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expectedDifference": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryReconciliationMovementDto": {
+        "required": [
+          "id",
+          "movementNumber",
+          "movementType"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "movementNumber": {
+            "type": "string"
+          },
+          "movementType": {
+            "$ref": "#/components/schemas/InventoryMovementType"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryReconciliationResultDto": {
+        "required": [
+          "alreadyAddedUpCount",
+          "movements",
+          "reconciledCount"
+        ],
+        "type": "object",
+        "properties": {
+          "reconciledCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "alreadyAddedUpCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "movements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryReconciliationMovementDto"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "InventoryStockDto": {
         "required": [
@@ -28389,6 +28880,26 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReconcileInventoryLedgerCommand": {
+        "required": [
+          "inventoryLocationId",
+          "lines"
+        ],
+        "type": "object",
+        "properties": {
+          "inventoryLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryReconciliationLineRequest"
+            }
           }
         },
         "additionalProperties": false

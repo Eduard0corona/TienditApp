@@ -4,12 +4,14 @@ import TabRow from '../../components/common/TabRow';
 import { getApiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventoryApi';
 import { INITIAL_COUNTS_FILTER, type InventoryCountsFilter } from '../../api/inventoryCounts';
+import { INITIAL_RECONCILIATION_FILTER, type InventoryReconciliationFilter } from '../../api/inventoryReconciliation';
 import { INITIAL_TRANSFERS_FILTER, type InventoryTransfersFilter } from '../../api/inventoryTransfers';
 import type { InventoryAlertsDto, InventoryLocationDto, InventoryMovementDto, SupplyItemDto } from '../../types';
 import AlertsTab from './AlertsTab';
 import CountDetail from './CountDetail';
 import CountsTab from './CountsTab';
 import KardexTab from './KardexTab';
+import LedgerReview from './LedgerReview';
 import LocationModal from './LocationModal';
 import LocationsTab from './LocationsTab';
 import MovementDetailModal from './MovementDetailModal';
@@ -93,6 +95,8 @@ export default function InventoryManagement() {
   const [openTransferId, setOpenTransferId] = useState<string | null>(null);
   const [transfersFilter, setTransfersFilter] = useState<InventoryTransfersFilter>(INITIAL_TRANSFERS_FILTER);
   const [openCountId, setOpenCountId] = useState<string | null>(null);
+  const [reviewingLedger, setReviewingLedger] = useState(false);
+  const [reconciliationFilter, setReconciliationFilter] = useState<InventoryReconciliationFilter>(INITIAL_RECONCILIATION_FILTER);
   const [countsFilter, setCountsFilter] = useState<InventoryCountsFilter>(INITIAL_COUNTS_FILTER);
   const [movementDetail, setMovementDetail] = useState<{
     show: boolean;
@@ -221,7 +225,7 @@ export default function InventoryManagement() {
       )}
 
       {success && (
-        <div className="alert alert-success alert-dismissible fade show">
+        <div className="alert alert-success alert-dismissible fade show" role="status">
           {success}
           <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setSuccess('')}></button>
         </div>
@@ -284,10 +288,15 @@ export default function InventoryManagement() {
                     </button>
                   </div>
                 )}
-                {activeTab === 'kardex' && (
-                  <button type="button" className="btn btn-light btn-sm" onClick={kardex.reload} disabled={kardex.loading}>
-                    <i className="ri-refresh-line me-1" aria-hidden="true"></i>Actualizar
-                  </button>
+                {activeTab === 'kardex' && !reviewingLedger && (
+                  <div className="d-flex align-items-center gap-2">
+                    <button type="button" className="btn btn-light btn-sm" onClick={kardex.reload} disabled={kardex.loading}>
+                      <i className="ri-refresh-line me-1" aria-hidden="true"></i>Actualizar
+                    </button>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => setReviewingLedger(true)}>
+                      <i className="ri-scales-3-line me-1" aria-hidden="true"></i>Revisar que cuadre
+                    </button>
+                  </div>
                 )}
                 {activeTab === 'alerts' && (
                   <button type="button" className="btn btn-light btn-sm" onClick={loadAlerts} disabled={alertsLoading}>
@@ -337,7 +346,21 @@ export default function InventoryManagement() {
                   activeLocations={activeLocations}
                 />
               )}
-              {activeTab === 'kardex' && <KardexTab list={kardex} supplyOptions={supplyOptions} locations={locations} />}
+              {activeTab === 'kardex' && !reviewingLedger && <KardexTab list={kardex} supplyOptions={supplyOptions} locations={locations} />}
+              {activeTab === 'kardex' && reviewingLedger && (
+                <LedgerReview
+                  locations={locations}
+                  filter={reconciliationFilter}
+                  onFilterChange={setReconciliationFilter}
+                  onBack={() => setReviewingLedger(false)}
+                  onStart={() => setSuccess('')}
+                  onReconciled={(message) => {
+                    setError('');
+                    setSuccess(message);
+                    Promise.all([kardex.reload(), movements.reload()]);
+                  }}
+                />
+              )}
               {activeTab === 'alerts' && <AlertsTab alerts={alerts} loading={alertsLoading} />}
               {activeTab === 'locations' && (
                 <LocationsTab

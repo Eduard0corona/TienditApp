@@ -12,6 +12,13 @@ public interface IFolioGenerator
     /// <summary>INV-20261005-0007, numbered by the UTC day of the movement.</summary>
     Task<string> NextInventoryMovementNumberAsync(Guid tenantId, DateTimeOffset movementDate, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Holds the counter of the inventory movements of the UTC day of <paramref name="movementDate"/> until the request's
+    /// transaction ends, without taking a number (Fase 27C). A request that posts a movement of that day takes its folio
+    /// there inside its own transaction, so it waits for this one, and this one waits for those already posting.
+    /// </summary>
+    Task HoldInventoryMovementNumbersAsync(Guid tenantId, DateTimeOffset movementDate, CancellationToken cancellationToken);
+
     /// <summary>PO-20261005-0002, numbered by the UTC day of the order.</summary>
     Task<string> NextPurchaseOrderNumberAsync(Guid tenantId, DateTimeOffset orderedAt, CancellationToken cancellationToken);
 

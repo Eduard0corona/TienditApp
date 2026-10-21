@@ -1047,6 +1047,40 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas visuales:** `transferencias.spec.ts` (8, nuevas): Transferencias y una transferencia (escritorio, teléfono y oscuro) y «Nueva transferencia» (escritorio y teléfono), con `transferencias.mocks.ts` (`CON_TRANSFERENCIAS`, `TRANSFER_ROUTES`).
     - **Lo que cambia y por qué:** 32 escenas, por la pestaña «Transferencias»: 16 de `catalogo-inventario.spec.ts` y 16 de `conteos.spec.ts`. Las pestañas que siguen se recorren y, en escritorio, la acción de cada pestaña pasa a la línea de abajo; «Registrar movimiento» suma la línea que manda las transferencias a su pestaña.
     - **Resultado:** la comparación contra `master` dio 579 escenas iguales, 8 nuevas y 32 que cambian. Con esas capturas, los tres archivos tocados con la cobertura de rutas (90 escenas) pasaron dos corridas seguidas contra el mismo build.
+- Fase 27C, revisar que el historial cuadre con las existencias ([ADR 0039](../adr/0039-ledger-reconciliation.md)):
+  - **Domain:**
+    - `InventoryMovementTypesTests` (1): el signo de cada tipo, el que aplican el libro mayor y la revisión.
+    - `InventoryReconciliationMovementTests` (3 pruebas, 8 casos): la línea de un cuadre guarda la existencia antes y después sin cambio y sin costo; el motivo solo va en un ajuste (6 tipos rechazados); solo un cuadre anota sin mover la existencia.
+    - `InventoryEnumValuesTests` (+1 valor): `LedgerReconciliation` = 12.
+  - **Application:**
+    - `InventoryReconciliationFlowTests` (11):
+      - todo cuadra con ventas y ajustes;
+      - encuentra lo que no cuadra por ubicación, nombre y búsqueda, también una existencia sin historial;
+      - cada tipo de movimiento suma con su signo, y sin su existencia guardada el historial suma aparte, tipo por tipo;
+      - «Por qué no cuadra» dice cada lugar: antes del primero, entre dos, dentro de uno y después del último, y suman la diferencia;
+      - con un historial largo (`maxReviewedLines`), lo de antes de lo revisado es un solo lugar, y con todas las líneas es un lugar entre dos movimientos;
+      - las líneas de un movimiento con el mismo artículo dos veces se encadenan por su saldo (sin esa corrección falla 5 de 6 veces);
+      - una existencia sin historial y una que no existe;
+      - cuadrar anota hasta dos ajustes con folio, notas en su unidad y sin costo, sin mover la existencia ni el costo promedio, y queda en la actividad; mandado otra vez no anota nada;
+      - si cambió lo que no cuadra no anota nada, y rechaza una ubicación o un artículo que no existen;
+      - el validador.
+    - `InventoryMovementCommandTests` (+1 teoría, 2 casos): un movimiento manual no usa el motivo del cuadre.
+  - **Infrastructure:** `InventoryReconciliationSqlServerTests` (4), con el candado y la transacción de producción:
+    - el historial suma con el signo del libro mayor y cuatro decimales;
+    - el mismo cuadre tres veces a la vez anota la diferencia una vez (sin el candado de la ubicación falla);
+    - una transferencia desde la ubicación al mismo tiempo no cambia lo que se cuadra;
+    - una venta que se está guardando cuando empieza el cuadre queda en lo que se cuadra, con *read committed snapshot* como en Azure SQL (sin tomar el contador de folios del día falla).
+  - **WebApi:** `CrossTenantInventoryReconciliationSqlServerTests` (2), sobre la API real: otro negocio no revisa ni cuadra mis existencias, ni con mis artículos o ubicaciones; cuadrar pide `ManageInventory`, lo que cambió responde 409 y un movimiento manual con el motivo del cuadre, 400. `CrossTenantSuiteCoverageTests` cubre `InventoryReconciliationController`. El contrato lleva las tres rutas, el motivo `LedgerReconciliation` y `InventoryReconciliationEventKind`.
+  - **Cliente:**
+    - `LedgerReview.test.tsx` (4): «Todo cuadra»; lista lo que no cuadra y cuadra una diferencia después de confirmar; explica dónde se separa y avisa cuando cambió; cuadra lo que se ve de una ubicación solo cuando ya se leyó.
+    - `ledgerGaps.test.ts` (2): la cantidad con signo y unidad, y cada lugar en palabras.
+    - `inventoryLabels.test.ts` (+1): el movimiento manual no ofrece el motivo del cuadre, y el historial sí.
+  - **Total:** `dotnet test` con SQL Server 2022, 3,295 pruebas sin fallos ni omitidas (Domain 941, Application 1,469, Infrastructure 460, WebApi 425).
+  - **Cliente en total:** 148 archivos y 972 pruebas.
+  - **Primera visita:** 179,093 B de 179,100 B (+5 B contra `master`): el motivo nuevo del enum generado; el tipo de los lugares se importa solo como tipo. La revisión se carga con Inventario.
+  - **Escenas visuales:** `cuadre.spec.ts` (7, nuevas): revisar que cuadre (escritorio, teléfono y oscuro), por qué no cuadra (escritorio y teléfono), por ubicación con «Cuadrar las 2 que se ven» y la pregunta antes de cuadrar (escritorio), con `cuadre.mocks.ts` (`CON_DIFERENCIAS`, `RECONCILIATION_ROUTES`).
+    - **Lo que cambia y por qué:** 4 escenas de `catalogo-inventario.spec.ts` (Entradas y salidas, Historial por insumo, registrar movimiento y el detalle de un movimiento), por el botón «Revisar que cuadre» junto a «Actualizar».
+    - **Resultado:** la comparación contra `master` dio 615 escenas iguales, 7 nuevas y 4 que cambian. Con esas capturas, las 7 nuevas pasaron dos corridas seguidas contra el mismo build.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

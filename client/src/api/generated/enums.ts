@@ -173,6 +173,7 @@ export const InventoryMovementReason = {
   Return: 9,
   ManualAdjustment: 10,
   Transfer: 11,
+  LedgerReconciliation: 12,
   Other: 99,
 } as const;
 export type InventoryMovementReason = (typeof InventoryMovementReason)[keyof typeof InventoryMovementReason];
@@ -188,6 +189,17 @@ export const InventoryMovementType = {
   ReturnToSupplier: 8,
 } as const;
 export type InventoryMovementType = (typeof InventoryMovementType)[keyof typeof InventoryMovementType];
+
+export const InventoryReconciliationEventKind = {
+  NoHistory: 1,
+  BeforeFirstMovement: 2,
+  BetweenMovements: 3,
+  InMovement: 4,
+  AfterLastMovement: 5,
+  Reconciled: 6,
+  BeforeReviewedHistory: 7,
+} as const;
+export type InventoryReconciliationEventKind = (typeof InventoryReconciliationEventKind)[keyof typeof InventoryReconciliationEventKind];
 
 export const KitchenTicketStatus = {
   Pending: 0,
