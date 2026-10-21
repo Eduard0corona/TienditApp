@@ -2401,6 +2401,96 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("InventoryStocks", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryTransfer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("FromLocationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("InMovementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("LineCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("OutMovementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ToLocationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("TotalCost")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("TransferNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTimeOffset>("TransferredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("TransferredBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromLocationId");
+
+                    b.HasIndex("InMovementId")
+                        .IsUnique();
+
+                    b.HasIndex("OutMovementId")
+                        .IsUnique();
+
+                    b.HasIndex("ToLocationId");
+
+                    b.HasIndex("TenantId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "TransferNumber")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "TransferredAt");
+
+                    b.ToTable("InventoryTransfers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InventoryTransfers_Lines", "[LineCount] BETWEEN 1 AND 200");
+
+                            t.HasCheckConstraint("CK_InventoryTransfers_Locations", "[FromLocationId] <> [ToLocationId]");
+
+                            t.HasCheckConstraint("CK_InventoryTransfers_Movements", "[OutMovementId] <> [InMovementId]");
+
+                            t.HasCheckConstraint("CK_InventoryTransfers_TotalCost", "[TotalCost] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.ProductSupplyRequirement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6107,6 +6197,33 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("InventoryLocation");
 
                     b.Navigation("SupplyItem");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryTransfer", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", null)
+                        .WithMany()
+                        .HasForeignKey("FromLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryMovement", null)
+                        .WithMany()
+                        .HasForeignKey("InMovementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryMovement", null)
+                        .WithMany()
+                        .HasForeignKey("OutMovementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", null)
+                        .WithMany()
+                        .HasForeignKey("ToLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.ProductSupplyRequirement", b =>

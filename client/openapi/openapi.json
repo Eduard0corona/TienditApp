@@ -21692,6 +21692,7 @@
           8,
           9,
           10,
+          11,
           99
         ],
         "type": "integer",
@@ -21707,6 +21708,7 @@
           "InitialLoad",
           "Return",
           "ManualAdjustment",
+          "Transfer",
           "Other"
         ]
       },

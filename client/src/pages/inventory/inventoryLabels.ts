@@ -25,6 +25,7 @@ const MOVEMENT_REASON_LABELS: Record<InventoryMovementReason, string> = {
   [InventoryMovementReason.InitialLoad]: 'Carga inicial',
   [InventoryMovementReason.Return]: 'Devolución',
   [InventoryMovementReason.ManualAdjustment]: 'Ajuste manual',
+  [InventoryMovementReason.Transfer]: 'Transferencia',
   [InventoryMovementReason.Other]: 'Otro',
 };
 

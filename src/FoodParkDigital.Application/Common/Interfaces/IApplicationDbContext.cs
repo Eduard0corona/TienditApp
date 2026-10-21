@@ -85,6 +85,7 @@ public interface IApplicationDbContext
     DbSet<InventoryStock> InventoryStocks { get; }
     DbSet<InventoryCount> InventoryCounts { get; }
     DbSet<InventoryCountLine> InventoryCountLines { get; }
+    DbSet<InventoryTransfer> InventoryTransfers { get; }
     DbSet<ProductSupplyRequirement> ProductSupplyRequirements { get; }
     DbSet<InventoryMovement> InventoryMovements { get; }
     DbSet<InventoryMovementLine> InventoryMovementLines { get; }

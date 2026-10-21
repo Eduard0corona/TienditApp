@@ -14118,7 +14118,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        InventoryMovementReason: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 99;
+        InventoryMovementReason: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 99;
         /**
          * Format: int32
          * @enum {integer}
