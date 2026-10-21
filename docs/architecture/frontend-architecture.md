@@ -706,6 +706,19 @@ Inventario › Conteos (Fase 27A, [ADR 0037](../adr/0037-inventory-counts.md)):
 - **Revisar:** espera a que se guarde lo escrito («Guardando lo contado…») y lee otra vez el conteo y sus diferencias. «Volver a contar» borra lo contado de un artículo para contarlo contra el sistema de ese momento. En el teléfono la tabla enseña el artículo, lo contado y la diferencia, y «Volver a contar» va bajo el artículo.
 - **Aplicar:** «Aplicar conteo» es la única acción principal de la revisión. Se habilita cuando el conteo y la página de diferencias tienen la misma revisión, pregunta antes y manda esa revisión; un 409 lee todo otra vez y lo dice.
 
+Inventario › Transferencias (Fase 27B, [ADR 0038](../adr/0038-inventory-transfers.md)):
+
+- **Datos:** `api/inventoryTransfers.ts` lee la lista y el detalle con TanStack Query (`transferKeys`), y lo que hay en el origen (`useOriginStock`: sus artículos activos con existencias, por nombre, una página de hasta 500 con la búsqueda del servidor; `partial` dice que hay más). Fuera de `api/queries.ts`, como los conteos. Transferir (`useCreateInventoryTransfer`) pone la transferencia hecha como su detalle e invalida las transferencias, lo que hay en el origen y los conteos, salga bien o mal.
+- **Pantallas:**
+  - `TransfersTab`: la lista, la más reciente primero, con ubicación y búsqueda en el servidor.
+  - `NewTransferModal`: origen (por omisión la ubicación principal), destino (otra ubicación activa), los artículos con existencias en el origen, que se buscan en el servidor por nombre, código o código de barras (300 ms después de dejar de escribir) y se agregan con lo que hay de cada uno, la cantidad y notas. Agregar lleva el cursor a la cantidad; quitar, al buscador. Cambiar el origen quita lo elegido. Lo que hay en el origen se lee solo con el diálogo abierto y otra vez cada vez que se abre.
+    - Guarda una llave por diálogo (`newUuid`): reenviar después de un error de red contesta la transferencia ya hecha en lugar de hacer otra; después de un rechazo (400 o 409) no se guardó nada y se manda lo corregido. Mientras manda no se cierra, para no perder la respuesta.
+    - Con una sola ubicación activa lo dice y no deja transferir.
+  - `TransferDetail`: cada artículo con su cantidad, costo, valor y lo que tenía el origen y el destino antes y después (en el teléfono, el artículo, la cantidad y el valor), y sus dos movimientos («Ver salida…», «Ver entrada…», que abren `MovementDetailModal`).
+  - `InventoryManagement`: la pestaña va después de «Entradas y salidas»; guarda la transferencia abierta y los filtros de la lista, y al transferir vuelve a leer existencias, movimientos, historial e insumos y abre la transferencia hecha.
+- **Lo que decide el cliente:** `transferForm.ts` (con pruebas) solo evita un viaje por lo que está claro que falla: las dos ubicaciones, al menos un artículo, cantidades con las reglas de `parseQuantity` y no más de lo que hay. Lo que hay, lo que vale cada artículo y si alcanza lo decide la API dentro del candado.
+- **Movimientos manuales:** `MovementModal` ofrece `MANUAL_MOVEMENT_TYPE_OPTIONS` y `MANUAL_MOVEMENT_REASON_OPTIONS`, sin los tipos de transferencia ni el motivo «Transferencia», y dice que las transferencias van en su pestaña. Los filtros del historial siguen con todos.
+
 ## Guardrails
 
 - Backend decide estados, totales, impuestos, saldos y existencias finales.

@@ -1006,6 +1006,47 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Lo que encontraron las escenas:**
       - en el teléfono la hoja no dejaba ver la caja de lo contado; la unidad pasa a la línea del artículo, la caja mide 9rem y los botones del conteo no se parten;
       - en el teléfono la revisión no cabía: enseña el artículo, lo contado y la diferencia, «Volver a contar» va bajo el artículo como enlace, y el correo de quien contó se parte.
+- Fase 27B, transferencias entre ubicaciones ([ADR 0038](../adr/0038-inventory-transfers.md)):
+  - **Domain:**
+    - `InventoryTransferTests` (6 pruebas, 7 casos): guarda de dónde a dónde, sus dos movimientos y quién la hizo; necesita dos ubicaciones distintas, de 1 a 200 artículos, sus dos movimientos, un valor no negativo y su llave; recorta las notas a 500; el folio `TRF-` empieza otra vez cada día UTC.
+    - `InventoryEnumValuesTests` (+1 valor): `Transfer` = 11.
+  - **Application:**
+    - `InventoryTransferFlowTests` (7):
+      - mueve los artículos en una salida y una entrada de motivo `Transfer` que valen lo mismo, con el folio `TRF` como referencia, `TRF:{id}:OUT` e `IN` y la nota de cada una, sin cambiar el costo promedio; queda en la actividad, y la lista la encuentra por ubicación y por folio;
+      - rechaza lo que el origen no tiene, nombrando cada artículo con lo que hay, sin mover nada;
+      - rechaza ubicaciones inactivas o que no existen, artículos inactivos o que no existen y fracciones de piezas;
+      - la misma llave contesta la misma transferencia sin mover nada, y con otros artículos u otras ubicaciones responde que ya se hizo;
+      - sin costo promedio las dos piernas valen el costo de referencia, y sin ningún costo, nada;
+      - una transferencia durante un conteo abierto se conserva al aplicarlo;
+      - el validador rechaza una llave vacía, la misma ubicación, ningún artículo, más de 200, un artículo repetido o nulo, cantidades fuera de rango y notas de más de 500.
+    - `OrderInventoryRegressionTests`: la entrada de una transferencia no cambia el costo promedio (ahora por el libro mayor); un movimiento manual no es una pierna de transferencia (3 casos) ni usa `TRF:` (+1 caso).
+  - **Infrastructure:**
+    - `InventoryTransferMigrationSqlServerTests` (3): la tabla guarda las transferencias de cada negocio, cada una con su llave y sus dos movimientos (la misma llave o el movimiento de otra se rechazan); las restricciones rechazan lo que el dominio nunca escribe y protegen sus ubicaciones y movimientos; revertir se detiene con 50031 sin cambiar nada en cuanto hay una transferencia y, sin ninguna, quita solo la tabla.
+    - `InventoryTransferSqlServerTests` (5), con el candado de producción:
+      - cuatro transferencias a la vez desde el mismo origen nunca se llevan más de lo que hay (sin el candado esta prueba falla) y sus folios no se repiten;
+      - transferencias en los dos sentidos a la vez se hacen todas, sin interbloquearse;
+      - la misma transferencia tres veces a la vez mueve la existencia una vez;
+      - una llave mandada a la vez para dos pares de ubicaciones hace una transferencia y la otra responde que ya se hizo;
+      - la base lee la transferencia con sus dos piernas, lo que tenía cada ubicación, y la lista la encuentra.
+  - **WebApi:**
+    - `CrossTenantInventoryTransfersSqlServerTests` (2), sobre la API real: otro negocio no transfiere desde ni hacia mis ubicaciones ni con mis artículos, no ve mis transferencias, y cada transferencia mueve solo las existencias de su negocio; la misma llave contesta la misma transferencia; transferir pide `ManageInventory`; un movimiento manual de transferencia se rechaza, y pedir más de lo que hay dice lo que hay.
+    - `TenantFilterBypassAllowlistTests` suma el folio de la transferencia en `FolioGenerator`, y `CrossTenantSuiteCoverageTests` cubre `InventoryTransfersController`. El contrato lleva `/api/v1/inventory/transfers` y el motivo `Transfer`.
+  - **Ensayo de los scripts:** sobre una copia de la base de la 27A:
+    - `apply.sql` dos veces, y la 27A sigue escribiendo;
+    - las restricciones y los índices rechazan lo que el dominio no escribe (misma ubicación, mismo movimiento, 0 o 201 artículos, valor negativo, ubicación o movimiento que no existen, folio, llave o movimiento repetidos, y borrar una pierna o una ubicación con transferencias);
+    - `rollback.sql` se detiene con 50031 con dos transferencias y con una;
+    - sin transferencias (sus piernas se quedan como movimientos), `rollback.sql` corre dos veces, y `apply.sql` otra vez.
+  - **Cliente:**
+    - `transferForm.test.ts` (11): manda la llave del diálogo, las dos ubicaciones, las notas recortadas y cada cantidad; toma todo lo que hay; rechaza sin ubicaciones, la misma ubicación, sin artículos, más de 200, cantidades vacías, fracciones de piezas, más de 3 decimales y más de lo que hay.
+    - `NewTransferModal.test.tsx` (5): ofrece lo que tiene la ubicación principal (sin lo agotado ni lo inactivo), busca en el servidor, lleva el cursor a la cantidad y manda cada cantidad con la llave; rechaza más de lo que hay y otro origen quita lo elegido; conserva la llave después de un rechazo; lee el origen solo con el diálogo abierto y otra vez después de un rechazo; pide una segunda ubicación.
+    - `TransferDetail.test.tsx` (1): lo que se movió, lo que tenía cada ubicación y sus dos movimientos.
+    - `inventoryLabels.test.ts` (1): el movimiento manual no ofrece los tipos de transferencia ni el motivo, y el historial sí.
+  - **Total:** `dotnet test` con SQL Server 2022, 3,267 pruebas sin fallos ni omitidas (Domain 932, Application 1,456, Infrastructure 456, WebApi 423). `InventoryMovementCommandTests` deja de mandar las dos piernas por la pantalla de movimientos: ahora prueba que la pantalla anterior a la 27B ya no las registra (3 casos).
+  - **Cliente en total:** 146 archivos y 965 pruebas.
+  - **Primera visita:** 179,088 B de 179,100 B (+24 B contra `master`): el motivo nuevo del enum generado; «Transferencias» se carga con Inventario.
+  - **Escenas visuales:** `transferencias.spec.ts` (8, nuevas): Transferencias y una transferencia (escritorio, teléfono y oscuro) y «Nueva transferencia» (escritorio y teléfono), con `transferencias.mocks.ts` (`CON_TRANSFERENCIAS`, `TRANSFER_ROUTES`).
+    - **Lo que cambia y por qué:** 32 escenas, por la pestaña «Transferencias»: 16 de `catalogo-inventario.spec.ts` y 16 de `conteos.spec.ts`. Las pestañas que siguen se recorren y, en escritorio, la acción de cada pestaña pasa a la línea de abajo; «Registrar movimiento» suma la línea que manda las transferencias a su pestaña.
+    - **Resultado:** la comparación contra `master` dio 579 escenas iguales, 8 nuevas y 32 que cambian. Con esas capturas, los tres archivos tocados con la cobertura de rutas (90 escenas) pasaron dos corridas seguidas contra el mismo build.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
