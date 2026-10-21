@@ -1829,6 +1829,9 @@ export { PlatformCommissionBase } from '../api/generated/enums';
 export { PlatformSettlementStatus } from '../api/generated/enums';
 
 export { PlatformSettlementAdjustmentKind } from '../api/generated/enums';
+
+/** What a folio of a platform's statement is in TienditApp (Fase 22H): the settlement takes it, or why not. */
+export { PlatformStatementMatchStatus } from '../api/generated/enums';
 export { CourierSettlementAdjustmentKind } from '../api/generated/enums';
 
 export interface CustomerCardDto {

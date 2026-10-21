@@ -1,4 +1,4 @@
-import { PlatformSettlementAdjustmentKind, PlatformSettlementStatus } from '../../types';
+import { PlatformSettlementAdjustmentKind, PlatformSettlementStatus, PlatformStatementMatchStatus } from '../../types';
 
 // Reportes › Liquidaciones only, out of utils/labels.ts, which the first visit loads. Every value of the contract has its
 // label: a value the API adds does not build until it has one.
@@ -27,4 +27,18 @@ export const ADJUSTMENT_KIND_LABELS: Record<PlatformSettlementAdjustmentKind, st
   [PlatformSettlementAdjustmentKind.Fee]: 'Cargos de la plataforma',
   [PlatformSettlementAdjustmentKind.PreviousBalance]: 'Saldo anterior',
   [PlatformSettlementAdjustmentKind.Other]: 'Otro',
+};
+
+/**
+ * What a folio of a platform's statement is in TienditApp (Fase 22H), as the comparison lists the ones the settlement does
+ * not take; the two it takes («En esta liquidación», «Pendiente») say it too.
+ */
+export const STATEMENT_STATUS_LABELS: Record<PlatformStatementMatchStatus, string> = {
+  [PlatformStatementMatchStatus.InThisSettlement]: 'Ya están en esta liquidación',
+  [PlatformStatementMatchStatus.Pending]: 'Pendientes: entran a la liquidación',
+  [PlatformStatementMatchStatus.AfterPeriod]: 'Se registraron después del periodo',
+  [PlatformStatementMatchStatus.Settled]: 'Ya están en otra liquidación',
+  [PlatformStatementMatchStatus.NothingExpected]: 'No traen nada: devueltos o sin cobrar',
+  [PlatformStatementMatchStatus.Ambiguous]: 'Varios pedidos con el mismo folio: elige cuál en la lista',
+  [PlatformStatementMatchStatus.Unknown]: 'No son pedidos de la plataforma en TienditApp',
 };

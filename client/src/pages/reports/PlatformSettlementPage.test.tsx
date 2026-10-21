@@ -16,6 +16,7 @@ import {
   PlatformCollectedBy,
   PlatformSettlementAdjustmentKind,
   PlatformSettlementStatus,
+  PlatformStatementMatchStatus,
   TenantCapability,
   type TenantProfileDto,
 } from '../../types';
@@ -205,6 +206,82 @@ describe('PlatformSettlementPage', () => {
     // The saved settlement opens in its own address, ready to close.
     expect(await screen.findByRole('heading', { name: 'Liquidación de Rappi' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cerrar liquidación' })).toBeEnabled();
+  });
+
+  it('imports a statement: includes the orders it brings, leaves out the rest and explains what they do not with adjustments', async () => {
+    const user = userEvent.setup();
+    serve({
+      'get /api/v1/platform-settlements/{id}': () => Promise.resolve(detail()),
+      'post /api/v1/platform-settlements/statement-matches': () => Promise.resolve({
+        folios: [
+          { folio: '152390', rows: [2], statementAmount: 561.48, status: PlatformStatementMatchStatus.InThisSettlement, orders: [IN_PERIOD], expectedNet: 561.48, difference: 0 },
+          { folio: '152001', rows: [3], statementAmount: 541.48, status: PlatformStatementMatchStatus.Pending, orders: [EARLIER], expectedNet: 561.48, difference: -20 },
+          { folio: '152999', rows: [4], statementAmount: 80, status: PlatformStatementMatchStatus.Unknown, orders: [] },
+        ],
+        concepts: [{ concept: 'Publicidad', rows: [5], amount: -100 }],
+        unreadable: [],
+        statementTotal: 1082.96,
+        matchedTotal: 1102.96,
+        expectedTotal: 1122.96,
+        conceptsTotal: -100,
+        unmatchedTotal: 80,
+      }),
+    });
+    renderAt('/reports/settlements/s1');
+
+    await user.click(await screen.findByRole('button', { name: 'Importar estado de cuenta' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Importar estado de cuenta' });
+    const csv = 'ID del pedido;Concepto;Monto neto\n152390;Pedido;561.48\n152001;Pedido;541.48\n152999;Pedido;80\n;Publicidad;-100.00\nTotal;;1082.96\n';
+    await user.upload(within(dialog).getByLabelText('Archivo CSV'), new File([csv], 'rappi-octubre.csv', { type: 'text/csv' }));
+
+    // The columns are guessed by their headers, and the first lines say how they read.
+    expect(await within(dialog).findByLabelText('Folio del pedido')).toHaveDisplayValue('ID del pedido');
+    expect(within(dialog).getByLabelText('Importe')).toHaveDisplayValue('Monto neto');
+    expect(within(dialog).getByLabelText('Concepto (opcional)')).toHaveDisplayValue('Concepto');
+    expect(within(dialog).getByText('Línea 2: folio 152390 · $561.48 · Pedido')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Comparar con mis pedidos' }));
+
+    expect(await within(dialog).findByText(/El estado de cuenta suma/)).toHaveTextContent('El estado de cuenta suma $1,082.96 en 4 renglones.');
+    // The row of totals is not sent: it would count everything twice.
+    expect(calls('post', '/api/v1/platform-settlements/statement-matches')[0][2]).toEqual({
+      body: {
+        channel: OrderChannel.Rappi,
+        settlementId: 's1',
+        periodFrom: '2026-10-05',
+        periodTo: '2026-10-11',
+        lines: [
+          { row: 2, folio: '152390', amount: 561.48, concept: 'Pedido' },
+          { row: 3, folio: '152001', amount: 541.48, concept: 'Pedido' },
+          { row: 4, folio: '152999', amount: 80, concept: 'Pedido' },
+          { row: 5, folio: null, amount: -100, concept: 'Publicidad' },
+        ],
+      },
+    });
+    expect(within(dialog).getByText('Un renglón no se tomó')).toBeInTheDocument();
+    expect(within(dialog).getByText(/152001: paga \$541\.48, se esperaba \$561\.48/)).toBeInTheDocument();
+    expect(within(dialog).getByText('No son pedidos de la plataforma en TienditApp: 152999')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Sale 1 pedido incluido que el estado de cuenta no trae/)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Aplicar a la liquidación' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-b)' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Incluir el pedido 152001 (ORD-a)' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Incluir el pedido 152777 (ORD-c)' })).not.toBeChecked();
+    // The adjustment written by hand stays, and the statement's follow it.
+    expect(screen.getAllByLabelText(/^Descripción del ajuste \d/).map((box) => (box as HTMLInputElement).value)).toEqual([
+      'Diferencia sin identificar',
+      'Estado de cuenta: diferencia en 1 pedido',
+      'Estado de cuenta: folios que no entran en esta liquidación (152999)',
+      'Estado de cuenta: Publicidad',
+    ]);
+    expect(screen.getByLabelText('Importe del ajuste 4')).toHaveValue('-100.00');
+    expect(screen.getByLabelText('Motivo del ajuste 4')).toHaveValue(String(PlatformSettlementAdjustmentKind.Fee));
+    expect(screen.getByLabelText('Notas (opcional)')).toHaveValue('Estado de cuenta: rappi-octubre.csv, 4 renglones.');
+    // 561.48 + 561.48 − 50 − 20 + 80 − 100 against the deposit already written.
+    expect(account('Diferencia')).toBe('-$869.48');
+    expect(toast.success).toHaveBeenCalledWith('Estado de cuenta aplicado. Revisa los ajustes y guarda la liquidación.');
   });
 
   it('marks what the API would refuse and does not save until it is fixed', async () => {

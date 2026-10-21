@@ -11,6 +11,10 @@ export type PlatformSettlementAdjustment = Schemas['PlatformSettlementAdjustment
 export type PlatformReceivable = Schemas['PlatformReceivableDto'];
 export type CreatePlatformSettlementBody = Schemas['CreatePlatformSettlementRequest'];
 export type UpdatePlatformSettlementBody = Schemas['UpdatePlatformSettlementRequest'];
+export type PlatformStatementMatch = Schemas['PlatformStatementMatchDto'];
+export type PlatformStatementFolio = Schemas['PlatformStatementFolioDto'];
+export type PlatformStatementLine = Schemas['PlatformStatementLineBody'];
+export type MatchPlatformStatementBody = Schemas['MatchPlatformStatementRequest'];
 
 /** Cache keys of the settlements: every change reads the lists and what each platform owes again. */
 export const settlementKeys = {
@@ -135,5 +139,16 @@ export function useVoidPlatformSettlement() {
     mutationFn: ({ id, revision, reason }: { id: string; revision: number; reason: string }) =>
       apiRequest('post', '/api/v1/platform-settlements/{id}/void', { path: { id }, body: { revision, reason } }),
     onSuccess: (detail) => settled(client, detail),
+  });
+}
+
+/**
+ * A platform's statement against its orders (Fase 22H): read on demand, never kept, since it saves nothing and the person
+ * applies it to what they are writing.
+ */
+export function useMatchPlatformStatement() {
+  return useMutation({
+    mutationFn: (body: MatchPlatformStatementBody) =>
+      apiRequest('post', '/api/v1/platform-settlements/statement-matches', { body }),
   });
 }

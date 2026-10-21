@@ -184,8 +184,9 @@ export function formOf(detail: PlatformSettlementDetail): SettlementForm {
 
 /** The orders of the settlement and the pending ones it could add, once each, the oldest first. */
 export function mergeOrders(saved: PlatformSettlementOrder[], candidates: PlatformSettlementOrder[]): PlatformSettlementOrder[] {
-  const seen = new Set(saved.map((order) => order.orderId));
-  return [...saved, ...candidates.filter((order) => !seen.has(order.orderId))]
+  const seen = new Set<string>();
+  return [...saved, ...candidates]
+    .filter((order) => !seen.has(order.orderId) && !!seen.add(order.orderId))
     .sort((a, b) => a.registeredAt.localeCompare(b.registeredAt) || a.orderId.localeCompare(b.orderId));
 }
 

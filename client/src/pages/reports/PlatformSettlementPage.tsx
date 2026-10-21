@@ -9,11 +9,14 @@ import {
   useUpdatePlatformSettlement,
   useVoidPlatformSettlement,
   type PlatformSettlementDetail,
+  type PlatformSettlementOrder,
 } from '../../api/platformSettlements';
 import PageTitle from '../../components/common/PageTitle';
 import SettlementAdjustments, { SettlementAdjustmentList } from '../../components/reports/SettlementAdjustments';
 import SettlementOrders from '../../components/reports/SettlementOrders';
 import SettlementSummary from '../../components/reports/SettlementSummary';
+import StatementImportModal from '../../components/reports/StatementImportModal';
+import type { StatementProposal } from '../../components/reports/statementImport';
 import { describePeriod } from '../../components/reports/reportPeriods';
 import { getSettlementStatusChip, getSettlementStatusLabel } from '../../components/reports/settlementLabels';
 import {
@@ -165,6 +168,9 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
   const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(false);
+  const [importing, setImporting] = useState(false);
+  // The orders an imported statement brought, for the period it was compared with: one may not be among those offered.
+  const [statement, setStatement] = useState<{ from: string; to: string; orders: PlatformSettlementOrder[] } | null>(null);
   const create = useCreatePlatformSettlement();
   const update = useUpdatePlatformSettlement();
   const close = useClosePlatformSettlement();
@@ -181,8 +187,9 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
   const orders = useMemo(() => {
     if (!editing) return detail?.orders ?? [];
     const candidates = periodChanged ? (periodReadable ? pending.data?.orders ?? [] : []) : detail?.candidates ?? [];
-    return mergeOrders(detail?.orders ?? [], candidates);
-  }, [editing, detail, periodChanged, periodReadable, pending.data]);
+    const fromStatement = statement && statement.from === form.from && statement.to === form.to ? statement.orders : [];
+    return mergeOrders(detail?.orders ?? [], [...candidates, ...fromStatement]);
+  }, [editing, detail, periodChanged, periodReadable, pending.data, statement, form.from, form.to]);
   // Until the orders of the new period arrive, or when they could not, what is checked is not that period's: no saving.
   const ordersLoading = readsPeriod && pending.isPending;
   const ordersFailed = readsPeriod && pending.isError;
@@ -219,6 +226,25 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
   const change = (patch: Partial<SettlementForm>) => setForm((current) => ({ ...current, ...patch }));
   const pick = (orderIds: string[], value: boolean) =>
     setForm((current) => ({ ...current, picks: { ...current.picks, ...Object.fromEntries(orderIds.map((orderId) => [orderId, value])) } }));
+
+  // The statement's orders go in and those it does not bring leave; its adjustments replace the ones imported before.
+  const applyStatement = (proposal: StatementProposal) => {
+    const brought = new Set(proposal.orderIds);
+    setStatement({ from: form.from, to: form.to, orders: proposal.orders });
+    setForm((current) => ({
+      ...current,
+      picks: {
+        ...current.picks,
+        ...Object.fromEntries(orders.map((order) => [order.orderId, brought.has(order.orderId)])),
+        ...Object.fromEntries(proposal.orderIds.map((orderId) => [orderId, true])),
+      },
+      adjustments: proposal.adjustments,
+      depositedText: proposal.depositedText,
+      notes: proposal.notes,
+    }));
+    setImporting(false);
+    toast.success('Estado de cuenta aplicado. Revisa los ajustes y guarda la liquidación.');
+  };
 
   const fail = (err: unknown, fallback: string) => {
     setConflict(getApiErrorStatus(err) === 409);
@@ -414,6 +440,17 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
         </div>
       )}
 
+      {importing && (
+        <StatementImportModal
+          platform={platform}
+          settlementId={settlement?.id ?? null}
+          form={form}
+          pickedIds={picked.map((order) => order.orderId)}
+          onHide={() => setImporting(false)}
+          onApply={applyStatement}
+        />
+      )}
+
       <div className="settlement-layout">
         <div>
           <section className="card mb-3" aria-labelledby={`${id}-deposit`}>
@@ -538,7 +575,19 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
 
           <section className="card mb-3" aria-labelledby={`${id}-orders`}>
             <div className="card-body">
-              <h2 id={`${id}-orders`} className="h5 mb-1">Pedidos</h2>
+              <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
+                <h2 id={`${id}-orders`} className="h5 mb-0 me-auto">Pedidos</h2>
+                {editing && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-light"
+                    disabled={busy || !periodReadable || ordersUnknown}
+                    onClick={() => setImporting(true)}
+                  >
+                    <i className="ri-file-upload-line me-1" aria-hidden="true"></i>Importar estado de cuenta
+                  </button>
+                )}
+              </div>
               <p className="small text-muted">
                 {!editing
                   ? 'Los pedidos que paga este depósito, con lo que se esperaba de cada uno al guardarla.'
