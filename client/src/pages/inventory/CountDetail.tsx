@@ -136,11 +136,11 @@ export default function CountDetail({ countId, supplyOptions, onBack, onOpenMove
               Revisar diferencias
             </button>
           </div>
-          <div className="d-flex gap-2">
-            <button type="button" className="btn btn-sm btn-light" onClick={() => setDialog('add')}>
+          <div className="d-flex flex-wrap gap-2">
+            <button type="button" className="btn btn-sm btn-light text-nowrap" onClick={() => setDialog('add')}>
               <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar artículos
             </button>
-            <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setDialog('cancel')}>
+            <button type="button" className="btn btn-sm btn-outline-danger text-nowrap" onClick={() => setDialog('cancel')}>
               Cancelar conteo
             </button>
           </div>

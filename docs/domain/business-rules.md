@@ -464,6 +464,11 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 - Archivar una categoría la saca de Vender, del menú en línea y de los formularios; si tiene productos, primero se pasan a otra categoría activa del mismo negocio. Restaurarla la devuelve tal como estaba.
 - Reservado no puede ser negativo ni superar existencia.
 - Los movimientos tienen líneas positivas y el tipo define el signo aplicado.
+- Conteo físico (Fase 27A, [ADR 0037](../adr/0037-inventory-counts.md)):
+  - Un conteo es de una ubicación, y una ubicación tiene un solo conteo abierto. Toma lo que tiene existencia ahí (todo o una categoría) o los artículos elegidos, hasta 2,000, y se le agregan artículos mientras está abierto.
+  - Cada cantidad contada (de 0 a 9,999,999, con 3 decimales como máximo y entera en piezas) guarda lo que el sistema tenía del artículo en la ubicación al contarla. La diferencia es contado menos eso.
+  - Aplicar mueve la existencia de ese momento por cada diferencia, con un ajuste de motivo «Conteo físico» valorado al costo promedio: lo vendido después de contar se conserva. Lo que no se contó se queda como está. Si un artículo quedaría en negativo, no se aplica.
+  - Aplicar exige la revisión del conteo que se revisó. Aplicado o cancelado, el conteo ya no cambia, y nunca mueve las existencias dos veces.
 - Una compra no repite insumo+ubicación, no recibe más de lo pendiente y distingue recepción parcial/total; un borrador se envía, y solo una compra sin nada recibido se cancela.
 - Una caja cerrada no recibe movimientos y no puede cerrarse dos veces; el monto contado al cerrar no puede ser negativo.
 - El tipo de movimiento de caja define su signo; los importes capturados son positivos. Solo el efectivo forma parte del saldo esperado.

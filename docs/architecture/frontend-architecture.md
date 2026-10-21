@@ -685,6 +685,22 @@ Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.
 
+Inventario › Conteos (Fase 27A, [ADR 0037](../adr/0037-inventory-counts.md)):
+
+- **Datos:** `api/inventoryCounts.ts` lee y cambia los conteos con TanStack Query (`countKeys`), fuera de `api/queries.ts`, que carga la primera visita. Guardar una cantidad pone en la caché el conteo que contesta la API y no vuelve a pedir la hoja, para que los campos no salten mientras se escribe. Agregar, aplicar o cancelar invalidan todos los conteos.
+- **Pantallas:**
+  - `CountsTab`: la lista, con estado, ubicación y búsqueda en el servidor.
+  - `NewCountModal`: la ubicación y qué se cuenta. Los artículos se eligen con `SupplyPicker`, que también usa `AddCountItemsModal`.
+  - `CountDetail`: el conteo. «Contar» abre `CountSheet` y «Revisar diferencias» abre el resumen y `CountDifferences`; el conteo aplicado enseña sus ajustes (abren `MovementDetailModal`) y el cancelado su motivo (`CancelCountModal`).
+  - `InventoryManagement`: guarda el conteo abierto mientras se visita otra pestaña.
+- **La hoja (`CountSheet`):**
+  - Es a ciegas: no muestra lo que dice el sistema.
+  - Cada cantidad se guarda al salir del campo o con Enter, que pasa al siguiente. Un código escaneado que es exactamente el de un artículo pone el cursor en su campo.
+  - Dice junto al campo por qué no toma una cantidad (`countEntry.ts`, el mismo límite que la API) o qué contestó la API.
+  - Tiene dos columnas para que el campo quepa junto al artículo en el teléfono: la unidad va debajo del nombre.
+- **Lo que decide la API:** las diferencias, en qué quedará cada artículo y lo que valen los calcula el servidor; el cliente solo los muestra.
+- **Aplicar:** «Aplicar conteo» es la única acción principal de la revisión. Pregunta antes, y manda la revisión del conteo que la pantalla leyó al abrir la revisión.
+
 ## Guardrails
 
 - Backend decide estados, totales, impuestos, saldos y existencias finales.

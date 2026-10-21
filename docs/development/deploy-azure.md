@@ -637,6 +637,27 @@ La Fase 26D trae una migración, [`database/production/20261020145628_AddCustome
 - **Volver a la versión anterior:** funciona sin tocar la base mientras nadie haya usado el saldo a favor. Después, esa versión no conoce la forma de pago 7 ni los movimientos de caja 8 y 9, y los mostraría mal en el pedido, la caja y el corte. Si ya se usó, vuelve a esta versión cuanto antes.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50029, sin cambiar nada, en cuanto hay movimientos de saldo, pagos o reembolsos con la forma de pago 7, o movimientos de caja de tipo 8 o 9 o con la forma de pago 7: se perdería lo que los clientes tienen a su favor. Sin ninguno, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Conteo físico de inventario (Fase 27A)
+
+La Fase 27A trae una migración, [`database/production/20261021002749_AddInventoryCounts`](../../database/production/20261021002749_AddInventoryCounts). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0037](../adr/0037-inventory-counts.md)).
+
+- **La migración** agrega las tablas `InventoryCounts` e `InventoryCountLines`, vacías: cada conteo de una ubicación y lo que se contó de cada artículo contra lo que tenía el sistema. Llevan:
+  - llaves foráneas, sin borrado en cascada, a `InventoryLocations`, `SupplyItems`, `InventoryMovements` y entre ellas;
+  - `CK_InventoryCounts_Status` (un conteo aplicado o cancelado dice cuándo y quién; uno abierto, ninguna de las dos), `CK_InventoryCounts_Lines` (contados entre cero y el número de artículos) y `CK_InventoryCountLines_Counted` (lo contado, nunca negativo, va con el sistema, cuándo y quién, o nada de eso);
+  - los índices únicos del folio por negocio, de un conteo abierto por ubicación (filtrado con `[Status] = 1`) y de cada artículo una vez por conteo, el de la lista y los de las llaves foráneas.
+
+  No cambia existencias, movimientos, artículos ni ubicaciones. Después de aplicarla, el `verify.sql` muestra las tablas, sus restricciones, llaves e índices. Su consulta 3 cuenta los conteos de cada estado, sus artículos y los ajustes de conteos (todos en cero hasta desplegar), y la 4 los movimientos de cada tipo y las existencias, igual antes y después.
+- **Mientras se publica:** la versión de `master` (Fase 26D) no conoce las tablas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:** Inventario suma la pestaña «Conteos», para quien maneja el inventario. Nada más cambia hasta que alguien aplica un conteo: entonces sus ajustes aparecen en «Entradas y salidas» y en el historial por insumo con el motivo «Conteo físico».
+- **El contrato solo agrega:**
+  - `GET` y `POST /api/v1/inventory/counts`, `GET /api/v1/inventory/counts/{id}`, `GET` y `PUT /api/v1/inventory/counts/{id}/lines` y `POST /api/v1/inventory/counts/{id}/items`, `/post` y `/cancel`;
+  - el enum `InventoryCountStatus`.
+
+  Nada se quita ni cambia de nombre. Un movimiento manual con una referencia externa que empieza con `COUNT:` ahora se rechaza, como los de `ORDER:` y `PO:`.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas, y los ajustes de un conteo son movimientos de inventario comunes que sabe leer. Solo deja de enseñar los conteos.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50030, sin cambiar nada, en cuanto hay un conteo (abierto, aplicado o cancelado): se perdería lo que se contó, quién y contra qué. Sin ninguno, quita las tablas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

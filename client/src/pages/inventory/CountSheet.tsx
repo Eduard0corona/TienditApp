@@ -10,10 +10,10 @@ import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { getUnitLabel } from '../../utils/units';
 import { parseCountedQuantity } from './countEntry';
 
+// Two columns, so the box fits beside the item on a phone: the unit goes under the name.
 const COLUMNS = [
   { header: 'Artículo' },
-  { header: 'Unidad', className: 'text-center' },
-  { header: 'Contado', width: '11rem' },
+  { header: 'Contado', width: '9rem' },
 ];
 
 type LineState = { kind: 'saving' } | { kind: 'saved' } | { kind: 'error'; message: string };
@@ -134,13 +134,12 @@ export default function CountSheet({ countId }: CountSheetProps) {
           return (
             <>
               <td>
-                <label htmlFor={inputId} className="fw-semibold mb-0">{line.supplyItemName}</label>
-                <div className="text-muted small">
-                  {[line.supplyCode, line.supplyBarcode, line.categoryName].filter(Boolean).join(' · ') || ' '}
-                  {!line.isSupplyActive && <span className="ms-1">· Inactivo</span>}
+                <label htmlFor={inputId} className="fw-semibold mb-0 text-wrap">{line.supplyItemName}</label>
+                <div className="text-muted small text-wrap">
+                  {[getUnitLabel(line.unit), line.supplyCode, line.supplyBarcode, line.categoryName].filter(Boolean).join(' · ')}
+                  {!line.isSupplyActive && ' · Inactivo'}
                 </div>
               </td>
-              <td className="text-center">{getUnitLabel(line.unit)}</td>
               <td>
                 <input
                   id={inputId}

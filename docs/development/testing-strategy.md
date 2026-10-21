@@ -945,6 +945,57 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - La ficha muestra la línea del fiado («Sin fiado · Ver cuenta») a quien cobra: 5 de `clientes-mensajes.spec.ts`.
     - **Resultado:** la comparación contra `master` dio 561 escenas iguales, 18 nuevas y 15 que cambian; «auditoría escritorio-oscuro» difirió una vez por el desplazamiento de la barra de pestañas de Configuración y pasó dos veces seguidas al repetirla, sin cambios de esta fase. Con esas capturas, los seis archivos tocados con la cobertura de rutas (196 escenas) pasaron dos corridas seguidas contra el mismo build.
     - **Lo que encontraron las escenas:** la ficha simulada no leía `customerId`, así que la ficha de Sofía abría la de María Fernanda; ahora busca al cliente como lo pide Clientes, y las fichas de María Fernanda quedan iguales.
+- Fase 27A, conteo físico de inventario ([ADR 0037](../adr/0037-inventory-counts.md)):
+  - **Domain:**
+    - `InventoryCountTests` (17 pruebas, 23 casos):
+      - **abrir:** el conteo nace abierto con su folio `CNT-` del día UTC, su ubicación y quien lo empezó;
+      - **artículos:** cada uno entra sin contar y sube la revisión, hasta 2000;
+      - **capturar:**
+        - guarda lo que tenía el sistema al contarlo, y lo vuelve a tomar si cambia la cantidad;
+        - con la misma cantidad solo cambia la nota, y sin cantidad lo deja sin contar;
+        - acepta de 0 a 9,999,999 con 3 decimales, y piezas enteras en lo que se cuenta por pieza;
+        - rechaza la línea de otro conteo;
+      - **el resultado:** lo que se movió después de contar se conserva (existencia actual + diferencia);
+      - **aplicar y cancelar:** aplicar pide algo contado y guarda sus ajustes; cancelar guarda el motivo; cerrado ya no cambia.
+    - `InventoryEnumValuesTests` (+1): los valores guardados de `InventoryCountStatus`.
+  - **Application:** `InventoryCountFlowTests` (9):
+    - **empezar:**
+      - toma lo que tiene existencias en la ubicación: todo, una categoría o lo elegido;
+      - rechaza una ubicación inactiva o sin nada que contar;
+    - **aplicar:**
+      - mueve cada existencia por su diferencia y conserva lo vendido después de contar;
+      - rechaza un conteo que cambió, uno sin nada contado y un artículo que quedaría en negativo;
+      - sin diferencias cierra el conteo sin movimientos;
+    - **capturar:** rechaza lo que la unidad no acepta y los artículos de otro conteo, y deja borrar una cantidad;
+    - **agregar artículos:** suma lo que apareció sin repetir los que ya tiene;
+    - **cancelar:** cierra el conteo sin mover nada;
+    - **movimientos a mano:** no pueden usar las referencias `COUNT:` de un conteo.
+  - **Infrastructure:**
+    - `InventoryCountMigrationSqlServerTests` (3):
+      - las tablas guardan los conteos de cada negocio, uno abierto por ubicación y cada artículo una vez;
+      - las restricciones rechazan lo que el dominio nunca escribe;
+      - revertir se detiene con 50030 sin cambiar nada en cuanto se empezó un conteo y, sin eso, quita solo las tablas.
+    - `InventoryCountSqlServerTests` (5), con el candado de producción:
+      - dos inicios de la misma ubicación a la vez abren un conteo;
+      - conteos de ubicaciones distintas empezados a la vez nunca repiten folio;
+      - el mismo «Aplicar» dos veces a la vez mueve la existencia una vez;
+      - una captura y «Aplicar» a la vez nunca aplican lo que no se revisó;
+      - la base lee los artículos con sus diferencias y lo que valen.
+  - **WebApi:** `CrossTenantInventoryCountsSqlServerTests` (2), sobre la API real: otro negocio no ve, no captura, no aplica ni cancela los conteos, y aplicar mueve solo la existencia del negocio; contar pide `ManageInventory`. `TenantFilterBypassAllowlistTests` suma el folio del conteo en `FolioGenerator`. El contrato (`openapi.json`, `schema.ts`, `enums.ts`) lleva `/api/inventory/counts` e `InventoryCountStatus`.
+  - **Ensayo de los scripts:** sobre una copia de la base de la 26D:
+    - `apply.sql` dos veces, y la 26D sigue escribiendo;
+    - las restricciones rechazan lo que el dominio no escribe;
+    - `rollback.sql` se detiene con 50030 con un conteo abierto, con uno aplicado con su ajuste y con solo uno cancelado;
+    - sin conteos, `rollback.sql` corre dos veces, y `apply.sql` otra vez.
+  - **Cliente:**
+    - `countEntry.test.ts` (4): cero, piezas enteras y hasta tres decimales de lo que se pesa; la caja vacía deja el artículo sin contar; el porqué con las palabras de la API; el signo de lo que sobra o falta.
+    - `NewCountModal.test.tsx` (3): todo lo que tiene existencias en la ubicación por omisión, una categoría de la ubicación elegida y solo lo elegido, buscado por su código de barras.
+    - `CountSheet.test.tsx` (5): guarda lo contado al salir de la caja sin mostrar lo que tiene el sistema; Enter pasa a la siguiente; dice por qué no acepta una cantidad sin mandarla; muestra lo que respondió la API; el código escaneado pone el cursor en la caja de su artículo.
+    - `CountDetail.test.tsx` (4): revisa las diferencias con lo que valen y lo no contado se queda; aplica la revisión que se revisó después de preguntar y muestra su ajuste; no aplica si se dice que no, y dice por qué lo rechazó la API; el conteo cancelado dice por qué cerró, sin valores.
+  - **Cliente en total:** 142 archivos y 939 pruebas.
+  - **Primera visita:** 179,064 B de 179,100 B (−2 B contra `master`): «Conteos» se carga con Inventario, no en la primera visita.
+  - **Escenas visuales:** `conteos.spec.ts` (17, nuevas): Conteos, la hoja de captura, revisar diferencias y el conteo aplicado (escritorio, teléfono y oscuro), empezar un conteo y el conteo cancelado (escritorio y teléfono) y lo guardado en escritorio.
+    - **Lo que encontraron las escenas:** en el teléfono la hoja no dejaba ver la caja de lo contado; la unidad pasa a la línea del artículo, la caja mide 9rem y los botones del conteo no se parten.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
