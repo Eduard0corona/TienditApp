@@ -8,7 +8,7 @@ import { formatDateTime } from './inventoryLabels';
 
 const COLUMNS = [
   { header: 'Folio' },
-  { header: 'De → A' },
+  { header: 'Origen y destino' },
   { header: 'Artículos', className: 'text-center' },
   { header: 'Valor', className: 'text-end' },
   { header: 'Cuándo' },
@@ -72,7 +72,7 @@ export default function TransfersTab({ locations, filter, onFilterChange: setFil
             <td className="fw-semibold text-nowrap">{item.transferNumber}</td>
             <td>
               <div className="text-wrap">{item.fromLocationName}</div>
-              <div className="text-muted small text-wrap">→ {item.toLocationName}</div>
+              <div className="text-muted small text-wrap">a {item.toLocationName}</div>
             </td>
             <td className="text-center">{item.lineCount}</td>
             <td className="text-end">{formatMoney(item.totalCost)}</td>

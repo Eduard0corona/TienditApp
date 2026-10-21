@@ -1,20 +1,24 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
 import { useCreateInventoryTransfer, useOriginStock, type InventoryTransfer } from '../../api/inventoryTransfers';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import type { InventoryLocationDto, UnitType } from '../../types';
-import { formatStockQuantity } from '../../utils/units';
+import { allowsFractions, formatStockQuantity } from '../../utils/units';
 import { newUuid } from '../../utils/uuid';
 import { toTransferRequest } from './transferForm';
 
 /** How many items of the origin the list shows at once: a search finds the rest. */
 const SHOWN = 50;
+/** How long the search waits for the typing to stop before asking the server. */
+const SEARCH_DELAY_MS = 300;
 
 interface ChosenLine {
   supplyItemId: string;
   name: string;
   unit: UnitType;
+  /** What the origin had when it was added, until a newer read of the origin says otherwise. */
+  onHand: number;
   quantity: string;
 }
 
@@ -25,9 +29,12 @@ interface NewTransferModalProps {
   onCreated: (transfer: InventoryTransfer) => void;
 }
 
+const quantityId = (supplyItemId: string) => `transferencia-cantidad-${supplyItemId}`;
+
 /**
  * A transfer between two locations (Fase 27B): the items with stock in the origin, how much of each, and they leave one
- * and enter the other at once. The dialog keeps one key, so sending it again never transfers twice.
+ * and enter the other at once. The dialog keeps one key, so sending it again never transfers twice; it does not close
+ * while sending, so the answer is never lost.
  */
 export default function NewTransferModal({ show, activeLocations, onHide, onCreated }: NewTransferModalProps) {
   const titleId = useId();
@@ -42,31 +49,62 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
   const origin = activeLocations.find((location) => location.id === fromId);
   const [lines, setLines] = useState<ChosenLine[]>([]);
   const [search, setSearch] = useState('');
+  const [term, setTerm] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+  // The item just added, whose quantity takes the cursor once it is on the screen.
+  const focusLine = useRef<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const sending = create.isPending;
 
-  const stock = useOriginStock(fromId);
-  const onHand = useMemo(
-    () => new Map((stock.data ?? []).map((row) => [row.supplyItemId, row.onHandQuantity])),
-    [stock.data],
-  );
+  useEffect(() => {
+    const timer = setTimeout(() => setTerm(search.trim()), SEARCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const stock = useOriginStock(fromId, term, show);
+  const rows = useMemo(() => stock.data?.rows ?? [], [stock.data]);
+  const onHand = useMemo(() => new Map(rows.map((row) => [row.supplyItemId, row.onHandQuantity])), [rows]);
   const offered = useMemo(() => {
     const chosen = new Set(lines.map((line) => line.supplyItemId));
-    const term = search.trim().toLowerCase();
-    return (stock.data ?? []).filter((row) => !chosen.has(row.supplyItemId) && (!term
-      || [row.supplyItemName, row.supplyCode, row.supplySku, row.supplyBarcode].some((value) => value?.toLowerCase().includes(term))));
-  }, [stock.data, lines, search]);
+    return rows.filter((row) => !chosen.has(row.supplyItemId));
+  }, [rows, lines]);
   const { ref, fadeClass } = useScrollFade<HTMLUListElement>(Math.min(offered.length, SHOWN), 'y');
+  const onHandOf = (line: ChosenLine) => onHand.get(line.supplyItemId) ?? line.onHand;
+
+  useEffect(() => {
+    if (!focusLine.current) return;
+    document.getElementById(quantityId(focusLine.current))?.focus();
+    focusLine.current = null;
+  }, [lines]);
 
   // Another origin has other stock: what was chosen goes.
   const changeOrigin = (locationId: string) => {
     setChosenFrom(locationId);
     setLines([]);
     setSearch('');
+    setTerm('');
+  };
+
+  const add = (row: (typeof rows)[number]) => {
+    setLines((current) => [
+      ...current,
+      { supplyItemId: row.supplyItemId, name: row.supplyItemName, unit: row.unit, onHand: row.onHandQuantity, quantity: '' },
+    ]);
+    focusLine.current = row.supplyItemId;
+  };
+
+  const remove = (supplyItemId: string) => {
+    setLines((current) => current.filter((line) => line.supplyItemId !== supplyItemId));
+    searchRef.current?.focus();
   };
 
   const updateQuantity = (supplyItemId: string, quantity: string) =>
     setLines((current) => current.map((line) => (line.supplyItemId === supplyItemId ? { ...line, quantity } : line)));
+
+  const hide = () => {
+    if (!sending) onHide();
+  };
 
   const submit = async () => {
     setError('');
@@ -75,7 +113,7 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
         fromLocationId: fromId,
         toLocationId: toId,
         notes,
-        lines: lines.map((line) => ({ ...line, onHand: onHand.get(line.supplyItemId) ?? 0 })),
+        lines: lines.map((line) => ({ ...line, onHand: onHandOf(line) })),
       },
       idempotencyKey,
       origin?.name ?? 'el origen',
@@ -88,13 +126,20 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
     try {
       onCreated(await create.mutateAsync(result.request));
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo hacer la transferencia.'));
+      // Without an answer it may have been made: the same key sent again answers it instead of transferring twice.
+      setError(getApiErrorMessage(err, 'No se pudo confirmar la transferencia. Vuelve a tocar «Transferir»: si ya se hizo, no se repite.'));
     }
   };
 
+  const emptyMessage = term
+    ? 'Ningún artículo con existencias coincide.'
+    : rows.length === 0
+      ? `No hay artículos con existencias${origin ? ` en ${origin.name}` : ''}.`
+      : 'Ya agregaste todos los artículos con existencias.';
+
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered aria-labelledby={titleId}>
-      <Modal.Header closeButton>
+    <Modal show={show} onHide={hide} size="lg" centered aria-labelledby={titleId} backdrop={sending ? 'static' : true} keyboard={!sending}>
+      <Modal.Header closeButton={!sending}>
         <Modal.Title id={titleId}>Nueva transferencia</Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -106,8 +151,9 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
         )}
         <div className="row g-2 mb-3">
           <div className="col-sm-6">
-            <label htmlFor="transferencia-de" className="form-label">De</label>
-            <select id="transferencia-de" className="form-select" value={fromId} onChange={(e) => changeOrigin(e.target.value)}>
+            <label htmlFor="transferencia-origen" className="form-label">Origen</label>
+            <select id="transferencia-origen" className="form-select" value={fromId} disabled={sending}
+              onChange={(e) => changeOrigin(e.target.value)}>
               {activeLocations.length === 0 && <option value="">No hay ubicaciones activas</option>}
               {activeLocations.map((location) => (
                 <option key={location.id} value={location.id}>{location.name}</option>
@@ -115,8 +161,9 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
             </select>
           </div>
           <div className="col-sm-6">
-            <label htmlFor="transferencia-a" className="form-label">A</label>
-            <select id="transferencia-a" className="form-select" value={toId} onChange={(e) => setChosenTo(e.target.value)}>
+            <label htmlFor="transferencia-destino" className="form-label">Destino</label>
+            <select id="transferencia-destino" className="form-select" value={toId} disabled={sending}
+              onChange={(e) => setChosenTo(e.target.value)}>
               {toId === '' && <option value="">Elige otra ubicación</option>}
               {activeLocations.filter((location) => location.id !== fromId).map((location) => (
                 <option key={location.id} value={location.id}>{location.name}</option>
@@ -130,6 +177,7 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
             Agregar artículo{origin ? ` con existencias en ${origin.name}` : ''}
           </label>
           <input
+            ref={searchRef}
             id="transferencia-buscar"
             type="search"
             className="form-control mb-2"
@@ -140,12 +188,10 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
           {stock.isError && (
             <div className="alert alert-danger" role="alert">{getApiErrorMessage(stock.error, 'No se pudo leer lo que hay en el origen.')}</div>
           )}
-          {stock.isLoading && fromId !== '' && <p className="text-muted small mb-0" role="status">Leyendo lo que hay…</p>}
+          {stock.isPending && fromId !== '' && show && <p className="text-muted small mb-0" role="status">Leyendo lo que hay…</p>}
           {stock.isSuccess && (
             offered.length === 0 ? (
-              <p className="text-muted small mb-0">
-                {search.trim() ? 'Ningún artículo con existencias coincide.' : 'No quedan artículos con existencias por agregar.'}
-              </p>
+              <p className="text-muted small mb-0">{emptyMessage}</p>
             ) : (
               <ul ref={ref} className={`list-group overflow-auto ta-scroll-fade-y ${fadeClass}`} style={{ maxHeight: '12rem' }}
                 aria-label="Artículos con existencias">
@@ -159,10 +205,7 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
                       type="button"
                       className="btn btn-sm btn-light text-nowrap"
                       aria-label={`Agregar ${row.supplyItemName}`}
-                      onClick={() => setLines((current) => [
-                        ...current,
-                        { supplyItemId: row.supplyItemId, name: row.supplyItemName, unit: row.unit, quantity: '' },
-                      ])}
+                      onClick={() => add(row)}
                     >
                       Agregar
                     </button>
@@ -171,8 +214,10 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
               </ul>
             )
           )}
-          {offered.length > SHOWN && (
-            <div className="form-text">Se muestran {SHOWN} de {offered.length}: escribe para encontrar los demás.</div>
+          {(offered.length > SHOWN || stock.data?.partial) && (
+            <div className="form-text">
+              {offered.length > SHOWN ? `Se muestran ${SHOWN} de ${offered.length}` : 'Hay más artículos'}: escribe para encontrar los demás.
+            </div>
           )}
         </div>
 
@@ -192,12 +237,13 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
                   <tr key={line.supplyItemId}>
                     <td>
                       <div className="text-wrap">{line.name}</div>
-                      <div className="text-muted small">Hay {formatStockQuantity(onHand.get(line.supplyItemId) ?? 0, line.unit)}</div>
+                      <div className="text-muted small">Hay {formatStockQuantity(onHandOf(line), line.unit)}</div>
                     </td>
                     <td>
                       <input
+                        id={quantityId(line.supplyItemId)}
                         type="text"
-                        inputMode="decimal"
+                        inputMode={allowsFractions(line.unit) ? 'decimal' : 'numeric'}
                         className="form-control form-control-sm text-end"
                         aria-label={`Cantidad de ${line.name}`}
                         value={line.quantity}
@@ -209,7 +255,8 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
                         type="button"
                         className="btn btn-sm btn-link text-danger text-nowrap"
                         aria-label={`Quitar ${line.name}`}
-                        onClick={() => setLines((current) => current.filter((item) => item.supplyItemId !== line.supplyItemId))}
+                        disabled={sending}
+                        onClick={() => remove(line.supplyItemId)}
                       >
                         Quitar
                       </button>
@@ -238,9 +285,9 @@ export default function NewTransferModal({ show, activeLocations, onHide, onCrea
         </p>
       </Modal.Body>
       <Modal.Footer>
-        <button type="button" className="btn btn-light" onClick={onHide}>Cancelar</button>
-        <button type="button" className="btn btn-primary" onClick={submit} disabled={create.isPending || activeLocations.length < 2}>
-          {create.isPending ? 'Transfiriendo…' : 'Transferir'}
+        <button type="button" className="btn btn-light" onClick={hide} disabled={sending}>Cancelar</button>
+        <button type="button" className="btn btn-primary" onClick={submit} disabled={sending || activeLocations.length < 2}>
+          {sending ? 'Transfiriendo…' : 'Transferir'}
         </button>
       </Modal.Footer>
     </Modal>

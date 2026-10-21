@@ -51,9 +51,11 @@ function renderModal(onCreated = vi.fn(), locations = LOCATIONS) {
 describe('NewTransferModal', () => {
   beforeEach(() => {
     request.mockReset();
-    request.mockImplementation(((method: string, path: string, options?: { query?: { inventoryLocationId?: string } }) => {
+    request.mockImplementation(((method: string, path: string, options?: { query?: { inventoryLocationId?: string; search?: string } }) => {
       if (method === 'get' && path === '/api/v1/inventory/stocks') {
-        const items = STOCK[options?.query?.inventoryLocationId ?? ''] ?? [];
+        const search = options?.query?.search?.toLowerCase();
+        const items = (STOCK[options?.query?.inventoryLocationId ?? ''] ?? [])
+          .filter((row) => !search || [row.supplyItemName, row.supplyBarcode].some((value) => value?.toLowerCase().includes(search)));
         return Promise.resolve({ items, pageNumber: 1, totalPages: 1, totalCount: items.length, hasPreviousPage: false, hasNextPage: false });
       }
       return Promise.resolve({ id: 't1', transferNumber: 'TRF-20261021-0001', lineCount: 2 });
@@ -64,8 +66,8 @@ describe('NewTransferModal', () => {
     const user = userEvent.setup();
     const onCreated = renderModal();
 
-    expect(screen.getByLabelText('De')).toHaveValue('l1');
-    expect(screen.getByLabelText('A')).toHaveValue('l2');
+    expect(screen.getByLabelText('Origen')).toHaveValue('l1');
+    expect(screen.getByLabelText('Destino')).toHaveValue('l2');
     const offered = await screen.findByRole('list', { name: 'Artículos con existencias' });
     // Nothing to give of what has no stock or is inactive.
     expect(within(offered).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
@@ -75,13 +77,19 @@ describe('NewTransferModal', () => {
     ]);
 
     await user.type(screen.getByLabelText(/Agregar artículo/), '75010');
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Agregar Papas 45 g' })).not.toBeInTheDocument());
+    expect(request).toHaveBeenCalledWith('get', '/api/v1/inventory/stocks', expect.objectContaining({
+      query: expect.objectContaining({ inventoryLocationId: 'l1', search: '75010' }),
+    }));
     await user.click(screen.getByRole('button', { name: 'Agregar Refresco de cola 600 ml' }));
+    // The cursor goes to the quantity of what was added.
+    expect(screen.getByLabelText('Cantidad de Refresco de cola 600 ml')).toHaveFocus();
     await user.clear(screen.getByLabelText(/Agregar artículo/));
-    await user.click(screen.getByRole('button', { name: 'Agregar Azúcar estándar' }));
+    await user.click(await screen.findByRole('button', { name: 'Agregar Azúcar estándar' }));
     expect(screen.queryByRole('button', { name: 'Agregar Refresco de cola 600 ml' })).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('Cantidad de Refresco de cola 600 ml'), '10');
     await user.type(screen.getByLabelText('Cantidad de Azúcar estándar'), '2.5');
-    await user.selectOptions(screen.getByLabelText('A'), 'l3');
+    await user.selectOptions(screen.getByLabelText('Destino'), 'l3');
     await user.type(screen.getByLabelText('Notas (opcional)'), 'Para el fin de semana');
     await user.click(screen.getByRole('button', { name: 'Transferir' }));
 
@@ -109,10 +117,10 @@ describe('NewTransferModal', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('En Bodega solo hay 15 de Papas 45 g.');
     expect(request).not.toHaveBeenCalledWith('post', expect.anything(), expect.anything());
 
-    await user.selectOptions(screen.getByLabelText('De'), 'l2');
+    await user.selectOptions(screen.getByLabelText('Origen'), 'l2');
     expect(screen.queryByLabelText('Cantidad de Papas 45 g')).not.toBeInTheDocument();
     // The destination is never the origin.
-    expect(screen.getByLabelText('A')).toHaveValue('l1');
+    expect(screen.getByLabelText('Destino')).toHaveValue('l1');
     expect(await screen.findByRole('button', { name: 'Agregar Refresco de cola 600 ml' })).toBeInTheDocument();
   });
 
@@ -137,6 +145,36 @@ describe('NewTransferModal', () => {
 
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
     expect((posts[0] as { idempotencyKey: string }).idempotencyKey).toBe((posts[1] as { idempotencyKey: string }).idempotencyKey);
+  });
+
+  it('reads what the origin has only while open, and again after the API refused the transfer', async () => {
+    const user = userEvent.setup();
+    const stockReads = () => request.mock.calls.filter(([method, path]) => method === 'get' && path === '/api/v1/inventory/stocks').length;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <NewTransferModal show={false} activeLocations={LOCATIONS} onHide={vi.fn()} onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    expect(stockReads()).toBe(0);
+
+    const answer = request.getMockImplementation()!;
+    request.mockImplementation(((method: string, path: string, options?: unknown) => method === 'post'
+      ? Promise.reject(apiError('No hay suficiente en Bodega: Papas 45 g (hay 2).'))
+      : answer(method as never, path as never, options as never)) as never);
+    rerender(
+      <QueryClientProvider client={client}>
+        <NewTransferModal show activeLocations={LOCATIONS} onHide={vi.fn()} onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Agregar Papas 45 g' }));
+    // As much as there is goes.
+    await user.type(screen.getByLabelText('Cantidad de Papas 45 g'), '15');
+    const before = stockReads();
+    await user.click(screen.getByRole('button', { name: 'Transferir' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No hay suficiente en Bodega: Papas 45 g (hay 2).');
+    expect(stockReads()).toBeGreaterThan(before);
   });
 
   it('asks for a second location when there is only one', () => {

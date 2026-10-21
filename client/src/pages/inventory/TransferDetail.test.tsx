@@ -40,7 +40,7 @@ describe('TransferDetail', () => {
       </QueryClientProvider>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'TRF-20261021-0001 · Bodega → Mostrador' })).toHaveFocus();
+    expect(await screen.findByRole('heading', { name: 'TRF-20261021-0001 · de Bodega a Mostrador' })).toHaveFocus();
     expect(screen.getByText(/Transfirió encargado/)).toHaveTextContent('2 artículos');
     expect(screen.getByText('Para el fin de semana')).toBeInTheDocument();
     const sugar = screen.getByRole('row', { name: /Azúcar estándar/ });

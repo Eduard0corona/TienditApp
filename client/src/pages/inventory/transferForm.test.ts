@@ -20,6 +20,11 @@ describe('toTransferRequest', () => {
     expect(toTransferRequest({ ...FORM, notes: '  ' }, 'k1', 'Bodega').request?.notes).toBeNull();
   });
 
+  it('takes all there is of an item', () => {
+    expect(toTransferRequest({ ...FORM, lines: [{ ...SODA, quantity: '24' }] }, 'k1', 'Bodega').request?.lines)
+      .toEqual([{ supplyItemId: 's1', quantity: 24 }]);
+  });
+
   it.each([
     [{ fromLocationId: '' }, 'Elige de qué ubicación salen los artículos.'],
     [{ toLocationId: '' }, 'Elige a qué ubicación van los artículos.'],

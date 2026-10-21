@@ -1,4 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { countKeys } from './inventoryCounts';
 import { apiRequest, type Schemas } from './typedClient';
 
 // Transferencias entre ubicaciones (Fase 27B, ADR 0038): the transfers of the business, one with its items, what an
@@ -27,7 +28,7 @@ export const transferKeys = {
   all: ['inventory-transfers'] as const,
   list: (filter: InventoryTransfersFilter) => ['inventory-transfers', 'list', filter] as const,
   transfer: (id: string) => ['inventory-transfers', 'transfer', id] as const,
-  originStock: (locationId: string) => ['inventory-transfers', 'origin-stock', locationId] as const,
+  originStock: (locationId: string, search: string) => ['inventory-transfers', 'origin-stock', locationId, search] as const,
 };
 
 /** The most items an origin offers at once: what the API pages at most. */
@@ -59,34 +60,46 @@ export function useInventoryTransfer(id: string) {
   });
 }
 
-/** What the origin has to transfer: its active items with stock, by name. */
-export function useOriginStock(locationId: string) {
+/**
+ * What the origin has to transfer: its active items with stock, by name, searched by name, code, SKU or barcode in the
+ * server. One page at most: `partial` says the origin has more, which a search finds. Only while the dialog is open, and
+ * read again each time it opens, since a sale changes it.
+ */
+export function useOriginStock(locationId: string, search: string, enabled: boolean) {
   return useQuery({
-    enabled: locationId !== '',
-    queryKey: transferKeys.originStock(locationId),
+    enabled: enabled && locationId !== '',
+    queryKey: transferKeys.originStock(locationId, search),
     queryFn: async ({ signal }) => {
       const page = await apiRequest('get', '/api/v1/inventory/stocks', {
-        query: { inventoryLocationId: locationId, pageNumber: 1, pageSize: ORIGIN_STOCK_PAGE },
+        query: { inventoryLocationId: locationId, search: search || undefined, pageNumber: 1, pageSize: ORIGIN_STOCK_PAGE },
         signal,
       });
-      return page.items
-        .filter((stock) => stock.isSupplyActive && stock.onHandQuantity > 0)
-        .sort((a, b) => a.supplyItemName.localeCompare(b.supplyItemName, 'es'));
+      return {
+        rows: page.items
+          .filter((stock) => stock.isSupplyActive && stock.onHandQuantity > 0)
+          .sort((a, b) => a.supplyItemName.localeCompare(b.supplyItemName, 'es')),
+        partial: page.hasNextPage,
+      };
     },
+    // While another search loads, the previous one of the same origin; never what another origin has.
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[2] === locationId ? previous : undefined),
+    staleTime: 0,
   });
 }
 
 /**
  * Makes a transfer. The body carries the key of the dialog: sent again (a retry, a double tap) it answers the same
- * transfer. Whatever happened, the list, what the locations have and the open counts are read again.
+ * transfer. Whatever happened, the list, what the origin has and the open counts are read again; the transfer made is
+ * already its detail.
  */
 export function useCreateInventoryTransfer() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateInventoryTransferBody) => apiRequest('post', '/api/v1/inventory/transfers', { body }),
+    onSuccess: (transfer) => client.setQueryData(transferKeys.transfer(transfer.id), transfer),
     onSettled: () => Promise.all([
-      client.invalidateQueries({ queryKey: transferKeys.all }),
-      client.invalidateQueries({ queryKey: ['inventory-counts'] }),
+      client.invalidateQueries({ queryKey: transferKeys.all, refetchType: 'active' }),
+      client.invalidateQueries({ queryKey: countKeys.all }),
     ]),
   });
 }

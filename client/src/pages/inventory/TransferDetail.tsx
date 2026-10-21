@@ -62,7 +62,7 @@ export default function TransferDetail({ transferId, onBack, onOpenMovement }: T
     <div>
       {back}
       <h2 className="h5 mb-1" ref={headingRef} tabIndex={-1}>
-        {transfer.transferNumber} · {transfer.fromLocationName} → {transfer.toLocationName}
+        {transfer.transferNumber} · de {transfer.fromLocationName} a {transfer.toLocationName}
       </h2>
       <p className="text-muted small mb-3">
         Transfirió {transfer.transferredBy}, {formatDateTime(transfer.transferredAt)}
