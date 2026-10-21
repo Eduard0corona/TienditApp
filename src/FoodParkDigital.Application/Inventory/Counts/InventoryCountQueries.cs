@@ -91,7 +91,7 @@ public class GetInventoryCountQueryHandler : IRequestHandler<GetInventoryCountQu
 /// <summary>The items of a count by name, searched by name, code, SKU or barcode (a scanner types it), over every page.</summary>
 [RequiresPermission(TenantPermission.ManageInventory)]
 [RequiresCapability(TenantCapability.Inventory)]
-public record GetInventoryCountLinesQuery : IRequest<PaginatedList<InventoryCountLineDto>>
+public record GetInventoryCountLinesQuery : IRequest<InventoryCountLinesPage>
 {
     public Guid CountId { get; init; }
     public string? Search { get; init; }
@@ -103,7 +103,7 @@ public record GetInventoryCountLinesQuery : IRequest<PaginatedList<InventoryCoun
     public int PageSize { get; init; } = 50;
 }
 
-public class GetInventoryCountLinesQueryHandler : IRequestHandler<GetInventoryCountLinesQuery, PaginatedList<InventoryCountLineDto>>
+public class GetInventoryCountLinesQueryHandler : IRequestHandler<GetInventoryCountLinesQuery, InventoryCountLinesPage>
 {
     private readonly IApplicationDbContext _context;
 
@@ -112,7 +112,7 @@ public class GetInventoryCountLinesQueryHandler : IRequestHandler<GetInventoryCo
         _context = context;
     }
 
-    public async Task<PaginatedList<InventoryCountLineDto>> Handle(GetInventoryCountLinesQuery request, CancellationToken cancellationToken)
+    public async Task<InventoryCountLinesPage> Handle(GetInventoryCountLinesQuery request, CancellationToken cancellationToken)
         => await InventoryCountReads.LinesAsync(_context, request, cancellationToken)
             ?? throw new EntityNotFoundException(nameof(InventoryCount), request.CountId);
 }
@@ -189,12 +189,13 @@ internal static class InventoryCountReads
     }
 
     /// <summary>The items of the count; null when the count does not exist in the business.</summary>
-    public static async Task<PaginatedList<InventoryCountLineDto>?> LinesAsync(
+    public static async Task<InventoryCountLinesPage?> LinesAsync(
         IApplicationDbContext context, GetInventoryCountLinesQuery request, CancellationToken cancellationToken)
     {
+        // The revision is read before the items: whatever changes in between is newer, so posting it is refused.
         var count = await context.InventoryCounts.AsNoTracking()
             .Where(c => c.Id == request.CountId)
-            .Select(c => new { c.InventoryLocationId, c.Status, c.IncreaseMovementId, c.DecreaseMovementId })
+            .Select(c => new { c.InventoryLocationId, c.Status, c.IncreaseMovementId, c.DecreaseMovementId, c.Revision })
             .FirstOrDefaultAsync(cancellationToken);
         if (count is null)
             return null;
@@ -223,7 +224,7 @@ internal static class InventoryCountReads
             .ToListAsync(cancellationToken);
 
         var lines = await MapAsync(context, page, count.Status, count.IncreaseMovementId, count.DecreaseMovementId, cancellationToken);
-        return new PaginatedList<InventoryCountLineDto>(lines, total, pageNumber, pageSize);
+        return new InventoryCountLinesPage(lines, total, pageNumber, pageSize, count.Revision);
     }
 
     /// <summary>These items of the count, as they are now.</summary>
@@ -304,7 +305,8 @@ internal static class InventoryCountReads
             };
             switch (status)
             {
-                case InventoryCountStatus.InProgress:
+                // Counting blind: an item not counted yet carries nothing of what the system has.
+                case InventoryCountStatus.InProgress when line.IsCounted:
                     dto.CurrentQuantity = row.OnHand;
                     dto.ResultingQuantity = line.ResultingQuantity(row.OnHand);
                     if (line.Difference is { } difference && difference != 0)

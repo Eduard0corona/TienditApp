@@ -41,10 +41,13 @@ public static class Paging
     // The largest page the SPA requests today (reference lists load 500 rows).
     public const int MaxPageSize = 500;
 
+    // Past it, (page - 1) * size no longer fits in an int and the OFFSET turns negative.
+    public const int MaxPageNumber = int.MaxValue / MaxPageSize;
+
     /// <summary>
-    /// Clamps client paging values: page numbers start at 1 and page sizes are kept between 1 and
-    /// <see cref="MaxPageSize"/>, so a request cannot dump a whole table or trigger a negative OFFSET.
+    /// Clamps client paging values: page numbers go from 1 to <see cref="MaxPageNumber"/> and page sizes are kept between
+    /// 1 and <see cref="MaxPageSize"/>, so a request cannot dump a whole table or trigger a negative OFFSET.
     /// </summary>
     public static (int PageNumber, int PageSize) Normalize(int pageNumber, int pageSize) =>
-        (Math.Max(1, pageNumber), Math.Clamp(pageSize, 1, MaxPageSize));
+        (Math.Clamp(pageNumber, 1, MaxPageNumber), Math.Clamp(pageSize, 1, MaxPageSize));
 }

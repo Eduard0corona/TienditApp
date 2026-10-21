@@ -49,7 +49,11 @@ public class InventoryCountFlowTests
         Assert.Equal(["Refresco de cola 600 ml"], (await LinesAsync(host, drinks.Value.Id)).Items.Select(l => l.SupplyItemName));
         Assert.True(chosen.IsSuccess, chosen.Error);
         var chips = Assert.Single((await LinesAsync(host, chosen.Value.Id)).Items);
-        Assert.Equal(("Papas 45 g", (decimal?)null, 0m), (chips.SupplyItemName, chips.CountedQuantity, chips.CurrentQuantity));
+        // Counting blind: nothing of what the system has until it is counted.
+        Assert.Equal(("Papas 45 g", (decimal?)null, (decimal?)null), (chips.SupplyItemName, chips.CountedQuantity, chips.CurrentQuantity));
+        var started = await host.QueryAsync(db => db.AuditLogs.Where(l => l.Action == "InventoryCountStarted").ToListAsync());
+        Assert.Equal(3, started.Count);
+        Assert.Contains(started, l => l.Metadata!.Contains($"\"CountNumber\":\"{CountFolio}\"") && l.Metadata.Contains("\"Items\":3"));
     }
 
     [Fact]
@@ -96,12 +100,15 @@ public class InventoryCountFlowTests
         var soda = recorded.Value.Lines.Single(l => l.SupplyItemId == shop.Soda);
         Assert.Equal(((decimal?)22m, (decimal?)24m, (decimal?)-2m, "sqlite-test", "Dos latas abolladas"),
             (soda.CountedQuantity, soda.SystemQuantity, soda.Difference, soda.CountedBy, soda.Notes));
-        var review = (await LinesAsync(host, count.Id, withDifference: true)).Items;
+        var reviewPage = await LinesAsync(host, count.Id, withDifference: true);
+        var review = reviewPage.Items;
         Assert.Equal(["Azúcar estándar", "Refresco de cola 600 ml"], review.Select(l => l.SupplyItemName));
         Assert.Equal(((decimal?)21m, (decimal?)19m, (decimal?)-24m), (review[1].CurrentQuantity, review[1].ResultingQuantity, review[1].DifferenceValue));
         Assert.Equal(((decimal?)10m, (decimal?)10.5m, (decimal?)15m), (review[0].CurrentQuantity, review[0].ResultingQuantity, review[0].DifferenceValue));
         var reviewed = await CountAsync(host, count.Id);
         Assert.Equal((2, (decimal?)15m, (decimal?)24m), (reviewed.DifferenceLineCount, reviewed.SurplusValue, reviewed.ShortageValue));
+        // The items reviewed are those of the revision posted.
+        Assert.Equal(reviewed.Revision, reviewPage.Revision);
 
         var posted = await PostAsync(host, count.Id, reviewed.Revision);
 
@@ -159,10 +166,16 @@ public class InventoryCountFlowTests
         Assert.Equal("Quedarían en negativo porque se movieron después de contarlos: Refresco de cola 600 ml (-21). Vuélvelos a contar.", negative.Error);
         Assert.Equal(0, await host.QueryAsync(db => db.InventoryMovements.CountAsync(m => m.MovementReason == InventoryMovementReason.InventoryCount)));
 
-        // Counted again, against what the system has now.
+        // Corrected, it is still measured against the 24 it was counted against, so it is still refused.
+        var corrected = await RecordAsync(host, count.Id, (soda, 0m, null));
+        var stillNegative = await PostAsync(host, count.Id, corrected.Value.Count.Revision);
+        // Counted again from scratch (cleared, then counted), against what the system has now.
+        await RecordAsync(host, count.Id, (soda, null, null));
         var recount = await RecordAsync(host, count.Id, (soda, 0m, null));
         var posted = await PostAsync(host, count.Id, recount.Value.Count.Revision);
 
+        Assert.Equal((decimal?)24m, corrected.Value.Lines.Single().SystemQuantity);
+        Assert.StartsWith("Quedarían en negativo porque se movieron después de contarlos: Refresco de cola 600 ml (-23).", stillNegative.Error);
         Assert.True(posted.IsSuccess, posted.Error);
         Assert.Equal((decimal?)-1m, recount.Value.Lines.Single().Difference);
         Assert.Equal(0m, await host.QueryAsync(db => db.InventoryStocks.Where(s => s.SupplyItemId == shop.Soda && s.InventoryLocationId == shop.Warehouse).Select(s => s.OnHandQuantity).SingleAsync()));
@@ -204,6 +217,11 @@ public class InventoryCountFlowTests
         Assert.Equal("Uno o más artículos no son de este conteo.", foreign.Error);
         Assert.True(cleared.IsSuccess, cleared.Error);
         Assert.Equal(((decimal?)null, (decimal?)null, 0), (cleared.Value.Lines.Single().CountedQuantity, cleared.Value.Lines.Single().SystemQuantity, cleared.Value.Count.CountedLineCount));
+        // Counting it the first time leaves no entry; clearing what was counted does, with what it was.
+        var corrected = await host.QueryAsync(db => db.AuditLogs.SingleAsync(l => l.Action == "InventoryCountCorrected"));
+        Assert.Equal((count.Id.ToString(), "sqlite-test"), (corrected.EntityId, corrected.PerformedBy));
+        Assert.Contains("\"From\":20", corrected.Metadata);
+        Assert.Contains("\"To\":null", corrected.Metadata);
         var validation = new RecordInventoryCountCommandValidator().Validate(new RecordInventoryCountCommand
         {
             CountId = count.Id,
@@ -212,6 +230,13 @@ public class InventoryCountFlowTests
         Assert.Equal(
             ["Un artículo va una sola vez.", "La cantidad contada va de 0 a 9,999,999, con máximo 3 decimales.", "La cantidad contada va de 0 a 9,999,999, con máximo 3 decimales."],
             validation.Errors.Select(e => e.ErrorMessage));
+        // A list with a hole, or none, is refused as invalid data, not as a failure of the server.
+        var hole = new RecordInventoryCountCommandValidator().Validate(new RecordInventoryCountCommand { CountId = count.Id, Lines = [null!] });
+        var none = new RecordInventoryCountCommandValidator().Validate(new RecordInventoryCountCommand { CountId = count.Id, Lines = null! });
+        Assert.Equal(["Falta un artículo en la lista."], hole.Errors.Select(e => e.ErrorMessage));
+        Assert.Equal(["Escribe lo que contaste de al menos un artículo."], none.Errors.Select(e => e.ErrorMessage));
+        Assert.False(new StartInventoryCountCommandValidator().Validate(new StartInventoryCountCommand { InventoryLocationId = shop.Warehouse, SupplyItemIds = null! }).IsValid);
+        Assert.False(new AddInventoryCountItemsCommandValidator().Validate(new AddInventoryCountItemsCommand { CountId = count.Id, SupplyItemIds = null! }).IsValid);
     }
 
     [Fact]
@@ -232,7 +257,10 @@ public class InventoryCountFlowTests
         Assert.Equal((2, 1, 3), (added.Value.LineCount, added.Value.CountedLineCount, added.Value.Revision));
         Assert.Equal("Uno o más artículos no existen o están inactivos.", missing.Error);
         var pending = Assert.Single((await LinesAsync(host, count.Id, pending: true)).Items);
-        Assert.Equal(("Papas 45 g", 0m), (pending.SupplyItemName, pending.CurrentQuantity));
+        Assert.Equal(("Papas 45 g", (decimal?)null), (pending.SupplyItemName, pending.CurrentQuantity));
+        var log = await host.QueryAsync(db => db.AuditLogs.SingleAsync(l => l.Action == "InventoryCountItemsAdded"));
+        Assert.Contains(shop.Chips.ToString(), log.Metadata);
+        Assert.DoesNotContain(shop.Soda.ToString(), log.Metadata);
         Assert.Equal("Papas 45 g", Assert.Single((await LinesAsync(host, count.Id, search: "7501055300")).Items).SupplyItemName);
         Assert.Equal("Refresco de cola 600 ml", Assert.Single((await LinesAsync(host, count.Id, search: "ref-600")).Items).SupplyItemName);
     }
@@ -357,9 +385,9 @@ public class InventoryCountFlowTests
     private static Task<InventoryCountDto> CountAsync(SqliteTestHost host, Guid countId)
         => host.HandleAsync<GetInventoryCountQueryHandler, InventoryCountDto>(h => h.Handle(new GetInventoryCountQuery(countId), default));
 
-    private static Task<PaginatedList<InventoryCountLineDto>> LinesAsync(
+    private static Task<InventoryCountLinesPage> LinesAsync(
         SqliteTestHost host, Guid countId, string? search = null, bool? pending = null, bool? withDifference = null)
-        => host.HandleAsync<GetInventoryCountLinesQueryHandler, PaginatedList<InventoryCountLineDto>>(h => h.Handle(
+        => host.HandleAsync<GetInventoryCountLinesQueryHandler, InventoryCountLinesPage>(h => h.Handle(
             new GetInventoryCountLinesQuery { CountId = countId, Search = search, Pending = pending, WithDifference = withDifference, PageSize = 100 }, default));
 
     private static Task<List<decimal>> StocksAsync(SqliteTestHost host, Guid locationId)

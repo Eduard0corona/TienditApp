@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Inventory.Enums;
 
@@ -83,6 +84,22 @@ public class InventoryCountLineDto
     public DateTimeOffset? CountedAt { get; set; }
     public string? CountedBy { get; set; }
     public string? Notes { get; set; }
+}
+
+/// <summary>A page of the items of a count, with the count's revision when they were read.</summary>
+public class InventoryCountLinesPage : PaginatedList<InventoryCountLineDto>
+{
+    public InventoryCountLinesPage(List<InventoryCountLineDto> items, int count, int pageNumber, int pageSize, int revision)
+        : base(items, count, pageNumber, pageSize)
+    {
+        Revision = revision;
+    }
+
+    /// <summary>
+    /// Read before the items: the review posts the count only while it is the revision of the count it shows, so what is
+    /// posted is what was reviewed.
+    /// </summary>
+    public int Revision { get; }
 }
 
 /// <summary>What recording quantities changed: the count and the items that were saved.</summary>

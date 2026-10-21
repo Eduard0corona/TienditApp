@@ -102,18 +102,37 @@ public class InventoryCountTests
     }
 
     [Fact]
-    public void Record_ShouldTakeTheSystemAgain_WhenTheQuantityChanges()
+    public void Record_ShouldKeepWhatTheSystemHad_WhenTheQuantityIsCorrected()
     {
         var count = NewCount();
         var line = count.AddLine(Guid.NewGuid());
-        count.Record(line, 8m, 10m, UnitType.Unit, Now, "cajero");
+        // 10 typed instead of 12; two are sold before it is corrected.
+        count.Record(line, 10m, 12m, UnitType.Unit, Now, "cajero");
 
-        count.Record(line, 6m, 9m, UnitType.Unit, Now.AddMinutes(5), "dueno");
+        count.Record(line, 12m, 10m, UnitType.Unit, Now.AddMinutes(30), "dueno");
 
-        Assert.Equal(((decimal?)6m, (decimal?)9m, (DateTimeOffset?)Now.AddMinutes(5), "dueno"),
+        Assert.Equal(((decimal?)12m, (decimal?)12m, (DateTimeOffset?)Now, "cajero"),
             (line.CountedQuantity, line.SystemQuantity, line.CountedAt, line.CountedBy));
-        Assert.Equal(-3m, line.Difference);
+        Assert.Equal(0m, line.Difference);
+        Assert.Equal(10m, line.ResultingQuantity(10m));
         Assert.Equal(1, count.CountedLineCount);
+    }
+
+    [Fact]
+    public void Record_ShouldTakeTheSystemAgain_WhenTheItemIsCountedFromScratch()
+    {
+        var count = NewCount();
+        var line = count.AddLine(Guid.NewGuid());
+        count.Record(line, 0m, -2m, UnitType.Unit, Now, "cajero");
+
+        // One more sale: cleared and counted again, it is measured against the system of then.
+        count.Record(line, null, -3m, UnitType.Unit, Now.AddMinutes(30), "dueno");
+        count.Record(line, 0m, -3m, UnitType.Unit, Now.AddMinutes(31), "dueno");
+
+        Assert.Equal(((decimal?)0m, (decimal?)-3m, (DateTimeOffset?)Now.AddMinutes(31), "dueno"),
+            (line.CountedQuantity, line.SystemQuantity, line.CountedAt, line.CountedBy));
+        Assert.Equal(3m, line.Difference);
+        Assert.Equal(0m, line.ResultingQuantity(-3m));
     }
 
     [Fact]

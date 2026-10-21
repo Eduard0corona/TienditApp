@@ -4,7 +4,7 @@ namespace FoodParkDigital.Domain.Inventory.Entities;
 
 /// <summary>
 /// One item of a physical count (Fase 27A, ADR 0037): what was counted and what the system had of it in the count's
-/// location at that moment. It changes only through its <see cref="InventoryCount"/>, while the count is open.
+/// location when it was first counted. It changes only through its <see cref="InventoryCount"/>, while the count is open.
 /// </summary>
 public class InventoryCountLine : AuditableEntity, ITenantScoped
 {
@@ -57,9 +57,15 @@ public class InventoryCountLine : AuditableEntity, ITenantScoped
             return;
         }
 
+        // A correction keeps what the system had when the item was counted, and who counted it then: a mistyped number
+        // does not change the shelf, and the stock sold since must not turn into a difference. Counting it again from
+        // scratch clears the quantity first.
+        if (!IsCounted)
+        {
+            SystemQuantity = systemQuantity;
+            CountedAt = countedAt;
+            CountedBy = countedBy;
+        }
         CountedQuantity = countedQuantity;
-        SystemQuantity = systemQuantity;
-        CountedAt = countedAt;
-        CountedBy = countedBy;
     }
 }

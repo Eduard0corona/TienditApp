@@ -126,23 +126,40 @@ public class InventoryCountSqlServerTests
         var shop = await Shop.OpenAsync(database);
         var count = (await shop.SendAsync(new StartInventoryCountCommand { InventoryLocationId = shop.Warehouse })).Value;
         var lines = (await shop.LinesAsync(count.Id)).ToDictionary(l => l.SupplyItemId, l => l.Id);
-        await shop.SendAsync(new RecordInventoryCountCommand
+        var recorded = await shop.SendAsync(new RecordInventoryCountCommand
         {
             CountId = count.Id,
             Lines = [new InventoryCountEntry { LineId = lines[shop.Soda], CountedQuantity = 22m, Notes = "Dos abolladas" }]
         });
 
-        var differences = await shop.LinesAsync(count.Id, withDifference: true);
+        var differences = await shop.PageAsync(count.Id, withDifference: true);
         var pending = await shop.LinesAsync(count.Id, pending: true);
         var searched = await shop.LinesAsync(count.Id, search: "750105");
         var detail = await shop.CountAsync(count.Id);
 
-        var soda = Assert.Single(differences);
+        var soda = Assert.Single(differences.Items);
         Assert.Equal(((decimal?)22m, (decimal?)24m, (decimal?)-2m, (decimal?)24m, (decimal?)22m, (decimal?)-24m, "Dos abolladas"),
             (soda.CountedQuantity, soda.SystemQuantity, soda.Difference, soda.CurrentQuantity, soda.ResultingQuantity, soda.DifferenceValue, soda.Notes));
-        Assert.Equal("Azúcar estándar", Assert.Single(pending).SupplyItemName);
+        Assert.Equal(recorded.Value.Count.Revision, differences.Revision);
+        // Counting blind: what is not counted yet carries nothing of the system.
+        var sugar = Assert.Single(pending);
+        Assert.Equal(("Azúcar estándar", (decimal?)null, (decimal?)null), (sugar.SupplyItemName, sugar.CurrentQuantity, sugar.ResultingQuantity));
         Assert.Equal("Refresco de cola 600 ml", Assert.Single(searched).SupplyItemName);
         Assert.Equal((1, (decimal?)0m, (decimal?)24m), (detail.DifferenceLineCount, detail.SurplusValue, detail.ShortageValue));
+
+        // Posted, each item shows what its adjustment did, and the count what the adjustments were worth.
+        var posted = await shop.SendAsync(new PostInventoryCountCommand { CountId = count.Id, ExpectedRevision = detail.Revision });
+        Assert.True(posted.IsSuccess, posted.Error);
+        var history = (await shop.LinesAsync(count.Id)).ToDictionary(l => l.SupplyItemId);
+        Assert.Equal(((decimal?)24m, (decimal?)22m, (decimal?)-24m), (history[shop.Soda].CurrentQuantity, history[shop.Soda].ResultingQuantity, history[shop.Soda].DifferenceValue));
+        Assert.Equal(((decimal?)null, (decimal?)null), (history[shop.Sugar].CountedQuantity, history[shop.Sugar].CurrentQuantity));
+        Assert.Equal((InventoryCountStatus.Posted, (decimal?)0m, (decimal?)24m, posted.Value.DecreaseMovementNumber),
+            (posted.Value.Status, posted.Value.SurplusValue, posted.Value.ShortageValue, (await shop.CountAsync(count.Id)).DecreaseMovementNumber));
+
+        // The list finds it by its location or its folio.
+        Assert.Equal([count.Id], (await shop.ListAsync("bode")).Select(c => c.Id));
+        Assert.Equal([count.Id], (await shop.ListAsync(count.CountNumber[^4..])).Select(c => c.Id));
+        Assert.Empty(await shop.ListAsync("anaquel"));
     }
 
     private sealed class Shop
@@ -214,12 +231,21 @@ public class InventoryCountSqlServerTests
                 .Handle(command, CancellationToken.None));
 
         public async Task<List<InventoryCountLineDto>> LinesAsync(Guid countId, string? search = null, bool? pending = null, bool? withDifference = null)
+            => (await PageAsync(countId, search, pending, withDifference)).Items;
+
+        public async Task<InventoryCountLinesPage> PageAsync(Guid countId, string? search = null, bool? pending = null, bool? withDifference = null)
         {
             var (tenant, user, clock) = Request();
             await using var context = Context(tenant, user, clock);
-            var page = await new GetInventoryCountLinesQueryHandler(context).Handle(
+            return await new GetInventoryCountLinesQueryHandler(context).Handle(
                 new GetInventoryCountLinesQuery { CountId = countId, Search = search, Pending = pending, WithDifference = withDifference }, CancellationToken.None);
-            return page.Items;
+        }
+
+        public async Task<List<InventoryCountListItemDto>> ListAsync(string search)
+        {
+            var (tenant, user, clock) = Request();
+            await using var context = Context(tenant, user, clock);
+            return (await new GetInventoryCountsQueryHandler(context).Handle(new GetInventoryCountsQuery { Search = search }, CancellationToken.None)).Items;
         }
 
         public async Task<InventoryCountDto> CountAsync(Guid countId)

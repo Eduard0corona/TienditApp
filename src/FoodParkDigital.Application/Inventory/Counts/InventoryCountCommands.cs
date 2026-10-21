@@ -69,10 +69,10 @@ public class StartInventoryCountCommandValidator : AbstractValidator<StartInvent
     {
         RuleFor(x => x.InventoryLocationId).NotEmpty().WithMessage("Elige la ubicación que vas a contar.");
         RuleFor(x => x.CategoryName).MaximumLength(InventoryCount.MaxCategoryNameLength);
-        RuleFor(x => x.SupplyItemIds).Must(ids => ids.Count <= InventoryCount.MaxLines)
-            .WithMessage(InventoryCount.TooManyLinesMessage);
+        RuleFor(x => x.SupplyItemIds).Cascade(CascadeMode.Stop).NotNull()
+            .Must(ids => ids.Count <= InventoryCount.MaxLines).WithMessage(InventoryCount.TooManyLinesMessage);
         RuleForEach(x => x.SupplyItemIds).NotEmpty();
-        RuleFor(x => x).Must(x => x.SupplyItemIds.Count == 0 || string.IsNullOrWhiteSpace(x.CategoryName))
+        RuleFor(x => x).Must(x => x.SupplyItemIds is not { Count: > 0 } || string.IsNullOrWhiteSpace(x.CategoryName))
             .WithMessage("Cuenta una categoría o los artículos que elijas, no las dos cosas.");
         RuleFor(x => x.Notes).MaximumLength(InventoryCount.MaxNotesLength);
     }
@@ -168,6 +168,21 @@ public class StartInventoryCountCommandHandler : IRequestHandler<StartInventoryC
         _context.InventoryCounts.Add(count);
         foreach (var supplyId in supplyIds)
             _context.InventoryCountLines.Add(count.AddLine(supplyId));
+        _context.AuditLogs.Add(new AuditLog(
+            tenantId: _tenant.TenantId,
+            entityName: nameof(InventoryCount),
+            entityId: count.Id.ToString(),
+            action: "InventoryCountStarted",
+            performedBy: count.StartedBy,
+            metadata: JsonSerializer.Serialize(new
+            {
+                count.CountNumber,
+                count.InventoryLocationId,
+                count.CategoryName,
+                Chosen = request.SupplyItemIds.Count > 0,
+                Items = count.LineCount
+            }),
+            timestamp: now));
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result.Success((await InventoryCountReads.CountAsync(_context, count.Id, cancellationToken))!);
@@ -201,12 +216,14 @@ public class RecordInventoryCountCommandValidator : AbstractValidator<RecordInve
     public RecordInventoryCountCommandValidator()
     {
         RuleFor(x => x.CountId).NotEmpty();
-        RuleFor(x => x.Lines).NotEmpty().WithMessage("Escribe lo que contaste de al menos un artículo.")
+        RuleFor(x => x.Lines).Cascade(CascadeMode.Stop)
+            .NotEmpty().WithMessage("Escribe lo que contaste de al menos un artículo.")
             .Must(lines => lines.Count <= RecordInventoryCountCommand.MaxEntries)
             .WithMessage($"Guarda como máximo {RecordInventoryCountCommand.MaxEntries} artículos a la vez.")
+            .Must(lines => lines.All(l => l is not null)).WithMessage("Falta un artículo en la lista.")
             .Must(lines => lines.Select(l => l.LineId).Distinct().Count() == lines.Count)
             .WithMessage("Un artículo va una sola vez.");
-        RuleForEach(x => x.Lines).ChildRules(line =>
+        RuleForEach(x => x.Lines).Where(l => l is not null).ChildRules(line =>
         {
             line.RuleFor(l => l.LineId).NotEmpty();
             line.RuleFor(l => l.CountedQuantity)
@@ -265,6 +282,7 @@ public class RecordInventoryCountCommandHandler : IRequestHandler<RecordInventor
 
         var now = _clock.UtcNow;
         var user = _currentUser.UserName ?? "system";
+        var corrections = new List<object>();
         foreach (var entry in request.Lines)
         {
             var line = lines[entry.LineId];
@@ -277,8 +295,21 @@ public class RecordInventoryCountCommandHandler : IRequestHandler<RecordInventor
                     return Result.Failure<RecordedInventoryCountDto>($"{supply.Name}: {Lowercase(InventoryCount.CountedQuantityMessage(supply.Unit))}");
             }
 
+            // Changing or clearing what someone counted is how shrinkage hides: who did it, and from what, is kept.
+            if (line.CountedQuantity is { } before && entry.CountedQuantity != before)
+                corrections.Add(new { line.SupplyItemId, supply.Name, From = before, To = entry.CountedQuantity, line.SystemQuantity, line.CountedBy });
+
             count.Record(line, entry.CountedQuantity, onHand.GetValueOrDefault(line.SupplyItemId), supply.Unit, now, user, entry.Notes);
         }
+        if (corrections.Count > 0)
+            _context.AuditLogs.Add(new AuditLog(
+                tenantId: _tenant.TenantId,
+                entityName: nameof(InventoryCount),
+                entityId: count.Id.ToString(),
+                action: "InventoryCountCorrected",
+                performedBy: user,
+                metadata: JsonSerializer.Serialize(new { count.CountNumber, Changes = corrections }),
+                timestamp: now));
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new RecordedInventoryCountDto
@@ -310,7 +341,8 @@ public class AddInventoryCountItemsCommandValidator : AbstractValidator<AddInven
     public AddInventoryCountItemsCommandValidator()
     {
         RuleFor(x => x.CountId).NotEmpty();
-        RuleFor(x => x.SupplyItemIds).NotEmpty().WithMessage("Elige los artículos que vas a agregar.")
+        RuleFor(x => x.SupplyItemIds).Cascade(CascadeMode.Stop)
+            .NotEmpty().WithMessage("Elige los artículos que vas a agregar.")
             .Must(ids => ids.Count <= AddInventoryCountItemsCommand.MaxItems)
             .WithMessage($"Agrega como máximo {AddInventoryCountItemsCommand.MaxItems} artículos a la vez.");
         RuleForEach(x => x.SupplyItemIds).NotEmpty();
@@ -321,12 +353,21 @@ public class AddInventoryCountItemsCommandHandler : IRequestHandler<AddInventory
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenant;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IDateTimeProvider _clock;
     private readonly IInventoryCountLock _countLock;
 
-    public AddInventoryCountItemsCommandHandler(IApplicationDbContext context, ICurrentTenantService tenant, IInventoryCountLock countLock)
+    public AddInventoryCountItemsCommandHandler(
+        IApplicationDbContext context,
+        ICurrentTenantService tenant,
+        ICurrentUserService currentUser,
+        IDateTimeProvider clock,
+        IInventoryCountLock countLock)
     {
         _context = context;
         _tenant = tenant;
+        _currentUser = currentUser;
+        _clock = clock;
         _countLock = countLock;
     }
 
@@ -354,6 +395,14 @@ public class AddInventoryCountItemsCommandHandler : IRequestHandler<AddInventory
 
             foreach (var supplyId in added)
                 _context.InventoryCountLines.Add(count.AddLine(supplyId));
+            _context.AuditLogs.Add(new AuditLog(
+                tenantId: _tenant.TenantId,
+                entityName: nameof(InventoryCount),
+                entityId: count.Id.ToString(),
+                action: "InventoryCountItemsAdded",
+                performedBy: _currentUser.UserName ?? "system",
+                metadata: JsonSerializer.Serialize(new { count.CountNumber, Added = added }),
+                timestamp: _clock.UtcNow));
             await _context.SaveChangesAsync(cancellationToken);
         }
 
@@ -387,6 +436,7 @@ public class PostInventoryCountCommandValidator : AbstractValidator<PostInventor
 public class PostInventoryCountCommandHandler : IRequestHandler<PostInventoryCountCommand, Result<InventoryCountDto>>
 {
     public const string ChangedMessage = "El conteo cambió mientras lo revisabas: revísalo otra vez antes de aplicarlo.";
+    public const string SoldMeanwhileMessage = "Se vendió o se movió un artículo mientras se aplicaba el conteo: revísalo otra vez y vuelve a aplicarlo.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenant;
@@ -473,9 +523,18 @@ public class PostInventoryCountCommandHandler : IRequestHandler<PostInventoryCou
         var shortage = differences.Where(d => d.Line.Difference < 0).ToList();
         if (shortage.Count > 0)
         {
-            var posted = await _ledger.PostAsync(_tenant.TenantId, Posting(
-                count, InventoryMovementType.AdjustmentDecrease, InventoryCountPostings.DecreaseReference(count.Id), now,
-                shortage.Select(d => Line(count, d.Line, d.Unit)).ToList()), cancellationToken);
+            Result<InventoryMovement> posted;
+            try
+            {
+                posted = await _ledger.PostAsync(_tenant.TenantId, Posting(
+                    count, InventoryMovementType.AdjustmentDecrease, InventoryCountPostings.DecreaseReference(count.Id), now,
+                    shortage.Select(d => Line(count, d.Line, d.Unit)).ToList()), cancellationToken);
+            }
+            catch (DomainException)
+            {
+                // A sale took the stock between the check above and the ledger: the failed result rolls everything back.
+                return Result.Failure<InventoryCountDto>(SoldMeanwhileMessage);
+            }
             if (posted.IsFailure)
                 return Result.Failure<InventoryCountDto>(posted.Error!);
             decrease = posted.Value;

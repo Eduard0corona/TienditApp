@@ -66,8 +66,16 @@ public sealed class CrossTenantInventoryCountsSqlServerTests
         var recorded = await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"{Counts}/{myCount}/lines",
             new { lines = new[] { new { lineId = myLine, countedQuantity = 8m } } }));
         var revision = recorded.GetProperty("count").GetProperty("revision").GetInt32();
+        // The page reviewed carries the revision it was read at; an older one is a conflict to review again.
+        var review = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"{Counts}/{myCount}/lines?withDifference=true"));
+        Assert.Equal(revision, review.GetProperty("revision").GetInt32());
+        var stale = await mine.Client.PostAsJsonAsync($"{Counts}/{myCount}/post", new { expectedRevision = revision - 1 });
+        Assert.Equal((HttpStatusCode.Conflict, "concurrency_conflict"), (stale.StatusCode, await CodeAsync(stale)));
         var posted = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"{Counts}/{myCount}/post", new { expectedRevision = revision }));
         Assert.Equal(2, posted.GetProperty("status").GetInt32());
+        // Posted, it no longer changes: counting it again is a conflict too.
+        var closed = await mine.Client.PutAsJsonAsync($"{Counts}/{myCount}/lines", new { lines = new[] { new { lineId = myLine, countedQuantity = 7m } } });
+        Assert.Equal((HttpStatusCode.Conflict, "conflict"), (closed.StatusCode, await CodeAsync(closed)));
         Assert.Equal(8m, await _api.QueryAsync(mine.TenantId, db => db.InventoryStocks.Where(s => s.SupplyItemId == mySupply).Select(s => s.OnHandQuantity).SingleAsync()));
         Assert.Equal(10m, await _api.QueryAsync(theirs.TenantId, db => db.InventoryStocks.Where(s => s.SupplyItemId == theirSupply).Select(s => s.OnHandQuantity).SingleAsync()));
         Assert.Equal(0, await _api.QueryAsync(theirs.TenantId, db => db.InventoryMovements.CountAsync(m => m.ExternalReference!.StartsWith("COUNT:"))));
@@ -123,5 +131,11 @@ public sealed class CrossTenantInventoryCountsSqlServerTests
         var signedIn = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = Password }));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", signedIn.GetProperty("accessToken").GetString());
         return client;
+    }
+
+    private static async Task<string?> CodeAsync(HttpResponseMessage response)
+    {
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return problem.RootElement.GetProperty("code").GetString();
     }
 }

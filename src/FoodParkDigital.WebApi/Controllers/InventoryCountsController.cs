@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Inventory.Counts;
+using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Inventory.Enums;
 using FoodParkDigital.WebApi.Errors;
 using MediatR;
@@ -44,7 +45,7 @@ public class InventoryCountsController : ControllerBase
 
     /// <summary>The items of the count; <paramref name="search"/> takes a name, code, SKU or barcode.</summary>
     [HttpGet("{id:guid}/lines")]
-    public async Task<ActionResult<PaginatedList<InventoryCountLineDto>>> GetLines(
+    public async Task<ActionResult<InventoryCountLinesPage>> GetLines(
         Guid id,
         [FromQuery] string? search,
         [FromQuery] bool? pending,
@@ -79,7 +80,7 @@ public class InventoryCountsController : ControllerBase
     {
         var result = await _mediator.Send(new RecordInventoryCountCommand { CountId = id, Lines = request.Lines }, cancellationToken);
         if (result.IsFailure)
-            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+            return Failure(result.Error);
 
         return Ok(result.Value);
     }
@@ -90,7 +91,7 @@ public class InventoryCountsController : ControllerBase
     {
         var result = await _mediator.Send(new AddInventoryCountItemsCommand { CountId = id, SupplyItemIds = request.SupplyItemIds }, cancellationToken);
         if (result.IsFailure)
-            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+            return Failure(result.Error);
 
         return Ok(result.Value);
     }
@@ -101,7 +102,7 @@ public class InventoryCountsController : ControllerBase
     {
         var result = await _mediator.Send(new PostInventoryCountCommand { CountId = id, ExpectedRevision = request.ExpectedRevision }, cancellationToken);
         if (result.IsFailure)
-            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+            return Failure(result.Error);
 
         return Ok(result.Value);
     }
@@ -112,10 +113,21 @@ public class InventoryCountsController : ControllerBase
     {
         var result = await _mediator.Send(new CancelInventoryCountCommand { CountId = id, Reason = request.Reason }, cancellationToken);
         if (result.IsFailure)
-            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+            return Failure(result.Error);
 
         return Ok(result.Value);
     }
+
+    /// <summary>
+    /// A count that changed since it was reviewed, or that someone else posted or cancelled, is a conflict: the client reads
+    /// it again. Anything else is a rule of the count.
+    /// </summary>
+    private ObjectResult Failure(string? error) => error switch
+    {
+        PostInventoryCountCommandHandler.ChangedMessage => this.ApiError(StatusCodes.Status409Conflict, error, ApiErrorCodes.ConcurrencyConflict),
+        InventoryCount.NotOpenMessage => this.ApiError(StatusCodes.Status409Conflict, error, ApiErrorCodes.Conflict),
+        _ => this.ApiError(StatusCodes.Status400BadRequest, error)
+    };
 }
 
 public class RecordInventoryCountRequest

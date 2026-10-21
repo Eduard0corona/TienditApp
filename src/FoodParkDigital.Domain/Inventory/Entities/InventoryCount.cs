@@ -90,8 +90,9 @@ public class InventoryCount : AuditableEntity, ITenantScoped
     }
 
     /// <summary>
-    /// What was counted of an item, with what the system had of it at that moment; null leaves it uncounted. The same
-    /// quantity again only changes the note: the system quantity stays the one it was counted against.
+    /// What was counted of an item, with what the system had of it at that moment; null leaves it uncounted. Changing the
+    /// quantity of a counted item corrects it: the system quantity stays the one it was first counted against. Counting it
+    /// again from scratch is clearing it and counting it, which takes the system of then.
     /// </summary>
     public void Record(
         InventoryCountLine line,
