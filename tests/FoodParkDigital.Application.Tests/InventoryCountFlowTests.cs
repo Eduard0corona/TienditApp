@@ -310,7 +310,7 @@ public class InventoryCountFlowTests
             Lines = [new CreateInventoryMovementLineRequest { SupplyItemId = Guid.NewGuid(), InventoryLocationId = Guid.NewGuid(), Quantity = 1 }]
         });
 
-        Assert.Contains(validation.Errors, e => e.ErrorMessage == "La referencia externa usa un prefijo reservado por el sistema (ORDER:, PO: o COUNT:).");
+        Assert.Contains(validation.Errors, e => e.ErrorMessage == "La referencia externa usa un prefijo reservado por el sistema (ORDER:, PO:, COUNT: o TRF:).");
     }
 
     private sealed record Shop(Guid Warehouse, Guid Counter, Guid Soda, Guid Chips, Guid Sugar);

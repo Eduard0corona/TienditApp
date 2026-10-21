@@ -470,6 +470,12 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
   - Corregir una cantidad no cambia lo que tenía el sistema; volver a contar es borrarla y contarla otra vez, contra el sistema de ese momento. Corregir o borrar lo que alguien contó queda en la actividad.
   - Aplicar mueve la existencia de ese momento por cada diferencia, con un ajuste de motivo «Conteo físico» valorado al costo promedio: lo vendido después de contar se conserva. Lo que no se contó se queda como está. Si un artículo quedaría en negativo, no se aplica.
   - Aplicar exige la revisión del conteo que se revisó (409 si cambió). Aplicado o cancelado, el conteo ya no cambia (409), y nunca mueve las existencias dos veces.
+- Transferencias entre ubicaciones (Fase 27B, [ADR 0038](../adr/0038-inventory-transfers.md)):
+  - Una transferencia lleva artículos de una ubicación activa a otra distinta: salen y entran en la misma transacción, todo o nada. Hecha, no cambia; deshacerla es otra transferencia al revés.
+  - Lleva de 1 a 200 artículos activos sin repetir, cada uno con una cantidad de más de 0 a 9,999,999 (3 decimales como máximo, entera en piezas). El origen debe tener cada cantidad; si no, se rechaza nombrando cada artículo con lo que hay.
+  - La salida y la entrada valen lo mismo: el costo promedio del artículo, si no el último, si no el de referencia. El costo promedio no cambia.
+  - La misma llave de la app contesta la transferencia ya hecha, sin mover nada; con otras ubicaciones o artículos se rechaza (409), porque ya hizo otra.
+  - Un movimiento manual no puede ser una pierna de transferencia (tipos de transferencia ni motivo «Transferencia»).
 - Una compra no repite insumo+ubicación, no recibe más de lo pendiente y distingue recepción parcial/total; un borrador se envía, y solo una compra sin nada recibido se cancela.
 - Una caja cerrada no recibe movimientos y no puede cerrarse dos veces; el monto contado al cerrar no puede ser negativo.
 - El tipo de movimiento de caja define su signo; los importes capturados son positivos. Solo el efectivo forma parte del saldo esperado.

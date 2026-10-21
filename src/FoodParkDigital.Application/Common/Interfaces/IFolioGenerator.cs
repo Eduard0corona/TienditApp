@@ -17,4 +17,7 @@ public interface IFolioGenerator
 
     /// <summary>CNT-20261021-0001, numbered by the UTC day the physical count started.</summary>
     Task<string> NextInventoryCountNumberAsync(Guid tenantId, DateTimeOffset startedAt, CancellationToken cancellationToken);
+
+    /// <summary>TRF-20261021-0001, numbered by the UTC day of the transfer between locations.</summary>
+    Task<string> NextInventoryTransferNumberAsync(Guid tenantId, DateTimeOffset transferredAt, CancellationToken cancellationToken);
 }

@@ -172,6 +172,7 @@ export const InventoryMovementReason = {
   InitialLoad: 8,
   Return: 9,
   ManualAdjustment: 10,
+  Transfer: 11,
   Other: 99,
 } as const;
 export type InventoryMovementReason = (typeof InventoryMovementReason)[keyof typeof InventoryMovementReason];

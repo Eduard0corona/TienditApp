@@ -55,7 +55,7 @@ Tomé las decisiones de la Fase 27A con la autorización permanente del dueño d
    - Los movimientos manuales no pueden usar el prefijo `COUNT:`, como ya no pueden usar `ORDER:` ni `PO:`.
 7. **Cancelar.** Un conteo abierto se cancela con un motivo opcional y no mueve nada. Lo contado se queda en el conteo y la cancelación queda en la actividad (`InventoryCountCancelled`).
 8. **Concurrencia.**
-   - Un candado por ubicación (`IInventoryCountLock`, `sp_getapplock` en la transacción de la petición) pone en fila empezar, capturar, agregar, aplicar y cancelar. Una captura nunca se cuela en un conteo que se está aplicando, y una ubicación nunca abre dos conteos.
+   - Un candado por ubicación (`IInventoryCountLock`, renombrado `IInventoryLocationLock` en la Fase 27B; `sp_getapplock` en la transacción de la petición) pone en fila empezar, capturar, agregar, aplicar y cancelar. Una captura nunca se cuela en un conteo que se está aplicando, y una ubicación nunca abre dos conteos.
    - La revisión del conteo (`Revision`) sube con cada artículo agregado o capturado y es token de concurrencia. Aplicar exige la revisión que se revisó: si cambió, responde 409 (`concurrency_conflict`) y la pantalla lee el conteo otra vez. Capturar, agregar, aplicar o cancelar un conteo que ya se aplicó o se canceló responde 409 (`conflict`).
    - La página de artículos lleva la revisión del conteo con la que se leyó (leída antes que los artículos). «Revisar diferencias» espera a que se guarde lo que se escribió y solo deja aplicar cuando la página que se ve y el conteo tienen la misma revisión: lo que se aplica es lo que se revisó.
    - Si una venta mueve la misma existencia mientras se aplica, choca con su token o dejaría la existencia en negativo, y el conteo no se aplica («Se vendió o se movió un artículo mientras se aplicaba el conteo»): aplicar es todo o nada y se vuelve a intentar.
@@ -79,7 +79,7 @@ Tomé las decisiones de la Fase 27A con la autorización permanente del dueño d
     - contar sin conexión;
     - imprimir la hoja;
     - comparar el kardex con la existencia guardada;
-    - las transferencias entre ubicaciones (Fase 27B).
+    - las transferencias entre ubicaciones ([ADR 0038](0038-inventory-transfers.md)).
 13. **La migración** `20261021002749_AddInventoryCounts` agrega las tablas `InventoryCounts` e `InventoryCountLines`:
     - tienen llaves foráneas (sin borrado en cascada) a ubicaciones, artículos, conteos y movimientos;
     - `CK_InventoryCounts_Status` exige cuándo y quién según el estado, `CK_InventoryCounts_Lines` exige que los contados vayan de cero al número de artículos, y `CK_InventoryCountLines_Counted` exige que lo contado, nunca negativo, vaya con el sistema, cuándo y quién, o nada de eso;

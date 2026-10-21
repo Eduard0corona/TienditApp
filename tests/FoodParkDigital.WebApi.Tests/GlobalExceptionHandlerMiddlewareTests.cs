@@ -167,7 +167,7 @@ public class GlobalExceptionHandlerMiddlewareTests
         var context = NewHttpContext();
         // What the count, credit and booking locks throw once their wait runs out.
         var middleware = CreateMiddleware(Environments.Production, logger,
-            _ => throw SqlExceptionFactory.Create(ApplicationLocks.NotGrantedErrorNumber, "The count lock of the location was not granted."));
+            _ => throw SqlExceptionFactory.Create(ApplicationLocks.NotGrantedErrorNumber, "The lock of the location was not granted."));
 
         await middleware.InvokeAsync(context);
 

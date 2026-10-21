@@ -660,6 +660,30 @@ La Fase 27A trae una migración, [`database/production/20261021002749_AddInvento
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas, y los ajustes de un conteo son movimientos de inventario comunes que sabe leer. Solo deja de enseñar los conteos.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50030, sin cambiar nada, en cuanto hay un conteo (abierto, aplicado o cancelado): se perdería lo que se contó, quién y contra qué. Sin ninguno, quita las tablas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Transferencias entre ubicaciones (Fase 27B)
+
+La Fase 27B trae una migración, [`database/production/20261021040954_AddInventoryTransfers`](../../database/production/20261021040954_AddInventoryTransfers). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0038](../adr/0038-inventory-transfers.md)).
+
+- **La migración** agrega la tabla `InventoryTransfers`, vacía: cada transferencia con su folio, de qué ubicación a cuál, quién y cuándo, cuántos artículos y cuánto valían, su salida y su entrada, y la llave con la que la mandó la app. Lleva:
+  - llaves foráneas, sin borrado en cascada, a `InventoryLocations` (origen y destino) e `InventoryMovements` (salida y entrada);
+  - `CK_InventoryTransfers_Locations` (origen y destino distintos), `CK_InventoryTransfers_Movements` (la salida y la entrada son dos movimientos), `CK_InventoryTransfers_Lines` (de 1 a 200 artículos) y `CK_InventoryTransfers_TotalCost` (nunca negativo);
+  - los índices únicos del folio y de la llave por negocio y de cada movimiento, el de la lista y los de las ubicaciones.
+
+  No cambia existencias, movimientos, artículos ni ubicaciones. Después de aplicarla, el `verify.sql` muestra la tabla, sus restricciones, llaves e índices. Su consulta 3 cuenta las transferencias, sus artículos, su valor y sus piernas (todo en cero hasta desplegar), y la 4 los movimientos de cada tipo y las existencias, igual antes y después.
+- **Mientras se publica:** la versión de `master` (Fase 27A) no conoce la tabla y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:**
+  - Inventario suma la pestaña «Transferencias», para quien maneja el inventario.
+  - «Registrar movimiento» ya no ofrece «Transferencia entrada», «Transferencia salida» ni el motivo «Transferencia», y la API rechaza esos movimientos manuales: una transferencia se hace en su pestaña, con las dos piernas juntas.
+  - Las transferencias aparecen en «Entradas y salidas» y en el historial por insumo como dos movimientos de motivo «Transferencia».
+- **El contrato agrega y restringe:**
+  - agrega `GET` y `POST /api/v1/inventory/transfers` y `GET /api/v1/inventory/transfers/{id}`, y el motivo `Transfer` (11) de `InventoryMovementReason`;
+  - `POST /api/v1/inventory/movements` ahora rechaza (400) los tipos `TransferIn` (5) y `TransferOut` (6), el motivo `Transfer` y una referencia externa que empieza con `TRF:`.
+
+  Nada se quita ni cambia de nombre.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla, y las piernas de una transferencia son movimientos de inventario comunes que sabe leer; el motivo nuevo lo enseña como «11». Deja de enseñar las transferencias y vuelve a permitir transferencias manuales de una pierna.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50031, sin cambiar nada, en cuanto hay una transferencia: cada pierna quedaría como un movimiento suelto. Sin ninguna, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

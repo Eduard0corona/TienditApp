@@ -28,11 +28,11 @@ public static class InventoryCountPostings
     public static string DecreaseReference(Guid countId) => $"{ReferencePrefix}{countId:N}:OUT";
 }
 
-/// <summary>An open count of the business, taken inside the location's count lock.</summary>
+/// <summary>An open count of the business, taken inside the location's lock.</summary>
 internal static class OpenInventoryCount
 {
     public static async Task<Result<InventoryCount>> TakeAsync(
-        IApplicationDbContext context, IInventoryCountLock countLock, Guid tenantId, Guid countId, CancellationToken cancellationToken)
+        IApplicationDbContext context, IInventoryLocationLock locationLock, Guid tenantId, Guid countId, CancellationToken cancellationToken)
     {
         var locationId = await context.InventoryCounts.AsNoTracking()
                 .Where(c => c.Id == countId)
@@ -41,7 +41,7 @@ internal static class OpenInventoryCount
             ?? throw new EntityNotFoundException(nameof(InventoryCount), countId);
 
         // Read again once in line: whatever was waiting for the lock may have posted or cancelled it.
-        await countLock.AcquireAsync(tenantId, locationId, cancellationToken);
+        await locationLock.AcquireAsync(tenantId, locationId, cancellationToken);
         var count = await context.InventoryCounts.FirstAsync(c => c.Id == countId, cancellationToken);
         return count.IsOpen ? Result.Success(count) : Result.Failure<InventoryCount>(InventoryCount.NotOpenMessage);
     }
@@ -85,7 +85,7 @@ public class StartInventoryCountCommandHandler : IRequestHandler<StartInventoryC
     private readonly ICurrentUserService _currentUser;
     private readonly IDateTimeProvider _clock;
     private readonly IFolioGenerator _folios;
-    private readonly IInventoryCountLock _countLock;
+    private readonly IInventoryLocationLock _locationLock;
 
     public StartInventoryCountCommandHandler(
         IApplicationDbContext context,
@@ -93,19 +93,19 @@ public class StartInventoryCountCommandHandler : IRequestHandler<StartInventoryC
         ICurrentUserService currentUser,
         IDateTimeProvider clock,
         IFolioGenerator folios,
-        IInventoryCountLock countLock)
+        IInventoryLocationLock locationLock)
     {
         _context = context;
         _tenant = tenant;
         _currentUser = currentUser;
         _clock = clock;
         _folios = folios;
-        _countLock = countLock;
+        _locationLock = locationLock;
     }
 
     public async Task<Result<InventoryCountDto>> Handle(StartInventoryCountCommand request, CancellationToken cancellationToken)
     {
-        await _countLock.AcquireAsync(_tenant.TenantId, request.InventoryLocationId, cancellationToken);
+        await _locationLock.AcquireAsync(_tenant.TenantId, request.InventoryLocationId, cancellationToken);
 
         var location = await _context.InventoryLocations.AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == request.InventoryLocationId, cancellationToken);
@@ -241,25 +241,25 @@ public class RecordInventoryCountCommandHandler : IRequestHandler<RecordInventor
     private readonly ICurrentTenantService _tenant;
     private readonly ICurrentUserService _currentUser;
     private readonly IDateTimeProvider _clock;
-    private readonly IInventoryCountLock _countLock;
+    private readonly IInventoryLocationLock _locationLock;
 
     public RecordInventoryCountCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenant,
         ICurrentUserService currentUser,
         IDateTimeProvider clock,
-        IInventoryCountLock countLock)
+        IInventoryLocationLock locationLock)
     {
         _context = context;
         _tenant = tenant;
         _currentUser = currentUser;
         _clock = clock;
-        _countLock = countLock;
+        _locationLock = locationLock;
     }
 
     public async Task<Result<RecordedInventoryCountDto>> Handle(RecordInventoryCountCommand request, CancellationToken cancellationToken)
     {
-        var taken = await OpenInventoryCount.TakeAsync(_context, _countLock, _tenant.TenantId, request.CountId, cancellationToken);
+        var taken = await OpenInventoryCount.TakeAsync(_context, _locationLock, _tenant.TenantId, request.CountId, cancellationToken);
         if (taken.IsFailure)
             return Result.Failure<RecordedInventoryCountDto>(taken.Error!);
         var count = taken.Value;
@@ -355,25 +355,25 @@ public class AddInventoryCountItemsCommandHandler : IRequestHandler<AddInventory
     private readonly ICurrentTenantService _tenant;
     private readonly ICurrentUserService _currentUser;
     private readonly IDateTimeProvider _clock;
-    private readonly IInventoryCountLock _countLock;
+    private readonly IInventoryLocationLock _locationLock;
 
     public AddInventoryCountItemsCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenant,
         ICurrentUserService currentUser,
         IDateTimeProvider clock,
-        IInventoryCountLock countLock)
+        IInventoryLocationLock locationLock)
     {
         _context = context;
         _tenant = tenant;
         _currentUser = currentUser;
         _clock = clock;
-        _countLock = countLock;
+        _locationLock = locationLock;
     }
 
     public async Task<Result<InventoryCountDto>> Handle(AddInventoryCountItemsCommand request, CancellationToken cancellationToken)
     {
-        var taken = await OpenInventoryCount.TakeAsync(_context, _countLock, _tenant.TenantId, request.CountId, cancellationToken);
+        var taken = await OpenInventoryCount.TakeAsync(_context, _locationLock, _tenant.TenantId, request.CountId, cancellationToken);
         if (taken.IsFailure)
             return Result.Failure<InventoryCountDto>(taken.Error!);
         var count = taken.Value;
@@ -442,7 +442,7 @@ public class PostInventoryCountCommandHandler : IRequestHandler<PostInventoryCou
     private readonly ICurrentTenantService _tenant;
     private readonly ICurrentUserService _currentUser;
     private readonly IDateTimeProvider _clock;
-    private readonly IInventoryCountLock _countLock;
+    private readonly IInventoryLocationLock _locationLock;
     private readonly InventoryLedger _ledger;
 
     public PostInventoryCountCommandHandler(
@@ -450,20 +450,20 @@ public class PostInventoryCountCommandHandler : IRequestHandler<PostInventoryCou
         ICurrentTenantService tenant,
         ICurrentUserService currentUser,
         IDateTimeProvider clock,
-        IInventoryCountLock countLock,
+        IInventoryLocationLock locationLock,
         InventoryLedger ledger)
     {
         _context = context;
         _tenant = tenant;
         _currentUser = currentUser;
         _clock = clock;
-        _countLock = countLock;
+        _locationLock = locationLock;
         _ledger = ledger;
     }
 
     public async Task<Result<InventoryCountDto>> Handle(PostInventoryCountCommand request, CancellationToken cancellationToken)
     {
-        var taken = await OpenInventoryCount.TakeAsync(_context, _countLock, _tenant.TenantId, request.CountId, cancellationToken);
+        var taken = await OpenInventoryCount.TakeAsync(_context, _locationLock, _tenant.TenantId, request.CountId, cancellationToken);
         if (taken.IsFailure)
             return Result.Failure<InventoryCountDto>(taken.Error!);
         var count = taken.Value;
@@ -606,25 +606,25 @@ public class CancelInventoryCountCommandHandler : IRequestHandler<CancelInventor
     private readonly ICurrentTenantService _tenant;
     private readonly ICurrentUserService _currentUser;
     private readonly IDateTimeProvider _clock;
-    private readonly IInventoryCountLock _countLock;
+    private readonly IInventoryLocationLock _locationLock;
 
     public CancelInventoryCountCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenant,
         ICurrentUserService currentUser,
         IDateTimeProvider clock,
-        IInventoryCountLock countLock)
+        IInventoryLocationLock locationLock)
     {
         _context = context;
         _tenant = tenant;
         _currentUser = currentUser;
         _clock = clock;
-        _countLock = countLock;
+        _locationLock = locationLock;
     }
 
     public async Task<Result<InventoryCountDto>> Handle(CancelInventoryCountCommand request, CancellationToken cancellationToken)
     {
-        var taken = await OpenInventoryCount.TakeAsync(_context, _countLock, _tenant.TenantId, request.CountId, cancellationToken);
+        var taken = await OpenInventoryCount.TakeAsync(_context, _locationLock, _tenant.TenantId, request.CountId, cancellationToken);
         if (taken.IsFailure)
             return Result.Failure<InventoryCountDto>(taken.Error!);
         var count = taken.Value;
