@@ -7,6 +7,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { IN_COURSE_REFRESH_MS } from '../../api/onlinePayments';
 import { apiRequest, type Schemas } from '../../api/typedClient';
+import { setBusinessTimeZone } from '../../utils/dates';
 import { goToExternalPage } from '../../utils/externalNavigation';
 import OnlinePayments from './OnlinePayments';
 
@@ -195,13 +196,16 @@ describe('OnlinePayments', () => {
   });
 
   it('says until when Mercado Pago was reviewed and points to the payments in dispute (Fase 24K)', async () => {
+    setBusinessTimeZone('America/Mexico_City');
+    onTestFinished(() => setBusinessTimeZone(null));
     serve({ ...CONNECTED, disputesOpen: 2, paymentsReviewedUntil: '2026-10-22T18:15:00Z' });
 
     renderPage();
 
-    expect(await screen.findByText(/2 pagos están en disputa: Mercado Pago retiene el dinero mientras decide/)).toHaveClass('alert-warning');
-    expect(screen.getByText('Revisada hasta').nextElementSibling).not.toHaveTextContent('Todavía no');
-    expect(screen.getByText(/Cada 15 minutos TienditApp revisa lo que cambió en tu cuenta/)).toBeInTheDocument();
+    expect(await screen.findByText(/2 pagos están en disputa: Mercado Pago retiene el dinero mientras se resuelven/)).toHaveClass('alert-warning');
+    // 18:15 UTC is 12:15 in Mexico City.
+    expect(screen.getByText('Revisada hasta').nextElementSibling).toHaveTextContent(/22 oct 2026.*12:15/);
+    expect(screen.getByText(/TienditApp revisa tu cuenta cada 15 minutos/)).toBeInTheDocument();
   });
 
   it('says the account was not reviewed yet, and one payment in dispute', async () => {

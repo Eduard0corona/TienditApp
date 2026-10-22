@@ -155,7 +155,8 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - **Una disputa de un pago que no creó pedido** no se guarda: ese dinero ya se devolvió o se está devolviendo.
   - **Nadie le avisa al negocio** de una disputa por WhatsApp ni correo: la ve en el pedido y en Pagos en línea.
   - **Durante un regreso a la 26E, o mientras conviven las dos versiones,** la anterior enseña una rechazada que el negocio hizo después como «en curso» (no conoce el estado 3) y deja de revisar Mercado Pago; lo ya registrado se queda.
-  - La 24K suma 48 B a la primera visita (de 179,248 a 179,296 B): los enums nuevos del contrato. El presupuesto (179,300 B) no cambia, pero ya no deja margen: la siguiente fase que sume a la primera visita lo sube.
+  - **Pedidos lista sin lo de Mercado Pago:** la lista no trae el estado de cada devolución «En línea» ni la disputa; el detalle de un pedido en línea pide el pedido completo al abrirse. No hay un filtro ni una marca de «en disputa» en la lista: Configuración › Pagos en línea dice cuántos, y la cuenta de Mercado Pago, de qué pagos son.
+  - La 24K suma 35 B a la primera visita (de 179,248 a 179,283 B): los enums nuevos del contrato, que van en el módulo de enums de la entrada. El presupuesto sube de 179,300 a 179,400 B, que ya no dejaba margen.
 - Elegir con quién en las citas en línea (Fase 24J, [ADR 0032](../adr/0032-online-booking-staff.md)):
   - **Sin vacaciones ni ausencias por fecha:** una persona que falta un día se apaga ese día, o el negocio marca un día especial (que cierra para todos).
   - **Sin foto de la persona:** la página muestra su inicial.

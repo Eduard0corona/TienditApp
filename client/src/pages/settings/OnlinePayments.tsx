@@ -172,8 +172,8 @@ export default function OnlinePayments() {
                     {data.disputesOpen > 0 && (
                       <div className="alert alert-warning small">
                         {data.disputesOpen === 1
-                          ? 'Un pago está en disputa: Mercado Pago retiene el dinero mientras decide. Atiéndela en tu cuenta de Mercado Pago; la ves en el pedido.'
-                          : `${data.disputesOpen} pagos están en disputa: Mercado Pago retiene el dinero mientras decide. Atiéndelas en tu cuenta de Mercado Pago; las ves en cada pedido.`}
+                          ? 'Un pago está en disputa: Mercado Pago retiene el dinero mientras se resuelve. Atiéndela en tu cuenta de Mercado Pago, que te dice de qué pago es.'
+                          : `${data.disputesOpen} pagos están en disputa: Mercado Pago retiene el dinero mientras se resuelven. Atiéndelas en tu cuenta de Mercado Pago, que te dice de qué pago es cada una.`}
                       </div>
                     )}
                     {inCourse > 0 && (
@@ -209,8 +209,8 @@ export default function OnlinePayments() {
                   <li>Lo cobrado en línea no entra a tu caja: lo ves aparte en Inicio y en tus reportes.</li>
                   <li>Para devolver, haz el reembolso del pedido con «En línea» y Mercado Pago se lo regresa al cliente.</li>
                   <li>
-                    Cada 15 minutos TienditApp revisa lo que cambió en tu cuenta: una devolución hecha en Mercado Pago, una
-                    reclamación o un contracargo quedan anotados en el pedido.
+                    Mercado Pago le avisa a TienditApp al momento y, además, TienditApp revisa tu cuenta cada 15 minutos: una
+                    devolución hecha ahí, una reclamación o un contracargo quedan anotados en su pedido.
                   </li>
                 </ul>
               </div>
