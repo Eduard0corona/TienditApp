@@ -50,9 +50,11 @@ public class AuthorizationBehaviorTests
             "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicAppointmentQuery", "GetPublicBookingQuery",
             "GetPublicBookingSlotsQuery", "GetPublicDeliveryQuoteQuery", "GetPublicDirectoryQuery",
             "GetPublicMenuQuery", "GetPublicOrderTrackingQuery", "GetPublicReviewsQuery", "GetPublicSitemapQuery", "GetStorePreviewQuery",
-            "Login2FACommand", "LoginCommand", "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand", "RefreshTokenCommand",
+            "Login2FACommand", "LoginCommand", "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand",
+            "ReconcileOnlinePaymentCommand", "RefreshTokenCommand",
             "RegisterBusinessCommand", "RegisterCustomerCommand", "RequestPublicAppointmentCommand", "ResendConfirmationEmailCommand",
-            "ResendPhoneConfirmationCommand", "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand", "SweepOnlinePaymentsCommand",
+            "ResendPhoneConfirmationCommand", "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand", "ReviewOnlinePaymentsCommand",
+            "SweepOnlinePaymentsCommand",
             "VerifyWhatsAppWebhookTokenQuery"
         ], anonymous);
     }

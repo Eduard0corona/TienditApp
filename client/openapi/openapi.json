@@ -24461,18 +24461,56 @@
         },
         "additionalProperties": false
       },
+      "OnlinePaymentDispute": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "None",
+          "Open",
+          "Lost",
+          "Won"
+        ]
+      },
+      "OnlinePaymentRefundReason": {
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "NotPlaced",
+          "DuplicatePayment",
+          "ByBusiness",
+          "InMercadoPago",
+          "Claim",
+          "Chargeback"
+        ]
+      },
       "OnlinePaymentRefundStatus": {
         "enum": [
           0,
           1,
-          2
+          2,
+          3
         ],
         "type": "integer",
         "format": "int32",
         "x-enum-varnames": [
           "Requested",
           "Completed",
-          "Failed"
+          "Failed",
+          "DoneInMercadoPago"
         ]
       },
       "OnlinePaymentSettingsDto": {
@@ -24481,6 +24519,7 @@
           "available",
           "checkoutsInCourse",
           "connected",
+          "disputesOpen",
           "menuTakesOrders",
           "needsReconnect",
           "refundsInCourse",
@@ -24533,6 +24572,15 @@
           "refundsRefused": {
             "type": "integer",
             "format": "int32"
+          },
+          "disputesOpen": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paymentsReviewedUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -25069,6 +25117,14 @@
               "$ref": "#/components/schemas/OrderRefundDto"
             }
           },
+          "onlineDispute": {
+            "$ref": "#/components/schemas/OnlinePaymentDispute"
+          },
+          "onlineDisputeUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "writeOffs": {
             "type": "array",
             "items": {
@@ -25491,6 +25547,9 @@
           "onlineFailure": {
             "type": "string",
             "nullable": true
+          },
+          "onlineReason": {
+            "$ref": "#/components/schemas/OnlinePaymentRefundReason"
           }
         },
         "additionalProperties": false

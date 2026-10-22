@@ -246,10 +246,29 @@ export const OnlineMenuMode = {
 } as const;
 export type OnlineMenuMode = (typeof OnlineMenuMode)[keyof typeof OnlineMenuMode];
 
+export const OnlinePaymentDispute = {
+  None: 0,
+  Open: 1,
+  Lost: 2,
+  Won: 3,
+} as const;
+export type OnlinePaymentDispute = (typeof OnlinePaymentDispute)[keyof typeof OnlinePaymentDispute];
+
+export const OnlinePaymentRefundReason = {
+  NotPlaced: 1,
+  DuplicatePayment: 2,
+  ByBusiness: 3,
+  InMercadoPago: 4,
+  Claim: 5,
+  Chargeback: 6,
+} as const;
+export type OnlinePaymentRefundReason = (typeof OnlinePaymentRefundReason)[keyof typeof OnlinePaymentRefundReason];
+
 export const OnlinePaymentRefundStatus = {
   Requested: 0,
   Completed: 1,
   Failed: 2,
+  DoneInMercadoPago: 3,
 } as const;
 export type OnlinePaymentRefundStatus = (typeof OnlinePaymentRefundStatus)[keyof typeof OnlinePaymentRefundStatus];
 

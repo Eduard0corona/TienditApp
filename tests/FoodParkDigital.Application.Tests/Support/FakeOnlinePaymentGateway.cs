@@ -29,6 +29,15 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
     /// <summary>The payments of the business's account, by id.</summary>
     public Dictionary<string, OnlinePaymentDetails> Payments { get; } = new();
 
+    /// <summary>The refunds Mercado Pago has of each payment, by payment id (Fase 24K).</summary>
+    public Dictionary<string, List<OnlinePaymentProviderRefund>> ProviderRefunds { get; } = new();
+
+    /// <summary>Each search of changed payments: from, to, offset (Fase 24K).</summary>
+    public List<(DateTimeOffset From, DateTimeOffset To, int Offset)> ChangeSearches { get; } = [];
+
+    /// <summary>The payments whose refunds were read (Fase 24K).</summary>
+    public List<string> RefundReads { get; } = [];
+
     public List<OnlinePaymentCheckoutRequest> Checkouts { get; } = [];
     public List<(string PaymentId, decimal Amount, Guid Key)> Refunds { get; } = [];
     public List<string> AccessTokensUsed { get; } = [];
@@ -91,6 +100,34 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
             .ToList();
     }
 
+    public async Task<IReadOnlyList<OnlinePaymentDetails>> FindChangedPaymentsAsync(
+        string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken)
+    {
+        await RunWhileReadingAsync();
+        ThrowIfUnavailable();
+        ThrowIfKeyRejected();
+        AccessTokensUsed.Add(accessToken);
+        ChangeSearches.Add((from, to, offset));
+        return Payments.Values
+            .Where(p => p.LastChangedAt >= from && p.LastChangedAt <= to)
+            .OrderBy(p => p.LastChangedAt)
+            .ThenBy(p => p.Id, StringComparer.Ordinal)
+            .Skip(offset)
+            .Take(limit)
+            .ToList();
+    }
+
+    public Task<IReadOnlyList<OnlinePaymentProviderRefund>> GetRefundsAsync(
+        string accessToken, string paymentId, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        ThrowIfKeyRejected();
+        AccessTokensUsed.Add(accessToken);
+        RefundReads.Add(paymentId);
+        IReadOnlyList<OnlinePaymentProviderRefund> refunds = ProviderRefunds.TryGetValue(paymentId, out var list) ? list.ToList() : [];
+        return Task.FromResult(refunds);
+    }
+
     public Task<OnlinePaymentRefundOutcome> RefundAsync(
         string accessToken, string paymentId, decimal amount, Guid idempotencyKey, CancellationToken cancellationToken)
     {
@@ -107,8 +144,41 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
     {
         var payment = new OnlinePaymentDetails(
             id ?? (1_000_000 + Payments.Count).ToString(), OnlinePaymentDetails.ApprovedStatus, "accredited",
-            checkoutId.ToString(), amount, currency, approvedAt, collector, LiveMode: !Sandbox);
+            checkoutId.ToString(), amount, currency, approvedAt, collector, LiveMode: !Sandbox, LastChangedAt: approvedAt);
         Payments[payment.Id] = payment;
+        return payment;
+    }
+
+    /// <summary>
+    /// Mercado Pago gives back <paramref name="amount"/> of a payment (Fase 24K): the refund is listed with its id and source,
+    /// and the payment says what was given back and when it changed.
+    /// </summary>
+    public OnlinePaymentProviderRefund GiveBack(
+        string paymentId, decimal amount, DateTimeOffset at, string? refundId = null, string source = "collector", string status = "approved")
+    {
+        var refunds = ProviderRefunds.TryGetValue(paymentId, out var list) ? list : ProviderRefunds[paymentId] = [];
+        var refund = new OnlinePaymentProviderRefund(refundId ?? $"77{refunds.Count + 1:D4}{paymentId}", amount, status, source, at);
+        refunds.Add(refund);
+        if (refund.IsApproved)
+        {
+            var payment = Payments[paymentId];
+            var refunded = payment.RefundedAmount + amount;
+            Payments[paymentId] = payment with
+            {
+                Status = refunded >= payment.Amount ? OnlinePaymentDetails.RefundedStatus : OnlinePaymentDetails.ApprovedStatus,
+                StatusDetail = refunded >= payment.Amount ? "refunded" : "partially_refunded",
+                RefundedAmount = refunded,
+                LastChangedAt = at
+            };
+        }
+        return refund;
+    }
+
+    /// <summary>Mercado Pago reports a chargeback or a claim on a payment (Fase 24K).</summary>
+    public OnlinePaymentDetails Dispute(string paymentId, string status, string detail, DateTimeOffset at)
+    {
+        var payment = Payments[paymentId] with { Status = status, StatusDetail = detail, LastChangedAt = at };
+        Payments[paymentId] = payment;
         return payment;
     }
 

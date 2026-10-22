@@ -16,8 +16,10 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs.OnlinePayments;
 /// <summary>
 /// The third way TienditApp learns of an online payment (Fase 24I, ADR 0031), besides the notification and the customer's
 /// return: every few minutes it sweeps each business with payments in course, or whose Mercado Pago key is close to
-/// expiring (<see cref="SweepOnlinePaymentsCommand"/>), in that business's scope. Without Mercado Pago configured it does
-/// nothing.
+/// expiring (<see cref="SweepOnlinePaymentsCommand"/>), in that business's scope. Since the Fase 24K (ADR 0044) it also
+/// reviews, every <see cref="ReviewOnlinePaymentsCommandHandler.ReviewEvery"/>, the payments that changed in each connected
+/// account (<see cref="ReviewOnlinePaymentsCommand"/>), so a refund made in Mercado Pago or a dispute reaches the order
+/// even without its notification. Without Mercado Pago configured it does nothing.
 /// </summary>
 public sealed class OnlinePaymentsWorkerService : BackgroundService
 {
@@ -72,13 +74,14 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
         }
     }
 
-    /// <returns>Businesses swept.</returns>
+    /// <returns>Businesses swept or reviewed.</returns>
     internal async Task<int> RunPassAsync(CancellationToken cancellationToken)
     {
         if (!_gateway.IsConfigured)
             return 0;
 
         List<Guid> tenants;
+        List<Guid> reviewing;
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -103,6 +106,16 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
                 .Take(max)
                 .ToListAsync(cancellationToken);
             tenants = withCheckouts.Concat(renewing).Distinct().Take(max).ToList();
+            // The accounts whose payments were not reviewed lately and whose key works, the longest waiting (or never
+            // reviewed) first.
+            var reviewedBy = now - ReviewOnlinePaymentsCommandHandler.ReviewEvery;
+            reviewing = await context.OnlinePaymentAccounts
+                .IgnoreQueryFilters()
+                .Where(a => a.AccessTokenExpiresAt > now && (a.PaymentsReviewedUntil == null || a.PaymentsReviewedUntil <= reviewedBy))
+                .OrderBy(a => a.PaymentsReviewedUntil)
+                .Select(a => a.TenantId)
+                .Take(max)
+                .ToListAsync(cancellationToken);
         }
 
         foreach (var tenantId in tenants)
@@ -124,6 +137,24 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
             }
         }
 
-        return tenants.Count;
+        foreach (var tenantId in reviewing)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
+                var review = await scope.ServiceProvider.GetRequiredService<ISender>()
+                    .Send(new ReviewOnlinePaymentsCommand(), cancellationToken);
+                if (review.IsSuccess && review.Value.Reflected > 0)
+                    _logger.LogInformation(
+                        "Online payments of tenant {TenantId}: {Reflected} payments reached their orders", tenantId, review.Value.Reflected);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(LogRedaction.RedactDatabaseMessages(ex), "Online payments review of tenant {TenantId} failed", tenantId);
+            }
+        }
+
+        return tenants.Union(reviewing).Count();
     }
 }

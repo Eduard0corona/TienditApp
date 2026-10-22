@@ -15177,7 +15177,17 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OnlinePaymentRefundStatus: 0 | 1 | 2;
+        OnlinePaymentDispute: 0 | 1 | 2 | 3;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OnlinePaymentRefundReason: 1 | 2 | 3 | 4 | 5 | 6;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OnlinePaymentRefundStatus: 0 | 1 | 2 | 3;
         OnlinePaymentSettingsDto: {
             available: boolean;
             sandbox: boolean;
@@ -15197,6 +15207,10 @@ export interface components {
             refundsInCourse: number;
             /** Format: int32 */
             refundsRefused: number;
+            /** Format: int32 */
+            disputesOpen: number;
+            /** Format: date-time */
+            paymentsReviewedUntil?: string | null;
         };
         OpenCashSessionCommand: {
             /** Format: double */
@@ -15361,6 +15375,9 @@ export interface components {
             servicePieces: components["schemas"]["ServiceOrderPieceDto"][];
             payments: components["schemas"]["OrderPaymentDto"][];
             refunds: components["schemas"]["OrderRefundDto"][];
+            onlineDispute?: components["schemas"]["OnlinePaymentDispute"];
+            /** Format: date-time */
+            onlineDisputeUpdatedAt?: string | null;
             writeOffs: components["schemas"]["OrderWriteOffDto"][];
             itemCancellations: components["schemas"]["OrderItemCancellationDto"][];
             isTab: boolean;
@@ -15487,6 +15504,7 @@ export interface components {
             lines: components["schemas"]["OrderRefundLineDto"][];
             onlineStatus?: components["schemas"]["OnlinePaymentRefundStatus"];
             onlineFailure?: string | null;
+            onlineReason?: components["schemas"]["OnlinePaymentRefundReason"];
         };
         OrderRefundLineDto: {
             /** Format: uuid */

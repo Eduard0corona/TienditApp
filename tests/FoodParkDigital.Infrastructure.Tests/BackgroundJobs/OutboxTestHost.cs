@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Events;
@@ -123,6 +124,7 @@ internal sealed class OutboxTestHost : IAsyncDisposable
             base.OnModelCreating(modelBuilder);
             // The in-memory provider does not generate SQL Server row versions.
             modelBuilder.Entity<Order>().Property(o => o.Version).IsRequired(false).ValueGeneratedNever();
+            modelBuilder.Entity<OnlinePaymentAccount>().Property(a => a.Version).IsRequired(false).ValueGeneratedNever();
         }
     }
 
