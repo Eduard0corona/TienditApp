@@ -119,6 +119,21 @@ Un pedido de Rappi, Uber Eats o DiDi Food puede guardar, además del folio corto
 - **Búsqueda:** Pedidos y Reportes › pedidos de plataformas encuentran el pedido por una parte del ID largo, escrita como se guarda.
 - **Dónde se ve:** el detalle y la lista de Pedidos, Reportes y la liquidación. La cocina y el ticket siguen con el folio corto.
 
+### Las retenciones de cada plataforma (Fase 22J)
+
+Rappi, Uber Eats y DiDi Food le emiten al negocio un CFDI de retenciones 2.0 (clave 26) cada mes o cada semana con el ISR y el IVA que le retuvieron. En Reportes › Liquidaciones › Retenciones se compara con lo que TienditApp calculó para sus pedidos ([ADR 0042](../adr/0042-platform-withholding-certificates.md)).
+
+- **Qué se guarda:** lo que dice el XML (folio fiscal, emisor, RFC del receptor, periodo, fecha de emisión, total de operaciones, ISR e IVA retenidos con sus bases y total retenido), nunca el archivo. La plataforma la elige la persona.
+- **Qué se lee:** solo la versión 2.0 con la clave 26, a un receptor nacional y timbrada, hasta 512 KB, sin DTD ni referencias externas. Una factura, un CFDI 1.0, otra clave, un PDF o un dato que falta se rechazan con un mensaje que dice cuál. No se valida el sello ni se consulta al SAT.
+- **Quién:** suben y quitan dueños y administradores; la conciliación la ve quien lee los reportes (`ViewReports`).
+- **Una vez por negocio:** un folio fiscal vigente responde 409 `conflict` con «Este CFDI ya está registrado en {plataforma}, {periodo}.». En otro negocio es otro registro.
+- **RFC:** si el negocio escribió su RFC en Configuración y el CFDI va a otro, se rechaza sin nombrar ninguno. Sin RFC escrito, se acepta.
+- **Periodo:** de enero a diciembre, el inicial no pasa del final, desde 2019 y sin empezar después del mes del negocio (uno semanal llega antes de que acabe el mes).
+- **Importes:** de $0 a $1,000,000,000, con dos decimales: cada impuesto se suma como viene y se redondea una vez, alejándose de cero. Una línea de más de $1,000,000,000 se rechaza antes de sumarla. El total retenido no es menor que el ISR más el IVA salvo por 2 centavos de redondeo; el IEPS cuenta solo ahí.
+- **Sustitución:** un CFDI que dice sustituir a otro (`CfdiRetenRelacionados`) quita al sustituido vigente en el mismo guardado. Uno que llega después del que lo sustituye (vigente o quitado) se guarda ya quitado, con «Lo sustituye el CFDI con folio …», y quita al que él sustituía: una cadena (A por B, B por C) subida en cualquier orden deja solo a C. Si ese CFDI ya estaba guardado, responde 409 `conflict` («Este CFDI ya se sustituyó por otro que está registrado en …: no cuenta.»). Un CFDI de otro negocio nunca quita uno de este.
+- **Quitar:** con motivo (hasta 500 caracteres). Deja de contar, se queda en la lista como quitado y ese folio puede subirse otra vez. Uno ya quitado responde 409 `concurrency_conflict`.
+- **La conciliación:** por plataforma y año, mes por mes en la zona del negocio. Lo calculado son los pedidos que cobró la plataforma, registrados en el mes, con su ISR, su IVA retenido y sus ventas sin IVA en proporción a lo que sigue pagado, redondeados por pedido. Los CFDI vigentes cuyos periodos se traslapan (una semana de DiDi que cruza el cambio de mes, con las semanas de los dos meses) se comparan juntos: cuentan completos en el último mes que cubren entre todos, y ese mes compara contra lo calculado en todos esos meses. Los meses anteriores que cubren dicen en qué mes se comparan, sin diferencia propia: ningún mes se compara dos veces. La diferencia es CFDI menos calculado (positiva: retuvo de más); la del año, solo de los meses con CFDI. Cada CFDI dice su tasa (retenido entre base), la del IVA solo cuando la base es el IVA.
+
 ## Sucursal solo a domicilio (Fase 22A)
 
 Una cocina sin local no publica su dirección ([ADR 0016](../adr/0016-delivery-only-branches.md)). Cada sucursal dice cómo atiende (`Branch.ServiceMode`): «Local abierto al público» o «Solo a domicilio, sin local».

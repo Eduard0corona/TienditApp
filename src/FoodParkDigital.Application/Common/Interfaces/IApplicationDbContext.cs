@@ -62,6 +62,7 @@ public interface IApplicationDbContext
     DbSet<OrderVisitCharge> OrderVisitCharges { get; }
     DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings { get; }
     DbSet<PlatformSettlement> PlatformSettlements { get; }
+    DbSet<PlatformWithholdingCertificate> PlatformWithholdingCertificates { get; }
     DbSet<PlatformSettlementOrder> PlatformSettlementOrders { get; }
     DbSet<PlatformSettlementAdjustment> PlatformSettlementAdjustments { get; }
     DbSet<CourierSettlement> CourierSettlements { get; }

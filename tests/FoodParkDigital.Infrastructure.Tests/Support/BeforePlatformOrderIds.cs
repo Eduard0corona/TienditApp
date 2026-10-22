@@ -18,7 +18,10 @@ internal static class BeforePlatformOrderIds
 
     /// <summary>For the context of an earlier version, which does not know it either.</summary>
     public static void Ignore(ModelBuilder modelBuilder)
-        => modelBuilder.Entity<PlatformOrderDetail>().Ignore(d => d.ExternalOrderId);
+    {
+        modelBuilder.Entity<PlatformOrderDetail>().Ignore(d => d.ExternalOrderId);
+        BeforePlatformWithholdingCertificates.Ignore(modelBuilder);
+    }
 
     private sealed class Context(
         DbContextOptions<ApplicationDbContext> options,

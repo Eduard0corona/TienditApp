@@ -342,6 +342,18 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
     - El giro decide la sucursal principal solo en el alta; en un negocio que ya existe se marca a mano en Sucursales.
     - La entrega llegó en las Fases 22B (zonas por código postal) y 22C (dirección del cliente en el pedido, envío cobrado y Paquetenvia).
     - La 22A suma 1 B a la primera visita (de 176,326 a 176,327 B, contra `master` en `a60b1d4`): el enum de la sucursal. El presupuesto no cambia.
+- Resuelto en la Fase 22J: lo que cada plataforma dice que retuvo de ISR e IVA, en su CFDI de retenciones, no se comparaba con lo que TienditApp calculó para sus pedidos ([ADR 0042](../adr/0042-platform-withholding-certificates.md)).
+  - En Reportes › Liquidaciones › Retenciones, dueños y administradores suben el XML de cada CFDI de retenciones 2.0 (clave 26) de Rappi, Uber Eats o DiDi Food, uno o varios a la vez. Se guarda lo que dice, no el archivo, y cada CFDI cuenta una vez por negocio; uno subido por error se quita con motivo y se queda como historia.
+  - La tabla compara cada mes del año, en la zona del negocio, el ISR y el IVA calculados para los pedidos que cobró la plataforma (en proporción a lo devuelto, redondeados por pedido) con los de sus CFDI, y la tasa de cada CFDI explica una diferencia por la configuración.
+  - Queda:
+    - No se valida el sello ni se consulta al SAT si el CFDI está vigente: un XML alterado se registra igual. La descarga masiva desde el SAT y las APIs de las plataformas llegan con las integraciones.
+    - Solo la versión 2.0: un CFDI de retenciones 1.0 (anterior a 2022) se rechaza con un mensaje.
+    - Un pedido cuenta en el mes en que se registró y la plataforma puede contarlo en el que lo pagó: alrededor del cambio de mes hay diferencias que se compensan. Los CFDI que se traslapan (uno de varios meses, o una semana que cruza el cambio de mes) cuentan juntos en el último mes que cubren, que compara contra todos esos meses.
+    - Un CFDI cancelado se reconoce solo cuando el que lo sustituye lo nombra (`CfdiRetenRelacionados`), en el orden en que se suban; uno cancelado sin sustituto se quita a mano.
+    - La tasa de cada pedido sale de la configuración de la plataforma cuando se registró: TienditApp no elige la tasa por año ni por tipo de persona (1 % antes de 2026, solo personas físicas; 2.5 % desde 2026). El IEPS retenido solo cuenta en el total.
+    - Lo calculado de un año se lee pedido por pedido para redondear igual que la liquidación; con muchísimos pedidos de una plataforma en un año, lee más filas.
+    - Con CFDI de retenciones guardados, el rollback de la base se detiene (error 50033): solo se corrige hacia adelante. Volver a la versión anterior de la app sí funciona sin tocar la base.
+    - La 22J suma 70 B a la primera visita (de 179,153 a 179,223 B): la ruta nueva en `App.tsx`, con el nombre de la pantalla que se carga aparte, y las palabras de búsqueda de Liquidaciones; la pantalla, su modal y su API se cargan aparte. El presupuesto sube de 179,200 a 179,300 B.
 - Resuelto en la Fase 22I: un estado de cuenta que nombra los pedidos por su ID largo no los encontraba, porque solo se guardaba el folio corto ([ADR 0041](../adr/0041-platform-order-ids.md)).
   - Un pedido de plataforma guarda, opcional, el ID largo que le da la plataforma: se escribe en Vender o después en el detalle del pedido, en cualquier estado. Pedidos y Reportes lo buscan, la liquidación lo enseña, y la importación del estado de cuenta compara cada renglón por folio o por ID largo.
   - Un ID largo repetido en otro pedido que cuenta, de cualquier fecha, avisa con 409 `possible_duplicate_order`, como el folio.
@@ -397,7 +409,7 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - Los pedidos de plataforma nunca mandan avisos de WhatsApp y quedan fuera de las campañas y de la ficha del cliente.
   - Pendiente:
     - Resuelta en la Fase 22G (arriba): la liquidación semanal y la conciliación con el estado de cuenta. Una cancelación tardía (un pedido ya entregado que la plataforma cancela) sigue quedando entregada y reembolsada: si el pedido todavía no está liquidado, deja de estar pendiente (trae 0); si ya está en una liquidación cerrada, se explica con un ajuste «Cancelaciones» en la siguiente.
-    - Integraciones por la API de las plataformas o por un integrador y el CFDI de retenciones. El ID largo del pedido para conciliar llegó en la Fase 22I (arriba).
+    - Integraciones por la API de las plataformas o por un integrador. El ID largo del pedido para conciliar llegó en la Fase 22I y el CFDI de retenciones en la 22J (arriba).
     - Confirmar con un contador las tasas de retención de 2026 para cada caso (persona física o moral, RFC, pago definitivo; las por omisión son las de la Ley de Ingresos 2026 y la Ley del IVA), la clave de forma de pago 31 y la base de la comisión de Uber Eats.
     - El aviso de folio repetido no es una restricción: dos capturas del mismo folio en el mismo instante pasan las dos.
     - En SQL Server, la parte de la comisión de cada pago se calcula con escala 6 antes de sumarse: con pagos parciales, un punto medio raro puede diferir un centavo del cálculo con toda la precisión.

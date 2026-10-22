@@ -9376,6 +9376,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform-withholdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    channel?: components["schemas"]["OrderChannel"];
+                    year?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformWithholdingsDto"];
+                        "application/json": components["schemas"]["PlatformWithholdingsDto"];
+                        "text/json": components["schemas"]["PlatformWithholdingsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RegisterPlatformWithholdingCertificateRequest"];
+                    "text/json": components["schemas"]["RegisterPlatformWithholdingCertificateRequest"];
+                    "application/*+json": components["schemas"]["RegisterPlatformWithholdingCertificateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformWithholdingCertificateDto"];
+                        "application/json": components["schemas"]["PlatformWithholdingCertificateDto"];
+                        "text/json": components["schemas"]["PlatformWithholdingCertificateDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-withholdings/{id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RemovePlatformWithholdingCertificateRequest"];
+                    "text/json": components["schemas"]["RemovePlatformWithholdingCertificateRequest"];
+                    "application/*+json": components["schemas"]["RemovePlatformWithholdingCertificateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformWithholdingCertificateDto"];
+                        "application/json": components["schemas"]["PlatformWithholdingCertificateDto"];
+                        "text/json": components["schemas"]["PlatformWithholdingCertificateDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/products": {
         parameters: {
             query?: never;
@@ -15916,6 +16028,87 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        PlatformWithholdingCertificateDto: {
+            /** Format: uuid */
+            id: string;
+            channel: components["schemas"]["OrderChannel"];
+            /** Format: uuid */
+            uuid: string;
+            issuerRfc: string;
+            issuerName: string;
+            /** Format: int32 */
+            year: number;
+            /** Format: int32 */
+            monthFrom: number;
+            /** Format: int32 */
+            monthTo: number;
+            /** Format: date-time */
+            issuedOn: string;
+            /** Format: double */
+            operationTotal: number;
+            /** Format: double */
+            isrBase?: number | null;
+            /** Format: double */
+            isrWithheld: number;
+            /** Format: double */
+            isrRatePercent?: number | null;
+            /** Format: double */
+            vatBase?: number | null;
+            /** Format: double */
+            vatWithheld: number;
+            /** Format: double */
+            vatRatePercent?: number | null;
+            /** Format: double */
+            totalWithheld: number;
+            /** Format: uuid */
+            replacesUuid?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            removedAt?: string | null;
+            removalReason?: string | null;
+        };
+        PlatformWithholdingPeriodDto: {
+            /** Format: int32 */
+            month?: number | null;
+            /** Format: int32 */
+            orderCount: number;
+            /** Format: double */
+            salesWithoutTax: number;
+            /** Format: double */
+            calculatedIsr: number;
+            /** Format: double */
+            calculatedVat: number;
+            /** Format: int32 */
+            certificateCount: number;
+            /** Format: double */
+            certificateOperationTotal?: number | null;
+            /** Format: double */
+            certificateIsr?: number | null;
+            /** Format: double */
+            certificateVat?: number | null;
+            /** Format: double */
+            isrDifference?: number | null;
+            /** Format: double */
+            vatDifference?: number | null;
+            /** Format: int32 */
+            coveredFromMonth?: number | null;
+            /** Format: int32 */
+            comparedInMonth?: number | null;
+        };
+        PlatformWithholdingsDto: {
+            channel: components["schemas"]["OrderChannel"];
+            /** Format: int32 */
+            year: number;
+            /** Format: double */
+            isrWithholdingPercent?: number | null;
+            /** Format: double */
+            vatWithholdingPercent?: number | null;
+            months: components["schemas"]["PlatformWithholdingPeriodDto"][];
+            total: components["schemas"]["PlatformWithholdingPeriodDto"];
+            certificates: components["schemas"]["PlatformWithholdingCertificateDto"][];
+            certificatesTruncated: boolean;
+        };
         PostInventoryCountRequest: {
             /** Format: int32 */
             expectedRevision: number;
@@ -16596,6 +16789,10 @@ export interface components {
             lastName: string;
             phoneNumber: string;
         };
+        RegisterPlatformWithholdingCertificateRequest: {
+            channel: components["schemas"]["OrderChannel"];
+            xml: string;
+        };
         RegisterSubscriptionPaymentRequest: {
             /** Format: int32 */
             months: number;
@@ -16603,6 +16800,9 @@ export interface components {
             amount?: number | null;
             method: components["schemas"]["SubscriptionPaymentMethod"];
             reference?: string | null;
+        };
+        RemovePlatformWithholdingCertificateRequest: {
+            reason: string;
         };
         RequestPhoneChangeCommand: {
             phoneNumber: string;

@@ -102,6 +102,9 @@ describe('navigation', () => {
 
     expect(found('liquidaciones')).toEqual(['Liquidaciones']);
     expect(found('depósitos')).toEqual(['Liquidaciones']);
+    // Retenciones hangs from Liquidaciones (Fase 22J).
+    expect(found('retenciones')).toEqual(['Liquidaciones']);
+    expect(found('cfdi')).toEqual(['Liquidaciones']);
     expect(found('reportes')).toEqual(['Ventas']);
   });
 });

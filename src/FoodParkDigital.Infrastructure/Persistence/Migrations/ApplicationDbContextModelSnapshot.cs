@@ -4159,9 +4159,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_PlatformOrderDetails_CommissionBase", "[CommissionBase] IN (0, 1)");
 
-                            t.HasCheckConstraint("CK_PlatformOrderDetails_Number", "LEN([ExternalOrderNumber]) > 0");
-
                             t.HasCheckConstraint("CK_PlatformOrderDetails_ExternalOrderId", "[ExternalOrderId] IS NULL OR LEN([ExternalOrderId]) >= 6");
+
+                            t.HasCheckConstraint("CK_PlatformOrderDetails_Number", "LEN([ExternalOrderNumber]) > 0");
 
                             t.HasCheckConstraint("CK_PlatformOrderDetails_Percents", "[CommissionPercent] BETWEEN 0 AND 100 AND [CommissionVatPercent] BETWEEN 0 AND 100 AND [IsrWithholdingPercent] BETWEEN 0 AND 100 AND [VatWithholdingPercent] BETWEEN 0 AND 100");
                         });
@@ -4742,6 +4742,111 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "OrderId");
 
                     b.ToTable("PlatformSettlementOrders", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Platforms.PlatformWithholdingCertificate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal?>("IsrBase")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("IsrWithheld")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("IssuedOn")
+                        .HasColumnType("datetime2(0)");
+
+                    b.Property<string>("IssuerName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("IssuerRfc")
+                        .IsRequired()
+                        .HasMaxLength(13)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(13)");
+
+                    b.Property<int>("MonthFrom")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MonthTo")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("OperationTotal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ReceiverRfc")
+                        .IsRequired()
+                        .HasMaxLength(13)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(13)");
+
+                    b.Property<string>("RemovalReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ReplacesUuid")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("TotalWithheld")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("Uuid")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("VatBase")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("VatWithheld")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Uuid")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PlatformWithholdingCertificates_TenantId_Uuid_Active")
+                        .HasFilter("[RemovedAt] IS NULL");
+
+                    b.HasIndex("TenantId", "Channel", "Year", "MonthTo");
+
+                    b.ToTable("PlatformWithholdingCertificates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlatformWithholdingCertificates_Amounts", "[OperationTotal] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0 AND [TotalWithheld] + 0.02 >= [IsrWithheld] + [VatWithheld] AND ([IsrBase] IS NULL OR [IsrBase] >= 0) AND ([VatBase] IS NULL OR [VatBase] >= 0)");
+
+                            t.HasCheckConstraint("CK_PlatformWithholdingCertificates_Channel", "[Channel] IN (3, 4, 5)");
+
+                            t.HasCheckConstraint("CK_PlatformWithholdingCertificates_Period", "[MonthFrom] BETWEEN 1 AND 12 AND [MonthTo] BETWEEN 1 AND 12 AND [MonthFrom] <= [MonthTo] AND [Year] >= 2019");
+
+                            t.HasCheckConstraint("CK_PlatformWithholdingCertificates_Removed", "([RemovedAt] IS NULL AND [RemovalReason] IS NULL) OR ([RemovedAt] IS NOT NULL AND [RemovalReason] IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", b =>

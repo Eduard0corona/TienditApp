@@ -93,7 +93,7 @@ export const NAV_GROUPS: NavGroup[] = [
         pages: [
           // Exact: Liquidaciones hangs from its path.
           { label: 'Ventas', path: '/reports', icon: 'ri-bar-chart-box-line', area: 'reports', exact: true, keywords: 'reportes utilidad ventas del mes' },
-          { label: 'Liquidaciones', path: '/reports/settlements', icon: 'ri-bank-line', area: 'reports', keywords: 'depósitos rappi uber eats didi food conciliación por cobrar' },
+          { label: 'Liquidaciones', path: '/reports/settlements', icon: 'ri-bank-line', area: 'reports', keywords: 'depósitos rappi uber eats didi food conciliación por cobrar retenciones cfdi isr iva' },
         ],
       },
       {

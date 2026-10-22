@@ -737,6 +737,25 @@ La Fase 22I trae una migración, [`database/production/20261022011024_AddPlatfor
 - **Volver a la versión anterior:** funciona sin tocar la base. No conoce la columna, sus pedidos la dejan vacía y sus cambios no la tocan. Deja de enseñar los IDs largos, que vuelven a verse con esta versión.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50032, sin cambiar nada, en cuanto un pedido tiene ID largo: borrarlo perdería lo que escribió el negocio. Sin ninguno, quita la columna, la restricción y el índice, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Conciliar las retenciones de cada plataforma (Fase 22J)
+
+La Fase 22J trae una migración, [`database/production/20261022033401_AddPlatformWithholdingCertificates`](../../database/production/20261022033401_AddPlatformWithholdingCertificates). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0042](../adr/0042-platform-withholding-certificates.md)).
+
+- **La migración** agrega solo la tabla `PlatformWithholdingCertificates` (lo que dice cada CFDI de retenciones que suba un negocio, y el folio del que sustituye), con:
+  - las restricciones `CK_PlatformWithholdingCertificates_Channel`, `_Period`, `_Amounts` y `_Removed`;
+  - el índice único `IX_PlatformWithholdingCertificates_TenantId_Uuid_Active`, filtrado a los vigentes (`[RemovedAt] IS NULL`), y el índice `IX_PlatformWithholdingCertificates_TenantId_Channel_Year_MonthTo`.
+
+  No cambia pedidos, pagos ni liquidaciones. Después de aplicarla, el `verify.sql` muestra las 4 restricciones y los 2 índices. Su consulta 3 cuenta los CFDI vigentes y quitados por plataforma (ninguno hasta desplegar), y la 4 los pedidos de cada plataforma con el ISR y el IVA retenidos que calculó TienditApp, igual antes y después.
+- **Mientras se publica:** la versión de `master` (Fase 22I) no conoce la tabla y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:**
+  - Reportes › Liquidaciones enlaza a «Retenciones»: la comparación mes por mes del ISR y el IVA que calculó TienditApp para los pedidos que cobró cada plataforma contra los de sus CFDI.
+  - Dueños y administradores suben el XML de cada CFDI de retenciones (uno o varios a la vez) y quitan, con motivo, uno subido por error. Quien lee los reportes la ve.
+  - Subir y quitar quedan en la actividad del negocio (`PlatformWithholdingCertificateRegistered` y `PlatformWithholdingCertificateRemoved`), en el mismo guardado, sin el RFC.
+- **El contrato agrega:** `GET` y `POST /api/v1/platform-withholdings` y `POST /api/v1/platform-withholdings/{id}/remove`. Nada se quita ni cambia de nombre.
+- **Sin configuración nueva.** El XML se manda en el cuerpo de la petición (hasta 2 MB; el servidor lee hasta 512 KB de XML) y no se guarda.
+- **Volver a la versión anterior:** funciona sin tocar la base. No conoce la tabla y deja de enseñar las retenciones, que vuelven a verse con esta versión.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50033, sin cambiar nada, en cuanto un negocio subió un CFDI (también uno quitado): borrarlo perdería lo que subió el negocio. Sin ninguno, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

@@ -77,6 +77,7 @@ export default function PlatformSettlements() {
       <PageTitle title="Liquidaciones" />
       <p className="text-muted">
         Registra cada depósito de Rappi, Uber Eats y DiDi Food con los pedidos que paga, y explica con ajustes lo que no cuadre.
+        Lo que te retienen de ISR e IVA se revisa en <Link to="/reports/settlements/withholdings">Retenciones</Link>.
       </p>
 
       <section aria-labelledby={`${id}-owed`}>

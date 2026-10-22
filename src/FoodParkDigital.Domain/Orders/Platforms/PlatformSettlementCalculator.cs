@@ -13,11 +13,20 @@ public static class PlatformSettlementCalculator
     /// <param name="netPaidAmount">What is paid of the order minus what was given back (<see cref="Entities.Order.NetPaidAmount"/>).</param>
     /// <param name="orderTotal">The order's total when it was registered: always more than zero.</param>
     public static decimal ExpectedNet(decimal expectedSettlement, decimal netPaidAmount, decimal orderTotal)
+        => InProportion(expectedSettlement, netPaidAmount, orderTotal);
+
+    /// <summary>
+    /// Any amount the order copied when it was registered (its expected net, its ISR or IVA withheld, its subtotal) in
+    /// proportion to what is still paid of it, rounded once to cents with banker's rounding: a refund of half the order
+    /// halves its withholdings too (Fase 22J).
+    /// </summary>
+    /// <param name="orderTotal">The order's total when it was registered: always more than zero.</param>
+    public static decimal InProportion(decimal amount, decimal netPaidAmount, decimal orderTotal)
     {
         if (orderTotal <= 0)
             throw new ArgumentOutOfRangeException(nameof(orderTotal), orderTotal, "An order of a delivery platform always has a total.");
 
         // Paid in full, the product and the division give back the copied amount exactly.
-        return decimal.Round(expectedSettlement * netPaidAmount / orderTotal, 2, MidpointRounding.ToEven);
+        return decimal.Round(amount * netPaidAmount / orderTotal, 2, MidpointRounding.ToEven);
     }
 }
