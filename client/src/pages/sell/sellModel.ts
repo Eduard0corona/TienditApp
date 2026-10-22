@@ -146,6 +146,8 @@ export interface SaleDetails {
   channel: OrderChannel;
   /** The folio of the platform's app, as typed: the server normalizes it. */
   externalOrderNumber: string;
+  /** The platform's long id of the order, as typed and optional: its statements name the order by it. */
+  externalOrderId: string;
   /** Who charged an order of a platform: the platform in its app (by default) or the business, when the courier pays. */
   collectedBy: PlatformCollectedBy;
   /** Sent to the customer's address with the zone that reaches its postal code; null when it is picked up or eaten here. */
@@ -155,9 +157,10 @@ export interface SaleDetails {
 }
 
 /** Where a counter sale comes from: no platform, no folio. */
-export const COUNTER_ORIGIN: Pick<SaleDetails, 'channel' | 'externalOrderNumber' | 'collectedBy'> = {
+export const COUNTER_ORIGIN: Pick<SaleDetails, 'channel' | 'externalOrderNumber' | 'externalOrderId' | 'collectedBy'> = {
   channel: OrderChannel.Counter,
   externalOrderNumber: '',
+  externalOrderId: '',
   collectedBy: PlatformCollectedBy.Platform,
 };
 

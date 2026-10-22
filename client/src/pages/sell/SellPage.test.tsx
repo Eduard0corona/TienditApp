@@ -589,9 +589,11 @@ function platformOrder(channel: OrderChannel, folio: string, collectedBy: Platfo
   };
 }
 
-function duplicateFolio(): AxiosError {
+function duplicateFolio(
+  detail = 'Hoy ya registraste un pedido de esta plataforma con el mismo folio.',
+): AxiosError {
   const headers = new AxiosHeaders();
-  const data = { code: 'possible_duplicate_order', detail: 'Hoy ya registraste un pedido de esta plataforma con el mismo folio.' };
+  const data = { code: 'possible_duplicate_order', detail };
   return new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
     status: 409, data, statusText: '', headers, config: { headers },
   } as AxiosResponse);
@@ -837,6 +839,39 @@ describe('SellPage with delivery platforms', () => {
     expect(first.confirmPossibleDuplicate).toBeUndefined();
     expect(second.idempotencyKey).toBe(first.idempotencyKey);
     expect(confirmed).toEqual({ ...second, confirmPossibleDuplicate: true });
+  });
+
+  it('sends the long id of the order when typed, refuses one that cannot be, and asks when it was registered before', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(ordersApi.create)
+      .mockRejectedValueOnce(duplicateFolio('Ya registraste un pedido de esta plataforma con el mismo ID largo. Si es otro pedido, confírmalo para registrarlo.'))
+      .mockResolvedValueOnce({ data: platformOrder(OrderChannel.UberEats, 'BC953', PlatformCollectedBy.Platform, 'ORD-000008') } as never);
+    givePlatforms([{ channel: OrderChannel.UberEats, isActive: true }]);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Uber Eats' }));
+    await userEvent.type(ticket().getByLabelText('Folio de Uber Eats'), 'bc953');
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+    const longId = ticket().getByLabelText('ID largo del pedido (opcional)');
+    await userEvent.type(longId, 'BC953');
+    expect(longId).toHaveAccessibleDescription('El ID largo del pedido lleva de 6 a 64 letras, números o guiones.');
+    await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Uber Eats · $25.00 F9' }));
+    expect(ordersApi.create).not.toHaveBeenCalled();
+
+    await userEvent.clear(longId);
+    await userEvent.type(longId, ' 3f9c2b1e-8d4a-4c6f-9b2e-1a7d5e0c3b84');
+    await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Uber Eats · $25.00 F9' }));
+    const ask = await screen.findByRole('dialog', { name: '¿Es otro pedido?' });
+    expect(ask).toHaveTextContent(
+      'Ya registraste un pedido de Uber Eats con el ID largo 3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84. '
+        + 'Los IDs largos no se repiten: búscalo en Pedidos; si de verdad es otro pedido, regístralo.',
+    );
+    await userEvent.click(within(ask).getByRole('button', { name: 'Registrar de todos modos' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Pedido ORD-000008 de Uber Eats registrado' })).toBeInTheDocument();
+    const [first, confirmed] = vi.mocked(ordersApi.create).mock.calls.map(([request]) => request);
+    expect(first).toMatchObject({ externalOrderNumber: 'BC953', externalOrderId: '3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84' });
+    expect(confirmed).toEqual({ ...first, confirmPossibleDuplicate: true });
   });
 
   it('charges an order of a platform at the prices of its app, and a counter sale at the menu\'s', async () => {

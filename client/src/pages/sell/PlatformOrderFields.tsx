@@ -2,8 +2,10 @@ import { useId } from 'react';
 import { PlatformCollectedBy } from '../../types';
 import {
   PLATFORM_FOLIO_MAX_LENGTH,
+  PLATFORM_ORDER_ID_MAX_INPUT_LENGTH,
   getPlatformFolioHint,
   getPlatformName,
+  getPlatformOrderIdHelp,
   type DeliveryPlatform,
 } from '../../utils/deliveryPlatforms';
 import type { SaleDetails } from './sellModel';
@@ -14,6 +16,8 @@ interface PlatformOrderFieldsProps {
   onChange: (changes: Partial<SaleDetails>) => void;
   /** What is wrong with the folio, once there is something to say (the server checks it again). */
   folioError: string;
+  /** What is wrong with the optional long id, as typed (the server checks it again). */
+  orderIdError: string;
   disabled: boolean;
   /** Whoever cannot charge gets no «charge it» help: under the totals the ticket says the cashier does. */
   canCharge: boolean;
@@ -21,9 +25,18 @@ interface PlatformOrderFieldsProps {
 
 /**
  * What an order of a delivery platform needs, in sight without opening anything: the folio of its app (focused as the
- * platform is chosen, with the keyboard that platform's folio takes), who charged it and the name for the bag.
+ * platform is chosen, with the keyboard that platform's folio takes), its long id when the cashier has it (optional: its
+ * statement names the order by it), who charged it and the name for the bag.
  */
-export default function PlatformOrderFields({ platform, details, onChange, folioError, disabled, canCharge }: PlatformOrderFieldsProps) {
+export default function PlatformOrderFields({
+  platform,
+  details,
+  onChange,
+  folioError,
+  orderIdError,
+  disabled,
+  canCharge,
+}: PlatformOrderFieldsProps) {
   // The ticket shows twice (beside the catalog, and in the sheet of a phone): each copy names its own fields.
   const id = useId();
   const collectedLabelId = `${id}-collected`;
@@ -61,6 +74,26 @@ export default function PlatformOrderFields({ platform, details, onChange, folio
         />
         <div id={`${id}-folio-help`} className={folioError ? 'invalid-feedback d-block' : 'form-text'}>
           {folioError || hint.help}
+        </div>
+      </div>
+
+      <div className="mb-2">
+        <label className="form-label small mb-1" htmlFor={`${id}-order-id`}>ID largo del pedido (opcional)</label>
+        <input
+          id={`${id}-order-id`}
+          className={`form-control ${orderIdError ? 'is-invalid' : ''}`}
+          maxLength={PLATFORM_ORDER_ID_MAX_INPUT_LENGTH}
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
+          aria-invalid={orderIdError ? true : undefined}
+          aria-describedby={`${id}-order-id-help`}
+          value={details.externalOrderId}
+          onChange={(event) => onChange({ externalOrderId: event.target.value })}
+          disabled={disabled}
+        />
+        <div id={`${id}-order-id-help`} className={orderIdError ? 'invalid-feedback d-block' : 'form-text'}>
+          {orderIdError || getPlatformOrderIdHelp(platform)}
         </div>
       </div>
 

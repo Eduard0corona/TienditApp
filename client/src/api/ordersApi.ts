@@ -16,6 +16,7 @@ import type {
   PaginatedList,
   RefundOrderRequest,
   RegisterCourierShipmentRequest,
+  SetPlatformOrderIdRequest,
   UploadedFileDto,
   VoidOrderRequest,
 } from '../types';
@@ -28,7 +29,7 @@ export const ordersApi = {
     channel?: OrderChannel;
     fromDate?: string;
     toDate?: string;
-    /** Folio, customer name or phone digits; searched on the server. */
+    /** Folio, customer name, phone digits or part of the platform's long id; searched on the server. */
     search?: string;
     pageNumber?: number;
     pageSize?: number;
@@ -47,6 +48,10 @@ export const ordersApi = {
   /** Writes down (or corrects) the courier's trip of an order sent to an address: its folio and, optionally, its link. */
   registerCourierShipment: (id: string, request: RegisterCourierShipmentRequest) =>
     api.put(`/orders/${id}/delivery/shipment`, request),
+
+  /** Writes, corrects or clears the platform's long id of an order of Rappi, Uber Eats or DiDi Food, at any status. */
+  setPlatformOrderId: (id: string, request: SetPlatformOrderIdRequest) =>
+    api.put(`/orders/${id}/platform-order-id`, request),
 
   /** The order goes out with the courier, collecting the balance in cash or not; corrected while it is on its way. */
   dispatch: (id: string, request: DispatchOrderRequest) =>

@@ -1,5 +1,5 @@
 import { OrderChannel, PlatformCollectedBy } from '../../types';
-import { isDeliveryPlatform, normalizePlatformFolio } from '../../utils/deliveryPlatforms';
+import { isDeliveryPlatform, normalizePlatformFolio, normalizePlatformOrderId } from '../../utils/deliveryPlatforms';
 import type { SaleAppointment } from './sellModel';
 
 // The sale being built survives a reload or a trip to another screen (per browser and business). It is
@@ -34,6 +34,8 @@ export interface SellDraft {
   channel: OrderChannel;
   /** The folio of the platform's app, as typed. */
   externalOrderNumber: string;
+  /** The platform's long id of the order, as typed; missing in drafts from before. */
+  externalOrderId?: string;
   collectedBy: PlatformCollectedBy;
   /** Where an order sent to the customer's address goes, as typed; null (or missing, before) when it does not. */
   delivery?: SellDraftDelivery | null;
@@ -63,7 +65,9 @@ export function describeSale(draft: SellDraft): string {
     [draft.customerName, draft.customerPhone, draft.tableNumber, draft.orderNotes].map((value) => value.trim()),
   ];
   if (isDeliveryPlatform(draft.channel)) {
-    sale.push([draft.channel, normalizePlatformFolio(draft.externalOrderNumber), draft.collectedBy]);
+    // The long id only when typed: an order described before it existed keeps its description (and its pending charge).
+    const longId = normalizePlatformOrderId(draft.externalOrderId ?? '');
+    sale.push([draft.channel, normalizePlatformFolio(draft.externalOrderNumber), draft.collectedBy, ...(longId ? [longId] : [])]);
   }
   // Another address is another order: its zone, minimum and fee can differ.
   if (draft.delivery) {
@@ -102,6 +106,7 @@ export function readSellDraft(tenantId: string): SellDraft | null {
       // Only the counter or a platform: anything else (a draft from before, or edited by hand) is a counter sale.
       channel: isDeliveryPlatform(parsed.channel) ? parsed.channel : OrderChannel.Counter,
       externalOrderNumber: typeof parsed.externalOrderNumber === 'string' ? parsed.externalOrderNumber : '',
+      externalOrderId: typeof parsed.externalOrderId === 'string' ? parsed.externalOrderId : undefined,
       collectedBy: parsed.collectedBy === PlatformCollectedBy.Business ? PlatformCollectedBy.Business : PlatformCollectedBy.Platform,
       delivery: readDelivery(parsed.delivery),
       appointment: readAppointment(parsed.appointment),
@@ -142,6 +147,7 @@ export function writeSellDraft(tenantId: string, draft: SellDraft) {
   try {
     const isEmpty = draft.lines.length === 0 && !draft.customerName && !draft.customerPhone
       && !draft.tableNumber && !draft.orderNotes && !isDeliveryPlatform(draft.channel) && !draft.externalOrderNumber
+      && !draft.externalOrderId
       && !draft.delivery && !draft.appointment;
     if (isEmpty) window.localStorage.removeItem(storageKey(tenantId));
     else window.localStorage.setItem(storageKey(tenantId), JSON.stringify(draft));

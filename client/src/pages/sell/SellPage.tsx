@@ -30,8 +30,10 @@ import { formatDateTime, formatInBusinessZone } from '../../utils/dates';
 import {
   PLATFORM_ONLY_PRODUCTS_MESSAGE,
   getPlatformFolioProblem,
+  getPlatformOrderIdProblem,
   isDeliveryPlatform,
   normalizePlatformFolio,
+  normalizePlatformOrderId,
   type DeliveryPlatform,
 } from '../../utils/deliveryPlatforms';
 import { getChannelLabel } from '../../utils/labels';
@@ -137,7 +139,13 @@ export default function SellPage() {
   const [details, setDetails] = useState<SaleDetails>(() => {
     const draft = tabTarget ? null : readSellDraft(tenantId);
     return draft && isDeliveryPlatform(draft.channel)
-      ? { ...NO_SALE_DETAILS, channel: draft.channel, externalOrderNumber: draft.externalOrderNumber, collectedBy: draft.collectedBy }
+      ? {
+        ...NO_SALE_DETAILS,
+        channel: draft.channel,
+        externalOrderNumber: draft.externalOrderNumber,
+        externalOrderId: draft.externalOrderId ?? '',
+        collectedBy: draft.collectedBy,
+      }
       : { ...NO_SALE_DETAILS, delivery: draft?.delivery ?? null };
   });
   // A folio left empty says so once a register was attempted, not while the cashier is still choosing products.
@@ -205,6 +213,7 @@ export default function SellPage() {
           orderNotes: draft.orderNotes,
           channel: draft.channel,
           externalOrderNumber: draft.externalOrderNumber,
+          externalOrderId: draft.externalOrderId ?? '',
           collectedBy: draft.collectedBy,
           delivery: draft.delivery ?? null,
           appointment: draft.appointment ?? null,
@@ -430,7 +439,9 @@ export default function SellPage() {
     : '';
   // Quick feedback only: the server checks the folio, the platform and the products again.
   const folioProblem = platform ? getPlatformFolioProblem(platform, details.externalOrderNumber) : '';
-  const platformProblem = platform && hasServices ? PLATFORM_ONLY_PRODUCTS_MESSAGE : folioProblem;
+  // The long id is optional: said as soon as what was typed cannot be one.
+  const orderIdError = platform ? getPlatformOrderIdProblem(details.externalOrderId) : '';
+  const platformProblem = platform && hasServices ? PLATFORM_ONLY_PRODUCTS_MESSAGE : folioProblem || orderIdError;
   const folioError = folioProblem && (folioChecked || details.externalOrderNumber.trim()) ? folioProblem : '';
 
   const categoriesWithProducts = useMemo(() => {
@@ -600,6 +611,7 @@ export default function SellPage() {
     expectedTotal: totals.total,
     channel: chatOrigin ? OrderChannel.WhatsApp : platform ?? undefined,
     externalOrderNumber: platform ? normalizePlatformFolio(details.externalOrderNumber) : undefined,
+    externalOrderId: platform && details.externalOrderId.trim() ? normalizePlatformOrderId(details.externalOrderId) : undefined,
     collectedBy: platform ? details.collectedBy : undefined,
     branchId: saleBranchId,
     delivery: delivery
@@ -653,8 +665,8 @@ export default function SellPage() {
   };
 
   /**
-   * Sends the sale. A folio of a platform already registered today asks first: short folios repeat, so when it is
-   * another order it goes again with the same key, confirmed; null when the cashier goes to check instead.
+   * Sends the sale. A folio of a platform already registered today, or its long id ever, asks first: short folios repeat,
+   * so when it is another order it goes again with the same key, confirmed; null when the cashier goes to check instead.
    */
   const sendSale = async (request: CreateOrderRequest): Promise<OrderDto | null> => {
     try {
@@ -662,10 +674,15 @@ export default function SellPage() {
       return data;
     } catch (err: unknown) {
       if (getApiErrorCode(err) !== 'possible_duplicate_order' || request.confirmPossibleDuplicate) throw err;
+      // The server says which one repeats: the long id (which does not repeat) or today's folio.
+      const byLongId = Boolean(request.externalOrderId) && getApiErrorMessage(err, '').includes('ID largo');
       const confirmed = await confirm({
         title: '¿Es otro pedido?',
-        message: `Hoy ya registraste un pedido de ${getChannelLabel(request.channel)} con el folio ${request.externalOrderNumber}. `
-          + 'Los folios cortos se repiten: si es otro pedido, regístralo; si no, búscalo en Pedidos.',
+        message: byLongId
+          ? `Ya registraste un pedido de ${getChannelLabel(request.channel)} con el ID largo ${request.externalOrderId}. `
+            + 'Los IDs largos no se repiten: búscalo en Pedidos; si de verdad es otro pedido, regístralo.'
+          : `Hoy ya registraste un pedido de ${getChannelLabel(request.channel)} con el folio ${request.externalOrderNumber}. `
+            + 'Los folios cortos se repiten: si es otro pedido, regístralo; si no, búscalo en Pedidos.',
         confirmLabel: 'Registrar de todos modos',
         cancelLabel: 'Revisar',
       });
@@ -871,6 +888,7 @@ export default function SellPage() {
       platform={platform}
       onChannelChange={changeChannel}
       folioError={folioError}
+      orderIdError={orderIdError}
       hasServices={hasServices}
       online={online}
       onRegisterPlatformOrder={registerPlatformOrder}

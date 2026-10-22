@@ -65,6 +65,18 @@ describe('sellDraft', () => {
     expect(readSellDraft('t1')).toEqual({ ...business, pendingCharge: undefined });
   });
 
+  it('keeps the long id of an order of a platform, and tells a sale with another one apart', () => {
+    const withLongId = { ...rappi, externalOrderId: '3f9c2b1e-8d4a-4c6f-9b2e-1a7d5e0c3b84' };
+
+    writeSellDraft('t1', withLongId);
+
+    expect(readSellDraft('t1')?.externalOrderId).toBe('3f9c2b1e-8d4a-4c6f-9b2e-1a7d5e0c3b84');
+    // Written another way it is the same sale; another long id is another one, and none keeps the description of before.
+    expect(describeSale({ ...withLongId, externalOrderId: ' #3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84 ' })).toBe(describeSale(withLongId));
+    expect(describeSale({ ...withLongId, externalOrderId: 'RAPPI-000555' })).not.toBe(describeSale(withLongId));
+    expect(describeSale({ ...rappi, externalOrderId: '' })).toBe(describeSale(rappi));
+  });
+
   it('brings a draft from before the platforms, or one with values that are not the enum\'s, back as a counter sale', () => {
     const old = { lines: draft.lines, customerName: 'Lupita', customerPhone: '', tableNumber: '', orderNotes: '' };
     window.localStorage.setItem('tienditapp.sell.draft.v1.t1', JSON.stringify(old));

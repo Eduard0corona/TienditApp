@@ -235,7 +235,7 @@ describe('PlatformSettlementPage', () => {
     await user.upload(within(dialog).getByLabelText('Archivo CSV'), new File([csv], 'rappi-octubre.csv', { type: 'text/csv' }));
 
     // The columns are guessed by their headers, and the first lines say how they read.
-    expect(await within(dialog).findByLabelText('Folio del pedido')).toHaveDisplayValue('ID del pedido');
+    expect(await within(dialog).findByLabelText('Folio o ID del pedido')).toHaveDisplayValue('ID del pedido');
     expect(within(dialog).getByLabelText('Importe')).toHaveDisplayValue('Monto neto');
     expect(within(dialog).getByLabelText('Concepto (opcional)')).toHaveDisplayValue('Concepto');
     expect(within(dialog).getByText('Línea 2: folio 152390 · $561.48 · Pedido')).toBeInTheDocument();
