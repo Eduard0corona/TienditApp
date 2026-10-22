@@ -6,6 +6,7 @@ import { withCredit } from './fiado.mocks';
 
 // MessagePurpose and OutgoingMessageStatus as the contract numbers them.
 const CREDIT_REMINDER = 3;
+const CREDIT_DUE_SOON = 4;
 const SENT = 1;
 const FAILED = 2;
 const SKIPPED = 3;
@@ -60,5 +61,31 @@ function withOwnTermWithoutWhatsApp(data: DemoData) {
   p2.settings.whatsAppConnected = false;
 }
 
+/**
+ * The same business with the notice before something comes due (Fase 26E) on too: two days before, with «Por vencer», a
+ * template approved in Meta. The offices of Grupo Altavista, up to date, got one three days ago for what came due on
+ * Saturday 3, which they paid.
+ */
+function withTermsRemindersAndNotice(data: DemoData) {
+  withTermsAndReminders(data);
+  data.creditDueSoon = { enabled: true, daysBefore: 2, templateId: 't-por-vencer' };
+  const p2 = data.p2 ?? (data.p2 = phase2Data(data));
+  p2.templates.push({
+    id: 't-por-vencer', name: 'Por vencer', purpose: CREDIT_DUE_SOON,
+    body: 'Hola {nombre}, el {fecha} vence {porvencer} de tu saldo de {monto} en {negocio}. Si ya pagaste, ignora este mensaje. Escribe BAJA si no quieres recibir recordatorios.',
+    providerTemplateName: 'por_vencer', languageCode: 'es_MX', isActive: true,
+    parameters: ['nombre', 'fecha', 'porvencer', 'monto', 'negocio'], createdAt: at(18, 15, -9),
+  });
+  const altavista = customerOf(data, 'Oficinas Grupo Altavista');
+  const threeDaysAgo = at(10, 5, -3);
+  p2.messages.push({
+    id: 'cs-1', purpose: CREDIT_DUE_SOON, phone: phoneKey(altavista.phone), recipientName: 'Oficinas Grupo Altavista',
+    body: 'Hola Oficinas, el sábado 3 de octubre vence $560.00 de tu saldo de $1,120.00 en Café La Esquina. Si ya pagaste, ignora este mensaje. Escribe BAJA si no quieres recibir recordatorios.',
+    status: SENT, attempts: 1, createdAt: threeDaysAgo, nextAttemptAt: threeDaysAgo, sentAt: threeDaysAgo, deliveredAt: threeDaysAgo,
+  });
+  data.lastCreditDueSoon = { [phoneKey(altavista.phone) as string]: threeDaysAgo };
+}
+
 export const CON_RECORDATORIOS = asOption(withTermsAndReminders);
+export const CON_AVISO = asOption(withTermsRemindersAndNotice);
 export const SIN_WHATSAPP = asOption(withOwnTermWithoutWhatsApp);

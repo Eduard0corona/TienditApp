@@ -49,6 +49,9 @@ const termOf = (data, key) => ownTermOf(data, key) ?? data.creditTermDays ?? nul
 /** Every how many days the reminders repeat (CreditReminders.EveryDaysAsync); null while they are off. */
 export const reminderEveryDays = (data) => (data.creditReminders?.enabled ? data.creditReminders.everyDays : null);
 
+/** How many days before the last day to pay the notice goes (CreditReminders.DueSoonDaysBeforeAsync); null while off. */
+const dueSoonDaysBefore = (data) => (data.creditDueSoon?.enabled ? data.creditDueSoon.daysBefore : null);
+
 /** The last day to pay an order with its customer's term (CreditTerm.DueOn); null without a term. */
 function dueOn(data, order) {
   const term = termOf(data, phoneKey(order.customerPhone));
@@ -129,6 +132,7 @@ export function account(data, key, record) {
     overdue: r2(orders.filter((o) => isOverdue(data, o)).reduce((sum, o) => sum + balanceOf(o), 0)),
     creditReminderEveryDays: reminderEveryDays(data),
     lastReminderAt: data.lastCreditReminders?.[key] ?? null,
+    lastDueSoonAt: data.lastCreditDueSoon?.[key] ?? null,
     orders: orders.map((o) => ({
       orderId: o.id, orderNumber: o.orderNumber, createdAt: o.createdAt, status: o.status, soldOnCredit: !!o.soldOnCredit,
       total: o.total, paid: o.paidAmount, writtenOff: o.writtenOffAmount ?? 0, balance: balanceOf(o),
@@ -183,6 +187,7 @@ function receivables(data, q, paginate) {
     totalOverdue: r2(rows.reduce((sum, row) => sum + row.overdue, 0)),
     creditTermDays: data.creditTermDays ?? null,
     creditReminderEveryDays: reminderEveryDays(data),
+    creditDueSoonDaysBefore: dueSoonDaysBefore(data),
     totalCreditBalance: r2((data.balanceEntries ?? []).reduce((sum, e) => sum + e.amount, 0)),
     page: {
       ...page,

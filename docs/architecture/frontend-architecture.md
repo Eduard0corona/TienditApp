@@ -669,6 +669,15 @@ Plazo por cliente y recordatorios del fiado (Fase 26C, [ADR 0035](../adr/0035-cu
 - **Clientes:** «Paga en N días» junto a «Fiado hasta $X». **Campañas › Plantillas:** el uso «Recordatorio del fiado», con `{monto}`, `{vencido}` y `{fecha}`, su ayuda (`CREDIT_PLACEHOLDER_HELP`) y su ejemplo. **Campañas › Recordatorios del fiado** (`CreditRemindersTab`): los últimos con su resultado, con `MessageHistory` de los de citas. `?tab=` abre una pestaña de Campañas; la pantalla de los recordatorios lleva a Plantillas y a lo que se mandó.
 - **Escenas:** `scenes/recordatorios.spec.ts` con `scenes/recordatorios.mocks.ts`. La API simulada de la 26A (`mocks/routes-p15.mjs`) cuenta lo vencido con el plazo de cada cliente; `mocks/routes-p17.mjs` agrega el plazo por cliente y los recordatorios.
 
+El aviso antes de vencer del fiado (Fase 26E, [ADR 0043](../adr/0043-credit-due-soon-notice.md)):
+
+- **`api/customerCredit.ts`:** `useCreditReminders` trae también `dueSoon` y `useUpdateCreditReminders` lo manda siempre (el servidor deja el aviso como estaba cuando no llega).
+- **Recordatorios del fiado (`components/customers/CreditRemindersModal`):** dos secciones (`fieldset` con `legend`, cada una con el componente `MessageSettings`): «Antes de que venza» (el interruptor, «Anticipación» de 1 a 7 días con `dueSoonDaysBeforeProblem`, el mensaje o una plantilla «Aviso antes de vencer») y «Lo vencido» (lo de la 26C). Cada una enseña cómo le llega al cliente (`previewReminder`, que ya sabe `{porvencer}`) y advierte si su mensaje no tiene plantilla aprobada en Meta. Sin WhatsApp no deja encender ninguno. Una sección apagada no avisa ni detiene el guardado: si sus días no se pueden guardar, manda los que tenía. El aviso de guardado dice los dos («Se avisará 2 días antes de que venza y se recordará lo vencido cada 7 días.»).
+- **Por cobrar:** `describeCreditMessages` («Aviso 2 días antes de vencer · recordatorios cada 7 días», o lo que esté encendido); «Cambiar» o «Activar» según haya alguno encendido.
+- **Estado de cuenta:** `describeDueSoon`, el último aviso que se le mandó.
+- **Campañas › Plantillas:** el uso «Aviso antes de vencer», con `{porvencer}` y su ayuda (`CREDIT_DUE_SOON_PLACEHOLDER_HELP`). **Campañas › Recordatorios del fiado:** «Avisos antes de vencer» arriba de los recordatorios.
+- **Escenas:** `scenes/aviso-antes-de-vencer.spec.ts` (con `CON_AVISO` de `scenes/recordatorios.mocks.ts`); `mocks/routes-p17.mjs` agrega `dueSoon` y `mocks/routes-p15.mjs` lo que dicen Por cobrar y la cuenta.
+
 Saldo a favor del cliente (Fase 26D, [ADR 0036](../adr/0036-customer-balance.md)):
 
 - **`api/customerCredit.ts`:** `useAddCustomerDeposit` y `useReturnCustomerBalance`, que dejan la cuenta que responde el servidor en la caché (`setQueryData`) y vuelven a pedir las listas, las cuentas y las fichas como un abono.

@@ -1149,6 +1149,36 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas visuales:** `retenciones.spec.ts` (5, nuevas): la conciliación de Uber Eats de 2026 (escritorio, teléfono y oscuro), subir dos XML con lo que pasó con cada uno y quitar un CFDI, con `retenciones.mocks.ts` (`RETENCIONES_ROUTES`, `UPLOAD_FILES`).
     - **Lo que cambia y por qué:** 3 escenas de `liquidaciones.spec.ts` (la lista en escritorio, teléfono y oscuro), por la frase que enlaza a Retenciones en la descripción de Liquidaciones.
     - **Resultado:** la comparación contra `master` en `12b00ec` dio 627 pruebas iguales (con la de cobertura, que pide la ruta escrita en la escena), 3 escenas que cambian y 5 nuevas. Las 5 nuevas se volvieron a tomar después de la segunda revisión (la nota de los CFDI que se traslapan) y pasaron dos corridas seguidas contra el mismo build.
+- Fase 26E, el aviso antes de vencer del fiado ([ADR 0043](../adr/0043-credit-due-soon-notice.md)):
+  - **Domain:** `CreditDueSoonTests` (6): el aviso empieza apagado, dos días antes y con el texto por omisión; va de 1 a 7 días antes sin tocar los recordatorios; fuera de rango se rechaza sin cambiar nada; y sus plantillas usan `{porvencer}`, no `{vencido}` ni lo de las citas (y `{porvencer}` no es de los recordatorios ni de las campañas).
+  - **Application:** `CreditDueSoonFlowTests` (16):
+    - el planificador le avisa a quien va al corriente lo que vence el próximo día límite (lo que vence ese día y lo que debe en total), una vez por día límite y a lo más una al día: nunca el día en que se le fió, ni a quien tiene algo vencido, ni lo que vence después de la anticipación; si paga lo de ese día, el siguiente día límite tiene su aviso al día siguiente;
+    - una pasada con límite alcanza a todos, y quien escribió BAJA o ya tiene su aviso no ocupa lugar; un aviso omitido porque se apagó no cuenta y uno fallido sí;
+    - espera a que se encienda (los recordatorios no lo encienden), a un plazo, al día del negocio y a WhatsApp, y nunca le escribe a quien escribió BAJA (también guardada con el 1);
+    - usa su plantilla aprobada en Meta con sus parámetros, y nunca una de los recordatorios;
+    - el envío lo omite tardío (otro día o después de las 20:00), apagado, con un plazo más largo (ya no vence ese día), con algo vencido por un plazo más corto, con la baja y ya condonado, y lo manda si no;
+    - lo que otro negocio hizo con el mismo teléfono (lo vencido, la baja, su aviso) no cuenta;
+    - la llave se lee desde la derecha como se escribió, y no se lee lo que no es su llave;
+    - la pantalla lo enciende con WhatsApp y con una plantilla activa de su uso, lo registra en la actividad, y una pantalla anterior (sin `dueSoon`) lo deja como estaba; Por cobrar dice los días; una plantilla retirada se lee como el texto por omisión;
+    - y la cuenta dice cuándo salió el último.
+
+    Los ayudantes de las pruebas del fiado (la tienda, los clientes, las ventas fiadas, WhatsApp, Por cobrar y la cuenta) pasan a `Support/CreditTestKit.cs`, que usan también `CustomerCreditReminderFlowTests`.
+  - **Infrastructure:**
+    - `CreditDueSoonMigrationSqlServerTests` (3): lo que guarda la versión anterior deja el aviso apagado, dos días antes; la restricción rechaza 0 y 8 días; y el rollback se detiene con 50034 con cada rastro del aviso (encendido, plantilla elegida, plantilla, aviso encolado), no por los recordatorios, y sin ninguno quita solo lo suyo. Las pruebas de migraciones anteriores que leen la configuración usan el modelo sin las columnas nuevas (`BeforeCreditDueSoon`).
+    - `CustomerCreditSqlServerTests` (+1): lo que vence pronto, en la base real, con el plazo propio de Ana (vence hoy), el del negocio por la fecha de entrega de Luis (vence el miércoles) y lo vencido de Sofía (fuera), sin la venta de hoy; y lo que pregunta el envío (`OwesDueOnAsync`).
+    - `MessagingWorkerTests` (+1): el worker encola recordatorios y avisos donde están encendidos, cada uno en su negocio.
+  - **WebApi:** `CrossTenantCustomerCreditSqlServerTests` (+1), sobre la API real: quien cobra y lleva campañas no cambia el aviso ni escribe sus plantillas (403); otro negocio no elige mi plantilla, sin WhatsApp no se enciende y los días van de 1 a 7 (400); cada negocio tiene el suyo, y una pantalla anterior lo deja como estaba.
+  - **Cliente:**
+    - `CreditRemindersModal.test.tsx` (5, nuevo): enciende el aviso con su plantilla junto a los recordatorios y manda los dos; rechaza los días fuera de rango mientras está encendido y no deja encender ninguno sin WhatsApp; una sección apagada conserva sus días guardados sin detener el guardado; una plantilla retirada empieza como el texto por omisión y se manda vacía; y el motivo del servidor se queda en el diálogo.
+    - `customerAccount.test.ts` (+9): los días antes, el aviso como lo lee un cliente, lo que dice Por cobrar y el último aviso de la cuenta.
+    - `ReceivablesPage.test.tsx`: los recordatorios se buscan en su sección («Lo vencido») y el cuerpo lleva `dueSoon`.
+  - **Total:** `dotnet test` con SQL Server 2022, 3,429 pruebas sin fallos ni omitidas (Domain 975, Application 1,540, Infrastructure 482, WebApi 432).
+  - **Cliente en total:** 155 archivos y 1,040 pruebas.
+  - **Primera visita:** 179,248 B de 179,300 B (+25 B contra `master`): el uso nuevo en los enums del contrato. El modal, Plantillas y la pestaña se cargan con su pantalla.
+  - **Escenas visuales:** `aviso-antes-de-vencer.spec.ts` (5, nuevas): Por cobrar con el aviso, el diálogo con el aviso encendido, la cuenta con su último aviso, la lista de avisos en Campañas y la plantilla del aviso.
+    - **Lo que cambia y por qué:** 3 escenas de `recordatorios.spec.ts`: el diálogo de los recordatorios en escritorio y sin WhatsApp en el teléfono (las dos secciones) y la pestaña de Campañas (la lista de avisos arriba).
+    - **Resultado:** RESULTADO_ESCENAS
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

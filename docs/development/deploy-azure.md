@@ -756,6 +756,21 @@ La Fase 22J trae una migración, [`database/production/20261022033401_AddPlatfor
 - **Volver a la versión anterior:** funciona sin tocar la base. No conoce la tabla y deja de enseñar las retenciones, que vuelven a verse con esta versión.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50033, sin cambiar nada, en cuanto un negocio subió un CFDI (también uno quitado): borrarlo perdería lo que subió el negocio. Sin ninguno, quita la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## El aviso antes de vencer del fiado (Fase 26E)
+
+La Fase 26E trae una migración, [`database/production/20261022153116_AddCreditDueSoon`](../../database/production/20261022153116_AddCreditDueSoon). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0043](../adr/0043-credit-due-soon-notice.md)).
+
+- **La migración** agrega a `TenantSettings` las columnas `CreditDueSoonEnabled` (0), `CreditDueSoonDaysBefore` (2) y `CreditDueSoonTemplateId` (con nulos), con la restricción `CK_TenantSettings_CreditDueSoonDaysBefore` (de 1 a 7). No cambia saldos, plazos, recordatorios ni mensajes. Después de aplicarla, el `verify.sql` muestra las tres columnas y la restricción; su consulta 3 cuenta los negocios con el aviso y las plantillas y avisos con ese uso (todo en cero hasta desplegar), y la 4 los recordatorios de lo vencido, igual antes y después.
+- **Mientras se publica:** la versión de `master` (Fase 22J) no conoce las columnas y sigue funcionando; lo que guarda deja el aviso apagado. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:**
+  - El aviso empieza apagado en todos: nadie recibe un mensaje nuevo hasta que el dueño lo encienda en Clientes › Por cobrar › Recordatorios del fiado.
+  - Con el aviso encendido, el worker de mensajes encola de 10:00 a 19:00 un aviso a quien va al corriente y tiene algo por vencer dentro de los días elegidos.
+  - Las plantillas con el uso «Aviso antes de vencer» las crea el dueño o un administrador; los avisos se ven en Campañas › Recordatorios del fiado.
+- **El contrato agrega:** `MessagePurpose.CreditDueSoon` (4), `dueSoon` en `GET` y (opcional) en `PUT /api/v1/customers/credit-reminders`, `creditDueSoonDaysBefore` en Por cobrar, `lastDueSoonAt` en la cuenta y `creditDueSoonPlaceholders` en los ajustes de mensajes. Nada se quita ni cambia de nombre; un `PUT` sin `dueSoon` deja el aviso como estaba.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base. Deja de encolar avisos; los que sigan pendientes (encolados ese día) salen con la baja revisada, pero sin revisar si todavía debe lo de ese día.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50034, sin cambiar nada, en cuanto un negocio encendió el aviso o eligió su plantilla, o hay plantillas o avisos con ese uso. Sin ninguno, quita las columnas y la restricción, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

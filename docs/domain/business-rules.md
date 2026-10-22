@@ -443,7 +443,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Abonar a la cuenta:** un monto con un método que entra a caja, repartido del pedido más viejo al más nuevo como pagos de cada pedido en la caja de quien cobra, con la nota «Abono a la cuenta»; el cambio va con la última parte. Nunca más de lo que debe, salvo que se deje el resto a su favor (Fase 26D). Un abono que llega dos veces, o después de otro que la pantalla no vio, encuentra la cuenta cambiada y se rechaza.
 - **El estado de cuenta:** el límite, lo que debe y lo que le queda, los pedidos que debe (hasta 100, del más viejo) y sus últimos 10 pagos; «Enviar por WhatsApp» lo manda desde el dispositivo.
 - **Clientes › Por cobrar:** una fila por teléfono con lo que debe, cuántos pedidos y desde cuándo, su límite (si hoy se le fía) y si lo rebasa, y el total; busca por nombre o parte del teléfono y ordena por lo que debe o por lo más viejo.
-- **Sin** intereses. El plazo y los recordatorios llegaron en la 26B y la 26C, y el saldo a favor en la 26D.
+- **Sin** intereses. El plazo y los recordatorios llegaron en la 26B y la 26C, el saldo a favor en la 26D y el aviso antes de vencer en la 26E.
 
 ## Condonar y plazo del fiado (Fase 26B)
 
@@ -471,6 +471,18 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - Nunca a quien escribió BAJA.
   - Sin plantilla aprobada en Meta solo llegan a quien escribió en las últimas 24 horas.
 - **Se ve:** «Paga en N días» en Clientes y en Por cobrar; en el estado de cuenta, si el plazo es solo para ese cliente y el último recordatorio.
+
+## El aviso antes de vencer del fiado (Fase 26E)
+
+[ADR 0043](../adr/0043-credit-due-soon-notice.md):
+
+- **Lo enciende** el dueño o un administrador en Por cobrar, junto a los recordatorios, con WhatsApp conectado: de 1 a 7 días antes del día límite (2 por omisión), con el texto por omisión o una plantilla «Aviso antes de vencer». Apagado en todos al migrar y aparte de los recordatorios; cada cambio queda en la actividad.
+- **A quién:** a cada cuenta (teléfono) que no debe nada vencido y debe algo cuyo día límite, por su plazo, cae de hoy a dentro de esos días. Solo cuenta lo que debe desde antes de hoy: nunca el mismo día en que se le fió. Quien tiene algo vencido recibe, si está encendido, el recordatorio de lo vencido.
+- **Cuántos:** uno por cuenta y por su próximo día límite, a lo más uno al día. Si paga lo de ese día y lo siguiente cae dentro de los días, recibe el aviso de ese nuevo día.
+- **Cuándo:** se encola de 10:00 a 19:00 del negocio. Al mandarse se omite si se apagó, si ya es otro día o pasan de las 20:00, si ya tiene algo vencido, o si ya no debe nada que venza ese día (pagó, se le condonó o le cambiaron el plazo).
+- **Nunca** a quien escribió BAJA. Sin plantilla aprobada en Meta solo llega a quien escribió en las últimas 24 horas.
+- **El mensaje** dice lo que debe en total (`{monto}`), lo que vence (`{porvencer}`) y el día (`{fecha}`).
+- **Se ve:** en Por cobrar («Aviso 2 días antes de vencer»), en el estado de cuenta (el último aviso) y en Campañas › Recordatorios del fiado.
 
 ## Saldo a favor del cliente (Fase 26D)
 

@@ -182,7 +182,7 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
 - Plazo por cliente y recordatorios del fiado (Fase 26C, [ADR 0035](../adr/0035-customer-credit-term-and-reminders.md)):
   - **Sin plantilla aprobada en Meta,** el recordatorio solo llega a quien escribió en las últimas 24 horas; los demás quedan fallidos en el registro de mensajes. La plantilla se aprueba en Meta, fuera de TienditApp, y debe llevar los parámetros en el orden en que aparecen en el texto.
   - **Ventana de envío fija** (de 10:00 a 19:00 del negocio): no lee el horario del negocio ni sus días cerrados.
-  - **Sin aviso antes de vencer** ni recordatorios por SMS o correo.
+  - **Sin recordatorios por SMS o correo.** El aviso antes de vencer llegó en la 26E ([ADR 0043](../adr/0043-credit-due-soon-notice.md)).
   - **Sin pausa por cliente:** para que a alguien no le lleguen, el negocio registra su baja en Mensajes (que también detiene las campañas).
   - **Dos fichas con el mismo teléfono:** el plazo que cuenta es el más corto de las dos.
   - **Hasta 500 cuentas por pasada y negocio:** las demás reciben el suyo en la pasada siguiente (cada 5 minutos); quien ya fue recordado o escribió BAJA no ocupa lugar.
@@ -190,6 +190,16 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - **El texto se arma al encolar:** un reintento del mismo día sale con lo que debía en la mañana aunque después haya pagado una parte (si pagó todo lo vencido, se omite).
   - **Una plantilla desactivada** deja el texto predeterminado, que no está aprobado en Meta: fuera de las 24 horas esos recordatorios fallan, y la cadencia los cuenta.
   - **Durante un regreso a la 26B, o mientras conviven las dos versiones en un despliegue,** todos vuelven al plazo del negocio y los recordatorios ya encolados salen sin la revisión de lo vencido.
+- El aviso antes de vencer del fiado (Fase 26E, [ADR 0043](../adr/0043-credit-due-soon-notice.md)):
+  - **Sin plantilla aprobada en Meta,** el aviso solo llega a quien escribió en las últimas 24 horas, como los recordatorios.
+  - **Quien tiene algo vencido no recibe el aviso** de lo que le vence después, aunque los recordatorios de lo vencido estén apagados.
+  - **Con un plazo igual o menor que la anticipación,** el aviso llega al día siguiente de la venta, no N días antes: nunca el mismo día en que se le fió.
+  - **Un aviso por día límite, a lo más uno al día:** quien fía y paga cada día puede recibir uno cada día; no hay un segundo aviso del mismo día límite (por ejemplo, el mismo día).
+  - **El texto se arma al encolar:** un reintento del mismo día sale con lo que debía en la mañana; si ya pagó todo lo de ese día, o algo se le venció, se omite.
+  - **Cada pasada lee dos veces los plazos propios** (lo vencido y lo que vence pronto), en el ciclo del worker de mensajes, como los recordatorios.
+  - **Durante un regreso a la 22J, o mientras conviven las dos versiones,** los avisos encolados que sigan pendientes salen con la baja revisada, pero sin revisar si todavía debe lo de ese día.
+  - La 26E suma 25 B a la primera visita (de 179,223 a 179,248 B): el uso nuevo en los enums del contrato. El presupuesto no cambia.
+
 - Saldo a favor del cliente (Fase 26D, [ADR 0036](../adr/0036-customer-balance.md)):
   - **Sin CFDI del anticipo:** lo pagado con saldo lleva la forma de pago 30 y un aviso; el CFDI del anticipo y su egreso los hace el contador.
   - **En los reportes por día cuenta como «Otros»:** la foto diaria tiene columnas fijas y no hay una para el saldo; el corte sí lo separa.
