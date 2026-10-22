@@ -195,7 +195,7 @@ export default function PlatformWithholdings() {
                       .
                     </>
                   )}
-                {' '}Un CFDI de varios meses cuenta completo en su último mes.
+                {' '}Un CFDI de varios meses cuenta completo en su último mes, junto con los que se traslapan con él.
               </p>
               <div className="table-responsive">
                 <table className="table table-sm align-middle mb-0">
@@ -225,6 +225,9 @@ export default function PlatformWithholdings() {
                             <div className="small text-muted">
                               Compara de {MONTH_NAMES[month.coveredFromMonth - 1]} a {MONTH_NAMES[month.month - 1]}
                             </div>
+                          )}
+                          {month.comparedInMonth !== null && month.comparedInMonth !== undefined && (
+                            <div className="small text-muted">Se compara en {MONTH_NAMES[month.comparedInMonth - 1]}</div>
                           )}
                         </td>
                         <td className="text-end"><Difference amount={month.isrDifference} /></td>

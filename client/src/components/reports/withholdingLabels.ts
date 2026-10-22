@@ -20,6 +20,8 @@ export const XML_TOO_BIG_MESSAGE = 'El archivo pasa de 512 KB: un CFDI de retenc
 export const NOT_XML_FILE_MESSAGE = 'No es un archivo .xml: sube el XML del CFDI de retenciones, no el PDF.';
 /** A .xml whose bytes are not text, in the server's words. */
 export const NOT_XML_CONTENT_MESSAGE = 'El archivo no es un XML válido: sube el XML del CFDI de retenciones, no el PDF.';
+/** The browser could not read it: it changed or went away after it was chosen. */
+export const FILE_NOT_READABLE_MESSAGE = 'No se pudo leer el archivo: puede que haya cambiado o ya no esté. Vuelve a elegirlo.';
 
 /** «Septiembre»: a month of the table, starting with a capital as the first word of a cell. */
 export function monthLabel(month: number): string {

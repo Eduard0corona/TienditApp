@@ -36,11 +36,11 @@ public static class PlatformWithholdingErrors
 
     private const string ReplacedStart = "Este CFDI ya se sustituyó por otro que está registrado en ";
 
-    /// <summary>The platform cancelled this CFDI and the one that replaces it is in force: this one does not count.</summary>
+    /// <summary>The platform cancelled this CFDI, which is already kept, and the one that replaces it is too: it does not count.</summary>
     public static string Replaced(PlatformWithholdingCertificate replacement)
         => $"{ReplacedStart}{OrderChannelRules.DisplayName(replacement.Channel)}, {PlatformWithholdingText.Period(replacement)}: no cuenta.";
 
-    /// <summary>The reason of a CFDI taken out because the one registered replaces it.</summary>
+    /// <summary>The reason of a CFDI taken out because another one registered replaces it.</summary>
     public static string ReplacedBy(PlatformWithholdingCertificate replacement)
         => $"Lo sustituye el CFDI con folio {replacement.Uuid.ToString()[..8].ToUpperInvariant()}.";
 
@@ -131,15 +131,21 @@ public class RegisterPlatformWithholdingCertificateCommandHandler
 
         if (await RegisteredAsync(data.Uuid, cancellationToken) is { } existing)
             return Result.Failure<PlatformWithholdingCertificateDto>(PlatformWithholdingErrors.AlreadyRegistered(existing));
-        // A CFDI the platform cancelled and replaced, uploaded after its replacement (a downloaded folder brings both).
+        // A CFDI the platform cancelled and replaced, uploaded after the one that replaces it (a downloaded folder brings
+        // both, in any order): it never counts. The one that replaces it may itself be replaced already, and removed.
         var replacement = await _context.PlatformWithholdingCertificates
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ReplacesUuid == data.Uuid && c.RemovedAt == null, cancellationToken);
-        if (replacement is not null)
+            .Where(c => c.ReplacesUuid == data.Uuid)
+            .OrderBy(c => c.RemovedAt == null ? 0 : 1)
+            .ThenByDescending(c => c.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        // Its record is here already: there is nothing new to keep.
+        if (replacement is not null && await _context.PlatformWithholdingCertificates.AnyAsync(c => c.Uuid == data.Uuid, cancellationToken))
             return Result.Failure<PlatformWithholdingCertificateDto>(PlatformWithholdingErrors.Replaced(replacement));
 
         var zone = await PlatformSettlementReader.ZoneAsync(_context, tenantId, cancellationToken);
         var today = DailySalesReadModel.LocalToday(zone, _clock.UtcNow);
+        var now = _clock.UtcNow;
         PlatformWithholdingCertificate certificate;
         try
         {
@@ -151,17 +157,27 @@ public class RegisterPlatformWithholdingCertificateCommandHandler
         }
 
         var performedBy = _currentUserService.UserName ?? "system";
+        var removals = new List<PlatformWithholdingCertificate>();
+        // Replaced already: it is kept as history, taken out from the start, so the chain is known when the one it replaces
+        // comes (A replaced by B and B by C, uploaded A, C, B: only C counts).
+        if (replacement is not null)
+        {
+            certificate.Remove(PlatformWithholdingErrors.ReplacedBy(replacement), now);
+            removals.Add(certificate);
+        }
         // The one it replaces stops counting in the same save, with why: the platform cancelled it.
         if (certificate.ReplacesUuid is { } replacedUuid
             && await _context.PlatformWithholdingCertificates
                 .FirstOrDefaultAsync(c => c.Uuid == replacedUuid && c.RemovedAt == null, cancellationToken) is { } replaced)
         {
-            replaced.Remove(PlatformWithholdingErrors.ReplacedBy(certificate), _clock.UtcNow);
-            _context.AuditLogs.Add(PlatformWithholdingAudit.Removed(tenantId, replaced, performedBy));
+            replaced.Remove(PlatformWithholdingErrors.ReplacedBy(certificate), now);
+            removals.Add(replaced);
         }
 
         _context.PlatformWithholdingCertificates.Add(certificate);
         _context.AuditLogs.Add(PlatformWithholdingAudit.Registered(tenantId, certificate, performedBy));
+        foreach (var removed in removals)
+            _context.AuditLogs.Add(PlatformWithholdingAudit.Removed(tenantId, removed, performedBy));
         try
         {
             await _context.SaveChangesAsync(cancellationToken);

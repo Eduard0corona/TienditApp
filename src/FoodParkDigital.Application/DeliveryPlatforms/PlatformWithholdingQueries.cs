@@ -58,22 +58,16 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
         var zone = await PlatformSettlementReader.ZoneAsync(_context, _tenantService.TenantId, cancellationToken);
         var calculated = await CalculatedAsync(request.Channel, request.Year, zone, cancellationToken);
 
-        // Each CFDI in force counts whole in the last month of its period, and is compared with every month it covers.
+        // The CFDI in force. The ones whose periods overlap are compared together (a weekly one of DiDi that crosses the
+        // month, with the weekly ones of both months): they count whole in the last month they cover between them, and that
+        // month is compared with what was calculated in every month they cover. A month is never compared twice.
         var vouchers = await _context.PlatformWithholdingCertificates
             .AsNoTracking()
             .Where(c => c.Channel == request.Channel && c.Year == request.Year && c.RemovedAt == null)
-            .GroupBy(c => c.MonthTo)
-            .Select(g => new
-            {
-                Month = g.Key,
-                From = g.Min(c => c.MonthFrom),
-                Count = g.Count(),
-                OperationTotal = g.Sum(c => c.OperationTotal),
-                Isr = g.Sum(c => c.IsrWithheld),
-                Vat = g.Sum(c => c.VatWithheld)
-            })
+            .Select(c => new Voucher(c.MonthFrom, c.MonthTo, c.OperationTotal, c.IsrWithheld, c.VatWithheld))
             .ToListAsync(cancellationToken);
-        var byMonth = vouchers.ToDictionary(v => v.Month);
+        var blocks = Block.Of(vouchers);
+        var byLastMonth = blocks.ToDictionary(b => b.To);
         Figures Of(int month) => calculated.TryGetValue(month, out var figures) ? figures : new Figures();
         Figures Over(IEnumerable<int> covered)
         {
@@ -86,11 +80,14 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
         var months = Enumerable.Range(1, 12).Select(month =>
         {
             var dto = Of(month).ToDto(month);
-            if (byMonth.TryGetValue(month, out var voucher))
+            if (byLastMonth.TryGetValue(month, out var block))
             {
-                var covered = Over(Enumerable.Range(voucher.From, month - voucher.From + 1));
-                Compare(dto, voucher.Count, voucher.OperationTotal, voucher.Isr, voucher.Vat, covered);
-                dto.CoveredFromMonth = voucher.From < month ? voucher.From : null;
+                Compare(dto, block.Count, block.OperationTotal, block.Isr, block.Vat, Over(block.Months));
+                dto.CoveredFromMonth = block.From < month ? block.From : null;
+            }
+            else if (blocks.FirstOrDefault(b => b.From <= month && month < b.To) is { } covering)
+            {
+                dto.ComparedInMonth = covering.To;
             }
             return dto;
         }).ToList();
@@ -98,16 +95,15 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
         // The year: what was calculated in all of it, and the difference only over the months some CFDI covers (the
         // current one has none yet), each counted once.
         var total = Over(Enumerable.Range(1, 12)).ToDto(null);
-        if (vouchers.Count > 0)
+        if (blocks.Count > 0)
         {
-            var coveredMonths = vouchers.SelectMany(v => Enumerable.Range(v.From, v.Month - v.From + 1)).Distinct();
             Compare(
                 total,
-                vouchers.Sum(v => v.Count),
-                vouchers.Sum(v => v.OperationTotal),
-                vouchers.Sum(v => v.Isr),
-                vouchers.Sum(v => v.Vat),
-                Over(coveredMonths));
+                blocks.Sum(b => b.Count),
+                blocks.Sum(b => b.OperationTotal),
+                blocks.Sum(b => b.Isr),
+                blocks.Sum(b => b.Vat),
+                Over(blocks.SelectMany(b => b.Months)));
         }
 
         var certificates = await _context.PlatformWithholdingCertificates
@@ -182,7 +178,7 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
         return months;
     }
 
-    /// <param name="covered">What was calculated in the months its CFDI cover: the difference is against that.</param>
+    /// <param name="covered">What was calculated in the months the CFDI cover: the difference is against that.</param>
     private static void Compare(
         PlatformWithholdingPeriodDto period, int count, decimal operationTotal, decimal isr, decimal vat, Figures covered)
     {
@@ -192,6 +188,50 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
         period.CertificateVat = vat;
         period.IsrDifference = isr - covered.Isr;
         period.VatDifference = vat - covered.Vat;
+    }
+
+    private sealed record Voucher(int MonthFrom, int MonthTo, decimal OperationTotal, decimal Isr, decimal Vat);
+
+    /// <summary>CFDI whose periods overlap, one after another: they are compared together, over every month they cover.</summary>
+    private sealed class Block
+    {
+        private Block(Voucher first)
+        {
+            From = first.MonthFrom;
+            To = first.MonthTo;
+            Add(first);
+        }
+
+        public int From { get; }
+        public int To { get; private set; }
+        public int Count { get; private set; }
+        public decimal OperationTotal { get; private set; }
+        public decimal Isr { get; private set; }
+        public decimal Vat { get; private set; }
+        public IEnumerable<int> Months => Enumerable.Range(From, To - From + 1);
+
+        /// <summary>The blocks of the CFDI, by month: one that starts in a month another one covers joins it.</summary>
+        public static List<Block> Of(IEnumerable<Voucher> vouchers)
+        {
+            var blocks = new List<Block>();
+            foreach (var voucher in vouchers.OrderBy(v => v.MonthFrom).ThenBy(v => v.MonthTo))
+            {
+                if (blocks.Count > 0 && voucher.MonthFrom <= blocks[^1].To)
+                    blocks[^1].Add(voucher);
+                else
+                    blocks.Add(new Block(voucher));
+            }
+            return blocks;
+        }
+
+        private void Add(Voucher voucher)
+        {
+            To = Math.Max(To, voucher.MonthTo);
+            Count++;
+            OperationTotal += voucher.OperationTotal;
+            Isr += voucher.Isr;
+            Vat += voucher.Vat;
+        }
     }
 
     private sealed class Figures

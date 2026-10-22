@@ -30,7 +30,7 @@ Tomé las decisiones de la Fase 22J con la autorización permanente del dueño d
 2. **El lector, en Application, no confía en el archivo.**
    - `PlatformWithholdingXml` lee hasta 512 KB, sin DTD ni resolutor: un XML que define entidades o apunta a otro archivo no se lee.
    - Exige la versión 2.0, la clave 26, un receptor nacional y el UUID del timbre.
-   - Suma cada `ImpRetenidos` por impuesto tal como viene y redondea la suma una sola vez. La base de un impuesto cuenta solo si todas sus líneas la traen.
+   - Suma cada `ImpRetenidos` por impuesto tal como viene y redondea la suma una sola vez. La base de un impuesto cuenta solo si todas sus líneas la traen. Una línea de más de $1,000,000,000 se rechaza antes de sumarla: la suma no cabría en un `decimal` y respondería 500.
    - Cada cifra se redondea a centavos, alejándose de cero, como el SAT redondea un importe a los decimales de su moneda.
    - Busca el timbre en cualquiera de sus complementos.
    - Dice qué es lo que no lee: una factura (CFDI de ingreso), un CFDI de retenciones 1.0, otra clave, un PDF o un dato que falta.
@@ -39,7 +39,9 @@ Tomé las decisiones de la Fase 22J con la autorización permanente del dueño d
    - `POST /api/v1/platform-withholdings` (`RegisterPlatformWithholdingCertificateCommand`, `RequiresTenantManager`) recibe la plataforma y el texto del XML.
    - Si el negocio escribió su RFC en Configuración y el CFDI va a otro, se rechaza. El mensaje no nombra ningún RFC.
    - Un UUID vigente en el negocio responde 409 `conflict` y dice en qué plataforma y periodo está. El índice único filtrado `(TenantId, Uuid) WHERE RemovedAt IS NULL` lo garantiza también cuando dos personas lo suben a la vez. El mismo CFDI en otro negocio es otro registro.
-   - Un CFDI que sustituye a otro vigente lo quita en el mismo guardado, con el motivo «Lo sustituye el CFDI con folio …». Uno que ya fue sustituido por otro vigente responde 409 `conflict`: una carpeta descargada trae los dos y solo cuenta el nuevo.
+   - Un CFDI que sustituye a otro vigente lo quita en el mismo guardado, con el motivo «Lo sustituye el CFDI con folio …».
+   - Una carpeta descargada trae los dos, en cualquier orden, y solo cuenta el nuevo. Uno que llega después del que lo sustituye (vigente o ya quitado) se guarda quitado desde el principio, con ese motivo, y quita al que él sustituía. Así se conoce la cadena: A sustituido por B y B por C, subidos A, C, B, dejan vigente solo a C. Si ese CFDI ya estaba guardado, responde 409 `conflict`.
+   - Todo se busca dentro del negocio: un CFDI de otro negocio que dice sustituir uno de este no lo quita.
    - La bitácora (`PlatformWithholdingCertificateRegistered`) va en el mismo guardado, con la plataforma, el UUID, el que sustituye, el periodo y los importes, sin RFC.
 4. **Quitar, con motivo; nunca borrar.**
    - `POST /api/v1/platform-withholdings/{id}/remove` marca el CFDI como quitado con su motivo. Deja de contar en la conciliación pero se queda en la lista, y ese UUID puede subirse otra vez (con otra plataforma, por ejemplo).
@@ -48,14 +50,14 @@ Tomé las decisiones de la Fase 22J con la autorización permanente del dueño d
 5. **La conciliación, por mes del negocio.**
    - `GET /api/v1/platform-withholdings?channel=&year=` (`ViewReports`) devuelve los 12 meses del año y el total.
    - Lo calculado son los pedidos de la plataforma que cobró ella, registrados en cada mes en la zona horaria del negocio. Para cada uno, su ISR, su IVA retenido y sus ventas sin IVA, en proporción a lo que sigue pagado (una devolución de la mitad retiene la mitad), con redondeo bancario por pedido, como la liquidación (`PlatformSettlementCalculator.InProportion`).
-   - Lo del CFDI es la suma de los vigentes cuyo último mes es ese. Un CFDI de varios meses cuenta completo en su último mes, y ese mes compara contra lo calculado en todos los meses que cubre (el mes lo dice).
+   - Lo del CFDI: los vigentes cuyos periodos se traslapan se comparan juntos, por ejemplo una semana de DiDi que cruza el cambio de mes con las semanas de los dos meses. Cuentan completos en el último mes que cubren entre todos, y ese mes compara contra lo calculado en todos esos meses (el mes lo dice). Los meses anteriores que cubren dicen en qué mes se comparan y no tienen diferencia propia. Así ningún mes se compara dos veces; un CFDI de varios meses solo es el caso más simple.
    - La diferencia por impuesto es CFDI menos calculado: positiva cuando la plataforma retuvo de más. Sin CFDI en el mes, no hay diferencia. La del año suma solo los meses que cubre algún CFDI, cada uno una vez: el mes en curso todavía no tiene el suyo.
    - Cada CFDI dice la tasa que aplicó (retenido entre base). La del IVA solo cuando su base es el IVA (la retención resulta de 25 % o más); si la base es el importe sin IVA, no se da. Junto con los porcentajes con los que TienditApp calcula hoy, eso explica una diferencia por tasa, como el cambio de 1 % a 2.5 %.
    - La lista trae los CFDI del año, vigentes y quitados, hasta 200, y avisa si hay más. Los meses los cuentan todos.
 6. **Cliente.**
    - Reportes › Liquidaciones › «Retenciones» (`/reports/settlements/withholdings`) tiene plataforma y año.
    - Muestra la tabla por mes hasta el mes del negocio, con «Cuadra» cuando la diferencia es $0 y guiones cuando no hay CFDI, y la lista de CFDI con «Quitar».
-   - «Subir CFDI de retenciones» toma varios XML a la vez. Manda cada uno por separado y dice si entró o por qué no.
+   - «Subir CFDI de retenciones» toma varios XML a la vez. Manda cada uno por separado y dice si entró, si se guardó sin contar (ya sustituido) o por qué no; un archivo que el navegador ya no puede leer también se dice.
 7. **Migración `AddPlatformWithholdingCertificates`, compatible con la versión anterior.**
    - Agrega solo la tabla, con sus restricciones (plataforma, periodo, importes, quitado con motivo) y sus dos índices.
    - La versión anterior no la conoce y sigue registrando y moviendo pedidos.

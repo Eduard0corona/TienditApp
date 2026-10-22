@@ -166,10 +166,11 @@ public class PlatformWithholdingFlowTests
         var mistaken = (await RegisterAsync(fixture, OrderChannel.UberEats, PlatformWithholdingXmlTests.Xml(
             uuid: "22222222-2222-4333-8444-555555555555", monthFrom: 8, monthTo: 8))).Value;
         await RemoveAsync(fixture, mistaken.Id, "Duplicado");
-        // Of DiDi, or of 2025: other reconciliations.
-        await RegisterAsync(fixture, OrderChannel.DidiFood, PlatformWithholdingXmlTests.Xml(uuid: "33333333-2222-4333-8444-555555555555"));
-        await RegisterAsync(fixture, OrderChannel.UberEats, PlatformWithholdingXmlTests.Xml(
-            uuid: "44444444-2222-4333-8444-555555555555", year: 2025, monthFrom: 12, monthTo: 12));
+        // Of DiDi, or of 2025: registered, and in other reconciliations.
+        Assert.True((await RegisterAsync(fixture, OrderChannel.DidiFood, PlatformWithholdingXmlTests.Xml(
+            uuid: "33333333-2222-4333-8444-555555555555"))).IsSuccess);
+        Assert.True((await RegisterAsync(fixture, OrderChannel.UberEats, PlatformWithholdingXmlTests.Xml(
+            uuid: "44444444-2222-4333-8444-555555555555", year: 2025, monthFrom: 12, monthTo: 12))).IsSuccess);
 
         var report = await WithholdingsAsync(fixture, OrderChannel.UberEats, 2026);
 
@@ -187,6 +188,9 @@ public class PlatformWithholdingFlowTests
         var august = report.Months[7];
         Assert.Equal((1, 21.55m, 68.97m, 0, (decimal?)null, (decimal?)null), (august.OrderCount, august.CalculatedIsr, august.CalculatedVat,
             august.CertificateCount, august.CertificateIsr, august.IsrDifference));
+        // July and August are compared in September, where the CFDI that covers them counts.
+        Assert.Equal([(int?)9, 9, null], new[] { report.Months[6], august, september }.Select(m => m.ComparedInMonth));
+        Assert.All(report.Months.Where(m => m.Month is < 7 or > 9), m => Assert.Null(m.ComparedInMonth));
         Assert.All(report.Months.Where(m => m.Month is not 8 and not 9), m => Assert.Equal((0, 0m, 0), (m.OrderCount, m.CalculatedIsr, m.CertificateCount)));
         Assert.Equal(
             (null, 3, 53.88m, 172.42m, 2, (decimal?)813.48m, (decimal?)759.60m, (decimal?)2430.74m),
@@ -220,6 +224,33 @@ public class PlatformWithholdingFlowTests
     }
 
     [Fact]
+    public async Task Withholdings_ShouldCompareCfdiWhosePeriodsOverlap_Together_AndEachMonthOnce()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        // $21.55 of ISR and $68.97 of IVA calculated in September and in October.
+        await SellAtAsync(fixture, At(new DateOnly(2026, 9, 10), 12), Uber(shop, "U1"));
+        await SellAtAsync(fixture, At(new DateOnly(2026, 10, 10), 12), Uber(shop, "U2"));
+        // Weekly, as DiDi issues them: the weeks of September, a week that crosses into October and the weeks of October.
+        Assert.True((await RegisterAsync(fixture, OrderChannel.UberEats, Weekly("11111111-2222-4333-8444-555555555555", 9, 9, 15.00m, 50.00m))).IsSuccess);
+        Assert.True((await RegisterAsync(fixture, OrderChannel.UberEats, Weekly("22222222-2222-4333-8444-555555555555", 9, 10, 12.00m, 37.94m))).IsSuccess);
+        Assert.True((await RegisterAsync(fixture, OrderChannel.UberEats, Weekly("33333333-2222-4333-8444-555555555555", 10, 10, 16.10m, 50.00m))).IsSuccess);
+
+        var report = await WithholdingsAsync(fixture, OrderChannel.UberEats, 2026);
+
+        // The three count together in October, against September and October: they add up. September is not compared alone.
+        var september = report.Months[8];
+        Assert.Equal((21.55m, 0, (decimal?)null, (decimal?)null, (int?)10),
+            (september.CalculatedIsr, september.CertificateCount, september.CertificateIsr, september.IsrDifference, september.ComparedInMonth));
+        var october = report.Months[9];
+        Assert.Equal(
+            (3, (decimal?)43.10m, (decimal?)137.94m, (decimal?)0m, (decimal?)0m, (int?)9, (int?)null),
+            (october.CertificateCount, october.CertificateIsr, october.CertificateVat, october.IsrDifference, october.VatDifference,
+                october.CoveredFromMonth, october.ComparedInMonth));
+        Assert.Equal((3, (decimal?)0m, (decimal?)0m), (report.Total.CertificateCount, report.Total.IsrDifference, report.Total.VatDifference));
+    }
+
+    [Fact]
     public async Task Register_ACfdiThatReplacesAnother_ShouldTakeThatOneOut_AndTheReplacedOneShouldNotComeBack()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -244,6 +275,78 @@ public class PlatformWithholdingFlowTests
         Assert.True(PlatformWithholdingErrors.IsConflict(again.Error));
     }
 
+    [Theory]
+    // A replaced by B and B by C, as a downloaded folder brings them: in any order, only C counts.
+    [InlineData("A", "C", "B")]
+    [InlineData("C", "B", "A")]
+    [InlineData("B", "C", "A")]
+    [InlineData("A", "B", "C")]
+    public async Task Register_AChainOfReplacements_InAnyOrder_ShouldLeaveOnlyTheLastOneCounting(string first, string second, string third)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await ShopAsync(fixture);
+        const string A = "aaaaaaaa-2222-4333-8444-555555555555", B = "bbbbbbbb-2222-4333-8444-555555555555", C = "cccccccc-2222-4333-8444-555555555555";
+        var files = new Dictionary<string, string>
+        {
+            ["A"] = PlatformWithholdingXmlTests.Xml(uuid: A),
+            ["B"] = Replacing(B, A),
+            ["C"] = Replacing(C, B)
+        };
+
+        foreach (var name in new[] { first, second, third })
+            Assert.True((await RegisterAsync(fixture, OrderChannel.UberEats, files[name])).IsSuccess, name);
+
+        // One that came after its replacement is kept as history, already out, with why.
+        var stored = await fixture.Context.PlatformWithholdingCertificates.AsNoTracking().ToListAsync();
+        Assert.Equal([Guid.Parse(C)], stored.Where(c => !c.IsRemoved).Select(c => c.Uuid));
+        Assert.Equal("Lo sustituye el CFDI con folio BBBBBBBB.", stored.Single(c => c.Uuid == Guid.Parse(A)).RemovalReason);
+        Assert.Equal("Lo sustituye el CFDI con folio CCCCCCCC.", stored.Single(c => c.Uuid == Guid.Parse(B)).RemovalReason);
+        Assert.Equal(1, (await WithholdingsAsync(fixture, OrderChannel.UberEats, 2026)).Months[8].CertificateCount);
+        // Each one taken out left its entry in the activity.
+        Assert.Equal(2, await fixture.Context.AuditLogs.CountAsync(a => a.Action == PlatformWithholdingAudit.RemovedAction));
+
+        // Uploaded again, nothing new is kept.
+        var again = await RegisterAsync(fixture, OrderChannel.UberEats, files["B"]);
+        Assert.Equal("Este CFDI ya se sustituyó por otro que está registrado en Uber Eats, septiembre de 2026: no cuenta.", again.Error);
+        Assert.Equal(3, await fixture.Context.PlatformWithholdingCertificates.CountAsync());
+    }
+
+    [Fact]
+    public async Task Register_ACfdiThatReplacesItsPredecessor_AfterTheReplacement_ShouldSayItIsKeptWithoutCounting()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await ShopAsync(fixture);
+        const string Original = "11111111-2222-4333-8444-555555555555", Replacement = "22222222-2222-4333-8444-555555555555";
+        Assert.True((await RegisterAsync(fixture, OrderChannel.UberEats, Replacing(Replacement, Original))).IsSuccess);
+
+        var original = await RegisterAsync(fixture, OrderChannel.UberEats, PlatformWithholdingXmlTests.Xml(uuid: Original));
+
+        // It goes into the list as removed: the person sees it, and it does not count.
+        Assert.True(original.IsSuccess, original.Error);
+        Assert.Equal((true, "Lo sustituye el CFDI con folio 22222222."), (original.Value.RemovedAt is not null, original.Value.RemovalReason));
+        Assert.Equal(1, (await WithholdingsAsync(fixture, OrderChannel.UberEats, 2026)).Months[8].CertificateCount);
+    }
+
+    [Fact]
+    public async Task Register_ACfdiOfAnotherBusiness_ThatSaysItReplacesOneOfMine_ShouldNotTakeMineOut()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var mine = await ShopAsync(fixture);
+        const string Original = "11111111-2222-4333-8444-555555555555", Replacement = "22222222-2222-4333-8444-555555555555";
+        var original = (await RegisterAsync(fixture, OrderChannel.UberEats, PlatformWithholdingXmlTests.Xml(uuid: Original))).Value;
+
+        var other = await ShopAsync(fixture, "otro");
+        fixture.TenantService.SetTenant(other.Tenant.Id);
+        var theirs = await RegisterAsync(fixture, OrderChannel.UberEats, Replacing(Replacement, Original));
+        Assert.True(theirs.IsSuccess, theirs.Error);
+        Assert.Null(theirs.Value.RemovedAt);
+
+        fixture.TenantService.SetTenant(mine.Tenant.Id);
+        var stored = await fixture.Context.PlatformWithholdingCertificates.AsNoTracking().SingleAsync(c => c.Id == original.Id);
+        Assert.False(stored.IsRemoved);
+        Assert.Equal(1, (await WithholdingsAsync(fixture, OrderChannel.UberEats, 2026)).Months[8].CertificateCount);
+    }
+
     [Fact]
     public async Task Certificate_ShouldGiveTheShareOfTheIvaWithheld_OnlyWhenItsBaseIsTheIva()
     {
@@ -258,6 +361,18 @@ public class PlatformWithholdingFlowTests
 
         Assert.Equal(((decimal?)2.50m, (decimal?)null), (amountAsBase.Value.IsrRatePercent, amountAsBase.Value.VatRatePercent));
     }
+
+    /// <summary>A weekly CFDI of the months given, with the ISR and IVA withheld (no bases).</summary>
+    private static string Weekly(string uuid, int monthFrom, int monthTo, decimal isr, decimal vat)
+        => PlatformWithholdingXmlTests.Xml(
+            uuid: uuid,
+            monthFrom: monthFrom,
+            monthTo: monthTo,
+            totalWithheld: (isr + vat).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            withheld: string.Create(System.Globalization.CultureInfo.InvariantCulture, $"""
+                <retenciones:ImpRetenidos ImpuestoRet="001" MontoRet="{isr}" TipoPagoRet="03"/>
+                <retenciones:ImpRetenidos ImpuestoRet="002" MontoRet="{vat}" TipoPagoRet="01"/>
+                """));
 
     /// <summary>A CFDI of September that replaces another one the platform cancelled.</summary>
     private static string Replacing(string uuid, string replaces)

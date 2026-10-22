@@ -26,7 +26,7 @@ const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(
 const prompt = vi.fn();
 
 function period(month: number | null, patch: Partial<PlatformWithholdingPeriod> = {}): PlatformWithholdingPeriod {
-  return { month, orderCount: 0, salesWithoutTax: 0, calculatedIsr: 0, calculatedVat: 0, certificateCount: 0, coveredFromMonth: null, ...patch };
+  return { month, orderCount: 0, salesWithoutTax: 0, calculatedIsr: 0, calculatedVat: 0, certificateCount: 0, coveredFromMonth: null, comparedInMonth: null, ...patch };
 }
 
 function certificate(patch: Partial<PlatformWithholdingCertificate> = {}): PlatformWithholdingCertificate {
@@ -165,13 +165,20 @@ describe('PlatformWithholdings', () => {
 
   it('marks a month that adds up, and one that compares the months of a CFDI of several months', async () => {
     const data = withholdings();
+    data.months[6] = { ...data.months[6], comparedInMonth: 9 };
+    data.months[7] = { ...data.months[7], comparedInMonth: 9 };
     data.months[8] = { ...data.months[8], isrDifference: 0, vatDifference: 0, coveredFromMonth: 7 };
     serve(() => data);
     renderPage();
 
-    const september = row(await screen.findByRole('table', { name: /Retenciones de Uber Eats/ }), 'Septiembre');
+    const table = await screen.findByRole('table', { name: /Retenciones de Uber Eats/ });
+    const september = row(table, 'Septiembre');
     expect(within(september).getAllByText('Cuadra')).toHaveLength(2);
     expect(within(september).getByText('Compara de julio a septiembre')).toBeInTheDocument();
+    // The months it covers say where they are compared, without a difference of their own.
+    expect(within(row(table, 'Agosto')).getByText('Se compara en septiembre')).toBeInTheDocument();
+    expect(within(row(table, 'Agosto')).queryByText('Cuadra')).not.toBeInTheDocument();
+    expect(within(row(table, 'Junio')).queryByText(/Se compara en/)).not.toBeInTheDocument();
     // The note sits in the CFDI's cell, not in the row's header that names every cell.
     expect(within(september).getByRole('rowheader')).toHaveTextContent(/^Septiembre$/);
   });

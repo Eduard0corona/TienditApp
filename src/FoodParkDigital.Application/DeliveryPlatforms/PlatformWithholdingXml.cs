@@ -135,7 +135,7 @@ public static class PlatformWithholdingXml
             return Missing("MontoTotRet");
 
         // Each tax withheld adds up as written and is rounded to cents once; its base counts only when every line of the tax
-        // writes it.
+        // writes it. A line past what any CFDI writes is refused before it is added: the sum would not fit a decimal.
         decimal isrWithheld = 0m, vatWithheld = 0m;
         decimal? isrBase = null, vatBase = null;
         bool isrBaseComplete = true, vatBaseComplete = true;
@@ -144,11 +144,15 @@ public static class PlatformWithholdingXml
             var tax = ((string?)line.Attribute("ImpuestoRet"))?.Trim();
             if (!TryAmount(line, "MontoRet", out var amount))
                 return Missing("MontoRet");
+            if (amount > PlatformWithholdingCertificate.MaxAmount)
+                return Reading.Refused(PlatformWithholdingCertificate.AmountMessage);
             decimal? lineBase = null;
             if (line.Attribute("BaseRet") is not null)
             {
                 if (!TryAmount(line, "BaseRet", out var parsedBase))
                     return Missing("BaseRet");
+                if (parsedBase > PlatformWithholdingCertificate.MaxAmount)
+                    return Reading.Refused(PlatformWithholdingCertificate.AmountMessage);
                 lineBase = parsedBase;
             }
 

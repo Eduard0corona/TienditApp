@@ -16093,6 +16093,8 @@ export interface components {
             vatDifference?: number | null;
             /** Format: int32 */
             coveredFromMonth?: number | null;
+            /** Format: int32 */
+            comparedInMonth?: number | null;
         };
         PlatformWithholdingsDto: {
             channel: components["schemas"]["OrderChannel"];

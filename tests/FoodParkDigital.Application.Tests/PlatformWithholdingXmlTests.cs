@@ -108,6 +108,29 @@ public class PlatformWithholdingXmlTests
     }
 
     [Fact]
+    public void Read_ShouldRefuseALineOfATaxPastWhatAnyCfdiWrites_BeforeAddingItUp()
+    {
+        // Two lines at the largest decimal would not fit their sum: refused as an amount no CFDI writes, not a server error.
+        const string Largest = "79228162514264337593543950335";
+        var huge = PlatformWithholdingXml.Read(Xml(withheld: $"""
+            <retenciones:ImpRetenidos ImpuestoRet="001" MontoRet="{Largest}" TipoPagoRet="03"/>
+            <retenciones:ImpRetenidos ImpuestoRet="001" MontoRet="{Largest}" TipoPagoRet="03"/>
+            """));
+        Assert.Equal(PlatformWithholdingCertificate.AmountMessage, huge.Error);
+
+        var hugeBase = PlatformWithholdingXml.Read(Xml(withheld: $"""
+            <retenciones:ImpRetenidos BaseRet="{Largest}" ImpuestoRet="002" MontoRet="1301.58" TipoPagoRet="01"/>
+            <retenciones:ImpRetenidos BaseRet="{Largest}" ImpuestoRet="002" MontoRet="1.00" TipoPagoRet="01"/>
+            """));
+        Assert.Equal(PlatformWithholdingCertificate.AmountMessage, hugeBase.Error);
+
+        // Up to the largest the domain takes, it reads.
+        Assert.Null(PlatformWithholdingXml.Read(Xml(totalWithheld: "1000000000.00", withheld: """
+            <retenciones:ImpRetenidos ImpuestoRet="001" MontoRet="1000000000.00" TipoPagoRet="03"/>
+            """)).Error);
+    }
+
+    [Fact]
     public void Read_ShouldSkipAByteOrderMarkOrBlankLinesBeforeTheDeclaration()
     {
         var reading = PlatformWithholdingXml.Read("\uFEFF\r\n  " + Xml());

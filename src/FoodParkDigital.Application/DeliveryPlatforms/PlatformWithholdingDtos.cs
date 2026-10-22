@@ -72,7 +72,10 @@ public class PlatformWithholdingPeriodDto
     /// <summary>The IVA withheld TienditApp calculated for them, less what was given back.</summary>
     public decimal CalculatedVat { get; set; }
 
-    /// <summary>The CFDI in force counted in the month: none leaves every figure of the CFDI empty.</summary>
+    /// <summary>
+    /// The CFDI in force counted in the month: the ones whose period ends in it, with the ones that overlap them. None
+    /// leaves every figure of the CFDI empty.
+    /// </summary>
     public int CertificateCount { get; set; }
 
     public decimal? CertificateOperationTotal { get; set; }
@@ -89,10 +92,17 @@ public class PlatformWithholdingPeriodDto
     public decimal? VatDifference { get; set; }
 
     /// <summary>
-    /// The first month its CFDI cover, when one starts before this month: it counts whole in its last month, and the
-    /// difference is against what was calculated from that month to this one. Null otherwise, and for the year.
+    /// The first month the CFDI counted here cover, when one starts before this month: they count whole in the last month
+    /// they cover, and the difference is against what was calculated from that month to this one. Null otherwise, and for
+    /// the year.
     /// </summary>
     public int? CoveredFromMonth { get; set; }
+
+    /// <summary>
+    /// The month this one is compared in, when a CFDI that counts in a later month covers it: its CFDI, if any, count
+    /// there too. Null otherwise, and for the year.
+    /// </summary>
+    public int? ComparedInMonth { get; set; }
 }
 
 /// <summary>The withholdings of a platform in a year, month by month, and its CFDI de retenciones of the year.</summary>

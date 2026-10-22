@@ -26,6 +26,7 @@ function month(number: number, orders: number, salesWithoutTax: number, voucher?
     isrDifference: voucher ? r2(voucher.isr - calculatedIsr) : null,
     vatDifference: voucher ? r2(voucher.vat - calculatedVat) : null,
     coveredFromMonth: null as number | null,
+    comparedInMonth: null as number | null,
   };
 }
 
@@ -78,6 +79,7 @@ const TOTAL = {
   isrDifference: 0,
   vatDifference: 0,
   coveredFromMonth: null,
+  comparedInMonth: null,
 };
 // The year's difference, only over the months with a CFDI: October has none yet.
 TOTAL.isrDifference = sum(WITH_VOUCHER.map((each) => each.isrDifference ?? 0));

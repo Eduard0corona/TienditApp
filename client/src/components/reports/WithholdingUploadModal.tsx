@@ -7,6 +7,7 @@ import { getPlatformName, type DeliveryPlatform } from '../../utils/deliveryPlat
 import { DELIVERY_PLATFORM_CHANNELS } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import {
+  FILE_NOT_READABLE_MESSAGE,
   MAX_WITHHOLDING_XML_BYTES,
   MAX_WITHHOLDING_XML_LENGTH,
   NOT_XML_CONTENT_MESSAGE,
@@ -31,12 +32,21 @@ interface WithholdingUploadModalProps {
   onHide: (outcome?: WithholdingUploadOutcome) => void;
 }
 
-/** What came of one file: registered (with what it says) or why not. */
+/**
+ * What came of one file: registered (with what it says), kept without counting (the platform already replaced it) or
+ * why it did not go in.
+ */
 interface FileResult {
   name: string;
-  ok: boolean;
+  outcome: 'registered' | 'notCounting' | 'refused';
   text: string;
 }
+
+const CHIPS: Record<FileResult['outcome'], { label: string; className: string }> = {
+  registered: { label: 'Registrado', className: 'ta-chip-ready' },
+  notCounting: { label: 'No cuenta', className: 'ta-chip-done' },
+  refused: { label: 'No entró', className: 'ta-chip-cancelled' },
+};
 
 function isXmlFile(file: File): boolean {
   return /\.xml$/i.test(file.name) || file.type === 'text/xml' || file.type === 'application/xml';
@@ -71,9 +81,13 @@ export default function WithholdingUploadModal({ platform, onHide }: Withholding
   const focusFileNext = useRef(false);
   const busy = sending !== null;
 
-  // Unmounted (another screen, the browser's back), the batch stops before the next file.
-  useEffect(() => () => {
-    stopped.current = true;
+  // Unmounted (another screen, the browser's back), the batch stops before the next file. Mounted again (StrictMode
+  // in development mounts twice), it starts afresh.
+  useEffect(() => {
+    stopped.current = false;
+    return () => {
+      stopped.current = true;
+    };
   }, []);
 
   // Closing or reloading the tab mid-batch asks first: the files after the current one would not be sent.
@@ -107,7 +121,14 @@ export default function WithholdingUploadModal({ platform, onHide }: Withholding
   const read = async (file: File): Promise<{ xml: string } | { problem: string }> => {
     if (!isXmlFile(file)) return { problem: NOT_XML_FILE_MESSAGE };
     if (file.size > MAX_WITHHOLDING_XML_BYTES) return { problem: XML_TOO_BIG_MESSAGE };
-    const xml = decodeCsv(await file.arrayBuffer());
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await file.arrayBuffer();
+    } catch {
+      // It changed or went away after it was chosen (a folder synced with the cloud, a USB taken out).
+      return { problem: FILE_NOT_READABLE_MESSAGE };
+    }
+    const xml = decodeCsv(bytes);
     if (xml === null) return { problem: NOT_XML_CONTENT_MESSAGE };
     // The server counts characters: a UTF-16 file weighs twice what it says.
     if (xml.length > MAX_WITHHOLDING_XML_LENGTH) return { problem: XML_TOO_BIG_MESSAGE };
@@ -122,19 +143,22 @@ export default function WithholdingUploadModal({ platform, onHide }: Withholding
       setSending(index + 1);
       const reading = await read(file);
       if ('problem' in reading) {
-        done.push({ name: file.name, ok: false, text: reading.problem });
+        done.push({ name: file.name, outcome: 'refused', text: reading.problem });
         continue;
       }
       try {
         const certificate = await register.mutateAsync({ channel, xml: reading.xml });
         last = { channel, year: certificate.year };
-        done.push({
-          name: file.name,
-          ok: true,
-          text: `Registrado: ${describeCertificatePeriod(certificate)}, ISR ${formatMoney(certificate.isrWithheld)} e IVA ${formatMoney(certificate.vatWithheld)}.`,
-        });
+        const period = describeCertificatePeriod(certificate);
+        done.push(certificate.removedAt
+          ? { name: file.name, outcome: 'notCounting', text: `Se guardó sin contar (${period}): ${certificate.removalReason ?? ''}` }
+          : {
+              name: file.name,
+              outcome: 'registered',
+              text: `Registrado: ${period}, ISR ${formatMoney(certificate.isrWithheld)} e IVA ${formatMoney(certificate.vatWithheld)}.`,
+            });
       } catch (err: unknown) {
-        done.push({ name: file.name, ok: false, text: getApiErrorMessage(err, 'No se pudo registrar. Intenta de nuevo.') });
+        done.push({ name: file.name, outcome: 'refused', text: getApiErrorMessage(err, 'No se pudo registrar. Intenta de nuevo.') });
       }
     }
     if (last) void refresh();
@@ -144,7 +168,7 @@ export default function WithholdingUploadModal({ platform, onHide }: Withholding
     setSending(null);
   };
 
-  const registered = results?.filter((result) => result.ok).length ?? 0;
+  const registered = results?.filter((result) => result.outcome !== 'refused').length ?? 0;
   const close = () => onHide(outcome);
 
   return (
@@ -160,9 +184,7 @@ export default function WithholdingUploadModal({ platform, onHide }: Withholding
             <ul className="list-unstyled mb-0 d-flex flex-column gap-2">
               {results.map((result, index) => (
                 <li key={`${result.name}-${index}`}>
-                  <span className={`ta-chip ${result.ok ? 'ta-chip-ready' : 'ta-chip-cancelled'} me-2`}>
-                    {result.ok ? 'Registrado' : 'No entró'}
-                  </span>
+                  <span className={`ta-chip ${CHIPS[result.outcome].className} me-2`}>{CHIPS[result.outcome].label}</span>
                   <span className="fw-semibold text-break">{result.name}</span>
                   <div className="small text-muted">{result.text}</div>
                 </li>

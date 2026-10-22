@@ -348,12 +348,12 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - Queda:
     - No se valida el sello ni se consulta al SAT si el CFDI está vigente: un XML alterado se registra igual. La descarga masiva desde el SAT y las APIs de las plataformas llegan con las integraciones.
     - Solo la versión 2.0: un CFDI de retenciones 1.0 (anterior a 2022) se rechaza con un mensaje.
-    - Un pedido cuenta en el mes en que se registró y la plataforma puede contarlo en el que lo pagó: alrededor del cambio de mes hay diferencias que se compensan. Un CFDI de varios meses cuenta completo en su último mes, que compara contra todos los meses que cubre.
-    - Un CFDI cancelado se reconoce solo cuando el que lo sustituye lo nombra (`CfdiRetenRelacionados`); uno cancelado sin sustituto se quita a mano.
+    - Un pedido cuenta en el mes en que se registró y la plataforma puede contarlo en el que lo pagó: alrededor del cambio de mes hay diferencias que se compensan. Los CFDI que se traslapan (uno de varios meses, o una semana que cruza el cambio de mes) cuentan juntos en el último mes que cubren, que compara contra todos esos meses.
+    - Un CFDI cancelado se reconoce solo cuando el que lo sustituye lo nombra (`CfdiRetenRelacionados`), en el orden en que se suban; uno cancelado sin sustituto se quita a mano.
     - La tasa de cada pedido sale de la configuración de la plataforma cuando se registró: TienditApp no elige la tasa por año ni por tipo de persona (1 % antes de 2026, solo personas físicas; 2.5 % desde 2026). El IEPS retenido solo cuenta en el total.
     - Lo calculado de un año se lee pedido por pedido para redondear igual que la liquidación; con muchísimos pedidos de una plataforma en un año, lee más filas.
     - Con CFDI de retenciones guardados, el rollback de la base se detiene (error 50033): solo se corrige hacia adelante. Volver a la versión anterior de la app sí funciona sin tocar la base.
-    - La 22J suma 63 B a la primera visita (de 179,153 a 179,216 B): la ruta nueva en `App.tsx` y las palabras de búsqueda de Liquidaciones; la pantalla, su modal y su API se cargan aparte. El presupuesto sube de 179,200 a 179,300 B.
+    - La 22J suma 70 B a la primera visita (de 179,153 a 179,223 B): la ruta nueva en `App.tsx`, con el nombre de la pantalla que se carga aparte, y las palabras de búsqueda de Liquidaciones; la pantalla, su modal y su API se cargan aparte. El presupuesto sube de 179,200 a 179,300 B.
 - Resuelto en la Fase 22I: un estado de cuenta que nombra los pedidos por su ID largo no los encontraba, porque solo se guardaba el folio corto ([ADR 0041](../adr/0041-platform-order-ids.md)).
   - Un pedido de plataforma guarda, opcional, el ID largo que le da la plataforma: se escribe en Vender o después en el detalle del pedido, en cualquier estado. Pedidos y Reportes lo buscan, la liquidación lo enseña, y la importación del estado de cuenta compara cada renglón por folio o por ID largo.
   - Un ID largo repetido en otro pedido que cuenta, de cualquier fecha, avisa con 409 `possible_duplicate_order`, como el folio.
