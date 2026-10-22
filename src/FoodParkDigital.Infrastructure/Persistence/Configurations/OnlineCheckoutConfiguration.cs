@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
+using FoodParkDigital.Domain.OnlinePayments.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,11 @@ public class OnlineCheckoutConfiguration : IEntityTypeConfiguration<OnlineChecko
                 + " OR ([Status] = 2 AND [Request] IS NULL AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [Failure] IS NULL)"
                 + " OR ([Status] = 3 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL AND [OrderId] IS NULL"
                 + " AND [Failure] IS NOT NULL AND [Failure] BETWEEN 1 AND 4)");
+            // Only the payment of an order has a chargeback or a claim (Fase 24K), with when it last changed.
+            table.HasCheckConstraint(
+                "CK_OnlineCheckouts_Dispute",
+                "([Dispute] = 0 AND [DisputeUpdatedAt] IS NULL)"
+                + " OR ([Dispute] IN (1, 2, 3) AND [Status] = 1 AND [DisputeUpdatedAt] IS NOT NULL)");
         });
         builder.HasKey(x => x.Id);
 
@@ -40,6 +46,11 @@ public class OnlineCheckoutConfiguration : IEntityTypeConfiguration<OnlineChecko
         builder.Property(x => x.PaymentId).HasMaxLength(OnlineCheckout.MaxPaymentIdLength);
         builder.Property(x => x.Failure).HasConversion<int?>();
         builder.Property(x => x.FailureMessage).HasMaxLength(OnlineCheckout.MaxFailureMessageLength);
+        // Every checkout has none until Mercado Pago reports one; the default keeps the rows of the previous version valid.
+        builder.Property(x => x.Dispute)
+            .HasConversion<int>()
+            .HasDefaultValue(OnlinePaymentDispute.None)
+            .ValueGeneratedNever();
         builder.Property(x => x.Version).IsRowVersion();
         builder.Ignore(x => x.IsAwaitingPayment);
 
@@ -62,5 +73,7 @@ public class OnlineCheckoutConfiguration : IEntityTypeConfiguration<OnlineChecko
         // How many a phone has in course in the business.
         builder.HasIndex(x => new { x.TenantId, x.CustomerPhone }).HasFilter("[Status] = 0");
         builder.HasIndex(x => x.OrderId).IsUnique().HasFilter("[OrderId] IS NOT NULL");
+        // The disputes still open, for Configuración › Pagos en línea.
+        builder.HasIndex(x => new { x.TenantId, x.Dispute }).HasFilter("[Dispute] = 1");
     }
 }

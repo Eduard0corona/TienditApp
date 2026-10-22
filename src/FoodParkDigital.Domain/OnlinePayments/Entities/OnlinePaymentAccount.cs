@@ -41,6 +41,13 @@ public class OnlinePaymentAccount : AuditableEntity, IAggregateRoot, ITenantScop
     /// <summary>Whether the online menu offers to pay online. Off when connected: the business turns it on.</summary>
     public bool AcceptsPayments { get; private set; }
 
+    /// <summary>
+    /// Until when TienditApp already looked in Mercado Pago for the payments of the account that changed (Fase 24K): the
+    /// refunds and the disputes are reflected on the orders up to then. Null until the first review, or after connecting
+    /// another account.
+    /// </summary>
+    public DateTimeOffset? PaymentsReviewedUntil { get; private set; }
+
     /// <summary>The business and the renewal of its keys change it: a change on a stale copy is a conflict (409).</summary>
     public byte[] Version { get; private set; } = null!;
 
@@ -77,6 +84,9 @@ public class OnlinePaymentAccount : AuditableEntity, IAggregateRoot, ITenantScop
         if (connectedByUserId == Guid.Empty)
             throw new DomainException("La cuenta de Mercado Pago necesita quién la conecta.");
 
+        // Another account has other payments: they are reviewed from its connection.
+        if (ProviderUserId != providerUserId)
+            PaymentsReviewedUntil = null;
         ProviderUserId = providerUserId;
         LiveMode = liveMode;
         ConnectedAt = now;
@@ -100,6 +110,16 @@ public class OnlinePaymentAccount : AuditableEntity, IAggregateRoot, ITenantScop
     }
 
     public void SetAcceptsPayments(bool accepts) => AcceptsPayments = accepts;
+
+    /// <summary>
+    /// The payments that changed in Mercado Pago up to <paramref name="until"/> are reflected on the orders. It never goes
+    /// back: a review that read less than the last one leaves it where it was.
+    /// </summary>
+    public void ReviewPaymentsUntil(DateTimeOffset until)
+    {
+        if (PaymentsReviewedUntil is not { } reviewed || until > reviewed)
+            PaymentsReviewedUntil = until;
+    }
 
     /// <summary>
     /// Mercado Pago no longer takes the key <paramref name="protectedAccessToken"/> (the owner revoked the access): from now
