@@ -40,7 +40,7 @@ test.describe('Retenciones', () => {
     const uploading = await dialog(page, 'Subir CFDI de retenciones');
     await uploading.getByLabel('Archivos XML').setInputFiles(UPLOAD_FILES);
     await uploading.getByRole('button', { name: 'Subir' }).click();
-    await expect(uploading.getByText('Se registraron 1 de 2. Revisa los que no entraron.')).toBeVisible();
+    await expect(uploading.getByText('Se registró 1 de 2. Revisa los que no entraron.')).toBeVisible();
     await snap(page, 'retenciones-subir-resultado', { fullPage: false });
   });
 
