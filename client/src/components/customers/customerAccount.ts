@@ -114,9 +114,21 @@ export function reminderEveryDaysProblem(typed: string, min = MIN_REMINDER_EVERY
   return null;
 }
 
+/** The days before the last day to pay the server takes (TenantSettings.MinCreditDueSoonDaysBefore and MaxCreditDueSoonDaysBefore). */
+export const MIN_DUE_SOON_DAYS_BEFORE = 1;
+export const MAX_DUE_SOON_DAYS_BEFORE = 7;
+
+/** What the days before the last day to pay typed mean, within the range the server reports (Fase 26E); null when they can be saved. */
+export function dueSoonDaysBeforeProblem(typed: string, min = MIN_DUE_SOON_DAYS_BEFORE, max = MAX_DUE_SOON_DAYS_BEFORE): string | null {
+  if (!/^\d{1,3}$/.test(typed.trim())) return 'Escribe cuántos días antes, por ejemplo 2.';
+  const days = Number(typed.trim());
+  if (days < min || days > max) return `El aviso se manda de ${min} a ${max} días antes.`;
+  return null;
+}
+
 /**
- * The reminder of what is overdue as a customer would read it (Fase 26C), with made-up amounts: the server fills in the
- * real ones of each customer.
+ * The reminder of what is overdue (Fase 26C), or the notice of what comes due (Fase 26E), as a customer would read it, with
+ * made-up amounts: the server fills in the real ones of each customer.
  */
 export function previewReminder(body: string, businessName: string): string {
   const sample: Record<string, string> = {
@@ -124,6 +136,7 @@ export function previewReminder(body: string, businessName: string): string {
     negocio: businessName,
     monto: formatMoney(1160),
     vencido: formatMoney(500),
+    porvencer: formatMoney(500),
     fecha: 'lunes 5 de octubre',
   };
   return body.replace(/\{([a-zA-Z_]+)\}/g, (match, name: string) => sample[name.toLowerCase()] ?? match);
@@ -139,6 +152,22 @@ export function describeReminder(account: Pick<CustomerAccount, 'lastReminderAt'
   if (account.lastReminderAt) return `Último recordatorio por WhatsApp: ${formatDate(account.lastReminderAt)}.${repeats}`;
   if (repeats) return `Se le recordará lo vencido por WhatsApp.${repeats}`;
   return null;
+}
+
+/** What the account says of the notice before something comes due (Fase 26E): when the last one went out; null if none did. */
+export function describeDueSoon(account: Pick<CustomerAccount, 'lastDueSoonAt'>): string | null {
+  return account.lastDueSoonAt ? `Último aviso antes de vencer por WhatsApp: ${formatDate(account.lastDueSoonAt)}.` : null;
+}
+
+/**
+ * What Por cobrar says of the business's WhatsApp messages of the fiado: the notice before something comes due (Fase 26E)
+ * and the reminders of what is overdue (Fase 26C), each null while off.
+ */
+export function describeCreditMessages(reminderEveryDays: number | null, dueSoonDaysBefore: number | null): string {
+  const notice = dueSoonDaysBefore != null ? `Aviso ${describeTerm(dueSoonDaysBefore)} antes de vencer` : null;
+  if (reminderEveryDays == null) return notice ?? 'Sin recordatorios';
+  const every = describeTerm(reminderEveryDays);
+  return notice ? `${notice} · recordatorios cada ${every}` : `Recordatorios cada ${every}`;
 }
 
 /** What the limit typed means, in the owner's words; null when it can be saved. */

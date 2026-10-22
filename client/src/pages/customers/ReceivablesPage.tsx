@@ -5,7 +5,7 @@ import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import CustomerAccountModal from '../../components/customers/CustomerAccountModal';
 import CreditTermModal from '../../components/customers/CreditTermModal';
 import CreditRemindersModal from '../../components/customers/CreditRemindersModal';
-import { daysSince, describeDays, describeTerm } from '../../components/customers/customerAccount';
+import { daysSince, describeCreditMessages, describeDays, describeTerm } from '../../components/customers/customerAccount';
 import { type AccountOf, type Receivable, useReceivables } from '../../api/customerCredit';
 import { ReceivablesSort } from '../../api/generated/enums';
 import { getApiErrorMessage } from '../../api/errors';
@@ -30,6 +30,7 @@ const COLUMNS = [
  * Fase 26B: with a term, what is overdue per customer and in total, and «Solo vencidos»; owners and admins set the term.
  * Fase 26C: a customer's own term in their row, and the WhatsApp reminders of what is overdue, which owners and admins set.
  * Fase 26D: what a customer who owes also has in their favor, and what the business holds in favor of all its customers.
+ * Fase 26E: the notice before something comes due, next to the reminders.
  */
 export default function ReceivablesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -48,6 +49,8 @@ export default function ReceivablesPage() {
   const { data, error, isPending } = useReceivables({ search, sort, overdueOnly, page, pageSize });
   const creditTerm = data?.creditTermDays ?? null;
   const reminderEveryDays = data?.creditReminderEveryDays ?? null;
+  const dueSoonDaysBefore = data?.creditDueSoonDaysBefore ?? null;
+  const messagesOn = reminderEveryDays != null || dueSoonDaysBefore != null;
   // Customers with a term of their own may have something overdue without the business's; «Solo vencidos» stays while on.
   const showsOverdue = creditTerm != null || (data?.totalOverdue ?? 0) > 0 || overdueOnly;
 
@@ -90,17 +93,17 @@ export default function ReceivablesPage() {
                     </button>
                   )}
                 </span>
-                {(canSetTerm || reminderEveryDays != null) && (
+                {(canSetTerm || messagesOn) && (
                   <span>
-                    {reminderEveryDays != null ? `Recordatorios cada ${describeTerm(reminderEveryDays)}` : 'Sin recordatorios'}
+                    {describeCreditMessages(reminderEveryDays, dueSoonDaysBefore)}
                     {canSetTerm && (
                       <button
                         type="button"
                         className="btn btn-link btn-sm align-baseline p-0 ms-2"
                         onClick={() => setEditingReminders(true)}
-                        aria-label={reminderEveryDays != null ? 'Cambiar los recordatorios' : 'Activar los recordatorios'}
+                        aria-label={messagesOn ? 'Cambiar los recordatorios' : 'Activar los recordatorios'}
                       >
-                        {reminderEveryDays != null ? 'Cambiar' : 'Activar'}
+                        {messagesOn ? 'Cambiar' : 'Activar'}
                       </button>
                     )}
                   </span>

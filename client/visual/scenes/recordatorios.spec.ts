@@ -45,8 +45,10 @@ test.describe('Recordatorios del fiado', () => {
 
   test('recordatorios del fiado', async ({ page }) => {
     const reminders = await openReminders(page, 'Cambiar los recordatorios');
-    await expect(reminders.getByLabel('Mensaje')).toHaveValue('t-fiado');
-    await expect(reminders.getByText('Así le llega:')).toBeVisible();
+    // Lo vencido is the last message of the dialog (Fase 26E puts the notice before it), and its only one before: the scene
+    // runs on both.
+    await expect(reminders.getByLabel('Mensaje').last()).toHaveValue('t-fiado');
+    await expect(reminders.getByText('Así le llega:').last()).toBeVisible();
     await snapScreen(page, 'por-cobrar-recordatorios-del-fiado');
   });
 

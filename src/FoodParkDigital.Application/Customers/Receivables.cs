@@ -108,14 +108,37 @@ public static class CreditTerm
         /// The orders owed since before this instant are overdue today: the start of the business day <see cref="Days"/>
         /// days ago. Without a term, the earliest instant, so nothing is.
         /// </summary>
-        public DateTimeOffset OverdueBefore(DateTimeOffset utcNow)
+        public DateTimeOffset OverdueBefore(DateTimeOffset utcNow) => OwedBefore(utcNow, 0);
+
+        /// <summary>
+        /// The orders owed since before this instant come due by the end of the business day <paramref name="daysAhead"/>
+        /// days from today (Fase 26E), or are overdue already: the start of the business day <see cref="Days"/> minus
+        /// <paramref name="daysAhead"/> plus one days ago. Without a term, the earliest instant, so nothing does.
+        /// </summary>
+        public DateTimeOffset DueByBefore(DateTimeOffset utcNow, int daysAhead) => OwedBefore(utcNow, daysAhead + 1);
+
+        /// <summary>The start of the business day <see cref="Days"/> days before today, moved <paramref name="offset"/> days on.</summary>
+        private DateTimeOffset OwedBefore(DateTimeOffset utcNow, int offset)
         {
             if (Days is not { } days)
                 return DateTimeOffset.MinValue;
             var zone = TenantDateTimeResolver.Resolve(TimeZone);
             var today = TimeZoneInfo.ConvertTime(utcNow, zone).Date;
             // Not LocalDateBoundaryToUtc: a day without 00:00 would throw inside the payment or write-off that reads it.
-            return TenantDateTimeResolver.StartOfLocalDayUtc(today.AddDays(-days), zone);
+            return TenantDateTimeResolver.StartOfLocalDayUtc(today.AddDays(offset - days), zone);
+        }
+
+        /// <summary>
+        /// When the orders whose last day to pay is <paramref name="dueOn"/> started to be owed (Fase 26E): from the start of
+        /// the business day <see cref="Days"/> days before it until the start of the next one. Null without a term.
+        /// </summary>
+        public (DateTimeOffset From, DateTimeOffset Until)? OwedSinceFor(DateOnly dueOn)
+        {
+            if (Days is not { } days)
+                return null;
+            var zone = TenantDateTimeResolver.Resolve(TimeZone);
+            var owedOn = dueOn.ToDateTime(TimeOnly.MinValue).AddDays(-days);
+            return (TenantDateTimeResolver.StartOfLocalDayUtc(owedOn, zone), TenantDateTimeResolver.StartOfLocalDayUtc(owedOn.AddDays(1), zone));
         }
 
         /// <summary>The last day to pay an order owed since <paramref name="owedSince"/>, in the business's calendar.</summary>
@@ -152,6 +175,20 @@ public static class CreditTerm
     }
 
     /// <summary>
+    /// Whether the customer with this phone key still owes something whose last day to pay, by their term now, is
+    /// <paramref name="dueOn"/> (Fase 26E).
+    /// </summary>
+    public static async Task<bool> OwesDueOnAsync(
+        IApplicationDbContext context, string phoneKey, Settings business, DateOnly dueOn, CancellationToken cancellationToken)
+    {
+        if (business.For(await OwnDaysAsync(context, phoneKey, cancellationToken)).OwedSinceFor(dueOn) is not { } owed)
+            return false;
+        var (from, until) = owed;
+        return await Receivables.OfCustomer(context.Orders.AsNoTracking(), phoneKey)
+            .AnyAsync(l => l.OwedSince >= from && l.OwedSince < until, cancellationToken);
+    }
+
+    /// <summary>
     /// The customers' own terms by the phone key their orders are grouped by (<see cref="Receivables.Lines"/>): a record saved
     /// before phones were normalized (ten digits) counts as +52, and the shortest wins when two records share the phone.
     /// </summary>
@@ -172,11 +209,32 @@ public static class CreditTerm
     /// The orders of <paramref name="lines"/> that are overdue now, each by the term of its customer: their own, else the
     /// business's. Read by the database: each term in use is one condition with its own instant.
     /// </summary>
-    public static async Task<IQueryable<OwedOrder>> OverdueAsync(
+    public static Task<IQueryable<OwedOrder>> OverdueAsync(
         IApplicationDbContext context,
         IQueryable<OwedOrder> lines,
         Settings business,
         DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
+        => OwedBeforeAsync(context, lines, business, term => term.OverdueBefore(utcNow), cancellationToken);
+
+    /// <summary>
+    /// The orders of <paramref name="lines"/> whose last day to pay, each by the term of its customer, is at most
+    /// <paramref name="daysAhead"/> days from today (Fase 26E): what comes due by then and what is overdue already.
+    /// </summary>
+    public static Task<IQueryable<OwedOrder>> DueByAsync(
+        IApplicationDbContext context,
+        IQueryable<OwedOrder> lines,
+        Settings business,
+        DateTimeOffset utcNow,
+        int daysAhead,
+        CancellationToken cancellationToken)
+        => OwedBeforeAsync(context, lines, business, term => term.DueByBefore(utcNow, daysAhead), cancellationToken);
+
+    private static async Task<IQueryable<OwedOrder>> OwedBeforeAsync(
+        IApplicationDbContext context,
+        IQueryable<OwedOrder> lines,
+        Settings business,
+        Func<Settings, DateTimeOffset> before,
         CancellationToken cancellationToken)
     {
         var ownTerms = OwnTerms(context.Customers.AsNoTracking());
@@ -186,14 +244,14 @@ public static class CreditTerm
             join term in ownTerms on line.Phone equals term.Phone into terms
             from term in terms.DefaultIfEmpty()
             select new TermedOrder { Line = line, OwnDays = (int?)term.Days };
-        return termed.Where(IsOverdue(business, ownDays, utcNow)).Select(t => t.Line);
+        return termed.Where(IsOwedBefore(business, ownDays, before)).Select(t => t.Line);
     }
 
     /// <summary>
-    /// Overdue by its customer's own term when they have one, else by the business's: one branch per term in use, each with
-    /// the start of the business day it reaches back to.
+    /// Owed since before the instant of its customer's own term when they have one, else of the business's: one branch per
+    /// term in use, each with the start of the business day it reaches back to.
     /// </summary>
-    private static Expression<Func<TermedOrder, bool>> IsOverdue(Settings business, IEnumerable<int> ownDays, DateTimeOffset utcNow)
+    private static Expression<Func<TermedOrder, bool>> IsOwedBefore(Settings business, IEnumerable<int> ownDays, Func<Settings, DateTimeOffset> before)
     {
         var order = Expression.Parameter(typeof(TermedOrder), "order");
         var own = Expression.Property(order, nameof(TermedOrder.OwnDays));
@@ -203,18 +261,18 @@ public static class CreditTerm
         Expression OwedBefore(DateTimeOffset instant) =>
             Expression.LessThan(owedSince, Expression.Property(Expression.Constant(new Instant(instant)), nameof(Instant.Value)));
 
-        Expression? overdue = null;
+        Expression? owed = null;
         if (business.Days is not null)
-            overdue = Expression.AndAlso(Expression.Equal(own, Expression.Constant(null, typeof(int?))), OwedBefore(business.OverdueBefore(utcNow)));
+            owed = Expression.AndAlso(Expression.Equal(own, Expression.Constant(null, typeof(int?))), OwedBefore(before(business)));
         foreach (var days in ownDays.Distinct().Order())
         {
             var branch = Expression.AndAlso(
                 Expression.Equal(own, Expression.Constant(days, typeof(int?))),
-                OwedBefore(business.For(days).OverdueBefore(utcNow)));
-            overdue = overdue is null ? branch : Expression.OrElse(overdue, branch);
+                OwedBefore(before(business.For(days))));
+            owed = owed is null ? branch : Expression.OrElse(owed, branch);
         }
 
-        return Expression.Lambda<Func<TermedOrder, bool>>(overdue ?? Expression.Constant(false), order);
+        return Expression.Lambda<Func<TermedOrder, bool>>(owed ?? Expression.Constant(false), order);
     }
 
     private sealed class Instant(DateTimeOffset value)

@@ -19272,6 +19272,56 @@
         },
         "additionalProperties": false
       },
+      "CreditDueSoonDto": {
+        "required": [
+          "daysBefore",
+          "defaultBody",
+          "enabled",
+          "maxDaysBefore",
+          "minDaysBefore",
+          "placeholders",
+          "templates"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "daysBefore": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "templateId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "defaultBody": {
+            "type": "string"
+          },
+          "placeholders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "templates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreditReminderTemplateDto"
+            }
+          },
+          "minDaysBefore": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxDaysBefore": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreditReminderTemplateDto": {
         "required": [
           "body",
@@ -19301,6 +19351,7 @@
         "required": [
           "customersWithOwnTerm",
           "defaultBody",
+          "dueSoon",
           "enabled",
           "everyDays",
           "maxEveryDays",
@@ -19365,6 +19416,9 @@
           },
           "sendUntil": {
             "type": "string"
+          },
+          "dueSoon": {
+            "$ref": "#/components/schemas/CreditDueSoonDto"
           }
         },
         "additionalProperties": false
@@ -19437,6 +19491,11 @@
             "nullable": true
           },
           "lastReminderAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastDueSoonAt": {
             "type": "string",
             "format": "date-time",
             "nullable": true
@@ -23381,7 +23440,8 @@
           0,
           1,
           2,
-          3
+          3,
+          4
         ],
         "type": "integer",
         "format": "int32",
@@ -23389,7 +23449,8 @@
           "Campaign",
           "AppointmentReminder",
           "AppointmentNotice",
-          "CreditReminder"
+          "CreditReminder",
+          "CreditDueSoon"
         ]
       },
       "MessageTemplateDto": {
@@ -23529,6 +23590,7 @@
           "appointmentRemindersEnabled",
           "appointmentsEnabled",
           "campaignPlaceholders",
+          "creditDueSoonPlaceholders",
           "creditReminderPlaceholders",
           "defaultReminderBody",
           "maxReminderHoursBefore",
@@ -23580,6 +23642,12 @@
             }
           },
           "creditReminderPlaceholders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "creditDueSoonPlaceholders": {
             "type": "array",
             "items": {
               "type": "string"
@@ -29543,6 +29611,11 @@
             "format": "int32",
             "nullable": true
           },
+          "creditDueSoonDaysBefore": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
           "totalCreditBalance": {
             "type": "number",
             "format": "double"
@@ -32538,6 +32611,28 @@
         },
         "additionalProperties": false
       },
+      "UpdateCreditDueSoon": {
+        "required": [
+          "daysBefore",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "daysBefore": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "templateId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateCreditRemindersCommand": {
         "required": [
           "enabled",
@@ -32556,6 +32651,9 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "dueSoon": {
+            "$ref": "#/components/schemas/UpdateCreditDueSoon"
           }
         },
         "additionalProperties": false

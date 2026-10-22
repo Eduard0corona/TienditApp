@@ -47,12 +47,12 @@ public static class MessageTemplateLimits
         "Solo el dueño o un administrador escribe los recordatorios del fiado.";
 
     /// <summary>
-    /// What a reminder of the fiado says to the customers who owe is the owner's decision (Fase 26C, ADR 0035), like
-    /// turning the reminders on: managing campaigns is not enough to write or change one.
+    /// What a reminder of the fiado (Fase 26C, ADR 0035) or the notice before it comes due (Fase 26E) says to the customers
+    /// who owe is the owner's decision, like turning them on: managing campaigns is not enough to write or change one.
     /// </summary>
     public static async Task EnsureCanWriteAsync(MessagePurpose purpose, CurrentAccessContext access, CancellationToken cancellationToken)
     {
-        if (purpose == MessagePurpose.CreditReminder && !await access.IsTenantManagerAsync(cancellationToken))
+        if (purpose is (MessagePurpose.CreditReminder or MessagePurpose.CreditDueSoon) && !await access.IsTenantManagerAsync(cancellationToken))
             throw new ForbiddenAccessException(CreditReminderManagersOnlyMessage);
     }
 }
@@ -73,7 +73,8 @@ public class CreateMessageTemplateCommandValidator : AbstractValidator<CreateMes
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(MessageTemplate.MaxNameLength);
         RuleFor(x => x.Purpose)
-            .Must(purpose => purpose is MessagePurpose.Campaign or MessagePurpose.AppointmentReminder or MessagePurpose.CreditReminder)
+            .Must(purpose => purpose is MessagePurpose.Campaign or MessagePurpose.AppointmentReminder or MessagePurpose.CreditReminder
+                or MessagePurpose.CreditDueSoon)
             .WithMessage(MessageTemplate.TemplatePurposeError);
         RuleFor(x => x.Body).NotEmpty().MaximumLength(MessageTemplate.MaxBodyLength);
         RuleFor(x => x.ProviderTemplateName).MaximumLength(MessageTemplate.MaxProviderTemplateNameLength);

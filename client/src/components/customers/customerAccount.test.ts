@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { CustomerAccount } from '../../api/customerCredit';
 import { OrderPaymentMethod } from '../../types';
 import {
-  accountSummaryText, creditLimitProblem, creditTermProblem, daysSince, describeBalanceEntry, describeDays, describeDue, describeReminder,
-  describeTerm, previewReminder, reminderEveryDaysProblem, writeOffProblem,
+  accountSummaryText, creditLimitProblem, creditTermProblem, daysSince, describeBalanceEntry, describeCreditMessages, describeDays,
+  describeDue, describeDueSoon, describeReminder, describeTerm, dueSoonDaysBeforeProblem, previewReminder, reminderEveryDaysProblem,
+  writeOffProblem,
 } from './customerAccount';
 
 function account(overrides: Partial<CustomerAccount> = {}): CustomerAccount {
@@ -156,6 +157,40 @@ describe('credit reminders', () => {
   it('shows the message with made-up amounts and the business name, and leaves what it does not know', () => {
     expect(previewReminder('Hola {nombre}, en {Negocio} debes {monto}; {vencido} venció el {fecha}. {cupon}', 'Tiendita'))
       .toBe('Hola Ana, en Tiendita debes $1,160.00; $500.00 venció el lunes 5 de octubre. {cupon}');
+  });
+});
+
+describe('the notice before something comes due (Fase 26E)', () => {
+  it.each([
+    ['', 'Escribe cuántos días antes, por ejemplo 2.'],
+    ['1.5', 'Escribe cuántos días antes, por ejemplo 2.'],
+    ['0', 'El aviso se manda de 1 a 7 días antes.'],
+    ['8', 'El aviso se manda de 1 a 7 días antes.'],
+  ])('refuses a notice %j days before', (typed, problem) => {
+    expect(dueSoonDaysBeforeProblem(typed)).toBe(problem);
+  });
+
+  it.each(['1', '2', ' 7 '])('accepts a notice %j days before', (typed) => {
+    expect(dueSoonDaysBeforeProblem(typed)).toBeNull();
+  });
+
+  it('follows the range the server reports', () => {
+    expect(dueSoonDaysBeforeProblem('10', 1, 14)).toBeNull();
+    expect(dueSoonDaysBeforeProblem('2', 3, 14)).toBe('El aviso se manda de 3 a 14 días antes.');
+  });
+
+  it('shows what comes due with made-up amounts', () => {
+    expect(previewReminder('Hola {nombre}, en {negocio} debes {monto}; {porvencer} vence el {fecha}.', 'Tiendita'))
+      .toBe('Hola Ana, en Tiendita debes $1,160.00; $500.00 vence el lunes 5 de octubre.');
+  });
+
+  it('says in Por cobrar which messages go out, and in the account when the last notice did', () => {
+    expect(describeCreditMessages(null, null)).toBe('Sin recordatorios');
+    expect(describeCreditMessages(7, null)).toBe('Recordatorios cada 7 días');
+    expect(describeCreditMessages(null, 1)).toBe('Aviso 1 día antes de vencer');
+    expect(describeCreditMessages(7, 2)).toBe('Aviso 2 días antes de vencer · recordatorios cada 7 días');
+    expect(describeDueSoon({ lastDueSoonAt: '2026-10-12T17:00:00Z' })).toBe('Último aviso antes de vencer por WhatsApp: 12 oct 2026.');
+    expect(describeDueSoon({ lastDueSoonAt: null })).toBeNull();
   });
 });
 

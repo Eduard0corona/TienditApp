@@ -36,7 +36,8 @@ public partial class MessageTemplate : AuditableEntity, ITenantScoped, IAggregat
         string? languageCode = null)
     {
         // Appointment notices are written by the system with the whole appointment; a business does not edit them.
-        if (purpose is not (MessagePurpose.Campaign or MessagePurpose.AppointmentReminder or MessagePurpose.CreditReminder))
+        if (purpose is not (MessagePurpose.Campaign or MessagePurpose.AppointmentReminder or MessagePurpose.CreditReminder
+            or MessagePurpose.CreditDueSoon))
             throw new DomainException(TemplatePurposeError);
 
         TenantId = tenantId;

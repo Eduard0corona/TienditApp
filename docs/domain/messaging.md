@@ -4,8 +4,8 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 
 ## Plantillas
 
-- `MessageTemplate` guarda nombre, uso (`Campaign`, `AppointmentReminder` o `CreditReminder`, Fase 26C), texto con variables y, opcionalmente, el nombre de la plantilla aprobada en Meta (`ProviderTemplateName`) y su idioma (`es_MX` por defecto). Los avisos de citas (`AppointmentNotice`) no tienen plantilla: los escribe el sistema con la cita completa.
-- Variables: `{nombre}` (primer nombre del cliente o "cliente") y `{negocio}`; los recordatorios de citas suman `{servicio}`, `{fecha}` ("lunes 5 de octubre") y `{hora}` ("4:30 p. m."), en la zona horaria del negocio; los del fiado, `{monto}` (lo que debe), `{vencido}` (lo vencido) y `{fecha}` (el último día para pagar que ya pasó). Una variable que no aplica al uso se rechaza.
+- `MessageTemplate` guarda nombre, uso (`Campaign`, `AppointmentReminder`, `CreditReminder`, Fase 26C, o `CreditDueSoon`, Fase 26E), texto con variables y, opcionalmente, el nombre de la plantilla aprobada en Meta (`ProviderTemplateName`) y su idioma (`es_MX` por defecto). Los avisos de citas (`AppointmentNotice`) no tienen plantilla: los escribe el sistema con la cita completa.
+- Variables: `{nombre}` (primer nombre del cliente o "cliente") y `{negocio}`; los recordatorios de citas suman `{servicio}`, `{fecha}` ("lunes 5 de octubre") y `{hora}` ("4:30 p. m."), en la zona horaria del negocio; los del fiado, `{monto}` (lo que debe), `{vencido}` (lo vencido) y `{fecha}` (el último día para pagar que ya pasó); los avisos antes de vencer, `{monto}`, `{porvencer}` (lo que vence ese día) y `{fecha}` (el próximo día límite). Una variable que no aplica al uso se rechaza.
 - WhatsApp solo entrega texto libre a quien escribió en las últimas 24 horas. Fuera de esa ventana hace falta una plantilla aprobada en Meta: el mensaje se envía como plantilla y las variables se mandan como parámetros en el orden en que aparecen en el texto (`{nombre}` → `{{1}}`…). Sin nombre de Meta se envía el texto; si Meta lo rechaza por la ventana (código 131047) el mensaje queda como fallido con esa explicación.
 - Editar una plantilla no cambia los mensajes ya encolados: cada mensaje guarda su texto y parámetros.
 
@@ -35,6 +35,16 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 - Antes de enviar se revisa que los recordatorios sigan encendidos, que siga siendo el día en que se encoló y antes de las 20:00, y que todavía deba algo vencido: si pagó o se le condonó, se omite ("Ya no tiene nada vencido").
 - Como los de citas, sin plantilla aprobada en Meta solo llegan a quien escribió en las últimas 24 horas. Las plantillas «Recordatorio del fiado» solo las crea o cambia el dueño o un administrador; una desactivada deja el texto predeterminado.
 - Campañas › Recordatorios del fiado muestra los últimos con su resultado y su motivo.
+
+## El aviso antes de vencer del fiado (Fase 26E)
+
+[ADR 0043](../adr/0043-credit-due-soon-notice.md):
+
+- Configurable en la misma pantalla que los recordatorios del fiado, por el dueño o un administrador: encendido o no (apagado por defecto, aparte de los recordatorios), cuántos días antes (1 a 7, 2 por defecto) y plantilla (o el texto predeterminado). Encenderlo pide WhatsApp conectado. `PUT /api/v1/customers/credit-reminders` lo recibe en `dueSoon`, opcional: sin él no cambia.
+- En la misma pasada que los recordatorios (cada uno con su alcance y su guardado), el worker encola uno por cada cuenta que no debe nada vencido y debe algo, desde antes de hoy, cuyo día límite cae de hoy a dentro de esos días, de 10:00 a 19:00 del negocio y con WhatsApp conectado. Uno por cuenta y próximo día límite, y a lo más uno al día: la clave `creditsoon:{teléfono}:{día límite}:{día del negocio}`. Quien escribió BAJA no recibe ninguno. Tope: 500 cuentas por pasada y negocio, del día límite más cercano al más lejano. Cuenta el aviso enviado, fallido u omitido, pero no uno cancelado ni uno omitido porque se apagó o se pasó la hora.
+- Antes de enviar se revisa que siga encendido, que siga siendo el día en que se encoló y antes de las 20:00, que no tenga nada vencido ("Ya tiene algo vencido: le toca el recordatorio de lo vencido") y que todavía deba algo cuyo día límite, por su plazo de ahora, sea el del aviso ("Ya no debe nada que venza ese día").
+- Las plantillas «Aviso antes de vencer» solo las crea o cambia el dueño o un administrador; una desactivada, o de otro uso, deja el texto predeterminado.
+- Campañas › Recordatorios del fiado los lista aparte, arriba de los recordatorios.
 
 ## Avisos de citas (Fase 6)
 

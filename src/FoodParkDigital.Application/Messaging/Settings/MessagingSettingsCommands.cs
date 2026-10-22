@@ -44,7 +44,8 @@ public class GetMessagingSettingsQueryHandler : IRequestHandler<GetMessagingSett
             MaxReminderHoursBefore = TenantSettings.MaxReminderHoursBefore,
             CampaignPlaceholders = MessageTemplateText.AllowedPlaceholders(MessagePurpose.Campaign).ToList(),
             ReminderPlaceholders = MessageTemplateText.AllowedPlaceholders(MessagePurpose.AppointmentReminder).ToList(),
-            CreditReminderPlaceholders = MessageTemplateText.AllowedPlaceholders(MessagePurpose.CreditReminder).ToList()
+            CreditReminderPlaceholders = MessageTemplateText.AllowedPlaceholders(MessagePurpose.CreditReminder).ToList(),
+            CreditDueSoonPlaceholders = MessageTemplateText.AllowedPlaceholders(MessagePurpose.CreditDueSoon).ToList()
         };
     }
 }

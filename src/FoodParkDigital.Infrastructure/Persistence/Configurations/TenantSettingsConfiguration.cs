@@ -22,6 +22,9 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
                 "CK_TenantSettings_CreditReminderEveryDays",
                 $"[CreditReminderEveryDays] >= {TenantSettings.MinCreditReminderEveryDays} AND [CreditReminderEveryDays] <= {TenantSettings.MaxCreditReminderEveryDays}");
             table.HasCheckConstraint(
+                "CK_TenantSettings_CreditDueSoonDaysBefore",
+                $"[CreditDueSoonDaysBefore] >= {TenantSettings.MinCreditDueSoonDaysBefore} AND [CreditDueSoonDaysBefore] <= {TenantSettings.MaxCreditDueSoonDaysBefore}");
+            table.HasCheckConstraint(
                 "CK_TenantSettings_OnlineBookingCapacity",
                 $"[OnlineBookingCapacity] >= 1 AND [OnlineBookingCapacity] <= {OnlineBookingRules.MaxCapacity}");
         });
@@ -73,6 +76,16 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             .IsRequired();
         builder.Property(s => s.CreditReminderEveryDays)
             .HasDefaultValue(TenantSettings.DefaultCreditReminderEveryDays)
+            .ValueGeneratedNever()
+            .IsRequired();
+        // Fase 26E (ADR 0043): the notice before the last day to pay starts off, two days before; the same defaults for the rows
+        // the previous version saves.
+        builder.Property(s => s.CreditDueSoonEnabled)
+            .HasDefaultValue(false)
+            .ValueGeneratedNever()
+            .IsRequired();
+        builder.Property(s => s.CreditDueSoonDaysBefore)
+            .HasDefaultValue(TenantSettings.DefaultCreditDueSoonDaysBefore)
             .ValueGeneratedNever()
             .IsRequired();
         // Null until the owner sets the hours: the version this one replaces does not map it.

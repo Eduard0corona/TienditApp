@@ -23,6 +23,14 @@ public static class MessagingDefaults
         "Hola {nombre}, te recordamos que en {negocio} tienes un saldo de {monto}; {vencido} venció el {fecha}. "
         + "Si ya pagaste, ignora este mensaje. Escribe BAJA si no quieres recibir recordatorios.";
 
+    /// <summary>
+    /// Used while the business has not chosen a template for the notice before the credit comes due (Fase 26E): what the
+    /// customer owes in all and what of it comes due on the coming last day to pay.
+    /// </summary>
+    public const string CreditDueSoonBody =
+        "Hola {nombre}, te recordamos que en {negocio} tienes un saldo de {monto}; {porvencer} vence el {fecha}. "
+        + "Si ya pagaste, ignora este mensaje. Escribe BAJA si no quieres recibir recordatorios.";
+
     public const string OptOutReply =
         "Listo, ya no te enviaremos promociones ni recordatorios. Seguirás recibiendo los avisos de tus pedidos y citas. "
         + "Escribe ALTA si quieres volver a recibirlos.";

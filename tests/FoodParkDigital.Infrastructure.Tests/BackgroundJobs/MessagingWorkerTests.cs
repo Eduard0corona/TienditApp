@@ -131,6 +131,27 @@ public class MessagingWorkerTests
         Assert.Equal((MessagePurpose.CreditReminder, OutgoingMessageStatus.Sent), (message.Purpose, message.Status));
     }
 
+    [Fact]
+    public async Task CreditNotices_ShouldBeQueuedWhereTurnedOn_EachOnItsOwn_NextToTheReminders()
+    {
+        await using var host = CreateHost(out _);
+        // Business a has both on: the reminder to who owes something overdue, the notice to who has something due tomorrow.
+        // Business b has only the notice: the one overdue gets nothing.
+        var both = await SeedOverdueAsync(host, "a", "+525511111111", remindersOn: true, dueSoonPhone: "+525544444444");
+        var noticeOnly = await SeedOverdueAsync(host, "b", "+525522222222", remindersOn: false, dueSoonPhone: "+525555555555");
+        var worker = host.Get<MessagingWorker>();
+
+        var queued = await worker.QueueCreditRemindersAsync(CancellationToken.None);
+        var again = await worker.QueueCreditRemindersAsync(CancellationToken.None);
+
+        Assert.Equal((3, 0), (queued, again));
+        var messages = await AllAsync(host, c => c.OutgoingMessages);
+        Assert.Equal(
+            [(both, MessagePurpose.CreditReminder, "+525511111111"), (both, MessagePurpose.CreditDueSoon, "+525544444444"),
+                (noticeOnly, MessagePurpose.CreditDueSoon, "+525555555555")],
+            messages.Select(m => (m.TenantId, m.Purpose, m.Phone)).OrderBy(m => m.Phone));
+    }
+
     private static OutboxTestHost CreateHost(out FakeWhatsApp whatsApp, int maxAttempts = 6)
     {
         var fake = new FakeWhatsApp();
@@ -149,6 +170,7 @@ public class MessagingWorkerTests
             services.AddScoped<CampaignLauncher>();
             services.AddScoped<AppointmentReminderPlanner>();
             services.AddScoped<CreditReminderPlanner>();
+            services.AddScoped<CreditDueSoonPlanner>();
             services.AddScoped<OutgoingMessageSender>();
             services.AddSingleton<MessagingSignal>();
             services.AddSingleton<MessagingWorker>();
@@ -182,9 +204,13 @@ public class MessagingWorkerTests
     /// <summary>
     /// A business with a 7-day term, WhatsApp connected and a customer who owes a sale on credit of 20 days ago (Fase 26C).
     /// </summary>
-    private static async Task<Guid> SeedOverdueAsync(OutboxTestHost host, string slug, string phone, bool remindersOn)
+    /// <summary>
+    /// A business with 7 days to pay and a sale on credit to <paramref name="phone"/> 20 days ago; with
+    /// <paramref name="dueSoonPhone"/>, the notice two days before is on and that phone owes a sale of 6 days ago, due tomorrow.
+    /// </summary>
+    private static async Task<Guid> SeedOverdueAsync(OutboxTestHost host, string slug, string phone, bool remindersOn, string? dueSoonPhone = null)
     {
-        var (tenantId, orderId) = await host.InScopeAsync(async services =>
+        var (tenantId, orders) = await host.InScopeAsync(async services =>
         {
             var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
             services.GetRequiredService<ICurrentTenantService>().SetTenant(tenant.Id);
@@ -192,23 +218,33 @@ public class MessagingWorkerTests
             var settings = new TenantSettings(tenant.Id, TenantCapability.Retail);
             settings.SetCreditTermDays(7);
             settings.UpdateCreditReminders(remindersOn, 7, null);
+            settings.UpdateCreditDueSoon(dueSoonPhone is not null, 2, null);
             var config = new WhatsAppConfig(tenant.Id);
             config.Update(true, "token", $"phone-{slug}", "waba", "+52 55 0000 0000");
             var stateMachine = new RetailOrderStateMachine();
-            var order = new Order(tenant.Id, null, null, true, $"V-{slug}-1", BusinessType.Retail, OrderType.Retail, "Ana", phone, null, null);
-            order.AddItem(Guid.NewGuid(), "Jabón", 1, 100m);
-            order.TransitionTo(OrderStatus.Confirmed, stateMachine, "cajero");
-            order.SellOnCredit();
-            order.CloseIfPaidCounterSale(stateMachine, waitsForKitchen: false, "cajero");
-            context.AddRange(tenant, settings, config, order);
+            var sales = new List<(Order Order, int DaysAgo)>();
+            foreach (var (customerPhone, daysAgo) in new[] { (phone, 20), (dueSoonPhone, 6) })
+            {
+                if (customerPhone is null)
+                    continue;
+                var order = new Order(tenant.Id, null, null, true, $"V-{slug}-{sales.Count + 1}", BusinessType.Retail, OrderType.Retail, "Ana", customerPhone, null, null);
+                order.AddItem(Guid.NewGuid(), "Jabón", 1, 100m);
+                order.TransitionTo(OrderStatus.Confirmed, stateMachine, "cajero");
+                order.SellOnCredit();
+                order.CloseIfPaidCounterSale(stateMachine, waitsForKitchen: false, "cajero");
+                sales.Add((order, daysAgo));
+            }
+            context.AddRange(tenant, settings, config);
+            context.AddRange(sales.Select(s => s.Order));
             await context.SaveChangesAsync();
-            return (tenant.Id, order.Id);
+            return (tenant.Id, sales.Select(s => (s.Order.Id, s.DaysAgo)).ToList());
         });
         await host.InScopeAsync(async services =>
         {
             services.GetRequiredService<ICurrentTenantService>().SetTenant(tenantId);
             var context = services.GetRequiredService<ApplicationDbContext>();
-            (await context.Orders.SingleAsync(o => o.Id == orderId)).CreatedAt = host.Clock.UtcNow.AddDays(-20);
+            foreach (var (orderId, daysAgo) in orders)
+                (await context.Orders.SingleAsync(o => o.Id == orderId)).CreatedAt = host.Clock.UtcNow.AddDays(-daysAgo);
             return await context.SaveChangesAsync();
         });
         return tenantId;

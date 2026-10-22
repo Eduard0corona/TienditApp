@@ -4,13 +4,14 @@ import { messagingApi } from '../../api/messagingApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useToast } from '../../hooks/useToast';
 import { MessagePurpose, type MessageTemplateDto } from '../../types';
-import { CREDIT_PLACEHOLDER_HELP, PLACEHOLDER_HELP } from './campaignLabels';
+import { CREDIT_DUE_SOON_PLACEHOLDER_HELP, CREDIT_PLACEHOLDER_HELP, PLACEHOLDER_HELP } from './campaignLabels';
 
 const PURPOSE_LABEL: Record<MessagePurpose, string> = {
   [MessagePurpose.Campaign]: 'Campaña',
   [MessagePurpose.AppointmentReminder]: 'Recordatorio de cita',
   [MessagePurpose.AppointmentNotice]: 'Aviso de cita',
   [MessagePurpose.CreditReminder]: 'Recordatorio del fiado',
+  [MessagePurpose.CreditDueSoon]: 'Aviso antes de vencer',
 };
 
 // Appointment notices are written by the system: no template uses them.
@@ -19,6 +20,7 @@ const PLACEHOLDERS: Record<MessagePurpose, string[]> = {
   [MessagePurpose.AppointmentReminder]: ['nombre', 'negocio', 'servicio', 'fecha', 'hora'],
   [MessagePurpose.AppointmentNotice]: [],
   [MessagePurpose.CreditReminder]: ['nombre', 'negocio', 'monto', 'vencido', 'fecha'],
+  [MessagePurpose.CreditDueSoon]: ['nombre', 'negocio', 'monto', 'porvencer', 'fecha'],
 };
 
 const BODY_EXAMPLE: Record<MessagePurpose, string> = {
@@ -26,6 +28,13 @@ const BODY_EXAMPLE: Record<MessagePurpose, string> = {
   [MessagePurpose.AppointmentReminder]: 'Hola {nombre}, te recordamos tu cita de {servicio} el {fecha} a las {hora}.',
   [MessagePurpose.AppointmentNotice]: '',
   [MessagePurpose.CreditReminder]: 'Hola {nombre}, en {negocio} tienes un saldo de {monto}; {vencido} venció el {fecha}.',
+  [MessagePurpose.CreditDueSoon]: 'Hola {nombre}, en {negocio} tienes un saldo de {monto}; {porvencer} vence el {fecha}.',
+};
+
+// What each placeholder chip says when hovered: those of the fiado tell what is owed instead of the appointment.
+const HELP: Partial<Record<MessagePurpose, Record<string, string>>> = {
+  [MessagePurpose.CreditReminder]: CREDIT_PLACEHOLDER_HELP,
+  [MessagePurpose.CreditDueSoon]: CREDIT_DUE_SOON_PLACEHOLDER_HELP,
 };
 
 type Draft = {
@@ -214,13 +223,14 @@ export default function TemplatesTab() {
                     <option value={MessagePurpose.Campaign}>Campaña</option>
                     <option value={MessagePurpose.AppointmentReminder}>Recordatorio de cita</option>
                     <option value={MessagePurpose.CreditReminder}>Recordatorio del fiado</option>
+                    <option value={MessagePurpose.CreditDueSoon}>Aviso antes de vencer</option>
                   </select>
                 </div>
               </div>
               <label className="form-label" htmlFor="template-body">Mensaje</label>
               <div className="d-flex flex-wrap gap-1 mb-1">
                 {PLACEHOLDERS[draft.purpose].map((name) => (
-                  <button key={name} type="button" className="btn btn-sm btn-soft-primary" title={(draft.purpose === MessagePurpose.CreditReminder ? CREDIT_PLACEHOLDER_HELP : PLACEHOLDER_HELP)[name]}
+                  <button key={name} type="button" className="btn btn-sm btn-soft-primary" title={(HELP[draft.purpose] ?? PLACEHOLDER_HELP)[name]}
                     onClick={() => insertPlaceholder(name)}>
                     {`{${name}}`}
                   </button>

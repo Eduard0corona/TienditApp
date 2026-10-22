@@ -19,11 +19,15 @@ public static partial class MessageTemplateText
     public const string Amount = "monto";
     /// <summary>What of it is past the term (Fase 26C).</summary>
     public const string Overdue = "vencido";
+    /// <summary>What of it comes due on the coming last day to pay (Fase 26E).</summary>
+    public const string DueSoon = "porvencer";
 
     private static readonly string[] CampaignPlaceholders = [Name, Business];
     private static readonly string[] ReminderPlaceholders = [Name, Business, Service, Date, Time];
     // {fecha} is the oldest last day to pay that passed.
     private static readonly string[] CreditReminderPlaceholders = [Name, Business, Amount, Overdue, Date];
+    // {fecha} is the coming last day to pay.
+    private static readonly string[] CreditDueSoonPlaceholders = [Name, Business, Amount, DueSoon, Date];
 
     [GeneratedRegex(@"\{([a-zA-Z_]+)\}")]
     private static partial Regex PlaceholderPattern();
@@ -32,6 +36,7 @@ public static partial class MessageTemplateText
     {
         MessagePurpose.AppointmentReminder => ReminderPlaceholders,
         MessagePurpose.CreditReminder => CreditReminderPlaceholders,
+        MessagePurpose.CreditDueSoon => CreditDueSoonPlaceholders,
         _ => CampaignPlaceholders
     };
 

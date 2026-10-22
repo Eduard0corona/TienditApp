@@ -14,7 +14,12 @@ public enum MessagePurpose
     /// What a customer owes past the term of the fiado (Fase 26C, ADR 0035), queued by the system while it stays overdue. An
     /// opt-out stops it, as every reminder.
     /// </summary>
-    CreditReminder = 3
+    CreditReminder = 3,
+    /// <summary>
+    /// What a customer who is up to date owes that comes due in a few days (Fase 26E, ADR 0043), queued by the system once per
+    /// last day to pay. An opt-out stops it, as every reminder.
+    /// </summary>
+    CreditDueSoon = 4
 }
 
 public enum OutgoingMessageStatus
@@ -24,7 +29,8 @@ public enum OutgoingMessageStatus
     /// <summary>Rejected by the provider or out of attempts.</summary>
     Failed = 2,
     /// <summary>
-    /// Not sent on purpose: the customer opted out, the appointment changed or was cancelled, or nothing is overdue anymore.
+    /// Not sent on purpose: the customer opted out, the appointment changed or was cancelled, nothing is overdue anymore, or
+    /// nothing comes due that day anymore.
     /// </summary>
     Skipped = 3,
     /// <summary>The campaign was cancelled before the message went out.</summary>

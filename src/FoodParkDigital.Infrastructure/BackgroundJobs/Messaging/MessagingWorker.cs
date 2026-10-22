@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
@@ -188,64 +189,88 @@ public sealed class MessagingWorker
     }
 
     /// <summary>
-    /// Queues the reminders of what customers owe past their term (Fase 26C) in each business that turned them on; the
-    /// planner decides whether it is the business's hour and who is due.
+    /// Queues the reminders of what customers owe past their term (Fase 26C) and the notices of what comes due soon (Fase 26E)
+    /// in each business that turned them on; the planners decide whether it is the business's hour and who is due. Each runs
+    /// in its own scope and saves on its own, so a collision in one does not drop the other.
     /// </summary>
-    /// <returns>Reminders queued.</returns>
+    /// <returns>Reminders and notices queued.</returns>
     public async Task<int> QueueCreditRemindersAsync(CancellationToken cancellationToken)
     {
-        List<Guid> tenants;
+        List<(Guid TenantId, bool Reminders, bool DueSoon)> tenants;
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            // Which businesses have credit reminders on, before entering each one's scope below.
-            tenants = await context.TenantSettings
-                .IgnoreQueryFilters()
-                .AsNoTracking()
-                .Where(s => s.CreditRemindersEnabled
-                    && context.Tenants.Any(t => t.Id == s.TenantId && t.Status == TenantStatus.Active))
-                .Select(s => s.TenantId)
-                .ToListAsync(cancellationToken);
+            // Which businesses have credit reminders or notices on, before entering each one's scope below.
+            tenants = (await context.TenantSettings
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Where(s => (s.CreditRemindersEnabled || s.CreditDueSoonEnabled)
+                        && context.Tenants.Any(t => t.Id == s.TenantId && t.Status == TenantStatus.Active))
+                    .Select(s => new { s.TenantId, s.CreditRemindersEnabled, s.CreditDueSoonEnabled })
+                    .ToListAsync(cancellationToken))
+                .Select(s => (s.TenantId, s.CreditRemindersEnabled, s.CreditDueSoonEnabled))
+                .ToList();
         }
 
         var queued = 0;
-        foreach (var tenantId in tenants)
+        foreach (var (tenantId, reminders, dueSoon) in tenants)
         {
-            try
-            {
-                await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
-                var services = scope.ServiceProvider;
-                var context = services.GetRequiredService<ApplicationDbContext>();
-                var settings = await context.TenantSettings.AsNoTracking()
-                    .FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
-                if (settings is null)
-                    continue;
-
-                var count = await services.GetRequiredService<CreditReminderPlanner>().QueueDueAsync(settings, cancellationToken);
-                if (count == 0)
-                    continue;
-
-                await context.SaveChangesAsync(cancellationToken);
-                queued += count;
-            }
-            catch (DbUpdateException ex)
-            {
-                // Another instance queued some of them at the same time (unique key); the next pass adds the rest.
-                _logger.LogInformation(
-                    LogRedaction.RedactDatabaseMessages(ex),
-                    "Credit reminders of tenant {TenantId} were not queued in this pass",
-                    tenantId);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError(
-                    LogRedaction.RedactDatabaseMessages(ex),
-                    "Credit reminders of tenant {TenantId} could not be queued",
-                    tenantId);
-            }
+            if (reminders)
+                queued += await QueueInTenantAsync(tenantId, "Credit reminders",
+                    (services, settings, ct) => services.GetRequiredService<CreditReminderPlanner>().QueueDueAsync(settings, ct),
+                    cancellationToken);
+            if (dueSoon)
+                queued += await QueueInTenantAsync(tenantId, "Credit due-soon notices",
+                    (services, settings, ct) => services.GetRequiredService<CreditDueSoonPlanner>().QueueDueAsync(settings, ct),
+                    cancellationToken);
         }
 
         return queued;
+    }
+
+    /// <summary>Runs one planner in the business's scope and saves what it queued.</summary>
+    private async Task<int> QueueInTenantAsync(
+        Guid tenantId,
+        string what,
+        Func<IServiceProvider, TenantSettings, CancellationToken, Task<int>> queue,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
+            var services = scope.ServiceProvider;
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            var settings = await context.TenantSettings.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
+            if (settings is null)
+                return 0;
+
+            var count = await queue(services, settings, cancellationToken);
+            if (count == 0)
+                return 0;
+
+            await context.SaveChangesAsync(cancellationToken);
+            return count;
+        }
+        catch (DbUpdateException ex)
+        {
+            // Another instance queued some of them at the same time (unique key); the next pass adds the rest.
+            _logger.LogInformation(
+                LogRedaction.RedactDatabaseMessages(ex),
+                "{What} of tenant {TenantId} were not queued in this pass",
+                what,
+                tenantId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(
+                LogRedaction.RedactDatabaseMessages(ex),
+                "{What} of tenant {TenantId} could not be queued",
+                what,
+                tenantId);
+        }
+
+        return 0;
     }
 
     /// <returns>Messages claimed; zero when nothing was due.</returns>

@@ -112,4 +112,6 @@ public class MessagingSettingsDto
     public List<string> ReminderPlaceholders { get; set; } = [];
     /// <summary>The placeholders of credit reminder templates (Fase 26C).</summary>
     public List<string> CreditReminderPlaceholders { get; set; } = [];
+    /// <summary>The placeholders of the templates of the notice before the credit comes due (Fase 26E).</summary>
+    public List<string> CreditDueSoonPlaceholders { get; set; } = [];
 }

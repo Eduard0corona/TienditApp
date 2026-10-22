@@ -13623,6 +13623,20 @@ export interface components {
             defaultCountry: string;
             items: components["schemas"]["CreateOrderItemDto"][];
         };
+        CreditDueSoonDto: {
+            enabled: boolean;
+            /** Format: int32 */
+            daysBefore: number;
+            /** Format: uuid */
+            templateId?: string | null;
+            defaultBody: string;
+            placeholders: string[];
+            templates: components["schemas"]["CreditReminderTemplateDto"][];
+            /** Format: int32 */
+            minDaysBefore: number;
+            /** Format: int32 */
+            maxDaysBefore: number;
+        };
         CreditReminderTemplateDto: {
             /** Format: uuid */
             id: string;
@@ -13650,6 +13664,7 @@ export interface components {
             maxEveryDays: number;
             sendFrom: string;
             sendUntil: string;
+            dueSoon: components["schemas"]["CreditDueSoonDto"];
         };
         CustomerAccountDto: {
             phone: string;
@@ -13674,6 +13689,8 @@ export interface components {
             creditReminderEveryDays?: number | null;
             /** Format: date-time */
             lastReminderAt?: string | null;
+            /** Format: date-time */
+            lastDueSoonAt?: string | null;
             orders: components["schemas"]["CustomerAccountOrderDto"][];
             /** Format: int32 */
             ordersCount: number;
@@ -14872,7 +14889,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        MessagePurpose: 0 | 1 | 2 | 3;
+        MessagePurpose: 0 | 1 | 2 | 3 | 4;
         MessageTemplateDto: {
             /** Format: uuid */
             id: string;
@@ -14926,6 +14943,7 @@ export interface components {
             campaignPlaceholders: string[];
             reminderPlaceholders: string[];
             creditReminderPlaceholders: string[];
+            creditDueSoonPlaceholders: string[];
         };
         MoveTabRequest: {
             /** Format: uuid */
@@ -16704,6 +16722,8 @@ export interface components {
             creditTermDays?: number | null;
             /** Format: int32 */
             creditReminderEveryDays?: number | null;
+            /** Format: int32 */
+            creditDueSoonDaysBefore?: number | null;
             /** Format: double */
             totalCreditBalance: number;
         };
@@ -17563,12 +17583,20 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
         };
+        UpdateCreditDueSoon: {
+            enabled: boolean;
+            /** Format: int32 */
+            daysBefore: number;
+            /** Format: uuid */
+            templateId?: string | null;
+        };
         UpdateCreditRemindersCommand: {
             enabled: boolean;
             /** Format: int32 */
             everyDays: number;
             /** Format: uuid */
             templateId?: string | null;
+            dueSoon?: components["schemas"]["UpdateCreditDueSoon"];
         };
         UpdateCustomerCommand: {
             /** Format: uuid */

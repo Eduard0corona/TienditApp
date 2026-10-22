@@ -52,3 +52,12 @@ export const CREDIT_PLACEHOLDER_HELP: Record<string, string> = {
   vencido: 'Lo que ya venció',
   fecha: 'Último día para pagar que ya pasó',
 };
+
+/** The same chips in the notice before something comes due (Fase 26E): {fecha} is the coming last day to pay. */
+export const CREDIT_DUE_SOON_PLACEHOLDER_HELP: Record<string, string> = {
+  nombre: 'Nombre del cliente',
+  negocio: 'Nombre de tu negocio',
+  monto: 'Lo que debe en total',
+  porvencer: 'Lo que vence ese día',
+  fecha: 'Último día para pagar que viene',
+};

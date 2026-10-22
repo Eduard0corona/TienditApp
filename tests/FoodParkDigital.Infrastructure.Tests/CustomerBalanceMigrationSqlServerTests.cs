@@ -19,7 +19,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// AddCustomerBalance (Fase 26D, ADR 0036): the movements of the balance in a customer's favor, each with the sign of its kind
 /// and tied to what moves it, a payment or a refund moving it once, per business; the checks refuse what the domain never
 /// writes; and rolling back stops with error 50029 once a customer left a balance or paid, got a refund or a drawer moved
-/// money with it, and otherwise drops only the table.
+/// money with it, and otherwise drops only the table. Its database stops before the notice of Fase 26E, whose columns the
+/// settings of this version do not have.
 /// </summary>
 public class CustomerBalanceMigrationSqlServerTests
 {
@@ -37,7 +38,7 @@ public class CustomerBalanceMigrationSqlServerTests
         var tenant = await SeedTenantAsync(database);
         var other = await SeedTenantAsync(database);
         Guid paymentId;
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var drawer = new CashSession(tenant.Id, Now, "cajero", 500m);
             var order = CounterSale(tenant.Id);
@@ -53,18 +54,18 @@ public class CustomerBalanceMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using (var check = database.CreateContext(tenant.Id))
+        await using (var check = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var entries = await check.CustomerBalanceEntries.Where(e => e.Phone == Phone).OrderBy(e => e.Kind).ToListAsync();
             Assert.Equal([100m, 10m, -30m, -20.50m], entries.Select(e => e.Amount));
             Assert.Equal(59.50m, entries.Sum(e => e.Amount));
             Assert.Equal(((OrderPaymentMethod?)OrderPaymentMethod.Card, "Voucher 77"), (entries[3].Method, entries[3].Reference));
         }
-        await using (var elsewhere = database.CreateContext(other.Id))
+        await using (var elsewhere = BeforeCreditDueSoon.CreateContext(database, other.Id))
             Assert.Empty(await elsewhere.CustomerBalanceEntries.ToListAsync());
 
         // A payment with the balance takes from it once.
-        await using var raw = database.CreateContext();
+        await using var raw = BeforeCreditDueSoon.CreateContext(database);
         var twice = await Assert.ThrowsAsync<SqlException>(() => raw.Database.ExecuteSqlAsync($"""
             INSERT INTO [CustomerBalanceEntries] ([Id], [TenantId], [Phone], [Kind], [Amount], [OrderId], [OrderPaymentId], [OccurredAt], [RecordedBy], [CreatedAt])
             SELECT {Guid.NewGuid()}, [TenantId], [Phone], 2, -1, [OrderId], [OrderPaymentId], [OccurredAt], N'cajero', SYSDATETIMEOFFSET()
@@ -96,7 +97,7 @@ public class CustomerBalanceMigrationSqlServerTests
             ("UPDATE [CustomerBalanceEntries] SET [OrderPaymentId] = NULL WHERE [Kind] = 2", "a payment without the payment"),
             ("UPDATE [CustomerBalanceEntries] SET [OrderId] = NULL WHERE [Kind] = 2", "a payment without its order"),
         ];
-        await using var context = database.CreateContext();
+        await using var context = BeforeCreditDueSoon.CreateContext(database);
         foreach (var (sql, what) in refusals)
         {
             var refused = await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlRawAsync(sql));
@@ -110,7 +111,7 @@ public class CustomerBalanceMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             // What the previous version stores too: a sale paid in cash and partly refunded, and a drawer with a deposit.
             var drawer = new CashSession(tenant.Id, Now, "cajero", 500m);
@@ -143,13 +144,13 @@ public class CustomerBalanceMigrationSqlServerTests
             await ExecuteAsync(database, trace);
             var used = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeBalance));
             Assert.True(used.Number == 50029, $"{trace}: {used.Message}");
-            await using (var context = database.CreateContext())
+            await using (var context = BeforeCreditDueSoon.CreateContext(database))
                 Assert.Equal(Migration, await LatestMigrationAsync(context));
             await ExecuteAsync(database, undo);
         }
 
         await MigrateAsync(database, BeforeBalance);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCreditDueSoon.CreateContext(database))
         {
             Assert.Equal(BeforeBalance, await LatestMigrationAsync(context));
             Assert.Equal((0, 1, 1, 1), (
@@ -162,7 +163,7 @@ public class CustomerBalanceMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the table is there, empty.
         await MigrateAsync(database, BeforeBalance);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeCreditDueSoon.CreateContext(database, tenant.Id);
         Assert.Empty(await forward.CustomerBalanceEntries.ToListAsync());
         Assert.Equal(60m, (await forward.Orders.SingleAsync()).NetPaidAmount);
     }
@@ -170,7 +171,7 @@ public class CustomerBalanceMigrationSqlServerTests
     /// <summary>One movement of each kind, as the domain writes them.</summary>
     private static async Task SeedEveryKindAsync(SqlServerTestDatabase database, Guid tenantId)
     {
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeCreditDueSoon.CreateContext(database, tenantId);
         var drawer = new CashSession(tenantId, Now, "cajero", 0m);
         var order = CounterSale(tenantId);
         var payment = order.RegisterPayment(70m, OrderPaymentMethod.CustomerBalance, Now, null, null, null, null);
@@ -197,7 +198,7 @@ public class CustomerBalanceMigrationSqlServerTests
     {
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant($"Tienda {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
-        await using var seed = database.CreateContext();
+        await using var seed = BeforeCreditDueSoon.CreateContext(database);
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Retail));
         await seed.SaveChangesAsync();
         return tenant;
@@ -212,7 +213,7 @@ public class CustomerBalanceMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, string sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCreditDueSoon.CreateContext(database);
         await context.Database.ExecuteSqlRawAsync(sql);
     }
 

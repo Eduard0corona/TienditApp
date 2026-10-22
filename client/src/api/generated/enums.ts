@@ -214,6 +214,7 @@ export const MessagePurpose = {
   AppointmentReminder: 1,
   AppointmentNotice: 2,
   CreditReminder: 3,
+  CreditDueSoon: 4,
 } as const;
 export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
 
