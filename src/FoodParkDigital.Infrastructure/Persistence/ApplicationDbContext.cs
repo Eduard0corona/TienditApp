@@ -184,6 +184,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderVisitCharge> OrderVisitCharges => Set<OrderVisitCharge>();
     public DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings => Set<DeliveryPlatformSetting>();
     public DbSet<PlatformSettlement> PlatformSettlements => Set<PlatformSettlement>();
+    public DbSet<PlatformWithholdingCertificate> PlatformWithholdingCertificates => Set<PlatformWithholdingCertificate>();
     public DbSet<PlatformSettlementOrder> PlatformSettlementOrders => Set<PlatformSettlementOrder>();
     public DbSet<PlatformSettlementAdjustment> PlatformSettlementAdjustments => Set<PlatformSettlementAdjustment>();
     public DbSet<CourierSettlement> CourierSettlements => Set<CourierSettlement>();
