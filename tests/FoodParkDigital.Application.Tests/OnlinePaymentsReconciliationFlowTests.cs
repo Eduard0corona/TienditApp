@@ -170,6 +170,36 @@ public partial class OnlinePaymentsFlowTests
     }
 
     [Fact]
+    public async Task Refund_Refused_ShouldNotTakeTheRefundOfAnotherOfTienditApps_DoneWithoutItsId()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var (orderId, payment) = await PlaceAsync(shop, quantity: 2);
+        // Mercado Pago made the first refund but its answer came without the id: TienditApp has it done, without it.
+        shop.Gateway.RefundOutcome = new OnlinePaymentRefundOutcome.Done(null);
+        await shop.RefundAsync(orderId, 55m);
+        await shop.DispatchRefundAsync((await shop.Context.OnlinePaymentRefunds.AsNoTracking().SingleAsync()).Id);
+        shop.Gateway.GiveBack(payment, 55m, SalesTestFixture.Now.AddMinutes(5), refundId: "4499");
+        shop.Gateway.RefundOutcome = new OnlinePaymentRefundOutcome.Refused("Mercado Pago no hizo la devolución: saldo insuficiente");
+        await shop.RefundAsync(orderId, 55m);
+
+        await shop.DispatchRefundAsync((await shop.Context.OnlinePaymentRefunds.AsNoTracking().SingleAsync(r => r.Status == OnlinePaymentRefundStatus.Requested)).Id);
+
+        // That refund of Mercado Pago may be the first one's: the second stays for the business to give back.
+        var refused = await shop.Context.OnlinePaymentRefunds.AsNoTracking().SingleAsync(r => r.Status != OnlinePaymentRefundStatus.Completed);
+        Assert.Equal((OnlinePaymentRefundStatus.Failed, (string?)null), (refused.Status, refused.ProviderRefundId));
+        Assert.Equal(1, (await shop.SettingsAsync()).RefundsRefused);
+
+        // The business then gives it back from its account: that one is new, and settles it.
+        shop.Gateway.GiveBack(payment, 55m, SalesTestFixture.Now.AddMinutes(30), refundId: "4500");
+        await shop.NotifyAsync(payment);
+        var refunds = await shop.Context.OnlinePaymentRefunds.AsNoTracking().ToListAsync();
+        Assert.Equal(2, refunds.Count);
+        Assert.Contains(refunds, r => r.Status == OnlinePaymentRefundStatus.DoneInMercadoPago);
+        Assert.Equal(0, (await shop.SettingsAsync()).RefundsRefused);
+        Assert.Equal(2, (await shop.Context.Orders.AsNoTracking().Include(o => o.Refunds).SingleAsync(o => o.Id == orderId)).Refunds.Count);
+    }
+
+    [Fact]
     public async Task AutomaticRefund_OfASecondPayment_RefusedThenMadeInTheAccount_ShouldBeDone_AndTouchNoOrder()
     {
         await using var shop = await Shop.OpenAsync();
@@ -346,29 +376,32 @@ public partial class OnlinePaymentsFlowTests
     }
 
     [Fact]
-    public async Task RefundThatAnotherPathRecordedFirst_ShouldStayOnce()
+    public async Task RefundThatAnotherPathRecordedFirst_ShouldStayOnce_WhenTheDatabaseRefusesTheSecond()
     {
         await using var shop = await Shop.OpenAsync();
         var (orderId, payment) = await PlaceAsync(shop);
         var refund = shop.Gateway.GiveBack(payment, 20m, SalesTestFixture.Now.AddHours(1));
-        // The review saves the same refund just before the notification reflects it (the race itself, on SQL Server's
-        // unique index, is in OnlinePaymentReconciliationSqlServerTests).
-        var saved = false;
-        shop.BeforeReconciling = async command =>
+        // The review records the same refund while the notification reflects it: the notification had already tracked its own,
+        // and the database refuses it (the race on SQL Server's unique index is in OnlinePaymentReconciliationSqlServerTests).
+        shop.RefuseNextReconcile = async _ =>
         {
-            if (saved)
-                return;
-            saved = true;
             var order = await shop.Context.Orders.Include(o => o.Payments).Include(o => o.Refunds).SingleAsync(o => o.Id == orderId);
             var orderRefund = order.RegisterRefund(20m, OrderPaymentMethod.Online, "Otra vía", shop.Clock.UtcNow, "Mercado Pago", null, refund.Id, false, []);
-            shop.Context.OnlinePaymentRefunds.Add(Domain.OnlinePayments.Entities.OnlinePaymentRefund.MadeInMercadoPago(
+            shop.Context.OnlinePaymentRefunds.Add(OnlinePaymentRefund.MadeInMercadoPago(
                 shop.Tenant.Id, orderId, orderRefund.Id, payment, 20m, refund.Id, OnlinePaymentRefundReason.InMercadoPago, shop.Clock.UtcNow));
             await shop.Context.SaveChangesAsync();
             shop.Context.ChangeTracker.Clear();
+            // What this path had loaded and was about to add when the database refused it.
+            await shop.Context.Orders.Include(o => o.Payments).Include(o => o.Refunds).SingleAsync(o => o.Id == orderId);
+            shop.Context.OnlinePaymentRefunds.Add(OnlinePaymentRefund.MadeInMercadoPago(
+                shop.Tenant.Id, orderId, Guid.NewGuid(), payment, 20m, refund.Id, OnlinePaymentRefundReason.InMercadoPago, shop.Clock.UtcNow));
         };
 
-        await shop.NotifyAsync(payment);
+        var notified = await shop.NotifyAsync(payment);
 
+        // The one that lost reads what the other recorded, without what it had tracked.
+        Assert.True(notified.IsSuccess);
+        Assert.DoesNotContain(shop.Context.ChangeTracker.Entries<OnlinePaymentRefund>(), e => e.State == EntityState.Added);
         Assert.Single(await shop.Context.OnlinePaymentRefunds.ToListAsync());
         Assert.Single((await shop.Context.Orders.AsNoTracking().Include(o => o.Refunds).SingleAsync(o => o.Id == orderId)).Refunds);
     }

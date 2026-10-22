@@ -869,12 +869,24 @@ public partial class OnlinePaymentsFlowTests
         /// <summary>Runs before each reflection of a payment of Mercado Pago (another path saving first throws from here).</summary>
         public Func<ReconcileOnlinePaymentCommand, Task>? BeforeReconciling { get; set; }
 
+        /// <summary>
+        /// Once, instead of the next reflection of a payment: what it runs (another path saving first, this one tracking what it
+        /// would add) and then the database refusing the save, as SQL Server's unique indexes do.
+        /// </summary>
+        public Func<ReconcileOnlinePaymentCommand, Task>? RefuseNextReconcile { get; set; }
+
         public async Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
         {
             if (request is ReconcileOnlinePaymentCommand reconcile)
             {
                 if (BeforeReconciling is { } beforeReconciling)
                     await beforeReconciling(reconcile);
+                if (RefuseNextReconcile is { } refuse)
+                {
+                    RefuseNextReconcile = null;
+                    await refuse(reconcile);
+                    throw new DbUpdateException("Another path recorded it first.");
+                }
                 var reconciler = new ReconcileOnlinePaymentCommandHandler(
                     Context, Gateway, Clock, NullLogger<ReconcileOnlinePaymentCommandHandler>.Instance);
                 return (TResponse)(object)await reconciler.Handle(reconcile, cancellationToken);

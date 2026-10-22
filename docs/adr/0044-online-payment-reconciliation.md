@@ -41,7 +41,7 @@ Tomé las decisiones de la Fase 24K con la autorización permanente del dueño d
    4. una que Mercado Pago rechazó, del mismo monto: el negocio la hizo desde su cuenta, como se le pidió. Pasa al estado nuevo 3 `DoneInMercadoPago` (`CompleteInMercadoPago`), conserva por qué la rechazó Mercado Pago y deja de contar en Pagos en línea. Vale también para las automáticas de un cobro que no creó pedido o se pagó dos veces;
    5. si no, es de fuera (punto 2).
 
-   Un rechazo no cambia el pago, así que ni el aviso ni la revisión lo volverían a leer: cuando Mercado Pago rechaza una que pidió la cola, la cola busca enseguida una devolución aprobada del mismo monto que TienditApp no conozca (el negocio ya la había hecho en su cuenta) y, si la hay, la deja como hecha en Mercado Pago.
+   Un rechazo no cambia el pago, así que ni el aviso ni la revisión lo volverían a leer: cuando Mercado Pago rechaza una que pidió la cola, la cola busca enseguida una devolución aprobada del mismo monto que no pueda ser otra de TienditApp (el negocio ya la había hecho en su cuenta) y, si la hay, la deja como hecha en Mercado Pago. Deja fuera las de id conocido y tantas como devoluciones de TienditApp de ese monto haya hechas sin su id o en curso, como el reflejo, que las empareja primero.
 4. **La disputa** (contracargo o reclamación) se guarda en el cobro (`OnlineCheckout.Dispute`: 0 ninguna, 1 abierta, 2 perdida, 3 ganada; y `DisputeUpdatedAt`), y solo en uno que creó pedido (`RecordDispute`):
    - `charged_back` / `settled` → perdida; `reimbursed` → ganada; cualquier otro detalle de `charged_back` → abierta;
    - `in_mediation` → abierta; `bpp_refunded` (o parcial) → perdida; `bpp_covered` (o parcial) → ganada;

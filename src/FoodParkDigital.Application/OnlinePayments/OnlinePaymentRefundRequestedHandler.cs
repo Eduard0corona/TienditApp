@@ -94,20 +94,27 @@ public sealed class OnlinePaymentRefundRequestedHandler : IOutboxEventHandler<On
     /// <summary>
     /// Mercado Pago may refuse it because the business already gave that money back from its account (Fase 24K): a refusal
     /// changes nothing in the payment, so neither the notification nor the review would read it again. One approved refund
-    /// of the same amount that TienditApp does not know yet settles it as done in Mercado Pago.
+    /// of the same amount that cannot be another of TienditApp's settles it as done in Mercado Pago: the ones with a known
+    /// id are left out, and so are as many as TienditApp has of that amount done without its id or still in course (as the
+    /// reconciliation matches them first).
     /// </summary>
     private async Task SettleIfAlreadyGivenBackAsync(
         OnlinePaymentRefund refund, string accessToken, DateTimeOffset now, CancellationToken cancellationToken)
     {
         try
         {
-            var known = await _context.OnlinePaymentRefunds
-                .Where(r => r.PaymentId == refund.PaymentId && r.ProviderRefundId != null)
-                .Select(r => r.ProviderRefundId!)
+            var ours = await _context.OnlinePaymentRefunds
+                .Where(r => r.PaymentId == refund.PaymentId && r.Id != refund.Id)
+                .Select(r => new { r.ProviderRefundId, r.Status, r.Amount })
                 .ToListAsync(cancellationToken);
+            var known = ours.Where(r => r.ProviderRefundId != null).Select(r => r.ProviderRefundId!).ToHashSet(StringComparer.Ordinal);
+            var unnamed = ours.Count(r => r.Amount == refund.Amount && r.ProviderRefundId == null
+                && r.Status is OnlinePaymentRefundStatus.Requested or OnlinePaymentRefundStatus.Completed);
             var made = (await _gateway.GetRefundsAsync(accessToken, refund.PaymentId, cancellationToken))
                 .Where(r => r.IsApproved && r.Amount == refund.Amount && !known.Contains(r.Id))
                 .OrderBy(r => r.CreatedAt)
+                .ThenBy(r => r.Id, StringComparer.Ordinal)
+                .Skip(unnamed)
                 .FirstOrDefault();
             if (made is not null)
                 refund.CompleteInMercadoPago(made.Id, now);

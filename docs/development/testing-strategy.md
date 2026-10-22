@@ -1181,9 +1181,10 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 
 - Fase 24K, lo que pasa en Mercado Pago regresa al pedido ([ADR 0044](../adr/0044-online-payment-reconciliation.md)):
   - **Domain:** `OnlinePaymentTests` (+8): la devolución hecha en Mercado Pago ya está hecha, con su id y el reembolso del pedido, sin pasar por la cola, y se rechaza con otro motivo, sin id o sin pedido; el contracargo perdido va sin id; a una hecha sin id se le anota una vez, y solo si está hecha; la rechazada que el negocio hizo después conserva por qué se rechazó; la disputa queda con su hora en un cobro con pedido, y sin pedido no hay; y la revisión de la cuenta solo avanza y empieza de nuevo al conectar otra.
-  - **Application:** `OnlinePaymentsReconciliationFlowTests` (25, nuevo):
+  - **Application:** `OnlinePaymentsReconciliationFlowTests` (26, nuevo):
     - la devolución de fuera llega al pedido con su motivo (cuenta del negocio, Mercado Pago o reclamación), hasta lo que queda pagado en línea, en un pedido cancelado no, y una en curso, rechazada o cancelada no cuenta;
-    - entre las de TienditApp: la que ya tiene el id, la pedida y en curso del mismo monto, la hecha sin id, la rechazada que el negocio hizo en su cuenta (también la automática de un segundo pago, sin tocar pedido) y la que Mercado Pago rechazó porque ya estaba devuelta, que la cola deja hecha sin esperar la revisión;
+    - entre las de TienditApp: la que ya tiene el id, la pedida y en curso del mismo monto, la hecha sin id, la rechazada que el negocio hizo en su cuenta (también la automática de un segundo pago, sin tocar pedido) y la que Mercado Pago rechazó porque ya estaba devuelta, que la cola deja hecha sin esperar la revisión, pero nunca con la devolución de otra de TienditApp hecha sin su id;
+    - la vía que pierde la carrera (la base rechaza su segunda devolución) lee lo que guardó la otra, sin lo que tenía en memoria;
     - la disputa abierta, perdida (un solo reembolso del contracargo, aunque llegue dos veces) y ganada; la reclamación que vuelve a aprobarse o que termina devuelta por Mercado Pago; y un pago leído antes del último cambio de la disputa no la regresa;
     - el pago de otra cuenta o de otro modo no refleja nada, y un pago sin devoluciones ni disputa no pide sus devoluciones;
     - la revisión refleja lo que cambió sin el aviso y sigue donde terminó; con más pagos que una revisión sigue desde el último cambio leído hasta leerlos todos; con más de 200 cambios en 10 minutos siempre avanza; con 260 en el mismo instante no se queda ahí; un pago que cambia a media revisión no hace saltar a otro; una página con resultados ilegibles no se toma por la última; la primera de una cuenta conectada otra vez lee desde su cobro pagado más viejo; y sin respuesta de Mercado Pago o con la llave rechazada no avanza.
@@ -1197,7 +1198,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `onlineRefunds.test.ts` (+8): de dónde vino cada devolución, la rechazada que se devolvió después en Mercado Pago, nada cuando no se sabe, y los textos de la disputa abierta, perdida (con y sin el reembolso de la disputa) y ganada (con y sin el reembolso anotado).
     - `OrdersList.test.tsx` (+4): el detalle de un pedido en línea pide el pedido completo (la lista no trae esto) y dice cómo va cada devolución, no adivina mientras llega, avisa la disputa con la última noticia de Mercado Pago en la zona del negocio, y la perdida y la ganada con su reembolso.
     - `OnlinePayments.test.tsx` (+2): «Revisada hasta» en la zona del negocio o «Todavía no», y los pagos en disputa.
-  - **Total:** `dotnet test` con SQL Server 2022, 3,482 pruebas sin fallos ni omitidas (Domain 983, Application 1,570, Infrastructure 494, WebApi 435).
+  - **Total:** `dotnet test` con SQL Server 2022, 3,483 pruebas sin fallos ni omitidas (Domain 983, Application 1,571, Infrastructure 494, WebApi 435).
   - **Cliente en total:** 155 archivos y 1,054 pruebas.
   - **Primera visita:** 179,308 B de 179,400 B (+60 B contra `master`; el presupuesto sube de 179,300): los enums nuevos del contrato, en el módulo de enums de la entrada.
   - **Escenas visuales:** `pago-en-linea.spec.ts` (+3): el pedido con el pago en disputa (escritorio y teléfono) y con el contracargo perdido, abiertos buscando a la clienta (Pedidos muestra el día).
