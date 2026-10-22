@@ -13,6 +13,8 @@ namespace FoodParkDigital.Domain.Orders.Events;
 /// any other order and for events stored before it existed.</param>
 /// <param name="VisitFee">What the sale of an appointment at the customer's address charged for the visit, never where it
 /// was; null for any other order and for events stored before it existed.</param>
+/// <param name="ExternalOrderId">The platform's long id of the order, when it was written (Fase 22I); null for any other
+/// order and for events stored before it existed.</param>
 public sealed record OrderCreatedEvent(
     Guid OrderId,
     Guid TenantId,
@@ -24,7 +26,8 @@ public sealed record OrderCreatedEvent(
     string? ExternalOrderNumber = null,
     PlatformCollectedBy? CollectedBy = null,
     decimal? DeliveryFee = null,
-    decimal? VisitFee = null) : DomainEvent
+    decimal? VisitFee = null,
+    string? ExternalOrderId = null) : DomainEvent
 {
     public bool IsHomeDelivery => DeliveryFee is not null;
 }

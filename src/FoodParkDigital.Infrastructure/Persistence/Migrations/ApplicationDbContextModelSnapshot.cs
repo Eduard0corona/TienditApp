@@ -4099,6 +4099,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("ExpectedSettlement")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("ExternalOrderId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("ExternalOrderNumber")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -4138,6 +4142,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "RegisteredAt");
 
+                    b.HasIndex("TenantId", "Channel", "ExternalOrderId")
+                        .HasFilter("[ExternalOrderId] IS NOT NULL");
+
                     b.HasIndex("TenantId", "Channel", "ExternalOrderNumber", "RegisteredAt");
 
                     b.ToTable("PlatformOrderDetails", null, t =>
@@ -4153,6 +4160,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_PlatformOrderDetails_CommissionBase", "[CommissionBase] IN (0, 1)");
 
                             t.HasCheckConstraint("CK_PlatformOrderDetails_Number", "LEN([ExternalOrderNumber]) > 0");
+
+                            t.HasCheckConstraint("CK_PlatformOrderDetails_ExternalOrderId", "[ExternalOrderId] IS NULL OR LEN([ExternalOrderId]) >= 6");
 
                             t.HasCheckConstraint("CK_PlatformOrderDetails_Percents", "[CommissionPercent] BETWEEN 0 AND 100 AND [CommissionVatPercent] BETWEEN 0 AND 100 AND [IsrWithholdingPercent] BETWEEN 0 AND 100 AND [VatWithholdingPercent] BETWEEN 0 AND 100");
                         });

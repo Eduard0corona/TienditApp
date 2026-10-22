@@ -30,6 +30,7 @@ public static class PlatformOrderRules
     public const string PlatformChargedRefundMessage =
         "La plataforma cobró este pedido: su devolución es «Plataforma» y no sale de la caja.";
     public const string MissingFolioMessage = "Al pedido de plataforma le falta su folio de la app.";
+    public const string OnlyPlatformOrdersHaveALongIdMessage = "Solo un pedido de Rappi, Uber Eats o DiDi Food lleva ID largo.";
 
     /// <summary>«Rappi no está activa en tu negocio.»</summary>
     public static string NotActiveMessage(OrderChannel channel)

@@ -7,8 +7,9 @@ namespace FoodParkDigital.Domain.Orders.Entities;
 /// <summary>
 /// What an order of a delivery platform was registered with: the folio of the platform's app, who charged it, the
 /// terms of the platform then (and their revision) and the amounts calculated from them. It is created once, with the
-/// order (<see cref="Order.RegisterPlatformOrder"/>), and never changes: changing the terms of the platform later does
-/// not rewrite it, as an order keeps the tax policy it was sold with.
+/// order (<see cref="Order.RegisterPlatformOrder"/>), and its amounts never change: changing the terms of the platform
+/// later does not rewrite it, as an order keeps the tax policy it was sold with. Only the platform's long id of the order,
+/// a reference to find it in a statement, may be added or corrected later (<see cref="Order.ChangePlatformOrderId"/>).
 /// </summary>
 public class PlatformOrderDetail : BaseEntity, ITenantScoped
 {
@@ -24,12 +25,14 @@ public class PlatformOrderDetail : BaseEntity, ITenantScoped
         PlatformTerms terms,
         decimal orderTotal,
         PlatformOrderAmounts amounts,
-        DateTimeOffset registeredAt)
+        DateTimeOffset registeredAt,
+        PlatformOrderId? externalOrderId)
     {
         TenantId = tenantId;
         OrderId = orderId;
         Channel = channel;
         ExternalOrderNumber = externalOrderNumber.Value;
+        ExternalOrderId = externalOrderId?.Value;
         CollectedBy = collectedBy;
         SettingsRevision = settingsRevision;
         CommissionPercent = terms.CommissionPercent;
@@ -52,6 +55,8 @@ public class PlatformOrderDetail : BaseEntity, ITenantScoped
     public OrderChannel Channel { get; private set; }
     /// <summary>The folio of the platform's app, normalized (<see cref="PlatformOrderNumber"/>).</summary>
     public string ExternalOrderNumber { get; private set; } = null!;
+    /// <summary>The platform's long id of the order, normalized (<see cref="PlatformOrderId"/>); null when it was not written.</summary>
+    public string? ExternalOrderId { get; private set; }
     public PlatformCollectedBy CollectedBy { get; private set; }
     /// <summary>The revision of the platform's settings the terms were copied from.</summary>
     public int SettingsRevision { get; private set; }
@@ -76,4 +81,15 @@ public class PlatformOrderDetail : BaseEntity, ITenantScoped
 
     /// <summary>When the order was registered, by the server's clock: the same time as its «Plataforma» payment.</summary>
     public DateTimeOffset RegisteredAt { get; private set; }
+
+    /// <summary>Writes, corrects or clears the long id; false when it is the same.</summary>
+    internal bool ChangeExternalOrderId(PlatformOrderId? externalOrderId)
+    {
+        var value = externalOrderId?.Value;
+        if (value == ExternalOrderId)
+            return false;
+
+        ExternalOrderId = value;
+        return true;
+    }
 }

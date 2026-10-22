@@ -711,7 +711,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
         AddDomainEvent(new OrderCreatedEvent(
             Id, TenantId, OrderNumber, BusinessType, Total, Status, Channel,
-            PlatformDetail?.ExternalOrderNumber, PlatformDetail?.CollectedBy, Delivery?.Fee, VisitCharge?.Fee));
+            PlatformDetail?.ExternalOrderNumber, PlatformDetail?.CollectedBy, Delivery?.Fee, VisitCharge?.Fee,
+            PlatformDetail?.ExternalOrderId));
     }
 
     public void LinkToCustomerUser(Guid userId)
@@ -734,12 +735,14 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <param name="number">The folio of the platform's app, stored as the payment's reference too.</param>
     /// <param name="registeredAt">The server's time: the detail and the payment share it.</param>
     /// <param name="inventoryLocationId">Stock location of the branch, recorded on the payment like any other.</param>
+    /// <param name="externalOrderId">The platform's long id of the order, when it was written (Fase 22I).</param>
     public PlatformOrderDetail RegisterPlatformOrder(
         DeliveryPlatformSetting setting,
         PlatformOrderNumber number,
         PlatformCollectedBy collectedBy,
         DateTimeOffset registeredAt,
-        Guid? inventoryLocationId)
+        Guid? inventoryLocationId,
+        PlatformOrderId? externalOrderId = null)
     {
         ArgumentNullException.ThrowIfNull(setting);
         ArgumentNullException.ThrowIfNull(number);
@@ -761,7 +764,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         var terms = setting.Terms;
         var amounts = PlatformOrderCalculator.Calculate(terms, collectedBy, SubTotal, Total, GetTaxBreakdown());
         PlatformDetail = new PlatformOrderDetail(
-            TenantId, Id, Channel, number, collectedBy, setting.Revision, terms, Total, amounts, registeredAt);
+            TenantId, Id, Channel, number, collectedBy, setting.Revision, terms, Total, amounts, registeredAt, externalOrderId);
 
         if (collectedBy == PlatformCollectedBy.Platform)
         {
@@ -782,6 +785,27 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         }
 
         return PlatformDetail;
+    }
+
+    /// <summary>
+    /// Writes, corrects or clears the platform's long id of the order (Fase 22I, ADR 0041), at any status: it is only a
+    /// reference to find the order in a statement, and no amount depends on it. The activity keeps the one before.
+    /// </summary>
+    /// <returns>False when it is the same, and nothing is recorded.</returns>
+    public bool ChangePlatformOrderId(PlatformOrderId? externalOrderId)
+    {
+        if (!IsDeliveryPlatformOrder)
+            throw new DomainException(PlatformOrderRules.OnlyPlatformOrdersHaveALongIdMessage);
+        if (PlatformDetail is null)
+            throw new DomainException(PlatformOrderRules.MissingFolioMessage);
+
+        var previous = PlatformDetail.ExternalOrderId;
+        if (!PlatformDetail.ChangeExternalOrderId(externalOrderId))
+            return false;
+
+        AddDomainEvent(new OrderPlatformIdChangedEvent(
+            Id, TenantId, Channel, PlatformDetail.ExternalOrderNumber, previous, PlatformDetail.ExternalOrderId));
+        return true;
     }
 
     public const string OnlinePaymentOnlyOnlineMessage = "Solo un pedido de la tienda en línea se paga en línea.";
