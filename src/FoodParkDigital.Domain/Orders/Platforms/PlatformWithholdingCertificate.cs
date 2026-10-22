@@ -89,7 +89,8 @@ public class PlatformWithholdingCertificate : AuditableEntity, ITenantScoped, IA
             throw new DomainException(PeriodMessage);
         if (data.Year < FirstYear)
             throw new DomainException(YearMessage);
-        if (new DateOnly(data.Year, data.MonthFrom, 1) > new DateOnly(currentMonth.Year, currentMonth.Month, 1))
+        // Compared as numbers: a year no calendar has (99999) is a period in the future, not a date that cannot be built.
+        if (data.Year > currentMonth.Year || (data.Year == currentMonth.Year && data.MonthFrom > currentMonth.Month))
             throw new DomainException(PeriodInTheFutureMessage);
 
         decimal[] amounts = [data.OperationTotal, data.IsrWithheld, data.VatWithheld, data.TotalWithheld];

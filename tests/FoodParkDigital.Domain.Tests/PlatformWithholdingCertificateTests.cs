@@ -80,6 +80,7 @@ public class PlatformWithholdingCertificateTests
             Tenant, OrderChannel.DidiFood, Data() with { MonthFrom = 10, MonthTo = 10 }, CurrentMonth).MonthTo);
         Refused(PlatformWithholdingCertificate.PeriodInTheFutureMessage, Data() with { MonthFrom = 11, MonthTo = 11 });
         Refused(PlatformWithholdingCertificate.PeriodInTheFutureMessage, Data() with { Year = 2027, MonthFrom = 1, MonthTo = 1 });
+        Refused(PlatformWithholdingCertificate.PeriodInTheFutureMessage, Data() with { Year = 99999 });
     }
 
     [Fact]
