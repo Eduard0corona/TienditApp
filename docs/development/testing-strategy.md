@@ -1177,7 +1177,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Primera visita:** 179,248 B de 179,300 B (+25 B contra `master`): el uso nuevo en los enums del contrato. El modal, Plantillas y la pestaña se cargan con su pantalla.
   - **Escenas visuales:** `aviso-antes-de-vencer.spec.ts` (5, nuevas): Por cobrar con el aviso, el diálogo con el aviso encendido, la cuenta con su último aviso, la lista de avisos en Campañas y la plantilla del aviso.
     - **Lo que cambia y por qué:** 3 escenas de `recordatorios.spec.ts`: el diálogo de los recordatorios en escritorio y sin WhatsApp en el teléfono (las dos secciones) y la pestaña de Campañas (la lista de avisos arriba).
-    - **Resultado:** RESULTADO_ESCENAS
+    - **Resultado:** la comparación contra `master` en `9017f0f` dio 632 pruebas iguales (con la de cobertura), las 3 escenas que cambian y las 5 nuevas, que no existen en `master`. Las 5 nuevas pasaron dos corridas seguidas contra el mismo build, después de la revisión.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
