@@ -23,7 +23,7 @@ import { getPaymentMethodLabel } from '../../utils/labels';
 import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 import { formatMoney, toCents } from '../../utils/money';
 import {
-  accountSummaryText, daysSince, describeBalanceEntry, describeDays, describeDue, describeReminder, describeTerm,
+  accountSummaryText, daysSince, describeBalanceEntry, describeDays, describeDue, describeDueSoon, describeReminder, describeTerm,
 } from './customerAccount';
 
 interface CustomerAccountModalProps {
@@ -52,7 +52,7 @@ const TITLES: Record<Mode, string> = {
  * The account of a customer (fiado, Fase 26A): what they may and do owe, the orders owed from the oldest, their latest
  * payments, «Abonar» for whoever charges and the summary for WhatsApp. Fase 26B: what is past the business's term, what
  * was forgiven, and «Condonar» for owners and admins. Fase 26C: whether the term is the customer's own, and the WhatsApp
- * reminders of what is overdue. Fase 26D: what they have in their favor and its movements; whoever charges leaves it,
+ * reminders of what is overdue (and, Fase 26E, the last notice before something came due). Fase 26D: what they have in their favor and its movements; whoever charges leaves it,
  * uses it or leaves the change of a payment in it, and who may also refund gives it back.
  */
 export default function CustomerAccountModal({ of, name, onClose }: CustomerAccountModalProps) {
@@ -68,6 +68,7 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
   const canReturnBalance = access.charge && access.refunds;
   const { data: account, error, isPending } = useCustomerAccount(of);
   const reminder = account ? describeReminder(account) : null;
+  const dueSoon = account ? describeDueSoon(account) : null;
   const pay = usePayCustomerAccount();
   const writeOff = useWriteOffCustomerAccount();
   const reverse = useReverseWriteOff();
@@ -273,6 +274,7 @@ export default function CustomerAccountModal({ of, name, onClose }: CustomerAcco
                 {account.overdue > 0
                   ? <strong className="text-danger">Vencido <span className="ta-money">{formatMoney(account.overdue)}</span></strong>
                   : <span className="text-muted">Nada vencido</span>}
+                {dueSoon && <span className="d-block text-muted">{dueSoon}</span>}
                 {reminder && <span className="d-block text-muted">{reminder}</span>}
               </p>
             )}
