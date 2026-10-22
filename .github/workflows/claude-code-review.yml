@@ -12,7 +12,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  claude-review:
+  # One reviewer per area of the diff, in parallel. A single session for a whole phase (17k-24k lines, 15k of them
+  # generated) read it in about 50 turns and reported nothing on eleven PRs in a row, while a review by area found real
+  # bugs in the same code (PR #111). Separate jobs, not subagents: on PR #97 the subagents ran in the background and
+  # the result was forced before any of them returned.
+  review:
     # Forks: secrets are not exposed, skip instead of failing.
     # Drafts: reviewed once they move to ready_for_review.
     # Dependabot-triggered runs get no Actions secrets, skip them too.
@@ -20,99 +24,185 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.draft == false &&
       github.actor != 'dependabot[bot]'
+    name: review (${{ matrix.area }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: read
-      # Inline review comments (Claude) and the summary comment (publish step).
+      # Inline review comments.
       pull-requests: write
       issues: read
       id-token: write
+    strategy:
+      fail-fast: false
+      # The publish job (claude-review) lists the same areas: change both together.
+      matrix:
+        include:
+          - area: domain-application
+            title: Domain y Application
+            paths: src/FoodParkDigital.Domain src/FoodParkDigital.Application
+            focus: >-
+              invariants and state transitions of the aggregates; money (decimal, rounding, sign, tolerances,
+              proportions); dates in the business time zone (month and year boundaries, inclusive or exclusive
+              ranges, overlapping periods); grouping, filters and sums in the queries; duplicates, ordering,
+              idempotency and the concurrency branches of the handlers; input that ends in an exception instead of a
+              clear error; validation.
+          - area: infrastructure-webapi
+            title: Infrastructure, WebApi y base de datos
+            paths: src/FoodParkDigital.Infrastructure src/FoodParkDigital.WebApi database
+            focus: >-
+              EF configuration against the domain (lengths, precision, filtered and unique indexes per tenant,
+              concurrency tokens, query filters); the migration's Up and Down (data already there, compatibility
+              with the version still running, rollback); the hand-written scripts of database/; controllers
+              (authorization attribute, status codes, request limits, user input that ends in a 500); files and
+              SignalR per tenant.
+          - area: tests
+            title: Pruebas
+            paths: tests
+            focus: >-
+              tests that would still pass with the code wrong (assertions that check nothing, setup results not
+              asserted, mocks that replace what is under test, InMemory where SQL Server behaves differently);
+              weakened or removed assertions; concurrency tests that never drive the handler; names that promise
+              more than they check. A branch of src/ with no test is reported by the reviewer of its area, on its
+              line.
+          - area: client-and-rest
+            title: Cliente, documentación y lo demás
+            paths: >-
+              . :(exclude)src/FoodParkDigital.Domain :(exclude)src/FoodParkDigital.Application
+              :(exclude)src/FoodParkDigital.Infrastructure :(exclude)src/FoodParkDigital.WebApi :(exclude)database
+              :(exclude)tests
+            focus: >-
+              React: effects under StrictMode (development mounts, cleans up and mounts again), an await outside
+              its try, stale cache or a missing invalidation, races between requests, state left behind when a
+              dialog closes; requests and responses against client/src/api/generated (the contract); money and dates
+              in the business time zone; access guards consistent with the backend; accessibility. Documentation and
+              ADRs that contradict the code. Workflows and scripts: injection, secrets, permissions.
 
     steps:
+      # The PR head with its history: inline comments go on the head's lines, and the diff starts at its merge base
+      # with master, the one GitHub shows (the repository is a few MB).
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      # The area's diff without generated files: CI checks those (docs/development/git-workflow.md), and the same
+      # list is in the publish job. Read with the Read tool, not `gh pr diff`, which brings all 48 files of a phase.
+      - name: Build the area's diff
+        id: diff
+        env:
+          AREA_PATHS: ${{ matrix.paths }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          mkdir -p .claude-review
+          base=$(git merge-base "origin/$BASE_REF" HEAD)
+          read -ra paths <<<"$AREA_PATHS"
+          generated=(
+            ':(exclude,glob)**/Migrations/*.Designer.cs'
+            ':(exclude,glob)**/Migrations/*ModelSnapshot.cs'
+            ':(exclude,glob)database/production/**/apply.sql'
+            ':(exclude,glob)database/production/**/rollback.sql'
+            ':(exclude,glob)database/production/**/verify.sql'
+            ':(exclude)client/openapi/openapi.json'
+            ':(exclude)client/src/api/generated'
+          )
+          git diff --find-renames "$base" HEAD -- "${paths[@]}" "${generated[@]}" > .claude-review/diff.patch
+          git diff --find-renames --numstat "$base" HEAD -- "${paths[@]}" "${generated[@]}" > .claude-review/files.txt
+          if [ -s .claude-review/files.txt ]; then
+            echo "empty=false" >> "$GITHUB_OUTPUT"
+            echo "$(wc -l < .claude-review/files.txt) files, $(wc -l < .claude-review/diff.patch) lines of diff:"
+            cat .claude-review/files.txt
+          else
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+            echo "The PR changes nothing in this area."
+          fi
 
       # Gives Claude the inline comments already on the PR so a new push
       # (synchronize) does not repeat the same findings.
       - name: Collect existing inline comments
+        if: steps.diff.outputs.empty == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          mkdir -p .claude-review
           gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/comments" \
             --jq '.[] | {path, line, author: .user.login, body: (.body | .[0:400])}' \
             > .claude-review/existing-comments.jsonl
 
       - name: Run Claude Code Review
         id: claude-review
+        if: steps.diff.outputs.empty == 'false'
         uses: anthropics/claude-code-action@756cc22e19660d20e8cc9496b4f242475a7f7790 # v1.0.235
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
+            AREA: ${{ matrix.title }}
 
-            Review this pull request into master (production: every merge deploys) against the
-            rules of this repository: AGENTS.md at the root (its "Guardrails" and "Code Review
-            Rules"), the nested AGENTS.md of each layer the diff touches (client/, tests/ and
-            src/FoodParkDigital.*/), docs/ai/guardrails.md and docs/ai/review-checklist.md.
+            You are one of four reviewers of this pull request into master (production: every merge deploys). Each
+            one reviews one area of the diff at the same time; yours is "${{ matrix.title }}". Your job is to find
+            the bugs before they reach production, not to confirm that the rules are followed.
 
-            Work alone and in order in this session: you have no subagents, and do not run any
-            command in the background. Use only Read/Glob/Grep on the checkout, `gh pr view`,
-            `gh pr diff` and the inline comment tool; other commands are denied.
+            Work alone and in order in this session: you have no subagents, and do not run any command in the
+            background. Use only Read/Glob/Grep on the checkout, `gh pr view` and the inline comment tool; other
+            commands are denied.
 
-            1. Read the PR with `gh pr view <PR NUMBER>` and the diff with `gh pr diff <PR NUMBER>`;
-               `gh pr view <PR NUMBER> --json files` lists every changed file with its size.
-               Use Read/Grep/Glob on the checkout for surrounding context.
-            2. If the diff is too large to review whole (several thousand lines), cover it layer by
-               layer in this order: src/FoodParkDigital.Domain, src/FoodParkDigital.Application,
-               src/FoodParkDigital.Infrastructure (its Persistence/Migrations and
-               database/production first), src/FoodParkDigital.WebApi, tests, then client and
-               everything else. Finish every file you start.
-            3. Report only concrete, verifiable problems: correctness bugs, guardrail violations
-               (layer dependencies, tenant isolation, roles/permissions/capabilities, money and
-               inventory, state transitions, migrations, domain events), security issues and
-               contract drift (DTOs, OpenAPI, generated client). Skip style nits.
-            4. Severity:
+            1. `gh pr view <PR NUMBER>` says what the PR wants to do. .claude-review/diff.patch is your area's diff
+               and .claude-review/files.txt lists its files with lines added and removed. Read the whole patch
+               (with Read's offset and limit when it is long). Generated files are not in it: CI checks them.
+            2. The checkout is the PR head. Read any file for context (callers, callees, the entity behind a DTO,
+               the test of a handler, the ADR the PR adds), but comment only on lines of your patch.
+               Rules: AGENTS.md at the root (its "Guardrails" and "Code Review Rules"), the nested AGENTS.md of the
+               layers your files belong to, docs/ai/guardrails.md, docs/ai/review-checklist.md, and the ADRs the PR
+               adds or changes: the code must do what they say.
+            3. Hunt for bugs. For every function, query, component or test your patch adds or changes, ask what
+               can reach it: empty, null, zero, negative, limits and overflow, duplicates, items arriving out of
+               order, overlapping or boundary ranges, retries and two requests at the same time, data of another
+               tenant, an exception on an error path. Trace each case through the code and decide whether the
+               result is right. In this area look especially at: ${{ matrix.focus }}
+            4. Report only what you confirmed by tracing it: correctness bugs, guardrail violations (layer
+               dependencies, tenant isolation, roles/permissions/capabilities, money and inventory, state
+               transitions, migrations, domain events), security issues, contract drift (DTOs, OpenAPI, generated
+               client) and missing tests for what the PR changes. Drop guesses. Skip style nits.
+            5. Severity:
                - BLOCKER: what the root AGENTS.md "Code Review Rules" block: tenant bypass,
                  direct state change, wrong money, lost history, secrets, unsafe migration,
                  broken contract or weakened tests.
                - MAJOR: any other correctness bug or guardrail violation.
                - MINOR: a concrete, low-impact problem (for example a missing test for a case
                  the PR changes).
-            5. Read .claude-review/existing-comments.jsonl: the inline comments already on this PR
+            6. Read .claude-review/existing-comments.jsonl: the inline comments already on this PR
                (`line: null` means outdated or file-level). For each NEW finding tied to a changed
                line, post one inline comment with
-               `mcp__github_inline_comment__create_inline_comment` (confirmed: true).
-               Do not re-post a finding already raised on the same path and line.
-            6. Do not post any top-level comment. When you are done with everything you reviewed,
+               `mcp__github_inline_comment__create_inline_comment` (confirmed: true): the severity, the problem,
+               and the concrete scenario (input or state, and the wrong result). Do not re-post a finding already
+               raised on the same path and line.
+            7. Do not post any top-level comment. When you are done with everything you reviewed,
                return the result as structured output:
                - blocker/major/minor: severity counts covering ALL findings that currently apply
-                 in what you reviewed (new and previously raised).
-               - incomplete: true if any part of the diff went unreviewed, for whatever reason;
-                 false only when you reviewed all of it. Generated files do not count: CI checks
-                 them, so do not review them line by line and never list them in skipped:
-                 **/Migrations/*.Designer.cs, **/Migrations/*ModelSnapshot.cs,
-                 database/production/**/{apply,rollback,verify}.sql, client/openapi/openapi.json
-                 and client/src/api/generated/**. The migration itself (its Up and Down) and the
-                 DTOs and controllers behind the contract are not generated: review them.
-               - skipped: the paths or directories you did not review, one per entry, with no
+                 in your area (new and previously raised).
+               - incomplete: true if any part of your patch went unreviewed, for whatever reason;
+                 false only when you reviewed all of it. An honest true costs a re-run; a false one
+                 lets a bug reach production.
+               - skipped: the paths of your patch you did not review, one per entry, with no
                  comment; empty when incomplete is false.
-               - summary: markdown. Its first line says what you reviewed, then one line per
-                 finding (`SEVERITY path:line - problem`), or one line saying there are none.
+               - summary: markdown. One line per finding (`SEVERITY path:line - problem`). With no
+                 findings, one line saying so, then at most five lines with the riskiest cases you
+                 traced and why they hold. Do not list rules that are fine.
             Write comments and the summary in Spanish, like the repository's docs and PRs.
             Do not modify files, push commits, approve or merge.
-          # Minimum tool surface: read the PR/diff, read the checkout, post inline comments.
+          # Minimum tool surface: read the PR, read the checkout, post inline comments.
           # No subagents: the Agent tool (formerly Task) runs them in the background, and on PR #97
           # the structured output was forced before any of them returned.
-          # The summary is returned as structured output and published by the next step.
+          # Opus: on PR #111 the default model reported nothing where a deeper review found a wrong monthly
+          # reconciliation and five smaller bugs.
+          # The result is returned as structured output and published by the claude-review job.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           claude_args: |
-            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),mcp__github_inline_comment__create_inline_comment"
+            --model claude-opus-5-5
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),mcp__github_inline_comment__create_inline_comment"
             --disallowedTools "Agent,Task"
             --json-schema '{"type":"object","properties":{"blocker":{"type":"integer","minimum":0},"major":{"type":"integer","minimum":0},"minor":{"type":"integer","minimum":0},"incomplete":{"type":"boolean"},"skipped":{"type":"array","items":{"type":"string"}},"summary":{"type":"string"}},"required":["blocker","major","minor","incomplete","skipped","summary"],"additionalProperties":false}'
 
@@ -131,40 +221,159 @@ jobs:
           echo "${reason:-The execution file has no error message.}"
           echo "::$stop::"
 
-      # Creates or updates a single summary comment, found by its hidden marker.
-      - name: Publish review summary
-        if: steps.claude-review.outputs.structured_output != ''
+      # What Claude actually did, so a "no findings" can be checked: every tool call with its input (paths, patterns,
+      # offsets, commands; no file contents) and every call the permissions denied. Between stop-commands: model text.
+      - name: Show what Claude read
+        if: always() && steps.claude-review.outputs.execution_file != ''
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
+          EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
+        run: |
+          stop=$(uuidgen)
+          echo "::stop-commands::$stop"
+          jq -r '
+            def brief: tostring | gsub("\\s+"; " ") | .[0:200];
+            [.[] | select(.type == "assistant") | .message.content[]? | select(.type == "tool_use")] as $calls
+            | [.[] | select(.type == "result") | .permission_denials[]?] as $denied
+            | "Tool calls: \($calls | length)",
+              ($calls[] | "- \(.name) \(.input | del(.body?) | brief)"),
+              "Permission denials: \($denied | length)",
+              ($denied[] | "- \(.tool_name) \(.tool_input | brief)")' "$EXECUTION_FILE"
+          echo "::$stop::"
+
+      # One file per area for the claude-review job. The action finishes without running Claude, and without an
+      # execution file, when the PR changes this workflow (the workflow must match master's): that is "not-run",
+      # not a failure.
+      - name: Save the area's result
+        if: always()
+        env:
+          AREA: ${{ matrix.area }}
+          TITLE: ${{ matrix.title }}
+          EMPTY: ${{ steps.diff.outputs.empty }}
+          OUTCOME: ${{ steps.claude-review.outcome }}
+          EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
           # Passed through env, never interpolated into the script: it is model output.
           RESULT: ${{ steps.claude-review.outputs.structured_output }}
         run: |
+          mkdir -p "$RUNNER_TEMP/claude-review-result"
+          if [ "$EMPTY" = true ]; then
+            status=empty
+          elif [ -n "$RESULT" ] && jq -e 'type == "object"' <<<"$RESULT" > /dev/null 2>&1; then
+            status=reviewed
+          elif [ "$OUTCOME" = success ] && [ -z "$EXECUTION_FILE" ]; then
+            status=not-run
+          else
+            status=failed
+          fi
+          if [ "$status" != reviewed ]; then
+            RESULT='{}'
+          fi
+          jq --arg area "$AREA" --arg title "$TITLE" --arg status "$status" \
+            '. + {area: $area, title: $title, status: $status}' <<<"$RESULT" \
+            > "$RUNNER_TEMP/claude-review-result/$AREA.json"
+          jq -c '{area, status, blocker, major, minor, incomplete}' "$RUNNER_TEMP/claude-review-result/$AREA.json"
+
+      - name: Upload the area's result
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: claude-review-result-${{ matrix.area }}
+          path: ${{ runner.temp }}/claude-review-result/${{ matrix.area }}.json
+          retention-days: 7
+          # "Re-run failed jobs" uploads it again in the same run.
+          overwrite: true
+
+  # Keeps the name of the check that the review always had: one comment and one verdict for the whole PR.
+  claude-review:
+    needs: review
+    if: ${{ !cancelled() && needs.review.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # The summary comment.
+      pull-requests: write
+      issues: read
+
+    steps:
+      # An area whose result never arrived (its job timed out or failed before saving it) counts as failed below.
+      - name: Download the areas' results
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: claude-review-result-*
+          path: ${{ runner.temp }}/claude-review-results
+          merge-multiple: true
+
+      # Creates or updates a single summary comment, found by its hidden marker.
+      - name: Publish review summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          # The areas of the review job's matrix, in the same order.
+          REVIEW_AREAS: domain-application infrastructure-webapi tests client-and-rest
+        run: |
           marker='<!-- claude-code-review -->'
+          results="$RUNNER_TEMP/claude-review-results"
+          read -ra areas <<<"$REVIEW_AREAS"
+          # An area of the matrix missing from REVIEW_AREAS is still published; the list is what notices a missing result.
+          for file in "$results"/*.json; do
+            [ -e "$file" ] || continue
+            area=$(basename "$file" .json)
+            [[ " ${areas[*]} " == *" $area "* ]] || areas+=("$area")
+          done
+          RESULT=$(for area in "${areas[@]}"; do
+            if [ -f "$results/$area.json" ]; then
+              cat "$results/$area.json"
+            else
+              jq -n --arg area "$area" '{area: $area, title: $area, status: "failed"}'
+            fi
+          done | jq -s '.')
+
           # Generated files never count as skipped, even when the model lists them anyway: CI checks them (the same
-          # list as point 6 of the prompt). On PR #97 it listed them with a comment and several per entry, so an entry
+          # list as the review job's diff). On PR #97 it listed them with a comment and several per entry, so an entry
           # is dropped when every path in it is generated, as in "a, b (comment)"; any other word, or a comment with
-          # a "/" or ".", keeps it. With only generated files listed the review is complete; anything still in skipped
-          # makes it incomplete, whatever the flag says.
+          # a "/" or ".", keeps it. With only generated files listed the area is complete; anything still in skipped
+          # makes it incomplete, whatever the flag says. A failed area makes the whole review incomplete; areas the
+          # action did not run (a PR that changes this workflow) do not.
           RESULT=$(jq '
             def generated:
               test("^(.+/)?Migrations/[^/]+\\.Designer\\.cs$|^(.+/)?Migrations/[^/]*ModelSnapshot\\.cs$|^database/production/(.+/)?(apply|rollback|verify)\\.sql$|^client/openapi/openapi\\.json$|^client/src/api/generated(/.*)?$");
             def only_generated:
               [sub("\\s*\\([^()/.]*\\)\\s*$"; "") | splits("[\\s,`]+") | ltrimstr("./") | select(. != "")]
               | length > 0 and all(generated);
-            (.skipped | length) as $listed
-            | .skipped |= map(select(only_generated | not))
-            | .incomplete = ((.skipped | length) > 0 or (.incomplete and $listed == 0))' <<<"$RESULT")
+            map(if .status == "reviewed" then
+                  (.skipped | length) as $listed
+                  | .skipped |= map(select(only_generated | not))
+                  | .incomplete = ((.skipped | length) > 0 or (.incomplete and $listed == 0))
+                else . end)
+            | {
+                areas: .,
+                blocker: (map(select(.status == "reviewed") | .blocker) | add // 0),
+                major: (map(select(.status == "reviewed") | .major) | add // 0),
+                minor: (map(select(.status == "reviewed") | .minor) | add // 0),
+                incomplete: any(.[]; .status == "failed" or (.status == "reviewed" and .incomplete)),
+                not_run: any(.[]; .status == "not-run")
+              }' <<<"$RESULT")
           incomplete=$(jq '.incomplete' <<<"$RESULT")
-          body=$(jq -r --arg m "$marker" --argjson incomplete "$incomplete" '
+          body=$(jq -r --arg m "$marker" '
             "\($m)\n**BLOCKER** \(.blocker) · **MAJOR** \(.major) · **MINOR** \(.minor)"
-            + (if $incomplete then
-                "\n\n**Revisión incompleta**: los conteos cubren solo lo revisado."
-                + (if (.skipped | length) > 0
-                    then " Sin revisar:\n" + (.skipped | map("- \(.)") | join("\n"))
-                    else "" end)
+            + (if .incomplete then
+                "\n\n**Revisión incompleta**: los conteos cubren solo lo revisado. Sin revisar:\n"
+                + ([.areas[] | select(.status == "failed") | "- \(.title): su revisión falló (ver el job `review (\(.area))`)"]
+                   + [.areas[] | select(.status == "reviewed") | .skipped[] | "- \(.)"]
+                   | join("\n"))
               else "" end)
-            + "\n\n\(.summary)"' <<<"$RESULT")
+            + (if .not_run then
+                "\n\nClaude no corrió en: "
+                + ([.areas[] | select(.status == "not-run") | .title] | join(", "))
+                + ". La action solo corre cuando el workflow del PR es idéntico al de `master`: un PR que lo cambia queda sin revisión automática."
+              else "" end)
+            + ([.areas[] | select(.status == "reviewed") | "\n\n### \(.title)\n\n\(.summary)"] | join(""))
+            + (if all(.areas[]; .status == "empty") then "\n\nEl PR solo cambia archivos generados: no hay nada que revisar." else "" end)
+            + (if any(.areas[]; .status == "empty") and any(.areas[]; .status != "empty") then
+                "\n\nSin cambios en: " + ([.areas[] | select(.status == "empty") | .title] | join(", ")) + "."
+              else "" end)' <<<"$RESULT")
 
           id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
             --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" \
