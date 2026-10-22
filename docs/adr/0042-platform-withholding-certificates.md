@@ -24,30 +24,33 @@ Tomé las decisiones de la Fase 22J con la autorización permanente del dueño d
 
 1. **Se guarda lo que dice el XML, no el archivo.**
    - `PlatformWithholdingCertificate` (Domain.Orders.Platforms, `ITenantScoped`) guarda la plataforma que eligió la persona, el UUID, el emisor, el RFC del receptor, el periodo, la fecha de emisión tal como la escribe el XML (sin zona), el total de operaciones, el ISR y el IVA retenidos con sus bases (cuando el XML las trae) y el total retenido.
-   - El total retenido incluye cualquier IEPS, así que nunca es menor que ISR más IVA.
+   - El total retenido incluye cualquier IEPS, así que no es menor que ISR más IVA, salvo por los centavos del redondeo (hasta 2 centavos, también en el CHECK de la tabla): un XML con más de dos decimales se redondea impuesto por impuesto y total aparte.
+   - Si el XML dice que sustituye a otro CFDI (`CfdiRetenRelacionados`, la relación 04 que usa la plataforma cuando cancela uno y emite otro en su lugar), guarda ese folio.
    - El dominio rechaza lo que ningún CFDI dice: meses fuera de 01 a 12 o al revés, un ejercicio antes de 2019 (la clave 26 existe desde junio de 2019), un periodo que empieza después del mes del negocio, y un importe negativo, de más de dos decimales o de más de $1,000,000,000.
 2. **El lector, en Application, no confía en el archivo.**
    - `PlatformWithholdingXml` lee hasta 512 KB, sin DTD ni resolutor: un XML que define entidades o apunta a otro archivo no se lee.
    - Exige la versión 2.0, la clave 26, un receptor nacional y el UUID del timbre.
-   - Suma cada `ImpRetenidos` por impuesto. La base de un impuesto cuenta solo si todas sus líneas la traen.
-   - Un importe con más de dos decimales se redondea a centavos, alejándose de cero, como el SAT redondea un importe a los decimales de su moneda.
+   - Suma cada `ImpRetenidos` por impuesto tal como viene y redondea la suma una sola vez. La base de un impuesto cuenta solo si todas sus líneas la traen.
+   - Cada cifra se redondea a centavos, alejándose de cero, como el SAT redondea un importe a los decimales de su moneda.
+   - Busca el timbre en cualquiera de sus complementos.
    - Dice qué es lo que no lee: una factura (CFDI de ingreso), un CFDI de retenciones 1.0, otra clave, un PDF o un dato que falta.
    - No valida el sello ni consulta al SAT si el CFDI está vigente.
 3. **Registrar: dueños y administradores, una vez por negocio.**
    - `POST /api/v1/platform-withholdings` (`RegisterPlatformWithholdingCertificateCommand`, `RequiresTenantManager`) recibe la plataforma y el texto del XML.
    - Si el negocio escribió su RFC en Configuración y el CFDI va a otro, se rechaza. El mensaje no nombra ningún RFC.
    - Un UUID vigente en el negocio responde 409 `conflict` y dice en qué plataforma y periodo está. El índice único filtrado `(TenantId, Uuid) WHERE RemovedAt IS NULL` lo garantiza también cuando dos personas lo suben a la vez. El mismo CFDI en otro negocio es otro registro.
-   - La bitácora (`PlatformWithholdingCertificateRegistered`) va en el mismo guardado, con la plataforma, el UUID, el periodo y los importes, sin RFC.
+   - Un CFDI que sustituye a otro vigente lo quita en el mismo guardado, con el motivo «Lo sustituye el CFDI con folio …». Uno que ya fue sustituido por otro vigente responde 409 `conflict`: una carpeta descargada trae los dos y solo cuenta el nuevo.
+   - La bitácora (`PlatformWithholdingCertificateRegistered`) va en el mismo guardado, con la plataforma, el UUID, el que sustituye, el periodo y los importes, sin RFC.
 4. **Quitar, con motivo; nunca borrar.**
    - `POST /api/v1/platform-withholdings/{id}/remove` marca el CFDI como quitado con su motivo. Deja de contar en la conciliación pero se queda en la lista, y ese UUID puede subirse otra vez (con otra plataforma, por ejemplo).
-   - `RemovedAt` es token de concurrencia: dos que lo quitan a la vez dejan el primero, y el segundo responde 409 `concurrency_conflict`.
+   - Uno ya quitado (por alguien más, después de que la persona cargó la lista) responde 409 `concurrency_conflict` y la lista se vuelve a leer. `RemovedAt` es token de concurrencia: dos que lo quitan a la vez dejan el primero.
    - Entra a la bitácora como `PlatformWithholdingCertificateRemoved`, con el motivo.
 5. **La conciliación, por mes del negocio.**
    - `GET /api/v1/platform-withholdings?channel=&year=` (`ViewReports`) devuelve los 12 meses del año y el total.
    - Lo calculado son los pedidos de la plataforma que cobró ella, registrados en cada mes en la zona horaria del negocio. Para cada uno, su ISR, su IVA retenido y sus ventas sin IVA, en proporción a lo que sigue pagado (una devolución de la mitad retiene la mitad), con redondeo bancario por pedido, como la liquidación (`PlatformSettlementCalculator.InProportion`).
-   - Lo del CFDI es la suma de los vigentes cuyo último mes es ese. Un CFDI de varios meses cuenta completo en su último mes y el mes lo avisa.
-   - La diferencia por impuesto es CFDI menos calculado: positiva cuando la plataforma retuvo de más. Sin CFDI en el mes, no hay diferencia.
-   - Cada CFDI dice la tasa que aplicó (retenido entre base). Junto con los porcentajes con los que TienditApp calcula hoy, eso explica una diferencia por tasa, como el cambio de 1 % a 2.5 %.
+   - Lo del CFDI es la suma de los vigentes cuyo último mes es ese. Un CFDI de varios meses cuenta completo en su último mes, y ese mes compara contra lo calculado en todos los meses que cubre (el mes lo dice).
+   - La diferencia por impuesto es CFDI menos calculado: positiva cuando la plataforma retuvo de más. Sin CFDI en el mes, no hay diferencia. La del año suma solo los meses que cubre algún CFDI, cada uno una vez: el mes en curso todavía no tiene el suyo.
+   - Cada CFDI dice la tasa que aplicó (retenido entre base). La del IVA solo cuando su base es el IVA (la retención resulta de 25 % o más); si la base es el importe sin IVA, no se da. Junto con los porcentajes con los que TienditApp calcula hoy, eso explica una diferencia por tasa, como el cambio de 1 % a 2.5 %.
    - La lista trae los CFDI del año, vigentes y quitados, hasta 200, y avisa si hay más. Los meses los cuentan todos.
 6. **Cliente.**
    - Reportes › Liquidaciones › «Retenciones» (`/reports/settlements/withholdings`) tiene plataforma y año.

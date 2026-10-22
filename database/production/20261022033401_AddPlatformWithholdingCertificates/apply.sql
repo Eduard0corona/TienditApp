@@ -7756,6 +7756,7 @@ BEGIN
         [VatBase] decimal(18,2) NULL,
         [VatWithheld] decimal(18,2) NOT NULL,
         [TotalWithheld] decimal(18,2) NOT NULL,
+        [ReplacesUuid] uniqueidentifier NULL,
         [RemovedAt] datetimeoffset NULL,
         [RemovalReason] nvarchar(500) NULL,
         [CreatedAt] datetimeoffset NOT NULL,
@@ -7763,7 +7764,7 @@ BEGIN
         [UpdatedAt] datetimeoffset NULL,
         [UpdatedBy] nvarchar(max) NULL,
         CONSTRAINT [PK_PlatformWithholdingCertificates] PRIMARY KEY ([Id]),
-        CONSTRAINT [CK_PlatformWithholdingCertificates_Amounts] CHECK ([OperationTotal] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0 AND [TotalWithheld] >= [IsrWithheld] + [VatWithheld] AND ([IsrBase] IS NULL OR [IsrBase] >= 0) AND ([VatBase] IS NULL OR [VatBase] >= 0)),
+        CONSTRAINT [CK_PlatformWithholdingCertificates_Amounts] CHECK ([OperationTotal] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0 AND [TotalWithheld] + 0.02 >= [IsrWithheld] + [VatWithheld] AND ([IsrBase] IS NULL OR [IsrBase] >= 0) AND ([VatBase] IS NULL OR [VatBase] >= 0)),
         CONSTRAINT [CK_PlatformWithholdingCertificates_Channel] CHECK ([Channel] IN (3, 4, 5)),
         CONSTRAINT [CK_PlatformWithholdingCertificates_Period] CHECK ([MonthFrom] BETWEEN 1 AND 12 AND [MonthTo] BETWEEN 1 AND 12 AND [MonthFrom] <= [MonthTo] AND [Year] >= 2019),
         CONSTRAINT [CK_PlatformWithholdingCertificates_Removed] CHECK (([RemovedAt] IS NULL AND [RemovalReason] IS NULL) OR ([RemovedAt] IS NOT NULL AND [RemovalReason] IS NOT NULL))

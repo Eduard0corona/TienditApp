@@ -15,6 +15,7 @@ namespace FoodParkDigital.Domain.Orders.Platforms;
 /// <param name="IsrBase">The base of the ISR withheld, when the XML writes it.</param>
 /// <param name="VatBase">The base of the IVA withheld (the IVA the platform charged), when the XML writes it.</param>
 /// <param name="TotalWithheld">MontoTotRet: every tax withheld, IEPS included.</param>
+/// <param name="ReplacesUuid">The folio of the CFDI this one replaces (CfdiRetenRelacionados), when it says so.</param>
 public sealed record PlatformWithholdingCertificateData(
     Guid Uuid,
     string IssuerRfc,
@@ -29,7 +30,8 @@ public sealed record PlatformWithholdingCertificateData(
     decimal IsrWithheld,
     decimal? VatBase,
     decimal VatWithheld,
-    decimal TotalWithheld);
+    decimal TotalWithheld,
+    Guid? ReplacesUuid = null);
 
 /// <summary>
 /// A CFDI de retenciones a delivery platform issued to the business (Fase 22J, ADR 0042): Rappi, Uber Eats or DiDi Food
@@ -45,6 +47,11 @@ public class PlatformWithholdingCertificate : AuditableEntity, ITenantScoped, IA
     public const decimal MaxAmount = 1_000_000_000m;
     public const int MaxIssuerNameLength = 300;
     public const int MaxRemovalReasonLength = 500;
+    /// <summary>
+    /// What the total withheld may fall short of the ISR plus the IVA: an XML with more than cents is rounded to them tax by
+    /// tax and total apart, and each rounding moves half a cent at most.
+    /// </summary>
+    public const decimal MaxRoundingShortfall = 0.02m;
 
     public const string UuidRequiredMessage = "El CFDI no trae su folio fiscal (UUID).";
     public const string IssuerRfcMessage = "El RFC de quien emite el CFDI no es válido.";
@@ -58,6 +65,7 @@ public class PlatformWithholdingCertificate : AuditableEntity, ITenantScoped, IA
     public const string RemovedMessage = "Este CFDI ya se quitó.";
     public const string RemovalReasonRequiredMessage = "Escribe por qué quitas el CFDI.";
     public const string RemovalReasonTooLongMessage = "El motivo admite hasta 500 caracteres.";
+    public const string ReplacesItselfMessage = "El CFDI dice que se sustituye a sí mismo: revisa el archivo.";
 
     private PlatformWithholdingCertificate() { }
 
@@ -100,8 +108,10 @@ public class PlatformWithholdingCertificate : AuditableEntity, ITenantScoped, IA
         {
             throw new DomainException(AmountMessage);
         }
-        if (data.TotalWithheld < data.IsrWithheld + data.VatWithheld)
+        if (data.TotalWithheld + MaxRoundingShortfall < data.IsrWithheld + data.VatWithheld)
             throw new DomainException(TotalWithheldMessage);
+        if (data.ReplacesUuid == data.Uuid)
+            throw new DomainException(ReplacesItselfMessage);
 
         TenantId = tenantId;
         Channel = channel;
@@ -119,6 +129,7 @@ public class PlatformWithholdingCertificate : AuditableEntity, ITenantScoped, IA
         VatBase = data.VatBase;
         VatWithheld = data.VatWithheld;
         TotalWithheld = data.TotalWithheld;
+        ReplacesUuid = data.ReplacesUuid == Guid.Empty ? null : data.ReplacesUuid;
     }
 
     public Guid TenantId { get; private set; }
@@ -127,6 +138,10 @@ public class PlatformWithholdingCertificate : AuditableEntity, ITenantScoped, IA
     public Guid Uuid { get; private set; }
     public string IssuerRfc { get; private set; } = null!;
     public string IssuerName { get; private set; } = null!;
+    /// <summary>
+    /// To whom the voucher goes: a business that writes its RFC later can still tell the vouchers of another one. Never in a
+    /// response, a message or the activity.
+    /// </summary>
     public string ReceiverRfc { get; private set; } = null!;
     public int Year { get; private set; }
     public int MonthFrom { get; private set; }
@@ -139,6 +154,8 @@ public class PlatformWithholdingCertificate : AuditableEntity, ITenantScoped, IA
     public decimal? VatBase { get; private set; }
     public decimal VatWithheld { get; private set; }
     public decimal TotalWithheld { get; private set; }
+    /// <summary>The CFDI this one replaces: registering it takes that one out of the reconciliation.</summary>
+    public Guid? ReplacesUuid { get; private set; }
     public DateTimeOffset? RemovedAt { get; private set; }
     public string? RemovalReason { get; private set; }
 

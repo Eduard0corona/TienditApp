@@ -741,7 +741,7 @@ La Fase 22I trae una migración, [`database/production/20261022011024_AddPlatfor
 
 La Fase 22J trae una migración, [`database/production/20261022033401_AddPlatformWithholdingCertificates`](../../database/production/20261022033401_AddPlatformWithholdingCertificates). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0042](../adr/0042-platform-withholding-certificates.md)).
 
-- **La migración** agrega solo la tabla `PlatformWithholdingCertificates` (lo que dice cada CFDI de retenciones que suba un negocio), con:
+- **La migración** agrega solo la tabla `PlatformWithholdingCertificates` (lo que dice cada CFDI de retenciones que suba un negocio, y el folio del que sustituye), con:
   - las restricciones `CK_PlatformWithholdingCertificates_Channel`, `_Period`, `_Amounts` y `_Removed`;
   - el índice único `IX_PlatformWithholdingCertificates_TenantId_Uuid_Active`, filtrado a los vigentes (`[RemovedAt] IS NULL`), y el índice `IX_PlatformWithholdingCertificates_TenantId_Channel_Year_MonthTo`.
 

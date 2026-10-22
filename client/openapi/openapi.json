@@ -27350,6 +27350,11 @@
             "type": "number",
             "format": "double"
           },
+          "replacesUuid": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -27372,8 +27377,7 @@
           "calculatedVat",
           "certificateCount",
           "orderCount",
-          "salesWithoutTax",
-          "spansMonths"
+          "salesWithoutTax"
         ],
         "type": "object",
         "properties": {
@@ -27427,8 +27431,10 @@
             "format": "double",
             "nullable": true
           },
-          "spansMonths": {
-            "type": "boolean"
+          "coveredFromMonth": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false

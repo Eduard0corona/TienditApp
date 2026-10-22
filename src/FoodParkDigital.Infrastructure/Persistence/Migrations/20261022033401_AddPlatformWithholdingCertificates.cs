@@ -32,6 +32,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     VatBase = table.Column<decimal>(type: "decimal(18,2)", nullable: true),
                     VatWithheld = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     TotalWithheld = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    ReplacesUuid = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     RemovedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
                     RemovalReason = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
@@ -42,7 +43,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_PlatformWithholdingCertificates", x => x.Id);
-                    table.CheckConstraint("CK_PlatformWithholdingCertificates_Amounts", "[OperationTotal] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0 AND [TotalWithheld] >= [IsrWithheld] + [VatWithheld] AND ([IsrBase] IS NULL OR [IsrBase] >= 0) AND ([VatBase] IS NULL OR [VatBase] >= 0)");
+                    table.CheckConstraint("CK_PlatformWithholdingCertificates_Amounts", "[OperationTotal] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0 AND [TotalWithheld] + 0.02 >= [IsrWithheld] + [VatWithheld] AND ([IsrBase] IS NULL OR [IsrBase] >= 0) AND ([VatBase] IS NULL OR [VatBase] >= 0)");
                     table.CheckConstraint("CK_PlatformWithholdingCertificates_Channel", "[Channel] IN (3, 4, 5)");
                     table.CheckConstraint("CK_PlatformWithholdingCertificates_Period", "[MonthFrom] BETWEEN 1 AND 12 AND [MonthTo] BETWEEN 1 AND 12 AND [MonthFrom] <= [MonthTo] AND [Year] >= 2019");
                     table.CheckConstraint("CK_PlatformWithholdingCertificates_Removed", "([RemovedAt] IS NULL AND [RemovalReason] IS NULL) OR ([RemovedAt] IS NOT NULL AND [RemovalReason] IS NOT NULL)");

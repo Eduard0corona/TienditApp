@@ -4804,6 +4804,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<Guid?>("ReplacesUuid")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -4839,7 +4842,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("PlatformWithholdingCertificates", null, t =>
                         {
-                            t.HasCheckConstraint("CK_PlatformWithholdingCertificates_Amounts", "[OperationTotal] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0 AND [TotalWithheld] >= [IsrWithheld] + [VatWithheld] AND ([IsrBase] IS NULL OR [IsrBase] >= 0) AND ([VatBase] IS NULL OR [VatBase] >= 0)");
+                            t.HasCheckConstraint("CK_PlatformWithholdingCertificates_Amounts", "[OperationTotal] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0 AND [TotalWithheld] + 0.02 >= [IsrWithheld] + [VatWithheld] AND ([IsrBase] IS NULL OR [IsrBase] >= 0) AND ([VatBase] IS NULL OR [VatBase] >= 0)");
 
                             t.HasCheckConstraint("CK_PlatformWithholdingCertificates_Channel", "[Channel] IN (3, 4, 5)");
 

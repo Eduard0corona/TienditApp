@@ -10,11 +10,16 @@ export const MONTH_NAMES = [
 /** The first year of the CFDI de retenciones of the platforms (clave 26), as the server takes it. */
 export const FIRST_WITHHOLDING_YEAR = 2019;
 
-/** The largest XML the server reads (512 KB): a bigger file is not a CFDI de retenciones. */
-export const MAX_WITHHOLDING_XML_BYTES = 512 * 1024;
+/** The longest XML the server reads, in characters (512 K): a bigger file is not a CFDI de retenciones. */
+export const MAX_WITHHOLDING_XML_LENGTH = 512 * 1024;
+
+/** A coarse cap on the file before reading it: those characters in UTF-16, with its mark. */
+export const MAX_WITHHOLDING_XML_BYTES = 2 * MAX_WITHHOLDING_XML_LENGTH + 2;
 
 export const XML_TOO_BIG_MESSAGE = 'El archivo pasa de 512 KB: un CFDI de retenciones es mucho más chico. Revisa que sea el XML.';
 export const NOT_XML_FILE_MESSAGE = 'No es un archivo .xml: sube el XML del CFDI de retenciones, no el PDF.';
+/** A .xml whose bytes are not text, in the server's words. */
+export const NOT_XML_CONTENT_MESSAGE = 'El archivo no es un XML válido: sube el XML del CFDI de retenciones, no el PDF.';
 
 /** «Septiembre»: a month of the table, starting with a capital as the first word of a cell. */
 export function monthLabel(month: number): string {

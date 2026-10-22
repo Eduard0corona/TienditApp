@@ -86,8 +86,9 @@ public sealed class CrossTenantPlatformWithholdingsSqlServerTests
         var removed = await TwoBusinessesApi.ReadAsync(await owner.Client.PostAsJsonAsync(
             $"/api/v1/platform-withholdings/{id}/remove", new { reason = "Era de Uber Eats" }));
         Assert.Equal("Era de Uber Eats", removed.GetProperty("removalReason").GetString());
+        // Removed already, as when someone else did it after the list was loaded: 409, and the list is read again.
         var twice = await owner.Client.PostAsJsonAsync($"/api/v1/platform-withholdings/{id}/remove", new { reason = "Otra vez" });
-        Assert.Equal(HttpStatusCode.BadRequest, twice.StatusCode);
+        Assert.Equal((HttpStatusCode.Conflict, ApiErrorCodes.ConcurrencyConflict), (twice.StatusCode, Problem(await twice.Content.ReadAsStringAsync()).Code));
         Assert.Equal(HttpStatusCode.OK,
             (await owner.Client.PostAsJsonAsync("/api/v1/platform-withholdings", new { channel = OrderChannel.UberEats, xml = Xml(Uuid) })).StatusCode);
         Assert.Equal(

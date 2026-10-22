@@ -134,7 +134,8 @@ public static class PlatformWithholdingXml
         if (!TryAmount(totals, "MontoTotRet", out var totalWithheld))
             return Missing("MontoTotRet");
 
-        // Each tax withheld adds up; its base counts only when every line of the tax writes it.
+        // Each tax withheld adds up as written and is rounded to cents once; its base counts only when every line of the tax
+        // writes it.
         decimal isrWithheld = 0m, vatWithheld = 0m;
         decimal? isrBase = null, vatBase = null;
         bool isrBaseComplete = true, vatBaseComplete = true;
@@ -163,9 +164,20 @@ public static class PlatformWithholdingXml
             }
         }
 
-        var stamp = root.Element(Retenciones + "Complemento")?.Element(Stamp + "TimbreFiscalDigital");
+        // The timbre may come in any of its complements.
+        var stamp = root.Elements(Retenciones + "Complemento").Elements(Stamp + "TimbreFiscalDigital").FirstOrDefault();
         if (!Guid.TryParse((string?)stamp?.Attribute("UUID"), out var uuid) || uuid == Guid.Empty)
             return Reading.Refused(PlatformWithholdingCertificate.UuidRequiredMessage);
+
+        // The one it replaces, when the platform cancelled a CFDI and issued this one in its place (TipoRelacion 04).
+        Guid? replaces = null;
+        var related = root.Element(Retenciones + "CfdiRetenRelacionados");
+        if (related is not null)
+        {
+            if (!Guid.TryParse((string?)related.Attribute("UUID"), out var relatedUuid) || relatedUuid == Guid.Empty)
+                return Missing("CfdiRetenRelacionados UUID");
+            replaces = relatedUuid;
+        }
 
         return new Reading(
             new PlatformWithholdingCertificateData(
@@ -177,12 +189,13 @@ public static class PlatformWithholdingXml
                 MonthFrom: monthFrom,
                 MonthTo: monthTo,
                 IssuedOn: issuedOn,
-                OperationTotal: operationTotal,
-                IsrBase: isrBaseComplete ? isrBase : null,
-                IsrWithheld: isrWithheld,
-                VatBase: vatBaseComplete ? vatBase : null,
-                VatWithheld: vatWithheld,
-                TotalWithheld: totalWithheld),
+                OperationTotal: Cents(operationTotal),
+                IsrBase: isrBaseComplete ? Cents(isrBase) : null,
+                IsrWithheld: Cents(isrWithheld),
+                VatBase: vatBaseComplete ? Cents(vatBase) : null,
+                VatWithheld: Cents(vatWithheld),
+                TotalWithheld: Cents(totalWithheld),
+                ReplacesUuid: replaces),
             null);
     }
 
@@ -194,17 +207,17 @@ public static class PlatformWithholdingXml
     private static bool TryInt(XElement element, string attribute, out int value)
         => int.TryParse((string?)element.Attribute(attribute), NumberStyles.None, CultureInfo.InvariantCulture, out value);
 
-    /// <summary>
-    /// An amount as the SAT writes it: digits and a point, never a sign or thousands. One with more than cents is rounded
-    /// to them, half away from zero, as the SAT rounds an amount to the decimals of its currency.
-    /// </summary>
+    /// <summary>An amount as the SAT writes it: digits and a point, never a sign or thousands; as many decimals as it writes.</summary>
     private static bool TryAmount(XElement element, string attribute, out decimal value)
-    {
-        if (!decimal.TryParse((string?)element.Attribute(attribute), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value))
-            return false;
-        value = decimal.Round(value, 2, MidpointRounding.AwayFromZero);
-        return true;
-    }
+        => decimal.TryParse((string?)element.Attribute(attribute), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value);
+
+    /// <summary>
+    /// To cents, half away from zero, as the SAT rounds an amount to the decimals of its currency: once per figure, after
+    /// adding up its lines as written.
+    /// </summary>
+    private static decimal Cents(decimal amount) => decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
+
+    private static decimal? Cents(decimal? amount) => amount is { } value ? Cents(value) : null;
 
     /// <summary>
     /// When it was issued, as written: the 2.0 writes the time of its place without a zone; one with a zone keeps the

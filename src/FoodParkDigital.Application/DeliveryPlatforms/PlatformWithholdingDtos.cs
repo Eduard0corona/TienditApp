@@ -34,11 +34,17 @@ public class PlatformWithholdingCertificateDto
     public decimal? VatBase { get; set; }
     public decimal VatWithheld { get; set; }
 
-    /// <summary>The IVA withheld over the IVA charged, in percent, when the XML writes it: 50.00.</summary>
+    /// <summary>
+    /// The IVA withheld over the IVA charged, in percent: 50.00. None when the XML writes no base, or writes the amount
+    /// without IVA as the base.
+    /// </summary>
     public decimal? VatRatePercent { get; set; }
 
     /// <summary>Every tax withheld, IEPS included.</summary>
     public decimal TotalWithheld { get; set; }
+
+    /// <summary>The folio of the CFDI this one replaces, which stopped counting when this one was registered.</summary>
+    public Guid? ReplacesUuid { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? RemovedAt { get; set; }
@@ -73,17 +79,20 @@ public class PlatformWithholdingPeriodDto
     public decimal? CertificateIsr { get; set; }
     public decimal? CertificateVat { get; set; }
 
-    /// <summary>The CFDI's ISR minus the calculated one: positive when the platform withheld more.</summary>
+    /// <summary>
+    /// The CFDI's ISR minus what was calculated in the months they cover: positive when the platform withheld more. For the
+    /// year, only over the months some CFDI covers.
+    /// </summary>
     public decimal? IsrDifference { get; set; }
 
-    /// <summary>The CFDI's IVA withheld minus the calculated one.</summary>
+    /// <summary>The CFDI's IVA withheld minus what was calculated in the months they cover, like the ISR.</summary>
     public decimal? VatDifference { get; set; }
 
     /// <summary>
-    /// One of its CFDI starts in an earlier month: it counts whole in its last month, so this month's difference includes
-    /// the months before it covers.
+    /// The first month its CFDI cover, when one starts before this month: it counts whole in its last month, and the
+    /// difference is against what was calculated from that month to this one. Null otherwise, and for the year.
     /// </summary>
-    public bool SpansMonths { get; set; }
+    public int? CoveredFromMonth { get; set; }
 }
 
 /// <summary>The withholdings of a platform in a year, month by month, and its CFDI de retenciones of the year.</summary>

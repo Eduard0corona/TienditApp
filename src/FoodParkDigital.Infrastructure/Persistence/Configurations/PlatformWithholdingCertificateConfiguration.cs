@@ -8,8 +8,9 @@ public class PlatformWithholdingCertificateConfiguration : IEntityTypeConfigurat
 {
     public void Configure(EntityTypeBuilder<PlatformWithholdingCertificate> builder)
     {
-        // Only what any CFDI de retenciones keeps (Fase 22J): the limits of policy (the first year, a billion) live in
-        // PlatformWithholdingCertificate and can change without a migration.
+        // What any CFDI de retenciones keeps (Fase 22J), and the first year of the clave 26 (2019), which no rule moves: the
+        // other limits of policy (a billion, a period not in the future) live in PlatformWithholdingCertificate. The total may
+        // fall short of the ISR plus the IVA by the cents of rounding an XML that writes more than two decimals.
         builder.ToTable("PlatformWithholdingCertificates", table =>
         {
             table.HasCheckConstraint("CK_PlatformWithholdingCertificates_Channel", "[Channel] IN (3, 4, 5)");
@@ -18,7 +19,7 @@ public class PlatformWithholdingCertificateConfiguration : IEntityTypeConfigurat
                 "[MonthFrom] BETWEEN 1 AND 12 AND [MonthTo] BETWEEN 1 AND 12 AND [MonthFrom] <= [MonthTo] AND [Year] >= 2019");
             table.HasCheckConstraint(
                 "CK_PlatformWithholdingCertificates_Amounts",
-                "[OperationTotal] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0 AND [TotalWithheld] >= [IsrWithheld] + [VatWithheld]"
+                "[OperationTotal] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0 AND [TotalWithheld] + 0.02 >= [IsrWithheld] + [VatWithheld]"
                 + " AND ([IsrBase] IS NULL OR [IsrBase] >= 0) AND ([VatBase] IS NULL OR [VatBase] >= 0)");
             table.HasCheckConstraint(
                 "CK_PlatformWithholdingCertificates_Removed",
@@ -39,6 +40,7 @@ public class PlatformWithholdingCertificateConfiguration : IEntityTypeConfigurat
         builder.Property(x => x.VatBase).HasColumnType("decimal(18,2)");
         builder.Property(x => x.VatWithheld).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(x => x.TotalWithheld).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(x => x.ReplacesUuid);
         // Two people removing the same one at once: the second finds it already removed (409), and the activity says it once.
         builder.Property(x => x.RemovedAt).IsConcurrencyToken();
         builder.Property(x => x.RemovalReason).HasMaxLength(PlatformWithholdingCertificate.MaxRemovalReasonLength);

@@ -1,3 +1,5 @@
+using FoodParkDigital.Application.DeliveryPlatforms;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -92,13 +94,14 @@ public class PlatformWithholdingCertificatesSqlServerTests
         await RefusedAsync("CK_PlatformWithholdingCertificates_Period", () => InsertAsync(context, tenant.Id, year: 2018));
         await RefusedAsync("CK_PlatformWithholdingCertificates_Amounts", () => InsertAsync(context, tenant.Id, operationTotal: -1m));
         await RefusedAsync("CK_PlatformWithholdingCertificates_Amounts", () => InsertAsync(context, tenant.Id, isrBase: -1m));
-        await RefusedAsync("CK_PlatformWithholdingCertificates_Amounts", () => InsertAsync(context, tenant.Id, totalWithheld: 1708.31m));
+        await RefusedAsync("CK_PlatformWithholdingCertificates_Amounts", () => InsertAsync(context, tenant.Id, totalWithheld: 1708.29m));
         await RefusedAsync("CK_PlatformWithholdingCertificates_Removed",
             () => InsertAsync(context, tenant.Id, removedAt: DateTimeOffset.UtcNow));
         await RefusedAsync("CK_PlatformWithholdingCertificates_Removed", () => InsertAsync(context, tenant.Id, removalReason: "Otro"));
 
-        // What the domain writes goes in, without the bases and with one removed alongside.
+        // What the domain writes goes in: without the bases, two cents short of rounding, and one removed alongside.
         await InsertAsync(context, tenant.Id, isrBase: null, vatBase: null);
+        await InsertAsync(context, tenant.Id, totalWithheld: 1708.30m);
         await InsertAsync(context, tenant.Id, removedAt: DateTimeOffset.UtcNow, removalReason: "Era de otra sucursal");
     }
 
@@ -187,6 +190,73 @@ public class PlatformWithholdingCertificatesSqlServerTests
         {
             Assert.Equal("Duplicado", (await context.PlatformWithholdingCertificates.AsNoTracking().SingleAsync()).RemovalReason);
         }
+    }
+
+    [SqlServerFact]
+    public async Task Reconciliation_ShouldReadOnSqlServer_ByMonthOfTheBusiness_TheOrdersThePlatformCharged()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        await using (var seed = database.CreateContext(tenant.Id))
+        {
+            var uber = new DeliveryPlatformSetting(tenant.Id, OrderChannel.UberEats, isActive: true, PlatformTerms.WithFiscalDefaults(30m));
+            seed.DeliveryPlatformSettings.Add(uber);
+            // In Mexico City: the last night of 2025 is out of 2026; the first minutes of 2026 are January's.
+            NewPlatformOrder(seed, tenant.Id, uber, "ORD-000001", "U1", Local(2025, 12, 31, 23, 30));
+            NewPlatformOrder(seed, tenant.Id, uber, "ORD-000002", "U2", Local(2026, 1, 1, 0, 30));
+            NewPlatformOrder(seed, tenant.Id, uber, "ORD-000003", "U3", Local(2026, 8, 31, 23, 30));
+            NewPlatformOrder(seed, tenant.Id, uber, "ORD-000004", "U4", Local(2026, 9, 10, 12, 0));
+            // Charged by the business: nothing withheld.
+            NewPlatformOrder(seed, tenant.Id, uber, "ORD-000005", "U5", Local(2026, 9, 11, 12, 0), PlatformCollectedBy.Business);
+            // August to September in one CFDI, and one of July removed.
+            seed.PlatformWithholdingCertificates.Add(new PlatformWithholdingCertificate(
+                tenant.Id, OrderChannel.UberEats, Data() with { MonthFrom = 8, MonthTo = 9 }, CurrentMonth));
+            var removed = new PlatformWithholdingCertificate(
+                tenant.Id, OrderChannel.UberEats, Data() with { Uuid = Guid.NewGuid(), MonthFrom = 7, MonthTo = 7 }, CurrentMonth);
+            removed.Remove("Era de Rappi", DateTimeOffset.UtcNow);
+            seed.PlatformWithholdingCertificates.Add(removed);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext(tenant.Id);
+        var tenantService = new InMemoryApplicationDbContext.TestCurrentTenantService();
+        tenantService.SetTenant(tenant.Id);
+        var report = await new GetPlatformWithholdingsQueryHandler(context, tenantService)
+            .Handle(new GetPlatformWithholdingsQuery { Channel = OrderChannel.UberEats, Year = 2026 }, default);
+
+        // $1,000 with IVA included: $21.55 of ISR and $68.97 of IVA withheld each.
+        Assert.Equal(
+            [(1, 1, 21.55m), (8, 1, 21.55m), (9, 1, 21.55m)],
+            report.Months.Where(m => m.OrderCount > 0).Select(m => (m.Month!.Value, m.OrderCount, m.CalculatedIsr)));
+        var september = report.Months[8];
+        // The CFDI counts in September and is compared with August and September.
+        Assert.Equal(
+            (1, (decimal?)406.74m, (decimal?)(406.74m - 43.10m), (decimal?)(1301.58m - 137.94m), (int?)8),
+            (september.CertificateCount, september.CertificateIsr, september.IsrDifference, september.VatDifference, september.CoveredFromMonth));
+        Assert.Equal(0, report.Months[6].CertificateCount);
+        // The year: three orders calculated, and the difference only over August and September (January has no CFDI).
+        Assert.Equal((3, 64.65m, september.IsrDifference), (report.Total.OrderCount, report.Total.CalculatedIsr, report.Total.IsrDifference));
+        Assert.Equal([(7, true), (8, false)], report.Certificates.Select(c => (c.MonthFrom, c.RemovedAt is not null)));
+        Assert.Equal((2.5m, 50m), (report.IsrWithholdingPercent!.Value, report.VatWithholdingPercent!.Value));
+    }
+
+    private static readonly TimeZoneInfo Mexico = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City");
+
+    private static DateTimeOffset Local(int year, int month, int day, int hour, int minute)
+        => new(TimeZoneInfo.ConvertTimeToUtc(new DateTime(year, month, day, hour, minute, 0), Mexico), TimeSpan.Zero);
+
+    /// <summary>A paquete of $1,000 with IVA included sold through Uber Eats at a time; added to the context, not saved.</summary>
+    private static void NewPlatformOrder(
+        ApplicationDbContext context, Guid tenantId, DeliveryPlatformSetting setting, string number, string folio, DateTimeOffset at,
+        PlatformCollectedBy collectedBy = PlatformCollectedBy.Platform)
+    {
+        var order = new Order(
+            tenantId, null, null, true, number, BusinessType.Food, OrderType.Retail, "Juan", null, null, null,
+            pricesIncludeTax: true, channel: OrderChannel.UberEats);
+        order.AddItem(Guid.NewGuid(), "Paquete familiar", 1, 1000m);
+        order.RegisterPlatformOrder(setting, PlatformOrderNumber.From(folio), collectedBy, at, null);
+        order.MarkAsCreated();
+        context.Orders.Add(order);
     }
 
     internal static PlatformWithholdingCertificateData Data() => new(

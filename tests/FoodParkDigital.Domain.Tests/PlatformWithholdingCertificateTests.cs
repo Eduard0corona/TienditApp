@@ -35,6 +35,12 @@ public class PlatformWithholdingCertificateTests
             (16269.76m, (decimal?)16269.76m, 406.74m, (decimal?)2603.16m, 1301.58m, 1708.32m),
             (certificate.OperationTotal, certificate.IsrBase, certificate.IsrWithheld, certificate.VatBase, certificate.VatWithheld, certificate.TotalWithheld));
         Assert.False(certificate.IsRemoved);
+        Assert.Null(certificate.ReplacesUuid);
+        var replacement = Guid.Parse("11111111-2222-4333-8444-555555555555");
+        Assert.Equal(replacement, new PlatformWithholdingCertificate(Tenant, OrderChannel.UberEats, Data() with
+        {
+            Uuid = Guid.NewGuid(), ReplacesUuid = replacement
+        }, CurrentMonth).ReplacesUuid);
     }
 
     [Fact]
@@ -91,7 +97,11 @@ public class PlatformWithholdingCertificateTests
         Refused(PlatformWithholdingCertificate.AmountMessage, Data() with { VatBase = -1m });
         Refused(PlatformWithholdingCertificate.AmountMessage, Data() with { IsrBase = 0.001m });
         Refused(PlatformWithholdingCertificate.AmountMessage, Data() with { OperationTotal = 1_000_000_000.01m });
-        Refused(PlatformWithholdingCertificate.TotalWithheldMessage, Data() with { TotalWithheld = 1708.31m });
+        Refused(PlatformWithholdingCertificate.TotalWithheldMessage, Data() with { TotalWithheld = 1708.29m });
+        // Two cents short is the rounding of an XML with more than cents, tax by tax and total apart.
+        Assert.Equal(1708.30m, new PlatformWithholdingCertificate(
+            Tenant, OrderChannel.Rappi, Data() with { TotalWithheld = 1708.30m }, CurrentMonth).TotalWithheld);
+        Refused(PlatformWithholdingCertificate.ReplacesItselfMessage, Data() with { ReplacesUuid = Data().Uuid });
         // A month without withholdings is still a voucher.
         var empty = new PlatformWithholdingCertificate(Tenant, OrderChannel.Rappi, Data() with
         {

@@ -58,7 +58,7 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
         var zone = await PlatformSettlementReader.ZoneAsync(_context, _tenantService.TenantId, cancellationToken);
         var calculated = await CalculatedAsync(request.Channel, request.Year, zone, cancellationToken);
 
-        // Each CFDI in force counts whole in the last month of its period.
+        // Each CFDI in force counts whole in the last month of its period, and is compared with every month it covers.
         var vouchers = await _context.PlatformWithholdingCertificates
             .AsNoTracking()
             .Where(c => c.Channel == request.Channel && c.Year == request.Year && c.RemovedAt == null)
@@ -66,37 +66,48 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
             .Select(g => new
             {
                 Month = g.Key,
+                From = g.Min(c => c.MonthFrom),
                 Count = g.Count(),
                 OperationTotal = g.Sum(c => c.OperationTotal),
                 Isr = g.Sum(c => c.IsrWithheld),
-                Vat = g.Sum(c => c.VatWithheld),
-                SpansMonths = g.Any(c => c.MonthFrom < c.MonthTo)
+                Vat = g.Sum(c => c.VatWithheld)
             })
             .ToListAsync(cancellationToken);
         var byMonth = vouchers.ToDictionary(v => v.Month);
+        Figures Of(int month) => calculated.TryGetValue(month, out var figures) ? figures : new Figures();
+        Figures Over(IEnumerable<int> covered)
+        {
+            var sum = new Figures();
+            foreach (var month in covered)
+                sum.Add(Of(month));
+            return sum;
+        }
 
         var months = Enumerable.Range(1, 12).Select(month =>
         {
-            var period = calculated.TryGetValue(month, out var figures) ? figures : new Figures();
-            var dto = period.ToDto(month);
+            var dto = Of(month).ToDto(month);
             if (byMonth.TryGetValue(month, out var voucher))
-                Compare(dto, voucher.Count, voucher.OperationTotal, voucher.Isr, voucher.Vat, voucher.SpansMonths);
+            {
+                var covered = Over(Enumerable.Range(voucher.From, month - voucher.From + 1));
+                Compare(dto, voucher.Count, voucher.OperationTotal, voucher.Isr, voucher.Vat, covered);
+                dto.CoveredFromMonth = voucher.From < month ? voucher.From : null;
+            }
             return dto;
         }).ToList();
 
-        var year = new Figures();
-        foreach (var figures in calculated.Values)
-            year.Add(figures);
-        var total = year.ToDto(null);
+        // The year: what was calculated in all of it, and the difference only over the months some CFDI covers (the
+        // current one has none yet), each counted once.
+        var total = Over(Enumerable.Range(1, 12)).ToDto(null);
         if (vouchers.Count > 0)
         {
+            var coveredMonths = vouchers.SelectMany(v => Enumerable.Range(v.From, v.Month - v.From + 1)).Distinct();
             Compare(
                 total,
                 vouchers.Sum(v => v.Count),
                 vouchers.Sum(v => v.OperationTotal),
                 vouchers.Sum(v => v.Isr),
                 vouchers.Sum(v => v.Vat),
-                spansMonths: false);
+                Over(coveredMonths));
         }
 
         var certificates = await _context.PlatformWithholdingCertificates
@@ -144,6 +155,8 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
                       && detail.CollectedBy == PlatformCollectedBy.Platform
                       && detail.RegisteredAt >= startUtc
                       && detail.RegisteredAt <= endUtc
+                      // Given back whole, or not paid: it brings nothing.
+                      && order.PaidAmount - order.RefundedAmount != 0
                 select new
                 {
                     detail.RegisteredAt,
@@ -156,7 +169,7 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
             .ToListAsync(cancellationToken);
 
         var months = new Dictionary<int, Figures>();
-        foreach (var row in rows.Where(row => row.NetPaid != 0 && row.OrderTotal > 0))
+        foreach (var row in rows.Where(row => row.OrderTotal > 0))
         {
             var month = DailySalesReadModel.LocalDate(row.RegisteredAt, zone).Month;
             if (!months.TryGetValue(month, out var figures))
@@ -169,16 +182,16 @@ public class GetPlatformWithholdingsQueryHandler : IRequestHandler<GetPlatformWi
         return months;
     }
 
+    /// <param name="covered">What was calculated in the months its CFDI cover: the difference is against that.</param>
     private static void Compare(
-        PlatformWithholdingPeriodDto period, int count, decimal operationTotal, decimal isr, decimal vat, bool spansMonths)
+        PlatformWithholdingPeriodDto period, int count, decimal operationTotal, decimal isr, decimal vat, Figures covered)
     {
         period.CertificateCount = count;
         period.CertificateOperationTotal = operationTotal;
         period.CertificateIsr = isr;
         period.CertificateVat = vat;
-        period.IsrDifference = isr - period.CalculatedIsr;
-        period.VatDifference = vat - period.CalculatedVat;
-        period.SpansMonths = spansMonths;
+        period.IsrDifference = isr - covered.Isr;
+        period.VatDifference = vat - covered.Vat;
     }
 
     private sealed class Figures
@@ -235,8 +248,9 @@ internal static class PlatformWithholdingText
         IsrRatePercent = RatePercent(certificate.IsrWithheld, certificate.IsrBase),
         VatBase = certificate.VatBase,
         VatWithheld = certificate.VatWithheld,
-        VatRatePercent = RatePercent(certificate.VatWithheld, certificate.VatBase),
+        VatRatePercent = VatRatePercent(certificate.VatWithheld, certificate.VatBase),
         TotalWithheld = certificate.TotalWithheld,
+        ReplacesUuid = certificate.ReplacesUuid,
         CreatedAt = certificate.CreatedAt,
         RemovedAt = certificate.RemovedAt,
         RemovalReason = certificate.RemovalReason
@@ -245,4 +259,12 @@ internal static class PlatformWithholdingText
     /// <summary>What was withheld over its base, in percent to two decimals; none without a base to divide by.</summary>
     private static decimal? RatePercent(decimal withheld, decimal? taxBase)
         => taxBase is > 0 ? decimal.Round(withheld / taxBase.Value * 100m, 2, MidpointRounding.ToEven) : null;
+
+    /// <summary>
+    /// The IVA withheld as a share of the IVA the platform charged. The SAT does not fix what the base of the IVA withheld
+    /// is: when it is the IVA, the share is a big part of it (half, or all of it); when an issuer writes the amount without
+    /// IVA instead, the share comes out a few percent and says nothing about the IVA, so none is given.
+    /// </summary>
+    private static decimal? VatRatePercent(decimal withheld, decimal? taxBase)
+        => RatePercent(withheld, taxBase) is >= 25m and var rate ? rate : null;
 }

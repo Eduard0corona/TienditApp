@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformWithholdingCertificate, PlatformWithholdingPeriod, PlatformWithholdings as Withholdings } from '../../api/platformWithholdings';
@@ -25,7 +26,7 @@ const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(
 const prompt = vi.fn();
 
 function period(month: number | null, patch: Partial<PlatformWithholdingPeriod> = {}): PlatformWithholdingPeriod {
-  return { month, orderCount: 0, salesWithoutTax: 0, calculatedIsr: 0, calculatedVat: 0, certificateCount: 0, spansMonths: false, ...patch };
+  return { month, orderCount: 0, salesWithoutTax: 0, calculatedIsr: 0, calculatedVat: 0, certificateCount: 0, coveredFromMonth: null, ...patch };
 }
 
 function certificate(patch: Partial<PlatformWithholdingCertificate> = {}): PlatformWithholdingCertificate {
@@ -70,9 +71,10 @@ function withholdings(patch: Partial<Withholdings> = {}): Withholdings {
     isrWithholdingPercent: 2.5,
     vatWithholdingPercent: 50,
     months,
+    // The year's difference only over September, the month with a CFDI.
     total: period(null, {
       orderCount: 3, calculatedIsr: 53.88, calculatedVat: 172.42,
-      certificateCount: 1, certificateIsr: 406.74, certificateVat: 1301.58, isrDifference: 352.86, vatDifference: 1129.16,
+      certificateCount: 1, certificateIsr: 406.74, certificateVat: 1301.58, isrDifference: 374.41, vatDifference: 1198.13,
     }),
     certificates: [
       certificate({ id: 'c0', uuid: '22222222-2222-4333-8444-555555555555', monthFrom: 7, monthTo: 7, removedAt: '2026-10-04T18:00:00Z', removalReason: 'Era de Rappi' }),
@@ -83,7 +85,7 @@ function withholdings(patch: Partial<Withholdings> = {}): Withholdings {
   };
 }
 
-function serve(answer: (query: Record<string, unknown>) => Withholdings) {
+function serve(answer: (query: Record<string, unknown>) => Withholdings | Promise<Withholdings>) {
   vi.mocked(apiRequest).mockImplementation(((method: string, path: string, options: Options = {}) => {
     if (method === 'get' && path === '/api/v1/platform-withholdings') return Promise.resolve(answer(options.query ?? {}));
     if (method === 'post' && path === '/api/v1/platform-withholdings/{id}/remove') {
@@ -149,23 +151,29 @@ describe('PlatformWithholdings', () => {
     ]);
     const september = within(row(table, 'Septiembre')).getAllByRole('cell').map((cell) => cell.textContent);
     expect(september).toEqual(['2', '$32.33', '$406.74', '+$374.41', '$103.45', '$1,301.58', '+$1,198.13']);
+    expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Mes', 'Pedidos', 'ISR calculado', 'ISR del CFDI', 'Diferencia de ISR', 'IVA calculado', 'IVA del CFDI', 'Diferencia de IVA',
+    ]);
     // A month with orders and without a CFDI shows dashes, not $0.
     expect(within(row(table, 'Agosto')).getAllByRole('cell').map((cell) => cell.textContent))
       .toEqual(['1', '$21.55', '—', '—', '$68.97', '—', '—']);
     expect(within(row(table, 'Total')).getAllByRole('cell')[0]).toHaveTextContent('3');
-    expect(screen.getByText(/calcula los pedidos nuevos con 2\.5 % de ISR y 50 % del IVA/)).toBeInTheDocument();
+    expect(screen.getByText(/calcula los pedidos nuevos con 2\.50 % de ISR y 50\.00 % del IVA/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Configuración › Negocio › Plataformas de reparto' })).toHaveAttribute('href', '/settings/business');
     expect(calls('get', '/api/v1/platform-withholdings')[0].query).toEqual({ channel: OrderChannel.UberEats, year: 2026 });
   });
 
-  it('marks a month that adds up, and one that counts a CFDI of several months', async () => {
+  it('marks a month that adds up, and one that compares the months of a CFDI of several months', async () => {
     const data = withholdings();
-    data.months[8] = { ...data.months[8], isrDifference: 0, vatDifference: 0, spansMonths: true };
+    data.months[8] = { ...data.months[8], isrDifference: 0, vatDifference: 0, coveredFromMonth: 7 };
     serve(() => data);
     renderPage();
 
     const september = row(await screen.findByRole('table', { name: /Retenciones de Uber Eats/ }), 'Septiembre');
     expect(within(september).getAllByText('Cuadra')).toHaveLength(2);
-    expect(within(september).getByText('Incluye un CFDI de varios meses')).toBeInTheDocument();
+    expect(within(september).getByText('Compara de julio a septiembre')).toBeInTheDocument();
+    // The note sits in the CFDI's cell, not in the row's header that names every cell.
+    expect(within(september).getByRole('rowheader')).toHaveTextContent(/^Septiembre$/);
   });
 
   it('lists the CFDI of the year with their rates, the removed one with its reason', async () => {
@@ -199,19 +207,83 @@ describe('PlatformWithholdings', () => {
     await waitFor(() => expect(calls('get', '/api/v1/platform-withholdings').length).toBeGreaterThan(1));
   });
 
-  it('reads another platform or year from the filters', async () => {
+  it('reads another platform or year from the filters, without passing the last one for it meanwhile', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    serve((query) => withholdings({ channel: query.channel as OrderChannel, year: query.year as number }));
+    let release: (() => void) | undefined;
+    serve((query) => {
+      const answer = withholdings({ channel: query.channel as OrderChannel, year: query.year as number });
+      if (query.channel !== OrderChannel.DidiFood) return answer;
+      const didi = { ...answer, certificates: [] };
+      return query.year === 2026 ? new Promise((resolve) => { release = () => resolve(didi); }) : didi;
+    });
     renderPage();
     await screen.findByRole('heading', { name: 'Uber Eats en 2026' });
 
     await user.selectOptions(screen.getByLabelText('Plataforma'), String(OrderChannel.DidiFood));
-    await user.selectOptions(screen.getByLabelText('Año'), '2025');
 
+    // While DiDi arrives, Uber's figures stay named as Uber's, and none of its CFDI can be removed.
+    expect(await screen.findByText('Cargando DiDi Food de 2026…')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Uber Eats en 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Quitar el CFDI de septiembre de 2026/ })).toBeDisabled();
+
+    release?.();
+    expect(await screen.findByRole('heading', { name: 'DiDi Food en 2026' })).toBeInTheDocument();
+    expect(screen.queryByText('Cargando DiDi Food de 2026…')).not.toBeInTheDocument();
+    expect(screen.getByText('Todavía no subes CFDI de retenciones de DiDi Food de 2026.')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Año'), '2025');
     expect(await screen.findByRole('heading', { name: 'DiDi Food en 2025' })).toBeInTheDocument();
     expect(calls('get', '/api/v1/platform-withholdings').at(-1)?.query).toEqual({ channel: OrderChannel.DidiFood, year: 2025 });
     // The whole of a past year shows.
+    expect(screen.getByRole('rowheader', { name: 'Diciembre' })).toBeInTheDocument();
+  });
+
+  it('falls back to the first platform and this year for what the link does not say right', async () => {
+    serve((query) => withholdings({ channel: query.channel as OrderChannel, year: query.year as number }));
+    renderPage('/reports/settlements/withholdings?channel=1&year=1999');
+
+    await screen.findByRole('table', { name: 'Retenciones de Rappi por mes de 2026' });
+    expect(calls('get', '/api/v1/platform-withholdings')[0].query).toEqual({ channel: OrderChannel.Rappi, year: 2026 });
+  });
+
+  it('takes the year of the business on the last night of December', async () => {
+    // 2027-01-01 03:00 UTC is still December 31 in Mexico City: 2026, whole.
+    vi.setSystemTime(new Date('2027-01-01T03:00:00Z'));
+    serve((query) => withholdings({ year: query.year as number }));
+    renderPage('/reports/settlements/withholdings?channel=4');
+
     expect(await screen.findByRole('rowheader', { name: 'Diciembre' })).toBeInTheDocument();
+    expect(calls('get', '/api/v1/platform-withholdings')[0].query).toEqual({ channel: OrderChannel.UberEats, year: 2026 });
+  });
+
+  it('opens the upload from its button, and says when the list does not bring every CFDI', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    serve(() => withholdings({ certificatesTruncated: true }));
+    renderPage();
+
+    expect(await screen.findByText('La lista muestra los primeros 200 CFDI; los meses cuentan todos.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Subir CFDI de retenciones' }));
+    expect(screen.getByRole('dialog', { name: 'Subir CFDI de retenciones' })).toBeInTheDocument();
+  });
+
+  it('removes nothing when the owner cancels, and says why the server refused', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    serve(() => withholdings());
+    renderPage();
+    const quitar = await screen.findByRole('button', { name: /^Quitar el CFDI de septiembre de 2026/ });
+
+    prompt.mockResolvedValueOnce(null);
+    await user.click(quitar);
+    expect(calls('post', '/api/v1/platform-withholdings/{id}/remove')).toEqual([]);
+
+    const headers = new AxiosHeaders();
+    vi.mocked(apiRequest).mockRejectedValueOnce(new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+      status: 409, statusText: '', headers, config: { headers }, data: { code: 'concurrency_conflict', detail: 'x' },
+    } as AxiosResponse));
+    prompt.mockResolvedValueOnce('Duplicado');
+    await user.click(quitar);
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it('lets whoever reads the reports see it, without uploading or removing', async () => {
@@ -222,6 +294,9 @@ describe('PlatformWithholdings', () => {
     await screen.findByRole('table', { name: /Retenciones de Uber Eats/ });
     expect(screen.queryByRole('button', { name: 'Subir CFDI de retenciones' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Quitar el CFDI/ })).not.toBeInTheDocument();
+    // Without anything to do, the list has no column of actions; nor a link to a Configuración it cannot open.
+    expect(screen.queryByRole('columnheader', { name: 'Acciones' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Configuración › Negocio › Plataformas de reparto' })).not.toBeInTheDocument();
   });
 
   it('says when the platform has no terms', async () => {

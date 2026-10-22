@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.DeliveryPlatforms;
+using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Platforms;
 
 namespace FoodParkDigital.Application.Tests;
@@ -64,6 +65,46 @@ public class PlatformWithholdingXmlTests
         var data = reading.Data!;
         Assert.Equal((16269.76m, 406.75m, 406.75m), (data.IsrBase!.Value, data.IsrWithheld, data.TotalWithheld));
         Assert.Equal(new DateTime(2026, 10, 2, 22, 28, 50), data.IssuedOn);
+    }
+
+    [Fact]
+    public void Read_ShouldAddUpEachTaxAsWritten_AndRoundItOnce_SoAValidTotalIsNotShort()
+    {
+        // 10.006 + 20.006 = 30.012: each tax rounds up to 10.01 and 20.01, the total to 30.01; still a voucher it reads.
+        var reading = PlatformWithholdingXml.Read(Xml(withheld: """
+            <retenciones:ImpRetenidos BaseRet="400.240000" ImpuestoRet="001" MontoRet="10.006000" TipoPagoRet="03"/>
+            <retenciones:ImpRetenidos BaseRet="40.012000" ImpuestoRet="002" MontoRet="20.006000" TipoPagoRet="01"/>
+            """, totalWithheld: "30.012000"));
+
+        var data = reading.Data!;
+        Assert.Equal((10.01m, 20.01m, 30.01m), (data.IsrWithheld, data.VatWithheld, data.TotalWithheld));
+        // The domain takes it: two cents short is rounding.
+        Assert.Equal(30.01m, new PlatformWithholdingCertificate(Guid.NewGuid(), OrderChannel.UberEats, data, new DateOnly(2026, 10, 1)).TotalWithheld);
+
+        // Two lines of a tax add up before rounding: 0.004 + 0.004 is one cent, not none.
+        var lines = PlatformWithholdingXml.Read(Xml(withheld: """
+            <retenciones:ImpRetenidos ImpuestoRet="001" MontoRet="0.004" TipoPagoRet="03"/>
+            <retenciones:ImpRetenidos ImpuestoRet="001" MontoRet="0.004" TipoPagoRet="03"/>
+            """, totalWithheld: "0.008")).Data!;
+        Assert.Equal((0.01m, 0.01m), (lines.IsrWithheld, lines.TotalWithheld));
+    }
+
+    [Fact]
+    public void Read_ShouldTakeTheCfdiItReplaces_AndTheTimbreFromAnyComplement()
+    {
+        var xml = Xml().Replace(
+            """<retenciones:Emisor""",
+            """<retenciones:CfdiRetenRelacionados TipoRelacion="04" UUID="11111111-2222-4333-8444-555555555555"/><retenciones:Emisor""");
+        // The timbre in a second complement, after the one of the platforms' services.
+        xml = xml.Replace("<retenciones:Complemento>", "<retenciones:Complemento><otro/></retenciones:Complemento><retenciones:Complemento>");
+
+        var data = PlatformWithholdingXml.Read(xml).Data!;
+
+        Assert.Equal(Guid.Parse("11111111-2222-4333-8444-555555555555"), data.ReplacesUuid);
+        Assert.Equal(Guid.Parse("7874D580-DA5B-558F-B8EC-D92C57197242"), data.Uuid);
+        Assert.Null(PlatformWithholdingXml.Read(Xml()).Data!.ReplacesUuid);
+        Assert.Equal($"{PlatformWithholdingXml.MissingFieldMessage} CfdiRetenRelacionados UUID.", PlatformWithholdingXml.Read(Xml().Replace(
+            """<retenciones:Emisor""", """<retenciones:CfdiRetenRelacionados TipoRelacion="04"/><retenciones:Emisor""")).Error);
     }
 
     [Fact]

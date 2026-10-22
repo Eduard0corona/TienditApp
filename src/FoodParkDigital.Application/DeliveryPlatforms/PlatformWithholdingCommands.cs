@@ -34,8 +34,20 @@ public static class PlatformWithholdingErrors
     public static string AlreadyRegistered(PlatformWithholdingCertificate existing)
         => $"{AlreadyRegisteredStart}{OrderChannelRules.DisplayName(existing.Channel)}, {PlatformWithholdingText.Period(existing)}.";
 
-    /// <summary>The same CFDI is already in the business: the API answers 409 with the reason.</summary>
-    public static bool IsConflict(string? error) => error?.StartsWith(AlreadyRegisteredStart, StringComparison.Ordinal) == true;
+    private const string ReplacedStart = "Este CFDI ya se sustituyó por otro que está registrado en ";
+
+    /// <summary>The platform cancelled this CFDI and the one that replaces it is in force: this one does not count.</summary>
+    public static string Replaced(PlatformWithholdingCertificate replacement)
+        => $"{ReplacedStart}{OrderChannelRules.DisplayName(replacement.Channel)}, {PlatformWithholdingText.Period(replacement)}: no cuenta.";
+
+    /// <summary>The reason of a CFDI taken out because the one registered replaces it.</summary>
+    public static string ReplacedBy(PlatformWithholdingCertificate replacement)
+        => $"Lo sustituye el CFDI con folio {replacement.Uuid.ToString()[..8].ToUpperInvariant()}.";
+
+    /// <summary>The same CFDI, or the one that replaces it, is already in the business: the API answers 409 with the reason.</summary>
+    public static bool IsConflict(string? error)
+        => error?.StartsWith(AlreadyRegisteredStart, StringComparison.Ordinal) == true
+           || error?.StartsWith(ReplacedStart, StringComparison.Ordinal) == true;
 
     /// <summary>Someone else's removal in between: the API answers 409 and the person reloads.</summary>
     public static bool IsStale(string? error) => error is Stale;
@@ -119,6 +131,12 @@ public class RegisterPlatformWithholdingCertificateCommandHandler
 
         if (await RegisteredAsync(data.Uuid, cancellationToken) is { } existing)
             return Result.Failure<PlatformWithholdingCertificateDto>(PlatformWithholdingErrors.AlreadyRegistered(existing));
+        // A CFDI the platform cancelled and replaced, uploaded after its replacement (a downloaded folder brings both).
+        var replacement = await _context.PlatformWithholdingCertificates
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ReplacesUuid == data.Uuid && c.RemovedAt == null, cancellationToken);
+        if (replacement is not null)
+            return Result.Failure<PlatformWithholdingCertificateDto>(PlatformWithholdingErrors.Replaced(replacement));
 
         var zone = await PlatformSettlementReader.ZoneAsync(_context, tenantId, cancellationToken);
         var today = DailySalesReadModel.LocalToday(zone, _clock.UtcNow);
@@ -132,13 +150,29 @@ public class RegisterPlatformWithholdingCertificateCommandHandler
             return Result.Failure<PlatformWithholdingCertificateDto>(ex.Message);
         }
 
+        var performedBy = _currentUserService.UserName ?? "system";
+        // The one it replaces stops counting in the same save, with why: the platform cancelled it.
+        if (certificate.ReplacesUuid is { } replacedUuid
+            && await _context.PlatformWithholdingCertificates
+                .FirstOrDefaultAsync(c => c.Uuid == replacedUuid && c.RemovedAt == null, cancellationToken) is { } replaced)
+        {
+            replaced.Remove(PlatformWithholdingErrors.ReplacedBy(certificate), _clock.UtcNow);
+            _context.AuditLogs.Add(PlatformWithholdingAudit.Removed(tenantId, replaced, performedBy));
+        }
+
         _context.PlatformWithholdingCertificates.Add(certificate);
-        _context.AuditLogs.Add(PlatformWithholdingAudit.Registered(tenantId, certificate, _currentUserService.UserName ?? "system"));
+        _context.AuditLogs.Add(PlatformWithholdingAudit.Registered(tenantId, certificate, performedBy));
         try
         {
             await _context.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException)
+        catch (DbUpdateConcurrencyException)
+        {
+            // Someone removed the one it replaces at the same time: nothing is saved, and the person uploads it again.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
+            return Result.Failure<PlatformWithholdingCertificateDto>(PlatformWithholdingErrors.Stale);
+        }
+        catch (DbUpdateException)
         {
             // Someone registered the same CFDI at the same time (the unique index): this one is undone, and the person is
             // told where the other one is.
@@ -184,6 +218,9 @@ public class RemovePlatformWithholdingCertificateCommandHandler
             .SingleOrDefaultAsync(c => c.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException(nameof(PlatformWithholdingCertificate), request.Id);
 
+        // Removed already (by someone else, after the person loaded the list): theirs stands, and the list is read again.
+        if (certificate.IsRemoved)
+            return Result.Failure<PlatformWithholdingCertificateDto>(PlatformWithholdingErrors.Stale);
         try
         {
             certificate.Remove(request.Reason, _clock.UtcNow);
@@ -221,6 +258,7 @@ internal static class PlatformWithholdingAudit
         {
             certificate.Channel,
             certificate.Uuid,
+            certificate.ReplacesUuid,
             certificate.Year,
             certificate.MonthFrom,
             certificate.MonthTo,

@@ -16060,6 +16060,8 @@ export interface components {
             vatRatePercent?: number | null;
             /** Format: double */
             totalWithheld: number;
+            /** Format: uuid */
+            replacesUuid?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -16089,7 +16091,8 @@ export interface components {
             isrDifference?: number | null;
             /** Format: double */
             vatDifference?: number | null;
-            spansMonths: boolean;
+            /** Format: int32 */
+            coveredFromMonth?: number | null;
         };
         PlatformWithholdingsDto: {
             channel: components["schemas"]["OrderChannel"];

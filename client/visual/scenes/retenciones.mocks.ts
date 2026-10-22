@@ -10,7 +10,7 @@ const UBER_EATS = 4;
 const r2 = (amount: number) => Math.round(amount * 100) / 100;
 
 /** A month with what TienditApp calculated: 2.5 % of ISR and half the IVA of its orders, without IVA. */
-function month(number: number, orders: number, salesWithoutTax: number, voucher?: { isr: number; vat: number; operation: number; spans?: boolean }) {
+function month(number: number, orders: number, salesWithoutTax: number, voucher?: { isr: number; vat: number; operation: number }) {
   const calculatedIsr = r2(salesWithoutTax * 0.025);
   const calculatedVat = r2(salesWithoutTax * 0.16 * 0.5);
   return {
@@ -25,7 +25,7 @@ function month(number: number, orders: number, salesWithoutTax: number, voucher?
     certificateVat: voucher?.vat ?? null,
     isrDifference: voucher ? r2(voucher.isr - calculatedIsr) : null,
     vatDifference: voucher ? r2(voucher.vat - calculatedVat) : null,
-    spansMonths: voucher?.spans ?? false,
+    coveredFromMonth: null as number | null,
   };
 }
 
@@ -77,10 +77,11 @@ const TOTAL = {
   certificateVat: sum(WITH_VOUCHER.map((each) => each.certificateVat ?? 0)),
   isrDifference: 0,
   vatDifference: 0,
-  spansMonths: false,
+  coveredFromMonth: null,
 };
-TOTAL.isrDifference = r2(TOTAL.certificateIsr - TOTAL.calculatedIsr);
-TOTAL.vatDifference = r2(TOTAL.certificateVat - TOTAL.calculatedVat);
+// The year's difference, only over the months with a CFDI: October has none yet.
+TOTAL.isrDifference = sum(WITH_VOUCHER.map((each) => each.isrDifference ?? 0));
+TOTAL.vatDifference = sum(WITH_VOUCHER.map((each) => each.vatDifference ?? 0));
 
 const CERTIFICATES = [
   certificate('jul', 7, 7, 370.51, 1185.64, 14820.5),

@@ -7,7 +7,7 @@ import type { PlatformWithholdingCertificate } from '../../api/platformWithholdi
 import { apiRequest } from '../../api/typedClient';
 import { OrderChannel } from '../../types';
 import WithholdingUploadModal, { MAX_WITHHOLDING_FILES } from './WithholdingUploadModal';
-import { MAX_WITHHOLDING_XML_BYTES, NOT_XML_FILE_MESSAGE, XML_TOO_BIG_MESSAGE } from './withholdingLabels';
+import { MAX_WITHHOLDING_XML_BYTES, MAX_WITHHOLDING_XML_LENGTH, NOT_XML_CONTENT_MESSAGE, NOT_XML_FILE_MESSAGE, XML_TOO_BIG_MESSAGE } from './withholdingLabels';
 
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 
@@ -60,7 +60,7 @@ describe('WithholdingUploadModal', () => {
     const { invalidate } = renderModal();
 
     const dialog = screen.getByRole('dialog', { name: 'Subir CFDI de retenciones' });
-    await user.selectOptions(within(dialog).getByLabelText('Plataforma que lo emitió'), String(OrderChannel.DidiFood));
+    await user.selectOptions(within(dialog).getByLabelText('Plataforma que emitió los CFDI'), String(OrderChannel.DidiFood));
     await user.upload(within(dialog).getByLabelText('Archivos XML'), [
       file('septiembre.xml', XML),
       file('agosto.xml', `${XML}<!-- agosto -->`),
@@ -69,7 +69,7 @@ describe('WithholdingUploadModal', () => {
     expect(within(dialog).getByText('3 archivos elegidos.')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Subir' }));
 
-    expect(await within(dialog).findByText('Se registraron 1 de 3. Revisa los que no entraron.')).toBeInTheDocument();
+    expect(await within(dialog).findByText('Se registró 1 de 3. Revisa los que no entraron.')).toHaveFocus();
     const items = within(dialog).getAllByRole('listitem');
     expect(items[0]).toHaveTextContent('Registradoseptiembre.xmlRegistrado: septiembre de 2026, ISR $25.00 e IVA $80.00.');
     expect(items[1]).toHaveTextContent('No entróagosto.xmlEste CFDI ya está registrado en DiDi Food, agosto de 2026.');
@@ -80,16 +80,66 @@ describe('WithholdingUploadModal', () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['platform-withholdings'] }));
   });
 
-  it('refuses a file over 512 KB before sending it, and reads nothing again when none went in', async () => {
+  it('refuses before sending a file too big or one that is not text, and reads nothing again when none went in', async () => {
     const user = userEvent.setup();
     const { invalidate } = renderModal();
 
-    await user.upload(screen.getByLabelText('Archivos XML'), file('grande.xml', 'x'.repeat(MAX_WITHHOLDING_XML_BYTES + 1)));
+    await user.upload(screen.getByLabelText('Archivos XML'), [
+      // Past the bytes of 512 K characters in UTF-16, and past 512 K characters in UTF-8.
+      file('enorme.xml', 'x'.repeat(MAX_WITHHOLDING_XML_BYTES + 1)),
+      file('grande.xml', 'x'.repeat(MAX_WITHHOLDING_XML_LENGTH + 1)),
+      new File([new Uint8Array([0x3c, 0x00, 0x3f, 0x00, 0x78, 0x00])], 'utf16-sin-marca.xml', { type: 'text/xml' }),
+    ]);
     await user.click(screen.getByRole('button', { name: 'Subir' }));
 
-    expect(await screen.findByText(XML_TOO_BIG_MESSAGE)).toBeInTheDocument();
+    expect(await screen.findByText('No se registró ninguno de los 3. Revisa por qué abajo.')).toBeInTheDocument();
+    const items = screen.getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent(XML_TOO_BIG_MESSAGE);
+    expect(items[1]).toHaveTextContent(XML_TOO_BIG_MESSAGE);
+    expect(items[2]).toHaveTextContent(NOT_XML_CONTENT_MESSAGE);
     expect(request).not.toHaveBeenCalled();
     expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('reads a file with its byte-order mark, in UTF-16 or in Windows-1252, as text', async () => {
+    const user = userEvent.setup();
+    request.mockResolvedValue(registered(9) as never);
+    renderModal();
+    const utf16 = new Uint8Array([0xff, 0xfe, ...Array.from('<x/>').flatMap((char) => [char.charCodeAt(0), 0])]);
+
+    await user.upload(screen.getByLabelText('Archivos XML'), [
+      new File([new Uint8Array([0xef, 0xbb, 0xbf]), '<x/>'], 'con-marca.xml', { type: 'text/xml' }),
+      new File([utf16], 'utf16.xml', { type: 'text/xml' }),
+      new File([new Uint8Array([0x3c, 0x78, 0x3e, 0xf1, 0x3c, 0x2f, 0x78, 0x3e])], 'ansi.xml', { type: 'text/xml' }),
+    ]);
+    await user.click(screen.getByRole('button', { name: 'Subir' }));
+
+    expect(await screen.findByText('Se registraron los 3 CFDI.')).toBeInTheDocument();
+    expect(request.mock.calls.map(([, , options]) => (options as Options).body?.xml)).toEqual(['<x/>', '<x/>', '<x>ñ</x>']);
+  });
+
+  it('stops the batch when the person leaves, without sending the files after the current one', async () => {
+    const user = userEvent.setup();
+    let finish: (() => void) | undefined;
+    request.mockImplementation((() => new Promise((resolve) => { finish = () => resolve(registered(9)); })) as unknown as typeof apiRequest);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <WithholdingUploadModal platform={OrderChannel.UberEats} onHide={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    await user.upload(screen.getByLabelText('Archivos XML'), [file('uno.xml', XML), file('dos.xml', XML), file('tres.xml', XML)]);
+    await user.click(screen.getByRole('button', { name: 'Subir' }));
+    expect(await screen.findByText('Subiendo 1 de 3…')).toBeInTheDocument();
+    // Busy, it does not close by its buttons.
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+
+    unmount();
+    finish?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it('takes up to its limit of files at once', async () => {
@@ -103,18 +153,26 @@ describe('WithholdingUploadModal', () => {
     expect(screen.getByRole('button', { name: 'Subir' })).toBeDisabled();
   });
 
-  it('starts on the platform on screen, and closes with Listo after a batch', async () => {
+  it('starts on the platform on screen, and closes with Listo saying what went in', async () => {
     const user = userEvent.setup();
     request.mockResolvedValue(registered(9) as never);
     const { onHide } = renderModal();
 
-    expect(screen.getByLabelText('Plataforma que lo emitió')).toHaveValue(String(OrderChannel.UberEats));
+    expect(screen.getByLabelText('Plataforma que emitió los CFDI')).toHaveValue(String(OrderChannel.UberEats));
     await user.upload(screen.getByLabelText('Archivos XML'), file('septiembre.xml', XML));
     await user.click(screen.getByRole('button', { name: 'Subir' }));
     expect(await screen.findByText('Se registró el CFDI.')).toBeInTheDocument();
     expect((request.mock.calls[0][2] as Options).body?.channel).toBe(OrderChannel.UberEats);
 
+    await user.click(screen.getByRole('button', { name: 'Subir otros' }));
+    expect(screen.getByLabelText('Archivos XML')).toHaveFocus();
+    await user.upload(screen.getByLabelText('Archivos XML'), file('factura.xml', XML));
+    request.mockRejectedValueOnce(new Error('caída'));
+    await user.click(screen.getByRole('button', { name: 'Subir' }));
+    expect(await screen.findByText('No se registró el CFDI.')).toBeInTheDocument();
+
+    // The page follows what went in, also after a batch where nothing did.
     await user.click(screen.getByRole('button', { name: 'Listo' }));
-    expect(onHide).toHaveBeenCalled();
+    expect(onHide).toHaveBeenCalledWith({ channel: OrderChannel.UberEats, year: 2026 });
   });
 });

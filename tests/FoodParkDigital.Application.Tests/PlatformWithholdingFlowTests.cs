@@ -124,7 +124,8 @@ public class PlatformWithholdingFlowTests
         var removed = await RemoveAsync(fixture, certificate.Id, "  Era de otra sucursal ");
 
         Assert.Equal(("Era de otra sucursal", true), (removed.Value.RemovalReason, removed.Value.RemovedAt is not null));
-        Assert.Equal(PlatformWithholdingCertificate.RemovedMessage, (await RemoveAsync(fixture, certificate.Id, "Otra vez")).Error);
+        // Removed already (someone else did, after the list was loaded): theirs stands, and the list is read again (409).
+        Assert.Equal(PlatformWithholdingErrors.Stale, (await RemoveAsync(fixture, certificate.Id, "Otra vez")).Error);
         var audit = await fixture.Context.AuditLogs.SingleAsync(a => a.Action == PlatformWithholdingAudit.RemovedAction);
         Assert.Contains("Era de otra sucursal", audit.Metadata);
 
@@ -178,10 +179,11 @@ public class PlatformWithholdingFlowTests
         var september = report.Months[8];
         // U1 whole and U2 half: U3 was given back whole.
         Assert.Equal((2, 1293.11m, 32.33m, 103.45m), (september.OrderCount, september.SalesWithoutTax, september.CalculatedIsr, september.CalculatedVat));
+        // The CFDI of July to September counts in September, so September compares with what July to September calculated.
         Assert.Equal(
-            (2, (decimal?)32539.52m, (decimal?)813.48m, (decimal?)2603.16m, (decimal?)781.15m, (decimal?)2499.71m, true),
+            (2, (decimal?)32539.52m, (decimal?)813.48m, (decimal?)2603.16m, (decimal?)759.60m, (decimal?)2430.74m, (int?)7),
             (september.CertificateCount, september.CertificateOperationTotal, september.CertificateIsr, september.CertificateVat,
-                september.IsrDifference, september.VatDifference, september.SpansMonths));
+                september.IsrDifference, september.VatDifference, september.CoveredFromMonth));
         var august = report.Months[7];
         Assert.Equal((1, 21.55m, 68.97m, 0, (decimal?)null, (decimal?)null), (august.OrderCount, august.CalculatedIsr, august.CalculatedVat,
             august.CertificateCount, august.CertificateIsr, august.IsrDifference));
@@ -190,12 +192,78 @@ public class PlatformWithholdingFlowTests
             (null, 3, 53.88m, 172.42m, 2, (decimal?)813.48m, (decimal?)759.60m, (decimal?)2430.74m),
             (report.Total.Month, report.Total.OrderCount, report.Total.CalculatedIsr, report.Total.CalculatedVat,
                 report.Total.CertificateCount, report.Total.CertificateIsr, report.Total.IsrDifference, report.Total.VatDifference));
+        Assert.Null(report.Total.CoveredFromMonth);
         // The list brings the removed one too, by the month each counts in.
         Assert.Equal(
             [(8, 8, true), (7, 9, false), (9, 9, false)],
             report.Certificates.Select(c => (c.MonthFrom, c.MonthTo, c.RemovedAt is not null)));
         Assert.False(report.CertificatesTruncated);
     }
+
+    [Fact]
+    public async Task Withholdings_OfTheYear_ShouldOnlyCompareTheMonthsSomeCfdiCovers()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        // August has an order and no CFDI yet; September has its CFDI.
+        await SellAtAsync(fixture, At(new DateOnly(2026, 8, 10), 12), Uber(shop, "U1"));
+        await SellAtAsync(fixture, At(new DateOnly(2026, 9, 10), 12), Uber(shop, "U2"));
+        await RegisterAsync(fixture, OrderChannel.UberEats, PlatformWithholdingXmlTests.Xml());
+
+        var report = await WithholdingsAsync(fixture, OrderChannel.UberEats, 2026);
+
+        Assert.Equal((21.55m, 68.97m), (report.Total.CalculatedIsr - report.Months[8].CalculatedIsr, report.Total.CalculatedVat - report.Months[8].CalculatedVat));
+        // The year's difference is September's: August waits for its CFDI.
+        Assert.Equal((406.74m - 21.55m, 1301.58m - 68.97m), (report.Months[8].IsrDifference!.Value, report.Months[8].VatDifference!.Value));
+        Assert.Equal((report.Months[8].IsrDifference, report.Months[8].VatDifference), (report.Total.IsrDifference, report.Total.VatDifference));
+        Assert.Null(report.Months[8].CoveredFromMonth);
+    }
+
+    [Fact]
+    public async Task Register_ACfdiThatReplacesAnother_ShouldTakeThatOneOut_AndTheReplacedOneShouldNotComeBack()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await ShopAsync(fixture);
+        const string Original = "11111111-2222-4333-8444-555555555555";
+        const string Replacement = "22222222-2222-4333-8444-555555555555";
+        var original = (await RegisterAsync(fixture, OrderChannel.UberEats, PlatformWithholdingXmlTests.Xml(uuid: Original))).Value;
+
+        var replacing = await RegisterAsync(fixture, OrderChannel.UberEats, Replacing(Replacement, Original));
+
+        Assert.True(replacing.IsSuccess, replacing.Error);
+        Assert.Equal(Guid.Parse(Original), replacing.Value.ReplacesUuid);
+        var replaced = await fixture.Context.PlatformWithholdingCertificates.AsNoTracking().SingleAsync(c => c.Id == original.Id);
+        Assert.Equal((true, "Lo sustituye el CFDI con folio 22222222."), (replaced.IsRemoved, replaced.RemovalReason));
+        Assert.Equal(1, await fixture.Context.AuditLogs.CountAsync(a => a.Action == PlatformWithholdingAudit.RemovedAction));
+        // Only the replacement counts in September.
+        Assert.Equal(1, (await WithholdingsAsync(fixture, OrderChannel.UberEats, 2026)).Months[8].CertificateCount);
+
+        // The cancelled one uploaded again (a downloaded folder brings both) does not count.
+        var again = await RegisterAsync(fixture, OrderChannel.UberEats, PlatformWithholdingXmlTests.Xml(uuid: Original));
+        Assert.Equal("Este CFDI ya se sustituyó por otro que está registrado en Uber Eats, septiembre de 2026: no cuenta.", again.Error);
+        Assert.True(PlatformWithholdingErrors.IsConflict(again.Error));
+    }
+
+    [Fact]
+    public async Task Certificate_ShouldGiveTheShareOfTheIvaWithheld_OnlyWhenItsBaseIsTheIva()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await ShopAsync(fixture);
+
+        // Its base is the amount without IVA: 8 % of it says nothing of the share of the IVA.
+        var amountAsBase = await RegisterAsync(fixture, OrderChannel.UberEats, PlatformWithholdingXmlTests.Xml(withheld: """
+            <retenciones:ImpRetenidos BaseRet="16269.76" ImpuestoRet="001" MontoRet="406.74" TipoPagoRet="03"/>
+            <retenciones:ImpRetenidos BaseRet="16269.76" ImpuestoRet="002" MontoRet="1301.58" TipoPagoRet="01"/>
+            """));
+
+        Assert.Equal(((decimal?)2.50m, (decimal?)null), (amountAsBase.Value.IsrRatePercent, amountAsBase.Value.VatRatePercent));
+    }
+
+    /// <summary>A CFDI of September that replaces another one the platform cancelled.</summary>
+    private static string Replacing(string uuid, string replaces)
+        => PlatformWithholdingXmlTests.Xml(uuid: uuid).Replace(
+            "<retenciones:Emisor",
+            $"""<retenciones:CfdiRetenRelacionados TipoRelacion="04" UUID="{replaces}"/><retenciones:Emisor""");
 
     [Fact]
     public async Task Withholdings_ShouldOnlyReadTheBusinessInScope_AndAskForAPlatformAndAYear()
