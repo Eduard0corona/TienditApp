@@ -150,6 +150,8 @@ export default function SellPage() {
   });
   // A folio left empty says so once a register was attempted, not while the cashier is still choosing products.
   const [folioChecked, setFolioChecked] = useState(false);
+  // A long id half typed says so once the cashier leaves it or tries to register, not at its first character.
+  const [orderIdChecked, setOrderIdChecked] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
@@ -439,10 +441,11 @@ export default function SellPage() {
     : '';
   // Quick feedback only: the server checks the folio, the platform and the products again.
   const folioProblem = platform ? getPlatformFolioProblem(platform, details.externalOrderNumber) : '';
-  // The long id is optional: said as soon as what was typed cannot be one.
-  const orderIdError = platform ? getPlatformOrderIdProblem(details.externalOrderId) : '';
-  const platformProblem = platform && hasServices ? PLATFORM_ONLY_PRODUCTS_MESSAGE : folioProblem || orderIdError;
+  // The long id is optional: what was typed and cannot be one stops the sale.
+  const orderIdProblem = platform ? getPlatformOrderIdProblem(details.externalOrderId) : '';
+  const platformProblem = platform && hasServices ? PLATFORM_ONLY_PRODUCTS_MESSAGE : folioProblem || orderIdProblem;
   const folioError = folioProblem && (folioChecked || details.externalOrderNumber.trim()) ? folioProblem : '';
+  const orderIdError = orderIdProblem && (orderIdChecked || details.externalOrderId.trim().length >= 6) ? orderIdProblem : '';
 
   const categoriesWithProducts = useMemo(() => {
     const used = new Set(products.map((product) => product.categoryId));
@@ -492,6 +495,7 @@ export default function SellPage() {
     setDetails(NO_SALE_DETAILS);
     setShowDetails(false);
     setFolioChecked(false);
+    setOrderIdChecked(false);
     setSaleError('');
   };
 
@@ -500,6 +504,7 @@ export default function SellPage() {
     if (draftLoadedFor.current !== tenantId) originChosen.current = true;
     setSaleError('');
     setFolioChecked(false);
+    setOrderIdChecked(false);
     // An order of a platform is taken by its courier: it never goes to an address of the business's zones.
     setDetails((current) => (isDeliveryPlatform(channel) ? { ...current, channel, delivery: null } : { ...current, ...COUNTER_ORIGIN }));
   };
@@ -553,6 +558,7 @@ export default function SellPage() {
     }
     if (platformProblem) {
       if (folioProblem) setFolioChecked(true);
+      if (orderIdProblem) setOrderIdChecked(true);
       setSaleError(platformProblem);
       return false;
     }
@@ -570,6 +576,7 @@ export default function SellPage() {
     // An order of a platform the courier pays now: its folio first, before taking the money.
     if (platformProblem) {
       if (folioProblem) setFolioChecked(true);
+      if (orderIdProblem) setOrderIdChecked(true);
       setSaleError(platformProblem);
       return;
     }
@@ -587,7 +594,7 @@ export default function SellPage() {
       return;
     }
     setChargeOpen(true);
-  }, [cart.length, submitting, tabTarget, canCharge, pricesPending, platformProblem, folioProblem, deliveryProblem, cashClosed, online]);
+  }, [cart.length, submitting, tabTarget, canCharge, pricesPending, platformProblem, folioProblem, orderIdProblem, deliveryProblem, cashClosed, online]);
 
   // «Paga con» goes only as an amount; anything else was refused before sending.
   const paysWithTyped = delivery ? parsePaysWith(delivery.paysWith ?? '') : null;
@@ -674,14 +681,14 @@ export default function SellPage() {
       return data;
     } catch (err: unknown) {
       if (getApiErrorCode(err) !== 'possible_duplicate_order' || request.confirmPossibleDuplicate) throw err;
-      // The server says which one repeats: the long id (which does not repeat) or today's folio.
-      const byLongId = Boolean(request.externalOrderId) && getApiErrorMessage(err, '').includes('ID largo');
+      const channel = getChannelLabel(request.channel);
       const confirmed = await confirm({
         title: '¿Es otro pedido?',
-        message: byLongId
-          ? `Ya registraste un pedido de ${getChannelLabel(request.channel)} con el ID largo ${request.externalOrderId}. `
-            + 'Los IDs largos no se repiten: búscalo en Pedidos; si de verdad es otro pedido, regístralo.'
-          : `Hoy ya registraste un pedido de ${getChannelLabel(request.channel)} con el folio ${request.externalOrderNumber}. `
+        // With a long id either one can repeat, and the server's answer says which; without it, only today's folio.
+        message: request.externalOrderId
+          ? `${getApiErrorMessage(err, `Ya registraste un pedido de ${channel} con el mismo folio o ID largo.`)} `
+            + 'Si no, búscalo en Pedidos.'
+          : `Hoy ya registraste un pedido de ${channel} con el folio ${request.externalOrderNumber}. `
             + 'Los folios cortos se repiten: si es otro pedido, regístralo; si no, búscalo en Pedidos.',
         confirmLabel: 'Registrar de todos modos',
         cancelLabel: 'Revisar',
@@ -889,6 +896,7 @@ export default function SellPage() {
       onChannelChange={changeChannel}
       folioError={folioError}
       orderIdError={orderIdError}
+      onOrderIdBlur={() => setOrderIdChecked(true)}
       hasServices={hasServices}
       online={online}
       onRegisterPlatformOrder={registerPlatformOrder}

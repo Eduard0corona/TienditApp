@@ -310,7 +310,6 @@ test.describe('Pedidos de Rappi', () => {
       await open(page, '/orders');
       const detail = await openOrder(page, 'ORD-000349');
       await expect(detail.getByText('Plataforma · 152390')).toBeVisible();
-      await expect(detail.getByText('4810373920')).toBeVisible();
       await snapDialog(page, 'pedidos-detalle-rappi');
     });
 

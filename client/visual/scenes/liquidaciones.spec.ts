@@ -39,7 +39,8 @@ for (const look of LOOKS) {
           mimeType: 'text/csv',
           buffer: Buffer.from(STATEMENT_CSV),
         });
-        await expect(importing.getByLabel('Folio o ID del pedido')).toHaveValue('1');
+        // «Folio del pedido» before the long id (Fase 22I): the same scene runs against master.
+        await expect(importing.getByLabel(/^Folio (o ID )?del pedido$/)).toHaveValue('1');
         await expect(importing.getByText(/^Línea 2: folio A7K2P/)).toBeVisible();
         await snap(page, `liquidacion-importar-columnas-${look.suffix}`, { fullPage: false });
 

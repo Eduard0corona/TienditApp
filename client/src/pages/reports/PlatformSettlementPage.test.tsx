@@ -208,6 +208,24 @@ describe('PlatformSettlementPage', () => {
     expect(screen.getByRole('button', { name: 'Cerrar liquidación' })).toBeEnabled();
   });
 
+  it('shows the long id under the folio and finds the order by it', async () => {
+    const user = userEvent.setup();
+    serve({
+      'get /api/v1/platform-settlements/pending-orders': () => Promise.resolve({
+        orders: [EARLIER, { ...IN_PERIOD, externalOrderId: '4810373920' }, COLLECTED],
+        truncated: false,
+      }),
+    });
+    renderAt('/reports/settlements/new?channel=3');
+
+    expect(await screen.findByText('ID 4810373920')).toBeInTheDocument();
+    await user.type(screen.getByRole('searchbox', { name: 'Buscar folio o pedido' }), '481037');
+
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Incluir el pedido 152777 (ORD-c)' })).not.toBeInTheDocument());
+    expect(screen.getByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-b)' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Incluir el pedido 152001 (ORD-a)' })).not.toBeInTheDocument();
+  });
+
   it('imports a statement: includes the orders it brings, leaves out the rest and explains what they do not with adjustments', async () => {
     const user = userEvent.setup();
     serve({

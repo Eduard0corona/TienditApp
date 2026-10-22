@@ -28,8 +28,8 @@ export type ApiErrorCode =
   | 'conflict'
   | 'concurrency_conflict'
   | 'invalid_state_transition'
-  // Today there is already an order of the same delivery platform with the same folio: ask, then send it again
-  // with the same idempotency key and confirmPossibleDuplicate.
+  // Another order of the same delivery platform has the same folio today, or the same long id ever (Fase 22I): ask,
+  // then send it again with confirmPossibleDuplicate (a sale, with the same idempotency key). The detail says which.
   | 'possible_duplicate_order'
   | 'too_many_requests'
   | 'server_error'

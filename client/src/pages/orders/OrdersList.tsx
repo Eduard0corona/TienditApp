@@ -795,8 +795,9 @@ export default function OrdersList() {
                           platform={selectedPlatform}
                           canManage={canSell}
                           onSaved={async (cleared) => {
-                            await Promise.all([loadOrders(), refreshSelectedOrder(selectedOrder.id)]);
+                            // Saved already: reading the order again failing is not a failed save.
                             toast.success(cleared ? 'ID largo quitado.' : 'ID largo guardado.');
+                            await Promise.all([loadOrders(), refreshSelectedOrder(selectedOrder.id)]).catch(() => undefined);
                           }}
                         />
                       )}

@@ -7,7 +7,7 @@ import {
   getPlatformFolioHint,
   getPlatformFolioProblem,
   getPlatformName,
-  getPlatformOrderIdHelp,
+  getPlatformOrderIdHint,
   getPlatformOrderIdProblem,
   isDeliveryPlatform,
   isValidPlatformFolio,
@@ -97,10 +97,13 @@ describe('deliveryPlatforms', () => {
     // Spaces count toward what the server reads (100), not toward the id.
     expect(getPlatformOrderIdProblem(`${' '.repeat(95)}123456`)).toBe(PLATFORM_ORDER_ID_FORMAT_MESSAGE);
     expect(PLATFORM_ORDER_ID_FORMAT_MESSAGE).toBe('El ID largo del pedido lleva de 6 a 64 letras, números o guiones.');
-    expect([OrderChannel.Rappi, OrderChannel.UberEats, OrderChannel.DidiFood].map(getPlatformOrderIdHelp)).toEqual([
-      'El número de orden completo de Rappi Aliados o del estado de cuenta.',
-      'El ID del pedido (con guiones) del estado de cuenta de Uber Eats.',
-      'El ID del pedido de DiDi Tienda o del estado de cuenta.',
+    expect([OrderChannel.Rappi, OrderChannel.UberEats, OrderChannel.DidiFood].map(getPlatformOrderIdHint)).toEqual([
+      { help: 'El número de orden completo de Rappi Aliados o del estado de cuenta.', inputMode: 'numeric' },
+      { help: 'El ID del pedido (con guiones) del estado de cuenta de Uber Eats.' },
+      { help: 'El ID del pedido de DiDi Tienda o del estado de cuenta.', inputMode: 'numeric' },
     ]);
+    // The invisible U+FEFF of a pasted text is no space for the server, which refuses it: so does the screen.
+    expect(getPlatformOrderIdProblem('1029384756\uFEFF102938475')).toBe(PLATFORM_ORDER_ID_FORMAT_MESSAGE);
+    expect(getPlatformFolioProblem(OrderChannel.Rappi, '1523\uFEFF90')).toBe(PLATFORM_FOLIO_FORMAT_MESSAGE);
   });
 });

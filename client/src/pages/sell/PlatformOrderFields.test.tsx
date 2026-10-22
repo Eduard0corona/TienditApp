@@ -9,7 +9,7 @@ const details = { ...NO_SALE_DETAILS, channel: OrderChannel.Rappi, externalOrder
 
 describe('PlatformOrderFields', () => {
   it('names its own fields in each copy of the ticket, beside the catalog and in the sheet of a phone', () => {
-    const fields = <PlatformOrderFields platform={OrderChannel.Rappi} details={details} onChange={vi.fn()} folioError="" orderIdError="" disabled={false} canCharge />;
+    const fields = <PlatformOrderFields platform={OrderChannel.Rappi} details={details} onChange={vi.fn()} folioError="" orderIdError="" onOrderIdBlur={vi.fn()} disabled={false} canCharge />;
     render(<>{fields}{fields}</>);
 
     const folios = screen.getAllByLabelText('Folio de Rappi');
@@ -22,7 +22,7 @@ describe('PlatformOrderFields', () => {
   it('takes the long id of the order as optional, saying where to find it or what is wrong with it', async () => {
     const onChange = vi.fn();
     const page = render(
-      <PlatformOrderFields platform={OrderChannel.UberEats} details={details} onChange={onChange} folioError="" orderIdError="" disabled={false} canCharge />,
+      <PlatformOrderFields platform={OrderChannel.UberEats} details={details} onChange={onChange} folioError="" orderIdError="" onOrderIdBlur={vi.fn()} disabled={false} canCharge />,
     );
     const longId = screen.getByLabelText('ID largo del pedido (opcional)');
     expect(longId).not.toBeRequired();
@@ -38,6 +38,7 @@ describe('PlatformOrderFields', () => {
         onChange={vi.fn()}
         folioError=""
         orderIdError="El ID largo del pedido lleva de 6 a 64 letras, números o guiones."
+        onOrderIdBlur={vi.fn()}
         disabled={false}
         canCharge
       />,
@@ -51,13 +52,13 @@ describe('PlatformOrderFields', () => {
     const businessCollects = { ...details, collectedBy: PlatformCollectedBy.Business };
     const help = 'El repartidor te paga al recoger: cóbralo en la caja como siempre.';
     const page = render(
-      <PlatformOrderFields platform={OrderChannel.DidiFood} details={businessCollects} onChange={vi.fn()} folioError="" orderIdError="" disabled={false} canCharge />,
+      <PlatformOrderFields platform={OrderChannel.DidiFood} details={businessCollects} onChange={vi.fn()} folioError="" orderIdError="" onOrderIdBlur={vi.fn()} disabled={false} canCharge />,
     );
     expect(within(page.container).getByText(help)).toBeInTheDocument();
     page.unmount();
 
     render(
-      <PlatformOrderFields platform={OrderChannel.DidiFood} details={businessCollects} onChange={vi.fn()} folioError="" orderIdError="" disabled={false} canCharge={false} />,
+      <PlatformOrderFields platform={OrderChannel.DidiFood} details={businessCollects} onChange={vi.fn()} folioError="" orderIdError="" onOrderIdBlur={vi.fn()} disabled={false} canCharge={false} />,
     );
     expect(screen.queryByText(help)).not.toBeInTheDocument();
   });

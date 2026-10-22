@@ -5,7 +5,7 @@ import {
   PLATFORM_ORDER_ID_MAX_INPUT_LENGTH,
   getPlatformFolioHint,
   getPlatformName,
-  getPlatformOrderIdHelp,
+  getPlatformOrderIdHint,
   type DeliveryPlatform,
 } from '../../utils/deliveryPlatforms';
 import type { SaleDetails } from './sellModel';
@@ -16,8 +16,10 @@ interface PlatformOrderFieldsProps {
   onChange: (changes: Partial<SaleDetails>) => void;
   /** What is wrong with the folio, once there is something to say (the server checks it again). */
   folioError: string;
-  /** What is wrong with the optional long id, as typed (the server checks it again). */
+  /** What is wrong with the optional long id, once there is something to say (the server checks it again). */
   orderIdError: string;
+  /** The cashier left the long id: what is wrong with it can be said. */
+  onOrderIdBlur: () => void;
   disabled: boolean;
   /** Whoever cannot charge gets no «charge it» help: under the totals the ticket says the cashier does. */
   canCharge: boolean;
@@ -34,6 +36,7 @@ export default function PlatformOrderFields({
   onChange,
   folioError,
   orderIdError,
+  onOrderIdBlur,
   disabled,
   canCharge,
 }: PlatformOrderFieldsProps) {
@@ -41,6 +44,7 @@ export default function PlatformOrderFields({
   const id = useId();
   const collectedLabelId = `${id}-collected`;
   const hint = getPlatformFolioHint(platform);
+  const orderIdHint = getPlatformOrderIdHint(platform);
   const name = getPlatformName(platform);
   const businessCollects = details.collectedBy === PlatformCollectedBy.Business;
   const choices = [
@@ -83,6 +87,7 @@ export default function PlatformOrderFields({
           id={`${id}-order-id`}
           className={`form-control ${orderIdError ? 'is-invalid' : ''}`}
           maxLength={PLATFORM_ORDER_ID_MAX_INPUT_LENGTH}
+          inputMode={orderIdHint.inputMode}
           autoCapitalize="characters"
           autoComplete="off"
           spellCheck={false}
@@ -90,10 +95,11 @@ export default function PlatformOrderFields({
           aria-describedby={`${id}-order-id-help`}
           value={details.externalOrderId}
           onChange={(event) => onChange({ externalOrderId: event.target.value })}
+          onBlur={onOrderIdBlur}
           disabled={disabled}
         />
         <div id={`${id}-order-id-help`} className={orderIdError ? 'invalid-feedback d-block' : 'form-text'}>
-          {orderIdError || getPlatformOrderIdHelp(platform)}
+          {orderIdError || orderIdHint.help}
         </div>
       </div>
 

@@ -54,16 +54,21 @@ export function getPlatformFolioHint(platform: DeliveryPlatform): PlatformFolioH
   return FOLIO_HINTS[platform];
 }
 
-// Where each platform shows the long id of an order: its statements name the orders by it (Fase 22I).
-const ORDER_ID_HELP: Record<DeliveryPlatform, string> = {
-  3: 'El número de orden completo de Rappi Aliados o del estado de cuenta.',
-  4: 'El ID del pedido (con guiones) del estado de cuenta de Uber Eats.',
-  5: 'El ID del pedido de DiDi Tienda o del estado de cuenta.',
+/** Where each platform shows the long id of an order, and the keyboard it takes (Rappi's and DiDi's are digits). */
+export interface PlatformOrderIdHint {
+  help: string;
+  inputMode?: 'numeric';
+}
+
+// Its statements name the orders by it (Fase 22I).
+const ORDER_ID_HINTS: Record<DeliveryPlatform, PlatformOrderIdHint> = {
+  3: { help: 'El número de orden completo de Rappi Aliados o del estado de cuenta.', inputMode: 'numeric' },
+  4: { help: 'El ID del pedido (con guiones) del estado de cuenta de Uber Eats.' },
+  5: { help: 'El ID del pedido de DiDi Tienda o del estado de cuenta.', inputMode: 'numeric' },
 };
 
-/** Where to find the long id of an order in the platform, for its optional field. */
-export function getPlatformOrderIdHelp(platform: DeliveryPlatform): string {
-  return ORDER_ID_HELP[platform];
+export function getPlatformOrderIdHint(platform: DeliveryPlatform): PlatformOrderIdHint {
+  return ORDER_ID_HINTS[platform];
 }
 
 /** "Rappi", "Uber Eats", "DiDi Food". */
@@ -71,10 +76,14 @@ export function getPlatformName(platform: DeliveryPlatform): string {
   return ORDER_CHANNEL_LABELS[platform];
 }
 
-/** The folio without the spaces around and inside it nor one leading #, still as typed. */
+/**
+ * The folio without the spaces around and inside it nor one leading #, still as typed. A space is what the server takes
+ * for one (`char.IsWhiteSpace`): the invisible U+FEFF a pasted text may carry is not, so the server refuses it, and so
+ * does this.
+ */
 function compactFolio(raw: string): string {
-  const trimmed = raw.trim();
-  return (trimmed.startsWith('#') ? trimmed.slice(1) : trimmed).replace(/\s/g, '');
+  const trimmed = raw.replace(/^[^\S\uFEFF]+|[^\S\uFEFF]+$/g, '');
+  return (trimmed.startsWith('#') ? trimmed.slice(1) : trimmed).replace(/[^\S\uFEFF]/g, '');
 }
 
 /**

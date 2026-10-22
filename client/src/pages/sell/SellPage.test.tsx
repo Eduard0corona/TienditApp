@@ -854,17 +854,21 @@ describe('SellPage with delivery platforms', () => {
     await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
     const longId = ticket().getByLabelText('ID largo del pedido (opcional)');
     await userEvent.type(longId, 'BC953');
-    expect(longId).toHaveAccessibleDescription('El ID largo del pedido lleva de 6 a 64 letras, números o guiones.');
+    // Half typed it is not wrong yet: it says so as the cashier tries to register.
+    expect(longId).toHaveAccessibleDescription('El ID del pedido (con guiones) del estado de cuenta de Uber Eats.');
     await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Uber Eats · $25.00 F9' }));
+    expect(longId).toHaveAccessibleDescription('El ID largo del pedido lleva de 6 a 64 letras, números o guiones.');
+    expect(longId).toBeInvalid();
     expect(ordersApi.create).not.toHaveBeenCalled();
 
     await userEvent.clear(longId);
     await userEvent.type(longId, ' 3f9c2b1e-8d4a-4c6f-9b2e-1a7d5e0c3b84');
     await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Uber Eats · $25.00 F9' }));
     const ask = await screen.findByRole('dialog', { name: '¿Es otro pedido?' });
+    // What repeats is what the server says: here, the long id.
     expect(ask).toHaveTextContent(
-      'Ya registraste un pedido de Uber Eats con el ID largo 3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84. '
-        + 'Los IDs largos no se repiten: búscalo en Pedidos; si de verdad es otro pedido, regístralo.',
+      'Ya registraste un pedido de esta plataforma con el mismo ID largo. Si es otro pedido, confírmalo para registrarlo. '
+        + 'Si no, búscalo en Pedidos.',
     );
     await userEvent.click(within(ask).getByRole('button', { name: 'Registrar de todos modos' }));
 
@@ -872,6 +876,40 @@ describe('SellPage with delivery platforms', () => {
     const [first, confirmed] = vi.mocked(ordersApi.create).mock.calls.map(([request]) => request);
     expect(first).toMatchObject({ externalOrderNumber: 'BC953', externalOrderId: '3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84' });
     expect(confirmed).toEqual({ ...first, confirmPossibleDuplicate: true });
+  });
+
+  it('says the folio repeats when the server says so, though a long id was typed', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(ordersApi.create).mockRejectedValueOnce(duplicateFolio(
+      'Hoy ya registraste un pedido de esta plataforma con el mismo folio. Si es otro pedido, confírmalo para registrarlo.',
+    ));
+    givePlatforms([{ channel: OrderChannel.UberEats, isActive: true }]);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Uber Eats' }));
+    await userEvent.type(ticket().getByLabelText('Folio de Uber Eats'), 'bc953');
+    await userEvent.type(ticket().getByLabelText('ID largo del pedido (opcional)'), '3f9c2b1e-8d4a-4c6f-9b2e-1a7d5e0c3b84');
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Uber Eats · $25.00 F9' }));
+
+    const ask = await screen.findByRole('dialog', { name: '¿Es otro pedido?' });
+    expect(ask).toHaveTextContent('Hoy ya registraste un pedido de esta plataforma con el mismo folio.');
+    expect(ask).not.toHaveTextContent('ID largo');
+    await userEvent.click(within(ask).getByRole('button', { name: 'Revisar' }));
+    expect(ordersApi.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the long id behind with the folio when the sale goes back to the counter', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(ordersApi.create).mockResolvedValue({ data: platformOrder(OrderChannel.Rappi, 'BC953', PlatformCollectedBy.Platform, 'ORD-000008') } as never);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Rappi' }));
+    await userEvent.type(ticket().getByLabelText('ID largo del pedido (opcional)'), '4810373920');
+    await userEvent.click(within(originPicker()).getByRole('radio', { name: 'Mostrador' }));
+    await userEvent.click(within(originPicker()).getByRole('radio', { name: 'Rappi' }));
+
+    expect(ticket().getByLabelText('ID largo del pedido (opcional)')).toHaveValue('');
   });
 
   it('charges an order of a platform at the prices of its app, and a counter sale at the menu\'s', async () => {
@@ -1159,7 +1197,7 @@ describe('SellPage with a platform order and no connection', () => {
     window.localStorage.setItem(draftKey, JSON.stringify({
       lines: [{ productId: 'chilaquiles', quantity: 1, notes: '' }, { productId: 'taco', quantity: 1, notes: '' }],
       customerName: '', customerPhone: '', tableNumber: '', orderNotes: '',
-      channel: OrderChannel.Rappi, externalOrderNumber: '152390', collectedBy: PlatformCollectedBy.Platform,
+      channel: OrderChannel.Rappi, externalOrderNumber: '152390', externalOrderId: '4810373920', collectedBy: PlatformCollectedBy.Platform,
     }));
     // Without connection the list of platforms waits (paused) and the catalog cannot load.
     vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
@@ -1171,10 +1209,11 @@ describe('SellPage with a platform order and no connection', () => {
     await screen.findByRole('button', { name: 'Reintentar' });
     // Nothing of the order is dropped or written over meanwhile, and the counter is still a choice.
     expect(ticket().getByLabelText('Folio de Rappi')).toHaveValue('152390');
+    expect(ticket().getByLabelText('ID largo del pedido (opcional)')).toHaveValue('4810373920');
     const radios = within(originPicker()).getAllByRole('radio');
     expect(radios.map((radio) => radio.textContent)).toEqual(['Mostrador', 'Rappi']);
     expect(within(originPicker()).getByRole('radio', { name: 'Rappi' })).toHaveAttribute('aria-checked', 'true');
-    expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}')).toMatchObject({ externalOrderNumber: '152390' });
+    expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}')).toMatchObject({ externalOrderNumber: '152390', externalOrderId: '4810373920' });
     expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}').lines).toHaveLength(2);
 
     // Back online, the order comes back whole.
