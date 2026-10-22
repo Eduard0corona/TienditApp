@@ -56,6 +56,7 @@ public static class DependencyInjection
         services.AddScoped<CampaignLauncher>();
         services.AddScoped<AppointmentReminderPlanner>();
         services.AddScoped<CreditReminderPlanner>();
+        services.AddScoped<CreditDueSoonPlanner>();
         services.AddScoped<OutgoingMessageSender>();
         services.AddScoped<AppointmentNotices>();
 

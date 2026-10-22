@@ -77,11 +77,7 @@ public sealed class CreditReminderPlanner
         // Who was reminded within the days or wrote BAJA is left out before the limit: otherwise the same accounts, which
         // get nothing, would take every place of every pass and the rest would never be reminded.
         var reminded = await RemindedAsync(today, settings.CreditReminderEveryDays, now, cancellationToken);
-        var optedOut = (await _context.MessagingOptOuts.AsNoTracking()
-                .Where(o => o.ResubscribedAt == null)
-                .Select(o => o.Phone)
-                .ToListAsync(cancellationToken))
-            .ToHashSet(StringComparer.Ordinal);
+        var optedOut = await OptedOutAsync(_context, cancellationToken);
         var accounts = candidates
             .Where(a => !reminded.Contains(a.Phone) && !optedOut.Contains(a.Phone))
             .Take(PassLimit)
@@ -98,7 +94,7 @@ public sealed class CreditReminderPlanner
         var ownTerms = await CreditTerm.OwnTerms(_context.Customers.AsNoTracking())
             .Where(t => phones.Contains(t.Phone))
             .ToDictionaryAsync(t => t.Phone, t => t.Days, cancellationToken);
-        var names = await NamesAsync(phones, cancellationToken);
+        var names = await NamesAsync(_context, _phones, phones, cancellationToken);
 
         // A deactivated template falls back to the default text, as the settings screen shows it.
         var template = settings.CreditReminderTemplateId is { } templateId
@@ -180,6 +176,14 @@ public sealed class CreditReminderPlanner
             && !(status == OutgoingMessageStatus.Skipped
                 && reason is OutgoingMessageSender.CreditRemindersOffReason or OutgoingMessageSender.CreditReminderLateReason);
 
+    /// <summary>The phones that wrote BAJA and did not write ALTA since, by the phone key.</summary>
+    internal static async Task<HashSet<string>> OptedOutAsync(IApplicationDbContext context, CancellationToken cancellationToken)
+        => (await context.MessagingOptOuts.AsNoTracking()
+                .Where(o => o.ResubscribedAt == null)
+                .Select(o => o.Phone)
+                .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+
     private static bool TryParseKey(string key, out string phone, out DateOnly day)
     {
         phone = string.Empty;
@@ -192,11 +196,12 @@ public sealed class CreditReminderPlanner
     }
 
     /// <summary>The customer record's name for each phone, the active one first; else the name on their latest order owed.</summary>
-    private async Task<Dictionary<string, string?>> NamesAsync(IReadOnlyList<string> phones, CancellationToken cancellationToken)
+    internal static async Task<Dictionary<string, string?>> NamesAsync(
+        IApplicationDbContext context, IPhoneNormalizationService normalizer, IReadOnlyList<string> phones, CancellationToken cancellationToken)
     {
         var names = new Dictionary<string, string?>(StringComparer.Ordinal);
         var forms = phones.SelectMany(CustomerPhones.StoredForms).Distinct().ToList();
-        var records = await _context.Customers.AsNoTracking()
+        var records = await context.Customers.AsNoTracking()
             .Where(c => !c.IsPublicGeneral && c.Phone != null && forms.Contains(c.Phone))
             .OrderByDescending(c => c.IsActive)
             .ThenByDescending(c => c.CreditLimit != null)
@@ -204,12 +209,12 @@ public sealed class CreditReminderPlanner
             .ToListAsync(cancellationToken);
         foreach (var record in records)
         {
-            if (CustomerPhones.TryNormalize(_phones, record.Phone, out var key))
+            if (CustomerPhones.TryNormalize(normalizer, record.Phone, out var key))
                 names.TryAdd(key, record.Name);
         }
 
         var variants = phones.SelectMany(MessagingPhone.Variants).Distinct().ToList();
-        var latest = await _context.Orders.AsNoTracking()
+        var latest = await context.Orders.AsNoTracking()
             .Where(o => o.CustomerPhone != null && o.CustomerName != null && variants.Contains(o.CustomerPhone))
             .Where(Receivables.IsOwed)
             .Select(o => new { o.CustomerPhone, o.CustomerName, o.CreatedAt })

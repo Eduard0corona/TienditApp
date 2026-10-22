@@ -96,6 +96,12 @@ public static class CreditReminders
         => context.TenantSettings.AsNoTracking()
             .Select(s => s.CreditRemindersEnabled ? (int?)s.CreditReminderEveryDays : null)
             .FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>How many days before the last day to pay the business tells it (Fase 26E); null while the notice is off.</summary>
+    public static Task<int?> DueSoonDaysBeforeAsync(IApplicationDbContext context, CancellationToken cancellationToken)
+        => context.TenantSettings.AsNoTracking()
+            .Select(s => s.CreditDueSoonEnabled ? (int?)s.CreditDueSoonDaysBefore : null)
+            .FirstOrDefaultAsync(cancellationToken);
 }
 
 /// <summary>The reminders of what is overdue (Fase 26C) and what the owner needs to set them up.</summary>
@@ -120,6 +126,24 @@ public class CreditRemindersDto
     /// <summary>The hours of the business's day when reminders are queued, so none arrives at night.</summary>
     public string SendFrom { get; set; } = null!;
     public string SendUntil { get; set; } = null!;
+    /// <summary>The notice before something comes due (Fase 26E), in the same hours.</summary>
+    public CreditDueSoonDto DueSoon { get; set; } = null!;
+}
+
+/// <summary>The notice before the credit comes due (Fase 26E) and what the owner needs to set it up.</summary>
+public class CreditDueSoonDto
+{
+    public bool Enabled { get; set; }
+    /// <summary>How many days before the last day to pay it goes out.</summary>
+    public int DaysBefore { get; set; }
+    /// <summary>The template; null uses <see cref="DefaultBody"/>.</summary>
+    public Guid? TemplateId { get; set; }
+    public string DefaultBody { get; set; } = null!;
+    public List<string> Placeholders { get; set; } = [];
+    /// <summary>The active templates of the notice to choose from.</summary>
+    public List<CreditReminderTemplateDto> Templates { get; set; } = [];
+    public int MinDaysBefore { get; set; }
+    public int MaxDaysBefore { get; set; }
 }
 
 public class CreditReminderTemplateDto
@@ -150,17 +174,23 @@ public class GetCreditRemindersQueryHandler : IRequestHandler<GetCreditReminders
     {
         var settings = await _context.TenantSettings.AsNoTracking()
             .FirstOrDefaultAsync(s => s.TenantId == _tenant.TenantId, cancellationToken);
-        var templates = await _context.MessageTemplates.AsNoTracking()
-            .Where(t => t.Purpose == MessagePurpose.CreditReminder && t.IsActive)
+        var active = await _context.MessageTemplates.AsNoTracking()
+            .Where(t => (t.Purpose == MessagePurpose.CreditReminder || t.Purpose == MessagePurpose.CreditDueSoon) && t.IsActive)
             .OrderBy(t => t.Name)
-            .Select(t => new CreditReminderTemplateDto
+            .Select(t => new
             {
-                Id = t.Id,
-                Name = t.Name,
-                Body = t.Body,
-                ProviderTemplateName = t.ProviderTemplateName
+                t.Purpose,
+                Template = new CreditReminderTemplateDto
+                {
+                    Id = t.Id,
+                    Name = t.Name,
+                    Body = t.Body,
+                    ProviderTemplateName = t.ProviderTemplateName
+                }
             })
             .ToListAsync(cancellationToken);
+        var templates = active.Where(t => t.Purpose == MessagePurpose.CreditReminder).Select(t => t.Template).ToList();
+        var dueSoonTemplates = active.Where(t => t.Purpose == MessagePurpose.CreditDueSoon).Select(t => t.Template).ToList();
         return new CreditRemindersDto
         {
             Enabled = settings?.CreditRemindersEnabled ?? false,
@@ -177,20 +207,44 @@ public class GetCreditRemindersQueryHandler : IRequestHandler<GetCreditReminders
             MinEveryDays = TenantSettings.MinCreditReminderEveryDays,
             MaxEveryDays = TenantSettings.MaxCreditReminderEveryDays,
             SendFrom = CreditReminderPlanner.QueueFrom.ToString("HH:mm"),
-            SendUntil = CreditReminderPlanner.QueueUntil.ToString("HH:mm")
+            SendUntil = CreditReminderPlanner.QueueUntil.ToString("HH:mm"),
+            DueSoon = new CreditDueSoonDto
+            {
+                Enabled = settings?.CreditDueSoonEnabled ?? false,
+                DaysBefore = settings?.CreditDueSoonDaysBefore ?? TenantSettings.DefaultCreditDueSoonDaysBefore,
+                // A retired template sends the default text, as for the reminders.
+                TemplateId = dueSoonTemplates.Any(t => t.Id == settings?.CreditDueSoonTemplateId) ? settings!.CreditDueSoonTemplateId : null,
+                DefaultBody = MessagingDefaults.CreditDueSoonBody,
+                Placeholders = MessageTemplateText.AllowedPlaceholders(MessagePurpose.CreditDueSoon).ToList(),
+                Templates = dueSoonTemplates,
+                MinDaysBefore = TenantSettings.MinCreditDueSoonDaysBefore,
+                MaxDaysBefore = TenantSettings.MaxCreditDueSoonDaysBefore
+            }
         };
     }
 }
 
 /// <summary>
-/// Turns the reminders of what is overdue on or off (Fase 26C), every how many days and with which template: owners and
-/// admins, with WhatsApp connected to turn them on. Recorded in the activity log.
+/// Turns the reminders of what is overdue on or off (Fase 26C), every how many days and with which template, and the notice
+/// before something comes due (Fase 26E): owners and admins, with WhatsApp connected to turn either on. Recorded in the
+/// activity log.
 /// </summary>
 [RequiresTenantManager]
 public record UpdateCreditRemindersCommand : IRequest<Result<CreditRemindersDto>>
 {
     public bool Enabled { get; init; }
     public int EveryDays { get; init; } = TenantSettings.DefaultCreditReminderEveryDays;
+    /// <summary>Empty uses the default text.</summary>
+    public Guid? TemplateId { get; init; }
+    /// <summary>The notice before something comes due (Fase 26E); without it, it stays as it is (a screen from before it).</summary>
+    public UpdateCreditDueSoon? DueSoon { get; init; }
+}
+
+/// <summary>The notice before the credit comes due (Fase 26E), as the owner sets it.</summary>
+public record UpdateCreditDueSoon
+{
+    public bool Enabled { get; init; }
+    public int DaysBefore { get; init; } = TenantSettings.DefaultCreditDueSoonDaysBefore;
     /// <summary>Empty uses the default text.</summary>
     public Guid? TemplateId { get; init; }
 }
@@ -202,12 +256,18 @@ public class UpdateCreditRemindersCommandValidator : AbstractValidator<UpdateCre
         RuleFor(x => x.EveryDays)
             .InclusiveBetween(TenantSettings.MinCreditReminderEveryDays, TenantSettings.MaxCreditReminderEveryDays)
             .WithMessage(TenantSettings.CreditReminderEveryDaysMessage);
+        RuleFor(x => x.DueSoon!.DaysBefore)
+            .InclusiveBetween(TenantSettings.MinCreditDueSoonDaysBefore, TenantSettings.MaxCreditDueSoonDaysBefore)
+            .When(x => x.DueSoon is not null)
+            .WithName("DueSoon.DaysBefore")
+            .WithMessage(TenantSettings.CreditDueSoonDaysBeforeMessage);
     }
 }
 
 public class UpdateCreditRemindersCommandHandler : IRequestHandler<UpdateCreditRemindersCommand, Result<CreditRemindersDto>>
 {
     public const string TemplateNotFoundMessage = "Elige una plantilla de recordatorio del fiado activa.";
+    public const string DueSoonTemplateNotFoundMessage = "Elige una plantilla de aviso antes de vencer activa.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenant;
@@ -231,24 +291,31 @@ public class UpdateCreditRemindersCommandHandler : IRequestHandler<UpdateCreditR
         var settings = await _context.TenantSettings.FirstOrDefaultAsync(s => s.TenantId == _tenant.TenantId, cancellationToken);
         if (settings is null)
             return Result.Failure<CreditRemindersDto>("Configura primero tu negocio.");
-        if (request.Enabled && !await CampaignRules.IsWhatsAppConnectedAsync(_context, _tenant.TenantId, cancellationToken))
+        if ((request.Enabled || request.DueSoon is { Enabled: true })
+            && !await CampaignRules.IsWhatsAppConnectedAsync(_context, _tenant.TenantId, cancellationToken))
             return Result.Failure<CreditRemindersDto>(MessagingDefaults.WhatsAppNotConfigured);
         if (request.TemplateId is { } templateId
             && !await _context.MessageTemplates.AnyAsync(
                 t => t.Id == templateId && t.Purpose == MessagePurpose.CreditReminder && t.IsActive, cancellationToken))
             return Result.Failure<CreditRemindersDto>(TemplateNotFoundMessage);
+        if (request.DueSoon?.TemplateId is { } dueSoonTemplateId
+            && !await _context.MessageTemplates.AnyAsync(
+                t => t.Id == dueSoonTemplateId && t.Purpose == MessagePurpose.CreditDueSoon && t.IsActive, cancellationToken))
+            return Result.Failure<CreditRemindersDto>(DueSoonTemplateNotFoundMessage);
 
-        var previous = new { Enabled = settings.CreditRemindersEnabled, EveryDays = settings.CreditReminderEveryDays, TemplateId = settings.CreditReminderTemplateId };
+        var previous = Snapshot(settings);
         try
         {
             settings.UpdateCreditReminders(request.Enabled, request.EveryDays, request.TemplateId);
+            if (request.DueSoon is { } dueSoon)
+                settings.UpdateCreditDueSoon(dueSoon.Enabled, dueSoon.DaysBefore, dueSoon.TemplateId);
         }
         catch (DomainException refused)
         {
             return Result.Failure<CreditRemindersDto>(refused.Message);
         }
 
-        var current = new { Enabled = settings.CreditRemindersEnabled, EveryDays = settings.CreditReminderEveryDays, TemplateId = settings.CreditReminderTemplateId };
+        var current = Snapshot(settings);
         if (!previous.Equals(current))
         {
             // Messages the business sends its customers about their debts: worth recording who turned them on.
@@ -264,4 +331,14 @@ public class UpdateCreditRemindersCommandHandler : IRequestHandler<UpdateCreditR
 
         return Result.Success(await _mediator.Send(new GetCreditRemindersQuery(), cancellationToken));
     }
+
+    private static object Snapshot(TenantSettings settings) => new
+    {
+        Enabled = settings.CreditRemindersEnabled,
+        EveryDays = settings.CreditReminderEveryDays,
+        TemplateId = settings.CreditReminderTemplateId,
+        DueSoonEnabled = settings.CreditDueSoonEnabled,
+        DueSoonDaysBefore = settings.CreditDueSoonDaysBefore,
+        DueSoonTemplateId = settings.CreditDueSoonTemplateId
+    };
 }

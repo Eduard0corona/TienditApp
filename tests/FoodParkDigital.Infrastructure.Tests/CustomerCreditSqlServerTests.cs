@@ -35,6 +35,7 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// the same lock keeps a write-off and a payment at once from forgiving or paying more than is owed. Fase 26C: each
 /// customer's own term, and the reminders of what is overdue, are read by the database as well. Fase 26D: the same lock
 /// keeps sales paid with the balance in the customer's favor, giving it back and leaving it from spending or leaving it twice.
+/// Fase 26E: what comes due soon, for the notice before the last day to pay, is read by the database as well.
 /// </summary>
 public class CustomerCreditSqlServerTests
 {
@@ -350,6 +351,67 @@ public class CustomerCreditSqlServerTests
         await using var none = database.CreateContext(shop.TenantId);
         var noTerm = await new GetReceivablesQueryHandler(none, new PhoneNormalizationService(), new Clock()).Handle(new GetReceivablesQuery(), default);
         Assert.Equal((300m, 0m), (noTerm.TotalOwed, noTerm.TotalOverdue));
+    }
+
+    [SqlServerFact]
+    public async Task WhatComesDueSoon_ShouldBeReadByTheDatabase_ForTheNoticeBeforeTheLastDayToPay()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var shop = await Shop.OpenAsync(database, creditLimit: 500m);
+        var ana = await shop.SellAsync(shop.CreditSale());
+        var today = await shop.SellAsync(shop.CreditSale());
+        var luis = await shop.SellAsync(shop.Sale("Luis Pérez", "5566667777"));
+        var sofia = await shop.SellAsync(shop.Sale("Sofía Ramírez", "5599990000"));
+        await shop.DeliverAsync(luis.Value.Id, sofia.Value.Id);
+        await using (var context = database.CreateContext(shop.TenantId))
+        {
+            // Monday 19 Oct, the notice 3 days before: Ana's sale of 12 Oct, with her own 7 days, comes due today; her sale of
+            // today does not count yet. Luis's, handed over unpaid on 6 Oct, comes due on Wednesday 21 by the business's 15
+            // days; Sofía's, handed over on 2 Oct, came due on the 17th and is the overdue reminder's.
+            await context.Database.ExecuteSqlAsync(
+                $"UPDATE [Orders] SET [CreatedAt] = {new DateTimeOffset(2026, 10, 12, 12, 0, 0, TimeSpan.FromHours(-6))} WHERE [Id] = {ana.Value.Id}");
+            await context.Database.ExecuteSqlAsync(
+                $"UPDATE [Orders] SET [CreatedAt] = {Now} WHERE [Id] = {today.Value.Id}");
+            await context.Database.ExecuteSqlAsync(
+                $"UPDATE [OrderStatusHistory] SET [ChangedAt] = {new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.FromHours(-6))} WHERE [OrderId] = {luis.Value.Id} AND [NewStatus] = {(int)OrderStatus.Delivered}");
+            await context.Database.ExecuteSqlAsync(
+                $"UPDATE [OrderStatusHistory] SET [ChangedAt] = {new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.FromHours(-6))} WHERE [OrderId] = {sofia.Value.Id} AND [NewStatus] = {(int)OrderStatus.Delivered}");
+            var settings = await context.TenantSettings.SingleAsync();
+            settings.SetCreditTermDays(15);
+            settings.UpdateCreditDueSoon(true, 3, null);
+            (await context.Customers.SingleAsync()).SetCreditTermDays(7);
+            var config = new WhatsAppConfig(shop.TenantId);
+            config.Update(true, "token", "123456", "waba", "+52 55 0000 0000");
+            context.WhatsAppConfigs.Add(config);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = database.CreateContext(shop.TenantId))
+        {
+            var settings = await context.TenantSettings.AsNoTracking().SingleAsync();
+            var queued = await new CreditDueSoonPlanner(context, new PhoneNormalizationService(), new Clock()).QueueDueAsync(settings, default);
+            await context.SaveChangesAsync();
+            Assert.Equal(2, queued);
+        }
+
+        await using (var check = database.CreateContext(shop.TenantId))
+        {
+            var messages = await check.OutgoingMessages.OrderBy(m => m.Phone).ToListAsync();
+            Assert.Equal(
+                [("creditsoon:+525512345678:20261019:20261019", "Ana López"), ("creditsoon:+525566667777:20261021:20261019", "Luis Pérez")],
+                messages.Select(m => (m.DeduplicationKey!, m.RecipientName!)));
+            Assert.Contains("tienes un saldo de $200.00; $100.00 vence el lunes 19 de octubre", messages[0].Body);
+            Assert.Contains("tienes un saldo de $100.00; $100.00 vence el miércoles 21 de octubre", messages[1].Body);
+            Assert.Equal(0, await new CreditDueSoonPlanner(check, new PhoneNormalizationService(), new Clock())
+                .QueueDueAsync(await check.TenantSettings.AsNoTracking().SingleAsync(), default));
+
+            // What the sender asks before each notice, by the database too.
+            var business = await CreditTerm.ReadAsync(check, default);
+            Assert.True(await CreditTerm.OwesDueOnAsync(check, AnaPhone, business, new DateOnly(2026, 10, 19), default));
+            Assert.False(await CreditTerm.OwesDueOnAsync(check, AnaPhone, business, new DateOnly(2026, 10, 20), default));
+            Assert.True(await CreditTerm.OwesDueOnAsync(check, "+525566667777", business, new DateOnly(2026, 10, 21), default));
+            Assert.False(await CreditTerm.OwesDueOnAsync(check, "+525599990000", business, new DateOnly(2026, 10, 21), default));
+        }
     }
 
     /// <summary>A shop that sells soap at $100 (IVA included), with an open drawer and Ana, who may owe the limit given.</summary>

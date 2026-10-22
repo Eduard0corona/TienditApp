@@ -58,6 +58,8 @@ public class ReceivablesDto
     /// Every how many days the business reminds what is overdue on WhatsApp (Fase 26C); null while the reminders are off.
     /// </summary>
     public int? CreditReminderEveryDays { get; set; }
+    /// <summary>How many days before the last day to pay the business tells it on WhatsApp (Fase 26E); null while it is off.</summary>
+    public int? CreditDueSoonDaysBefore { get; set; }
     /// <summary>What the business holds in favor of all its customers (Fase 26D), whether they owe or not.</summary>
     public decimal TotalCreditBalance { get; set; }
 }
@@ -97,6 +99,8 @@ public class CustomerAccountDto
     public int? CreditReminderEveryDays { get; set; }
     /// <summary>When the last reminder of what they owe went out to them (Fase 26C); null if none did.</summary>
     public DateTimeOffset? LastReminderAt { get; set; }
+    /// <summary>When the last notice of what comes due soon went out to them (Fase 26E); null if none did.</summary>
+    public DateTimeOffset? LastDueSoonAt { get; set; }
     /// <summary>The orders owed, the oldest first (at most <see cref="GetCustomerAccountQuery.MaxOrders"/>).</summary>
     public List<CustomerAccountOrderDto> Orders { get; set; } = [];
     /// <summary>How many orders they owe, also beyond the ones listed.</summary>
@@ -364,6 +368,7 @@ public class GetReceivablesQueryHandler : IRequestHandler<GetReceivablesQuery, R
             TotalOverdue = totalOverdue,
             CreditTermDays = term.Days,
             CreditReminderEveryDays = reminderEveryDays,
+            CreditDueSoonDaysBefore = await CreditReminders.DueSoonDaysBeforeAsync(_context, cancellationToken),
             TotalCreditBalance = await CustomerBalances.TotalAsync(_context, cancellationToken)
         };
     }
@@ -883,6 +888,11 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
                 && m.Status == OutgoingMessageStatus.Sent
                 && variants.Contains(m.Phone))
             .MaxAsync(m => m.SentAt, cancellationToken);
+        var lastDueSoonAt = await context.OutgoingMessages.AsNoTracking()
+            .Where(m => m.Purpose == MessagePurpose.CreditDueSoon
+                && m.Status == OutgoingMessageStatus.Sent
+                && variants.Contains(m.Phone))
+            .MaxAsync(m => m.SentAt, cancellationToken);
 
         var name = Customer?.Name ?? await context.Orders.AsNoTracking()
             .Where(o => o.CustomerPhone != null && variants.Contains(o.CustomerPhone))
@@ -905,6 +915,7 @@ public sealed record CreditAccount(string Phone, Customer? Customer)
             Overdue = overdue,
             CreditReminderEveryDays = await CreditReminders.EveryDaysAsync(context, cancellationToken),
             LastReminderAt = lastReminderAt,
+            LastDueSoonAt = lastDueSoonAt,
             Orders = orders,
             OrdersCount = count,
             RecentPayments = payments,
