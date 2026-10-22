@@ -428,7 +428,10 @@ public class PlatformSettlementsSqlServerTests
         var pending = await SeedOrderAsync(database, tenant.Id, "ORD-000001", "BC001", Now, longId: uuid);
         // Another business wrote the same long id on its own order: never this business's.
         await SeedOrderAsync(database, other.Id, "ORD-000001", "BC009", Now, longId: uuid);
-        var settledOrder = await SeedOrderAsync(database, tenant.Id, "ORD-000002", "BC010", Now.AddDays(-14), longId: "RAPPI-000010");
+        // Longer than any folio (30): only the long id finds these.
+        var settledOrder = await SeedOrderAsync(
+            database, tenant.Id, "ORD-000002", "BC010", Now.AddDays(-14), longId: "A1B2C3D4-0000-4E5F-8A9B-1234567890AB");
+        var uuidOnly = await SeedOrderAsync(database, tenant.Id, "ORD-000004", "BC030", Now, longId: "D4C3B2A1-1111-4E5F-8A9B-0987654321FE");
         var closedId = await OpenAsync(database, tenant.Id, [Line(settledOrder, 561.48m)], [], 561.48m);
         await using (var closing = database.CreateContext(tenant.Id))
         {
@@ -441,9 +444,10 @@ public class PlatformSettlementsSqlServerTests
         {
             new() { Row = 2, Folio = uuid.ToLowerInvariant(), Amount = 561.48m },
             new() { Row = 3, Folio = "bc001", Amount = -20m, Concept = "Promoción" },
-            new() { Row = 4, Folio = "rappi-000010", Amount = 561.48m },
+            new() { Row = 4, Folio = "a1b2c3d4-0000-4e5f-8a9b-1234567890ab", Amount = 561.48m },
             new() { Row = 5, Folio = "RAPPI-000020", Amount = 10m },
-            new() { Row = 6, Folio = "RAPPI-000099", Amount = 1m }
+            new() { Row = 6, Folio = "RAPPI-000099", Amount = 1m },
+            new() { Row = 7, Folio = "D4C3B2A1-1111-4E5F-8A9B-0987654321FE", Amount = 561.48m }
         };
 
         await using var context = database.CreateContext(tenant.Id);
@@ -453,9 +457,10 @@ public class PlatformSettlementsSqlServerTests
         Assert.Equal(
             [
                 (uuid, (PlatformStatementMatchStatus.Pending, (Guid?)pending)),
-                ("RAPPI-000010", (PlatformStatementMatchStatus.Settled, settledOrder)),
+                ("A1B2C3D4-0000-4E5F-8A9B-1234567890AB", (PlatformStatementMatchStatus.Settled, settledOrder)),
                 ("RAPPI-000020", (PlatformStatementMatchStatus.NothingExpected, uncollected)),
-                ("RAPPI-000099", (PlatformStatementMatchStatus.Unknown, null))
+                ("RAPPI-000099", (PlatformStatementMatchStatus.Unknown, null)),
+                ("D4C3B2A1-1111-4E5F-8A9B-0987654321FE", (PlatformStatementMatchStatus.Pending, uuidOnly))
             ],
             match.Folios.Select(folio => (folio.Folio, (folio.Status, folio.Orders.SingleOrDefault()?.OrderId))));
         Assert.Equal([2, 3], match.Folios[0].Rows);
@@ -466,6 +471,27 @@ public class PlatformSettlementsSqlServerTests
         var found = await new GetOrdersByBusinessQueryHandler(context, Tenant(tenant.Id))
             .Handle(new GetOrdersByBusinessQuery { Search = "0c3b84" }, CancellationToken.None);
         Assert.Equal(pending, Assert.Single(found.Items).Id);
+    }
+
+    [SqlServerFact]
+    public async Task StatementMatch_OfMoreFoliosThanTheQueryTakesOneByOne_ShouldStillFindAnOrderByItsLongIdAlone()
+    {
+        const string uuid = "3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84";
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var pending = await SeedOrderAsync(database, tenant.Id, "ORD-000001", "BC001", Now, longId: uuid);
+        // Past about a thousand folios the query sends them as one list instead of one parameter each.
+        var lines = Enumerable.Range(1, 1_100)
+            .Select(i => new PlatformStatementLineInput { Row = i + 1, Folio = $"X{i:D5}", Amount = 1m })
+            .Append(new PlatformStatementLineInput { Row = 1_102, Folio = uuid.ToLowerInvariant(), Amount = 561.48m })
+            .ToList();
+
+        await using var context = database.CreateContext(tenant.Id);
+        var match = await Match(context, tenant.Id, null, lines);
+
+        var found = Assert.Single(match.Folios, folio => folio.Status != PlatformStatementMatchStatus.Unknown);
+        Assert.Equal((uuid, PlatformStatementMatchStatus.Pending, pending), (found.Folio, found.Status, found.Orders.Single().OrderId));
+        Assert.Equal((561.48m, 1_100m), (match.MatchedTotal, match.UnmatchedTotal));
     }
 
     private static Task<PlatformStatementMatchDto> Match(

@@ -48,7 +48,7 @@ public class PlatformOrderIdsMigrationSqlServerTests
         {
             var order = await LoadAsync(context, orderId);
             Assert.Null(order.PlatformDetail!.ExternalOrderId);
-            Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("1029384756102938475")));
+            Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("1029384756102938475"), DateTimeOffset.UtcNow));
             await context.SaveChangesAsync();
         }
 
@@ -97,7 +97,7 @@ public class PlatformOrderIdsMigrationSqlServerTests
         await using (var context = database.CreateContext(tenant.Id))
         {
             var order = await LoadAsync(context, withLongId);
-            Assert.True(order.ChangePlatformOrderId(null));
+            Assert.True(order.ChangePlatformOrderId(null, DateTimeOffset.UtcNow));
             await context.SaveChangesAsync();
         }
         await MigrateAsync(database, BeforeLongIds);
@@ -129,7 +129,7 @@ public class PlatformOrderIdsMigrationSqlServerTests
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.All(await context.PlatformOrderDetails.ToListAsync(), detail => Assert.Null(detail.ExternalOrderId));
             var order = await LoadAsync(context, withLongId);
-            Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("C1A2B3D4-0000-4E5F-8A9B-1234567890AB")));
+            Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("C1A2B3D4-0000-4E5F-8A9B-1234567890AB"), DateTimeOffset.UtcNow));
             await context.SaveChangesAsync();
         }
     }

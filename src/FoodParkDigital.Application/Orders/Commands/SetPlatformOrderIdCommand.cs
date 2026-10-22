@@ -15,7 +15,8 @@ namespace FoodParkDigital.Application.Orders.Commands;
 /// Writes, corrects or clears the platform's long id of an order of Rappi, Uber Eats or DiDi Food (Fase 22I, ADR 0041), at
 /// any status: whoever takes the orders, as when capturing it. Empty clears it. Another order of the platform that still
 /// counts with the same long id is a warning the business confirms. The order's activity keeps the one before (its
-/// domain event, written by the outbox).
+/// domain event, written by the outbox). Two corrections of the same order at once: the second answers 409
+/// <c>concurrency_conflict</c> (the order's version), so its activity never tells a change that did not stay.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 public record SetPlatformOrderIdCommand(Guid OrderId, string? ExternalOrderId, bool ConfirmPossibleDuplicate = false)
@@ -36,11 +37,14 @@ public class SetPlatformOrderIdCommandHandler : IRequestHandler<SetPlatformOrder
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IDateTimeProvider _clock;
 
-    public SetPlatformOrderIdCommandHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public SetPlatformOrderIdCommandHandler(
+        IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider clock)
     {
         _context = context;
         _tenantService = tenantService;
+        _clock = clock;
     }
 
     public async Task<Result> Handle(SetPlatformOrderIdCommand request, CancellationToken cancellationToken)
@@ -61,7 +65,7 @@ public class SetPlatformOrderIdCommandHandler : IRequestHandler<SetPlatformOrder
                 return Result.Failure(PlatformOrderErrors.LongIdInUse);
             }
 
-            if (!order.ChangePlatformOrderId(longId))
+            if (!order.ChangePlatformOrderId(longId, _clock.UtcNow))
                 return Result.Success();
         }
         catch (DomainException ex)

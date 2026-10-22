@@ -720,6 +720,13 @@ La Fase 22I trae una migración, [`database/production/20261022011024_AddPlatfor
 
   No cambia pedidos, pagos, folios ni liquidaciones. Después de aplicarla, el `verify.sql` muestra la columna, la restricción y el índice. Su consulta 3 cuenta los pedidos con ID largo por plataforma (ninguno hasta desplegar), y la 4 los pedidos de cada plataforma y su neto esperado, igual antes y después.
 - **Mientras se publica:** la versión de `master` (Fase 22H) no conoce la columna y sigue funcionando: sus pedidos nuevos la dejan vacía. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **La bitácora del cambio de un ID largo** (`OrderPlatformIdChangedEvent`) va por el outbox. Si en los segundos en que corren las dos versiones, o después de volver a la anterior, el worker de la Fase 22H toma uno, no conoce el evento y lo aparta (`Unknown event type` en el log, y `background-queues` Degraded un día): el ID largo queda guardado, pero esa entrada falta en la actividad del pedido. Para recuperarla, ya con esta versión publicada, regresa a pendientes los mensajes apartados de ese tipo:
+
+  ```sql
+  UPDATE OutboxMessages SET DeadLetteredAt = NULL, Attempts = 0, LastError = NULL, NextAttemptAt = SYSDATETIMEOFFSET()
+  WHERE Type = 'FoodParkDigital.Domain.Orders.Events.OrderPlatformIdChangedEvent'
+    AND DeadLetteredAt IS NOT NULL AND LastError LIKE 'Unknown event type%';
+  ```
 - **Lo que cambia para los negocios al desplegar:**
   - Vender suma «ID largo del pedido (opcional)» en un pedido de Rappi, Uber Eats o DiDi Food.
   - Pedidos enseña el ID largo y deja agregarlo o corregirlo en el detalle, a quien toma los pedidos.

@@ -118,6 +118,26 @@ public class PlatformOrderIdFlowTests
     }
 
     [Fact]
+    public async Task SameLongIdAndSameFolioToday_ShouldBeAskedOnce_NamingBoth()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, pack) = await ShopAsync(fixture);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.UberEats);
+        await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.UberEats, "BC953", pack.Id) with { ExternalOrderId = UberUuid });
+
+        var both = await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.UberEats, "BC953", pack.Id) with { ExternalOrderId = UberUuid });
+        var folioOnly = await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.UberEats, "BC953", pack.Id) with
+        {
+            ExternalOrderId = "RAPPI-000555"
+        });
+
+        // What one confirmation skips is what the warning said.
+        Assert.Equal(PlatformOrderErrors.PossibleDuplicateLongIdAndFolio, both.Error);
+        Assert.True(PlatformOrderErrors.IsPossibleDuplicate(both.Error));
+        Assert.Equal(PlatformOrderErrors.PossibleDuplicate, folioOnly.Error);
+    }
+
+    [Fact]
     public async Task SameLongId_ShouldPass_WhenTheOtherOrderWasCancelled()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -138,6 +158,31 @@ public class PlatformOrderIdFlowTests
         });
 
         // The cancelled order does not count: neither its folio nor its long id ask again.
+        Assert.True(again.IsSuccess, again.Error);
+    }
+
+    [Fact]
+    public async Task SameLongId_ShouldPass_WhenTheOtherOrderWasRefundedInFull()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, pack) = await ShopAsync(fixture);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.UberEats);
+        var refunded = await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.UberEats, "BC953", pack.Id) with
+        {
+            ExternalOrderId = UberUuid
+        });
+        var order = await fixture.Context.Orders.Include(o => o.Payments).Include(o => o.Refunds).SingleAsync(o => o.Id == refunded.Value.Id);
+        order.RegisterRefund(order.Total, OrderPaymentMethod.Platform, "Uber Eats lo canceló", SalesTestFixture.Now, "duena", null, null, false, []);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        // Another folio, so only the long id could ask.
+        var again = await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.UberEats, "BC954", pack.Id) with
+        {
+            ExternalOrderId = UberUuid
+        });
+
+        // Given back whole, the order does not count: its long id does not ask again.
         Assert.True(again.IsSuccess, again.Error);
     }
 
@@ -270,7 +315,7 @@ public class PlatformOrderIdFlowTests
     {
         try
         {
-            return await new SetPlatformOrderIdCommandHandler(fixture.Context, fixture.TenantService)
+            return await new SetPlatformOrderIdCommandHandler(fixture.Context, fixture.TenantService, fixture.Clock)
                 .Handle(new SetPlatformOrderIdCommand(orderId, longId, confirm), CancellationToken.None);
         }
         finally

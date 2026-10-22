@@ -789,10 +789,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
     /// <summary>
     /// Writes, corrects or clears the platform's long id of the order (Fase 22I, ADR 0041), at any status: it is only a
-    /// reference to find the order in a statement, and no amount depends on it. The activity keeps the one before.
+    /// reference to find the order in a statement, and no amount depends on it. The activity keeps the one before. The
+    /// order itself changes too, so two corrections over the same version do not both pass: the second is a conflict.
     /// </summary>
     /// <returns>False when it is the same, and nothing is recorded.</returns>
-    public bool ChangePlatformOrderId(PlatformOrderId? externalOrderId)
+    public bool ChangePlatformOrderId(PlatformOrderId? externalOrderId, DateTimeOffset changedAt)
     {
         if (!IsDeliveryPlatformOrder)
             throw new DomainException(PlatformOrderRules.OnlyPlatformOrdersHaveALongIdMessage);
@@ -803,6 +804,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (!PlatformDetail.ChangeExternalOrderId(externalOrderId))
             return false;
 
+        UpdatedAt = changedAt;
         AddDomainEvent(new OrderPlatformIdChangedEvent(
             Id, TenantId, Channel, PlatformDetail.ExternalOrderNumber, previous, PlatformDetail.ExternalOrderId));
         return true;

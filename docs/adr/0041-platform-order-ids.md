@@ -29,10 +29,12 @@ Tomé las decisiones de la Fase 22I con la autorización permanente del dueño d
    - Vender muestra «ID largo del pedido (opcional)» junto al folio, con dónde encontrarlo en cada app. Lo guarda en el borrador del dispositivo y avisa si lo escrito no puede ser uno.
    - `PUT /api/v1/orders/{id}/platform-order-id` (`SetPlatformOrderIdCommand`) lo escribe, corrige o quita (vacío) en cualquier estado del pedido, porque los estados de cuenta llegan después de entregarlo. Lo usa quien toma los pedidos (`ManageOrders`), como al capturar.
    - Un pedido que no es de plataforma responde 400. El de otro negocio, 404.
+   - El cambio también toca el pedido, así su versión (`rowversion`) detiene una segunda corrección hecha sobre la misma: responde 409 `concurrency_conflict` y la bitácora nunca dice un cambio que no quedó.
    - En Pedidos, el detalle muestra el ID largo con «Agregar» o «Corregir».
 3. **Un ID largo repetido es un aviso, como el folio.**
    - Al capturar o corregir, otro pedido de la misma plataforma del negocio con el mismo ID largo que todavía cuenta (ni cancelado ni devuelto completo) responde 409 `possible_duplicate_order`. Cuenta de cualquier fecha, porque los IDs largos no se repiten.
    - La persona confirma y se manda otra vez, con la misma llave de idempotencia al capturar.
+   - Una sola confirmación cubre el ID largo y el folio de hoy. Por eso, cuando se repiten los dos, el aviso nombra los dos: lo que la persona confirma es lo que leyó.
    - No es un índice único: un pedido capturado dos veces se corrige cancelando uno, como con el folio. El índice `(TenantId, Channel, ExternalOrderId)` es no único y filtrado a los que lo tienen.
    - El mismo ID en otro negocio no avisa.
 4. **Queda en la bitácora.** `Order.ChangePlatformOrderId` levanta `OrderPlatformIdChangedEvent` con el anterior y el nuevo. La auditoría `OrderPlatformIdChanged` lo escribe por el outbox. Escribir el mismo ID otra vez no cambia nada ni deja entrada. `OrderCreated` incluye el ID largo con el que se capturó.
@@ -43,6 +45,7 @@ Tomé las decisiones de la Fase 22I con la autorización permanente del dueño d
 6. **El estado de cuenta compara por folio o por ID largo.**
    - Cada renglón se normaliza como folio, o como ID largo cuando es demasiado largo para folio, y se buscan los pedidos cuyo folio o ID largo coincide.
    - Los renglones que nombran el mismo pedido por su folio y por su ID largo se suman en uno, bajo el primero: el pedido no cuenta dos veces.
+   - Un folio que tienen varios pedidos sigue siendo de varios aunque uno de ellos ya lo tome otro renglón por su ID largo: la persona elige. Sumarlo solo a ese pedido podría darle el dinero de otro pedido con el mismo folio y sin ID largo.
    - De un ID largo que la liquidación no puede tomar se leen sus pedidos completos, que son uno o los pocos capturados dos veces. El historial de un folio repetido sigue sin leerse completo.
    - El renglón admite hasta 100 caracteres, y la columna se llama «Folio o ID del pedido».
 7. **Migración `AddPlatformOrderIds`, compatible con la versión anterior.**

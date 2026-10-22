@@ -222,6 +222,45 @@ public class DeliveryPlatformsSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task LongIdCorrections_OverTheSameVersionOfTheOrder_ShouldKeepTheFirst_AndRefuseTheSecond()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        Guid orderId;
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            var setting = new DeliveryPlatformSetting(tenant.Id, OrderChannel.Rappi, true, PlatformTerms.WithFiscalDefaults(30m));
+            context.DeliveryPlatformSettings.Add(setting);
+            var order = NewOrder(tenant.Id, "ORD-000001", OrderChannel.Rappi);
+            order.RegisterPlatformOrder(
+                setting, PlatformOrderNumber.From("BC953"), PlatformCollectedBy.Platform, Now, null, PlatformOrderId.FromOptional("4810373920"));
+            order.MarkAsCreated();
+            context.Orders.Add(order);
+            await context.SaveChangesAsync();
+            orderId = order.Id;
+        }
+
+        // Two people correct the long id of the same order at once: only the detail's column changes, but the order's
+        // version stops the second, so its activity never tells a change that did not stay.
+        await using (var first = database.CreateContext(tenant.Id))
+        await using (var second = database.CreateContext(tenant.Id))
+        {
+            var mine = await first.Orders.Include(o => o.PlatformDetail).SingleAsync(o => o.Id == orderId);
+            var theirs = await second.Orders.Include(o => o.PlatformDetail).SingleAsync(o => o.Id == orderId);
+            Assert.True(mine.ChangePlatformOrderId(PlatformOrderId.FromOptional("4810373921"), Now.AddDays(1)));
+            Assert.True(theirs.ChangePlatformOrderId(PlatformOrderId.FromOptional("4810373922"), Now.AddDays(1)));
+
+            await first.SaveChangesAsync();
+            await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
+        }
+
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            Assert.Equal("4810373921", (await context.PlatformOrderDetails.AsNoTracking().SingleAsync()).ExternalOrderId);
+        }
+    }
+
+    [SqlServerFact]
     public async Task Settings_ShouldKeepOneRowPerPlatform_AndRefuseAStaleEdit()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();

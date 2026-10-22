@@ -78,7 +78,7 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
     /// <summary>
     /// The business already registered an order of the same platform with the same folio today, or ever one with the same
     /// long id, and confirms this is another one (short folios repeat). Sent again with the same idempotency key after the
-    /// possible duplicate warning.
+    /// possible duplicate warning, which names each one that repeats: the confirmation covers both.
     /// </summary>
     [System.ComponentModel.DefaultValue(false)]
     public bool ConfirmPossibleDuplicate { get; init; }
@@ -644,16 +644,21 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             return Result.Failure<OrderDto>("Los pagos suman mas que el total de la venta.");
 
         // 11. The same folio of the same platform again today, or its same long id ever: short folios repeat, so the
-        // business confirms instead of a unique index refusing a real order. A retry with the same key never gets here
-        // (step 1).
+        // business confirms instead of a unique index refusing a real order. One confirmation covers both, so the warning
+        // names each one that repeats. A retry with the same key never gets here (step 1).
         if (isPlatform && !request.ConfirmPossibleDuplicate)
         {
-            if (platformOrderId is not null && await PlatformOrderPlacement.HasLongIdDuplicateAsync(
-                    _context, _tenantService.TenantId, request.Channel, platformOrderId, null, cancellationToken))
-                return Result.Failure<OrderDto>(PlatformOrderErrors.PossibleDuplicateLongId);
-            if (await PlatformOrderPlacement.HasSameDayDuplicateAsync(
-                    _context, _tenantService.TenantId, request.Channel, platformNumber!, now, tenantZone, cancellationToken))
-                return Result.Failure<OrderDto>(PlatformOrderErrors.PossibleDuplicate);
+            var longIdRepeats = platformOrderId is not null && await PlatformOrderPlacement.HasLongIdDuplicateAsync(
+                _context, _tenantService.TenantId, request.Channel, platformOrderId, null, cancellationToken);
+            var folioRepeats = await PlatformOrderPlacement.HasSameDayDuplicateAsync(
+                _context, _tenantService.TenantId, request.Channel, platformNumber!, now, tenantZone, cancellationToken);
+            if (longIdRepeats || folioRepeats)
+            {
+                return Result.Failure<OrderDto>(
+                    longIdRepeats && folioRepeats ? PlatformOrderErrors.PossibleDuplicateLongIdAndFolio
+                    : longIdRepeats ? PlatformOrderErrors.PossibleDuplicateLongId
+                    : PlatformOrderErrors.PossibleDuplicate);
+            }
         }
 
         // 11b. On credit: what the payments leave must fit in what the customer may still owe. Checked inside the

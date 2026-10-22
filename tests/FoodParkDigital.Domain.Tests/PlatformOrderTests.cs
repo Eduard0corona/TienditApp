@@ -355,11 +355,14 @@ public class PlatformOrderTests
         Register(order, Setting(OrderChannel.DidiFood), PlatformCollectedBy.Business, "12");
         order.ClearDomainEvents();
 
-        Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890123456789")));
-        Assert.False(order.ChangePlatformOrderId(PlatformOrderId.FromOptional(" 1234567890 123456789 ")));
-        Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890123456780")));
+        Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890123456789"), Now));
+        // The order changes with it (its version stops a second correction over the same one), but not for the same id.
+        Assert.Equal(Now, order.UpdatedAt);
+        Assert.False(order.ChangePlatformOrderId(PlatformOrderId.FromOptional(" 1234567890 123456789 "), Now.AddHours(1)));
+        Assert.Equal(Now, order.UpdatedAt);
+        Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890123456780"), Now));
         order.Cancel(new FoodOrderStateMachine(), "cajero", "Se capturó dos veces");
-        Assert.True(order.ChangePlatformOrderId(null));
+        Assert.True(order.ChangePlatformOrderId(null, Now));
 
         Assert.Null(order.PlatformDetail!.ExternalOrderId);
         Assert.Equal(
@@ -377,9 +380,9 @@ public class PlatformOrderTests
             Tenant, null, null, true, Order.NumberNotAssigned, BusinessType.Food, OrderType.Retail, "Público en general",
             null, null, null);
         AssertRefused(PlatformOrderRules.OnlyPlatformOrdersHaveALongIdMessage,
-            () => counter.ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890")));
+            () => counter.ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890"), Now));
         AssertRefused(PlatformOrderRules.MissingFolioMessage,
-            () => NewOrderWithItems().ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890")));
+            () => NewOrderWithItems().ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890"), Now));
     }
 
     [Fact]

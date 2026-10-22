@@ -274,6 +274,29 @@ public class PlatformStatementMatchFlowTests
     }
 
     [Fact]
+    public async Task Match_ShouldLeaveAFolioOfSeveralOrders_ForThePersonToPick_ThoughOneOfThemIsTakenByItsLongId()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        var withLongId = await SellAtAsync(fixture, At(Monday, 12), Uber(shop, "BC953") with { ExternalOrderId = UberUuid });
+        // Another order with the same short folio, without its long id: the statement's folio may be either one's.
+        var sameFolio = await SellAtAsync(fixture, At(Monday.AddDays(2), 12), Uber(shop, "BC953"));
+
+        var match = await MatchAsync(fixture, OrderChannel.UberEats, null,
+            Line(2, UberUuid, 561.48m, "Pedido"),
+            Line(3, "BC953", -20m, "Promoción"));
+
+        // Added to the order of the long id it could be the other order's money: the person picks, as with any folio.
+        Assert.Equal(
+            [(UberUuid, PlatformStatementMatchStatus.Pending), ("BC953", PlatformStatementMatchStatus.Ambiguous)],
+            match.Folios.Select(f => (f.Folio, f.Status)));
+        Assert.Equal([withLongId.Id], match.Folios[0].Orders.Select(o => o.OrderId));
+        Assert.Equal([sameFolio.Id, withLongId.Id], match.Folios[1].Orders.Select(o => o.OrderId));
+        Assert.Equal((561.48m, PlatformNet, -20m), (match.MatchedTotal, match.ExpectedTotal, match.UnmatchedTotal));
+        Assert.Equal(match.StatementTotal, match.MatchedTotal + match.UnmatchedTotal + match.ConceptsTotal);
+    }
+
+    [Fact]
     public async Task Match_ShouldTellWhyALongIdCannotBeTaken_ReadingOnlyItsOrders()
     {
         await using var fixture = SalesTestFixture.Create();

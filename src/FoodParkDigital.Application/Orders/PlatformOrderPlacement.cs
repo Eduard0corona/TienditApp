@@ -21,13 +21,20 @@ public static class PlatformOrderErrors
     public const string PossibleDuplicateLongId =
         "Ya registraste un pedido de esta plataforma con el mismo ID largo. Si es otro pedido, confírmalo para registrarlo.";
 
+    /// <summary>
+    /// Both at once: the long id ever and the folio today. One confirmation covers both, so the warning names both.
+    /// </summary>
+    public const string PossibleDuplicateLongIdAndFolio =
+        "Ya registraste un pedido de esta plataforma con el mismo ID largo, y hoy uno con el mismo folio. "
+        + "Si es otro pedido, confírmalo para registrarlo.";
+
     /// <summary>Writing a long id that another order that counts already has (Fase 22I): also 409, confirmable.</summary>
     public const string LongIdInUse =
         "Otro pedido de esta plataforma ya tiene este ID largo. Si es correcto, confírmalo para guardarlo.";
 
     /// <summary>Whether <paramref name="error"/> is a warning the business confirms (409 <c>possible_duplicate_order</c>).</summary>
     public static bool IsPossibleDuplicate(string? error)
-        => error is PossibleDuplicate or PossibleDuplicateLongId or LongIdInUse;
+        => error is PossibleDuplicate or PossibleDuplicateLongId or PossibleDuplicateLongIdAndFolio or LongIdInUse;
 
     /// <summary>«Rappi no está activa en tu negocio: actívala en Configuración › Negocio › Plataformas de reparto.»</summary>
     public static string NotActive(OrderChannel channel)
