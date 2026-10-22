@@ -6,9 +6,9 @@ import { MessagePurpose, type OutgoingMessageDto, type PaginatedList } from '../
 import { MessageHistory } from './RemindersTab';
 
 /**
- * What the reminders of the fiado did (Fase 26C): sent, failed (for example, outside the 24 hours without a template
- * approved in Meta) or skipped, with why; below them, the notices before something comes due (Fase 26E). They are turned
- * on in Clientes › Por cobrar.
+ * What the WhatsApp messages of the fiado did: the notices before something comes due (Fase 26E) and, below them, the
+ * reminders of what is overdue (Fase 26C), each sent, failed (for example, outside the 24 hours without a template
+ * approved in Meta) or skipped, with why. They are turned on in Clientes › Por cobrar, in the same order.
  */
 export default function CreditRemindersTab() {
   const [history, setHistory] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
@@ -45,16 +45,16 @@ export default function CreditRemindersTab() {
   return (
     <>
       <MessageHistory
-        title="Recordatorios del fiado"
-        hint={<>Lo que debe cada cliente con algo vencido, por WhatsApp. {turnedOnIn}</>}
-        empty="Todavía no se ha enviado ningún recordatorio del fiado."
-        history={history}
-      />
-      <MessageHistory
         title="Avisos antes de vencer"
         hint={<>Lo que vence pronto a cada cliente que va al corriente, por WhatsApp. {turnedOnIn}</>}
         empty="Todavía no se ha enviado ningún aviso antes de vencer."
         history={notices}
+      />
+      <MessageHistory
+        title="Recordatorios del fiado"
+        hint={<>Lo que debe cada cliente con algo vencido, por WhatsApp. {turnedOnIn}</>}
+        empty="Todavía no se ha enviado ningún recordatorio del fiado."
+        history={history}
       />
     </>
   );

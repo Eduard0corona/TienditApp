@@ -59,5 +59,5 @@ export const CREDIT_DUE_SOON_PLACEHOLDER_HELP: Record<string, string> = {
   negocio: 'Nombre de tu negocio',
   monto: 'Lo que debe en total',
   porvencer: 'Lo que vence ese día',
-  fecha: 'Próximo día para pagar',
+  fecha: 'Último día para pagar que viene',
 };

@@ -8,6 +8,7 @@ using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using static FoodParkDigital.Application.Tests.Support.CreditTestKit;
@@ -229,6 +230,14 @@ public class CreditDueSoonFlowTests
         Assert.Equal(OutgoingMessageSender.NothingDueSoonReason, (await sender.SendAsync(notice, default)).Reason);
         await SetBusinessTermAsync(fixture, 7);
 
+        // A shorter term of her own since it was queued: something is overdue, which is the overdue reminder's.
+        var record = await fixture.Context.Customers.SingleAsync(c => c.Id == ana.Id);
+        record.SetCreditTermDays(3);
+        await fixture.Context.SaveChangesAsync();
+        Assert.Equal(OutgoingMessageSender.OverdueInsteadReason, (await sender.SendAsync(notice, default)).Reason);
+        record.SetCreditTermDays(null);
+        await fixture.Context.SaveChangesAsync();
+
         // Ana wrote BAJA: like every reminder, it stops.
         var optOut = new MessagingOptOut(tenant.Id, AnaPhone, OptOutSource.CustomerKeyword, SalesTestFixture.Now);
         fixture.Context.MessagingOptOuts.Add(optOut);
@@ -243,6 +252,57 @@ public class CreditDueSoonFlowTests
         Assert.Equal((OutgoingSendDecision.Skipped, OutgoingMessageSender.NothingDueSoonReason), (skipped.Decision, skipped.Reason));
         Assert.Single(whatsApp.Sent);
     }
+
+    [Fact]
+    public async Task PlannerAndSender_ShouldReadOnlyTheirBusiness_WhateverAnotherDidWithTheSamePhone()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        // In another business the same phone owes something overdue, wrote BAJA and was told of Monday already.
+        var other = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true, slug: "otro");
+        var otherSoap = await fixture.AddProductAsync(other, "Jabón", 100m);
+        await SetBusinessTermAsync(fixture, 7);
+        await TurnDueSoonOnAsync(fixture, other, daysBefore: 2);
+        var otherAna = await AddCustomerAsync(fixture, other, "Ana López", AnaPhone, creditLimit: 1000m);
+        await SellOnCreditAsync(fixture, otherAna, otherSoap, quantity: 1, createdAt: SoldOn(9, 20));
+        fixture.Context.MessagingOptOuts.Add(new MessagingOptOut(other.Id, AnaPhone, OptOutSource.CustomerKeyword, SalesTestFixture.Now));
+        fixture.Context.OutgoingMessages.Add(new OutgoingMessage(other.Id, MessagePurpose.CreditDueSoon, AnaPhone, "Ana", "Hola", null,
+            "es_MX", [], SalesTestFixture.Now, CreditDueSoonPlanner.Key(AnaPhone, new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 4))));
+        await fixture.Context.SaveChangesAsync();
+
+        // In this one Ana is up to date and owes something due Monday.
+        var (tenant, soap) = await ShopAsync(fixture);
+        await SetBusinessTermAsync(fixture, 7);
+        await TurnDueSoonOnAsync(fixture, tenant, daysBefore: 2);
+        var ana = await AddCustomerAsync(fixture, tenant, "Ana López", AnaPhone, creditLimit: 1000m);
+        await SellOnCreditAsync(fixture, ana, soap, quantity: 1, createdAt: SoldOn(9, 28));
+
+        Assert.Equal(1, await QueueAsync(fixture));
+        var notice = await fixture.Context.OutgoingMessages.SingleAsync();
+        Assert.Equal((tenant.Id, "creditsoon:+525512345678:20261005:20261004"), (notice.TenantId, notice.DeduplicationKey));
+        var sender = new OutgoingMessageSender(fixture.Context, new FakeWhatsApp(),
+            new MessagingConsentService(fixture.Context, fixture.TenantService, fixture.Clock), fixture.Clock);
+        Assert.Equal(OutgoingSendDecision.Sent, (await sender.SendAsync(notice, default)).Decision);
+    }
+
+    [Theory]
+    [InlineData("creditsoon:+525512345678:20261005:20261004", "+525512345678", "2026-10-05", "2026-10-04")]
+    [InlineData("creditsoon:a:b:20261005:20261004", "a:b", "2026-10-05", "2026-10-04")]
+    public void Key_ShouldBeReadFromTheRight_AsItWasWritten(string key, string phone, string dueOn, string day)
+    {
+        Assert.Equal(key, CreditDueSoonPlanner.Key(phone, DateOnly.Parse(dueOn), DateOnly.Parse(day)));
+        Assert.True(CreditDueSoonPlanner.TryParseKey(key, out var readPhone, out var readDueOn, out var readDay));
+        Assert.Equal((phone, DateOnly.Parse(dueOn), DateOnly.Parse(day)), (readPhone, readDueOn, readDay));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("credit:+525512345678:20261004")]
+    [InlineData("creditsoon:+525512345678:20261004")]
+    [InlineData("creditsoon::20261005:20261004")]
+    [InlineData("creditsoon:+525512345678:2026105:20261004")]
+    [InlineData("creditsoon:")]
+    public void Key_ShouldNotBeRead_WhenItIsNotANoticesKey(string? key)
+        => Assert.False(CreditDueSoonPlanner.TryParseKey(key, out _, out _, out _));
 
     [Fact]
     public async Task Settings_ShouldTurnTheNoticeOn_WithWhatsApp_AndItsOwnActiveTemplate_Recorded_AndAnEarlierScreenKeepsIt()

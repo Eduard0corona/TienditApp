@@ -46,7 +46,21 @@ const REMINDERS = {
   maxEveryDays: 30,
   sendFrom: '10:00',
   sendUntil: '19:00',
+  dueSoon: {
+    enabled: false,
+    daysBefore: 2,
+    templateId: null,
+    defaultBody: 'Hola {nombre}, te recordamos que en {negocio} tienes un saldo de {monto}; {porvencer} vence el {fecha}.',
+    placeholders: ['nombre', 'negocio', 'monto', 'porvencer', 'fecha'],
+    templates: [],
+    minDaysBefore: 1,
+    maxDaysBefore: 7,
+  },
 };
+
+/** The overdue reminders' half of the reminders dialog (Fase 26E puts the notice before it). */
+const overdueOf = (dialog: HTMLElement) => within(within(dialog).getByRole('group', { name: 'Lo vencido' }));
+const NOTICE_OFF = { enabled: false, daysBefore: 2, templateId: null };
 
 const LUIS_ACCOUNT = {
   phone: '+525566667777', name: 'Luis Pérez', customerId: null, creditLimit: null, sellsOnCredit: false, owed: 50, available: null,
@@ -232,8 +246,10 @@ describe('ReceivablesPage', () => {
     expect(await screen.findByText('Sin recordatorios')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Activar los recordatorios' }));
     const dialog = await screen.findByRole('dialog', { name: 'Recordatorios del fiado' });
-    expect(await within(dialog).findByText(/Hola Ana, te recordamos que en Tiendita tienes un saldo de \$1,160\.00/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/Sin plantilla aprobada en Meta/)).toBeInTheDocument();
+    await within(dialog).findByRole('group', { name: 'Lo vencido' });
+    const overdue = overdueOf(dialog);
+    expect(overdue.getByText(/Hola Ana, te recordamos que en Tiendita tienes un saldo de \$1,160\.00; \$500\.00 venció/)).toBeInTheDocument();
+    expect(overdue.getByText(/Sin plantilla aprobada en Meta/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByLabelText('Recordar lo vencido por WhatsApp'));
     await userEvent.clear(within(dialog).getByLabelText('Cada'));
     await userEvent.type(within(dialog).getByLabelText('Cada'), '31');
@@ -243,7 +259,9 @@ describe('ReceivablesPage', () => {
     await userEvent.type(within(dialog).getByLabelText('Cada'), '3');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }));
 
-    expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/credit-reminders', { body: { enabled: true, everyDays: 3, templateId: null } });
+    expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/credit-reminders', {
+      body: { enabled: true, everyDays: 3, templateId: null, dueSoon: NOTICE_OFF },
+    });
     expect(await screen.findByText('Recordatorios cada 3 días')).toBeInTheDocument();
   });
 
@@ -257,7 +275,7 @@ describe('ReceivablesPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Activar los recordatorios' }));
     const dialog = await screen.findByRole('dialog', { name: 'Recordatorios del fiado' });
     expect(await within(dialog).findByRole('link', { name: 'Ir a WhatsApp' })).toHaveAttribute('href', '/settings/whatsapp');
-    expect(within(dialog).getByRole('link', { name: 'Campañas › Plantillas' })).toHaveAttribute('href', '/campaigns?tab=templates');
+    expect(overdueOf(dialog).getByRole('link', { name: 'Campañas › Plantillas' })).toHaveAttribute('href', '/campaigns?tab=templates');
     expect(within(dialog).getByRole('link', { name: 'Ver los que se mandaron' })).toHaveAttribute('href', '/campaigns?tab=creditReminders');
     expect(within(dialog).getByText('Sin plazo, nada vence: pon un plazo para que haya a quién recordarle.')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByLabelText('Recordar lo vencido por WhatsApp'));
@@ -282,16 +300,20 @@ describe('ReceivablesPage', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Cambiar los recordatorios' }));
     const dialog = await screen.findByRole('dialog', { name: 'Recordatorios del fiado' });
-    expect(await within(dialog).findByLabelText('Mensaje')).toHaveValue('');
+    await within(dialog).findByRole('group', { name: 'Lo vencido' });
+    const overdue = overdueOf(dialog);
+    expect(overdue.getByLabelText('Mensaje')).toHaveValue('');
     // An approved template reaches who did not write in 24 hours: no warning, and the preview is its text.
-    await userEvent.selectOptions(within(dialog).getByLabelText('Mensaje'), 't2');
-    expect(within(dialog).getByText(/Hola Ana, debes \$/)).toBeInTheDocument();
-    expect(within(dialog).queryByText(/Sin plantilla aprobada en Meta/)).not.toBeInTheDocument();
-    await userEvent.selectOptions(within(dialog).getByLabelText('Mensaje'), '');
+    await userEvent.selectOptions(overdue.getByLabelText('Mensaje'), 't2');
+    expect(overdue.getByText(/Hola Ana, debes \$/)).toBeInTheDocument();
+    expect(overdue.queryByText(/Sin plantilla aprobada en Meta/)).not.toBeInTheDocument();
+    await userEvent.selectOptions(overdue.getByLabelText('Mensaje'), '');
     await userEvent.click(within(dialog).getByLabelText('Recordar lo vencido por WhatsApp'));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }));
 
-    expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/credit-reminders', { body: { enabled: false, everyDays: 7, templateId: null } });
+    expect(request).toHaveBeenCalledWith('put', '/api/v1/customers/credit-reminders', {
+      body: { enabled: false, everyDays: 7, templateId: null, dueSoon: NOTICE_OFF },
+    });
     expect(useToast().success).toHaveBeenCalledWith('Los recordatorios del fiado están apagados.');
   });
 

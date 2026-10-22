@@ -240,6 +240,47 @@ public sealed class CrossTenantCustomerCreditSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task DueSoonNotice_ShouldBeOnlyTheBusinesses_AndTheOwners()
+    {
+        var mine = await _api.SignUpAsync("aviso-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("aviso-b", TwoBusinessesApi.FoodBusiness);
+        var cashier = await EmployeeAsync(mine, "ManageOrders", "ChargeOrders", "ManageCash", "ManageCustomers", "ManageCampaigns");
+        const string templates = "/api/v1/messaging/templates";
+        const string reminders = Customers + "/credit-reminders";
+        object Notice(bool enabled, int daysBefore, Guid? templateId = null)
+            => new { enabled = false, everyDays = 7, dueSoon = new { enabled, daysBefore, templateId } };
+
+        // Who charges and runs campaigns neither sets the notice nor writes what it says.
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PutAsJsonAsync(reminders, Notice(false, 3))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await cashier.PostAsJsonAsync(templates, new { name = "Por vencer", purpose = 4, body = "Vence {porvencer}" })).StatusCode);
+        var myTemplate = await TwoBusinessesApi.IdAsync(mine.Client, templates, new { name = "Por vencer", purpose = 4, body = "Hola {nombre}, vence {porvencer}." });
+        var theirTemplate = await TwoBusinessesApi.IdAsync(theirs.Client, templates, new { name = "Por vencer", purpose = 4, body = "Hola {nombre}, el {fecha} vence {porvencer}." });
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PutAsJsonAsync($"{templates}/{myTemplate}",
+            new { name = "Por vencer", body = "Paga ya {porvencer}", isActive = true })).StatusCode);
+
+        // Another business cannot choose my template; without WhatsApp mine cannot turn it on; the days go from 1 to 7.
+        Assert.Equal(HttpStatusCode.BadRequest, (await theirs.Client.PutAsJsonAsync(reminders, Notice(false, 3, myTemplate))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await mine.Client.PutAsJsonAsync(reminders, Notice(true, 2))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await theirs.Client.PutAsJsonAsync(reminders, Notice(false, 8))).StatusCode);
+
+        // Each business keeps its own, and a screen from before the notice leaves it as it is.
+        var theirNotice = (await TwoBusinessesApi.ReadAsync(await theirs.Client.PutAsJsonAsync(reminders, Notice(false, 4, theirTemplate))))
+            .GetProperty("dueSoon");
+        Assert.Equal((4, theirTemplate), (theirNotice.GetProperty("daysBefore").GetInt32(), theirNotice.GetProperty("templateId").GetGuid()));
+        var earlierScreen = (await TwoBusinessesApi.ReadAsync(await theirs.Client.PutAsJsonAsync(reminders, new { enabled = false, everyDays = 7 })))
+            .GetProperty("dueSoon");
+        Assert.Equal(4, earlierScreen.GetProperty("daysBefore").GetInt32());
+        var myNotice = (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(reminders))).GetProperty("dueSoon");
+        Assert.Equal((false, 2, JsonValueKind.Null), (myNotice.GetProperty("enabled").GetBoolean(), myNotice.GetProperty("daysBefore").GetInt32(),
+            myNotice.GetProperty("templateId").ValueKind));
+        Assert.Equal([myTemplate], myNotice.GetProperty("templates").EnumerateArray().Select(t => t.GetProperty("id").GetGuid()));
+        Assert.Equal((0, 1), (
+            await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CreditRemindersUpdated")),
+            await _api.QueryAsync(theirs.TenantId, db => db.AuditLogs.CountAsync(l => l.Action == "CreditRemindersUpdated"))));
+    }
+
+    [SqlServerFact]
     public async Task BalanceInFavor_ShouldBeOnlyTheBusinesses_AndNeedWhoChargesOrRefunds()
     {
         var mine = await _api.SignUpAsync("a-favor-a", TwoBusinessesApi.FoodBusiness);

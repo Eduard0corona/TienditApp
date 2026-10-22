@@ -50,12 +50,14 @@ public sealed class CreditDueSoonPlanner
         day = default;
         if (key is null || !key.StartsWith(KeyPrefix, StringComparison.Ordinal))
             return false;
-        var parts = key[KeyPrefix.Length..].Split(':');
-        if (parts.Length != 3 || parts[0].Length == 0)
+        // The two days from the right, as the reminder's key: whatever the phone holds stays the phone.
+        var dayStart = key.LastIndexOf(':') + 1;
+        var dueOnStart = key.LastIndexOf(':', Math.Max(dayStart - 2, 0)) + 1;
+        if (dueOnStart <= KeyPrefix.Length + 1)
             return false;
-        phone = parts[0];
-        return DateOnly.TryParseExact(parts[1], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out dueOn)
-            && DateOnly.TryParseExact(parts[2], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out day);
+        phone = key[KeyPrefix.Length..(dueOnStart - 1)];
+        return DateOnly.TryParseExact(key[dueOnStart..(dayStart - 1)], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out dueOn)
+            && DateOnly.TryParseExact(key[dayStart..], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out day);
     }
 
     /// <returns>Notices queued.</returns>

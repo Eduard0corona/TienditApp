@@ -1351,6 +1351,7 @@ export interface MessagingSettingsDto {
   reminderPlaceholders: string[];
   /** Fase 26C: the variables of a reminder of the fiado. */
   creditReminderPlaceholders: string[];
+  creditDueSoonPlaceholders: string[];
 }
 
 export interface UpdateAppointmentRemindersRequest {

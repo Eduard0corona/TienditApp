@@ -40,6 +40,7 @@ public sealed class OutgoingMessageSender
     public const string CreditRemindersOffReason = "Los recordatorios del fiado se apagaron.";
     public const string CreditReminderLateReason = "El recordatorio ya no se mandó: se pasó la hora de ese día.";
     public const string NothingDueSoonReason = "Ya no debe nada que venza ese día.";
+    public const string OverdueInsteadReason = "Ya tiene algo vencido: le toca el recordatorio de lo vencido.";
     public const string CreditDueSoonOffReason = "El aviso antes de vencer se apagó.";
     public const string CreditDueSoonLateReason = "El aviso ya no se mandó: se pasó la hora de ese día.";
 
@@ -163,8 +164,9 @@ public sealed class OutgoingMessageSender
 
     /// <summary>
     /// A notice before the credit comes due (Fase 26E) goes out only the business day it was queued, before night, while the
-    /// notice is on and the customer still owes something whose last day to pay, by their term now, is the notice's: a payment,
-    /// a write-off or a new term since it was queued makes it stale.
+    /// notice is on, the customer owes nothing overdue (a shorter term since it was queued makes it the overdue reminder's)
+    /// and still owes something whose last day to pay, by their term now, is the notice's: a payment, a write-off or a new
+    /// term since it was queued makes it stale.
     /// </summary>
     private async Task<string?> CreditDueSoonSkipReasonAsync(OutgoingMessage message, CancellationToken cancellationToken)
     {
@@ -180,7 +182,10 @@ public sealed class OutgoingMessageSender
             return NothingDueSoonReason;
 
         var business = new CreditTerm.Settings(settings.CreditTermDays, settings.TimeZone);
-        return await CreditTerm.OwesDueOnAsync(_context, MessagingPhone.ToKey(message.Phone), business, dueOn, cancellationToken)
+        var phoneKey = MessagingPhone.ToKey(message.Phone);
+        if (await CreditTerm.HasOverdueAsync(_context, phoneKey, business, _clock.UtcNow, cancellationToken))
+            return OverdueInsteadReason;
+        return await CreditTerm.OwesDueOnAsync(_context, phoneKey, business, dueOn, cancellationToken)
             ? null
             : NothingDueSoonReason;
     }

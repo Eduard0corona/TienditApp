@@ -72,8 +72,11 @@ function RemindersForm({ settings, update, onClose }: {
   const [dueSoonTemplateId, setDueSoonTemplateId] = useState(
     dueSoon.templates.some((template) => template.id === dueSoon.templateId) ? dueSoon.templateId ?? '' : '');
   const [error, setError] = useState('');
-  const problem = reminderEveryDaysProblem(typedDays, settings.minEveryDays, settings.maxEveryDays);
-  const dueSoonProblem = dueSoonDaysBeforeProblem(typedDaysBefore, dueSoon.minDaysBefore, dueSoon.maxDaysBefore);
+  const daysProblem = reminderEveryDaysProblem(typedDays, settings.minEveryDays, settings.maxEveryDays);
+  const daysBeforeProblem = dueSoonDaysBeforeProblem(typedDaysBefore, dueSoon.minDaysBefore, dueSoon.maxDaysBefore);
+  // A message that is off keeps its saved days when what is typed cannot be saved: it neither warns nor blocks the other.
+  const problem = enabled ? daysProblem : null;
+  const dueSoonProblem = dueSoonEnabled ? daysBeforeProblem : null;
   // Turning them off never needs WhatsApp; turning either on does.
   const blocked = (enabled || dueSoonEnabled) && !settings.whatsAppConnected;
   const nothingDue = settings.creditTermDays == null && settings.customersWithOwnTerm === 0;
@@ -84,9 +87,13 @@ function RemindersForm({ settings, update, onClose }: {
     try {
       const saved = await update.mutateAsync({
         enabled,
-        everyDays: Number(typedDays.trim()),
+        everyDays: daysProblem ? settings.everyDays : Number(typedDays.trim()),
         templateId: templateId || null,
-        dueSoon: { enabled: dueSoonEnabled, daysBefore: Number(typedDaysBefore.trim()), templateId: dueSoonTemplateId || null },
+        dueSoon: {
+          enabled: dueSoonEnabled,
+          daysBefore: daysBeforeProblem ? dueSoon.daysBefore : Number(typedDaysBefore.trim()),
+          templateId: dueSoonTemplateId || null,
+        },
       });
       toast.success(describeSaved(saved));
       onClose();
@@ -104,7 +111,7 @@ function RemindersForm({ settings, update, onClose }: {
     >
       <Modal.Body>
         <p className="text-muted small">
-          Por WhatsApp, de {settings.sendFrom} a {settings.sendUntil} y nunca a quien escribió BAJA.{' '}
+          Se mandan por WhatsApp de {settings.sendFrom} a {settings.sendUntil}, nunca a quien escribió BAJA.{' '}
           <Link to="/campaigns?tab=creditReminders">Ver los que se mandaron</Link>
         </p>
         {!settings.whatsAppConnected && (
@@ -118,11 +125,11 @@ function RemindersForm({ settings, update, onClose }: {
         <MessageSettings
           idPrefix={ids.dueSoon}
           legend="Antes de que venza"
-          hint="A quien va al corriente, unos días antes de su día de pago: lo que vence y cuándo. Una vez por día de pago, nunca el día en que fió."
-          switchLabel="Avisar antes de que venza"
+          hint="A quien va al corriente, unos días antes de su último día para pagar: cuánto vence y cuándo. Una vez por fecha, nunca el mismo día en que se le fió."
+          switchLabel="Avisar por WhatsApp antes de que venza"
           checked={dueSoonEnabled}
           onCheck={setDueSoonEnabled}
-          daysLabel="Días antes"
+          daysLabel="Anticipación"
           typedDays={typedDaysBefore}
           onDays={setTypedDaysBefore}
           problem={dueSoonProblem}
