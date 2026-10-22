@@ -199,7 +199,7 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
             .ToList();
     }
 
-    public async Task<IReadOnlyList<OnlinePaymentDetails>> FindChangedPaymentsAsync(
+    public async Task<OnlinePaymentChanges> FindChangedPaymentsAsync(
         string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken)
     {
         EnsureConfigured();
@@ -219,14 +219,17 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
             throw await UnavailableAsync(response, "changes", cancellationToken);
 
         using var json = await ReadJsonAsync(response, cancellationToken);
-        if (!json.RootElement.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array)
-            return [];
+        // Without its page the review cannot tell whether it read everything: as if Mercado Pago did not answer.
+        if (json.RootElement.ValueKind != JsonValueKind.Object
+            || !json.RootElement.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array)
+            throw new OnlinePaymentGatewayUnavailableException("Mercado Pago no devolvió la lista de los pagos que cambiaron.");
 
-        return results.EnumerateArray()
+        var payments = results.EnumerateArray()
             .Select(ParsePayment)
             .Where(payment => payment is not null)
             .Select(payment => payment!)
             .ToList();
+        return new OnlinePaymentChanges(payments, results.GetArrayLength());
     }
 
     public async Task<IReadOnlyList<OnlinePaymentProviderRefund>> GetRefundsAsync(

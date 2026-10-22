@@ -1085,7 +1085,7 @@ export default function OrdersList() {
                   <div className={`alert alert-${dispute.variant} mt-3 mb-0`} role="status">
                     <strong>{dispute.title}.</strong> {dispute.text}
                     {selectedOrder.onlineDisputeUpdatedAt && (
-                      <div className="small">Última noticia de Mercado Pago: {toLocalDateTime(selectedOrder.onlineDisputeUpdatedAt)}.</div>
+                      <div className="small">Última noticia de Mercado Pago: {toLocalDateTime(selectedOrder.onlineDisputeUpdatedAt)}</div>
                     )}
                   </div>
                 );

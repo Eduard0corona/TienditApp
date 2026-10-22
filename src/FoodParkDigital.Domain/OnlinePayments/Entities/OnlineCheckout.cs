@@ -72,6 +72,7 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
     /// </summary>
     public OnlinePaymentDispute Dispute { get; private set; }
 
+    /// <summary>When the payment changed in Mercado Pago to say the dispute as it is now (by Mercado Pago's clock).</summary>
     public DateTimeOffset? DisputeUpdatedAt { get; private set; }
 
     /// <summary>The notification, the customer's return and the sweep may apply a payment at once: one wins (409).</summary>
@@ -185,8 +186,9 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
     /// <summary>
     /// Mercado Pago reports a chargeback or a claim on the payment that placed the order, or how it ended (Fase 24K).
     /// </summary>
+    /// <param name="reportedAt">When the payment changed in Mercado Pago to say it.</param>
     /// <returns>Whether it changed.</returns>
-    public bool RecordDispute(OnlinePaymentDispute dispute, DateTimeOffset now)
+    public bool RecordDispute(OnlinePaymentDispute dispute, DateTimeOffset reportedAt)
     {
         if (Status != OnlineCheckoutStatus.Placed)
             throw new DomainException("Solo el pago de un pedido tiene disputas.");
@@ -196,7 +198,7 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
             return false;
 
         Dispute = dispute;
-        DisputeUpdatedAt = now;
+        DisputeUpdatedAt = reportedAt;
         return true;
     }
 

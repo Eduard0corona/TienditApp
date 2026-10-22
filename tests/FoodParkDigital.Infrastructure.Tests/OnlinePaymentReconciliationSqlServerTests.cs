@@ -131,7 +131,7 @@ public class OnlinePaymentReconciliationSqlServerTests
         public Task<OnlinePaymentCheckoutPage> CreateCheckoutAsync(string accessToken, OnlinePaymentCheckoutRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<OnlinePaymentDetails?> GetPaymentAsync(string accessToken, string paymentId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<OnlinePaymentDetails>> FindPaymentsAsync(string accessToken, Guid checkoutId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<OnlinePaymentDetails>> FindChangedPaymentsAsync(string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<OnlinePaymentChanges> FindChangedPaymentsAsync(string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<OnlinePaymentProviderRefund>> GetRefundsAsync(string accessToken, string paymentId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<OnlinePaymentRefundOutcome> RefundAsync(string accessToken, string paymentId, decimal amount, Guid idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
     }

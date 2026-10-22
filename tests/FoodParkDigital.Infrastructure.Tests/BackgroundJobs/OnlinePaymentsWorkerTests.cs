@@ -14,7 +14,7 @@ namespace FoodParkDigital.Infrastructure.Tests.BackgroundJobs;
 /// <summary>
 /// The online payments worker (Fases 24I and 24K) finds the businesses with work across all of them and sends each one its
 /// command in its own scope: since the Fase 24K, the review of the payments that changed in Mercado Pago, every 15 minutes
-/// per account whose key works, the longest waiting first.
+/// per account whose key works, the longest waiting first, within a time per pass.
 /// </summary>
 public class OnlinePaymentsWorkerTests
 {
@@ -31,8 +31,9 @@ public class OnlinePaymentsWorkerTests
         });
         var now = host.Clock.UtcNow;
         var never = await AddAccountAsync(host, "nunca", reviewedUntil: null, keyExpiresAt: now.AddDays(100));
-        var stale = await AddAccountAsync(host, "hace-rato", reviewedUntil: now.AddMinutes(-20), keyExpiresAt: now.AddDays(100));
-        await AddAccountAsync(host, "reciente", reviewedUntil: now.AddMinutes(-5), keyExpiresAt: now.AddDays(100));
+        // A review that read everything leaves the account reviewed until 10 minutes before it ran: due 15 minutes later.
+        var stale = await AddAccountAsync(host, "hace-rato", reviewedUntil: now.AddMinutes(-25), keyExpiresAt: now.AddDays(100));
+        await AddAccountAsync(host, "reciente", reviewedUntil: now.AddMinutes(-24), keyExpiresAt: now.AddDays(100));
         await AddAccountAsync(host, "sin-llave", reviewedUntil: null, keyExpiresAt: now.AddMinutes(-1));
         var worker = host.Get<OnlinePaymentsWorkerService>();
 
@@ -103,7 +104,7 @@ public class OnlinePaymentsWorkerTests
         public Task<OnlinePaymentCheckoutPage> CreateCheckoutAsync(string accessToken, OnlinePaymentCheckoutRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<OnlinePaymentDetails?> GetPaymentAsync(string accessToken, string paymentId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<OnlinePaymentDetails>> FindPaymentsAsync(string accessToken, Guid checkoutId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<OnlinePaymentDetails>> FindChangedPaymentsAsync(string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<OnlinePaymentChanges> FindChangedPaymentsAsync(string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<OnlinePaymentProviderRefund>> GetRefundsAsync(string accessToken, string paymentId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<OnlinePaymentRefundOutcome> RefundAsync(string accessToken, string paymentId, decimal amount, Guid idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
     }

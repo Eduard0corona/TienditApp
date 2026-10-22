@@ -35,6 +35,9 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
     /// <summary>Each search of changed payments: from, to, offset (Fase 24K).</summary>
     public List<(DateTimeOffset From, DateTimeOffset To, int Offset)> ChangeSearches { get; } = [];
 
+    /// <summary>The payments each search of changed payments gave back, in order (Fase 24K).</summary>
+    public List<string> ChangesGivenBack { get; } = [];
+
     /// <summary>The payments whose refunds were read (Fase 24K).</summary>
     public List<string> RefundReads { get; } = [];
 
@@ -100,7 +103,7 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
             .ToList();
     }
 
-    public async Task<IReadOnlyList<OnlinePaymentDetails>> FindChangedPaymentsAsync(
+    public async Task<OnlinePaymentChanges> FindChangedPaymentsAsync(
         string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken)
     {
         await RunWhileReadingAsync();
@@ -108,14 +111,20 @@ internal sealed class FakeOnlinePaymentGateway : IOnlinePaymentGateway
         ThrowIfKeyRejected();
         AccessTokensUsed.Add(accessToken);
         ChangeSearches.Add((from, to, offset));
-        return Payments.Values
+        var page = Payments.Values
             .Where(p => p.LastChangedAt >= from && p.LastChangedAt <= to)
             .OrderBy(p => p.LastChangedAt)
             .ThenBy(p => p.Id, StringComparer.Ordinal)
             .Skip(offset)
             .Take(limit)
             .ToList();
+        ChangesGivenBack.AddRange(page.Select(p => p.Id));
+        // What Mercado Pago gave back that could not be read still counts toward a full page.
+        return new OnlinePaymentChanges(page, page.Count + UnreadableInNextPage.GetValueOrDefault(ChangeSearches.Count, 0));
     }
+
+    /// <summary>For the search with that number (1 is the first), how many more results Mercado Pago gave back unread.</summary>
+    public Dictionary<int, int> UnreadableInNextPage { get; } = [];
 
     public Task<IReadOnlyList<OnlinePaymentProviderRefund>> GetRefundsAsync(
         string accessToken, string paymentId, CancellationToken cancellationToken)

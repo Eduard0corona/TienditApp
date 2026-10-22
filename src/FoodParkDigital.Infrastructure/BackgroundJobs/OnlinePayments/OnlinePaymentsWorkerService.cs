@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
@@ -24,6 +25,12 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs.OnlinePayments;
 public sealed class OnlinePaymentsWorkerService : BackgroundService
 {
     private const string WorkerActor = "online-payments";
+
+    /// <summary>
+    /// The reviews of a pass start within this long (Fase 24K): the sweep of the next pass (payments in course, keys to
+    /// renew) never waits behind a first review of many accounts. The accounts left go first in the next pass.
+    /// </summary>
+    internal static readonly TimeSpan MaxReviewTimePerPass = TimeSpan.FromMinutes(1);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IDateTimeProvider _clock;
@@ -108,7 +115,7 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
             tenants = withCheckouts.Concat(renewing).Distinct().Take(max).ToList();
             // The accounts whose payments were not reviewed lately and whose key works, the longest waiting (or never
             // reviewed) first.
-            var reviewedBy = now - ReviewOnlinePaymentsCommandHandler.ReviewEvery;
+            var reviewedBy = ReviewOnlinePaymentsCommandHandler.DueIfReviewedBefore(now);
             reviewing = await context.OnlinePaymentAccounts
                 .IgnoreQueryFilters()
                 .Where(a => a.AccessTokenExpiresAt > now && (a.PaymentsReviewedUntil == null || a.PaymentsReviewedUntil <= reviewedBy))
@@ -137,9 +144,18 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
             }
         }
 
+        var reviewed = new List<Guid>();
+        var reviewTime = Stopwatch.StartNew();
         foreach (var tenantId in reviewing)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (reviewTime.Elapsed > MaxReviewTimePerPass)
+            {
+                _logger.LogInformation(
+                    "Online payments review: {Left} accounts left for the next pass", reviewing.Count - reviewed.Count);
+                break;
+            }
+            reviewed.Add(tenantId);
             try
             {
                 await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
@@ -155,6 +171,6 @@ public sealed class OnlinePaymentsWorkerService : BackgroundService
             }
         }
 
-        return tenants.Union(reviewing).Count();
+        return tenants.Union(reviewed).Count();
     }
 }

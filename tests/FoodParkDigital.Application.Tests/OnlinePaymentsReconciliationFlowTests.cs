@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -148,6 +149,27 @@ public partial class OnlinePaymentsFlowTests
     }
 
     [Fact]
+    public async Task Refund_RefusedBecauseTheBusinessAlreadyGaveItBackInItsAccount_ShouldBeDone_WithoutWaitingForTheReview()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var (orderId, payment) = await PlaceAsync(shop, quantity: 2);
+        await shop.RefundAsync(orderId, 55m);
+        // Meanwhile the business gives the same money back from its account; the notification leaves it to the queue.
+        shop.Gateway.GiveBack(payment, 55m, SalesTestFixture.Now.AddMinutes(5), refundId: "4488");
+        await shop.NotifyAsync(payment);
+        Assert.Single(await shop.Context.OnlinePaymentRefunds.ToListAsync());
+        shop.Gateway.RefundOutcome = new OnlinePaymentRefundOutcome.Refused("Mercado Pago no hizo la devolución: el pago ya se devolvió.");
+
+        // A refusal changes nothing in the payment: no notification or review would read it again.
+        await shop.DispatchRefundAsync((await shop.Context.OnlinePaymentRefunds.AsNoTracking().SingleAsync()).Id);
+
+        var refund = await shop.Context.OnlinePaymentRefunds.AsNoTracking().SingleAsync();
+        Assert.Equal((OnlinePaymentRefundStatus.DoneInMercadoPago, "4488"), (refund.Status, refund.ProviderRefundId));
+        Assert.Single((await shop.Context.Orders.AsNoTracking().Include(o => o.Refunds).SingleAsync(o => o.Id == orderId)).Refunds);
+        Assert.Equal(0, (await shop.SettingsAsync()).RefundsRefused);
+    }
+
+    [Fact]
     public async Task AutomaticRefund_OfASecondPayment_RefusedThenMadeInTheAccount_ShouldBeDone_AndTouchNoOrder()
     {
         await using var shop = await Shop.OpenAsync();
@@ -243,6 +265,25 @@ public partial class OnlinePaymentsFlowTests
         await shop.NotifyAsync(payment);
         var covered = await shop.OrderAsync(orderId);
         Assert.Equal((OnlinePaymentDispute.Won, 2), (covered.OnlineDispute, covered.Refunds.Count));
+    }
+
+    [Fact]
+    public async Task Dispute_ShouldNotGoBack_WithWhatMercadoPagoSaidBeforeItLastChanged()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var (orderId, payment) = await PlaceAsync(shop);
+        var opened = shop.Gateway.Dispute(payment, OnlinePaymentDetails.ChargedBackStatus, "in_process", SalesTestFixture.Now.AddDays(10));
+        shop.Gateway.Dispute(payment, OnlinePaymentDetails.ChargedBackStatus, "settled", SalesTestFixture.Now.AddDays(40));
+        await shop.NotifyAsync(payment);
+        var checkoutId = await shop.Context.OnlineCheckouts.AsNoTracking().Select(c => c.Id).SingleAsync();
+
+        // A review that read the payment while it was still open reflects it after the notification of how it ended.
+        var stale = (await shop.Send(new ReconcileOnlinePaymentCommand(checkoutId, opened, []))).Value;
+
+        Assert.False(stale.ChangedAnything);
+        var order = await shop.OrderAsync(orderId);
+        Assert.Equal((OnlinePaymentDispute.Lost, SalesTestFixture.Now.AddDays(40)), (order.OnlineDispute, order.OnlineDisputeUpdatedAt));
+        Assert.Equal(0, (await shop.SettingsAsync()).DisputesOpen);
     }
 
     [Fact]
@@ -344,45 +385,156 @@ public partial class OnlinePaymentsFlowTests
 
         var first = (await shop.ReviewAsync()).Value;
 
-        Assert.Equal((2, 1, SalesTestFixture.Now.AddHours(4)), (first.Read, first.Reflected, first.ReviewedUntil));
+        // Read all of it: reviewed until the overlap before now (Mercado Pago's clock may run ahead of ours).
+        var reviewed = SalesTestFixture.Now.AddHours(4) - ReviewOnlinePaymentsCommandHandler.Overlap;
+        Assert.Equal((2, 1, reviewed), (first.Read, first.Reflected, first.ReviewedUntil));
         Assert.Single((await shop.Context.Orders.AsNoTracking().Include(o => o.Refunds).SingleAsync(o => o.Id == orderId)).Refunds);
-        // The first review reads from the connection, with the overlap.
-        Assert.Equal(SalesTestFixture.Now - ReviewOnlinePaymentsCommandHandler.Overlap, shop.Gateway.ChangeSearches[0].From);
-        Assert.Equal(SalesTestFixture.Now.AddHours(4), (await shop.Context.OnlinePaymentAccounts.AsNoTracking().SingleAsync()).PaymentsReviewedUntil);
-        Assert.Equal(SalesTestFixture.Now.AddHours(4), (await shop.SettingsAsync()).PaymentsReviewedUntil);
+        // The first review reads from the checkout paid with the account (connected that same moment).
+        Assert.Equal(SalesTestFixture.Now, shop.Gateway.ChangeSearches[0].From);
+        Assert.Equal(reviewed, (await shop.Context.OnlinePaymentAccounts.AsNoTracking().SingleAsync()).PaymentsReviewedUntil);
+        Assert.Equal(reviewed, (await shop.SettingsAsync()).PaymentsReviewedUntil);
 
-        // Not again before its time; then from the last review, with the overlap.
-        shop.Clock.UtcNow = SalesTestFixture.Now.AddHours(4).AddMinutes(10);
+        // Not again before its time (15 minutes after it ran); then from where it ended.
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddHours(4).AddMinutes(14);
         Assert.Null((await shop.ReviewAsync()).Value.ReviewedUntil);
         Assert.Single(shop.Gateway.ChangeSearches);
-        shop.Clock.UtcNow = SalesTestFixture.Now.AddHours(5);
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddHours(4).AddMinutes(15);
         var second = (await shop.ReviewAsync()).Value;
-        Assert.Equal(SalesTestFixture.Now.AddHours(4) - ReviewOnlinePaymentsCommandHandler.Overlap, shop.Gateway.ChangeSearches[1].From);
-        Assert.Equal(0, second.Reflected);
+        Assert.Equal(reviewed, shop.Gateway.ChangeSearches[1].From);
+        Assert.Equal((0, SalesTestFixture.Now.AddHours(4).AddMinutes(5)), (second.Reflected, second.ReviewedUntil));
         Assert.Single(await shop.Context.OnlinePaymentRefunds.ToListAsync());
     }
 
     [Fact]
-    public async Task Review_ThatReadsAFullPage_ShouldGoOnFromTheLastChangeRead()
+    public async Task Review_ThatReadsAFullPage_ShouldGoOnFromTheLastChangeRead_UntilEveryPaymentWasRead()
     {
         await using var shop = await Shop.OpenAsync();
         await PlaceAsync(shop);
-        for (var i = 0; i < ReviewOnlinePaymentsCommandHandler.PageSize * ReviewOnlinePaymentsCommandHandler.MaxPagesPerReview + 3; i++)
-            shop.Gateway.Payments[$"8{i:D5}"] = shop.Gateway.Payments.Values.First() with
+        var others = AddOtherPayments(shop, ReviewOnlinePaymentsCommandHandler.PageSize * ReviewOnlinePaymentsCommandHandler.MaxPagesPerReview + 3,
+            i => SalesTestFixture.Now.AddMinutes(i + 1));
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddDays(1);
+
+        var first = (await shop.ReviewAsync()).Value;
+
+        Assert.Equal(ReviewOnlinePaymentsCommandHandler.MaxPagesPerReview, shop.Gateway.ChangeSearches.Count);
+        // Each page starts at the last change of the one before, which gives that payment back once more.
+        Assert.Equal(ReviewOnlinePaymentsCommandHandler.PageSize * ReviewOnlinePaymentsCommandHandler.MaxPagesPerReview - 3, first.Read);
+        Assert.All(shop.Gateway.ChangeSearches, search => Assert.Equal(0, search.Offset));
+        // Reviewed until the last change it read, by Mercado Pago's clock; due again at once.
+        var lastRead = shop.Gateway.Payments[shop.Gateway.ChangesGivenBack[^1]].LastChangedAt;
+        Assert.Equal(lastRead, first.ReviewedUntil);
+
+        var second = (await shop.ReviewAsync()).Value;
+
+        Assert.Equal(lastRead, shop.Gateway.ChangeSearches[ReviewOnlinePaymentsCommandHandler.MaxPagesPerReview].From);
+        Assert.Equal(SalesTestFixture.Now.AddDays(1) - ReviewOnlinePaymentsCommandHandler.Overlap, second.ReviewedUntil);
+        Assert.Superset(others.Append(shop.Gateway.Payments.Keys.Except(others).Single()).ToHashSet(), shop.Gateway.ChangesGivenBack.ToHashSet());
+        Assert.Subset(shop.Gateway.ChangesGivenBack.ToHashSet(), shop.Gateway.Payments.Keys.ToHashSet());
+    }
+
+    [Fact]
+    public async Task Review_OfAnAccountWithMoreChangesInTenMinutesThanAReviewReads_ShouldAlwaysMoveForward()
+    {
+        await using var shop = await Shop.OpenAsync();
+        await PlaceAsync(shop);
+        // 450 sales outside TienditApp at a lunch peak, one every second: more than a review reads within the overlap.
+        AddOtherPayments(shop, 450, i => SalesTestFixture.Now.AddHours(2).AddSeconds(i));
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddDays(1);
+
+        var cursors = new List<DateTimeOffset?>();
+        for (var review = 0; review < 5 && cursors.LastOrDefault() != shop.Clock.UtcNow - ReviewOnlinePaymentsCommandHandler.Overlap; review++)
+            cursors.Add((await shop.ReviewAsync()).Value.ReviewedUntil);
+
+        // It never stays where it was, and three reviews read all of it.
+        Assert.Equal(3, cursors.Count);
+        Assert.Equal(cursors.OrderBy(c => c).ToList(), cursors);
+        Assert.Equal(cursors.Count, cursors.Distinct().Count());
+        Assert.Equal(shop.Gateway.Payments.Keys.ToHashSet(), shop.Gateway.ChangesGivenBack.ToHashSet());
+    }
+
+    [Fact]
+    public async Task Review_OfAWholeReviewOfChangesAtOneInstant_ShouldNotStayThereForever()
+    {
+        await using var shop = await Shop.OpenAsync();
+        await PlaceAsync(shop);
+        var instant = SalesTestFixture.Now.AddHours(2);
+        AddOtherPayments(shop, 260, _ => instant);
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddDays(1);
+
+        var first = (await shop.ReviewAsync()).Value;
+        var second = (await shop.ReviewAsync()).Value;
+        var third = (await shop.ReviewAsync()).Value;
+
+        // A page that changed at one instant goes on by position; a next review that again reads only that instant goes on
+        // after it (the rest of that instant is left out and logged) instead of reading it again on every pass.
+        Assert.Equal(instant, first.ReviewedUntil);
+        Assert.True(second.ReviewedUntil > instant);
+        Assert.Equal(shop.Clock.UtcNow - ReviewOnlinePaymentsCommandHandler.Overlap, third.ReviewedUntil);
+    }
+
+    [Fact]
+    public async Task Review_ShouldReadEveryPayment_EvenWhenOneChangesAgainWhileItRuns()
+    {
+        await using var shop = await Shop.OpenAsync();
+        await PlaceAsync(shop);
+        var others = AddOtherPayments(shop, 120, i => SalesTestFixture.Now.AddMinutes(i + 1));
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddDays(1);
+        // While the second page is asked for, a payment of the first one changes again (it moves past now): by position, the
+        // payment at the start of the second page would never come.
+        shop.Gateway.WhileReading = () =>
+        {
+            shop.Gateway.WhileReading = () =>
             {
-                Id = $"8{i:D5}",
-                ExternalReference = $"otra-{i}",
-                LastChangedAt = SalesTestFixture.Now.AddMinutes(i + 1)
+                shop.Gateway.Payments[others[10]] = shop.Gateway.Payments[others[10]] with { LastChangedAt = SalesTestFixture.Now.AddDays(2) };
+                return Task.CompletedTask;
             };
+            return Task.CompletedTask;
+        };
+
+        var review = (await shop.ReviewAsync()).Value;
+
+        Assert.Equal(shop.Clock.UtcNow - ReviewOnlinePaymentsCommandHandler.Overlap, review.ReviewedUntil);
+        Assert.Equal(shop.Gateway.Payments.Keys.ToHashSet(), shop.Gateway.ChangesGivenBack.ToHashSet());
+    }
+
+    [Fact]
+    public async Task Review_ShouldNotTakeAFullPageForTheLast_WhenSomeOfItCouldNotBeRead()
+    {
+        await using var shop = await Shop.OpenAsync();
+        await PlaceAsync(shop);
+        AddOtherPayments(shop, ReviewOnlinePaymentsCommandHandler.PageSize - 2, i => SalesTestFixture.Now.AddMinutes(i + 1));
+        // The first page also came with two results that could not be read.
+        shop.Gateway.UnreadableInNextPage[1] = 2;
         shop.Clock.UtcNow = SalesTestFixture.Now.AddDays(1);
 
         var review = (await shop.ReviewAsync()).Value;
 
-        Assert.Equal(ReviewOnlinePaymentsCommandHandler.PageSize * ReviewOnlinePaymentsCommandHandler.MaxPagesPerReview, review.Read);
-        Assert.Equal(ReviewOnlinePaymentsCommandHandler.MaxPagesPerReview, shop.Gateway.ChangeSearches.Count);
-        // The order's payment changed first: the last read is the 199th of the others.
-        Assert.True(review.ReviewedUntil < SalesTestFixture.Now.AddDays(1));
-        Assert.Equal(review.ReviewedUntil, (await shop.Context.OnlinePaymentAccounts.AsNoTracking().SingleAsync()).PaymentsReviewedUntil);
+        Assert.Equal(2, shop.Gateway.ChangeSearches.Count);
+        Assert.Equal(shop.Clock.UtcNow - ReviewOnlinePaymentsCommandHandler.Overlap, review.ReviewedUntil);
+    }
+
+    [Fact]
+    public async Task FirstReview_OfAnAccountConnectedAgain_ShouldReadFromItsOldestPaidCheckout()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var (orderId, payment) = await PlaceAsync(shop);
+        // The business disconnected the account and connected it again a month later; meanwhile it gave money back from it.
+        shop.Context.OnlinePaymentAccounts.RemoveRange(await shop.Context.OnlinePaymentAccounts.ToListAsync());
+        await shop.Context.SaveChangesAsync();
+        shop.Context.OnlinePaymentAccounts.Add(OnlinePaymentAccount.Connect(
+            shop.Tenant.Id, FakeOnlinePaymentGateway.AccountId,
+            OnlinePaymentKeys.ProtectAccess(shop.Protector, shop.Tenant.Id, FakeOnlinePaymentGateway.AccessToken),
+            OnlinePaymentKeys.ProtectRefresh(shop.Protector, shop.Tenant.Id, FakeOnlinePaymentGateway.RefreshToken),
+            SalesTestFixture.Now.AddDays(200), liveMode: true, Guid.NewGuid(), SalesTestFixture.Now.AddDays(30)));
+        await shop.Context.SaveChangesAsync();
+        shop.Gateway.GiveBack(payment, 20m, SalesTestFixture.Now.AddDays(10));
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddDays(31);
+
+        var review = (await shop.ReviewAsync()).Value;
+
+        Assert.Equal(SalesTestFixture.Now, shop.Gateway.ChangeSearches[0].From);
+        Assert.Equal(1, review.Reflected);
+        Assert.Single((await shop.Context.Orders.AsNoTracking().Include(o => o.Refunds).SingleAsync(o => o.Id == orderId)).Refunds);
     }
 
     [Fact]
@@ -408,6 +560,21 @@ public partial class OnlinePaymentsFlowTests
         shop.Gateway.RejectKey = false;
         Assert.Null((await shop.ReviewAsync()).Value.ReviewedUntil);
         Assert.Equal(searches, shop.Gateway.ChangeSearches.Count);
+    }
+
+    /// <summary>Payments of the account TienditApp did not charge, each changed when <paramref name="changedAt"/> says.</summary>
+    /// <returns>Their ids, in the order they were added.</returns>
+    private static List<string> AddOtherPayments(Shop shop, int count, Func<int, DateTimeOffset> changedAt)
+    {
+        var template = shop.Gateway.Payments.Values.First();
+        var ids = new List<string>();
+        for (var i = 0; i < count; i++)
+        {
+            var id = $"8{i:D5}";
+            shop.Gateway.Payments[id] = template with { Id = id, ExternalReference = $"otra-{i}", LastChangedAt = changedAt(i) };
+            ids.Add(id);
+        }
+        return ids;
     }
 
     /// <summary>An order placed by an approved payment of <paramref name="quantity"/> lattes ($55 each).</summary>

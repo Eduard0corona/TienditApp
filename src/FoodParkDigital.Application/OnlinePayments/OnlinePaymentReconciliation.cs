@@ -199,9 +199,12 @@ public class ReconcileOnlinePaymentCommandHandler
         }
 
         var disputeChanged = false;
-        if (order is not null && OnlinePaymentDisputes.From(payment, checkout.Dispute) is { } dispute)
+        // What Mercado Pago said of the payment before the dispute last changed is not news: a review that read the payment
+        // minutes ago never takes the dispute back.
+        var stale = payment.LastChangedAt is { } changedAt && checkout.DisputeUpdatedAt is { } disputedAt && changedAt < disputedAt;
+        if (order is not null && !stale && OnlinePaymentDisputes.From(payment, checkout.Dispute) is { } dispute)
         {
-            disputeChanged = checkout.RecordDispute(dispute, now);
+            disputeChanged = checkout.RecordDispute(dispute, payment.LastChangedAt ?? now);
             if (OnlinePaymentDisputes.IsLostChargeback(payment)
                 && !ours.Any(r => r.Reason == OnlinePaymentRefundReason.Chargeback)
                 && RecordChargeback(order, payment.Id, now) is not null)

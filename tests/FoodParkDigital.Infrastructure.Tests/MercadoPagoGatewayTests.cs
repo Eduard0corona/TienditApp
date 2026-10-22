@@ -229,9 +229,11 @@ public class MercadoPagoGatewayTests
               {"id":8,"status":"charged_back","status_detail":"in_process","external_reference":"otra-tienda","transaction_amount":10}]}
             """));
 
-        var payments = await gateway.FindChangedPaymentsAsync(
+        var changes = await gateway.FindChangedPaymentsAsync(
             "APP_USR-business", Now.AddDays(-1), Now, offset: 50, limit: 50, CancellationToken.None);
 
+        var payments = changes.Payments;
+        Assert.Equal(2, changes.Returned);
         Assert.Equal(["7", "8"], payments.Select(payment => payment.Id));
         Assert.Equal((20.5m, DateTimeOffset.Parse("2026-10-20T15:00:00Z"), true), (payments[0].RefundedAmount, payments[0].LastChangedAt, payments[0].MayHaveRefunds));
         Assert.Equal((0m, (DateTimeOffset?)null, false), (payments[1].RefundedAmount, payments[1].LastChangedAt, payments[1].MayHaveRefunds));
@@ -253,6 +255,23 @@ public class MercadoPagoGatewayTests
             () => rejected.FindChangedPaymentsAsync("APP_USR-business", Now.AddDays(-1), Now, 0, 50, CancellationToken.None));
         await Assert.ThrowsAsync<OnlinePaymentGatewayUnavailableException>(
             () => failing.FindChangedPaymentsAsync("APP_USR-business", Now.AddDays(-1), Now, 0, 50, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindChangedPaymentsAsync_ShouldCountWhatItCouldNotRead_AndTakeAnAnswerWithoutResultsAsNoAnswer()
+    {
+        // A result without its id still counts: the review must not take a full page for the last one.
+        var (gateway, _) = Create(_ => Json(HttpStatusCode.OK, """
+            {"results":[{"id":7,"status":"approved"},{"status":"approved"},{"id":9}]}
+            """));
+        var (withoutResults, _) = Create(_ => Json(HttpStatusCode.OK, """{"paging":{"total":0}}"""));
+
+        var changes = await gateway.FindChangedPaymentsAsync("APP_USR-business", Now.AddDays(-1), Now, 0, 50, CancellationToken.None);
+
+        Assert.Equal(3, changes.Returned);
+        Assert.Equal(["7"], changes.Payments.Select(payment => payment.Id));
+        await Assert.ThrowsAsync<OnlinePaymentGatewayUnavailableException>(
+            () => withoutResults.FindChangedPaymentsAsync("APP_USR-business", Now.AddDays(-1), Now, 0, 50, CancellationToken.None));
     }
 
     [Fact]

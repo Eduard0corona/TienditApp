@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -78,6 +79,11 @@ public class ApplyOnlinePaymentNotificationCommandHandler
 /// payments of the account that changed since the last review and reflects the ones of this business's checkouts, so a
 /// refund made in Mercado Pago or a dispute reaches the order even when its notification was lost. Without a key that works
 /// nothing is reviewed, and it waits.
+/// <para>The account keeps until when everything was read (<see cref="OnlinePaymentAccount.PaymentsReviewedUntil"/>): a review
+/// that read all of it, until <see cref="ReviewOnlinePaymentsCommandHandler.Overlap"/> before now (Mercado Pago's clock and
+/// ours may differ); one that stopped at its page limit, until the last change it read, by Mercado Pago's clock, and the next
+/// one goes on from there. Each page starts at the last change of the one before, so a payment that changes again while the
+/// review runs (it moves to the end) shifts nothing.</para>
 /// </summary>
 [AllowAnonymousRequest("Lo envía la revisión de pagos en línea (sistema), sin usuario, en el alcance del negocio.")]
 public record ReviewOnlinePaymentsCommand : IRequest<Result<OnlinePaymentReview>>;
@@ -92,14 +98,26 @@ public class ReviewOnlinePaymentsCommandHandler : IRequestHandler<ReviewOnlinePa
     /// <summary>How often a business's account is reviewed: the notification usually brings each change at once.</summary>
     public static readonly TimeSpan ReviewEvery = TimeSpan.FromMinutes(15);
 
-    /// <summary>Each review reads again this much before the last one: Mercado Pago's clock and ours may differ.</summary>
+    /// <summary>
+    /// A review that read everything counts as read until this much before now: Mercado Pago's clock and ours may differ, and
+    /// the next review reads it again.
+    /// </summary>
     public static readonly TimeSpan Overlap = TimeSpan.FromMinutes(10);
 
-    /// <summary>The first review reads from the connection, at most this far back: Mercado Pago's window for refunds.</summary>
+    /// <summary>
+    /// The first review of an account reads from its oldest checkout paid with it (or its connection), at most this far back:
+    /// Mercado Pago's window for refunds.
+    /// </summary>
     public static readonly TimeSpan FirstReviewWindow = TimeSpan.FromDays(180);
 
     public const int PageSize = 50;
     public const int MaxPagesPerReview = 4;
+
+    /// <summary>
+    /// An account reviewed until before this is due a review: one that read everything is due <see cref="ReviewEvery"/>
+    /// after it ran, and one that stopped at its page limit goes on at once, unless what it read is that recent.
+    /// </summary>
+    public static DateTimeOffset DueIfReviewedBefore(DateTimeOffset now) => now - ReviewEvery - Overlap;
 
     private readonly IApplicationDbContext _context;
     private readonly IOnlinePaymentGateway _gateway;
@@ -131,15 +149,16 @@ public class ReviewOnlinePaymentsCommandHandler : IRequestHandler<ReviewOnlinePa
         var nothing = new OnlinePaymentReview(0, 0, null);
         var now = _clock.UtcNow;
         var account = await _context.OnlinePaymentAccounts.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        if (account is null || account.PaymentsReviewedUntil > now - ReviewEvery)
+        if (account is null || account.PaymentsReviewedUntil > DueIfReviewedBefore(now))
             return Result.Success(nothing);
         var accessToken = await _checker.AccessTokenAsync(cancellationToken);
         if (accessToken is null)
             return Result.Success(nothing);
 
-        var from = account.PaymentsReviewedUntil is { } reviewed
-            ? reviewed - Overlap
-            : Max(account.ConnectedAt, now - FirstReviewWindow) - Overlap;
+        var start = account.PaymentsReviewedUntil ?? await FirstReviewStartAsync(account, now, cancellationToken);
+        var from = start;
+        var offset = 0;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var read = 0;
         var reflected = 0;
         DateTimeOffset? lastChanged = null;
@@ -148,14 +167,29 @@ public class ReviewOnlinePaymentsCommandHandler : IRequestHandler<ReviewOnlinePa
         {
             for (var page = 0; page < MaxPagesPerReview; page++)
             {
-                var payments = await _gateway.FindChangedPaymentsAsync(accessToken, from, now, page * PageSize, PageSize, cancellationToken);
-                read += payments.Count;
-                reflected += await ReflectAsync(accessToken, payments, cancellationToken);
-                lastChanged = payments.Select(p => p.LastChangedAt).LastOrDefault(at => at is not null) ?? lastChanged;
-                if (payments.Count < PageSize)
+                var changes = await _gateway.FindChangedPaymentsAsync(accessToken, from, now, offset, PageSize, cancellationToken);
+                // A page that starts at the last change of the one before gives back the payments of that same instant again.
+                var fresh = changes.Payments.Where(p => seen.Add(p.Id)).ToList();
+                read += fresh.Count;
+                reflected += await ReflectAsync(accessToken, fresh, cancellationToken);
+                if (changes.Returned < PageSize)
                 {
                     complete = true;
                     break;
+                }
+
+                var last = changes.Payments.Select(p => p.LastChangedAt).LastOrDefault(at => at is not null);
+                lastChanged = last ?? lastChanged;
+                // The next page starts at the last change read; only when the whole page changed at that same instant does it
+                // go on by position.
+                if (last is { } at && at > from)
+                {
+                    from = at;
+                    offset = 0;
+                }
+                else
+                {
+                    offset += PageSize;
                 }
             }
         }
@@ -171,8 +205,7 @@ public class ReviewOnlinePaymentsCommandHandler : IRequestHandler<ReviewOnlinePa
             return Result.Success(new OnlinePaymentReview(read, reflected, null));
         }
 
-        // All of it was read: reviewed until now. Otherwise until the last change read, and the next review goes on from there.
-        var until = complete ? now : lastChanged ?? from;
+        var until = complete ? now - Overlap : ContinueFrom(lastChanged, start, account.TenantId);
         _context.ChangeTracker.Clear();
         var stored = await _context.OnlinePaymentAccounts.FirstOrDefaultAsync(cancellationToken);
         if (stored is null || stored.ProviderUserId != account.ProviderUserId)
@@ -189,7 +222,35 @@ public class ReviewOnlinePaymentsCommandHandler : IRequestHandler<ReviewOnlinePa
             return Result.Success(new OnlinePaymentReview(read, reflected, null));
         }
 
-        return Result.Success(new OnlinePaymentReview(read, reflected, until));
+        return Result.Success(new OnlinePaymentReview(read, reflected, stored.PaymentsReviewedUntil));
+    }
+
+    /// <summary>
+    /// Where the next review goes on after one that stopped at its page limit: the last change it read, which it reads again
+    /// (the ones of that instant it had not reached yet). It always moves forward: if every payment it read changed at the
+    /// instant it started from, the rest of that instant is left out (and logged) rather than read again forever.
+    /// </summary>
+    private DateTimeOffset ContinueFrom(DateTimeOffset? lastChanged, DateTimeOffset start, Guid tenantId)
+    {
+        if (lastChanged is { } last && last > start)
+            return last;
+        _logger.LogWarning(
+            "The review of the payments of tenant {TenantId} read a whole review of changes at one instant; it goes on after it", tenantId);
+        return start.AddMilliseconds(1);
+    }
+
+    /// <summary>
+    /// The first review reads from the oldest checkout paid with this account (it may have been connected before, and connected
+    /// again) or from its connection, at most <see cref="FirstReviewWindow"/> back.
+    /// </summary>
+    private async Task<DateTimeOffset> FirstReviewStartAsync(OnlinePaymentAccount account, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var oldestPaid = await _context.OnlineCheckouts.AsNoTracking()
+            .Where(c => c.ProviderUserId == account.ProviderUserId
+                && (c.Status == OnlineCheckoutStatus.Placed || c.Status == OnlineCheckoutStatus.NotPlaced))
+            .MinAsync(c => (DateTimeOffset?)c.StartedAt, cancellationToken);
+        var start = oldestPaid is { } paid && paid < account.ConnectedAt ? paid : account.ConnectedAt;
+        return Max(start, now - FirstReviewWindow);
     }
 
     /// <returns>How many payments reached their orders.</returns>

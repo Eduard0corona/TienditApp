@@ -50,7 +50,8 @@ public interface IOnlinePaymentGateway
     /// <paramref name="offset"/>.
     /// </summary>
     /// <exception cref="OnlinePaymentAccountRejectedException">Mercado Pago no longer takes the account's key.</exception>
-    Task<IReadOnlyList<OnlinePaymentDetails>> FindChangedPaymentsAsync(
+    /// <exception cref="OnlinePaymentGatewayUnavailableException">Mercado Pago did not answer, or not with a page of results.</exception>
+    Task<OnlinePaymentChanges> FindChangedPaymentsAsync(
         string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken);
 
     /// <summary>
@@ -119,6 +120,15 @@ public sealed record OnlinePaymentDetails(
 
     /// <summary>Whether Mercado Pago may have given part of it back: then its refunds are read.</summary>
     public bool MayHaveRefunds => RefundedAmount > 0 || Status == RefundedStatus || StatusDetail == "partially_refunded";
+}
+
+/// <summary>A page of the payments that changed in Mercado Pago (Fase 24K).</summary>
+/// <param name="Payments">The ones that could be read, in the order Mercado Pago gave them.</param>
+/// <param name="Returned">How many Mercado Pago gave back, also the ones that could not be read: a page is the last one only
+/// when this is less than what was asked for.</param>
+public sealed record OnlinePaymentChanges(IReadOnlyList<OnlinePaymentDetails> Payments, int Returned)
+{
+    public static OnlinePaymentChanges Of(IReadOnlyList<OnlinePaymentDetails> payments) => new(payments, payments.Count);
 }
 
 /// <summary>A refund Mercado Pago has of a payment (Fase 24K); only an approved one gave the money back.</summary>

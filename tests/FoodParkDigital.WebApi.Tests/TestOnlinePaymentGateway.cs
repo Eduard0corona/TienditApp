@@ -64,18 +64,19 @@ public sealed class TestOnlinePaymentGateway : IOnlinePaymentGateway
         }
     }
 
-    public Task<IReadOnlyList<OnlinePaymentDetails>> FindChangedPaymentsAsync(
+    public Task<OnlinePaymentChanges> FindChangedPaymentsAsync(
         string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken)
     {
         lock (_gate)
         {
-            IReadOnlyList<OnlinePaymentDetails> changed = _payments.Values
+            var changed = _payments.Values
                 .Where(p => Key(p.CollectorId!.Value) == accessToken && p.LastChangedAt >= from && p.LastChangedAt <= to)
                 .OrderBy(p => p.LastChangedAt)
+                .ThenBy(p => p.Id, StringComparer.Ordinal)
                 .Skip(offset)
                 .Take(limit)
                 .ToList();
-            return Task.FromResult(changed);
+            return Task.FromResult(OnlinePaymentChanges.Of(changed));
         }
     }
 

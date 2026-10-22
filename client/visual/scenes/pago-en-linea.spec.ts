@@ -255,9 +255,9 @@ test.describe('Un pedido pagado en línea', () => {
 });
 
 test.describe('Lo que pasó en Mercado Pago', () => {
-  /** Renata's order, its detail open where the dispute and the refunds read. */
+  /** Renata's order of September, found by her name (Pedidos shows today's), its detail open where the dispute reads. */
   async function openOrder(page: Page) {
-    await open(page, '/orders');
+    await open(page, '/orders?search=Renata');
     const row = page.getByRole('row').filter({ hasText: 'Renata Ibarra' });
     const folio = (await row.getByRole('button', { name: /^ORD-\d+$/ }).textContent()) ?? '';
     await row.getByRole('button', { name: folio, exact: true }).click();
@@ -292,7 +292,7 @@ test.describe('Lo que pasó en Mercado Pago', () => {
       const detail = await openOrder(page);
       await expect(detail.getByRole('status').filter({ hasText: 'Disputa perdida.' })).toBeVisible();
       const refunds = detail.getByRole('table').filter({ hasText: 'Motivo' });
-      await expect(refunds.getByText('El banco del cliente lo regresó (contracargo).')).toBeVisible();
+      await expect(refunds.getByText('El banco se lo regresó al cliente (contracargo).')).toBeVisible();
       await refunds.scrollIntoViewIfNeeded();
       await snapScreen(page, 'pedidos-detalle-contracargo-perdido');
     });
