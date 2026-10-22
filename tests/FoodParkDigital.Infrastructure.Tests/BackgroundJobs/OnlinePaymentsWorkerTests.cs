@@ -44,6 +44,32 @@ public class OnlinePaymentsWorkerTests
         Assert.Empty(sent.Sweeps);
     }
 
+    [Fact]
+    public async Task Pass_ShouldStartWith_TheAccountsThePassBeforeLeftOut_WhenItsReviewsRanOutOfTime()
+    {
+        // Each review takes longer than the reviews of a pass may start in, and leaves the account as behind as it was (the
+        // first review of an account with many sales, or one that keeps failing): each pass reviews only one account.
+        var sent = new SentCommands { EachReviewTakes = OnlinePaymentsWorkerService.MaxReviewTimePerPass + TimeSpan.FromSeconds(1) };
+        await using var host = OutboxTestHost.Create(configure: services =>
+        {
+            services.AddSingleton<IOnlinePaymentGateway, ConfiguredGateway>();
+            services.AddSingleton(sent);
+            services.AddScoped<ISender, RecordingSender>();
+            services.AddSingleton<OnlinePaymentsWorkerService>();
+        });
+        var now = host.Clock.UtcNow;
+        var behind = await AddAccountAsync(host, "atrasada", reviewedUntil: now.AddDays(-90), keyExpiresAt: now.AddDays(100));
+        var second = await AddAccountAsync(host, "segunda", reviewedUntil: now.AddHours(-2), keyExpiresAt: now.AddDays(100));
+        var third = await AddAccountAsync(host, "tercera", reviewedUntil: now.AddHours(-1), keyExpiresAt: now.AddDays(100));
+        var worker = host.Get<OnlinePaymentsWorkerService>();
+
+        for (var pass = 0; pass < 4; pass++)
+            Assert.Equal(1, await worker.RunPassAsync(CancellationToken.None));
+
+        // The account reviewed longest ago goes first, not the one still reviewed until the oldest date.
+        Assert.Equal([behind, second, third, behind], sent.Reviews);
+    }
+
     private static Task<Guid> AddAccountAsync(OutboxTestHost host, string slug, DateTimeOffset? reviewedUntil, DateTimeOffset keyExpiresAt)
         => host.InScopeAsync(async services =>
         {
@@ -65,14 +91,18 @@ public class OnlinePaymentsWorkerTests
     {
         public List<Guid> Reviews { get; } = [];
         public List<Guid> Sweeps { get; } = [];
+        /// <summary>How long the clock moves with each review.</summary>
+        public TimeSpan EachReviewTakes { get; init; }
     }
 
     /// <summary>Records each command with the business whose scope sent it.</summary>
-    private sealed class RecordingSender(SentCommands sent, ICurrentTenantService tenant) : ISender
+    private sealed class RecordingSender(SentCommands sent, ICurrentTenantService tenant, MutableClock clock) : ISender
     {
         public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
         {
             var business = tenant.TenantId;
+            if (request is ReviewOnlinePaymentsCommand)
+                clock.Advance(sent.EachReviewTakes);
             object result = request switch
             {
                 ReviewOnlinePaymentsCommand => Record(sent.Reviews, business, Result.Success(new OnlinePaymentReview(0, 0, null))),
