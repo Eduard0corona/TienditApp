@@ -237,6 +237,58 @@ const RECEIVABLES = [
   },
 ];
 
+// PlatformStatementMatchStatus as the contract numbers it.
+const IN_THIS_SETTLEMENT = 1;
+const PENDING = 2;
+const UNKNOWN = 7;
+
+/**
+ * The statement of Uber Eats of the open settlement (STATEMENT_CSV), as the API compares it: four of its orders and the
+ * pending one of before, C91XM with $15.20 less (a promotion), a folio of no order, and two charges without a folio. The
+ * order the business charged (H8N3R) is not in it.
+ */
+export const STATEMENT_CSV = [
+  'Fecha,ID de pedido,Tipo,Pago neto',
+  ...UBER_ORDERS.slice(0, 4).map((each, index) => `2025-09-${15 + index},${each.externalOrderNumber},Pedido,${index === 1 ? r2(each.expectedNet - 15.2) : each.expectedNet}`),
+  `2025-09-14,${UBER_EARLIER.externalOrderNumber},Pedido,${UBER_EARLIER.expectedNet}`,
+  '2025-09-20,K3P9Z,Pedido,120.00',
+  '2025-09-21,,Publicidad,-150.00',
+  '2025-09-21,,Tableta,-35.00',
+  'Total,,,',
+].join('\n');
+
+const statementFolio = (each: Order, row: number, status: number, statementAmount = each.expectedNet) => ({
+  folio: each.externalOrderNumber,
+  rows: [row],
+  statementAmount,
+  status,
+  orders: [each],
+  expectedNet: each.expectedNet,
+  difference: r2(statementAmount - each.expectedNet),
+});
+
+const STATEMENT_FOLIOS = [
+  ...UBER_ORDERS.slice(0, 4).map((each, index) =>
+    statementFolio(each, index + 2, IN_THIS_SETTLEMENT, index === 1 ? r2(each.expectedNet - 15.2) : each.expectedNet)),
+  statementFolio(UBER_EARLIER, 6, PENDING),
+  { folio: 'K3P9Z', rows: [7], statementAmount: 120, status: UNKNOWN, orders: [], expectedNet: null, difference: null },
+];
+const STATEMENT_CONCEPTS = [
+  { concept: 'Publicidad', rows: [8], amount: -150 },
+  { concept: 'Tableta', rows: [9], amount: -35 },
+];
+const TAKEN = STATEMENT_FOLIOS.slice(0, 5);
+const STATEMENT_MATCH = {
+  folios: STATEMENT_FOLIOS,
+  concepts: STATEMENT_CONCEPTS,
+  unreadable: [],
+  statementTotal: sum([...STATEMENT_FOLIOS.map((each) => each.statementAmount), ...STATEMENT_CONCEPTS.map((each) => each.amount)]),
+  matchedTotal: sum(TAKEN.map((each) => each.statementAmount)),
+  expectedTotal: sum(TAKEN.map((each) => each.expectedNet ?? 0)),
+  conceptsTotal: sum(STATEMENT_CONCEPTS.map((each) => each.amount)),
+  unmatchedTotal: 120,
+};
+
 /** Reportes › Liquidaciones: what each platform owes, the settlements, two of them in detail and DiDi's pending orders. */
 const settlementRoutes: ExtraRoutes = (_data, helpers) => [
   ['GET', /^\/platform-settlements\/receivable$/, () => helpers.ok(RECEIVABLES)],
@@ -255,6 +307,7 @@ const settlementRoutes: ExtraRoutes = (_data, helpers) => [
     return { status: 404, json: { code: 'not_found', detail: 'No existe.' } };
   }],
   ['GET', /^\/platform-settlements$/, (_match, query) => helpers.ok(helpers.paginate(SETTLEMENTS, query, 20))],
+  ['POST', /^\/platform-settlements\/statement-matches$/, () => helpers.ok(STATEMENT_MATCH)],
 ];
 
 export const LIQUIDACIONES_ROUTES = asOption(settlementRoutes);

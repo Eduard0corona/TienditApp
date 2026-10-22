@@ -240,7 +240,13 @@ internal static class PlatformSettlementReader
         VoidReason = settlement.VoidReason
     };
 
-    private static PlatformSettlementOrderDto ToDto(PlatformOrderRow row, decimal expectedNet, DateOnly periodFrom, TimeZoneInfo zone)
+    /// <param name="periodTo">The end of the period, for an order that may be registered after it (a statement's folio).</param>
+    internal static PlatformSettlementOrderDto ToDto(
+        PlatformOrderRow row,
+        decimal expectedNet,
+        DateOnly periodFrom,
+        TimeZoneInfo zone,
+        DateOnly? periodTo = null)
     {
         var registeredOn = DailySalesReadModel.LocalDate(row.RegisteredAt, zone);
         return new PlatformSettlementOrderDto
@@ -250,7 +256,7 @@ internal static class PlatformSettlementReader
             ExternalOrderNumber = row.ExternalOrderNumber,
             RegisteredAt = row.RegisteredAt,
             RegisteredOn = registeredOn,
-            InPeriod = registeredOn >= periodFrom,
+            InPeriod = registeredOn >= periodFrom && (periodTo is null || registeredOn <= periodTo),
             Status = row.Status,
             CollectedBy = row.CollectedBy,
             OrderTotal = row.OrderTotal,

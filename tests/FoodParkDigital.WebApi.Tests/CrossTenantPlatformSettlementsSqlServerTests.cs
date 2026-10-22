@@ -16,7 +16,7 @@ namespace FoodParkDigital.WebApi.Tests;
 /// The settlements of the delivery platforms' deposits (Fase 22G) through the API, on SQL Server: each business sees and
 /// changes only its own settlements and settles only its own orders, the business header of an owner changes nothing, a
 /// settlement goes from open to closed with the figures of its orders and back to pending when voided, and they are read
-/// with the reports and changed by owners and admins.
+/// with the reports and changed by owners and admins. A statement is compared with the business's own orders only (Fase 22H).
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantPlatformSettlementsSqlServerTests
@@ -196,6 +196,58 @@ public sealed class CrossTenantPlatformSettlementsSqlServerTests
             (thirdDecimal.StatusCode, Problem(await thirdDecimal.Content.ReadAsStringAsync()).Detail));
         Assert.Equal(HttpStatusCode.BadRequest, withoutPeriod.StatusCode);
         Assert.Equal(0, await _api.QueryAsync(owner.TenantId, db => db.PlatformSettlements.CountAsync()));
+    }
+
+    [SqlServerFact]
+    public async Task StatementMatch_ShouldFindOnlyTheBusinessesOwnOrders_AndBeForOwnersAndAdmins()
+    {
+        var mine = await _api.SignUpAsync("estado-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("estado-b", TwoBusinessesApi.FoodBusiness);
+        var myOrder = await RappiOrderAsync(mine, "SM1");
+        var theirOrder = await RappiOrderAsync(theirs, "SM1");
+        var created = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            "/api/v1/platform-settlements", Settlement(OrderChannel.Rappi, 0m, [], [new { kind = 4, amount = -1m }])));
+        var id = created.GetProperty("settlement").GetProperty("id").GetGuid();
+        object Statement(Guid? settlementId) => new
+        {
+            channel = 3,
+            settlementId,
+            periodFrom = Today().AddDays(-6),
+            periodTo = Today(),
+            lines = new object[]
+            {
+                new { row = 2, folio = "sm1", amount = 100m, concept = "Pedido" },
+                new { row = 3, folio = (string?)null, amount = -12.5m, concept = "Publicidad" }
+            }
+        };
+
+        // Mine finds my order; theirs, with the same folio, finds theirs, and cannot compare with my settlement.
+        var myMatch = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/platform-settlements/statement-matches", Statement(id)));
+        var folio = myMatch.GetProperty("folios").EnumerateArray().Single();
+        Assert.Equal(("SM1", (int)PlatformStatementMatchStatus.Pending, myOrder.Id, 100m - myOrder.ExpectedNet),
+            (folio.GetProperty("folio").GetString(), folio.GetProperty("status").GetInt32(),
+                folio.GetProperty("orders").EnumerateArray().Single().GetProperty("orderId").GetGuid(), folio.GetProperty("difference").GetDecimal()));
+        Assert.Equal(-12.5m, myMatch.GetProperty("conceptsTotal").GetDecimal());
+        var theirMatch = await TwoBusinessesApi.ReadAsync(await theirs.Client.PostAsJsonAsync("/api/v1/platform-settlements/statement-matches", Statement(null)));
+        Assert.Equal(theirOrder.Id, theirMatch.GetProperty("folios")[0].GetProperty("orders")[0].GetProperty("orderId").GetGuid());
+        using (var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/platform-settlements/statement-matches") { Content = JsonContent.Create(Statement(id)) })
+        {
+            request.Headers.Add("X-Tenant-Id", mine.TenantId.ToString());
+            Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(request)).StatusCode);
+        }
+
+        // Comparing is part of saving: whoever only reads the reports cannot.
+        var reports = await EmployeeAsync(mine, appRole: 2, "ViewReports");
+        Assert.Equal(HttpStatusCode.Forbidden, (await reports.PostAsJsonAsync("/api/v1/platform-settlements/statement-matches", Statement(id))).StatusCode);
+
+        var nullLine = await mine.Client.PostAsync("/api/v1/platform-settlements/statement-matches", new StringContent(
+            $"{{\"channel\":3,\"periodFrom\":\"{Today().AddDays(-6):yyyy-MM-dd}\",\"periodTo\":\"{Today():yyyy-MM-dd}\",\"lines\":[null]}}",
+            System.Text.Encoding.UTF8, "application/json"));
+        var nulls = Problem(await nullLine.Content.ReadAsStringAsync());
+        Assert.Equal((HttpStatusCode.BadRequest, ApiErrorCodes.ValidationFailed, MatchPlatformStatementQueryValidator.MissingLineMessage),
+            (nullLine.StatusCode, nulls.Code, nulls.Detail));
+        // Nothing was saved.
+        Assert.Empty(await _api.QueryAsync(mine.TenantId, db => db.PlatformSettlementOrders.ToListAsync()));
     }
 
     /// <summary>The date of the business today (the default time zone of a new business).</summary>

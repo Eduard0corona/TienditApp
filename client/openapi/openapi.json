@@ -10995,6 +10995,54 @@
         }
       }
     },
+    "/api/v1/platform-settlements/statement-matches": {
+      "post": {
+        "tags": [
+          "PlatformSettlements"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchPlatformStatementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchPlatformStatementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchPlatformStatementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformStatementMatchDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformStatementMatchDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformStatementMatchDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform-settlements/{id}": {
       "get": {
         "tags": [
@@ -23093,6 +23141,40 @@
         },
         "additionalProperties": false
       },
+      "MatchPlatformStatementRequest": {
+        "required": [
+          "channel",
+          "lines",
+          "periodFrom",
+          "periodTo"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "settlementId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "periodFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformStatementLineRequest"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "MessagePurpose": {
         "enum": [
           0,
@@ -26645,6 +26727,210 @@
           "Closed",
           "Voided"
         ]
+      },
+      "PlatformStatementConceptDto": {
+        "required": [
+          "amount",
+          "concept",
+          "rows"
+        ],
+        "type": "object",
+        "properties": {
+          "concept": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformStatementFolioDto": {
+        "required": [
+          "folio",
+          "orders",
+          "rows",
+          "statementAmount",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "folio": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "statementAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlatformStatementMatchStatus"
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformSettlementOrderDto"
+            }
+          },
+          "expectedNet": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "difference": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "settlementId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformStatementLineRequest": {
+        "required": [
+          "amount",
+          "row"
+        ],
+        "type": "object",
+        "properties": {
+          "row": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "folio": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "concept": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformStatementMatchDto": {
+        "required": [
+          "concepts",
+          "conceptsTotal",
+          "expectedTotal",
+          "folios",
+          "matchedTotal",
+          "statementTotal",
+          "unmatchedTotal",
+          "unreadable"
+        ],
+        "type": "object",
+        "properties": {
+          "folios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformStatementFolioDto"
+            }
+          },
+          "concepts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformStatementConceptDto"
+            }
+          },
+          "unreadable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformStatementUnreadableDto"
+            }
+          },
+          "statementTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "matchedTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "conceptsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "unmatchedTotal": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformStatementMatchStatus": {
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "InThisSettlement",
+          "Pending",
+          "AfterPeriod",
+          "Settled",
+          "NothingExpected",
+          "Ambiguous",
+          "Unknown"
+        ]
+      },
+      "PlatformStatementUnreadableDto": {
+        "required": [
+          "amount",
+          "folio",
+          "row"
+        ],
+        "type": "object",
+        "properties": {
+          "row": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "concept": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
       },
       "PlatformTenantDto": {
         "required": [

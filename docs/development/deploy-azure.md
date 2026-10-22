@@ -700,6 +700,15 @@ La Fase 27C no trae migración ni `apply.sql`: el motivo nuevo «Cuadre del hist
 - **Sin configuración nueva.** La revisión lee cada existencia con su historial en una sola consulta y supone *read committed snapshot*, que Azure SQL Database trae encendido. Para confirmarlo: `SELECT is_read_committed_snapshot_on FROM sys.databases WHERE name = DB_NAME();` debe dar `1`.
 - **Volver a la versión anterior:** funciona sin tocar la base. Los cuadres hechos son ajustes comunes que la 27B sabe leer, y enseña su motivo como «12». Deja de tener la revisión.
 
+## Importar el estado de cuenta (Fase 22H)
+
+La Fase 22H no trae migración ni `apply.sql`: la comparación del estado de cuenta solo lee, y lo que se aplica se guarda con la liquidación de siempre ([ADR 0040](../adr/0040-platform-statement-import.md)). El merge despliega sin pasos en la base, y `/health/schema` sigue sano.
+
+- **Lo que cambia para los negocios al desplegar:** Reportes › Liquidaciones suma «Importar estado de cuenta» en una liquidación abierta o nueva, para dueños y administradores. Lee un CSV en el navegador, lo compara con los pedidos de la plataforma y propone los pedidos, los ajustes, lo depositado y una nota, que se guardan con «Guardar».
+- **El contrato agrega:** `POST /api/v1/platform-settlements/statement-matches`, sus DTO y el enum `PlatformStatementMatchStatus`. Nada se quita ni cambia de nombre.
+- **Sin configuración nueva.** El archivo no se sube: al servidor llegan hasta 5,000 renglones, y la ruta admite hasta 8 MB por petición (`RequestSizeLimit`), debajo de los 30 MB de Kestrel.
+- **Volver a la versión anterior:** funciona sin tocar la base. Las liquidaciones armadas con un estado de cuenta son liquidaciones comunes. Deja de tener la importación.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

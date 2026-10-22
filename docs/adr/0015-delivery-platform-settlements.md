@@ -107,7 +107,7 @@ Las decisiones fijas de la fase eran:
 
 ## Alternativas descartadas
 
-- **Importar el estado de cuenta (CSV o PDF):** cada plataforma usa un formato distinto y lo cambia sin aviso. La captura manual funciona con las tres, y la importación puede llegar después sobre el mismo modelo.
+- **Importar el estado de cuenta (CSV o PDF):** cada plataforma usa un formato distinto y lo cambia sin aviso. La captura manual funciona con las tres, y la importación puede llegar después sobre el mismo modelo. Llegó en la Fase 22H, en CSV y con las columnas que elige la persona ([ADR 0040](0040-platform-statement-import.md)).
 - **Capturar el neto real de cada pedido:** obligaría a escribir cientos de importes por semana. Marcar los pedidos que trae el estado de cuenta y explicar la diferencia con ajustes deja la misma cuenta.
 - **Cerrar con una diferencia sin explicar:** escondería los errores, y la siguiente semana nadie sabría de dónde salió. Registrarla como «Otro» con una nota cuesta un clic.
 - **Editar o borrar una liquidación cerrada:** rompería la regla de que las correcciones compensan. Se anula y se registra otra.
@@ -135,7 +135,7 @@ Las decisiones fijas de la fase eran:
 
 ## Siguientes pasos
 
-- **Importar el estado de cuenta** de cada plataforma.
+- **Importar el estado de cuenta** de cada plataforma: resuelto en la Fase 22H, en CSV ([ADR 0040](0040-platform-statement-import.md)).
 - **El ID largo del pedido** para comparar con el estado de cuenta.
 - **Ligar las devoluciones posteriores** a la siguiente liquidación.
 - **CFDI de retenciones** que emiten las plataformas.

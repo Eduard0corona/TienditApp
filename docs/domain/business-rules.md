@@ -85,6 +85,27 @@ Cada depósito de Rappi, Uber Eats o DiDi Food se concilia en Reportes › Liqui
 - **Quién:** la leen quienes leen los reportes (`ViewReports`); la abren, guardan, cierran y anulan dueños y administradores.
 - **No es caja:** un depósito no es un movimiento de caja, y Ventas por canal, Inicio y el corte siguen en base caja. La liquidación redondea por pedido y Ventas por canal por fila, así que pueden diferir por centavos.
 
+### Importar el estado de cuenta (Fase 22H)
+
+En una liquidación abierta, o en una nueva, la persona importa el estado de cuenta de la plataforma en CSV y la pantalla propone qué pedidos lleva y qué ajustes explican el resto ([ADR 0040](../adr/0040-platform-statement-import.md)). La comparación (`MatchPlatformStatementQuery`) no guarda nada; lo propuesto se guarda con la liquidación, que vuelve a validar todo con las reglas de arriba.
+
+- **El archivo:** se lee en el navegador, hasta 5 MB, en UTF-8, UTF-16 con su marca o Windows-1252, separado por comas, punto y coma o tabuladores; un libro de Excel o un PDF se rechazan. El encabezado es el primer renglón con dos columnas o más. La persona elige las columnas de folio, importe y concepto (opcional); la pantalla las propone por el encabezado y recuerda por plataforma, en ese dispositivo, las que se usaron.
+- **Qué renglones se mandan:** hasta 5,000, con su línea del archivo. No se mandan los renglones vacíos, los de totales del archivo («Total», «Total:», «TOTAL A PAGAR», «Gran total», «Subtotal»…, sin folio o con esa palabra en el folio), ni los que tienen un importe que no se lee, con más de dos decimales o fuera de ±$10,000,000, o un folio de más de 60 caracteres; la pantalla dice cuáles y por qué. El separador decimal de los importes sale de su columna.
+- **Validación (400 `validation_failed`):** una plataforma de reparto; el periodo, con las mismas reglas que el de la liquidación, sin terminar después de hoy (del negocio); de 1 a 5,000 renglones sin nulos ni líneas repetidas, cada uno con su línea (desde 1), un importe de dos decimales hasta ±$10,000,000, un folio de hasta 60 caracteres y un concepto de hasta 200. Pasado el límite de renglones, un solo mensaje; la petición admite hasta 8 MB.
+- **La liquidación:** una de otro negocio, o que no existe, responde 404; una de otra plataforma o que no está abierta, 400. Sin liquidación (una nueva), otra abierta de la plataforma responde 400 con «Ya hay una liquidación abierta…».
+- **Cómo se agrupan:**
+  - cada folio se normaliza como lo guardan los pedidos (`PlatformOrderNumber`), y sus renglones se suman: el pedido y lo que se le descuenta en otra línea;
+  - un renglón sin folio, o con uno sin letras ni números («-»), va con los de su mismo concepto, sin distinguir mayúsculas ni espacios de más;
+  - un folio que no puede ser de la plataforma («R/9») va aparte, como ilegible.
+- **Qué es cada folio:** entre los pedidos de la plataforma con ese folio registrados hasta el final del periodo (la fecha del negocio), la liquidación puede tomar los que ya tiene (también en 0) y los que no están en otra liquidación vigente y traen un neto esperado distinto de 0. Uno solo que ya tiene, o uno solo en total, hace el folio **ya en esta liquidación** o **pendiente**, con su neto esperado y la diferencia contra el estado de cuenta; si no, con varios, **varios pedidos** (lista hasta 10) y la persona elige. Sin ninguno, el folio dice por qué, en este orden: **después del periodo** (uno que traería algo, también de la liquidación si se acortó el periodo), **en otra liquidación vigente** (el más reciente, con cuál), **sin nada que esperar** (el más reciente: devuelto completo o sin cobrar todavía); sin pedidos, **ninguno**. De los folios que la liquidación no puede tomar se lee un solo pedido, no su historial.
+- **Totales:** lo que suma el estado de cuenta = lo de los folios que entran + los conceptos + lo que no entra (los demás folios, incluidos los de varios pedidos, y los ilegibles). Responde también el neto esperado de los folios que entran.
+- **Lo que propone la pantalla:**
+  - incluye los pedidos de los folios que entran y quita los incluidos que el estado de cuenta no trae; de un folio con varios no se incluye ninguno solo: se queda el que la persona marcó o guardó;
+  - ajustes con la descripción «Estado de cuenta: …»: la diferencia de los pedidos que entran; los folios que no entran y los ilegibles (sin los de varios pedidos); y uno por concepto, con el motivo que sugieren sus palabras. Sin pasar de 100 ajustes: los conceptos que no caben van juntos;
+  - importar otra vez reemplaza los ajustes con esa descripción y deja los escritos a mano;
+  - lo depositado, solo si estaba vacío y el archivo cuadra (sin renglones con importe fuera y con su total, si lo trae, igual a lo que se tomó), y una nota con el archivo y cuántos renglones tenía, si cabe en las 500 letras.
+- **Quién:** dueños y administradores (`[RequiresTenantManager]`), los mismos que guardan la liquidación.
+
 ## Sucursal solo a domicilio (Fase 22A)
 
 Una cocina sin local no publica su dirección ([ADR 0016](../adr/0016-delivery-only-branches.md)). Cada sucursal dice cómo atiende (`Branch.ServiceMode`): «Local abierto al público» o «Solo a domicilio, sin local».

@@ -61,6 +61,33 @@ public class PlatformSettlementsController : ControllerBase
         CancellationToken cancellationToken)
         => Ok(await _mediator.Send(new GetPendingPlatformOrdersQuery { Channel = channel, From = from, To = to }, cancellationToken));
 
+    /// <summary>
+    /// A platform's statement against its orders, by folio, for the open settlement or a new one (Fase 22H): which orders
+    /// the settlement takes, what each brings by the statement and by TienditApp, and what no order explains. It saves
+    /// nothing; the settlement is saved as always.
+    /// </summary>
+    [HttpPost("statement-matches")]
+    // 5,000 lines with their longest folio and concept, escaped, fit in 8 MB; the server's 30 MB would be a million lines.
+    [RequestSizeLimit(8 * 1024 * 1024)]
+    public async Task<ActionResult<PlatformStatementMatchDto>> MatchStatement(
+        [FromBody] MatchPlatformStatementRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Lines.Any(line => line is null))
+            return this.ApiError(StatusCodes.Status400BadRequest, MatchPlatformStatementQueryValidator.MissingLineMessage, ApiErrorCodes.ValidationFailed);
+
+        return Ok(await _mediator.Send(new MatchPlatformStatementQuery
+        {
+            Channel = request.Channel,
+            SettlementId = request.SettlementId,
+            PeriodFrom = request.PeriodFrom,
+            PeriodTo = request.PeriodTo,
+            Lines = request.Lines
+                .Select(line => new PlatformStatementLineInput { Row = line.Row, Folio = line.Folio, Amount = line.Amount, Concept = line.Concept })
+                .ToList()
+        }, cancellationToken));
+    }
+
     /// <summary>A settlement with its orders and adjustments and, while open, the pending orders it could add.</summary>
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<PlatformSettlementDetailDto>> GetById(Guid id, CancellationToken cancellationToken)
@@ -199,6 +226,24 @@ public record PlatformSettlementAdjustmentRequest(
     [property: JsonRequired] PlatformSettlementAdjustmentKind Kind,
     string? Description,
     [property: JsonRequired] decimal Amount);
+
+/// <summary>
+/// A platform's statement to compare with its orders: the settlement it is for (none for a new one), its period and the
+/// lines of the person's file.
+/// </summary>
+public record MatchPlatformStatementRequest(
+    [property: JsonRequired] OrderChannel Channel,
+    Guid? SettlementId,
+    [property: JsonRequired] DateOnly PeriodFrom,
+    [property: JsonRequired] DateOnly PeriodTo,
+    [property: JsonRequired] IReadOnlyList<PlatformStatementLineRequest> Lines);
+
+/// <summary>A line of the statement: the line of the file it came in, its folio (none for a fee), its amount and concept.</summary>
+public record PlatformStatementLineRequest(
+    [property: JsonRequired] int Row,
+    string? Folio,
+    [property: JsonRequired] decimal Amount,
+    string? Concept);
 
 /// <summary>The revision of the settlement the person saw.</summary>
 public record ClosePlatformSettlementRequest([property: JsonRequired] int Revision);

@@ -9134,6 +9134,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform-settlements/statement-matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["MatchPlatformStatementRequest"];
+                    "text/json": components["schemas"]["MatchPlatformStatementRequest"];
+                    "application/*+json": components["schemas"]["MatchPlatformStatementRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformStatementMatchDto"];
+                        "application/json": components["schemas"]["PlatformStatementMatchDto"];
+                        "text/json": components["schemas"]["PlatformStatementMatchDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/platform-settlements/{id}": {
         parameters: {
             query?: never;
@@ -14660,6 +14703,16 @@ export interface components {
             /** Format: double */
             longitude: number;
         };
+        MatchPlatformStatementRequest: {
+            channel: components["schemas"]["OrderChannel"];
+            /** Format: uuid */
+            settlementId?: string | null;
+            /** Format: date */
+            periodFrom: string;
+            /** Format: date */
+            periodTo: string;
+            lines: components["schemas"]["PlatformStatementLineRequest"][];
+        };
         /**
          * Format: int32
          * @enum {integer}
@@ -15725,6 +15778,62 @@ export interface components {
          * @enum {integer}
          */
         PlatformSettlementStatus: 0 | 1 | 99;
+        PlatformStatementConceptDto: {
+            concept: string;
+            rows: number[];
+            /** Format: double */
+            amount: number;
+        };
+        PlatformStatementFolioDto: {
+            folio: string;
+            rows: number[];
+            /** Format: double */
+            statementAmount: number;
+            status: components["schemas"]["PlatformStatementMatchStatus"];
+            orders: components["schemas"]["PlatformSettlementOrderDto"][];
+            /** Format: double */
+            expectedNet?: number | null;
+            /** Format: double */
+            difference?: number | null;
+            /** Format: uuid */
+            settlementId?: string | null;
+        };
+        PlatformStatementLineRequest: {
+            /** Format: int32 */
+            row: number;
+            folio?: string | null;
+            /** Format: double */
+            amount: number;
+            concept?: string | null;
+        };
+        PlatformStatementMatchDto: {
+            folios: components["schemas"]["PlatformStatementFolioDto"][];
+            concepts: components["schemas"]["PlatformStatementConceptDto"][];
+            unreadable: components["schemas"]["PlatformStatementUnreadableDto"][];
+            /** Format: double */
+            statementTotal: number;
+            /** Format: double */
+            matchedTotal: number;
+            /** Format: double */
+            expectedTotal: number;
+            /** Format: double */
+            conceptsTotal: number;
+            /** Format: double */
+            unmatchedTotal: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformStatementMatchStatus: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+        PlatformStatementUnreadableDto: {
+            /** Format: int32 */
+            row: number;
+            folio: string;
+            concept?: string | null;
+            /** Format: double */
+            amount: number;
+        };
         PlatformTenantDto: {
             /** Format: uuid */
             tenantId: string;

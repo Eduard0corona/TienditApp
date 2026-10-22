@@ -342,11 +342,23 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
     - El giro decide la sucursal principal solo en el alta; en un negocio que ya existe se marca a mano en Sucursales.
     - La entrega llegó en las Fases 22B (zonas por código postal) y 22C (dirección del cliente en el pedido, envío cobrado y Paquetenvia).
     - La 22A suma 1 B a la primera visita (de 176,326 a 176,327 B, contra `master` en `a60b1d4`): el enum de la sucursal. El presupuesto no cambia.
+- Resuelto en la Fase 22H: los pedidos de una liquidación se marcaban uno por uno contra el estado de cuenta, y la diferencia de cada pedido no se veía hasta que la liquidación no cuadraba ([ADR 0040](../adr/0040-platform-statement-import.md)).
+  - En Reportes › Liquidaciones, «Importar estado de cuenta» lee un CSV en el navegador, con las columnas que elige la persona, y el servidor lo compara con los pedidos de la plataforma sin guardar nada. La pantalla enseña qué es cada folio y su diferencia, y al aplicarlo propone los pedidos, un ajuste por cada cosa que los pedidos no explican, lo depositado y una nota. Se guarda con «Guardar», que vuelve a validar todo.
+  - Queda:
+    - Solo CSV: un PDF o un XLSX se guardan antes como CSV. Sin formato fijo por plataforma, la persona elige las columnas la primera vez en cada dispositivo.
+    - La llave es el folio corto que se captura en Vender. Un estado de cuenta que solo trae el ID largo del pedido no encuentra nada.
+    - Los motivos de los conceptos se sugieren por palabras («publicidad», «promoción», «reclamo»…); uno con otro nombre llega como «Otro».
+    - Las diferencias por pedido van juntas en un ajuste «Otro»: la liquidación no guarda cuál pedido trajo cuánto, y el estado de cuenta no se guarda.
+    - Un folio con varios pedidos que la liquidación podría tomar (Uber Eats y DiDi Food repiten folios) se deja para que la persona elija, y su importe no entra en ningún ajuste.
+    - Lo aplicado vive en la pantalla hasta guardar, como cualquier cambio sin guardar de la liquidación.
+    - Lo depositado se llena solo cuando el archivo cuadra con su último renglón de totales: un archivo con un «Total» por día lo deja sin llenar, y la persona lo escribe.
+    - La comparación es un `POST` que solo lee, pero como todo `POST` termina aunque la persona cierre la pantalla (`RequestCancellation`).
+    - La 22H suma 40 B a la primera visita (de 179,093 a 179,133 B, contra `master` en `24c84b8`): el enum `PlatformStatementMatchStatus`, que entra al archivo de los enums del contrato que carga la primera pantalla; el lector de CSV, el modal y su API se cargan aparte. El presupuesto sube de 179,100 a 179,200 B.
 - Resuelto en la Fase 22G: la liquidación de cada depósito de Rappi, Uber Eats y DiDi Food y su conciliación con el estado de cuenta ([ADR 0015](../adr/0015-delivery-platform-settlements.md)).
   - Reportes › Liquidaciones dice lo que debe cada plataforma por sus pedidos pendientes. El dueño o un administrador captura cada depósito, TienditApp propone los pedidos del periodo, lo que no cuadra se explica con ajustes con motivo (el 35 % que cubre Rappi, los faltantes, el saldo de DiDi, la publicidad, las cancelaciones tardías…) y la liquidación solo se cierra con la diferencia en $0.00.
   - Cerrar vuelve a calcular cada pedido y, si una devolución cambió alguno, pide revisarlo; anular conserva la liquidación y libera sus pedidos; las dos quedan en la bitácora.
   - Pendiente:
-    - El estado de cuenta se captura a mano: importar el archivo de cada plataforma, o leerlo de su API, llega con las integraciones.
+    - El estado de cuenta se capturaba a mano. Importarlo en CSV llegó en la Fase 22H (arriba); leerlo de la API de cada plataforma llega con las integraciones.
     - Un depósito no es un movimiento de caja ni de banco: TienditApp no lleva cuentas de banco ni concilia contra el estado de cuenta del banco.
     - Con liquidaciones guardadas, el rollback de la base se detiene (error 50010): hay que exportarlas y borrarlas antes, o corregir hacia adelante. Volver a la versión anterior de la app sí funciona sin tocar la base.
     - Lo escrito en una liquidación se pierde sin preguntar al cambiar de pantalla dentro de la app (`BrowserRouter` no permite detener una navegación); cerrar o recargar la pestaña sí pregunta, como en Precios en apps.
