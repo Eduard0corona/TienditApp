@@ -5433,6 +5433,17 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("Capabilities")
                         .HasColumnType("int");
 
+                    b.Property<int>("CreditDueSoonDaysBefore")
+                        .HasColumnType("int")
+                        .HasDefaultValue(2);
+
+                    b.Property<bool>("CreditDueSoonEnabled")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid?>("CreditDueSoonTemplateId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("CreditReminderEveryDays")
                         .HasColumnType("int")
                         .HasDefaultValue(7);
@@ -5515,6 +5526,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantSettings", null, t =>
                         {
+                            t.HasCheckConstraint("CK_TenantSettings_CreditDueSoonDaysBefore", "[CreditDueSoonDaysBefore] >= 1 AND [CreditDueSoonDaysBefore] <= 7");
+
                             t.HasCheckConstraint("CK_TenantSettings_CreditReminderEveryDays", "[CreditReminderEveryDays] >= 1 AND [CreditReminderEveryDays] <= 30");
 
                             t.HasCheckConstraint("CK_TenantSettings_CreditTermDays", "[CreditTermDays] IS NULL OR ([CreditTermDays] >= 1 AND [CreditTermDays] <= 120)");

@@ -15,7 +15,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// <summary>
 /// AddInventoryTransfers (Fase 27B, ADR 0038): the transfers of each business, each with its folio, its key and its own two
 /// movements; the checks refuse what the domain never writes; and rolling back stops with error 50031 once a business made
-/// a transfer, and otherwise drops only the table.
+/// a transfer, and otherwise drops only the table. Its database stops before the notice of Fase 26E, whose columns the
+/// settings of this version do not have.
 /// </summary>
 public class InventoryTransferMigrationSqlServerTests
 {
@@ -33,7 +34,7 @@ public class InventoryTransferMigrationSqlServerTests
         var other = await SeedTenantAsync(database);
         var shelf = await SeedShelfAsync(database, tenant.Id);
         var key = Guid.NewGuid();
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var (exit, entry) = Legs(tenant.Id, shelf, "TRF-20261021-0001", Guid.NewGuid());
             context.AddRange(exit, entry, new InventoryTransfer(Guid.NewGuid(), tenant.Id, "TRF-20261021-0001", key,
@@ -41,7 +42,7 @@ public class InventoryTransferMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using (var check = database.CreateContext(tenant.Id))
+        await using (var check = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var transfer = await check.InventoryTransfers.SingleAsync();
             Assert.Equal(("TRF-20261021-0001", key, shelf.Warehouse.Id, shelf.Store.Id, 1, 36m, "Para el fin de semana"),
@@ -55,11 +56,11 @@ public class InventoryTransferMigrationSqlServerTests
             Assert.Equal([(InventoryMovementType.TransferIn, InventoryMovementReason.Transfer), (InventoryMovementType.TransferOut, InventoryMovementReason.Transfer)],
                 legs.Select(l => (l.MovementType, l.MovementReason)));
         }
-        await using (var elsewhere = database.CreateContext(other.Id))
+        await using (var elsewhere = BeforeCreditDueSoon.CreateContext(database, other.Id))
             Assert.Empty(await elsewhere.InventoryTransfers.ToListAsync());
 
         // The same key again, or a movement of another transfer, is refused by the base too.
-        await using var raw = database.CreateContext(tenant.Id);
+        await using var raw = BeforeCreditDueSoon.CreateContext(database, tenant.Id);
         var (secondExit, secondEntry) = Legs(tenant.Id, shelf, "TRF-20261021-0002", Guid.NewGuid());
         raw.AddRange(secondExit, secondEntry, new InventoryTransfer(Guid.NewGuid(), tenant.Id, "TRF-20261021-0002", key,
             shelf.Store.Id, shelf.Warehouse.Id, Now, "dueno", secondExit.Id, secondEntry.Id, 1, 12m));
@@ -100,7 +101,7 @@ public class InventoryTransferMigrationSqlServerTests
             ("DELETE FROM [InventoryMovements] WHERE [Id] IN (SELECT [InMovementId] FROM [InventoryTransfers])", "deleting a leg"),
             ("DELETE FROM [InventoryLocations] WHERE [Id] IN (SELECT [ToLocationId] FROM [InventoryTransfers])", "deleting a location"),
         ];
-        await using var raw = database.CreateContext();
+        await using var raw = BeforeCreditDueSoon.CreateContext(database);
         foreach (var (sql, what) in refusals)
         {
             var refused = await Assert.ThrowsAsync<SqlException>(() => raw.Database.ExecuteSqlRawAsync(sql));
@@ -120,7 +121,7 @@ public class InventoryTransferMigrationSqlServerTests
         var made = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeTransfers));
         Assert.Equal(50031, made.Number);
         Assert.Contains("transfers between locations", made.Message);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCreditDueSoon.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [InventoryTransfers]"));
@@ -129,7 +130,7 @@ public class InventoryTransferMigrationSqlServerTests
         // Without transfers its legs stay, as plain movements.
         await ExecuteAsync(database, "DELETE FROM [InventoryTransfers]");
         await MigrateAsync(database, BeforeTransfers);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCreditDueSoon.CreateContext(database))
         {
             Assert.Equal(BeforeTransfers, await LatestMigrationAsync(context));
             Assert.Equal((0, 2, 2), (
@@ -141,7 +142,7 @@ public class InventoryTransferMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the table is there, empty.
         await MigrateAsync(database, BeforeTransfers);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeCreditDueSoon.CreateContext(database, tenant.Id);
         Assert.Empty(await forward.InventoryTransfers.ToListAsync());
     }
 
@@ -162,7 +163,7 @@ public class InventoryTransferMigrationSqlServerTests
     {
         var id = Guid.NewGuid();
         var (exit, entry) = Legs(tenantId, shelf, "TRF-20261021-0001", id);
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeCreditDueSoon.CreateContext(database, tenantId);
         context.AddRange(exit, entry, new InventoryTransfer(id, tenantId, "TRF-20261021-0001", Guid.NewGuid(),
             shelf.Warehouse.Id, shelf.Store.Id, Now, "dueno", exit.Id, entry.Id, 1, 36m));
         await context.SaveChangesAsync();
@@ -173,7 +174,7 @@ public class InventoryTransferMigrationSqlServerTests
         var warehouse = new InventoryLocation(tenantId, "Bodega", "BOD", isDefault: true);
         var store = new InventoryLocation(tenantId, "Sucursal centro", "CEN");
         var soda = new SupplyItem(tenantId, "Refresco de cola 600 ml", UnitType.Unit, defaultCost: 12m);
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeCreditDueSoon.CreateContext(database, tenantId);
         context.AddRange(warehouse, store, soda);
         await context.SaveChangesAsync();
         return new Shelf(warehouse, store, soda);
@@ -183,7 +184,7 @@ public class InventoryTransferMigrationSqlServerTests
     {
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant($"Tienda {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
-        await using var seed = database.CreateContext();
+        await using var seed = BeforeCreditDueSoon.CreateContext(database);
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Retail));
         await seed.SaveChangesAsync();
         return tenant;
@@ -198,7 +199,7 @@ public class InventoryTransferMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, string sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCreditDueSoon.CreateContext(database);
         await context.Database.ExecuteSqlRawAsync(sql);
     }
 

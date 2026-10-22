@@ -16,7 +16,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// AddCustomerCreditReminders (Fase 26C, ADR 0035): a customer's own term and the business's credit reminders; what the
 /// deployed version stores meanwhile has no term of its own and keeps reminders off; the checks refuse what the domain never
 /// writes; and rolling back stops with error 50028 once a customer has a term or a business used the reminders, and
-/// otherwise drops only the columns and their checks.
+/// otherwise drops only the columns and their checks. Its database stops before the notice of Fase 26E, whose columns the
+/// settings of this version do not have.
 /// </summary>
 public class CustomerCreditRemindersMigrationSqlServerTests
 {
@@ -47,7 +48,7 @@ public class CustomerCreditRemindersMigrationSqlServerTests
         }
         var template = new MessageTemplate(tenant.Id, "Saldo vencido", MessagePurpose.CreditReminder,
             "Hola {nombre}, debes {vencido} vencido.", "saldo_vencido");
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var customers = await context.Customers.OrderBy(c => c.Name).ToListAsync();
             Assert.Equal(2, customers.Count);
@@ -62,7 +63,7 @@ public class CustomerCreditRemindersMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeCreditDueSoon.CreateContext(database, tenant.Id);
         Assert.Equal(7, (await check.Customers.SingleAsync(c => c.Name == "Luis Pérez")).CreditTermDays);
         Assert.Null((await check.Customers.SingleAsync(c => c.Name == "Ana López")).CreditTermDays);
         var saved = await check.TenantSettings.SingleAsync();
@@ -76,13 +77,13 @@ public class CustomerCreditRemindersMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             context.Customers.Add(new Customer(tenant.Id, "Luis Pérez", "+525512345678", null));
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext();
+        await using var check = BeforeCreditDueSoon.CreateContext(database);
         Assert.Equal(547, (await Assert.ThrowsAsync<SqlException>(() => check.Database.ExecuteSqlAsync(
             $"UPDATE [Customers] SET [CreditTermDays] = 121"))).Number);
         Assert.Equal(547, (await Assert.ThrowsAsync<SqlException>(() => check.Database.ExecuteSqlAsync(
@@ -99,7 +100,7 @@ public class CustomerCreditRemindersMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var customer = new Customer(tenant.Id, "Luis Pérez", "+525512345678", null);
             customer.SetCreditTermDays(7);
@@ -131,14 +132,14 @@ public class CustomerCreditRemindersMigrationSqlServerTests
         ];
         foreach (var trace in traces)
         {
-            await using (var context = database.CreateContext())
+            await using (var context = BeforeCreditDueSoon.CreateContext(database))
             {
                 Assert.Equal(Migration, await LatestMigrationAsync(context));
                 await context.Database.ExecuteSqlRawAsync(
                     "UPDATE [Customers] SET [CreditTermDays] = NULL; UPDATE [TenantSettings] SET [CreditRemindersEnabled] = 0; " +
                     "DELETE FROM [MessageTemplates]; DELETE FROM [OutgoingMessages];");
             }
-            await using (var context = database.CreateContext(tenant.Id))
+            await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
             {
                 await trace(context);
                 await context.SaveChangesAsync();
@@ -148,7 +149,7 @@ public class CustomerCreditRemindersMigrationSqlServerTests
             Assert.Equal(50028, used.Number);
         }
 
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCreditDueSoon.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [OutgoingMessages] WHERE [Purpose] = 3"));
@@ -156,7 +157,7 @@ public class CustomerCreditRemindersMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeReminders);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCreditDueSoon.CreateContext(database))
         {
             Assert.Equal(BeforeReminders, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 0, 1), (
@@ -169,7 +170,7 @@ public class CustomerCreditRemindersMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the customer is there, with the business's term.
         await MigrateAsync(database, BeforeReminders);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeCreditDueSoon.CreateContext(database, tenant.Id);
         Assert.Null((await forward.Customers.SingleAsync()).CreditTermDays);
         Assert.False((await forward.TenantSettings.SingleAsync()).CreditRemindersEnabled);
     }

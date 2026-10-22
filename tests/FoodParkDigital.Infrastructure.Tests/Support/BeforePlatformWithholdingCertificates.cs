@@ -17,7 +17,10 @@ internal static class BeforePlatformWithholdingCertificates
 
     /// <summary>For the context of an earlier version, which does not know it either.</summary>
     public static void Ignore(ModelBuilder modelBuilder)
-        => modelBuilder.Ignore<PlatformWithholdingCertificate>();
+    {
+        modelBuilder.Ignore<PlatformWithholdingCertificate>();
+        BeforeCreditDueSoon.Ignore(modelBuilder);
+    }
 
     private sealed class Context(
         DbContextOptions<ApplicationDbContext> options,

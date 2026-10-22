@@ -15,7 +15,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// <summary>
 /// AddInventoryCounts (Fase 27A, ADR 0037): the physical counts of each business, one open per location, each item once
 /// and counted with what the system had; the checks refuse what the domain never writes; and rolling back stops with
-/// error 50030 once a business started a count, and otherwise drops only the two tables.
+/// error 50030 once a business started a count, and otherwise drops only the two tables. Its database stops before the
+/// notice of Fase 26E, whose columns the settings of this version do not have.
 /// </summary>
 public class InventoryCountMigrationSqlServerTests
 {
@@ -33,7 +34,7 @@ public class InventoryCountMigrationSqlServerTests
         var other = await SeedTenantAsync(database);
         var (location, soda, chips) = await SeedShelfAsync(database, tenant.Id);
         Guid countId;
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var count = new InventoryCount(tenant.Id, "CNT-20261021-0001", location.Id, Now, "dueno", "Bebidas", "Cierre de mes");
             var sodaLine = count.AddLine(soda.Id);
@@ -44,7 +45,7 @@ public class InventoryCountMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using (var check = database.CreateContext(tenant.Id))
+        await using (var check = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var count = await check.InventoryCounts.SingleAsync();
             Assert.Equal((InventoryCountStatus.InProgress, 2, 1, 3, "Bebidas"),
@@ -53,14 +54,14 @@ public class InventoryCountMigrationSqlServerTests
             Assert.Equal([null, 22m], lines.Select(l => l.CountedQuantity));
             Assert.Equal(-2m, lines[1].Difference);
         }
-        await using (var elsewhere = database.CreateContext(other.Id))
+        await using (var elsewhere = BeforeCreditDueSoon.CreateContext(database, other.Id))
         {
             Assert.Empty(await elsewhere.InventoryCounts.ToListAsync());
             Assert.Empty(await elsewhere.InventoryCountLines.ToListAsync());
         }
 
         // A second open count of the location, or the same item twice, is refused by the base too.
-        await using var raw = database.CreateContext(tenant.Id);
+        await using var raw = BeforeCreditDueSoon.CreateContext(database, tenant.Id);
         raw.Add(new InventoryCount(tenant.Id, "CNT-20261021-0002", location.Id, Now, "cajero"));
         var secondOpen = await Assert.ThrowsAsync<DbUpdateException>(() => raw.SaveChangesAsync());
         Assert.Contains("IX_InventoryCounts_TenantId_InventoryLocationId_Open", secondOpen.InnerException!.Message);
@@ -87,7 +88,7 @@ public class InventoryCountMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
         var (location, soda, chips) = await SeedShelfAsync(database, tenant.Id);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var count = new InventoryCount(tenant.Id, "CNT-20261021-0001", location.Id, Now, "dueno");
             var sodaLine = count.AddLine(soda.Id);
@@ -110,7 +111,7 @@ public class InventoryCountMigrationSqlServerTests
             ($"UPDATE [InventoryCountLines] SET [SupplyItemId] = '{Guid.NewGuid()}'", "an item that does not exist"),
             ($"UPDATE [InventoryCounts] SET [InventoryLocationId] = '{Guid.NewGuid()}'", "a location that does not exist"),
         ];
-        await using var raw = database.CreateContext();
+        await using var raw = BeforeCreditDueSoon.CreateContext(database);
         foreach (var (sql, what) in refusals)
         {
             var refused = await Assert.ThrowsAsync<SqlException>(() => raw.Database.ExecuteSqlRawAsync(sql));
@@ -125,7 +126,7 @@ public class InventoryCountMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
         var (location, soda, _) = await SeedShelfAsync(database, tenant.Id);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCreditDueSoon.CreateContext(database, tenant.Id))
         {
             var count = new InventoryCount(tenant.Id, "CNT-20261021-0001", location.Id, Now, "dueno");
             context.AddRange(count, count.AddLine(soda.Id));
@@ -145,13 +146,13 @@ public class InventoryCountMigrationSqlServerTests
             var started = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeCounts));
             Assert.True(started.Number == 50030, $"{state}: {started.Message}");
             Assert.Contains("physical counts", started.Message);
-            await using var context = database.CreateContext();
+            await using var context = BeforeCreditDueSoon.CreateContext(database);
             Assert.Equal(Migration, await LatestMigrationAsync(context));
         }
 
         await ExecuteAsync(database, "DELETE FROM [InventoryCountLines]; DELETE FROM [InventoryCounts]");
         await MigrateAsync(database, BeforeCounts);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCreditDueSoon.CreateContext(database))
         {
             Assert.Equal(BeforeCounts, await LatestMigrationAsync(context));
             Assert.Equal((0, 1, 2), (
@@ -163,7 +164,7 @@ public class InventoryCountMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the tables are there, empty.
         await MigrateAsync(database, BeforeCounts);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeCreditDueSoon.CreateContext(database, tenant.Id);
         Assert.Empty(await forward.InventoryCounts.ToListAsync());
         Assert.Empty(await forward.InventoryCountLines.ToListAsync());
     }
@@ -174,7 +175,7 @@ public class InventoryCountMigrationSqlServerTests
         var location = new InventoryLocation(tenantId, "Bodega", "BOD", isDefault: true);
         var soda = new SupplyItem(tenantId, "Refresco de cola 600 ml", UnitType.Unit, defaultCost: 12m);
         var chips = new SupplyItem(tenantId, "Papas 45 g", UnitType.Unit, defaultCost: 9m);
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeCreditDueSoon.CreateContext(database, tenantId);
         context.AddRange(location, soda, chips);
         await context.SaveChangesAsync();
         return (location, soda, chips);
@@ -184,7 +185,7 @@ public class InventoryCountMigrationSqlServerTests
     {
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant($"Tienda {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
-        await using var seed = database.CreateContext();
+        await using var seed = BeforeCreditDueSoon.CreateContext(database);
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Retail));
         await seed.SaveChangesAsync();
         return tenant;
@@ -199,7 +200,7 @@ public class InventoryCountMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, string sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCreditDueSoon.CreateContext(database);
         await context.Database.ExecuteSqlRawAsync(sql);
     }
 

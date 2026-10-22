@@ -183,6 +183,31 @@ public class TenantSettings : BaseEntity, ITenantScoped
         CreditReminderTemplateId = templateId;
     }
 
+    public const int MinCreditDueSoonDaysBefore = 1;
+    public const int MaxCreditDueSoonDaysBefore = 7;
+    public const int DefaultCreditDueSoonDaysBefore = 2;
+    public const string CreditDueSoonDaysBeforeMessage = "El aviso antes de vencer se manda de 1 a 7 días antes.";
+
+    /// <summary>
+    /// A WhatsApp notice to the customers who are up to date, a few days before something of theirs comes due (Fase 26E,
+    /// ADR 0043); off until the owner turns it on.
+    /// </summary>
+    public bool CreditDueSoonEnabled { get; private set; }
+    /// <summary>How many days before the last day to pay the notice goes out.</summary>
+    public int CreditDueSoonDaysBefore { get; private set; } = DefaultCreditDueSoonDaysBefore;
+    /// <summary>The template of the notice; null uses the default text.</summary>
+    public Guid? CreditDueSoonTemplateId { get; private set; }
+
+    public void UpdateCreditDueSoon(bool enabled, int daysBefore, Guid? templateId)
+    {
+        if (daysBefore is < MinCreditDueSoonDaysBefore or > MaxCreditDueSoonDaysBefore)
+            throw new DomainException(CreditDueSoonDaysBeforeMessage);
+
+        CreditDueSoonEnabled = enabled;
+        CreditDueSoonDaysBefore = daysBefore;
+        CreditDueSoonTemplateId = templateId;
+    }
+
     /// <summary>Records the end of the guided setup; finishing it again keeps the first date.</summary>
     public void CompleteOnboarding(DateTimeOffset completedAt)
     {
