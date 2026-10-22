@@ -13,8 +13,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// <summary>
 /// The CFDI de retenciones of the platforms (Fase 22J) through the API, on SQL Server: each business sees, registers and
 /// removes only its own, the business header of an owner changes nothing, a CFDI of another business that says it
-/// replaces one of mine takes nothing out, the same CFDI counts once in a business (and once in each), and the
-/// withholdings are read with the reports and changed by owners and admins.
+/// replaces one of mine takes nothing out (uploaded before mine or after it), the same CFDI counts once in a business
+/// (and once in each), and the withholdings are read with the reports and changed by owners and admins.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantPlatformWithholdingsSqlServerTests
@@ -72,24 +72,34 @@ public sealed class CrossTenantPlatformWithholdingsSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task ReplacementUploadedByAnotherBusiness_ShouldNotTakeMineOut()
+    public async Task ReplacementUploadedByAnotherBusiness_BeforeOrAfterMine_ShouldNotTakeMineOut()
     {
         var mine = await _api.SignUpAsync("retiene-sustituye-a", TwoBusinessesApi.FoodBusiness);
         var theirs = await _api.SignUpAsync("retiene-sustituye-b", TwoBusinessesApi.FoodBusiness);
-        var registered = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
-            "/api/v1/platform-withholdings", new { channel = OrderChannel.UberEats, xml = Xml(Uuid) }));
 
-        // Theirs says it replaces my folio: in their business there is nothing to take out, and mine still counts.
-        var replacing = await theirs.Client.PostAsJsonAsync(
+        // Theirs says it replaces my folio before mine is here: mine is not kept as already replaced.
+        var replacingBefore = await theirs.Client.PostAsJsonAsync(
             "/api/v1/platform-withholdings",
             new { channel = OrderChannel.UberEats, xml = Xml("22222222-2222-4333-8444-555555555555", replaces: Uuid) });
+        var registered = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            "/api/v1/platform-withholdings", new { channel = OrderChannel.UberEats, xml = Xml(Uuid) }));
+        // And once mine is here: in their business there is nothing to take out.
+        var replacingAfter = await theirs.Client.PostAsJsonAsync(
+            "/api/v1/platform-withholdings",
+            new { channel = OrderChannel.UberEats, xml = Xml("33333333-2222-4333-8444-555555555555", replaces: Uuid) });
 
-        Assert.Equal(HttpStatusCode.OK, replacing.StatusCode);
+        Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (replacingBefore.StatusCode, replacingAfter.StatusCode));
+        Assert.Equal(JsonValueKind.Null, registered.GetProperty("removedAt").ValueKind);
+        // Mine still counts, without a reason to be out and without a removal in my activity.
         Assert.Equal(
-            new[] { (registered.GetProperty("id").GetGuid(), (DateTimeOffset?)null) },
-            (await _api.QueryAsync(mine.TenantId, db => db.PlatformWithholdingCertificates.Select(c => new { c.Id, c.RemovedAt }).ToListAsync()))
-                .Select(c => (c.Id, c.RemovedAt)));
+            new[] { (registered.GetProperty("id").GetGuid(), (DateTimeOffset?)null, (string?)null) },
+            (await _api.QueryAsync(mine.TenantId, db => db.PlatformWithholdingCertificates
+                    .Select(c => new { c.Id, c.RemovedAt, c.RemovalReason })
+                    .ToListAsync()))
+                .Select(c => (c.Id, c.RemovedAt, c.RemovalReason)));
         Assert.Equal(0, await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(log => log.Action == "PlatformWithholdingCertificateRemoved")));
+        // Theirs count in their business.
+        Assert.Equal(2, await _api.QueryAsync(theirs.TenantId, db => db.PlatformWithholdingCertificates.CountAsync(c => c.RemovedAt == null)));
     }
 
     [SqlServerFact]
