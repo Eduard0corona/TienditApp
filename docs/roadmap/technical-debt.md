@@ -342,11 +342,21 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
     - El giro decide la sucursal principal solo en el alta; en un negocio que ya existe se marca a mano en Sucursales.
     - La entrega llegó en las Fases 22B (zonas por código postal) y 22C (dirección del cliente en el pedido, envío cobrado y Paquetenvia).
     - La 22A suma 1 B a la primera visita (de 176,326 a 176,327 B, contra `master` en `a60b1d4`): el enum de la sucursal. El presupuesto no cambia.
+- Resuelto en la Fase 22I: un estado de cuenta que nombra los pedidos por su ID largo no los encontraba, porque solo se guardaba el folio corto ([ADR 0041](../adr/0041-platform-order-ids.md)).
+  - Un pedido de plataforma guarda, opcional, el ID largo que le da la plataforma: se escribe en Vender o después en el detalle del pedido, en cualquier estado. Pedidos y Reportes lo buscan, la liquidación lo enseña, y la importación del estado de cuenta compara cada renglón por folio o por ID largo.
+  - Un ID largo repetido en otro pedido que cuenta, de cualquier fecha, avisa con 409 `possible_duplicate_order`, como el folio.
+  - Queda:
+    - El ID largo es opcional y nada lo llena solo: los pedidos sin él se encuentran por folio. Leerlo de la API de cada plataforma llega con las integraciones; llenarlo desde un estado de cuenta, que lo trae junto al folio, sería el siguiente paso.
+    - Un ID escrito distinto (sin un guion, con otro carácter) es otro ID: se corrige en el detalle del pedido.
+    - Un mismo texto puede ser el folio de un pedido y el ID largo de otro: el renglón queda con varios pedidos y la persona elige, como con un folio repetido.
+    - El aviso de ID largo repetido no es una restricción: dos capturas en el mismo instante pasan las dos, como con el folio.
+    - Con IDs largos guardados, el rollback de la base se detiene (error 50032): solo se corrige hacia adelante. Volver a la versión anterior de la app sí funciona sin tocar la base.
+    - La 22I suma 14 B a la primera visita (de 179,133 a 179,147 B, contra `master` en `e801eca`): el campo de Vender y sus mensajes entran con el código de la venta que carga la primera pantalla. El presupuesto no cambia.
 - Resuelto en la Fase 22H: los pedidos de una liquidación se marcaban uno por uno contra el estado de cuenta, y la diferencia de cada pedido no se veía hasta que la liquidación no cuadraba ([ADR 0040](../adr/0040-platform-statement-import.md)).
   - En Reportes › Liquidaciones, «Importar estado de cuenta» lee un CSV en el navegador, con las columnas que elige la persona, y el servidor lo compara con los pedidos de la plataforma sin guardar nada. La pantalla enseña qué es cada folio y su diferencia, y al aplicarlo propone los pedidos, un ajuste por cada cosa que los pedidos no explican, lo depositado y una nota. Se guarda con «Guardar», que vuelve a validar todo.
   - Queda:
     - Solo CSV: un PDF o un XLSX se guardan antes como CSV. Sin formato fijo por plataforma, la persona elige las columnas la primera vez en cada dispositivo.
-    - La llave es el folio corto que se captura en Vender. Un estado de cuenta que solo trae el ID largo del pedido no encuentra nada.
+    - La llave es el folio corto que se captura en Vender. Un estado de cuenta que solo trae el ID largo del pedido no encuentra nada. Resuelto en la Fase 22I (arriba).
     - Los motivos de los conceptos se sugieren por palabras («publicidad», «promoción», «reclamo»…); uno con otro nombre llega como «Otro».
     - Las diferencias por pedido van juntas en un ajuste «Otro»: la liquidación no guarda cuál pedido trajo cuánto, y el estado de cuenta no se guarda.
     - Un folio con varios pedidos que la liquidación podría tomar (Uber Eats y DiDi Food repiten folios) se deja para que la persona elija, y su importe no entra en ningún ajuste.
@@ -387,7 +397,7 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - Los pedidos de plataforma nunca mandan avisos de WhatsApp y quedan fuera de las campañas y de la ficha del cliente.
   - Pendiente:
     - Resuelta en la Fase 22G (arriba): la liquidación semanal y la conciliación con el estado de cuenta. Una cancelación tardía (un pedido ya entregado que la plataforma cancela) sigue quedando entregada y reembolsada: si el pedido todavía no está liquidado, deja de estar pendiente (trae 0); si ya está en una liquidación cerrada, se explica con un ajuste «Cancelaciones» en la siguiente.
-    - Integraciones por la API de las plataformas o por un integrador, el CFDI de retenciones y el ID largo del pedido para conciliar.
+    - Integraciones por la API de las plataformas o por un integrador y el CFDI de retenciones. El ID largo del pedido para conciliar llegó en la Fase 22I (arriba).
     - Confirmar con un contador las tasas de retención de 2026 para cada caso (persona física o moral, RFC, pago definitivo; las por omisión son las de la Ley de Ingresos 2026 y la Ley del IVA), la clave de forma de pago 31 y la base de la comisión de Uber Eats.
     - El aviso de folio repetido no es una restricción: dos capturas del mismo folio en el mismo instante pasan las dos.
     - En SQL Server, la parte de la comisión de cada pago se calcula con escala 6 antes de sumarse: con pagos parciales, un punto medio raro puede diferir un centavo del cálculo con toda la precisión.

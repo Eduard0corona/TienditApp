@@ -139,7 +139,7 @@ Las decisiones fijas de la fase eran:
   - **Estimaciones:** un reembolso parcial compensa la comisión y las retenciones en proporción, y el redondeo por fila puede diferir por centavos del estado de cuenta. En SQL Server, cada parte (importe × pago / total) se calcula con escala 6 antes de sumarse. Con pagos completos el resultado es exacto; con pagos parciales, en un punto medio raro, puede diferir un centavo del cálculo con toda la precisión.
   - **Folio repetido:** el aviso no es una restricción. Dos capturas del mismo folio en el mismo instante pasan las dos; se ven en la búsqueda y en la lista por pedido, y se corrigen anulando una.
   - **Tasas fiscales:** las de 2026 (ISR de 2.5 % e IVA retenido de 50 %; 20 % y 100 % sin RFC) son las de la Ley de Ingresos de la Federación 2026 (publicada en el DOF en noviembre de 2025) y la Ley del IVA, pero dependen de cada caso (persona física o moral, RFC, pago definitivo) y cambian cada año. Son configurables, y la pantalla pide confirmarlas con el contador. La clave 31 y la base de la comisión de Uber Eats (con o sin IVA) también faltan por confirmar.
-  - **Folio:** solo se guarda el folio corto. El ID largo de DiDi o de Uber para conciliar no llegó con la liquidación (Fase 22G): sigue pendiente.
+  - **Folio:** solo se guarda el folio corto. El ID largo de DiDi o de Uber para conciliar no llegó con la liquidación (Fase 22G). Resuelto en la Fase 22I: el ID largo se guarda, opcional ([ADR 0041](0041-platform-order-ids.md)).
   - **Conteos:** `PaidOrders` del reporte por canal cuenta cada pedido una vez por periodo, como Inicio, y las ventas por sucursal lo cuentan por día. Ningún importe depende de esa diferencia.
 - **Reversibilidad:**
   - **Volver a la versión anterior** (master con la Fase 21) funciona sin `rollback.sql` mientras no haya pedidos de plataforma: no conoce las tablas ni la columna.
@@ -153,4 +153,4 @@ Las decisiones fijas de la fase eran:
 - **Liquidación semanal y conciliación con el estado de cuenta:** el 35 % que cubre Rappi, los faltantes, el saldo negativo de DiDi por el efectivo que cobra el negocio y las cancelaciones tardías. Hecho: [ADR 0015](0015-delivery-platform-settlements.md).
 - **Integraciones** por la API de cada plataforma o por un integrador, en lugar de la captura manual.
 - **CFDI de retenciones** que emiten las plataformas.
-- **El ID largo del pedido** para conciliar.
+- **El ID largo del pedido** para conciliar. Hecho: [ADR 0041](0041-platform-order-ids.md).

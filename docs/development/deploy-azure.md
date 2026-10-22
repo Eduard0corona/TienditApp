@@ -709,6 +709,27 @@ La Fase 22H no trae migración ni `apply.sql`: la comparación del estado de cue
 - **Sin configuración nueva.** El archivo no se sube: al servidor llegan hasta 5,000 renglones, y la ruta admite hasta 8 MB por petición (`RequestSizeLimit`), debajo de los 30 MB de Kestrel.
 - **Volver a la versión anterior:** funciona sin tocar la base. Las liquidaciones armadas con un estado de cuenta son liquidaciones comunes. Deja de tener la importación.
 
+## El ID largo del pedido de cada plataforma (Fase 22I)
+
+La Fase 22I trae una migración, [`database/production/20261022011024_AddPlatformOrderIds`](../../database/production/20261022011024_AddPlatformOrderIds). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0041](../adr/0041-platform-order-ids.md)).
+
+- **La migración** agrega a `PlatformOrderDetails`:
+  - la columna `ExternalOrderId` nvarchar(64) NULL, el ID largo que la plataforma da al pedido; todos los pedidos que ya existen quedan sin él;
+  - `CK_PlatformOrderDetails_ExternalOrderId` (vacío, o de 6 caracteres o más);
+  - el índice no único `IX_PlatformOrderDetails_TenantId_Channel_ExternalOrderId`, filtrado a los que lo tienen.
+
+  No cambia pedidos, pagos, folios ni liquidaciones. Después de aplicarla, el `verify.sql` muestra la columna, la restricción y el índice. Su consulta 3 cuenta los pedidos con ID largo por plataforma (ninguno hasta desplegar), y la 4 los pedidos de cada plataforma y su neto esperado, igual antes y después.
+- **Mientras se publica:** la versión de `master` (Fase 22H) no conoce la columna y sigue funcionando: sus pedidos nuevos la dejan vacía. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:**
+  - Vender suma «ID largo del pedido (opcional)» en un pedido de Rappi, Uber Eats o DiDi Food.
+  - Pedidos enseña el ID largo y deja agregarlo o corregirlo en el detalle, a quien toma los pedidos.
+  - Pedidos y Reportes buscan por el ID largo, y la liquidación lo enseña bajo el folio.
+  - Importar el estado de cuenta compara cada renglón por folio o por ID largo, con renglones de hasta 100 caracteres.
+- **El contrato agrega:** `PUT /api/v1/orders/{id}/platform-order-id`, `externalOrderId` en la venta, en el pedido, en Reportes y en la liquidación, y el 409 `possible_duplicate_order` también para un ID largo repetido. Nada se quita ni cambia de nombre.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base. No conoce la columna, sus pedidos la dejan vacía y sus cambios no la tocan. Deja de enseñar los IDs largos, que vuelven a verse con esta versión.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50032, sin cambiar nada, en cuanto un pedido tiene ID largo: borrarlo perdería lo que escribió el negocio. Sin ninguno, quita la columna, la restricción y el índice, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

@@ -136,6 +136,6 @@ Las decisiones fijas de la fase eran:
 ## Siguientes pasos
 
 - **Importar el estado de cuenta** de cada plataforma: resuelto en la Fase 22H, en CSV ([ADR 0040](0040-platform-statement-import.md)).
-- **El ID largo del pedido** para comparar con el estado de cuenta.
+- **El ID largo del pedido** para comparar con el estado de cuenta. Hecho: [ADR 0041](0041-platform-order-ids.md).
 - **Ligar las devoluciones posteriores** a la siguiente liquidación.
 - **CFDI de retenciones** que emiten las plataformas.

@@ -27,6 +27,8 @@ interface SaleRequest {
   channel?: number;
   /** The folio of a delivery platform's app, normalized by Vender (Rappi, Uber Eats or DiDi Food only). */
   externalOrderNumber?: string;
+  /** The platform's long id of the order, normalized by Vender, when typed (Fase 22I). */
+  externalOrderId?: string;
   /** Who charged an order of a platform: the platform (0, also when omitted) or the business (1). */
   collectedBy?: number;
   items?: SaleItemRequest[];
@@ -184,7 +186,9 @@ export function createSale(data: DemoData, body: SaleRequest) {
     refundedAmount: 0, netPaidAmount: money(paidCents), canCancel: payments.length === 0, allowedTransitions: status === 1 ? [4, 2, 99] : [],
     createdAt: NOW_ISO, items, statusHistory: [], servicePieces: [], payments, refunds: [], itemCancellations: [],
     isTab: false, isOpenTab: false, kitchenTickets: [], stockWarnings: [], soldOnCredit: !!body.onCredit,
-    platformOrder: isPlatform ? { externalOrderNumber: body.externalOrderNumber ?? '', collectedBy } : null,
+    platformOrder: isPlatform
+      ? { externalOrderNumber: body.externalOrderNumber ?? '', externalOrderId: body.externalOrderId ?? null, collectedBy }
+      : null,
     delivery: zone && body.delivery
       ? {
         postalCode: body.delivery.postalCode, addressLine: body.delivery.addressLine, references: body.delivery.references ?? null,
@@ -222,13 +226,14 @@ export const RAPPI_ROUTES = asOption(rappiRoutes);
 export const RAPPI_PRICES_DATA = asOption(withRappiPrices);
 
 /**
- * Two Rappi orders of today the platform charged in its app: one already delivered, for Juan, and one the kitchen has
- * not started. They are added in these scenes only, so the shared lists of today stay as they are.
+ * Two Rappi orders of today the platform charged in its app: one already delivered, for Juan, with the long id of its
+ * order (Fase 22I), and one the kitchen has not started. They are added in these scenes only, so the shared lists of
+ * today stay as they are.
  */
 function withRappiOrders(data: DemoData) {
   const product = (name: string) => data.products.find((candidate: { name: string }) => candidate.name === name).id;
   const delivered = createSale(data, {
-    channel: RAPPI, externalOrderNumber: '152390', collectedBy: 0, customerName: 'Juan',
+    channel: RAPPI, externalOrderNumber: '152390', externalOrderId: '4810373920', collectedBy: 0, customerName: 'Juan',
     items: [{ productId: product('Chilaquiles verdes'), quantity: 2 }, { productId: product('Café americano'), quantity: 2 }],
   });
   delivered.createdAt = at(12, 40);
