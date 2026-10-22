@@ -771,6 +771,26 @@ La Fase 26E trae una migración, [`database/production/20261022153116_AddCreditD
 - **Volver a la versión anterior:** funciona sin tocar la base. Deja de encolar avisos; los que sigan pendientes (encolados ese día) salen con la baja revisada, pero sin revisar si todavía debe lo de ese día.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50034, sin cambiar nada, en cuanto un negocio encendió el aviso o eligió su plantilla, o hay plantillas o avisos con ese uso. Sin ninguno, quita las columnas y la restricción, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Lo que pasa en Mercado Pago regresa al pedido (Fase 24K)
+
+La Fase 24K trae una migración, [`database/production/20261022213253_AddOnlinePaymentReconciliation`](../../database/production/20261022213253_AddOnlinePaymentReconciliation). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0044](../adr/0044-online-payment-reconciliation.md)).
+
+- **La migración:**
+  - agrega a `OnlineCheckouts` `Dispute` (0) y `DisputeUpdatedAt` (con nulos), con `CK_OnlineCheckouts_Dispute` (de 0 a 3) y el índice de las abiertas;
+  - agrega a `OnlinePaymentAccounts` `PaymentsReviewedUntil` (con nulos);
+  - en `OnlinePaymentRefunds`, amplía las restricciones de estado (0 a 3), de lo resuelto y del enlace con el pedido, agrega `CK_OnlinePaymentRefunds_MadeInMercadoPago` y dos índices únicos: el id de Mercado Pago por negocio y un contracargo por pago.
+  - No cambia pedidos, pagos ni devoluciones. Antes del índice de los ids se detiene con el error 50036, sin cambiar nada, si dos devoluciones de un negocio tienen el mismo id de Mercado Pago; la consulta 3 del `verify.sql` las lista (debe salir sin filas).
+  - Después de aplicarla, el `verify.sql` muestra las columnas, las restricciones y los índices, y su consulta 4 cuenta lo registrado desde Mercado Pago y las disputas: todo en cero hasta desplegar.
+- **Mientras se publica:** la versión de `master` (Fase 26E) no conoce las columnas ni los motivos y el estado nuevos y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Lo que cambia para los negocios al desplegar:**
+  - El worker de pagos en línea revisa cada 15 minutos, por cada cuenta conectada con llave que sirve, los pagos que cambiaron en Mercado Pago. La primera revisión de cada cuenta lee desde que se conectó (a lo más 180 días): una devolución hecha en Mercado Pago en ese tiempo llega a su pedido como reembolso «En línea» con la fecha del despliegue, y una rechazada que el negocio ya hizo en su cuenta deja de contarse.
+  - El aviso de «Pagos» de Mercado Pago también lo refleja, en cuanto llega.
+  - El detalle del pedido y Configuración › Pagos en línea enseñan las disputas.
+- **El contrato agrega:** `OnlinePaymentRefundStatus.DoneInMercadoPago` (3), los enums `OnlinePaymentRefundReason` y `OnlinePaymentDispute`, `onlineDispute` y `onlineDisputeUpdatedAt` en el pedido, `onlineReason` en cada reembolso, y `disputesOpen` y `paymentsReviewedUntil` en Pagos en línea. Nada se quita ni cambia de nombre.
+- **Sin configuración nueva:** usa las llaves y la cuenta de la 24I. Cada revisión hace al menos una llamada a `/v1/payments/search` por negocio conectado, y una a `/v1/payments/{id}/refunds` por cada pago que puede tener devoluciones.
+- **Volver a la versión anterior:** funciona sin tocar la base. Deja de revisar Mercado Pago; lo ya registrado se queda en los pedidos, y una rechazada que el negocio hizo se lee como «en curso».
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50035, sin cambiar nada, en cuanto hay una devolución hecha en Mercado Pago, por reclamación o por contracargo, una rechazada que el negocio hizo, o una disputa. Sin ninguna, quita las columnas, los índices y la restricción nueva y regresa las otras restricciones a como estaban; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

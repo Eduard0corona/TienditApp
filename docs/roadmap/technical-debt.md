@@ -132,8 +132,8 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - **Sin fotos ni calificación por producto.**
   - La 24H suma 406 B a la primera visita (de 178,116 a 178,522 B) y sube el presupuesto a 178,600 B: las dos rutas, su menú, el área de acceso y los enums de reseñas.
 - Pago en línea con Mercado Pago (Fase 24I, [ADR 0031](../adr/0031-online-payments.md)):
-  - **Lo que pasa en Mercado Pago no regresa solo:** un contracargo, o una devolución que el negocio hace desde su cuenta de Mercado Pago, no se refleja en el pedido. TienditApp solo sabe de los pagos que aplica y de las devoluciones que pide. Escuchar esos avisos (`chargebacks`, pagos `refunded`) y registrar una devolución que llegó de fuera es lo siguiente natural.
-  - **Una devolución rechazada no se reintenta:** queda en el pedido y en Configuración › Pagos en línea para que el negocio la haga en Mercado Pago. Nadie le avisa por WhatsApp ni correo.
+  - **Lo que pasa en Mercado Pago** (un contracargo, una devolución hecha desde la cuenta del negocio) llegó al pedido en la 24K ([ADR 0044](../adr/0044-online-payment-reconciliation.md)).
+  - **Una devolución rechazada no se reintenta:** queda en el pedido y en Configuración › Pagos en línea para que el negocio la haga en Mercado Pago (desde la 24K, TienditApp la ve hecha ahí). Nadie le avisa por WhatsApp ni correo.
   - **La comisión de Mercado Pago no se ve:** los informes dicen lo cobrado en línea, no el neto que llega a la cuenta del negocio.
   - **Solo Mercado Pago, solo pesos y solo pagos al momento:** sin OXXO, transferencias, meses ni otra pasarela. La interfaz (`IOnlinePaymentGateway`) es de Mercado Pago; otra pasarela necesitaría su propia cuenta, llaves y aviso.
   - **Un aviso perdido** espera al barrido (cada dos minutos, y deja a cada cobro dos minutos para su aviso); con muchos negocios conectados, el barrido revisa hasta 200 por pasada, primero los de cobros que llevan más tiempo esperando.
@@ -145,6 +145,17 @@ Actualizada el 2026-10-20 con la Fase 26B y antes con la 26A, la 24J, la 24I, la
   - **El aviso de Mercado Pago** se firma solo sobre el id del pago: de lo demás solo se usa la cuenta que menciona, para saber qué negocios probar, y todo se lee de Mercado Pago. El inbox guarda cada aviso una vez por pago y petición firmados; la hora de la firma no se revisa (Mercado Pago reintenta avisos), así que un aviso capturado puede repetirse con otro id de petición solo si viene firmado.
   - **La carrera de dos pagos del mismo cobro** se resuelve con el índice único de las devoluciones y un reintento; no hay una prueba de concurrencia real sobre SQL Server, solo las vías una tras otra.
   - La 24I suma 226 B a la primera visita (de 178,522 a 178,748 B) y sube el presupuesto a 178,800 B: las dos rutas, su entrada en el menú y el método «En línea».
+- Lo que pasa en Mercado Pago regresa al pedido (Fase 24K, [ADR 0044](../adr/0044-online-payment-reconciliation.md)):
+  - **Se registra el día en que TienditApp se entera,** no el día en que se hizo la devolución en Mercado Pago: el corte de ese día la muestra; el del día en que se hizo, no.
+  - **Una devolución de TienditApp se reconoce por su monto** cuando Mercado Pago no le conoce todavía su id: dos del mismo monto en el mismo pago pueden tomarse una por la otra. El total del pedido queda bien.
+  - **Un contracargo perdido devuelve todo lo que quedaba pagado en línea,** aunque Mercado Pago haya regresado solo una parte; uno ganado después no lo deshace (queda a mano del negocio).
+  - **Sin el aviso de contracargos de Mercado Pago** (pide una configuración no confirmada para cuentas conectadas por OAuth): el contracargo llega por el aviso de «Pagos» o por la revisión. Las pruebas de un contracargo se mandan desde Mercado Pago.
+  - **La revisión lee hasta 200 pagos cambiados por pasada y negocio** y repite 10 minutos de la anterior: una cuenta con más de 200 cambios en esos 10 minutos (muchas ventas fuera de TienditApp) avanzaría muy despacio. Lee todos los pagos de la cuenta, también los que no son de TienditApp, y solo refleja los de sus cobros.
+  - **Una revisión que falla con un pago** inesperado lo registra como error y sigue con los demás; ese pago se vuelve a leer solo si cambia otra vez en Mercado Pago (o en la revisión siguiente, si cae en el traslape).
+  - **Una disputa de un pago que no creó pedido** no se guarda: ese dinero ya se devolvió o se está devolviendo.
+  - **Nadie le avisa al negocio** de una disputa por WhatsApp ni correo: la ve en el pedido y en Pagos en línea.
+  - **Durante un regreso a la 26E, o mientras conviven las dos versiones,** la anterior enseña una rechazada que el negocio hizo después como «en curso» (no conoce el estado 3) y deja de revisar Mercado Pago; lo ya registrado se queda.
+  - La 24K suma 48 B a la primera visita (de 179,248 a 179,296 B): los enums nuevos del contrato. El presupuesto (179,300 B) no cambia, pero ya no deja margen: la siguiente fase que sume a la primera visita lo sube.
 - Elegir con quién en las citas en línea (Fase 24J, [ADR 0032](../adr/0032-online-booking-staff.md)):
   - **Sin vacaciones ni ausencias por fecha:** una persona que falta un día se apaga ese día, o el negocio marca un día especial (que cierra para todos).
   - **Sin foto de la persona:** la página muestra su inicial.
