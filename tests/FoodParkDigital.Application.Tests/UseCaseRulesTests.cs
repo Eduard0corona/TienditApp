@@ -98,6 +98,9 @@ public class UseCaseRulesTests
         { typeof(UpdatePlatformSettlementCommand), "Manager" },
         { typeof(ClosePlatformSettlementCommand), "Manager" },
         { typeof(VoidPlatformSettlementCommand), "Manager" },
+        { typeof(GetPlatformWithholdingsQuery), "Permission(ViewReports)" },
+        { typeof(RegisterPlatformWithholdingCertificateCommand), "Manager" },
+        { typeof(RemovePlatformWithholdingCertificateCommand), "Manager" },
         // The courier and the cash it collects (Fase 22D): whoever takes the orders sends one out with it; whoever handles the
         // cash reads what the couriers owe and settles it, charging the orders in their own drawer (ManageCash as well).
         { typeof(DispatchOrderCommand), "Permission(ManageOrders)" },

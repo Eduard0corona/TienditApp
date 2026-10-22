@@ -11300,6 +11300,157 @@
         }
       }
     },
+    "/api/v1/platform-withholdings": {
+      "get": {
+        "tags": [
+          "PlatformWithholdings"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWithholdingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWithholdingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWithholdingsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "PlatformWithholdings"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPlatformWithholdingCertificateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPlatformWithholdingCertificateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPlatformWithholdingCertificateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWithholdingCertificateDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWithholdingCertificateDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWithholdingCertificateDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform-withholdings/{id}/remove": {
+      "post": {
+        "tags": [
+          "PlatformWithholdings"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemovePlatformWithholdingCertificateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemovePlatformWithholdingCertificateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemovePlatformWithholdingCertificateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWithholdingCertificateDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWithholdingCertificateDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWithholdingCertificateDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/products": {
       "get": {
         "tags": [
@@ -27111,6 +27262,226 @@
         },
         "additionalProperties": false
       },
+      "PlatformWithholdingCertificateDto": {
+        "required": [
+          "channel",
+          "createdAt",
+          "id",
+          "isrWithheld",
+          "issuedOn",
+          "issuerName",
+          "issuerRfc",
+          "monthFrom",
+          "monthTo",
+          "operationTotal",
+          "totalWithheld",
+          "uuid",
+          "vatWithheld",
+          "year"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuerRfc": {
+            "type": "string"
+          },
+          "issuerName": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "monthFrom": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "monthTo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "issuedOn": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operationTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "isrBase": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isrWithheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "isrRatePercent": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "vatBase": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "vatWithheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "vatRatePercent": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "totalWithheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "removedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "removalReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformWithholdingPeriodDto": {
+        "required": [
+          "calculatedIsr",
+          "calculatedVat",
+          "certificateCount",
+          "orderCount",
+          "salesWithoutTax",
+          "spansMonths"
+        ],
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "orderCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "salesWithoutTax": {
+            "type": "number",
+            "format": "double"
+          },
+          "calculatedIsr": {
+            "type": "number",
+            "format": "double"
+          },
+          "calculatedVat": {
+            "type": "number",
+            "format": "double"
+          },
+          "certificateCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "certificateOperationTotal": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "certificateIsr": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "certificateVat": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isrDifference": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "vatDifference": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "spansMonths": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformWithholdingsDto": {
+        "required": [
+          "certificates",
+          "certificatesTruncated",
+          "channel",
+          "months",
+          "total",
+          "year"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isrWithholdingPercent": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "vatWithholdingPercent": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformWithholdingPeriodDto"
+            }
+          },
+          "total": {
+            "$ref": "#/components/schemas/PlatformWithholdingPeriodDto"
+          },
+          "certificates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformWithholdingCertificateDto"
+            }
+          },
+          "certificatesTruncated": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "PostInventoryCountRequest": {
         "required": [
           "expectedRevision"
@@ -29473,6 +29844,22 @@
         },
         "additionalProperties": false
       },
+      "RegisterPlatformWithholdingCertificateRequest": {
+        "required": [
+          "channel",
+          "xml"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "xml": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "RegisterSubscriptionPaymentRequest": {
         "required": [
           "method",
@@ -29495,6 +29882,18 @@
           "reference": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RemovePlatformWithholdingCertificateRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
           }
         },
         "additionalProperties": false
