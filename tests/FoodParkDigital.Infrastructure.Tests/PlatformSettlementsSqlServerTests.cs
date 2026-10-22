@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.DeliveryPlatforms;
+using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Platforms;
@@ -418,6 +419,55 @@ public class PlatformSettlementsSqlServerTests
             again.Folios.Select(folio => (folio.Status, folio.Orders.Single().OrderId)));
     }
 
+    [SqlServerFact]
+    public async Task StatementMatch_ShouldFindOrdersByTheirLongId_InItsBusinessOnly()
+    {
+        const string uuid = "3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84";
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, other) = await SeedAsync(database);
+        var pending = await SeedOrderAsync(database, tenant.Id, "ORD-000001", "BC001", Now, longId: uuid);
+        // Another business wrote the same long id on its own order: never this business's.
+        await SeedOrderAsync(database, other.Id, "ORD-000001", "BC009", Now, longId: uuid);
+        var settledOrder = await SeedOrderAsync(database, tenant.Id, "ORD-000002", "BC010", Now.AddDays(-14), longId: "RAPPI-000010");
+        var closedId = await OpenAsync(database, tenant.Id, [Line(settledOrder, 561.48m)], [], 561.48m);
+        await using (var closing = database.CreateContext(tenant.Id))
+        {
+            (await LoadAsync(closing, closedId)).Close(Now);
+            await closing.SaveChangesAsync();
+        }
+        var uncollected = await SeedOrderAsync(
+            database, tenant.Id, "ORD-000003", "BC020", Now, PlatformCollectedBy.Business, longId: "RAPPI-000020");
+        var lines = new List<PlatformStatementLineInput>
+        {
+            new() { Row = 2, Folio = uuid.ToLowerInvariant(), Amount = 561.48m },
+            new() { Row = 3, Folio = "bc001", Amount = -20m, Concept = "Promoción" },
+            new() { Row = 4, Folio = "rappi-000010", Amount = 561.48m },
+            new() { Row = 5, Folio = "RAPPI-000020", Amount = 10m },
+            new() { Row = 6, Folio = "RAPPI-000099", Amount = 1m }
+        };
+
+        await using var context = database.CreateContext(tenant.Id);
+        var match = await Match(context, tenant.Id, null, lines);
+
+        // The lines of BC001 by its long id and by its folio are one order.
+        Assert.Equal(
+            [
+                (uuid, (PlatformStatementMatchStatus.Pending, (Guid?)pending)),
+                ("RAPPI-000010", (PlatformStatementMatchStatus.Settled, settledOrder)),
+                ("RAPPI-000020", (PlatformStatementMatchStatus.NothingExpected, uncollected)),
+                ("RAPPI-000099", (PlatformStatementMatchStatus.Unknown, null))
+            ],
+            match.Folios.Select(folio => (folio.Folio, (folio.Status, folio.Orders.SingleOrDefault()?.OrderId))));
+        Assert.Equal([2, 3], match.Folios[0].Rows);
+        Assert.Equal((541.48m, (decimal?)-20m), (match.Folios[0].StatementAmount, match.Folios[0].Difference));
+        Assert.Equal(closedId, match.Folios[1].SettlementId);
+
+        // Pedidos finds the order by a part of its long id, in its business only.
+        var found = await new GetOrdersByBusinessQueryHandler(context, Tenant(tenant.Id))
+            .Handle(new GetOrdersByBusinessQuery { Search = "0c3b84" }, CancellationToken.None);
+        Assert.Equal(pending, Assert.Single(found.Items).Id);
+    }
+
     private static Task<PlatformStatementMatchDto> Match(
         ApplicationDbContext context, Guid tenantId, Guid? settlementId, List<PlatformStatementLineInput> lines)
         => new MatchPlatformStatementQueryHandler(context, Tenant(tenantId), new FixedClock()).Handle(new MatchPlatformStatementQuery
@@ -490,14 +540,18 @@ public class PlatformSettlementsSqlServerTests
         return (orders[0].Id, orders[1].Id);
     }
 
-    /// <summary>One more order of Rappi of $1,000, charged by the platform unless told otherwise, with its folio and when it was registered.</summary>
+    /// <summary>
+    /// One more order of Rappi of $1,000, charged by the platform unless told otherwise, with its folio, when it was registered
+    /// and, optionally, its long id.
+    /// </summary>
     private static async Task<Guid> SeedOrderAsync(
         SqlServerTestDatabase database,
         Guid tenantId,
         string number,
         string folio,
         DateTimeOffset at,
-        PlatformCollectedBy collectedBy = PlatformCollectedBy.Platform)
+        PlatformCollectedBy collectedBy = PlatformCollectedBy.Platform,
+        string? longId = null)
     {
         await using var context = database.CreateContext(tenantId);
         var setting = await context.DeliveryPlatformSettings.SingleOrDefaultAsync(s => s.Channel == OrderChannel.Rappi);
@@ -511,7 +565,7 @@ public class PlatformSettlementsSqlServerTests
             tenantId, null, null, true, number, BusinessType.Food, OrderType.Retail, "Juan", null, null, null,
             pricesIncludeTax: true, channel: OrderChannel.Rappi);
         order.AddItem(Guid.NewGuid(), "Paquete familiar", 1, 1000m);
-        order.RegisterPlatformOrder(setting, PlatformOrderNumber.From(folio), collectedBy, at, null);
+        order.RegisterPlatformOrder(setting, PlatformOrderNumber.From(folio), collectedBy, at, null, PlatformOrderId.FromOptional(longId));
         order.MarkAsCreated();
         context.Orders.Add(order);
         await context.SaveChangesAsync();

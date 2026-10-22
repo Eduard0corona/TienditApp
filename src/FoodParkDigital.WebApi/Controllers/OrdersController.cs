@@ -159,8 +159,8 @@ public class OrdersController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
         {
-            // The same folio of the same platform again today: the client confirms and sends it again.
-            return result.Error == PlatformOrderErrors.PossibleDuplicate
+            // The same folio of the same platform again today, or its same long id: the client confirms and sends it again.
+            return PlatformOrderErrors.IsPossibleDuplicate(result.Error)
                 ? this.ApiError(StatusCodes.Status409Conflict, result.Error, ApiErrorCodes.PossibleDuplicateOrder)
                 : this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         }
@@ -194,6 +194,23 @@ public class OrdersController : ControllerBase
             new RegisterCourierShipmentCommand(id, request.Courier, request.Folio, request.TrackingUrl), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return NoContent();
+    }
+
+    /// <summary>Writes, corrects or clears the platform's long id of an order of Rappi, Uber Eats or DiDi Food (Fase 22I).</summary>
+    [HttpPut("{id:guid}/platform-order-id")]
+    public async Task<IActionResult> SetPlatformOrderId(
+        Guid id, [FromBody] SetPlatformOrderIdRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SetPlatformOrderIdCommand(id, request.ExternalOrderId, request.ConfirmPossibleDuplicate), cancellationToken);
+        if (result.IsFailure)
+        {
+            // Another order of the platform has it: the client confirms and sends it again.
+            return PlatformOrderErrors.IsPossibleDuplicate(result.Error)
+                ? this.ApiError(StatusCodes.Status409Conflict, result.Error, ApiErrorCodes.PossibleDuplicateOrder)
+                : this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        }
         return NoContent();
     }
 
@@ -477,6 +494,15 @@ public class DispatchOrderRequest
     public bool CollectsCash { get; init; }
     /// <summary>The bill the customer pays with, for the change; only when the courier collects.</summary>
     public decimal? PaysWith { get; init; }
+}
+
+public class SetPlatformOrderIdRequest
+{
+    /// <summary>The long id as the platform's statement or app shows it; empty clears it.</summary>
+    public string? ExternalOrderId { get; init; }
+    /// <summary>Saves it although another order of the platform has it (409 possible_duplicate_order).</summary>
+    [System.ComponentModel.DefaultValue(false)]
+    public bool ConfirmPossibleDuplicate { get; init; }
 }
 
 public class RegisterCourierShipmentRequest

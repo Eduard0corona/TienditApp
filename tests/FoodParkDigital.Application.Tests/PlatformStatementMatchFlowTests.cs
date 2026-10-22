@@ -27,6 +27,7 @@ public class PlatformStatementMatchFlowTests
 
     // $1,000 with IVA included, 30 % of commission on the total, charged by the platform.
     private const decimal PlatformNet = 561.48m;
+    private const string UberUuid = "3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84";
 
     [Fact]
     public async Task Match_ShouldTellWhatEachFolioIs_AddingUpItsLines()
@@ -230,7 +231,8 @@ public class PlatformStatementMatchFlowTests
             (Valid() with { Lines = [Line(3, "R1", 1m), Line(7, "R2", 1m), Line(7, "R3", 1m)] }, MatchPlatformStatementQueryValidator.RepeatedRowMessage(7)),
             (Valid() with { Lines = [Line(7, "R1", 1.005m)] }, MatchPlatformStatementQueryValidator.AmountMessage(7)),
             (Valid() with { Lines = [Line(7, "R1", 10_000_000.01m)] }, MatchPlatformStatementQueryValidator.AmountMessage(7)),
-            (Valid() with { Lines = [Line(7, new string('9', 61), 1m)] }, MatchPlatformStatementQueryValidator.FolioTooLongMessage(7)),
+            // A folio or the platform's long id of the order (Fase 22I): up to 100 characters as the file wrote it.
+            (Valid() with { Lines = [Line(7, new string('9', 101), 1m)] }, MatchPlatformStatementQueryValidator.FolioTooLongMessage(7)),
             (Valid() with { Lines = [Line(7, "R1", 1m, new string('c', 201))] }, MatchPlatformStatementQueryValidator.ConceptTooLongMessage(7))
         };
         foreach (var (query, message) in refusals)
@@ -239,6 +241,81 @@ public class PlatformStatementMatchFlowTests
         var tooMany = validator.Validate(Valid() with { Lines = Enumerable.Range(1, 6_000).Select(_ => Line(0, "R1", 0.001m)).ToList() });
         Assert.Equal([MatchPlatformStatementQueryValidator.TooManyLinesMessage], tooMany.Errors.Select(error => error.ErrorMessage));
         Assert.True(validator.Validate(Valid() with { Lines = [Line(1, null, -10_000_000m, new string('c', 200))] }).IsValid);
+        Assert.True(validator.Validate(Valid() with { Lines = [Line(1, new string('9', 100), 1m)] }).IsValid);
+    }
+
+    [Fact]
+    public async Task Match_ShouldFindOrdersByTheirLongId_AddingUpTheLinesThatNameOneOrderBothWays()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        var withLongId = await SellAtAsync(fixture, At(Monday, 12), Uber(shop, "BC953") with { ExternalOrderId = UberUuid });
+        var folioOnly = await SellAtAsync(fixture, At(Monday, 13), Uber(shop, "BC954"));
+
+        var match = await MatchAsync(fixture, OrderChannel.UberEats, null,
+            Line(2, UberUuid.ToLowerInvariant(), 561.48m, "Pedido"),
+            Line(3, "BC954", 561.48m),
+            // The promotion of the first order names it by its folio: the same order, added up once.
+            Line(4, "#bc953", -20m, "Promoción"),
+            // Too long for a folio and for a long id.
+            Line(5, new string('X', 70), 15m));
+
+        Assert.Equal(
+            [
+                (UberUuid, new List<int> { 2, 4 }, 541.48m, PlatformStatementMatchStatus.Pending, (decimal?)PlatformNet, (decimal?)-20m),
+                ("BC954", [3], 561.48m, PlatformStatementMatchStatus.Pending, PlatformNet, 0m)
+            ],
+            match.Folios.Select(f => (f.Folio, f.Rows, f.StatementAmount, f.Status, f.ExpectedNet, f.Difference)));
+        Assert.Equal([withLongId.Id], match.Folios[0].Orders.Select(o => o.OrderId));
+        Assert.Equal(("BC953", UberUuid), (match.Folios[0].Orders[0].ExternalOrderNumber, match.Folios[0].Orders[0].ExternalOrderId));
+        Assert.Equal([folioOnly.Id], match.Folios[1].Orders.Select(o => o.OrderId));
+        Assert.Equal(5, Assert.Single(match.Unreadable).Row);
+        Assert.Equal((1_102.96m, 2 * PlatformNet, 15m), (match.MatchedTotal, match.ExpectedTotal, match.UnmatchedTotal));
+    }
+
+    [Fact]
+    public async Task Match_ShouldTellWhyALongIdCannotBeTaken_ReadingOnlyItsOrders()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        var settledOrder = await SellAtAsync(fixture, At(Monday.AddDays(-7), 12), Rappi(shop, "R5") with { ExternalOrderId = "RAPPI-000555" });
+        var settled = (await CreateAsync(fixture, Command(Monday.AddDays(-7), Monday.AddDays(-1), PlatformNet, [settledOrder.Id]))).Value;
+        Assert.True((await CloseAsync(fixture, settled.Settlement.Id, settled.Settlement.Revision)).IsSuccess);
+        var refunded = await SellAtAsync(fixture, At(Monday, 12), Rappi(shop, "R3") with { ExternalOrderId = "1000000000000000777" });
+        await RefundAsync(fixture, refunded.Id, 1000m);
+        await SellAtAsync(fixture, At(Sunday.AddDays(1), 12), Rappi(shop, "R4") with { ExternalOrderId = "RAPPI-000444" });
+
+        var match = await MatchAsync(fixture, OrderChannel.Rappi, null,
+            Line(1, "rappi-000555", 561.48m),
+            Line(2, "1000000000000000777", 0m),
+            Line(3, "RAPPI 000444", 561.48m),
+            Line(4, "RAPPI-000999", 100m));
+
+        Assert.Equal(
+            [
+                ("RAPPI-000555", PlatformStatementMatchStatus.Settled),
+                ("1000000000000000777", PlatformStatementMatchStatus.NothingExpected),
+                ("RAPPI000444", PlatformStatementMatchStatus.Unknown),
+                ("RAPPI-000999", PlatformStatementMatchStatus.Unknown)
+            ],
+            match.Folios.Select(f => (f.Folio, f.Status)));
+        Assert.Equal((settledOrder.Id, settled.Settlement.Id), (match.Folios[0].Orders.Single().OrderId, match.Folios[0].SettlementId));
+        Assert.Equal(refunded.Id, match.Folios[1].Orders.Single().OrderId);
+        // Written without its hyphen it is another id: the statement names the order as the business wrote it.
+        Assert.Empty(match.Folios[2].Orders);
+    }
+
+    [Fact]
+    public async Task Match_ShouldTellALongIdAfterThePeriod()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        var after = await SellAtAsync(fixture, At(Sunday.AddDays(1), 12), Rappi(shop, "R4") with { ExternalOrderId = "RAPPI-000444" });
+
+        var match = await MatchAsync(fixture, OrderChannel.Rappi, null, Line(1, "rappi-000444", 561.48m));
+
+        var folio = Assert.Single(match.Folios);
+        Assert.Equal((PlatformStatementMatchStatus.AfterPeriod, after.Id), (folio.Status, folio.Orders.Single().OrderId));
     }
 
     private sealed record Shop(Tenant Tenant, Product Pack);

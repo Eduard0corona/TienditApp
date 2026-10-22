@@ -18,7 +18,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// own business, the business header of an owner changes nothing, a save over an older revision answers 409, the rates
 /// are for owners and admins (whoever takes orders or reads the reports learns only which platforms are on), a business
 /// registers orders only of the platforms it turned on, and the orders of a platform of one business never show in the
-/// lists, searches or reports of another.
+/// lists, searches or reports of another. The long id of an order (Fase 22I) is written and found only in its business,
+/// and a repeated one is a warning only within it.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantDeliveryPlatformsSqlServerTests
@@ -222,6 +223,65 @@ public sealed class CrossTenantDeliveryPlatformsSqlServerTests
         Assert.Equal(0, theirOrders.GetProperty("totalCount").GetInt32());
     }
 
+    [SqlServerFact]
+    public async Task LongIdOfAnOrder_ShouldBeWrittenAndFoundInItsBusinessOnly_AndWarnedOnlyWithinIt()
+    {
+        const string uuid = "3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84";
+        var mine = await _api.SignUpAsync("id-largo-propio", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("id-largo-ajeno", TwoBusinessesApi.FoodBusiness);
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync("/api/v1/delivery-platforms/Rappi", Terms(revision: 0, commission: 30m)));
+        await TwoBusinessesApi.ReadAsync(await theirs.Client.PutAsJsonAsync("/api/v1/delivery-platforms/Rappi", Terms(revision: 0, commission: 30m)));
+        var myProduct = await ProductAsync(mine.Client, "Paquete de A");
+        var theirProduct = await ProductAsync(theirs.Client, "Paquete de B");
+
+        var order = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/orders", RappiOrder(myProduct, "XA953", uuid.ToLowerInvariant())));
+        var orderId = order.GetProperty("id").GetGuid();
+        Assert.Equal(uuid, order.GetProperty("platformOrder").GetProperty("externalOrderId").GetString());
+
+        // The other business writes the same long id on its own order: no warning, it is another business's.
+        var theirOrder = await TwoBusinessesApi.ReadAsync(await theirs.Client.PostAsJsonAsync("/api/v1/orders", RappiOrder(theirProduct, "XB001", uuid)));
+        // It cannot touch this business's order.
+        var foreign = await theirs.Client.PutAsJsonAsync($"/api/v1/orders/{orderId}/platform-order-id", new { externalOrderId = "RAPPI-000001" });
+        Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode);
+
+        // The same long id again in this business answers 409, and the person confirms.
+        var repeated = await mine.Client.PostAsJsonAsync("/api/v1/orders", RappiOrder(myProduct, "XA954", uuid));
+        Assert.Equal(HttpStatusCode.Conflict, repeated.StatusCode);
+        var problem = JsonDocument.Parse(await repeated.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(ApiErrorCodes.PossibleDuplicateOrder, problem.GetProperty("code").GetString());
+        Assert.Equal(PlatformOrderErrors.PossibleDuplicateLongId, problem.GetProperty("detail").GetString());
+
+        // Corrected afterwards; one that is not a long id is refused.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await mine.Client.PutAsJsonAsync($"/api/v1/orders/{orderId}/platform-order-id", new { externalOrderId = "3f9c2b1e-8d4a-4c6f-9b2e-1a7d5e0c3b85" })).StatusCode);
+        var invalid = await mine.Client.PutAsJsonAsync($"/api/v1/orders/{orderId}/platform-order-id", new { externalOrderId = "1234" });
+        await AssertValidationAsync(invalid, "El ID largo del pedido lleva de 6 a 64 letras, números o guiones.");
+        // Writing the other business's long id on this order is no warning either.
+        var other = theirOrder.GetProperty("platformOrder").GetProperty("externalOrderId").GetString();
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await mine.Client.PutAsJsonAsync($"/api/v1/orders/{orderId}/platform-order-id", new { externalOrderId = other })).StatusCode);
+
+        var mineAfter = await mine.Client.GetFromJsonAsync<JsonElement>($"/api/v1/orders/{orderId}");
+        Assert.Equal(uuid, mineAfter.GetProperty("platformOrder").GetProperty("externalOrderId").GetString());
+        var theirsAfter = await theirs.Client.GetFromJsonAsync<JsonElement>($"/api/v1/orders/{theirOrder.GetProperty("id").GetGuid()}");
+        Assert.Equal(uuid, theirsAfter.GetProperty("platformOrder").GetProperty("externalOrderId").GetString());
+
+        // Each business finds only its own order by the long id, in Pedidos and in Reportes.
+        foreach (var (client, own, foreignId) in new[]
+        {
+            (mine.Client, orderId, theirOrder.GetProperty("id").GetGuid()),
+            (theirs.Client, theirOrder.GetProperty("id").GetGuid(), orderId)
+        })
+        {
+            var orders = await client.GetStringAsync("/api/v1/orders?search=0c3b84&pageSize=10");
+            var report = await client.GetStringAsync("/api/v1/reports/delivery-platform-orders?channel=Rappi&search=0C3B84");
+            Assert.Contains(own.ToString(), orders);
+            Assert.Contains(own.ToString(), report);
+            Assert.DoesNotContain(foreignId.ToString(), orders);
+            Assert.DoesNotContain(foreignId.ToString(), report);
+        }
+    }
+
     private static object Terms(int revision, decimal commission, bool isActive = true) => new
     {
         revision,
@@ -233,10 +293,11 @@ public sealed class CrossTenantDeliveryPlatformsSqlServerTests
         vatWithholdingPercent = 50m
     };
 
-    private static object RappiOrder(Guid product, string folio) => new
+    private static object RappiOrder(Guid product, string folio, string? longId = null) => new
     {
         channel = (int)OrderChannel.Rappi,
         externalOrderNumber = folio,
+        externalOrderId = longId,
         customerName = "Juan",
         items = new[] { Line(product) }
     };

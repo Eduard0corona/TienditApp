@@ -18,7 +18,10 @@ public record PlatformStatementLineInput
     /// <summary>The line of the file it came in, from 1, so the person finds it.</summary>
     public int Row { get; init; }
 
-    /// <summary>The folio of the order as the file wrote it; empty for a line that is not an order (a fee, a promotion).</summary>
+    /// <summary>
+    /// The folio of the order, or the platform's long id of it (Fase 22I), as the file wrote it; empty for a line that is not
+    /// an order (a fee, a promotion).
+    /// </summary>
     public string? Folio { get; init; }
 
     /// <summary>What the line pays the business: negative when the platform deducts it.</summary>
@@ -28,8 +31,8 @@ public record PlatformStatementLineInput
 }
 
 /// <summary>
-/// Importar el estado de cuenta (Fase 22H, ADR 0040): the lines of a platform's statement against its orders, by folio, for
-/// a settlement of the period (the open one, or a new one): which orders the settlement takes, what each brings by the
+/// Importar el estado de cuenta (Fase 22H, ADR 0040): the lines of a platform's statement against its orders, by folio or
+/// by the platform's long id of the order (Fase 22I, ADR 0041), for a settlement of the period (the open one, or a new one): which orders the settlement takes, what each brings by the
 /// statement and by TienditApp, and what the statement has that no order explains. It saves nothing: the person reviews
 /// it and saves the settlement as always, which checks everything again.
 /// </summary>
@@ -58,7 +61,7 @@ public class MatchPlatformStatementQueryValidator : AbstractValidator<MatchPlatf
 
     public static string RepeatedRowMessage(int row) => $"La línea {row} del archivo viene dos veces.";
     public static string AmountMessage(int row) => $"El importe de la línea {row} va de -$10,000,000 a $10,000,000, con dos decimales.";
-    public static string FolioTooLongMessage(int row) => $"El folio de la línea {row} admite hasta 60 caracteres.";
+    public static string FolioTooLongMessage(int row) => $"El folio o ID del pedido de la línea {row} admite hasta 100 caracteres.";
     public static string ConceptTooLongMessage(int row) => $"El concepto de la línea {row} admite hasta 200 caracteres.";
 
     public MatchPlatformStatementQueryValidator()
@@ -92,7 +95,7 @@ public class MatchPlatformStatementQueryValidator : AbstractValidator<MatchPlatf
                     .Must(amount => Math.Abs(amount) <= PlatformSettlement.MaxDepositedAmount && decimal.Round(amount, 2) == amount)
                     .WithMessage(l => AmountMessage(l.Row));
                 line.RuleFor(l => l.Folio)
-                    .Must(folio => folio is null || folio.Length <= PlatformOrderNumber.MaxInputLength)
+                    .Must(folio => folio is null || folio.Length <= PlatformOrderId.MaxInputLength)
                     .WithMessage(l => FolioTooLongMessage(l.Row));
                 line.RuleFor(l => l.Concept)
                     .Must(concept => concept is null || concept.Length <= MatchPlatformStatementQuery.MaxConceptLength)
@@ -166,9 +169,12 @@ public class MatchPlatformStatementQueryHandler : IRequestHandler<MatchPlatformS
 
         var statement = StatementLines.Read(request.Lines);
         var endUtc = DailySalesReadModel.EndUtc(to, zone);
+        // Each folio of the statement is the folio of an order in the app or its long id: an order is a candidate by either.
         var folios = statement.Folios.Select(folio => folio.Folio).ToList();
+        var keys = folios.ToHashSet(StringComparer.Ordinal);
         var ofTheFolios = PlatformSettlementReader.Orders(_context)
-            .Where(row => row.Channel == channel && folios.Contains(row.ExternalOrderNumber));
+            .Where(row => row.Channel == channel
+                && (folios.Contains(row.ExternalOrderNumber) || (row.ExternalOrderId != null && folios.Contains(row.ExternalOrderId))));
 
         // The orders the settlement could take, of any date: its own and the pending ones (in no other settlement in force,
         // and bringing something), as the save reads them. Pending orders do not pile up: a settlement takes them.
@@ -181,11 +187,13 @@ public class MatchPlatformStatementQueryHandler : IRequestHandler<MatchPlatformS
         var pending = folios.Count == 0
             ? []
             : await PlatformSettlementReader.Pending(_context, settlementId)
-                .Where(row => row.Channel == channel && folios.Contains(row.ExternalOrderNumber))
+                .Where(row => row.Channel == channel
+                    && (folios.Contains(row.ExternalOrderNumber) || (row.ExternalOrderId != null && folios.Contains(row.ExternalOrderId))))
                 .ToListAsync(cancellationToken);
         var ownIds = own.Select(row => row.OrderId).ToHashSet();
         var open = own.Concat(pending.Where(row => !ownIds.Contains(row.OrderId)))
-            .ToLookup(row => row.ExternalOrderNumber, StringComparer.Ordinal);
+            .SelectMany(row => KeysOf(row, keys).Select(key => (Key: key, Row: row)))
+            .ToLookup(pair => pair.Key, pair => pair.Row, StringComparer.Ordinal);
 
         var result = new PlatformStatementMatchDto
         {
@@ -195,9 +203,22 @@ public class MatchPlatformStatementQueryHandler : IRequestHandler<MatchPlatformS
             ConceptsTotal = statement.Concepts.Sum(concept => concept.Amount)
         };
         var unexplained = new List<PlatformStatementFolioDto>();
+        // A statement that names an order by its folio on some lines and by its long id on others: one order, added once.
+        var takenBy = new Dictionary<Guid, PlatformStatementFolioDto>();
         foreach (var folio in statement.Folios)
         {
             var match = Match(folio, open[folio.Folio]);
+            if (Takes(match))
+            {
+                if (takenBy.TryGetValue(match.Orders[0].OrderId, out var same))
+                {
+                    same.Rows = same.Rows.Concat(match.Rows).Order().ToList();
+                    same.StatementAmount += match.StatementAmount;
+                    same.Difference = same.StatementAmount - same.ExpectedNet;
+                    continue;
+                }
+                takenBy[match.Orders[0].OrderId] = match;
+            }
             result.Folios.Add(match);
             if (match.Status == PlatformStatementMatchStatus.Unknown)
                 unexplained.Add(match);
@@ -210,10 +231,9 @@ public class MatchPlatformStatementQueryHandler : IRequestHandler<MatchPlatformS
             var left = unexplained.Select(match => match.Folio).ToList();
             var settled = await NewestAsync(PlatformSettlementReader.Orders(_context).Where(row =>
                 row.Channel == channel
-                && left.Contains(row.ExternalOrderNumber)
                 && _context.PlatformSettlementOrders.Any(line =>
                     line.OrderId == row.OrderId && line.IsActive && (settlementId == null || line.SettlementId != settlementId))),
-                cancellationToken);
+                left, cancellationToken);
             var settledIds = settled.Values.Select(row => row.OrderId).ToList();
             var settledIn = settledIds.Count == 0
                 ? []
@@ -224,8 +244,7 @@ public class MatchPlatformStatementQueryHandler : IRequestHandler<MatchPlatformS
             var rest = left.Where(folio => !settled.ContainsKey(folio)).ToList();
             var any = rest.Count == 0
                 ? []
-                : await NewestAsync(PlatformSettlementReader.Orders(_context).Where(row =>
-                    row.Channel == channel && rest.Contains(row.ExternalOrderNumber)), cancellationToken);
+                : await NewestAsync(PlatformSettlementReader.Orders(_context).Where(row => row.Channel == channel), rest, cancellationToken);
             foreach (var match in unexplained)
             {
                 if (settled.TryGetValue(match.Folio, out var elsewhere))
@@ -295,30 +314,53 @@ public class MatchPlatformStatementQueryHandler : IRequestHandler<MatchPlatformS
         }
     }
 
-    /// <summary>The newest order of each folio among <paramref name="rows"/>: one row per folio read, not its history.</summary>
+    /// <summary>
+    /// The newest order among <paramref name="rows"/> of each of <paramref name="keys"/>, whose folio or long id it is: one row
+    /// per folio read, not its history. A long id names one order (or the few captured twice), so its orders are read whole.
+    /// </summary>
     private static async Task<Dictionary<string, PlatformSettlementReader.PlatformOrderRow>> NewestAsync(
         IQueryable<PlatformSettlementReader.PlatformOrderRow> rows,
+        List<string> keys,
         CancellationToken cancellationToken)
     {
-        var newest = rows
+        var ofTheFolios = rows.Where(row => keys.Contains(row.ExternalOrderNumber));
+        var newest = ofTheFolios
             .GroupBy(row => row.ExternalOrderNumber)
             .Select(group => new { Folio = group.Key, RegisteredAt = group.Max(row => row.RegisteredAt) });
-        var found = await (
-                from row in rows
+        var byFolio = await (
+                from row in ofTheFolios
                 join last in newest on new { Folio = row.ExternalOrderNumber, row.RegisteredAt } equals new { last.Folio, last.RegisteredAt }
                 select row)
             .ToListAsync(cancellationToken);
+        var byLongId = await rows
+            .Where(row => row.ExternalOrderId != null && keys.Contains(row.ExternalOrderId))
+            .ToListAsync(cancellationToken);
         // Two orders of a folio registered at the same instant: the same one every time.
-        return found
-            .GroupBy(row => row.ExternalOrderNumber, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.MaxBy(row => row.OrderId)!, StringComparer.Ordinal);
+        return byFolio.Select(row => (Key: row.ExternalOrderNumber, Row: row))
+            .Concat(byLongId.Select(row => (Key: row.ExternalOrderId!, Row: row)))
+            .GroupBy(pair => pair.Key, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(pair => pair.Row).MaxBy(row => (row.RegisteredAt, row.OrderId))!,
+                StringComparer.Ordinal);
+    }
+
+    /// <summary>The folios of the statement an order answers to: its folio in the app, its long id, or both.</summary>
+    private static IEnumerable<string> KeysOf(PlatformSettlementReader.PlatformOrderRow row, HashSet<string> keys)
+    {
+        if (keys.Contains(row.ExternalOrderNumber))
+            yield return row.ExternalOrderNumber;
+        if (row.ExternalOrderId is { } longId && longId != row.ExternalOrderNumber && keys.Contains(longId))
+            yield return longId;
     }
 
     private static bool Takes(PlatformStatementFolioDto match)
         => match.Status is PlatformStatementMatchStatus.InThisSettlement or PlatformStatementMatchStatus.Pending;
 }
 
-/// <summary>The lines of a statement by folio, by concept the ones without one, and the ones whose folio cannot be read.</summary>
+/// <summary>
+/// The lines of a statement by folio (or long id), by concept the ones without one, and the ones whose folio cannot be read.
+/// </summary>
 internal static class StatementLines
 {
     internal sealed record FolioLines(string Folio, List<int> Rows, decimal Amount);
@@ -331,7 +373,8 @@ internal static class StatementLines
     /// <summary>
     /// Adds up the lines of each folio, as the platforms write the folio of an order on its own line and on the lines of
     /// what they deduct from it (a promotion, a claim); and the lines without a folio by concept, trimmed and without
-    /// telling capitals apart. A folio without a letter or a digit («-», «—») is no folio.
+    /// telling capitals apart. A folio without a letter or a digit («-», «—») is no folio. Each folio may also be the
+    /// platform's long id of the order (Fase 22I), written the same way; a text too long for a folio can only be one.
     /// </summary>
     public static Grouped Read(IReadOnlyList<PlatformStatementLineInput> lines)
     {
@@ -360,7 +403,7 @@ internal static class StatementLines
                 continue;
             }
 
-            if (!PlatformOrderNumber.TryNormalize(raw, out var folio))
+            if (Key(raw) is not { } folio)
             {
                 unreadable.Add(new PlatformStatementUnreadableDto
                 {
@@ -387,6 +430,12 @@ internal static class StatementLines
 
         return new Grouped(folios, concepts, unreadable);
     }
+
+    /// <summary>The folio as the orders keep it, or the long id when it can only be one; null when it is neither.</summary>
+    private static string? Key(string raw)
+        => PlatformOrderNumber.TryNormalize(raw, out var folio) ? folio
+            : PlatformOrderId.TryNormalize(raw, out var longId) ? longId
+            : null;
 
     private static string Clean(string? concept)
         => string.Join(' ', (concept ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));

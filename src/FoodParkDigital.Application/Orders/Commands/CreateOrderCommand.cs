@@ -66,13 +66,19 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
     /// <summary>The folio the delivery platform's app shows for the order: only with Rappi, Uber Eats or DiDi Food.</summary>
     public string? ExternalOrderNumber { get; init; }
     /// <summary>
+    /// The platform's long id of the order (Uber Eats' UUID, DiDi's id, Rappi's order number), optional: only with Rappi,
+    /// Uber Eats or DiDi Food. Its statements find the order by it (Fase 22I).
+    /// </summary>
+    public string? ExternalOrderId { get; init; }
+    /// <summary>
     /// Who charged an order of a delivery platform: the platform, in its app (when omitted), or the business, when the
     /// courier pays on pickup. Only with Rappi, Uber Eats or DiDi Food.
     /// </summary>
     public PlatformCollectedBy? CollectedBy { get; init; }
     /// <summary>
-    /// The business already registered an order of the same platform with the same folio today and confirms this is
-    /// another one (short folios repeat). Sent again with the same idempotency key after the possible duplicate warning.
+    /// The business already registered an order of the same platform with the same folio today, or ever one with the same
+    /// long id, and confirms this is another one (short folios repeat). Sent again with the same idempotency key after the
+    /// possible duplicate warning.
     /// </summary>
     [System.ComponentModel.DefaultValue(false)]
     public bool ConfirmPossibleDuplicate { get; init; }
@@ -194,7 +200,7 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
     public const string PlatformWithConnectionMessage = "Un pedido de plataforma se registra con conexión.";
     public const string PlatformAlreadyChargedMessage = "La plataforma ya cobró este pedido: no registres pagos.";
     public const string PlatformFieldsOnlyForPlatformsMessage =
-        "El folio de la app y quién cobró solo van en pedidos de Rappi, Uber Eats o DiDi Food.";
+        "El folio de la app, su ID largo y quién cobró solo van en pedidos de Rappi, Uber Eats o DiDi Food.";
     public const string DeliveryNoTableMessage = "Un pedido a domicilio no lleva mesa: la dirección dice a dónde va.";
     public const string DeliveryWithConnectionMessage = "Un pedido a domicilio se registra con conexión: su envío sale de las zonas.";
     public const string AppointmentSaleMessage =
@@ -313,6 +319,9 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             RuleFor(x => x.ExternalOrderNumber).Cascade(CascadeMode.Stop)
                 .NotEmpty().WithMessage(PlatformOrderNumber.RequiredMessage)
                 .Must(number => PlatformOrderNumber.TryNormalize(number, out _)).WithMessage(PlatformOrderNumber.InvalidMessage);
+            RuleFor(x => x.ExternalOrderId)
+                .Must(id => string.IsNullOrWhiteSpace(id) || PlatformOrderId.TryNormalize(id, out _))
+                .WithMessage(PlatformOrderId.InvalidMessage);
             RuleFor(x => x.CollectedBy).IsInEnum();
             RuleFor(x => x.CustomerPhone).Empty().WithMessage(PlatformNoPhoneMessage);
             RuleFor(x => x.CustomerId).Null().WithMessage(PlatformOrderRules.NoCustomerMessage);
@@ -372,6 +381,7 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         When(x => !OrderChannelRules.IsDeliveryPlatform(x.Channel), () =>
         {
             RuleFor(x => x.ExternalOrderNumber).Empty().WithMessage(PlatformFieldsOnlyForPlatformsMessage);
+            RuleFor(x => x.ExternalOrderId).Empty().WithMessage(PlatformFieldsOnlyForPlatformsMessage);
             RuleFor(x => x.CollectedBy).Null().WithMessage(PlatformFieldsOnlyForPlatformsMessage);
             RuleFor(x => x.ConfirmPossibleDuplicate).Equal(false).WithMessage(PlatformFieldsOnlyForPlatformsMessage);
         });
@@ -457,6 +467,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         var isPlatform = OrderChannelRules.IsDeliveryPlatform(request.Channel);
         DeliveryPlatformSetting? platformSetting = null;
         PlatformOrderNumber? platformNumber = null;
+        PlatformOrderId? platformOrderId = null;
         if (isPlatform)
         {
             platformSetting = await PlatformOrderPlacement.LoadActiveSettingAsync(
@@ -464,6 +475,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             if (platformSetting is null)
                 return Result.Failure<OrderDto>(PlatformOrderErrors.NotActive(request.Channel));
             platformNumber = PlatformOrderNumber.From(request.ExternalOrderNumber);
+            platformOrderId = PlatformOrderId.FromOptional(request.ExternalOrderId);
         }
 
         string? customerName = request.CustomerName;
@@ -631,13 +643,17 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         if (request.Payments.Sum(p => p.Amount) > order.Total)
             return Result.Failure<OrderDto>("Los pagos suman mas que el total de la venta.");
 
-        // 11. The same folio of the same platform again today: short folios repeat, so the business confirms instead
-        // of a unique index refusing a real order. A retry with the same key never gets here (step 1).
-        if (isPlatform && !request.ConfirmPossibleDuplicate
-            && await PlatformOrderPlacement.HasSameDayDuplicateAsync(
-                _context, _tenantService.TenantId, request.Channel, platformNumber!, now, tenantZone, cancellationToken))
+        // 11. The same folio of the same platform again today, or its same long id ever: short folios repeat, so the
+        // business confirms instead of a unique index refusing a real order. A retry with the same key never gets here
+        // (step 1).
+        if (isPlatform && !request.ConfirmPossibleDuplicate)
         {
-            return Result.Failure<OrderDto>(PlatformOrderErrors.PossibleDuplicate);
+            if (platformOrderId is not null && await PlatformOrderPlacement.HasLongIdDuplicateAsync(
+                    _context, _tenantService.TenantId, request.Channel, platformOrderId, null, cancellationToken))
+                return Result.Failure<OrderDto>(PlatformOrderErrors.PossibleDuplicateLongId);
+            if (await PlatformOrderPlacement.HasSameDayDuplicateAsync(
+                    _context, _tenantService.TenantId, request.Channel, platformNumber!, now, tenantZone, cancellationToken))
+                return Result.Failure<OrderDto>(PlatformOrderErrors.PossibleDuplicate);
         }
 
         // 11b. On credit: what the payments leave must fit in what the customer may still owe. Checked inside the
@@ -696,7 +712,8 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 platformNumber!,
                 request.CollectedBy ?? PlatformCollectedBy.Platform,
                 now,
-                await BranchRules.StockLocationIdAsync(_context, _tenantService.TenantId, order.BranchId, cancellationToken));
+                await BranchRules.StockLocationIdAsync(_context, _tenantService.TenantId, order.BranchId, cancellationToken),
+                platformOrderId);
         }
 
         // 14. What the business charged now (when the business collects an order of a platform, too): into a drawer, but

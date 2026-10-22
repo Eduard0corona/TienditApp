@@ -13,6 +13,7 @@ namespace FoodParkDigital.Application.Orders.EventHandlers;
 /// </summary>
 public sealed class OrderAuditHandlers :
     IOutboxEventHandler<OrderCreatedEvent>,
+    IOutboxEventHandler<OrderPlatformIdChangedEvent>,
     IOutboxEventHandler<OrderStatusChangedEvent>,
     IOutboxEventHandler<OrderCancelledEvent>,
     IOutboxEventHandler<ServiceOrderPieceStatusChangedEvent>,
@@ -28,9 +29,9 @@ public sealed class OrderAuditHandlers :
         _context = context;
     }
 
-    // Where the order came from and, for an order of a delivery platform, the folio of its app and who charged it; for
-    // an order sent to the customer's address, that it is and what it charged for it, never the address; for the sale of
-    // a visit at the customer's address, what it charged for the visit.
+    // Where the order came from and, for an order of a delivery platform, the folio of its app, its long id and who charged
+    // it; for an order sent to the customer's address, that it is and what it charged for it, never the address; for the
+    // sale of a visit at the customer's address, what it charged for the visit.
     public Task HandleAsync(OrderCreatedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
         => AddAsync(domainEvent.TenantId, nameof(Order), domainEvent.OrderId, "OrderCreated", context, new
         {
@@ -39,10 +40,22 @@ public sealed class OrderAuditHandlers :
             domainEvent.Total,
             domainEvent.Channel,
             domainEvent.ExternalOrderNumber,
+            domainEvent.ExternalOrderId,
             domainEvent.CollectedBy,
             domainEvent.IsHomeDelivery,
             domainEvent.DeliveryFee,
             domainEvent.VisitFee
+        });
+
+    // The platform's long id of an order written, corrected or cleared after it was registered (Fase 22I): the one before and
+    // the new one, with the folio of the app that names the order.
+    public Task HandleAsync(OrderPlatformIdChangedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
+        => AddAsync(domainEvent.TenantId, nameof(Order), domainEvent.OrderId, "OrderPlatformIdChanged", context, new
+        {
+            domainEvent.Channel,
+            domainEvent.ExternalOrderNumber,
+            domainEvent.PreviousExternalOrderId,
+            domainEvent.ExternalOrderId
         });
 
     public Task HandleAsync(OrderStatusChangedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)

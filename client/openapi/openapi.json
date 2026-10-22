@@ -9580,6 +9580,48 @@
         }
       }
     },
+    "/api/v1/orders/{id}/platform-order-id": {
+      "put": {
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPlatformOrderIdRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPlatformOrderIdRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPlatformOrderIdRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/orders/{id}/delivery/dispatch": {
       "put": {
         "tags": [
@@ -18469,6 +18511,10 @@
             "type": "string",
             "nullable": true
           },
+          "externalOrderId": {
+            "type": "string",
+            "nullable": true
+          },
           "collectedBy": {
             "$ref": "#/components/schemas/PlatformCollectedBy"
           },
@@ -20529,6 +20575,10 @@
           },
           "externalOrderNumber": {
             "type": "string"
+          },
+          "externalOrderId": {
+            "type": "string",
+            "nullable": true
           },
           "registeredAt": {
             "type": "string",
@@ -25159,6 +25209,10 @@
           "externalOrderNumber": {
             "type": "string"
           },
+          "externalOrderId": {
+            "type": "string",
+            "nullable": true
+          },
           "collectedBy": {
             "$ref": "#/components/schemas/PlatformCollectedBy"
           }
@@ -26677,6 +26731,10 @@
           },
           "externalOrderNumber": {
             "type": "string"
+          },
+          "externalOrderId": {
+            "type": "string",
+            "nullable": true
           },
           "registeredAt": {
             "type": "string",
@@ -30583,6 +30641,20 @@
         "properties": {
           "accepts": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetPlatformOrderIdRequest": {
+        "type": "object",
+        "properties": {
+          "externalOrderId": {
+            "type": "string",
+            "nullable": true
+          },
+          "confirmPossibleDuplicate": {
+            "type": "boolean",
+            "default": false
           }
         },
         "additionalProperties": false

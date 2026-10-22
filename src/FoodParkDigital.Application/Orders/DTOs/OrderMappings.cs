@@ -30,6 +30,7 @@ public static class OrderMappings
         PlatformOrder = order.PlatformDetail is null ? null : new OrderPlatformDto
         {
             ExternalOrderNumber = order.PlatformDetail.ExternalOrderNumber,
+            ExternalOrderId = order.PlatformDetail.ExternalOrderId,
             CollectedBy = order.PlatformDetail.CollectedBy
         },
         Delivery = order.Delivery is null ? null : new OrderDeliveryDto
@@ -265,6 +266,7 @@ public static class OrderMappings
         PlatformOrder = order.PlatformDetail == null ? null : new OrderPlatformDto
         {
             ExternalOrderNumber = order.PlatformDetail.ExternalOrderNumber,
+            ExternalOrderId = order.PlatformDetail.ExternalOrderId,
             CollectedBy = order.PlatformDetail.CollectedBy
         },
         Delivery = order.Delivery == null ? null : new OrderDeliveryDto

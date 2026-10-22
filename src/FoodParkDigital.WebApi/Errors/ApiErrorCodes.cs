@@ -34,9 +34,9 @@ public static class ApiErrorCodes
     /// <summary>409. The status changed meanwhile and the transition is no longer allowed.</summary>
     public const string InvalidStateTransition = "invalid_state_transition";
     /// <summary>
-    /// 409. The business already registered today an order of the same delivery platform with the same folio. Short
-    /// folios repeat: the client asks, and sends the same order again (same idempotency key) with
-    /// <c>confirmPossibleDuplicate</c>.
+    /// 409. The business already registered today an order of the same delivery platform with the same folio, or ever one
+    /// with the same long id (Fase 22I). Short folios repeat: the client asks, and sends the same order again (same
+    /// idempotency key) with <c>confirmPossibleDuplicate</c>. Writing a long id another order has answers it too.
     /// </summary>
     public const string PossibleDuplicateOrder = "possible_duplicate_order";
     /// <summary>429. Too many attempts; try again later.</summary>

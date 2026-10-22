@@ -7914,6 +7914,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/platform-order-id": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetPlatformOrderIdRequest"];
+                    "text/json": components["schemas"]["SetPlatformOrderIdRequest"];
+                    "application/*+json": components["schemas"]["SetPlatformOrderIdRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}/delivery/dispatch": {
         parameters: {
             query?: never;
@@ -13284,6 +13325,7 @@ export interface components {
             expectedTotal?: number | null;
             channel: components["schemas"]["OrderChannel"];
             externalOrderNumber?: string | null;
+            externalOrderId?: string | null;
             collectedBy?: components["schemas"]["PlatformCollectedBy"];
             /** @default false */
             confirmPossibleDuplicate: boolean;
@@ -13924,6 +13966,7 @@ export interface components {
             orderId: string;
             orderNumber: string;
             externalOrderNumber: string;
+            externalOrderId?: string | null;
             /** Format: date-time */
             registeredAt: string;
             status: components["schemas"]["OrderStatus"];
@@ -15296,6 +15339,7 @@ export interface components {
         OrderPaymentMethod: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
         OrderPlatformDto: {
             externalOrderNumber: string;
+            externalOrderId?: string | null;
             collectedBy: components["schemas"]["PlatformCollectedBy"];
         };
         OrderRefundDto: {
@@ -15757,6 +15801,7 @@ export interface components {
             orderId: string;
             orderNumber: string;
             externalOrderNumber: string;
+            externalOrderId?: string | null;
             /** Format: date-time */
             registeredAt: string;
             /** Format: date */
@@ -16897,6 +16942,11 @@ export interface components {
         };
         SetOnlinePaymentsAcceptedRequest: {
             accepts: boolean;
+        };
+        SetPlatformOrderIdRequest: {
+            externalOrderId?: string | null;
+            /** @default false */
+            confirmPossibleDuplicate: boolean;
         };
         SetProductOptionGroupsRequest: {
             groups: components["schemas"]["ProductOptionGroupInput"][];
