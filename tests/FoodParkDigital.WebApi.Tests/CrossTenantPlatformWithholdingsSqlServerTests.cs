@@ -12,8 +12,9 @@ namespace FoodParkDigital.WebApi.Tests;
 
 /// <summary>
 /// The CFDI de retenciones of the platforms (Fase 22J) through the API, on SQL Server: each business sees, registers and
-/// removes only its own, the business header of an owner changes nothing, the same CFDI counts once in a business (and
-/// once in each), and the withholdings are read with the reports and changed by owners and admins.
+/// removes only its own, the business header of an owner changes nothing, a CFDI of another business that says it
+/// replaces one of mine takes nothing out, the same CFDI counts once in a business (and once in each), and the
+/// withholdings are read with the reports and changed by owners and admins.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantPlatformWithholdingsSqlServerTests
@@ -68,6 +69,27 @@ public sealed class CrossTenantPlatformWithholdingsSqlServerTests
             new[] { mine.TenantId },
             await _api.QueryAsync(mine.TenantId, db => db.PlatformWithholdingCertificates.Select(c => c.TenantId).ToListAsync()));
         Assert.Equal(1, await _api.QueryAsync(theirs.TenantId, db => db.PlatformWithholdingCertificates.CountAsync()));
+    }
+
+    [SqlServerFact]
+    public async Task ReplacementUploadedByAnotherBusiness_ShouldNotTakeMineOut()
+    {
+        var mine = await _api.SignUpAsync("retiene-sustituye-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("retiene-sustituye-b", TwoBusinessesApi.FoodBusiness);
+        var registered = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            "/api/v1/platform-withholdings", new { channel = OrderChannel.UberEats, xml = Xml(Uuid) }));
+
+        // Theirs says it replaces my folio: in their business there is nothing to take out, and mine still counts.
+        var replacing = await theirs.Client.PostAsJsonAsync(
+            "/api/v1/platform-withholdings",
+            new { channel = OrderChannel.UberEats, xml = Xml("22222222-2222-4333-8444-555555555555", replaces: Uuid) });
+
+        Assert.Equal(HttpStatusCode.OK, replacing.StatusCode);
+        Assert.Equal(
+            new[] { (registered.GetProperty("id").GetGuid(), (DateTimeOffset?)null) },
+            (await _api.QueryAsync(mine.TenantId, db => db.PlatformWithholdingCertificates.Select(c => new { c.Id, c.RemovedAt }).ToListAsync()))
+                .Select(c => (c.Id, c.RemovedAt)));
+        Assert.Equal(0, await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(log => log.Action == "PlatformWithholdingCertificateRemoved")));
     }
 
     [SqlServerFact]
@@ -143,10 +165,14 @@ public sealed class CrossTenantPlatformWithholdingsSqlServerTests
         Assert.Equal(0, await _api.QueryAsync(owner.TenantId, db => db.PlatformWithholdingCertificates.CountAsync()));
     }
 
-    /// <summary>A CFDI de retenciones 2.0 of September 2026: 2.5 % of ISR and half the IVA of $16,269.76.</summary>
-    private static string Xml(string uuid) => $"""
+    /// <summary>
+    /// A CFDI de retenciones 2.0 of September 2026: 2.5 % of ISR and half the IVA of $16,269.76; it replaces another when
+    /// <paramref name="replaces"/> says which.
+    /// </summary>
+    private static string Xml(string uuid, string? replaces = null) => $"""
         <?xml version="1.0" encoding="utf-8"?>
         <retenciones:Retenciones xmlns:retenciones="http://www.sat.gob.mx/esquemas/retencionpago/2" Version="2.0" FechaExp="2026-10-02T22:28:50" CveRetenc="26" LugarExpRetenc="03810">
+          {(replaces is null ? "" : $"<retenciones:CfdiRetenRelacionados TipoRelacion=\"04\" UUID=\"{replaces}\"/>")}
           <retenciones:Emisor RfcE="UBV121024TN8" NomDenRazSocE="UBER B.V." RegimenFiscalE="601"/>
           <retenciones:Receptor NacionalidadR="Nacional"><retenciones:Nacional RfcR="CLA150101AB1" NomDenRazSocR="COCINA LA ABUELA"/></retenciones:Receptor>
           <retenciones:Periodo MesIni="09" MesFin="09" Ejercicio="2026"/>

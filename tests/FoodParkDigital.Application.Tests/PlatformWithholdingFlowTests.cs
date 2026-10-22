@@ -281,6 +281,8 @@ public class PlatformWithholdingFlowTests
     [InlineData("C", "B", "A")]
     [InlineData("B", "C", "A")]
     [InlineData("A", "B", "C")]
+    [InlineData("B", "A", "C")]
+    [InlineData("C", "A", "B")]
     public async Task Register_AChainOfReplacements_InAnyOrder_ShouldLeaveOnlyTheLastOneCounting(string first, string second, string third)
     {
         await using var fixture = SalesTestFixture.Create();
