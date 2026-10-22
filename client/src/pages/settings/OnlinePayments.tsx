@@ -11,7 +11,7 @@ import {
 } from '../../api/onlinePayments';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
-import { formatDate } from '../../utils/dates';
+import { formatDate, formatDateTime } from '../../utils/dates';
 import { goToExternalPage } from '../../utils/externalNavigation';
 
 /**
@@ -131,6 +131,8 @@ export default function OnlinePayments() {
                       <dd className="col-sm-7 ta-money">{data.accountId}</dd>
                       <dt className="col-sm-5">Conectada el</dt>
                       <dd className="col-sm-7">{formatDate(data.connectedAt)}</dd>
+                      <dt className="col-sm-5">Revisada hasta</dt>
+                      <dd className="col-sm-7">{data.paymentsReviewedUntil ? formatDateTime(data.paymentsReviewedUntil) : 'Todavía no'}</dd>
                     </dl>
                     {data.needsReconnect && (
                       <div className="alert alert-warning">
@@ -167,6 +169,13 @@ export default function OnlinePayments() {
                           : `Mercado Pago no hizo ${data.refundsRefused} devoluciones: devuélvelas desde tu cuenta de Mercado Pago. Las ves en cada pedido.`}
                       </div>
                     )}
+                    {data.disputesOpen > 0 && (
+                      <div className="alert alert-warning small">
+                        {data.disputesOpen === 1
+                          ? 'Un pago está en disputa: Mercado Pago retiene el dinero mientras decide. Atiéndela en tu cuenta de Mercado Pago; la ves en el pedido.'
+                          : `${data.disputesOpen} pagos están en disputa: Mercado Pago retiene el dinero mientras decide. Atiéndelas en tu cuenta de Mercado Pago; las ves en cada pedido.`}
+                      </div>
+                    )}
                     {inCourse > 0 && (
                       <p className="small text-muted">
                         Hay {inCourse === 1 ? 'un pago o devolución en curso' : `${inCourse} pagos o devoluciones en curso`}: para
@@ -199,6 +208,10 @@ export default function OnlinePayments() {
                   <li>El dinero llega a tu cuenta de Mercado Pago, que cobra su comisión. TienditApp no cobra nada extra ni ve las tarjetas.</li>
                   <li>Lo cobrado en línea no entra a tu caja: lo ves aparte en Inicio y en tus reportes.</li>
                   <li>Para devolver, haz el reembolso del pedido con «En línea» y Mercado Pago se lo regresa al cliente.</li>
+                  <li>
+                    Cada 15 minutos TienditApp revisa lo que cambió en tu cuenta: una devolución hecha en Mercado Pago, una
+                    reclamación o un contracargo quedan anotados en el pedido.
+                  </li>
                 </ul>
               </div>
             </div>

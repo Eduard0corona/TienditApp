@@ -53,7 +53,7 @@ import {
   getPaymentMethodLabel,
 } from '../../utils/labels';
 import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
-import { describeOnlineRefund } from '../../utils/onlineRefunds';
+import { describeOnlineDispute, describeOnlineRefund } from '../../utils/onlineRefunds';
 import { getApiErrorMessage } from '../../api/errors';
 import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 
@@ -1070,6 +1070,18 @@ export default function OrdersList() {
                 </div>
               )}
 
+              {(() => {
+                const dispute = describeOnlineDispute(selectedOrder.onlineDispute);
+                return dispute && (
+                  <div className={`alert alert-${dispute.variant} mt-3 mb-0`} role="status">
+                    <strong>{dispute.title}.</strong> {dispute.text}
+                    {selectedOrder.onlineDisputeUpdatedAt && (
+                      <div className="small">Mercado Pago lo reportó el {toLocalDateTime(selectedOrder.onlineDisputeUpdatedAt)}.</div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {selectedOrder.payments.length > 0 && (
                 <div className="mt-3">
                   <h5 className="mb-2">Pagos</h5>
@@ -1129,7 +1141,7 @@ export default function OrdersList() {
                             <td>
                               {getPaymentMethodLabel(refund.method)}
                               {refund.method === OrderPaymentMethod.Online && (() => {
-                                const online = describeOnlineRefund(refund.onlineStatus, refund.onlineFailure);
+                                const online = describeOnlineRefund(refund.onlineStatus, refund.onlineFailure, refund.onlineReason);
                                 return <div className={`small text-${online.tone}`}>{online.text}</div>;
                               })()}
                             </td>

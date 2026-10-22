@@ -24,6 +24,7 @@ type Settings = Schemas['OnlinePaymentSettingsDto'];
 const NOT_CONNECTED: Settings = {
   available: true, sandbox: false, connected: false, accountId: null, connectedAt: null, keyExpiresAt: null,
   needsReconnect: false, acceptsPayments: false, menuTakesOrders: true, checkoutsInCourse: 0, refundsInCourse: 0, refundsRefused: 0,
+  disputesOpen: 0, paymentsReviewedUntil: null,
 };
 const CONNECTED: Settings = {
   ...NOT_CONNECTED, connected: true, accountId: 123456789, connectedAt: '2026-10-19T17:00:00Z', keyExpiresAt: '2027-04-17T17:00:00Z',
@@ -191,6 +192,25 @@ describe('OnlinePayments', () => {
     serve({ ...CONNECTED, refundsRefused: 2, needsReconnect: true });
     await vi.advanceTimersByTimeAsync(IN_COURSE_REFRESH_MS);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Desconectar' })).toBeEnabled());
+  });
+
+  it('says until when Mercado Pago was reviewed and points to the payments in dispute (Fase 24K)', async () => {
+    serve({ ...CONNECTED, disputesOpen: 2, paymentsReviewedUntil: '2026-10-22T18:15:00Z' });
+
+    renderPage();
+
+    expect(await screen.findByText(/2 pagos están en disputa: Mercado Pago retiene el dinero mientras decide/)).toHaveClass('alert-warning');
+    expect(screen.getByText('Revisada hasta').nextElementSibling).not.toHaveTextContent('Todavía no');
+    expect(screen.getByText(/Cada 15 minutos TienditApp revisa lo que cambió en tu cuenta/)).toBeInTheDocument();
+  });
+
+  it('says the account was not reviewed yet, and one payment in dispute', async () => {
+    serve({ ...CONNECTED, disputesOpen: 1 });
+
+    renderPage();
+
+    expect(await screen.findByText(/^Un pago está en disputa/)).toBeInTheDocument();
+    expect(screen.getByText('Revisada hasta').nextElementSibling).toHaveTextContent('Todavía no');
   });
 
   it('tells the owner the menu must take orders for paying online to show', async () => {

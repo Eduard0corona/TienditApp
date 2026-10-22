@@ -7,7 +7,7 @@ import { ordersApi } from '../../api/ordersApi';
 import { apiRequest } from '../../api/typedClient';
 import { useAuth } from '../../hooks/useAuth';
 import type { OrderCreatedPayload, OrderUpdatedPayload } from '../../hooks/useOrderSignalR';
-import { OnlinePaymentRefundStatus } from '../../api/generated/enums';
+import { OnlinePaymentDispute, OnlinePaymentRefundReason, OnlinePaymentRefundStatus } from '../../api/generated/enums';
 import { useTenant } from '../../hooks/useTenant';
 import { DeliveryCourier, OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, TenantCapability, type OrderDto } from '../../types';
 import OrdersList from './OrdersList';
@@ -264,6 +264,47 @@ describe('OrdersList', () => {
     expect(within(detail).getByText('Mercado Pago lo está devolviendo.')).toHaveClass('text-muted');
     expect(within(detail).getByText('Mercado Pago ya lo devolvió.')).toHaveClass('text-success');
     expect(within(detail).getByText('El pago ya no se puede devolver. Devuélvelo desde tu cuenta de Mercado Pago.')).toHaveClass('text-danger');
+  });
+
+  it('warns of a payment in dispute and says where each refund made in Mercado Pago came from (Fase 24K)', async () => {
+    const user = userEvent.setup();
+    const refund = (id: string, reason: string, onlineReason: number, onlineStatus: number = OnlinePaymentRefundStatus.Completed) => ({
+      id, amount: 40, method: OrderPaymentMethod.Online, reason, refundedAt: '2026-10-09T17:00:00Z', refundedBy: 'Mercado Pago',
+      restockItems: false, lines: [], onlineStatus, onlineFailure: null, onlineReason,
+    });
+    renderOrders(TenantCapability.Food, [order({
+      channel: OrderChannel.Online, createdByBusiness: false, items: [], taxBreakdown: [], statusHistory: [], servicePieces: [],
+      allowedTransitions: [], refundedAmount: 120, onlineDispute: OnlinePaymentDispute.Open, onlineDisputeUpdatedAt: '2026-10-10T17:00:00Z',
+      payments: [{ id: 'p1', amount: 160, method: OrderPaymentMethod.Online, paidAt: '2026-10-09T16:00:00Z', reference: '987654321' }],
+      refunds: [
+        refund('f1', 'Devolución hecha desde la cuenta de Mercado Pago.', OnlinePaymentRefundReason.InMercadoPago),
+        refund('f2', 'Mercado Pago se lo devolvió al cliente por una reclamación.', OnlinePaymentRefundReason.Claim),
+        refund('f3', 'Faltó un refresco', OnlinePaymentRefundReason.ByBusiness, OnlinePaymentRefundStatus.DoneInMercadoPago),
+      ],
+    } as Partial<OrderDto>)]);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    expect(within(detail).getByRole('status')).toHaveTextContent(/^Pago en disputa\. .*Mercado Pago retiene el dinero/);
+    expect(within(detail).getByRole('status')).toHaveClass('alert-warning');
+    expect(within(detail).getByText('Se hizo en Mercado Pago.')).toHaveClass('text-success');
+    expect(within(detail).getByText('Mercado Pago lo devolvió por una reclamación.')).toHaveClass('text-warning');
+    expect(within(detail).getByText('Mercado Pago no lo devolvió; lo devolviste desde tu cuenta de Mercado Pago.')).toHaveClass('text-success');
+  });
+
+  it('shows no dispute for an order paid online with none', async () => {
+    const user = userEvent.setup();
+    renderOrders(TenantCapability.Food, [order({
+      channel: OrderChannel.Online, createdByBusiness: false, items: [], taxBreakdown: [], statusHistory: [], servicePieces: [],
+      allowedTransitions: [], refunds: [], onlineDispute: null,
+      payments: [{ id: 'p1', amount: 120, method: OrderPaymentMethod.Online, paidAt: '2026-10-09T16:00:00Z', reference: '987654321' }],
+    } as Partial<OrderDto>)]);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    expect(detail).not.toHaveTextContent(/disputa/i);
   });
 
   it('says «Saldado», not «Pagado», for a sale settled by what was forgiven, and what was undone (Fase 26B)', async () => {
