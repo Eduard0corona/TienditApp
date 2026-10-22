@@ -107,12 +107,15 @@ public class GetDeliveryPlatformOrdersQueryHandler
             orders = orders.Where(x => x.order.BranchId == branchId);
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            // On the server, over every page: the folio of the statement may be on any of them. The folio of the app is
-            // stored normalized and the one of TienditApp is lower-cased on both sides, so neither depends on the collation.
+            // On the server, over every page: the folio of the statement may be on any of them. The folio of the app and its
+            // long id are stored normalized and the one of TienditApp is lower-cased on both sides, so none depends on the
+            // collation.
             var term = request.Search.Trim().ToLowerInvariant();
             var folioTerm = PlatformOrderNumber.NormalizeForSearch(request.Search);
+            var longIdTerm = PlatformOrderId.NormalizeForSearch(request.Search);
             orders = orders.Where(x =>
                 (folioTerm != "" && x.detail.ExternalOrderNumber.Contains(folioTerm))
+                || (longIdTerm != "" && x.detail.ExternalOrderId != null && x.detail.ExternalOrderId.Contains(longIdTerm))
                 || x.order.OrderNumber.ToLower().Contains(term));
         }
 
@@ -124,6 +127,7 @@ public class GetDeliveryPlatformOrdersQueryHandler
                 OrderId = x.order.Id,
                 OrderNumber = x.order.OrderNumber,
                 ExternalOrderNumber = x.detail.ExternalOrderNumber,
+                ExternalOrderId = x.detail.ExternalOrderId,
                 RegisteredAt = x.detail.RegisteredAt,
                 Status = x.order.Status,
                 CollectedBy = x.detail.CollectedBy,
@@ -148,6 +152,8 @@ public class DeliveryPlatformOrderDto
     public string OrderNumber { get; set; } = null!;
     /// <summary>The folio the platform's app shows for the order.</summary>
     public string ExternalOrderNumber { get; set; } = null!;
+    /// <summary>The platform's long id of the order, when the business wrote it (Fase 22I).</summary>
+    public string? ExternalOrderId { get; set; }
     public DateTimeOffset RegisteredAt { get; set; }
     public OrderStatus Status { get; set; }
     public PlatformCollectedBy CollectedBy { get; set; }

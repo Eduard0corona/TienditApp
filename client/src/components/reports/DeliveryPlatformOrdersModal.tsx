@@ -96,7 +96,10 @@ export default function DeliveryPlatformOrdersModal({ platform, from, to, branch
             }}
             renderRow={(order) => (
               <>
-                <td className="fw-semibold">{order.externalOrderNumber}</td>
+                <td>
+                  <span className="fw-semibold">{order.externalOrderNumber}</span>
+                  {order.externalOrderId && <div className="small text-muted text-break">ID {order.externalOrderId}</div>}
+                </td>
                 <td>
                   {order.orderNumber}
                   {order.status === OrderStatus.Cancelled && <div><StatusChip status={order.status} /></div>}

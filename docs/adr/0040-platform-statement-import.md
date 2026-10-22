@@ -62,7 +62,7 @@ Tomé las decisiones de la Fase 22H con la autorización permanente del dueño d
 6. **Sin migración ni cambio de dominio.** El contrato agrega una ruta, sus DTO y el enum `PlatformStatementMatchStatus`. Nada se quita.
 7. **Fuera de esta fase:**
    - PDF y XLSX;
-   - el ID largo del pedido;
+   - el ID largo del pedido (llegó en la Fase 22I, [ADR 0041](0041-platform-order-ids.md));
    - guardar el estado de cuenta en la base;
    - importarlo solo, por correo o por la API de la plataforma;
    - un formato fijo por plataforma.
@@ -75,7 +75,7 @@ Tomé las decisiones de la Fase 22H con la autorización permanente del dueño d
   - Los cargos sin folio llegan como ajustes con su motivo sugerido, y cada peso del depósito sigue explicado.
   - Funciona con los formatos de las tres plataformas, y con sus cambios, porque las columnas las elige la persona.
 - **Lo que limita:**
-  - **Formato:** depende de que el estado de cuenta traiga el folio corto que se captura en Vender. Con otra llave, como el ID largo, no encuentra los pedidos.
+  - **Formato:** depende de que el estado de cuenta traiga el folio corto que se captura en Vender. Con otra llave, como el ID largo, no encuentra los pedidos. Resuelto en la Fase 22I: cada renglón se compara también con el ID largo del pedido ([ADR 0041](0041-platform-order-ids.md)).
   - **Dónde se ven los cambios:** la comparación no guarda nada. Lo aplicado vive en la pantalla hasta guardar, y recargar lo pierde, como cualquier cambio sin guardar.
   - **Motivos:** se sugieren por palabras. Un concepto con otro nombre llega como «Otro» y la persona lo cambia.
   - **Diferencias por pedido:** van en un solo ajuste «Otro». La pantalla de la comparación las enlista, pero la liquidación no guarda cuál pedido trajo cuánto.

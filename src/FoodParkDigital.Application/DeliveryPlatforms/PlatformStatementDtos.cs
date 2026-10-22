@@ -68,7 +68,10 @@ public class PlatformStatementMatchDto
 /// <summary>A folio of the statement, its lines added up, and what it is in TienditApp.</summary>
 public class PlatformStatementFolioDto
 {
-    /// <summary>The folio, normalized as the orders keep it.</summary>
+    /// <summary>
+    /// The folio, or the platform's long id of the order (Fase 22I), normalized as the orders keep it. Lines that name one
+    /// order by its folio and by its long id are added up under the first.
+    /// </summary>
     public string Folio { get; set; } = null!;
 
     /// <summary>The lines of the file it came in (from 1).</summary>

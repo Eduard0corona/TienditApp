@@ -11,6 +11,7 @@ import SaleTicket from '../../components/sales/SaleTicket';
 import RefundOrderModal from '../../components/orders/RefundOrderModal';
 import CfdiDraftModal from '../../components/orders/CfdiDraftModal';
 import OrderDeliveryPanel from '../../components/orders/OrderDeliveryPanel';
+import PlatformOrderIdEditor from '../../components/orders/PlatformOrderIdEditor';
 import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
@@ -680,6 +681,9 @@ export default function OrdersList() {
                           {order.platformOrder && (
                             <small className="d-block text-muted">Folio {order.platformOrder.externalOrderNumber}</small>
                           )}
+                          {order.platformOrder?.externalOrderId && (
+                            <small className="d-block text-muted text-break">ID {order.platformOrder.externalOrderId}</small>
+                          )}
                         </div>
                       )}
                     </td>
@@ -784,6 +788,19 @@ export default function OrdersList() {
                         <strong>Origen:</strong> {getChannelLabel(selectedPlatform)}
                         {selectedOrder.platformOrder && <> · folio {selectedOrder.platformOrder.externalOrderNumber}</>}
                       </p>
+                      {selectedOrder.platformOrder && (
+                        <PlatformOrderIdEditor
+                          key={selectedOrder.id}
+                          order={selectedOrder}
+                          platform={selectedPlatform}
+                          canManage={canSell}
+                          onSaved={async (cleared) => {
+                            // Saved already: reading the order again failing is not a failed save.
+                            toast.success(cleared ? 'ID largo quitado.' : 'ID largo guardado.');
+                            await Promise.all([loadOrders(), refreshSelectedOrder(selectedOrder.id)]).catch(() => undefined);
+                          }}
+                        />
+                      )}
                       {selectedOrder.platformOrder && (
                         <p className="mb-1">
                           <strong>Cobró:</strong>{' '}

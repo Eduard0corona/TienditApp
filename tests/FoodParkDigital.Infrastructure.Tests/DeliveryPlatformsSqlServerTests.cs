@@ -15,7 +15,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// <summary>
 /// The tables of the orders of delivery platforms (Fase 22F): the settings of each platform in a business and the
 /// detail each order copies. Their checks keep every row one the domain could write, the unique index keeps one row
-/// per platform and business, the revision refuses a stale edit, and rates and amounts keep their cents.
+/// per platform and business, the revision refuses a stale edit, and rates and amounts keep their cents. The platform's
+/// long id of an order (Fase 22I) is optional and has its own filtered index.
 /// </summary>
 public class DeliveryPlatformsSqlServerTests
 {
@@ -52,6 +53,11 @@ public class DeliveryPlatformsSqlServerTests
                 AND t.[name] = N'nvarchar' AND c.[max_length] = 60 AND c.[is_nullable] = 0
             """));
         Assert.Equal(1, await CountAsync(context, $"""
+            SELECT COUNT(*) AS [Value] FROM sys.columns c INNER JOIN sys.types t ON t.[user_type_id] = c.[user_type_id]
+            WHERE c.[object_id] = OBJECT_ID(N'dbo.PlatformOrderDetails') AND c.[name] = N'ExternalOrderId'
+                AND t.[name] = N'nvarchar' AND c.[max_length] = 128 AND c.[is_nullable] = 1
+            """));
+        Assert.Equal(1, await CountAsync(context, $"""
             SELECT COUNT(*) AS [Value] FROM sys.columns c
             INNER JOIN sys.types t ON t.[user_type_id] = c.[user_type_id]
             INNER JOIN sys.default_constraints d ON d.[object_id] = c.[default_object_id]
@@ -65,8 +71,8 @@ public class DeliveryPlatformsSqlServerTests
                 "CK_DeliveryPlatformSettings_Channel", "CK_DeliveryPlatformSettings_CommissionBase",
                 "CK_DeliveryPlatformSettings_Percents", "CK_DeliveryPlatformSettings_Revision",
                 "CK_PlatformOrderDetails_Amounts", "CK_PlatformOrderDetails_BusinessCollected", "CK_PlatformOrderDetails_Channel",
-                "CK_PlatformOrderDetails_CollectedBy", "CK_PlatformOrderDetails_CommissionBase", "CK_PlatformOrderDetails_Number",
-                "CK_PlatformOrderDetails_Percents"
+                "CK_PlatformOrderDetails_CollectedBy", "CK_PlatformOrderDetails_CommissionBase", "CK_PlatformOrderDetails_ExternalOrderId",
+                "CK_PlatformOrderDetails_Number", "CK_PlatformOrderDetails_Percents"
             },
             await context.Database.SqlQuery<string>($"""
                 SELECT [name] AS [Value] FROM sys.check_constraints
@@ -77,6 +83,7 @@ public class DeliveryPlatformsSqlServerTests
             new[]
             {
                 "IX_DeliveryPlatformSettings_TenantId_Channel 1", "IX_PlatformOrderDetails_OrderId 1",
+                "IX_PlatformOrderDetails_TenantId_Channel_ExternalOrderId 0",
                 "IX_PlatformOrderDetails_TenantId_Channel_ExternalOrderNumber_RegisteredAt 0",
                 "IX_PlatformOrderDetails_TenantId_RegisteredAt 0"
             },
@@ -86,6 +93,12 @@ public class DeliveryPlatformsSqlServerTests
                     AND [name] LIKE N'IX[_]%'
                 ORDER BY [name]
                 """).ToListAsync());
+        // Only the orders with a long id are in its index.
+        Assert.Equal(1, await CountAsync(context, $"""
+            SELECT COUNT(*) AS [Value] FROM sys.indexes
+            WHERE [object_id] = OBJECT_ID(N'dbo.PlatformOrderDetails') AND [name] = N'IX_PlatformOrderDetails_TenantId_Channel_ExternalOrderId'
+                AND [has_filter] = 1 AND [filter_definition] = N'([ExternalOrderId] IS NOT NULL)'
+            """));
         // The detail goes with its order, like the detail of a service order.
         Assert.Equal(1, await CountAsync(context, $"""
             SELECT COUNT(*) AS [Value] FROM sys.foreign_keys
@@ -126,6 +139,8 @@ public class DeliveryPlatformsSqlServerTests
             await RefusedAsync("CK_PlatformOrderDetails_CommissionBase", () => InsertDetailAsync(context, tenant.Id, orderId, commissionBase: -1));
             await RefusedAsync("CK_PlatformOrderDetails_Number", () => InsertDetailAsync(context, tenant.Id, orderId, number: ""));
             await RefusedAsync("CK_PlatformOrderDetails_Number", () => InsertDetailAsync(context, tenant.Id, orderId, number: "   "));
+            await RefusedAsync("CK_PlatformOrderDetails_ExternalOrderId", () => InsertDetailAsync(context, tenant.Id, orderId, externalOrderId: ""));
+            await RefusedAsync("CK_PlatformOrderDetails_ExternalOrderId", () => InsertDetailAsync(context, tenant.Id, orderId, externalOrderId: "ABC12"));
             await RefusedAsync("CK_PlatformOrderDetails_Percents", () => InsertDetailAsync(context, tenant.Id, orderId, vatWithholding: 100.5m));
             await RefusedAsync("CK_PlatformOrderDetails_Amounts", () => InsertDetailAsync(context, tenant.Id, orderId, orderTotal: 0m));
             await RefusedAsync("CK_PlatformOrderDetails_Amounts", () => InsertDetailAsync(context, tenant.Id, orderId, commission: -1m));
@@ -134,8 +149,9 @@ public class DeliveryPlatformsSqlServerTests
             await RefusedAsync("CK_PlatformOrderDetails_BusinessCollected",
                 () => InsertDetailAsync(context, tenant.Id, orderId, collectedBy: 1, isrWithheld: 21.55m, vatWithheld: 0m, settlement: -348m));
 
-            // What the domain writes goes in, a negative expected settlement included.
-            await InsertDetailAsync(context, tenant.Id, orderId, collectedBy: 1, isrWithheld: 0m, vatWithheld: 0m, settlement: -348m);
+            // What the domain writes goes in, a negative expected settlement and a long id included.
+            await InsertDetailAsync(
+                context, tenant.Id, orderId, collectedBy: 1, isrWithheld: 0m, vatWithheld: 0m, settlement: -348m, externalOrderId: "ABC123");
             var duplicate = await Assert.ThrowsAsync<SqlException>(() => InsertDetailAsync(context, tenant.Id, orderId));
             Assert.Equal(2601, duplicate.Number);
             Assert.Contains("IX_PlatformOrderDetails_OrderId", duplicate.Message);
@@ -154,7 +170,9 @@ public class DeliveryPlatformsSqlServerTests
                 tenant.Id, OrderChannel.Rappi, isActive: true, new PlatformTerms(27.35m, PlatformCommissionBase.TotalWithTax, 16m, 2.5m, 50m));
             context.DeliveryPlatformSettings.Add(setting);
             var order = NewOrder(tenant.Id, "ORD-000001", OrderChannel.Rappi);
-            order.RegisterPlatformOrder(setting, PlatformOrderNumber.From("#bc 953"), PlatformCollectedBy.Platform, Now, null);
+            order.RegisterPlatformOrder(
+                setting, PlatformOrderNumber.From("#bc 953"), PlatformCollectedBy.Platform, Now, null,
+                PlatformOrderId.FromOptional("1029384756 102938475"));
             order.MarkAsCreated();
             context.Orders.Add(order);
             await context.SaveChangesAsync();
@@ -170,6 +188,7 @@ public class DeliveryPlatformsSqlServerTests
             var detail = order.PlatformDetail!;
             Assert.Equal(OrderChannel.Rappi, order.Channel);
             Assert.Equal("BC953", detail.ExternalOrderNumber);
+            Assert.Equal("1029384756102938475", detail.ExternalOrderId);
             Assert.Equal(PlatformCollectedBy.Platform, detail.CollectedBy);
             Assert.Equal(1, detail.SettingsRevision);
             Assert.Equal((27.35m, 16m, 2.5m, 50m), (detail.CommissionPercent, detail.CommissionVatPercent, detail.IsrWithholdingPercent, detail.VatWithholdingPercent));
@@ -199,6 +218,45 @@ public class DeliveryPlatformsSqlServerTests
             await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM OrderPayments WHERE OrderId = {orderId}");
             await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM Orders WHERE Id = {orderId}");
             Assert.Equal(0, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM PlatformOrderDetails"));
+        }
+    }
+
+    [SqlServerFact]
+    public async Task LongIdCorrections_OverTheSameVersionOfTheOrder_ShouldKeepTheFirst_AndRefuseTheSecond()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        Guid orderId;
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            var setting = new DeliveryPlatformSetting(tenant.Id, OrderChannel.Rappi, true, PlatformTerms.WithFiscalDefaults(30m));
+            context.DeliveryPlatformSettings.Add(setting);
+            var order = NewOrder(tenant.Id, "ORD-000001", OrderChannel.Rappi);
+            order.RegisterPlatformOrder(
+                setting, PlatformOrderNumber.From("BC953"), PlatformCollectedBy.Platform, Now, null, PlatformOrderId.FromOptional("4810373920"));
+            order.MarkAsCreated();
+            context.Orders.Add(order);
+            await context.SaveChangesAsync();
+            orderId = order.Id;
+        }
+
+        // Two people correct the long id of the same order at once: only the detail's column changes, but the order's
+        // version stops the second, so its activity never tells a change that did not stay.
+        await using (var first = database.CreateContext(tenant.Id))
+        await using (var second = database.CreateContext(tenant.Id))
+        {
+            var mine = await first.Orders.Include(o => o.PlatformDetail).SingleAsync(o => o.Id == orderId);
+            var theirs = await second.Orders.Include(o => o.PlatformDetail).SingleAsync(o => o.Id == orderId);
+            Assert.True(mine.ChangePlatformOrderId(PlatformOrderId.FromOptional("4810373921"), Now.AddDays(1)));
+            Assert.True(theirs.ChangePlatformOrderId(PlatformOrderId.FromOptional("4810373922"), Now.AddDays(1)));
+
+            await first.SaveChangesAsync();
+            await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
+        }
+
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            Assert.Equal("4810373921", (await context.PlatformOrderDetails.AsNoTracking().SingleAsync()).ExternalOrderId);
         }
     }
 
@@ -369,12 +427,12 @@ public class DeliveryPlatformsSqlServerTests
     private static Task<int> InsertDetailAsync(
         ApplicationDbContext context, Guid tenantId, Guid orderId, int channel = 3, string number = "BC953", int collectedBy = 0,
         int commissionBase = 0, decimal vatWithholding = 50m, decimal orderTotal = 1000m, decimal commission = 300m,
-        decimal isrWithheld = 21.55m, decimal vatWithheld = 68.97m, decimal settlement = 561.48m)
+        decimal isrWithheld = 21.55m, decimal vatWithheld = 68.97m, decimal settlement = 561.48m, string? externalOrderId = null)
         => context.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO PlatformOrderDetails (Id, TenantId, OrderId, Channel, ExternalOrderNumber, CollectedBy, SettingsRevision,
+            INSERT INTO PlatformOrderDetails (Id, TenantId, OrderId, Channel, ExternalOrderNumber, ExternalOrderId, CollectedBy, SettingsRevision,
                 CommissionPercent, CommissionBase, CommissionVatPercent, IsrWithholdingPercent, VatWithholdingPercent,
                 OrderTotal, Commission, CommissionTax, IsrWithheld, VatWithheld, ExpectedSettlement, RegisteredAt)
-            VALUES ({Guid.NewGuid()}, {tenantId}, {orderId}, {channel}, {number}, {collectedBy}, 1,
+            VALUES ({Guid.NewGuid()}, {tenantId}, {orderId}, {channel}, {number}, {externalOrderId}, {collectedBy}, 1,
                 30, {commissionBase}, 16, 2.5, {vatWithholding},
                 {orderTotal}, {commission}, 48, {isrWithheld}, {vatWithheld}, {settlement}, {Now})
             """);

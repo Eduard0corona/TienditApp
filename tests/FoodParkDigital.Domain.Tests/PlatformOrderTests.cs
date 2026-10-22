@@ -331,6 +331,61 @@ public class PlatformOrderTests
     }
 
     [Fact]
+    public void RegisterPlatformOrder_ShouldKeepTheLongId_AndTellItWhenCreated()
+    {
+        var order = NewOrderWithItems(channel: OrderChannel.UberEats);
+        order.AssignNumber("ORD-000126");
+
+        var detail = order.RegisterPlatformOrder(
+            Setting(OrderChannel.UberEats), PlatformOrderNumber.From("bc953"), PlatformCollectedBy.Platform, Now, Location,
+            PlatformOrderId.FromOptional("3f9c2b1e-8d4a-4c6f-9b2e-1a7d5e0c3b84"));
+        order.MarkAsCreated();
+
+        Assert.Equal("3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84", detail.ExternalOrderId);
+        var created = Assert.IsType<OrderCreatedEvent>(Assert.Single(order.DomainEvents));
+        Assert.Equal("3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84", created.ExternalOrderId);
+        Assert.Null(Register(NewOrderWithItems(), Setting()).ExternalOrderId);
+    }
+
+    [Fact]
+    public void ChangePlatformOrderId_ShouldWriteCorrectAndClearIt_TellingTheOneBefore_AtAnyStatus()
+    {
+        var order = NewOrderWithItems(channel: OrderChannel.DidiFood);
+        // Charged by the business, so it cancels without a refund first.
+        Register(order, Setting(OrderChannel.DidiFood), PlatformCollectedBy.Business, "12");
+        order.ClearDomainEvents();
+
+        Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890123456789"), Now));
+        // The order changes with it (its version stops a second correction over the same one), but not for the same id.
+        Assert.Equal(Now, order.UpdatedAt);
+        Assert.False(order.ChangePlatformOrderId(PlatformOrderId.FromOptional(" 1234567890 123456789 "), Now.AddHours(1)));
+        Assert.Equal(Now, order.UpdatedAt);
+        Assert.True(order.ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890123456780"), Now));
+        order.Cancel(new FoodOrderStateMachine(), "cajero", "Se capturó dos veces");
+        Assert.True(order.ChangePlatformOrderId(null, Now));
+
+        Assert.Null(order.PlatformDetail!.ExternalOrderId);
+        Assert.Equal(
+            [(null, "1234567890123456789"), ("1234567890123456789", "1234567890123456780"), ("1234567890123456780", null)],
+            order.DomainEvents.OfType<OrderPlatformIdChangedEvent>()
+                .Select(e => (e.PreviousExternalOrderId, e.ExternalOrderId)));
+        Assert.All(order.DomainEvents.OfType<OrderPlatformIdChangedEvent>(), e =>
+            Assert.Equal((OrderChannel.DidiFood, "12", order.Id), (e.Channel, e.ExternalOrderNumber, e.OrderId)));
+    }
+
+    [Fact]
+    public void ChangePlatformOrderId_ShouldBeOnlyForAnOrderOfAPlatform()
+    {
+        var counter = new Order(
+            Tenant, null, null, true, Order.NumberNotAssigned, BusinessType.Food, OrderType.Retail, "Público en general",
+            null, null, null);
+        AssertRefused(PlatformOrderRules.OnlyPlatformOrdersHaveALongIdMessage,
+            () => counter.ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890"), Now));
+        AssertRefused(PlatformOrderRules.MissingFolioMessage,
+            () => NewOrderWithItems().ChangePlatformOrderId(PlatformOrderId.FromOptional("1234567890"), Now));
+    }
+
+    [Fact]
     public void MarkAsCreated_OfAnotherChannel_ShouldCarryNoFolio()
     {
         var counter = new Order(

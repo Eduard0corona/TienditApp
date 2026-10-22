@@ -50,6 +50,9 @@ interface CartPanelProps {
   platform: DeliveryPlatform | null;
   onChannelChange: (channel: OrderChannel) => void;
   folioError: string;
+  /** What is wrong with the optional long id of the order, once there is something to say. */
+  orderIdError: string;
+  onOrderIdBlur: () => void;
   /** Services in the ticket: an order of a platform takes only products. */
   hasServices: boolean;
   /** An order of a platform is registered with connection only. */
@@ -153,6 +156,8 @@ export default function CartPanel(props: CartPanelProps) {
           details={props.details}
           onChange={props.onDetailsChange}
           folioError={props.folioError}
+          orderIdError={props.orderIdError}
+          onOrderIdBlur={props.onOrderIdBlur}
           disabled={submitting}
           canCharge={props.canCharge}
         />

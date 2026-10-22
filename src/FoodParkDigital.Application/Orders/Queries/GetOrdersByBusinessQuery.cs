@@ -101,11 +101,15 @@ public class GetOrdersByBusinessQueryHandler : IRequestHandler<GetOrdersByBusine
             // The folio of a platform's app is stored normalized (upper case, no # or spaces): written the same way, the
             // match does not depend on the collation either. Empty when the term cannot be a folio.
             var folioTerm = PlatformOrderNumber.NormalizeForSearch(request.Search);
+            // The platform's long id (Fase 22I) is stored the same way, and a part of it finds it.
+            var longIdTerm = PlatformOrderId.NormalizeForSearch(request.Search);
             query = query.Where(o =>
                 o.OrderNumber.ToLower().Contains(term)
                 || o.CustomerName.ToLower().Contains(term)
                 || (searchPhone && o.CustomerPhone != null && o.CustomerPhone.Contains(digits))
-                || (folioTerm != "" && o.PlatformDetail != null && o.PlatformDetail.ExternalOrderNumber.Contains(folioTerm)));
+                || (folioTerm != "" && o.PlatformDetail != null && o.PlatformDetail.ExternalOrderNumber.Contains(folioTerm))
+                || (longIdTerm != "" && o.PlatformDetail != null && o.PlatformDetail.ExternalOrderId != null
+                    && o.PlatformDetail.ExternalOrderId.Contains(longIdTerm)));
         }
 
         // The id breaks ties: two orders created at the same instant keep their place between pages.

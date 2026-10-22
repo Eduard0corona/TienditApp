@@ -16,13 +16,13 @@ import {
 // Importar el estado de cuenta (Fase 22H, ADR 0040): the file of a platform read in the browser, line by line, and what the
 // comparison of the API proposes for the settlement. The person reviews it before saving, and the server checks it again.
 
-/** The limits of the API (MatchPlatformStatementQuery and PlatformOrderNumber). */
+/** The limits of the API (MatchPlatformStatementQuery, and PlatformOrderId for a folio or the long id of an order). */
 export const MAX_STATEMENT_LINES = 5_000;
-export const MAX_FOLIO_INPUT_LENGTH = 60;
+export const MAX_FOLIO_INPUT_LENGTH = 100;
 export const MAX_CONCEPT_LENGTH = 200;
 
 export const TOO_MANY_LINES_MESSAGE = 'Se importan hasta 5,000 renglones a la vez.';
-export const CHOOSE_COLUMNS_MESSAGE = 'Elige la columna del folio y la del importe.';
+export const CHOOSE_COLUMNS_MESSAGE = 'Elige la columna del folio o ID del pedido y la del importe.';
 export const NO_LINES_MESSAGE = 'El archivo no tiene renglones con importe.';
 
 /** How the adjustments of a statement begin: importing another one replaces them. */
@@ -228,7 +228,7 @@ export function readStatement(rows: { line: number; cells: string[] }[], columns
       continue;
     }
     if (folio.length > MAX_FOLIO_INPUT_LENGTH) {
-      skipped.push({ line: row.line, reason: 'Su folio es demasiado largo para ser de la plataforma.' });
+      skipped.push({ line: row.line, reason: 'Su folio o ID es demasiado largo para ser de la plataforma.' });
       continue;
     }
     lines.push({ row: row.line, folio: folio || null, amount, concept: cutText(concept, MAX_CONCEPT_LENGTH) || null });

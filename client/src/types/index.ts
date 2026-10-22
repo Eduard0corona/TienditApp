@@ -1672,6 +1672,8 @@ export interface OrderDto {
 export interface OrderPlatformDto {
   /** The folio the platform's app shows for the order. */
   externalOrderNumber: string;
+  /** The platform's long id of the order, when the business wrote it (what its statements name the order by). */
+  externalOrderId?: string | null;
   /** The platform, in its app, or the business, when the courier pays on pickup. */
   collectedBy: PlatformCollectedBy;
 }
@@ -1732,6 +1734,14 @@ export interface DispatchOrderRequest {
   collectsCash: boolean;
   /** Only when the courier collects: the bill the customer pays with. */
   paysWith?: number;
+}
+
+/** Writes, corrects or clears (empty) the platform's long id of an order of Rappi, Uber Eats or DiDi Food. */
+export interface SetPlatformOrderIdRequest {
+  /** As typed: the server normalizes it like the folio. */
+  externalOrderId: string;
+  /** Saves it although another order of the platform has it (409 possible_duplicate_order). */
+  confirmPossibleDuplicate?: boolean;
 }
 
 export interface RegisterCourierShipmentRequest {
@@ -1886,9 +1896,14 @@ export interface CreateOrderRequest {
   channel?: OrderChannel;
   /** The folio the delivery platform's app shows for the order (Rappi, Uber Eats or DiDi Food only). */
   externalOrderNumber?: string;
+  /** The platform's long id of the order, optional (Rappi, Uber Eats or DiDi Food only). */
+  externalOrderId?: string;
   /** Who charged an order of a delivery platform: the platform when omitted, or the business. */
   collectedBy?: PlatformCollectedBy;
-  /** Registers it although today there is an order of the same platform with the same folio (409 possible_duplicate_order). */
+  /**
+   * Registers it although today there is an order of the same platform with the same folio, or ever one with the same
+   * long id (409 possible_duplicate_order).
+   */
   confirmPossibleDuplicate?: boolean;
   /** Opens the order as a tab: its items are the first round sent to the kitchen. */
   openTab?: boolean;

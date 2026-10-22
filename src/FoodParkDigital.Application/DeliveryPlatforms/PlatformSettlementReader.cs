@@ -23,6 +23,7 @@ internal static class PlatformSettlementReader
         public Guid OrderId { get; init; }
         public string OrderNumber { get; init; } = null!;
         public string ExternalOrderNumber { get; init; } = null!;
+        public string? ExternalOrderId { get; init; }
         public OrderChannel Channel { get; init; }
         public DateTimeOffset RegisteredAt { get; init; }
         public OrderStatus Status { get; init; }
@@ -58,6 +59,7 @@ internal static class PlatformSettlementReader
                OrderId = order.Id,
                OrderNumber = order.OrderNumber,
                ExternalOrderNumber = detail.ExternalOrderNumber,
+               ExternalOrderId = detail.ExternalOrderId,
                Channel = detail.Channel,
                RegisteredAt = detail.RegisteredAt,
                Status = order.Status,
@@ -254,6 +256,7 @@ internal static class PlatformSettlementReader
             OrderId = row.OrderId,
             OrderNumber = row.OrderNumber,
             ExternalOrderNumber = row.ExternalOrderNumber,
+            ExternalOrderId = row.ExternalOrderId,
             RegisteredAt = row.RegisteredAt,
             RegisteredOn = registeredOn,
             InPeriod = registeredOn >= periodFrom && (periodTo is null || registeredOn <= periodTo),

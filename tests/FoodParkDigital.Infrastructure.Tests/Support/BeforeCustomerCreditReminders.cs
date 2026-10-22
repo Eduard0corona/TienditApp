@@ -30,6 +30,7 @@ internal static class BeforeCustomerCreditReminders
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.CreditRemindersEnabled);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.CreditReminderEveryDays);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.CreditReminderTemplateId);
+        BeforePlatformOrderIds.Ignore(modelBuilder);
     }
 
     private sealed class Context(

@@ -41,6 +41,7 @@ public class UseCaseRulesTests
         { typeof(CreateTenantOrderCommand), "Permission(ManageOrders)" },
         { typeof(UpdateOrderStatusCommand), "Permission(ManageOrders)" },
         { typeof(CancelOrderCommand), "Permission(ManageOrders)" },
+        { typeof(SetPlatformOrderIdCommand), "Permission(ManageOrders)" },
         { typeof(MoveKitchenOrderCommand), "Permission(ManageServiceBoard) Module(Kitchen)" },
         { typeof(UpdateKitchenTicketStatusCommand), "Permission(ManageServiceBoard) Module(Kitchen)" },
         { typeof(GetKitchenOrdersQuery), "Permission(ManageServiceBoard) Module(Kitchen)" },

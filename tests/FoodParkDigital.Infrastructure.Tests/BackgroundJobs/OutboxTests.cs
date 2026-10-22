@@ -248,7 +248,9 @@ public class OutboxTests
         {
             new OrderCreatedEvent(Guid.NewGuid(), TenantA, "ORD-000001", BusinessType.Food, 123.45m, OrderStatus.Pending),
             new OrderCreatedEvent(Guid.NewGuid(), TenantA, "ORD-000002", BusinessType.Food, 350m, OrderStatus.Confirmed,
-                OrderChannel.Rappi, "BC953", PlatformCollectedBy.Platform),
+                OrderChannel.Rappi, "BC953", PlatformCollectedBy.Platform, ExternalOrderId: "1029384756102938475"),
+            new OrderPlatformIdChangedEvent(Guid.NewGuid(), TenantA, OrderChannel.UberEats, "BC953", null,
+                "3F9C2B1E-8D4A-4C6F-9B2E-1A7D5E0C3B84"),
             new OrderStatusChangedEvent(Guid.NewGuid(), TenantA, OrderStatus.Confirmed, OrderStatus.Ready, NotifyCustomer: false),
             new OrderCancelledEvent(Guid.NewGuid(), TenantA, OrderStatus.Pending, "Cliente canceló"),
             new ServiceOrderPieceStatusChangedEvent(Guid.NewGuid(), Guid.NewGuid(), TenantA,
@@ -318,6 +320,23 @@ public class OutboxTests
         Assert.Null(restored.ExternalOrderNumber);
         Assert.Null(restored.CollectedBy);
         Assert.Equal(OrderStatus.Pending, restored.Status);
+        Assert.Equal(current.OrderId, restored.OrderId);
+    }
+
+    [Fact]
+    public void OrderCreatedEventStoredBeforeItHadALongId_ShouldReadWithoutOne()
+    {
+        // Messages waiting in the outbox during the deploy of Fase 22I: their orders had no long id.
+        var current = new OrderCreatedEvent(Guid.NewGuid(), TenantA, "ORD-000001", BusinessType.Food, 50m, OrderStatus.Pending,
+            OrderChannel.DidiFood, "4821", PlatformCollectedBy.Platform, ExternalOrderId: "1029384756102938475");
+        var payload = JsonNode.Parse(OutboxEventSerializer.Serialize(current))!.AsObject();
+        Assert.True(payload.Remove("externalOrderId"));
+
+        var restored = Assert.IsType<OrderCreatedEvent>(
+            OutboxEventSerializer.Deserialize(OutboxEventSerializer.TypeNameOf(current), payload.ToJsonString()));
+
+        Assert.Null(restored.ExternalOrderId);
+        Assert.Equal("4821", restored.ExternalOrderNumber);
         Assert.Equal(current.OrderId, restored.OrderId);
     }
 

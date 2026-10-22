@@ -79,8 +79,8 @@ function names(folios: string[]): string {
 
 /**
  * Importar el estado de cuenta (Fase 22H): the platform's CSV read in this browser, its columns chosen, and its lines
- * compared by the API with the orders by folio; applying it marks the orders and writes the adjustments, which the person
- * reviews before saving the settlement.
+ * compared by the API with the orders by folio or long id (Fase 22I); applying it marks the orders and writes the
+ * adjustments, which the person reviews before saving the settlement.
  */
 export default function StatementImportModal({ platform, settlementId, form, pickedIds, onHide, onApply }: StatementImportModalProps) {
   const id = useId();
@@ -192,7 +192,8 @@ export default function StatementImportModal({ platform, settlementId, form, pic
           <>
             <p className="small text-muted">
               Descarga el estado de cuenta de {name} del periodo en CSV (en Excel: Guardar como › CSV). El archivo se lee aquí y
-              solo se comparan sus renglones con tus pedidos por folio: no se guarda nada hasta que guardes la liquidación.
+              solo se comparan sus renglones con tus pedidos por folio o por ID largo: no se guarda nada hasta que guardes la
+              liquidación.
             </p>
             <label className="form-label" htmlFor={`${id}-file`}>Archivo CSV</label>
             <input
@@ -209,7 +210,7 @@ export default function StatementImportModal({ platform, settlementId, form, pic
                   {file.name}: {file.rows.length === 1 ? '1 renglón' : `${file.rows.length.toLocaleString('es-MX')} renglones`} después del encabezado.
                 </p>
                 <div className="row g-3">
-                  {column('Folio del pedido', 'folio')}
+                  {column('Folio o ID del pedido', 'folio')}
                   {column('Importe', 'amount')}
                   {column('Concepto (opcional)', 'concept', true)}
                 </div>

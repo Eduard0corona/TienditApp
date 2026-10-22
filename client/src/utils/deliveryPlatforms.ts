@@ -21,6 +21,13 @@ const FOLIO_MAX_INPUT_LENGTH = 60;
 const FOLIO_PATTERN = /^[A-Za-z0-9-]{1,30}$/;
 
 export const PLATFORM_FOLIO_FORMAT_MESSAGE = 'El folio lleva de 1 a 30 letras, números o guiones.';
+
+/** The longest long id of an order the server keeps (PlatformOrderId.MaxLength): a UUID of Uber Eats fits. */
+export const PLATFORM_ORDER_ID_MAX_LENGTH = 64;
+/** What the server reads of a long id before normalizing (PlatformOrderId.MaxInputLength): spaces may split its groups. */
+export const PLATFORM_ORDER_ID_MAX_INPUT_LENGTH = 100;
+const ORDER_ID_PATTERN = /^[A-Za-z0-9-]{6,64}$/;
+export const PLATFORM_ORDER_ID_FORMAT_MESSAGE = 'El ID largo del pedido lleva de 6 a 64 letras, números o guiones.';
 export const PLATFORM_ONLY_PRODUCTS_MESSAGE = 'Los pedidos de plataforma son de productos: quita los servicios del ticket.';
 
 /** How each platform shows its folio, so the cashier finds it in the app and the phone opens the right keyboard. */
@@ -47,15 +54,36 @@ export function getPlatformFolioHint(platform: DeliveryPlatform): PlatformFolioH
   return FOLIO_HINTS[platform];
 }
 
+/** Where each platform shows the long id of an order, and the keyboard it takes (Rappi's and DiDi's are digits). */
+export interface PlatformOrderIdHint {
+  help: string;
+  inputMode?: 'numeric';
+}
+
+// Its statements name the orders by it (Fase 22I).
+const ORDER_ID_HINTS: Record<DeliveryPlatform, PlatformOrderIdHint> = {
+  3: { help: 'El número de orden completo de Rappi Aliados o del estado de cuenta.', inputMode: 'numeric' },
+  4: { help: 'El ID del pedido (con guiones) del estado de cuenta de Uber Eats.' },
+  5: { help: 'El ID del pedido de DiDi Tienda o del estado de cuenta.', inputMode: 'numeric' },
+};
+
+export function getPlatformOrderIdHint(platform: DeliveryPlatform): PlatformOrderIdHint {
+  return ORDER_ID_HINTS[platform];
+}
+
 /** "Rappi", "Uber Eats", "DiDi Food". */
 export function getPlatformName(platform: DeliveryPlatform): string {
   return ORDER_CHANNEL_LABELS[platform];
 }
 
-/** The folio without the spaces around and inside it nor one leading #, still as typed. */
+/**
+ * The folio without the spaces around and inside it nor one leading #, still as typed. A space is what the server takes
+ * for one (`char.IsWhiteSpace`): the invisible U+FEFF a pasted text may carry is not, so the server refuses it, and so
+ * does this.
+ */
 function compactFolio(raw: string): string {
-  const trimmed = raw.trim();
-  return (trimmed.startsWith('#') ? trimmed.slice(1) : trimmed).replace(/\s/g, '');
+  const trimmed = raw.replace(/^[^\S\uFEFF]+|[^\S\uFEFF]+$/g, '');
+  return (trimmed.startsWith('#') ? trimmed.slice(1) : trimmed).replace(/[^\S\uFEFF]/g, '');
 }
 
 /**
@@ -69,6 +97,19 @@ export function normalizePlatformFolio(raw: string): string {
 /** Whether the server would take the folio: 1 to 30 letters, digits or hyphens once normalized. */
 export function isValidPlatformFolio(raw: string): boolean {
   return raw.length <= FOLIO_MAX_INPUT_LENGTH && FOLIO_PATTERN.test(compactFolio(raw));
+}
+
+/** The long id as the server keeps it (PlatformOrderId): normalized as the folio. */
+export function normalizePlatformOrderId(raw: string): string {
+  return compactFolio(raw).toUpperCase();
+}
+
+/** What is wrong with the long id typed, or '' when it is empty (it is optional) or the server would take it. */
+export function getPlatformOrderIdProblem(raw: string): string {
+  if (!raw.trim()) return '';
+  return raw.length <= PLATFORM_ORDER_ID_MAX_INPUT_LENGTH && ORDER_ID_PATTERN.test(compactFolio(raw))
+    ? ''
+    : PLATFORM_ORDER_ID_FORMAT_MESSAGE;
 }
 
 /** What is wrong with the folio typed for an order of the platform, or '' when the server would take it. */

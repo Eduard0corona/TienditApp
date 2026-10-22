@@ -313,6 +313,15 @@ test.describe('Pedidos de Rappi', () => {
       await snapDialog(page, 'pedidos-detalle-rappi');
     });
 
+    test('Corregir el ID largo de un pedido de Rappi', async ({ page }) => {
+      // Delivered, its long id is corrected where it shows, as the statement of Rappi writes it (Fase 22I).
+      await open(page, '/orders');
+      const detail = await openOrder(page, 'ORD-000349');
+      await detail.getByRole('button', { name: 'Corregir el ID largo del pedido ORD-000349' }).click();
+      await expect(detail.getByLabel('ID largo del pedido')).toHaveValue('4810373920');
+      await snapDialog(page, 'pedidos-detalle-rappi-id-largo');
+    });
+
     test('Cocina con un pedido de Rappi', async ({ page }) => {
       await open(page, '/kitchen');
       // The folio of the app, big, to find the bag; the order number of the business goes small.

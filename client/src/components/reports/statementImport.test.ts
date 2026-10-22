@@ -100,25 +100,27 @@ describe('statementImport', () => {
       { line: 3, cells: ['', 'Publicidad', '-100'] },
       { line: 4, cells: ['', '', ''] },
       { line: 5, cells: ['152001', 'Pedido', 'n/d'] },
-      { line: 6, cells: ['9'.repeat(61), 'Pedido', '1'] },
+      { line: 6, cells: ['9'.repeat(101), 'Pedido', '1'] },
       { line: 7, cells: ['Total', '', '461.48'] },
       { line: 8, cells: ['', 'Total general', '461.48'] },
       { line: 9, cells: ['152002', `  Pedido   con   ${'x'.repeat(250)}`, '10'] },
+      // The long id of an order (Uber Eats' UUID): the API compares it with the folio and the long id of each order.
+      { line: 10, cells: ['3f9c2b1e-8d4a-4c6f-9b2e-1a7d5e0c3b84', 'Pedido', '20'] },
     ];
 
     const reading = readStatement(rows, { folio: 0, amount: 2, concept: 1 });
 
     expect(reading.lines.map((line) => [line.row, line.folio, line.amount, line.concept?.length ?? 0])).toEqual([
-      [2, '152390', 561.48, 6], [3, null, -100, 10], [9, '152002', 10, 200],
+      [2, '152390', 561.48, 6], [3, null, -100, 10], [9, '152002', 10, 200], [10, '3f9c2b1e-8d4a-4c6f-9b2e-1a7d5e0c3b84', 20, 6],
     ]);
     expect(reading.lines[2].concept?.startsWith('Pedido con xxx')).toBe(true);
     expect(reading.skipped).toEqual([
       { line: 5, reason: 'No se pudo leer el importe «n/d».' },
-      { line: 6, reason: 'Su folio es demasiado largo para ser de la plataforma.' },
+      { line: 6, reason: 'Su folio o ID es demasiado largo para ser de la plataforma.' },
       { line: 7, reason: 'Es un renglón de totales del archivo.' },
       { line: 8, reason: 'Es un renglón de totales del archivo.' },
     ]);
-    expect(reading.totalCents).toBe(47148);
+    expect(reading.totalCents).toBe(49148);
     // The file's total says 461.48 and lines were left out: the deposit is not filled with what was read.
     expect(reading.fileTotal).toEqual({ line: 8, cents: 46148 });
     expect(readingAddsUp(reading)).toBe(false);

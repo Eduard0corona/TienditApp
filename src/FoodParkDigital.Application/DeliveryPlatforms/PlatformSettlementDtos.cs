@@ -67,6 +67,9 @@ public class PlatformSettlementOrderDto
     /// <summary>The folio the platform's app shows for the order.</summary>
     public string ExternalOrderNumber { get; set; } = null!;
 
+    /// <summary>The platform's long id of the order, when the business wrote it (Fase 22I).</summary>
+    public string? ExternalOrderId { get; set; }
+
     public DateTimeOffset RegisteredAt { get; set; }
 
     /// <summary>The date of the business the order was registered on.</summary>

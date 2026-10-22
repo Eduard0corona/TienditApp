@@ -19,6 +19,7 @@ public class PlatformOrderDetailConfiguration : IEntityTypeConfiguration<Platfor
             table.HasCheckConstraint("CK_PlatformOrderDetails_CollectedBy", "[CollectedBy] IN (0, 1)");
             table.HasCheckConstraint("CK_PlatformOrderDetails_CommissionBase", "[CommissionBase] IN (0, 1)");
             table.HasCheckConstraint("CK_PlatformOrderDetails_Number", "LEN([ExternalOrderNumber]) > 0");
+            table.HasCheckConstraint("CK_PlatformOrderDetails_ExternalOrderId", "[ExternalOrderId] IS NULL OR LEN([ExternalOrderId]) >= 6");
             table.HasCheckConstraint(
                 "CK_PlatformOrderDetails_Percents",
                 "[CommissionPercent] BETWEEN 0 AND 100 AND [CommissionVatPercent] BETWEEN 0 AND 100 AND [IsrWithholdingPercent] BETWEEN 0 AND 100 AND [VatWithholdingPercent] BETWEEN 0 AND 100");
@@ -35,6 +36,7 @@ public class PlatformOrderDetailConfiguration : IEntityTypeConfiguration<Platfor
         builder.Property(x => x.OrderId).IsRequired();
         builder.Property(x => x.Channel).HasConversion<int>().IsRequired();
         builder.Property(x => x.ExternalOrderNumber).HasMaxLength(PlatformOrderNumber.MaxLength).IsRequired();
+        builder.Property(x => x.ExternalOrderId).HasMaxLength(PlatformOrderId.MaxLength);
         builder.Property(x => x.CollectedBy).HasConversion<int>().IsRequired();
         builder.Property(x => x.SettingsRevision).IsRequired();
         builder.Property(x => x.CommissionPercent).HasColumnType("decimal(5,2)").IsRequired();
@@ -55,6 +57,10 @@ public class PlatformOrderDetailConfiguration : IEntityTypeConfiguration<Platfor
         // found through this index, as the search by folio is.
         builder.HasIndex(x => x.OrderId).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.Channel, x.ExternalOrderNumber, x.RegisteredAt });
+        // The platform's long id (Fase 22I): a statement finds the order by it, and a repeated one is a warning too, not a
+        // unique index (an order captured twice is corrected by cancelling one, as with the folio).
+        builder.HasIndex(x => new { x.TenantId, x.Channel, x.ExternalOrderId })
+            .HasFilter("[ExternalOrderId] IS NOT NULL");
         // The orders of a platform in a period, to compare with its weekly statement.
         builder.HasIndex(x => new { x.TenantId, x.RegisteredAt });
     }

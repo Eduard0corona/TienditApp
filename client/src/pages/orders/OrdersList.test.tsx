@@ -41,7 +41,7 @@ vi.mock('../../hooks/useOrderSignalR', () => {
     }),
   };
 });
-vi.mock('../../api/ordersApi', () => ({ ordersApi: { getAll: vi.fn(), getById: vi.fn(), cancel: vi.fn() } }));
+vi.mock('../../api/ordersApi', () => ({ ordersApi: { getAll: vi.fn(), getById: vi.fn(), cancel: vi.fn(), setPlatformOrderId: vi.fn() } }));
 // The delivery platforms of the business (GET /delivery-platforms/channels) come through the typed client.
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 
@@ -159,7 +159,7 @@ describe('OrdersList', () => {
 
   it('marks an order of a platform with its badge, the folio of its app and who charged it', async () => {
     renderOrders(TenantCapability.Food, [
-      rappiOrder(),
+      rappiOrder({ platformOrder: { externalOrderNumber: 'BC953', externalOrderId: '4810373920', collectedBy: PlatformCollectedBy.Platform } }),
       rappiOrder({
         id: 'd1', orderNumber: 'ORD-000124', channel: OrderChannel.DidiFood, paidAmount: 0, balance: 245, payments: [],
         platformOrder: { externalOrderNumber: '12', collectedBy: PlatformCollectedBy.Business },
@@ -169,13 +169,59 @@ describe('OrdersList', () => {
     const rappi = (await screen.findByText('ORD-000123')).closest('tr') as HTMLElement;
     expect(within(rappi).getByText('Rappi')).toHaveClass('badge', 'text-bg-light', 'border');
     expect(within(rappi).getByText('Folio BC953')).toBeInTheDocument();
+    // The long id under the folio, when it was written: what its statement names the order by.
+    expect(within(rappi).getByText('ID 4810373920')).toBeInTheDocument();
     expect(within(rappi).getByText('Cobró Rappi')).toBeInTheDocument();
     expect(within(rappi).queryByText('Pagado')).not.toBeInTheDocument();
 
     const didi = screen.getByText('ORD-000124').closest('tr') as HTMLElement;
     expect(within(didi).getByText('DiDi Food')).toBeInTheDocument();
     expect(within(didi).getByText('Folio 12')).toBeInTheDocument();
+    expect(within(didi).queryByText(/^ID /)).not.toBeInTheDocument();
     expect(within(didi).getByText('Por cobrar $245.00')).toBeInTheDocument();
+  });
+
+  it('adds the long id of a delivered order of a platform in its detail, and reads the order again', async () => {
+    const user = userEvent.setup();
+    const saved = rappiOrder({ platformOrder: { externalOrderNumber: 'BC953', externalOrderId: '4810373920', collectedBy: PlatformCollectedBy.Platform } });
+    vi.mocked(ordersApi.setPlatformOrderId).mockResolvedValue({} as never);
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: saved } as never);
+    renderOrders(TenantCapability.Food, [rappiOrder()]);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000123' }));
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000123' });
+    expect(detail).toHaveTextContent('ID largo: sin capturar');
+    // Esc leaves the field, not the order.
+    await user.click(within(detail).getByRole('button', { name: 'Agregar el ID largo del pedido ORD-000123' }));
+    await user.keyboard('{Escape}');
+    expect(within(detail).queryByLabelText('ID largo del pedido')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Pedido ORD-000123' })).toBeInTheDocument();
+
+    await user.click(within(detail).getByRole('button', { name: 'Agregar el ID largo del pedido ORD-000123' }));
+    await user.type(within(detail).getByLabelText('ID largo del pedido'), '4810373920');
+    await user.click(within(detail).getByRole('button', { name: 'Guardar' }));
+
+    expect(ordersApi.setPlatformOrderId).toHaveBeenCalledWith('r1', { externalOrderId: '4810373920' });
+    await waitFor(() => expect(detail).toHaveTextContent('ID largo: 4810373920'));
+    expect(ordersApi.getById).toHaveBeenCalledWith('r1');
+    expect(within(detail).getByRole('button', { name: 'Corregir el ID largo del pedido ORD-000123' })).toBeInTheDocument();
+  });
+
+  it('keeps the long id saved though reading the order again fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(ordersApi.setPlatformOrderId).mockResolvedValue({} as never);
+    vi.mocked(ordersApi.getById).mockRejectedValue(new Error('Network Error'));
+    renderOrders(TenantCapability.Food, [rappiOrder()]);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000123' }));
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000123' });
+    await user.click(within(detail).getByRole('button', { name: 'Agregar el ID largo del pedido ORD-000123' }));
+    await user.type(within(detail).getByLabelText('ID largo del pedido'), '4810373920');
+    await user.click(within(detail).getByRole('button', { name: 'Guardar' }));
+
+    // Saved: the field closes instead of saying it could not be saved.
+    await waitFor(() => expect(within(detail).queryByLabelText('ID largo del pedido')).not.toBeInTheDocument());
+    expect(within(detail).queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('shows where an order of a platform came from and who charged it, without a phone, a table or a customer card', async () => {

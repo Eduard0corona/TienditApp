@@ -90,6 +90,11 @@ public class OrderPlatformDto
 {
     /// <summary>The folio the platform's app shows for the order.</summary>
     public string ExternalOrderNumber { get; set; } = null!;
+    /// <summary>
+    /// The platform's long id of the order, when the business wrote it (Fase 22I): what its statements name the order by.
+    /// The kitchen and the ticket keep the short folio.
+    /// </summary>
+    public string? ExternalOrderId { get; set; }
     /// <summary>The platform, in its app, or the business, when the courier pays on pickup.</summary>
     public PlatformCollectedBy CollectedBy { get; set; }
 }

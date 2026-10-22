@@ -71,7 +71,9 @@ export default function SettlementOrders({ platform, orders, from, to, saved, pi
       emptyMessage={emptyMessage}
       searchPlaceholder="Buscar folio o pedido"
       searchFilter={(order, search) =>
-        order.externalOrderNumber.toLowerCase().includes(search) || order.orderNumber.toLowerCase().includes(search)}
+        order.externalOrderNumber.toLowerCase().includes(search)
+        || (order.externalOrderId ?? '').toLowerCase().includes(search)
+        || order.orderNumber.toLowerCase().includes(search)}
       pageSizeOptions={PAGE_SIZES}
       filters={picking && (
         <DataTableFilter label="Mostrar" htmlFor={`${id}-shown`}>
@@ -121,6 +123,7 @@ export default function SettlementOrders({ platform, orders, from, to, saved, pi
             )}
             <td>
               <span className="fw-semibold">{order.externalOrderNumber}</span>
+              {order.externalOrderId && <div className="small text-muted text-break">ID {order.externalOrderId}</div>}
               <div className="small text-muted">{order.orderNumber} · {formatShortDateTime(order.registeredAt)}</div>
               {placement !== 'in' && (
                 <div className="small text-muted">{placement === 'before' ? 'De antes del periodo' : 'Después del periodo: no entra'}</div>

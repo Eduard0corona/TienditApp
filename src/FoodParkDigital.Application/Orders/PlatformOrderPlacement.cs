@@ -17,6 +17,25 @@ public static class PlatformOrderErrors
     public const string PossibleDuplicate =
         "Hoy ya registraste un pedido de esta plataforma con el mismo folio. Si es otro pedido, confírmalo para registrarlo.";
 
+    /// <summary>The same long id of the platform on another order that counts, of any date (Fase 22I): also 409.</summary>
+    public const string PossibleDuplicateLongId =
+        "Ya registraste un pedido de esta plataforma con el mismo ID largo. Si es otro pedido, confírmalo para registrarlo.";
+
+    /// <summary>
+    /// Both at once: the long id ever and the folio today. One confirmation covers both, so the warning names both.
+    /// </summary>
+    public const string PossibleDuplicateLongIdAndFolio =
+        "Ya registraste un pedido de esta plataforma con el mismo ID largo, y hoy uno con el mismo folio. "
+        + "Si es otro pedido, confírmalo para registrarlo.";
+
+    /// <summary>Writing a long id that another order that counts already has (Fase 22I): also 409, confirmable.</summary>
+    public const string LongIdInUse =
+        "Otro pedido de esta plataforma ya tiene este ID largo. Si es correcto, confírmalo para guardarlo.";
+
+    /// <summary>Whether <paramref name="error"/> is a warning the business confirms (409 <c>possible_duplicate_order</c>).</summary>
+    public static bool IsPossibleDuplicate(string? error)
+        => error is PossibleDuplicate or PossibleDuplicateLongId or PossibleDuplicateLongIdAndFolio or LongIdInUse;
+
     /// <summary>«Rappi no está activa en tu negocio: actívala en Configuración › Negocio › Plataformas de reparto.»</summary>
     public static string NotActive(OrderChannel channel)
         => $"{OrderChannelRules.DisplayName(channel)} no está activa en tu negocio: "
@@ -25,7 +44,7 @@ public static class PlatformOrderErrors
 
 /// <summary>
 /// The checks an order of Rappi, Uber Eats or DiDi Food needs before it is registered (<see cref="Commands.CreateOrderCommand"/>):
-/// the platform active in the business, and whether the same folio was already registered today.
+/// the platform active in the business, and whether the same folio was already registered today or the same long id ever.
 /// </summary>
 internal static class PlatformOrderPlacement
 {
@@ -63,6 +82,33 @@ internal static class PlatformOrderPlacement
                       && detail.Channel == channel
                       && detail.ExternalOrderNumber == folio
                       && detail.RegisteredAt >= startOfToday
+                      && order.Status != OrderStatus.Cancelled
+                      && !(order.PaidAmount > 0 && order.RefundedAmount >= order.PaidAmount)
+                select order.Id)
+            .AnyAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Whether another order of the platform in the business that still counts (as for the folio) has the same long id, of
+    /// any date (Fase 22I): long ids do not repeat, so the same one is the same order captured twice, or a typo. A warning
+    /// the business confirms too, not a unique index.
+    /// </summary>
+    public static Task<bool> HasLongIdDuplicateAsync(
+        IApplicationDbContext context,
+        Guid tenantId,
+        OrderChannel channel,
+        PlatformOrderId longId,
+        Guid? exceptOrderId,
+        CancellationToken cancellationToken)
+    {
+        var value = longId.Value;
+        return (
+                from detail in context.PlatformOrderDetails
+                join order in context.Orders on detail.OrderId equals order.Id
+                where detail.TenantId == tenantId
+                      && detail.Channel == channel
+                      && detail.ExternalOrderId == value
+                      && (exceptOrderId == null || order.Id != exceptOrderId)
                       && order.Status != OrderStatus.Cancelled
                       && !(order.PaidAmount > 0 && order.RefundedAmount >= order.PaidAmount)
                 select order.Id)
