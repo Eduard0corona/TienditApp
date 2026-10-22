@@ -1122,11 +1122,12 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `SellPage.test.tsx` (+3): el ID largo va normalizado y su aviso sale al registrar; el diálogo dice lo que el servidor encontró repetido (el folio aunque haya ID largo); volver al mostrador lo deja atrás. El borrador lo recupera.
     - `OrdersList.test.tsx` (+2): el ID bajo el folio; agregarlo en el detalle vuelve a leer el pedido, y un error al leerlo no dice que no se guardó.
     - `PlatformSettlementPage.test.tsx` (+1), `PlatformOrderFields.test.tsx` (+1), `sellDraft.test.ts` (+1) y `deliveryPlatforms.test.ts` (+1): la búsqueda de la liquidación por ID largo, el campo opcional, la llave de una venta de antes y la normalización (también la marca U+FEFF).
-  - **Total:** TOTAL_DOTNET
-  - **Cliente en total:** TOTAL_CLIENT
-  - **Primera visita:** TOTAL_BUNDLE
+  - **Total:** `dotnet test` con SQL Server 2022, 3,350 pruebas sin fallos ni omitidas (Domain 963, Application 1,493, Infrastructure 467, WebApi 427).
+  - **Cliente en total:** 151 archivos y 1,003 pruebas.
+  - **Primera visita:** 179,153 B de 179,200 B (+20 B contra `master`): `setPlatformOrderId` en el cliente de pedidos, que la primera visita ya carga. Vender, Pedidos y el editor del ID largo se cargan con su pantalla.
   - **Escenas visuales:** `vender-pedidos.spec.ts` (+1 escena): corregir el ID largo de un pedido de Rappi entregado. Las escenas del detalle de Rappi y de importar el estado de cuenta buscan lo que existe en `master` y en esta rama.
-    - VISUAL_RESULT
+    - **Lo que cambia y por qué:** 6 capturas, por el ID largo: Vender con un pedido de Rappi en escritorio y teléfono (el campo «ID largo del pedido (opcional)»), Pedidos filtrado por Rappi (el ID bajo el folio), el detalle de un pedido de Rappi («ID largo» con «Corregir») e importar el estado de cuenta en escritorio y teléfono (la columna «Folio o ID del pedido»).
+    - **Resultado:** la comparación contra `master` dio 623 escenas iguales, las 6 que cambian y la nueva, que no existe en `master` porque ahí no hay botón «Corregir». La nueva pasó dos corridas seguidas contra el mismo build.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
