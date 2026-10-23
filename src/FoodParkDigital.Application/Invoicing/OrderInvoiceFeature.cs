@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers;
+using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Exceptions;
@@ -160,7 +161,11 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 public record IssueOrderInvoiceCommand(Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer)
-    : IRequest<Result<OrderInvoiceDto>>;
+    : IRequest<Result<OrderInvoiceDto>>, IRequiresContentPermissions
+{
+    /// <summary>Keeping the fiscal data in the customer changes the customer: it needs ManageCustomers, as Clientes does.</summary>
+    public IEnumerable<TenantPermission> RequiredPermissions() => OrderInvoicing.SavingToCustomer(SaveToCustomer);
+}
 
 public class IssueOrderInvoiceCommandValidator : AbstractValidator<IssueOrderInvoiceCommand>
 {
@@ -213,7 +218,10 @@ public class IssueOrderInvoiceCommandHandler : IRequestHandler<IssueOrderInvoice
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 public record RequestOrderInvoiceCommand(Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer)
-    : IRequest<Result<Guid>>, ITransactionalRequest;
+    : IRequest<Result<Guid>>, ITransactionalRequest, IRequiresContentPermissions
+{
+    public IEnumerable<TenantPermission> RequiredPermissions() => OrderInvoicing.SavingToCustomer(SaveToCustomer);
+}
 
 public class RequestOrderInvoiceCommandValidator : AbstractValidator<RequestOrderInvoiceCommand>
 {
@@ -305,8 +313,11 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         if (request.SaveToCustomer
             && await OrderInvoicing.CustomerAsync(_context, _phones, order.CustomerPhone, tracked: true, cancellationToken) is { } customer)
         {
+            var previous = customer.FiscalData;
             // A value of its own: an owned value is never shared between two records.
             customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver));
+            if (CustomerFiscalDataAudit.Entry(customer, previous, _currentUser.UserName, $"Factura {invoice.Number}") is { } changed)
+                _context.AuditLogs.Add(changed);
         }
 
         _context.AuditLogs.Add(new AuditLog(
@@ -634,4 +645,8 @@ internal static class OrderInvoicing
 
     public static CfdiReceiver Receiver(CfdiReceiverInput input)
         => CfdiReceiver.Create(input.Rfc, input.Name, input.PostalCode, input.FiscalRegime, input.CfdiUse);
+
+    /// <summary>What keeping the fiscal data in the customer also asks for, besides ManageOrders.</summary>
+    public static IEnumerable<TenantPermission> SavingToCustomer(bool saveToCustomer)
+        => saveToCustomer ? [TenantPermission.ManageCustomers] : [];
 }

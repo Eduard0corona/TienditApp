@@ -111,10 +111,21 @@ public class SwSapienGatewayTests
     [Fact]
     public async Task Token_ShouldBeReused_UntilItIsAboutToExpire_AndATokenWithoutExpiryNeedsNoLogin()
     {
-        var (gateway, http) = Create(Answer);
+        var clock = new TestClock(Now);
+        var (gateway, http) = Create(Answer, clock: clock);
+        int Logins() => http.Requests.Count(r => r.Url.EndsWith("/v2/security/authenticate", StringComparison.Ordinal));
         await gateway.StampAsync(Document(), Key, CancellationToken.None);
         await gateway.StampAsync(Document(), Guid.NewGuid(), CancellationToken.None);
-        Assert.Single(http.Requests, r => r.Url.EndsWith("/v2/security/authenticate", StringComparison.Ordinal));
+        Assert.Equal(1, Logins());
+
+        // expires_in is the moment it expires (two hours from now), not a duration: six minutes before it the token is
+        // still used, and four minutes before it (inside the five of margin) a new one is asked for.
+        clock.UtcNow = Now.AddHours(2).AddMinutes(-6);
+        await gateway.StampAsync(Document(), Guid.NewGuid(), CancellationToken.None);
+        Assert.Equal(1, Logins());
+        clock.UtcNow = Now.AddHours(2).AddMinutes(-4);
+        await gateway.StampAsync(Document(), Guid.NewGuid(), CancellationToken.None);
+        Assert.Equal(2, Logins());
 
         var (fixedToken, fixedHttp) = Create(Answer, options => options.Token = "infinito");
         await fixedToken.StampAsync(Document(), Key, CancellationToken.None);
@@ -388,13 +399,13 @@ public class SwSapienGatewayTests
         $$"""{"data":{"token":"{{Token}}","expires_in":{{Now.AddHours(2).ToUnixTimeSeconds()}},"tokeny_type":"Bearer"},"status":"success"}""");
 
     private static (SwSapienGateway Gateway, RecordingHandler Http) Create(
-        Func<HttpRequestMessage, HttpResponseMessage> respond, Action<SwSapienOptions>? configure = null)
+        Func<HttpRequestMessage, HttpResponseMessage> respond, Action<SwSapienOptions>? configure = null, TestClock? clock = null)
     {
         var http = new RecordingHandler(respond);
         var options = new SwSapienOptions { User = "demo@negocio.mx", Password = "secreta" };
         configure?.Invoke(options);
         var gateway = new SwSapienGateway(
-            new SingleClientFactory(http), Options.Create(options), new FixedClock(Now), NullLogger<SwSapienGateway>.Instance);
+            new SingleClientFactory(http), Options.Create(options), clock ?? new TestClock(Now), NullLogger<SwSapienGateway>.Instance);
         return (gateway, http);
     }
 
@@ -437,9 +448,9 @@ public class SwSapienGatewayTests
         }
     }
 
-    private sealed class FixedClock(DateTimeOffset utcNow) : IDateTimeProvider
+    private sealed class TestClock(DateTimeOffset utcNow) : IDateTimeProvider
     {
-        public DateTimeOffset UtcNow { get; } = utcNow;
+        public DateTimeOffset UtcNow { get; set; } = utcNow;
     }
 }
 

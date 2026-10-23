@@ -359,21 +359,46 @@ public class OrderInvoicingFlowTests
         Assert.Null((await book.InvoicingAsync(first.Id)).ProposedReceiver);
         Assert.Equal(customer.Id, (await book.InvoicingAsync(first.Id)).CustomerId);
 
-        Assert.True((await book.IssueAsync(first.Id, saveToCustomer: true)).IsSuccess);
+        var stamped = await book.IssueAsync(first.Id, saveToCustomer: true);
+        Assert.True(stamped.IsSuccess, stamped.Error);
 
         var proposed = (await book.InvoicingAsync(second.Id)).ProposedReceiver!;
         Assert.Equal(("XIQB891116QE4", "KARLA FUENTE NOLASCO", "26015", "612", "G03"),
             (proposed.Rfc, proposed.Name, proposed.PostalCode, proposed.FiscalRegime, proposed.CfdiUse));
+        // The same data kept again changes nothing.
+        Assert.True((await book.IssueAsync(second.Id, saveToCustomer: true)).IsSuccess);
 
         // Edited or forgotten in Clientes.
-        var forgotten = await new UpdateCustomerFiscalDataCommandHandler(book.Context)
+        var forgotten = await new UpdateCustomerFiscalDataCommandHandler(book.Context, book.Fixture.CurrentUser)
             .Handle(new UpdateCustomerFiscalDataCommand(customer.Id, null), CancellationToken.None);
         Assert.Null(forgotten.Value.FiscalData);
         var publicGeneral = new Customer(book.Tenant.Id, "Público en general", null, null, isPublicGeneral: true);
         book.Context.Customers.Add(publicGeneral);
         await book.Context.SaveChangesAsync();
-        Assert.Equal(Customer.PublicGeneralFiscalDataMessage, (await new UpdateCustomerFiscalDataCommandHandler(book.Context)
+        Assert.Equal(Customer.PublicGeneralFiscalDataMessage, (await new UpdateCustomerFiscalDataCommandHandler(book.Context, book.Fixture.CurrentUser)
             .Handle(new UpdateCustomerFiscalDataCommand(publicGeneral.Id, Receiver), CancellationToken.None)).Error);
+
+        // Its next invoices propose it: who changed it, from where and from which RFC is recorded.
+        var changes = await book.Context.AuditLogs
+            .Where(a => a.Action == CustomerFiscalDataAudit.Action && a.EntityId == customer.Id.ToString())
+            .OrderBy(a => a.Timestamp)
+            .Select(a => a.Metadata)
+            .ToListAsync();
+        Assert.Equal(
+            [
+                $$"""{"From":"Factura {{stamped.Value.Number}}","PreviousRfc":null,"Rfc":"XIQB891116QE4"}""",
+                """{"From":"Clientes","PreviousRfc":"XIQB891116QE4","Rfc":null}""",
+            ],
+            changes);
+    }
+
+    [Fact]
+    public void Issue_KeepingTheFiscalDataInTheCustomer_ShouldAlsoAskForManageCustomers()
+    {
+        Assert.Equal([TenantPermission.ManageCustomers], new IssueOrderInvoiceCommand(Guid.NewGuid(), Receiver, SaveToCustomer: true).RequiredPermissions());
+        Assert.Equal([TenantPermission.ManageCustomers], new RequestOrderInvoiceCommand(Guid.NewGuid(), Receiver, SaveToCustomer: true).RequiredPermissions());
+        Assert.Empty(new IssueOrderInvoiceCommand(Guid.NewGuid(), Receiver, SaveToCustomer: false).RequiredPermissions());
+        Assert.Empty(new RequestOrderInvoiceCommand(Guid.NewGuid(), Receiver, SaveToCustomer: false).RequiredPermissions());
     }
 
     [Fact]

@@ -51,10 +51,14 @@ function serve(
   }) as unknown as typeof apiRequest);
 }
 
-function renderModal(canCancel = false, queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderModal(
+  canCancel = false,
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  canSaveToCustomer = true,
+) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <CfdiDraftModal orderId="o-1" orderNumber="ORD-000001" canCancel={canCancel} onClose={() => {}} />
+      <CfdiDraftModal orderId="o-1" orderNumber="ORD-000001" canCancel={canCancel} canSaveToCustomer={canSaveToCustomer} onClose={() => {}} />
     </QueryClientProvider>,
   );
 }
@@ -78,6 +82,23 @@ describe('CfdiDraftModal', () => {
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada.'));
     expect(issued).toEqual({ method: 'post', path: '/api/v1/invoicing/orders/{orderId}/invoices', body: { receiver: KARLA, saveToCustomer: true } });
+  });
+
+  it('stamps without keeping the fiscal data for whoever does not manage customers', async () => {
+    let issued: unknown;
+    serve(INVOICING, (_method, _path, body) => {
+      issued = body;
+      return Promise.resolve(STAMPED);
+    });
+    renderModal(false, undefined, false);
+
+    const stamp = await screen.findByRole('button', { name: 'Timbrar factura' });
+    expect(screen.queryByLabelText(/Guardar estos datos en/)).not.toBeInTheDocument();
+    await waitFor(() => expect(stamp).toBeEnabled());
+    await userEvent.click(stamp);
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada.'));
+    expect(issued).toEqual({ receiver: KARLA, saveToCustomer: false });
   });
 
   it('asks to review the invoice again after the data changes, before stamping it', async () => {

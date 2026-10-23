@@ -1235,6 +1235,7 @@ export default function OrdersList() {
           orderId={cfdiFor.id}
           orderNumber={cfdiFor.orderNumber}
           canCancel={access.businessSettings}
+          canSaveToCustomer={access.customers}
           onClose={() => setCfdiFor(null)}
         />
       )}

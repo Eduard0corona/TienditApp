@@ -14,7 +14,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// <summary>
 /// Invoicing (Fase 28A, ADR 0045) through the API: a business sees, stamps, downloads and cancels only the invoices of its
 /// own orders, with its own CSD and folios (the business header of an owner changes nothing); staff who manage the orders
-/// stamp, but only owners and admins cancel and touch the CSD.
+/// stamp, but only owners and admins cancel and touch the CSD, and only who manages customers keeps their fiscal data; and
+/// the same order invoiced by two people at once is stamped once, on SQL Server's index and transaction.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantInvoicingSqlServerTests
@@ -98,6 +99,9 @@ public sealed class CrossTenantInvoicingSqlServerTests
 
         Assert.Equal(HttpStatusCode.Forbidden, (await stock.GetAsync($"/api/v1/invoicing/orders/{order}")).StatusCode);
         Assert.True((await TwoBusinessesApi.ReadAsync(await cashier.GetAsync($"/api/v1/invoicing/orders/{order}"))).GetProperty("canInvoice").GetBoolean());
+        // Keeping the fiscal data in the customer changes the customer: whoever does not manage customers stamps without it.
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = true })).StatusCode);
         var invoice = await TwoBusinessesApi.ReadAsync(await cashier.PostAsJsonAsync(
             $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }));
         var invoiceId = invoice.GetProperty("id").GetGuid();
@@ -112,6 +116,45 @@ public sealed class CrossTenantInvoicingSqlServerTests
             $"/api/v1/invoicing/invoices/{invoiceId}/cancel", new { motive = (int)CfdiCancellationMotive.NotCarriedOut }));
         Assert.Equal((int)OrderInvoiceStatus.Cancelling, cancelling.GetProperty("status").GetInt32());
         Assert.Equal(2, await _api.QueryAsync(mine.TenantId, db => db.AuditLogs.CountAsync(a => a.EntityName == nameof(OrderInvoice))));
+    }
+
+    [SqlServerFact]
+    public async Task TheSameOrderInvoicedAtOnce_ShouldBeStampedOnce_AndGiveTheOtherFolioBack()
+    {
+        var mine = await _api.SignUpAsync("facturas-carrera", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        var product = await ProductAsync(mine.Client, "Factura carrera");
+        var (first, _) = await PaidOrderAsync(mine.Client, product, phone: null, name: "Mostrador");
+        var (raced, _) = await PaidOrderAsync(mine.Client, product, phone: null, name: "Mostrador");
+        var (next, _) = await PaidOrderAsync(mine.Client, product, phone: null, name: "Mostrador");
+        var body = new { receiver = Receiver, saveToCustomer = false };
+        Assert.Equal("F-1", (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{first}/invoices", body))).GetProperty("number").GetString());
+
+        // Two people stamp the same order at once. While the serie's folio is held, both find no live invoice and wait
+        // for a folio: the second one's insert meets the index of one live invoice per order (2601) after the first commits.
+        var answers = await _api.QueryAsync(mine.TenantId, async db =>
+        {
+            await using var held = await db.Database.BeginTransactionAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE FolioSequences SET LastNumber = LastNumber WHERE TenantId = {mine.TenantId}");
+            var both = Enumerable.Range(0, 2)
+                .Select(_ => mine.Client.PostAsJsonAsync($"/api/v1/invoicing/orders/{raced}/invoices", body))
+                .ToList();
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await held.CommitAsync();
+            return await Task.WhenAll(both);
+        });
+
+        Assert.Single(answers, answer => answer.StatusCode == HttpStatusCode.OK);
+        var refused = Assert.Single(answers, answer => answer.StatusCode != HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal("Otra persona está facturando este pedido en este momento: actualiza la página.",
+            JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+        Assert.Equal(1, await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.CountAsync(i => i.OrderId == raced)));
+        // The refused one gave its folio back: the next invoice of the serie follows without a hole.
+        Assert.Equal("F-3", (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{next}/invoices", body))).GetProperty("number").GetString());
     }
 
     [SqlServerFact]

@@ -15,6 +15,8 @@ interface CfdiDraftModalProps {
   orderNumber: string;
   /** Owners and admins cancel the order's invoices. */
   canCancel: boolean;
+  /** Who manages customers keeps the fiscal data in the customer (ManageCustomers, as Clientes). */
+  canSaveToCustomer: boolean;
   onClose: () => void;
 }
 
@@ -31,7 +33,7 @@ function formatTransfer(transfer: Transfer | null | undefined): string {
  * rate and what is still missing) for the customer's fiscal data. With the platform's PAC and the business's CSD, it is
  * stamped from here; without them it is only a preview.
  */
-export default function CfdiDraftModal({ orderId, orderNumber, canCancel, onClose }: CfdiDraftModalProps) {
+export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSaveToCustomer, onClose }: CfdiDraftModalProps) {
   const titleId = useId();
   const invoicing = useOrderInvoicing(orderId);
   // What a previous opening left in the cache may be old (the order since paid, the customer's data changed): the body
@@ -57,6 +59,7 @@ export default function CfdiDraftModal({ orderId, orderNumber, canCancel, onClos
           orderId={orderId}
           invoicing={data}
           canCancel={canCancel}
+          canSaveToCustomer={canSaveToCustomer}
           onClose={onClose}
           loadError={invoicing.isError && (
             <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
@@ -81,12 +84,13 @@ interface InvoiceBodyProps {
   /** Missing when it could not be read: the preview still works. */
   invoicing: OrderInvoicing | undefined;
   canCancel: boolean;
+  canSaveToCustomer: boolean;
   onClose: () => void;
   /** Why the order's invoicing could not be read, with a way to try again. */
   loadError: ReactNode;
 }
 
-function InvoiceBody({ orderId, invoicing, canCancel, onClose, loadError }: InvoiceBodyProps) {
+function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, onClose, loadError }: InvoiceBodyProps) {
   const toast = useToast();
   const issue = useIssueOrderInvoice(orderId);
   const proposed = invoicing?.proposedReceiver ?? null;
@@ -95,6 +99,8 @@ function InvoiceBody({ orderId, invoicing, canCancel, onClose, loadError }: Invo
   const [receiver, setReceiver] = useState<CfdiReceiver | undefined>(proposed ? normalizeReceiver(proposed) : undefined);
   const [showReceiver, setShowReceiver] = useState(invoicing?.available ?? false);
   const [saveToCustomer, setSaveToCustomer] = useState(true);
+  // Offered to who manages customers only: the API asks for ManageCustomers to keep it.
+  const offerSaveToCustomer = canSaveToCustomer && !!invoicing?.customerId;
   const draft = useCfdiDraft(orderId, receiver);
   const cfdi = draft.data;
 
@@ -112,7 +118,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, onClose, loadError }: Invo
   const stamp = async () => {
     if (!receiver) return;
     try {
-      const invoice = await issue.mutateAsync({ receiver, saveToCustomer: !!invoicing?.customerId && saveToCustomer });
+      const invoice = await issue.mutateAsync({ receiver, saveToCustomer: offerSaveToCustomer && saveToCustomer });
       if (invoice.status === OrderInvoiceStatus.Stamped) toast.success(`Factura ${invoice.number} timbrada.`);
       else if (invoice.status === OrderInvoiceStatus.Refused) toast.error(invoice.failureMessage ?? 'El PAC rechazó la factura.');
       else toast.info(`El PAC no respondió: TienditApp sigue pidiendo el timbre de ${invoice.number}.`);
@@ -154,7 +160,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, onClose, loadError }: Invo
         {showReceiver && (
           <form className="border rounded p-2 mb-3" onSubmit={applyReceiver}>
             <CfdiReceiverFields idPrefix="cfdi" value={form} onChange={setForm} />
-            {available && invoicing?.customerId && (
+            {available && offerSaveToCustomer && (
               <div className="form-check mt-2">
                 <input
                   id="cfdi-save-to-customer"
