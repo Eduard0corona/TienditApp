@@ -3646,6 +3646,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/customers/{id}/fiscal-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateCustomerFiscalDataRequest"];
+                    "text/json": components["schemas"]["UpdateCustomerFiscalDataRequest"];
+                    "application/*+json": components["schemas"]["UpdateCustomerFiscalDataRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers/{id}/notes": {
         parameters: {
             query?: never;
@@ -5841,6 +5886,388 @@ export interface paths {
                         "application/json": components["schemas"]["InventoryTransferDto"];
                         "text/json": components["schemas"]["InventoryTransferDto"];
                     };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InvoicingSettingsDto"];
+                        "application/json": components["schemas"]["InvoicingSettingsDto"];
+                        "text/json": components["schemas"]["InvoicingSettingsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/settings/certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UploadInvoicingCertificateRequest"];
+                    "text/json": components["schemas"]["UploadInvoicingCertificateRequest"];
+                    "application/*+json": components["schemas"]["UploadInvoicingCertificateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InvoicingSettingsDto"];
+                        "application/json": components["schemas"]["InvoicingSettingsDto"];
+                        "text/json": components["schemas"]["InvoicingSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InvoicingSettingsDto"];
+                        "application/json": components["schemas"]["InvoicingSettingsDto"];
+                        "text/json": components["schemas"]["InvoicingSettingsDto"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/settings/serie": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ChangeInvoiceSerieRequest"];
+                    "text/json": components["schemas"]["ChangeInvoiceSerieRequest"];
+                    "application/*+json": components["schemas"]["ChangeInvoiceSerieRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InvoicingSettingsDto"];
+                        "application/json": components["schemas"]["InvoicingSettingsDto"];
+                        "text/json": components["schemas"]["InvoicingSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/orders/{orderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderInvoicingDto"];
+                        "application/json": components["schemas"]["OrderInvoicingDto"];
+                        "text/json": components["schemas"]["OrderInvoicingDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/orders/{orderId}/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["IssueOrderInvoiceRequest"];
+                    "text/json": components["schemas"]["IssueOrderInvoiceRequest"];
+                    "application/*+json": components["schemas"]["IssueOrderInvoiceRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderInvoiceDto"];
+                        "application/json": components["schemas"]["OrderInvoiceDto"];
+                        "text/json": components["schemas"]["OrderInvoiceDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/invoices/{invoiceId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    invoiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderInvoiceDto"];
+                        "application/json": components["schemas"]["OrderInvoiceDto"];
+                        "text/json": components["schemas"]["OrderInvoiceDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/invoices/{invoiceId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    invoiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CancelOrderInvoiceRequest"];
+                    "text/json": components["schemas"]["CancelOrderInvoiceRequest"];
+                    "application/*+json": components["schemas"]["CancelOrderInvoiceRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderInvoiceDto"];
+                        "application/json": components["schemas"]["OrderInvoiceDto"];
+                        "text/json": components["schemas"]["OrderInvoiceDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/invoices/{invoiceId}/xml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    invoiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/invoices/{invoiceId}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    invoiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -12821,6 +13248,9 @@ export interface components {
         CancelInventoryCountRequest: {
             reason?: string | null;
         };
+        CancelOrderInvoiceRequest: {
+            motive: components["schemas"]["CfdiCancellationMotive"];
+        };
         CancelOrderRequest: {
             reason?: string | null;
             restockItems?: boolean | null;
@@ -12959,6 +13389,11 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        CfdiCancellationMotive: 1 | 2 | 3 | 4;
         CfdiConceptDto: {
             /** Format: uuid */
             orderItemId: string;
@@ -13013,6 +13448,20 @@ export interface components {
             postalCode?: string | null;
             cfdiUse?: string | null;
         };
+        CfdiReceiverDto: {
+            rfc: string;
+            name: string;
+            postalCode: string;
+            fiscalRegime: string;
+            cfdiUse: string;
+        };
+        CfdiReceiverInput: {
+            rfc?: string | null;
+            name?: string | null;
+            postalCode?: string | null;
+            fiscalRegime?: string | null;
+            cfdiUse?: string | null;
+        };
         /**
          * Format: int32
          * @enum {integer}
@@ -13027,6 +13476,9 @@ export interface components {
             rateOrQuota?: number | null;
             /** Format: double */
             amount?: number | null;
+        };
+        ChangeInvoiceSerieRequest: {
+            serie: string;
         };
         ChangePasswordCommand: {
             currentPassword: string;
@@ -13884,6 +14336,7 @@ export interface components {
             creditLimit?: number | null;
             /** Format: int32 */
             creditTermDays?: number | null;
+            fiscalData?: components["schemas"]["CfdiReceiverDto"];
             addresses: components["schemas"]["CustomerAddressDto"][];
             /** Format: date-time */
             createdAt: string;
@@ -14799,6 +15252,36 @@ export interface components {
             firstName: string;
             businesses: string[];
         };
+        InvoicingCertificateDto: {
+            number: string;
+            rfc: string;
+            /** Format: date-time */
+            validFrom: string;
+            /** Format: date-time */
+            validTo: string;
+            /** Format: date-time */
+            uploadedAt: string;
+            usable: boolean;
+            expiresSoon: boolean;
+            expired: boolean;
+            otherRfc: boolean;
+        };
+        InvoicingSettingsDto: {
+            available: boolean;
+            sandbox: boolean;
+            serie: string;
+            rfc?: string | null;
+            legalName?: string | null;
+            fiscalRegime?: string | null;
+            postalCode?: string | null;
+            missingData: string[];
+            certificate?: components["schemas"]["InvoicingCertificateDto"];
+            ready: boolean;
+        };
+        IssueOrderInvoiceRequest: {
+            receiver: components["schemas"]["CfdiReceiverInput"];
+            saveToCustomer: boolean;
+        };
         KitchenOrderDto: {
             /** Format: uuid */
             id: string;
@@ -15398,6 +15881,54 @@ export interface components {
             readonly totalCount: number;
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
+        };
+        OrderInvoiceDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            orderId: string;
+            number: string;
+            status: components["schemas"]["OrderInvoiceStatus"];
+            receiver: components["schemas"]["CfdiReceiverDto"];
+            paymentForm: string;
+            paymentMethod: string;
+            /** Format: double */
+            subTotal: number;
+            /** Format: double */
+            taxTotal: number;
+            /** Format: double */
+            total: number;
+            /** Format: date-time */
+            requestedAt: string;
+            uuid?: string | null;
+            /** Format: date-time */
+            stampedAt?: string | null;
+            hasXml: boolean;
+            hasPdf: boolean;
+            failureMessage?: string | null;
+            /** Format: date-time */
+            refusedAt?: string | null;
+            cancellationMotive?: components["schemas"]["CfdiCancellationMotive"];
+            /** Format: date-time */
+            cancellationRequestedAt?: string | null;
+            /** Format: date-time */
+            cancelledAt?: string | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OrderInvoiceStatus: 0 | 1 | 2 | 3 | 4;
+        OrderInvoicingDto: {
+            available: boolean;
+            sandbox: boolean;
+            canInvoice: boolean;
+            problem?: string | null;
+            proposedReceiver?: components["schemas"]["CfdiReceiverDto"];
+            /** Format: uuid */
+            customerId?: string | null;
+            customerName?: string | null;
+            invoices: components["schemas"]["OrderInvoiceDto"][];
         };
         OrderItemCancellationDto: {
             /** Format: uuid */
@@ -17632,6 +18163,9 @@ export interface components {
             /** Format: int32 */
             creditTermDays?: number | null;
         };
+        UpdateCustomerFiscalDataRequest: {
+            fiscalData?: components["schemas"]["CfdiReceiverInput"];
+        };
         UpdateCustomerNotesRequest: {
             notes?: string | null;
         };
@@ -17887,6 +18421,11 @@ export interface components {
             phoneNumberId?: string | null;
             wabaId?: string | null;
             displayPhoneNumber?: string | null;
+        };
+        UploadInvoicingCertificateRequest: {
+            certificate: string;
+            privateKey: string;
+            password: string;
         };
         UploadedFileDto: {
             url: string;

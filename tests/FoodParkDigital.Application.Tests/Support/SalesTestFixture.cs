@@ -7,6 +7,7 @@ using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Finance.Entities;
+using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -220,6 +221,14 @@ internal sealed class SalesDbContext : ApplicationDbContext
             .ValueGeneratedNever();
         modelBuilder.Entity<OnlinePaymentRefund>()
             .Property(r => r.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<OrderInvoice>()
+            .Property(i => i.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<InvoicingProfile>()
+            .Property(p => p.Version)
             .IsRequired(false)
             .ValueGeneratedNever();
     }

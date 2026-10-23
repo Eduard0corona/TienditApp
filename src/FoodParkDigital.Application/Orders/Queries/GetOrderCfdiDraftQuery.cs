@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
@@ -40,25 +41,7 @@ public class GetOrderCfdiDraftQueryValidator : AbstractValidator<GetOrderCfdiDra
     public GetOrderCfdiDraftQueryValidator()
     {
         RuleFor(x => x.OrderId).NotEmpty();
-        When(x => x.Receiver is not null, () =>
-        {
-            RuleFor(x => x.Receiver!.Rfc)
-                .NotEmpty()
-                .Must(rfc => SatCatalog.IsValidRfc(rfc?.Trim().ToUpperInvariant()))
-                .WithMessage("El RFC del cliente no tiene un formato válido.");
-            RuleFor(x => x.Receiver!.Name)
-                .NotEmpty().WithMessage("Escribe el nombre o razón social del cliente como aparece en su constancia.")
-                .MaximumLength(254);
-            RuleFor(x => x.Receiver!.PostalCode)
-                .Must(SatCatalog.IsValidPostalCode)
-                .WithMessage("El código postal fiscal del cliente tiene 5 dígitos.");
-            RuleFor(x => x.Receiver!.FiscalRegime)
-                .Must(regime => regime is not null && SatCatalog.FiscalRegimes.Contains(regime))
-                .WithMessage("Elige el régimen fiscal del cliente.");
-            RuleFor(x => x.Receiver!.CfdiUse)
-                .Must(use => use is not null && SatCatalog.CfdiUses.Contains(use))
-                .WithMessage("Elige el uso del CFDI.");
-        });
+        RuleFor(x => x.Receiver!).SetValidator(new CfdiReceiverInputValidator()).When(x => x.Receiver is not null);
     }
 }
 

@@ -11,6 +11,7 @@ using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Billing;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Messaging;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Invoicing;
 using FoodParkDigital.Infrastructure.BackgroundJobs.OnlinePayments;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Reporting;
@@ -186,6 +187,7 @@ public static class DependencyInjection
             services.AddHostedService<SalesSnapshotWorkerService>();
             services.AddHostedService<SubscriptionStatusWorkerService>();
             services.AddHostedService<OnlinePaymentsWorkerService>();
+            services.AddHostedService<InvoicingWorkerService>();
             services.AddHostedService<PrivateFilesMigrationService>();
         }
 

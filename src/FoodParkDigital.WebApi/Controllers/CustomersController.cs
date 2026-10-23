@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Customers.DTOs;
 using FoodParkDigital.Application.Customers.Queries;
+using FoodParkDigital.Application.Orders.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -189,6 +190,11 @@ public class CustomersController : ControllerBase
     public async Task<ActionResult<CustomerDto>> SetCreditTerm(Guid id, [FromBody] SetCustomerCreditTermRequest request, CancellationToken cancellationToken)
         => ToResult(await _mediator.Send(new SetCustomerCreditTermCommand { CustomerId = id, CreditTermDays = request.CreditTermDays }, cancellationToken));
 
+    /// <summary>What the customer's invoices go to (Fase 28A); without data it is forgotten.</summary>
+    [HttpPut("{id:guid}/fiscal-data")]
+    public async Task<ActionResult<CustomerDto>> UpdateFiscalData(Guid id, [FromBody] UpdateCustomerFiscalDataRequest request, CancellationToken cancellationToken)
+        => ToResult(await _mediator.Send(new UpdateCustomerFiscalDataCommand(id, request.FiscalData), cancellationToken));
+
     [HttpPut("{id:guid}/notes")]
     public async Task<ActionResult<CustomerDto>> UpdateNotes(Guid id, [FromBody] UpdateCustomerNotesRequest request, CancellationToken cancellationToken)
         => ToResult(await _mediator.Send(new UpdateCustomerNotesCommand(id, request.Notes), cancellationToken));
@@ -243,3 +249,8 @@ public record SetCustomerCreditTermRequest(int? CreditTermDays);
 
 public record CustomerAddressRequest(string AddressLine, string? Label = null, string? References = null, bool IsDefault = false);
 
+public class UpdateCustomerFiscalDataRequest
+{
+    /// <summary>RFC, name, fiscal postal code, regime and use of the CFDI; null forgets them.</summary>
+    public CfdiReceiverInput? FiscalData { get; init; }
+}

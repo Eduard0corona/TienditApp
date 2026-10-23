@@ -17,6 +17,20 @@ public sealed class BackgroundJobOptions
     public SalesSnapshotOptions SalesSnapshots { get; set; } = new();
     public SubscriptionOptions Subscriptions { get; set; } = new();
     public OnlinePaymentOptions OnlinePayments { get; set; } = new();
+    public InvoicingOptions Invoicing { get; set; } = new();
+
+    /// <summary>The invoices the PAC has not answered for and the cancellations that wait for the SAT (Fase 28A).</summary>
+    public sealed class InvoicingOptions
+    {
+        /// <summary>How often the invoices still «Timbrando» are asked for again.</summary>
+        public int IntervalMinutes { get; set; } = 2;
+
+        /// <summary>How often the SAT is asked about the cancellations that wait for the customer.</summary>
+        public int CancellationIntervalMinutes { get; set; } = 30;
+
+        /// <summary>Businesses handled on each pass.</summary>
+        public int MaxBusinessesPerPass { get; set; } = 100;
+    }
 
     /// <summary>The sweep of online payments in course and the renewal of the Mercado Pago keys (Fase 24I).</summary>
     public sealed class OnlinePaymentOptions

@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Customers.Entities;
 
 namespace FoodParkDigital.Application.Customers.DTOs;
@@ -15,6 +16,8 @@ public class CustomerDto
     public decimal? CreditLimit { get; set; }
     /// <summary>Their own term to pay what they owe (Fase 26C); null when the business's applies.</summary>
     public int? CreditTermDays { get; set; }
+    /// <summary>What their invoices go to (Fase 28A); null when the business has not captured it.</summary>
+    public CfdiReceiverDto? FiscalData { get; set; }
     /// <summary>Only in the detail of one customer (the list leaves it empty).</summary>
     public List<CustomerAddressDto> Addresses { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
@@ -32,6 +35,7 @@ public class CustomerDto
         Notes = customer.Notes,
         CreditLimit = customer.CreditLimit,
         CreditTermDays = customer.CreditTermDays,
+        FiscalData = customer.FiscalData is null ? null : CfdiReceiverDto.From(customer.FiscalData),
         Addresses = customer.Addresses
             .OrderByDescending(a => a.IsDefault)
             .ThenBy(a => a.CreatedAt)
