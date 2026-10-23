@@ -814,6 +814,17 @@ La Fase 28A trae una migración, [`database/production/20261023064133_AddOrderIn
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas. Las facturas y el CSD se quedan en la base y en el PAC, y Pedidos vuelve a mostrar solo la vista previa.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50037, sin cambiar nada, en cuanto hay una factura (aunque sea rechazada), un CSD o datos fiscales de un cliente. Sin ninguno, quita las tablas, las columnas y la restricción; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## La factura global a público en general (Fase 28B)
+
+La Fase 28B trae una migración, [`database/production/20261023175930_AddGlobalInvoices`](../../database/production/20261023175930_AddGlobalInvoices). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0046](../adr/0046-global-invoice.md)).
+
+- **La migración** crea dos tablas vacías: `GlobalInvoices` (las facturas globales, con su CFDI, periodo, folio, estado, timbre y cancelación) y `GlobalInvoiceOrders` (las ventas de cada una; un índice único filtrado deja cada venta en una sola global viva). No cambia pedidos, pagos ni facturas; después de aplicarla, el `verify.sql` muestra las tablas, restricciones e índices, y cuenta las facturas globales y sus ventas: cero hasta desplegar.
+- **Mientras se publica:** la versión de `master` (Fase 28A) no conoce las tablas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** las rutas bajo `/api/v1/invoicing/global-invoices` (dueños y administradores) y el enum `GlobalInvoicePeriodicity`. Nada se quita ni cambia de nombre.
+- **Sin configuración nueva:** usa el PAC, el CSD, la serie, los archivos privados y los workers de la 28A. Sin SW Sapien, Reportes › Factura global muestra la vista previa y dice que no está disponible.
+- **Volver a la versión anterior:** funciona sin tocar la base. Las globales se quedan en la base y en el PAC; la 28A no revisa si una venta está en una global, así que mientras tanto se puede facturar sola (se cancela una de las dos).
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50038, sin cambiar nada, en cuanto hay una factura global (aunque sea rechazada). Sin ninguna, quita las dos tablas; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

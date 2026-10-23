@@ -130,7 +130,8 @@ public class InvoicingController : ControllerBase
         [FromBody] IssueGlobalInvoiceRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new IssueGlobalInvoiceCommand(request.Periodicity, request.Day, request.ExpectedSaleCount, request.ExpectedTotal),
+            new IssueGlobalInvoiceCommand(
+                request.Periodicity, request.Day, request.ExpectedSaleCount, request.ExpectedTotal, request.ExpectedFingerprint ?? string.Empty),
             cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
@@ -210,6 +211,8 @@ public class IssueGlobalInvoiceRequest
     public int ExpectedSaleCount { get; init; }
     /// <summary>The total the reviewed preview had.</summary>
     public decimal ExpectedTotal { get; init; }
+    /// <summary>The fingerprint the reviewed preview had: which sales it took and for how much.</summary>
+    public string? ExpectedFingerprint { get; init; }
 }
 
 public class CancelOrderInvoiceRequest

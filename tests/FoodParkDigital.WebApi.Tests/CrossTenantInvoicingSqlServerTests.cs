@@ -150,8 +150,14 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Single(answers, answer => answer.StatusCode == HttpStatusCode.OK);
         var refused = Assert.Single(answers, answer => answer.StatusCode != HttpStatusCode.OK);
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
-        Assert.Equal("Este pedido ya tiene la factura F-2: cancélala para facturarlo otra vez.",
-            JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+        // The first one's invoice, timbrando or already stamped: it is stamped after its commit, when the second gets the lock.
+        Assert.Contains(
+            JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString(),
+            new[]
+            {
+                "La factura F-2 de este pedido se está timbrando.",
+                "Este pedido ya tiene la factura F-2: cancélala para facturarlo otra vez."
+            });
         Assert.Equal(1, await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.CountAsync(i => i.OrderId == raced)));
         // The refused one took no folio: the next invoice of the serie follows without a hole.
         Assert.Equal("F-3", (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(

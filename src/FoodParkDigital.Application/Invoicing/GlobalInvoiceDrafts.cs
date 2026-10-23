@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders.DTOs;
@@ -66,6 +68,11 @@ public class GlobalInvoiceDraftDto
     public int ConceptCount { get; set; }
     public List<GlobalInvoiceSaleDto> Sales { get; set; } = [];
     public List<GlobalInvoiceLeftOutDto> LeftOut { get; set; } = [];
+    /// <summary>
+    /// Which sales it takes and for how much, in a few characters: stamping sends it back, and if the period's sales changed
+    /// since this preview (even keeping their number and total), nothing is stamped.
+    /// </summary>
+    public string Fingerprint { get; set; } = string.Empty;
 }
 
 /// <summary>The preview of a global invoice with what stamping it needs: its period, its CFDI and its sales.</summary>
@@ -157,6 +164,12 @@ public static class GlobalInvoiceDrafts
     public const string RefundedReason = "Tiene reembolsos: lo devuelto requiere una nota de crédito, que TienditApp todavía no genera.";
     public const string WrittenOffReason = "Se condonó parte de ella: lo condonado requiere una nota de crédito, que TienditApp todavía no genera.";
     public const string RefundInCourseReason = "Tiene un reembolso en curso en Mercado Pago.";
+    public const string CanStillChangeReason =
+        "Todavía puede cambiar (sigue pendiente o es una cuenta abierta): ciérrala para que entre en la factura global.";
+
+    public static string CoveredRefundsWarning(int count) => count == 1
+        ? "Incluye 1 venta con devoluciones que ya estaba en una factura global cancelada: va por su total, como la primera; la devolución requiere una nota de crédito."
+        : $"Incluye {count} ventas con devoluciones que ya estaban en una factura global cancelada: van por su total, como la primera; las devoluciones requieren una nota de crédito.";
     public const string AmountsReason = "Sus importes no cuadran con lo que cobró: revisa su vista previa del CFDI en Pedidos.";
 
     private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-MX");
@@ -218,6 +231,8 @@ public static class GlobalInvoiceDrafts
                 o.RefundedAmount,
                 o.WrittenOffAmount,
                 o.SoldOnCredit,
+                o.Status,
+                o.IsTab,
                 PaidAt = o.Payments.Max(p => p.PaidAt)
             })
             .OrderBy(o => o.PaidAt)
@@ -238,22 +253,35 @@ public static class GlobalInvoiceDrafts
             .Where(r => r.Status == OnlinePaymentRefundStatus.Requested && r.OrderId != null && candidateIds.Contains(r.OrderId.Value))
             .Select(r => r.OrderId!.Value)
             .ToListAsync(cancellationToken);
+        // Sales a stamped global invoice covered until it was cancelled (motive 04, a customer asked for theirs): issued again
+        // as they were then. A refund since asks for a credit note, not for leaving the sale without a CFDI.
+        var coveredBefore = (await context.GlobalInvoiceOrders.AsNoTracking()
+            .Where(o => o.Released && candidateIds.Contains(o.OrderId))
+            .Join(context.GlobalInvoices.AsNoTracking().Where(g => g.Status == OrderInvoiceStatus.Cancelled),
+                o => o.GlobalInvoiceId, g => g.Id, (o, g) => o.OrderId)
+            .ToListAsync(cancellationToken)).ToHashSet();
         var ownByOrder = ownInvoices.GroupBy(i => i.OrderId).ToDictionary(g => g.Key, g => $"{g.First().Serie}-{g.First().Folio}");
         var globalByOrder = inGlobals.GroupBy(i => i.OrderId).ToDictionary(g => g.Key, g => $"{g.First().Serie}-{g.First().Folio}");
         var refunding = refundsInCourse.ToHashSet();
 
         var included = new List<(Guid Id, DateTimeOffset PaidAt)>();
+        var coveredWithRefunds = 0;
         foreach (var candidate in candidates)
         {
+            var covered = coveredBefore.Contains(candidate.Id);
             var reason = ownByOrder.TryGetValue(candidate.Id, out var own) ? OwnInvoiceReason(own)
                 : globalByOrder.TryGetValue(candidate.Id, out var global) ? InGlobalReason(global)
                 : candidate.Total <= 0 ? null
+                // What it charges later would stay out of the global invoice and could not be invoiced on its own.
+                : Order.TotalCanChange(candidate.Status, candidate.IsTab) ? CanStillChangeReason
                 : candidate.WrittenOffAmount > 0 ? WrittenOffReason
                 : candidate.Total - candidate.PaidAmount > 0 ? NotPaidReason
                 : candidate.SoldOnCredit ? CreditReason
-                : candidate.RefundedAmount > 0 ? RefundedReason
-                : refunding.Contains(candidate.Id) ? RefundInCourseReason
+                : candidate.RefundedAmount > 0 && !covered ? RefundedReason
+                : refunding.Contains(candidate.Id) && !covered ? RefundInCourseReason
                 : string.Empty;
+            if (reason?.Length == 0 && covered && (candidate.RefundedAmount > 0 || refunding.Contains(candidate.Id)))
+                coveredWithRefunds++;
             // A sale without amount is not invoiced, nor listed.
             if (reason is null)
                 continue;
@@ -269,12 +297,13 @@ public static class GlobalInvoiceDrafts
                 });
         }
 
+        var includedIds = included.Select(sale => sale.Id).ToList();
         var orders = included.Count == 0
             ? []
             : await context.Orders.AsNoTracking()
                 .Include(o => o.Items).ThenInclude(i => i.Options)
                 .Include(o => o.Payments)
-                .Where(o => candidateIds.Contains(o.Id))
+                .Where(o => includedIds.Contains(o.Id))
                 .ToListAsync(cancellationToken);
         var ordersById = orders.ToDictionary(o => o.Id);
 
@@ -284,7 +313,9 @@ public static class GlobalInvoiceDrafts
         var platformSales = 0;
         foreach (var (orderId, paidAt) in included)
         {
-            var order = ordersById[orderId];
+            // Read a moment ago; outside a transaction a sale can be cancelled in between, and then it is not a sale.
+            if (!ordersById.TryGetValue(orderId, out var order))
+                continue;
             var orderConcepts = Concepts(order);
             if (orderConcepts is null)
             {
@@ -347,6 +378,8 @@ public static class GlobalInvoiceDrafts
             if (dto.PaymentForm == SatCatalog.PaymentFormToBeDefined)
                 dto.Blockers.Add(OtherPaymentBlocker);
         }
+        if (coveredWithRefunds > 0)
+            dto.Warnings.Add(CoveredRefundsWarning(coveredWithRefunds));
         if (platformSales > 0)
         {
             dto.Warnings.Add(platformSales == 1
@@ -354,6 +387,7 @@ public static class GlobalInvoiceDrafts
                 : $"Incluye {platformSales} pedidos de Rappi, Uber Eats o DiDi Food: confirma con tu contador cómo declarar los pedidos de plataformas.");
         }
         dto.IsReadyToStamp = dto.Problem is null && dto.Blockers.Count == 0;
+        dto.Fingerprint = Fingerprint(sales);
 
         var tenant = await context.Tenants.AsNoTracking()
             .Where(t => t.Id == tenantId)
@@ -395,6 +429,9 @@ public static class GlobalInvoiceDrafts
             {
                 var taxBase = rate.Sum(concept => concept.Transfer!.Base);
                 var tax = rate.Sum(concept => concept.Transfer!.Amount);
+                // Only free lines at that rate: nothing to transfer, and the SAT takes no base of 0.
+                if (taxBase == 0 && tax == 0)
+                    continue;
                 if (!rate.Key.IsExempt && (tax < CfdiAmountCalculator.MinimumTax(taxBase, rate.Key.RatePercent)
                         || tax > CfdiAmountCalculator.MaximumTax(taxBase, rate.Key.RatePercent)))
                     return null;
@@ -402,13 +439,24 @@ public static class GlobalInvoiceDrafts
                 transfers.Add(new CfdiDocumentTransfer(
                     taxBase, CfdiTransfer.IvaTaxCode, transfer.FactorType, transfer.RateOrQuota, rate.Key.IsExempt ? null : tax));
             }
-            concepts.Add(Concept(order, subject.Sum(concept => concept.Amount), CfdiTaxObject.Subject, transfers));
+            if (transfers.Count > 0)
+                concepts.Add(Concept(order, subject.Sum(concept => concept.Amount), CfdiTaxObject.Subject, transfers));
         }
 
         var notSubject = amounts.Concepts.Where(concept => concept.Transfer is null).ToList();
-        if (notSubject.Count > 0)
-            concepts.Add(Concept(order, notSubject.Sum(concept => concept.Amount), CfdiTaxObject.NotSubject, null));
-        return concepts;
+        var notSubjectAmount = notSubject.Sum(concept => concept.Amount);
+        if (notSubjectAmount > 0)
+            concepts.Add(Concept(order, notSubjectAmount, CfdiTaxObject.NotSubject, null));
+        return concepts.Count == 0 ? null : concepts;
+    }
+
+    /// <summary>The sales and their totals, in order, as a short hash: two previews with the same one take the same sales.</summary>
+    public static string Fingerprint(IEnumerable<GlobalInvoiceSale> sales)
+    {
+        var lines = sales
+            .OrderBy(sale => sale.OrderId)
+            .Select(sale => string.Create(CultureInfo.InvariantCulture, $"{sale.OrderId:N}:{sale.Total:0.00}"));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', lines)))).ToLowerInvariant();
     }
 
     private static CfdiDocumentConcept Concept(

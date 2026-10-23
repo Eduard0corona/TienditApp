@@ -13,8 +13,14 @@ import { formatMoney } from '../../utils/money';
 
 const PARENT = { label: 'Factura global', to: '/reports/global-invoices' };
 
-// What the API takes as a day (GlobalInvoicing.IsReasonableDay): anything else is not asked for.
-const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+// What the API takes as a day (GlobalInvoicing.IsReasonableDay, years 2022 to 9998): anything else is not asked for, as
+// the year being typed in the date field (0002, 0020, 0202…).
+const DAY_PATTERN = /^(\d{4})-\d{2}-\d{2}$/;
+
+function isReasonableDay(day: string): boolean {
+  const year = Number(DAY_PATTERN.exec(day)?.[1]);
+  return year >= 2022 && year <= 9998;
+}
 
 function saleCount(count: number): string {
   return count === 1 ? '1 venta' : `${count} ventas`;
@@ -32,8 +38,9 @@ export default function NewGlobalInvoice() {
   const { confirm } = useConfirm();
   // Yesterday: the usual global invoice is the one of the day that just ended.
   const [periodicity, setPeriodicity] = useState<GlobalInvoicePeriodicity>(GlobalInvoicePeriodicity.Daily);
-  const [day, setDay] = useState(() => addCalendarDays(getBusinessToday(), -1));
-  const validDay = DAY_PATTERN.test(day);
+  const yesterday = addCalendarDays(getBusinessToday(), -1);
+  const [day, setDay] = useState(yesterday);
+  const validDay = isReasonableDay(day);
   const draft = useGlobalInvoiceDraft(periodicity, day, validDay);
   const issue = useIssueGlobalInvoice();
 
@@ -51,6 +58,7 @@ export default function NewGlobalInvoice() {
         day,
         expectedSaleCount: preview.saleCount,
         expectedTotal: preview.total,
+        expectedFingerprint: preview.fingerprint,
       });
       if (result.status === OrderInvoiceStatus.Stamped) toast.success(`Factura global ${result.number} timbrada.`);
       else if (result.status === OrderInvoiceStatus.Refused) toast.error(result.failureMessage ?? 'El PAC rechazó la factura global.');
@@ -87,7 +95,8 @@ export default function NewGlobalInvoice() {
                 type="date"
                 className="form-control"
                 value={day}
-                max={getBusinessToday()}
+                // No period that holds today has ended yet.
+                max={yesterday}
                 onChange={(event) => setDay(event.target.value)}
               />
             </div>
@@ -99,7 +108,7 @@ export default function NewGlobalInvoice() {
         </div>
       </section>
 
-      {!validDay && <div className="alert alert-info">Elige un día del periodo.</div>}
+      {!validDay && <div className="alert alert-info">Elige un día del periodo, de 2022 en adelante.</div>}
       {validDay && draft.isPending && <p className="text-muted" aria-busy="true">Calculando la factura global…</p>}
       {validDay && draft.isError && (
         <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
@@ -111,8 +120,8 @@ export default function NewGlobalInvoice() {
         <DraftPreview
           draft={draft.data}
           stamping={issue.isPending}
-          // A preview being read again is not the one the person reviewed.
-          stale={draft.isFetching}
+          // A preview being read again, or that could not be read again, is not the one the person reviewed.
+          stale={draft.isFetching || draft.isError}
           onStamp={() => void stamp(draft.data)}
         />
       )}

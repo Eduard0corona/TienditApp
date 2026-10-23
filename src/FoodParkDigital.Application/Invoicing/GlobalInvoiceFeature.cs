@@ -141,11 +141,16 @@ public class GetGlobalInvoiceDraftQueryHandler : IRequestHandler<GetGlobalInvoic
 /// <summary>
 /// Stamps the global invoice of a period that is over (owners and administrators): its folio, its CFDI and its sales are
 /// saved first (<see cref="RequestGlobalInvoiceCommand"/>), and the PAC is asked after the commit. The preview the person
-/// reviewed is what is stamped: if the period's sales changed since (their number or their total), nothing is stamped.
+/// reviewed is what is stamped: if the period's sales changed since (which ones, their number or their total), nothing is
+/// stamped.
 /// </summary>
 [RequiresTenantManager]
-public record IssueGlobalInvoiceCommand(GlobalInvoicePeriodicity Periodicity, DateOnly Day, int ExpectedSaleCount, decimal ExpectedTotal)
-    : IRequest<Result<GlobalInvoiceDto>>;
+public record IssueGlobalInvoiceCommand(
+    GlobalInvoicePeriodicity Periodicity,
+    DateOnly Day,
+    int ExpectedSaleCount,
+    decimal ExpectedTotal,
+    string ExpectedFingerprint) : IRequest<Result<GlobalInvoiceDto>>;
 
 public class IssueGlobalInvoiceCommandValidator : AbstractValidator<IssueGlobalInvoiceCommand>
 {
@@ -155,6 +160,7 @@ public class IssueGlobalInvoiceCommandValidator : AbstractValidator<IssueGlobalI
         RuleFor(x => x.Day).Must(GlobalInvoicing.IsReasonableDay).WithMessage(GlobalInvoicing.DayMessage);
         RuleFor(x => x.ExpectedSaleCount).GreaterThan(0);
         RuleFor(x => x.ExpectedTotal).GreaterThan(0);
+        RuleFor(x => x.ExpectedFingerprint).NotEmpty().MaximumLength(GlobalInvoicing.FingerprintLength);
     }
 }
 
@@ -185,7 +191,8 @@ public class IssueGlobalInvoiceCommandHandler : IRequestHandler<IssueGlobalInvoi
             return Result.Failure<GlobalInvoiceDto>(InvoicingSettings.NotAvailableMessage);
 
         var requested = await _sender.Send(
-            new RequestGlobalInvoiceCommand(request.Periodicity, request.Day, request.ExpectedSaleCount, request.ExpectedTotal),
+            new RequestGlobalInvoiceCommand(
+                request.Periodicity, request.Day, request.ExpectedSaleCount, request.ExpectedTotal, request.ExpectedFingerprint),
             cancellationToken);
         if (requested.IsFailure)
             return Result.Failure<GlobalInvoiceDto>(requested.Error!);
@@ -201,8 +208,12 @@ public class IssueGlobalInvoiceCommandHandler : IRequestHandler<IssueGlobalInvoi
 /// business's invoicing lock, so no invoice of an order takes one of them meanwhile. Answers the new invoice's id.
 /// </summary>
 [RequiresTenantManager]
-public record RequestGlobalInvoiceCommand(GlobalInvoicePeriodicity Periodicity, DateOnly Day, int ExpectedSaleCount, decimal ExpectedTotal)
-    : IRequest<Result<Guid>>, ITransactionalRequest;
+public record RequestGlobalInvoiceCommand(
+    GlobalInvoicePeriodicity Periodicity,
+    DateOnly Day,
+    int ExpectedSaleCount,
+    decimal ExpectedTotal,
+    string ExpectedFingerprint) : IRequest<Result<Guid>>, ITransactionalRequest;
 
 public class RequestGlobalInvoiceCommandHandler : IRequestHandler<RequestGlobalInvoiceCommand, Result<Guid>>
 {
@@ -249,7 +260,9 @@ public class RequestGlobalInvoiceCommandHandler : IRequestHandler<RequestGlobalI
             return Result.Failure<Guid>(dto.Problem);
         if (dto.Blockers.Count > 0)
             return Result.Failure<Guid>(dto.Blockers[0]);
-        if (dto.SaleCount != request.ExpectedSaleCount || dto.Total != request.ExpectedTotal)
+        if (dto.SaleCount != request.ExpectedSaleCount
+            || dto.Total != request.ExpectedTotal
+            || !string.Equals(dto.Fingerprint, request.ExpectedFingerprint, StringComparison.Ordinal))
             return Result.Failure<Guid>(GlobalInvoicing.SalesChangedMessage);
 
         var timeZone = await _context.TenantSettings.AsNoTracking()
@@ -563,6 +576,9 @@ public static class GlobalInvoicing
     public const string DayMessage = "Elige un día del periodo.";
     public const string CancellationMotivesMessage =
         "Cancela la factura global por errores sin relación (02) o porque un cliente pidió la factura de una de sus ventas (04).";
+    /// <summary>The fingerprint of a preview: a SHA-256 in hexadecimal.</summary>
+    public const int FingerprintLength = 64;
+
     public const string SalesChangedMessage =
         "Las ventas del periodo cambiaron desde que viste la vista previa: revísala otra vez antes de timbrar.";
 

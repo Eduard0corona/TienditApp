@@ -89,6 +89,27 @@ describe('GlobalInvoices', () => {
     })));
   });
 
+  it('says why the list could not be read and reads it again on request', async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    request.mockImplementation((() => (reads++ === 0
+      ? Promise.reject(Object.assign(new Error('503'), { isAxiosError: true, response: { status: 503, data: {} } }))
+      : Promise.resolve(page([invoice()])))) as unknown as typeof apiRequest);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <GlobalInvoices />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('No se pudieron cargar las facturas globales.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    expect(await screen.findByText('F-7')).toBeInTheDocument();
+  });
+
   it('says there is none yet', async () => {
     renderList(() => []);
 

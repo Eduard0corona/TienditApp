@@ -231,13 +231,17 @@ function useGlobalInvoiceChange<TVariables>(change: (variables: TVariables) => P
   });
 }
 
-/** Stamps the global invoice of a period as the preview showed it: if its sales changed, the API refuses it. */
+/**
+ * Stamps the global invoice of a period as the preview showed it: its number of sales, total and fingerprint (which sales,
+ * for how much). If the period's sales changed since, the API refuses it.
+ */
 export function useIssueGlobalInvoice() {
   return useGlobalInvoiceChange((body: {
     periodicity: GlobalInvoicePeriodicity;
     day: string;
     expectedSaleCount: number;
     expectedTotal: number;
+    expectedFingerprint: string;
   }) => apiRequest('post', '/api/v1/invoicing/global-invoices', { body }));
 }
 

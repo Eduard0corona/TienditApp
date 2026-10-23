@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
@@ -48,6 +48,7 @@ function draft(patch: Partial<GlobalInvoiceDraft> = {}): GlobalInvoiceDraft {
       { orderId: 'o-2', orderNumber: 'ORD-000002', paidAt: '2026-10-22T19:00:00Z', total: 100 },
     ],
     leftOut: [{ orderId: 'o-3', orderNumber: 'ORD-000003', total: 50, reason: 'Tiene su propia factura (F-4).' }],
+    fingerprint: 'a1b2c3',
     ...patch,
   };
 }
@@ -63,10 +64,13 @@ function Detail() {
   return <p>Detalle {useParams().id}</p>;
 }
 
-function renderPage(preview: () => GlobalInvoiceDraft | Promise<GlobalInvoiceDraft>, issue: () => Promise<unknown> = () => Promise.resolve(STAMPED)) {
+function renderPage(
+  preview: (query: Options['query']) => GlobalInvoiceDraft | Promise<GlobalInvoiceDraft>,
+  issue: (body: unknown) => Promise<unknown> = () => Promise.resolve(STAMPED),
+) {
   request.mockImplementation(((method: string, path: string, options?: Options) => {
-    if (method === 'get' && path === '/api/v1/invoicing/global-invoices/draft') return Promise.resolve(preview());
-    if (method === 'post' && path === '/api/v1/invoicing/global-invoices') return issue();
+    if (method === 'get' && path === '/api/v1/invoicing/global-invoices/draft') return Promise.resolve(preview(options?.query));
+    if (method === 'post' && path === '/api/v1/invoicing/global-invoices') return issue(options?.body);
     return Promise.reject(new Error(`Sin respuesta para ${method} ${path} ${JSON.stringify(options)}`));
   }) as unknown as typeof apiRequest);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -124,7 +128,7 @@ describe('NewGlobalInvoice', () => {
 
     expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('2 ventas por $300.00') }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('post', '/api/v1/invoicing/global-invoices', {
-      body: { periodicity: GlobalInvoicePeriodicity.Daily, day: '2026-10-22', expectedSaleCount: 2, expectedTotal: 300 },
+      body: { periodicity: GlobalInvoicePeriodicity.Daily, day: '2026-10-22', expectedSaleCount: 2, expectedTotal: 300, expectedFingerprint: 'a1b2c3' },
     }));
     expect(await screen.findByText('Detalle g-1')).toBeInTheDocument();
     expect(toast.success).toHaveBeenCalledWith('Factura global F-5 timbrada.');
@@ -132,21 +136,22 @@ describe('NewGlobalInvoice', () => {
 
   it('asks for the period chosen and stamps nothing while something stops it', async () => {
     const user = userEvent.setup();
-    renderPage(() => draft({
-      periodicity: GlobalInvoicePeriodicity.Monthly,
-      periodFrom: '2026-10-01',
-      periodTo: '2026-10-31',
-      isReadyToStamp: false,
-      blockers: ['El periodo termina el 31/10/2026: la factura global se emite después.'],
-    }));
-    await screen.findByRole('heading', { name: /Diaria|Mensual/ });
+    renderPage((query) => (query?.periodicity === GlobalInvoicePeriodicity.Monthly
+      ? draft({
+        periodicity: GlobalInvoicePeriodicity.Monthly,
+        periodFrom: '2026-10-01',
+        periodTo: '2026-10-31',
+        isReadyToStamp: false,
+        blockers: ['El periodo termina el 31 de octubre de 2026: su factura global se emite a partir del día siguiente.'],
+      })
+      : draft()));
+    await screen.findByRole('heading', { name: 'Diaria · 22 oct. 2026' });
+    expect(screen.getByRole('button', { name: 'Timbrar factura global' })).toBeEnabled();
 
     await user.selectOptions(screen.getByLabelText('Periodicidad'), 'Mensual');
 
-    expect(await screen.findByText('El periodo termina el 31/10/2026: la factura global se emite después.')).toBeInTheDocument();
-    expect(request).toHaveBeenCalledWith('get', '/api/v1/invoicing/global-invoices/draft', expect.objectContaining({
-      query: { periodicity: GlobalInvoicePeriodicity.Monthly, day: '2026-10-22' },
-    }));
+    expect(await screen.findByRole('heading', { name: 'Mensual · 1 al 31 oct. 2026' })).toBeInTheDocument();
+    expect(screen.getByText('El periodo termina el 31 de octubre de 2026: su factura global se emite a partir del día siguiente.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Timbrar factura global' })).toBeDisabled();
   });
 
@@ -170,6 +175,62 @@ describe('NewGlobalInvoice', () => {
     expect(screen.getByText('1 venta')).toBeInTheDocument();
   });
 
+  it('stamps the next time with the numbers of the preview read again, never the first one', async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    const sent: unknown[] = [];
+    renderPage(
+      () => (reads++ === 0 ? draft() : draft({ saleCount: 1, total: 200, sales: draft().sales.slice(0, 1), fingerprint: 'd4e5f6' })),
+      (body) => {
+        sent.push(body);
+        return sent.length === 1
+          ? Promise.reject(Object.assign(new Error('400'), { isAxiosError: true, response: { status: 400, data: { detail: 'Las ventas del periodo cambiaron desde que viste la vista previa: revísala otra vez antes de timbrar.' } } }))
+          : Promise.resolve(STAMPED);
+      },
+    );
+    await screen.findByText('ORD-000002');
+    await user.click(screen.getByRole('button', { name: 'Timbrar factura global' }));
+    await waitFor(() => expect(screen.queryByText('ORD-000002')).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Timbrar factura global' }));
+
+    expect(await screen.findByText('Detalle g-1')).toBeInTheDocument();
+    expect(sent).toEqual([
+      expect.objectContaining({ expectedSaleCount: 2, expectedTotal: 300, expectedFingerprint: 'a1b2c3' }),
+      expect.objectContaining({ expectedSaleCount: 1, expectedTotal: 200, expectedFingerprint: 'd4e5f6' }),
+    ]);
+  });
+
+  it('does not stamp a preview it could not read again', async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    renderPage(
+      () => (reads++ === 0
+        ? draft()
+        : Promise.reject(Object.assign(new Error('503'), { isAxiosError: true, response: { status: 503, data: {} } }))),
+      () => Promise.reject(Object.assign(new Error('400'), { isAxiosError: true, response: { status: 400, data: { detail: 'Las ventas del periodo cambiaron desde que viste la vista previa: revísala otra vez antes de timbrar.' } } })),
+    );
+    await screen.findByText('ORD-000002');
+
+    await user.click(screen.getByRole('button', { name: 'Timbrar factura global' }));
+
+    expect(await screen.findByText('No se pudo calcular la factura global.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Timbrar factura global' })).toBeDisabled();
+  });
+
+  it('asks for nothing while the year being typed is not one the SAT takes', async () => {
+    renderPage(() => draft());
+    await screen.findByText('ORD-000002');
+    request.mockClear();
+
+    fireEvent.change(screen.getByLabelText('Un día del periodo'), { target: { value: '0202-10-22' } });
+
+    expect(await screen.findByText('Elige un día del periodo, de 2022 en adelante.')).toBeInTheDocument();
+    expect(request).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Un día del periodo')).toHaveAttribute('max', '2026-10-22');
+  });
+
   it('stamps nothing when the person does not confirm', async () => {
     const user = userEvent.setup();
     confirm.mockResolvedValueOnce(false);
@@ -185,10 +246,10 @@ describe('NewGlobalInvoice', () => {
   it('sends the business to set up invoicing when it is not ready', async () => {
     renderPage(() => draft({
       isReadyToStamp: false,
-      problem: 'Sube el CSD de tu negocio en Configuración › Facturación.',
+      problem: 'Sube el certificado de sello digital (CSD) del negocio en Configuración › Facturación para facturar.',
       saleCount: 0,
       sales: [],
-      blockers: ['No hay ventas para la factura global en este periodo.'],
+      blockers: ['No hay ventas por facturar en este periodo.'],
     }));
 
     expect(await screen.findByRole('link', { name: 'Ir a Configuración › Facturación' })).toHaveAttribute('href', '/settings/invoicing');

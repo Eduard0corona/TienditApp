@@ -15063,6 +15063,7 @@ export interface components {
             conceptCount: number;
             sales: components["schemas"]["GlobalInvoiceSaleDto"][];
             leftOut: components["schemas"]["GlobalInvoiceLeftOutDto"][];
+            fingerprint: string;
         };
         GlobalInvoiceDto: {
             /** Format: uuid */
@@ -15734,6 +15735,7 @@ export interface components {
             expectedSaleCount: number;
             /** Format: double */
             expectedTotal: number;
+            expectedFingerprint?: string | null;
         };
         IssueOrderInvoiceRequest: {
             receiver: components["schemas"]["CfdiReceiverInput"];

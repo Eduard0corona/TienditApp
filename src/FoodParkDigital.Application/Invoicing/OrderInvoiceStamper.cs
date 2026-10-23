@@ -38,7 +38,7 @@ public sealed class OrderInvoiceStamper
     }
 
     public const string LateRefusalNote =
-        "Se pidió hace más de 71 horas: antes de facturar el pedido otra vez, revisa en el portal del PAC que no se haya timbrado.";
+        "Se pidió hace más de 71 horas: antes de facturar otra vez lo que cubría, revisa en el portal del PAC que no se haya timbrado.";
 
     /// <summary>The private file of an invoice: «invoices/{business}/{yyyyMM}/{invoice}.xml».</summary>
     public static string FileKey(CfdiInvoice invoice, string extension)

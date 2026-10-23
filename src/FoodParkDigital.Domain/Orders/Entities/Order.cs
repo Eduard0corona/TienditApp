@@ -206,6 +206,13 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
     public bool IsOpenTab => IsTab && !IsClosedStatus(Status);
 
+    /// <summary>
+    /// Whether a sale in that state can still change its total: a pending one takes items, delivery and visits; an open
+    /// tab, rounds and cancellations of what it sent. For queries, which cannot read <see cref="IsOpenTab"/>.
+    /// </summary>
+    public static bool TotalCanChange(OrderStatus status, bool isTab)
+        => status == OrderStatus.Pending || (isTab && !IsClosedStatus(status));
+
     /// <summary>Records the device's key of the sale (once) and, for a sale captured without connection, when it was captured.</summary>
     public void IdentifyClientRequest(Guid clientRequestId, DateTimeOffset? capturedOfflineAt)
     {

@@ -52,9 +52,8 @@ export default function GlobalInvoices() {
             columns={COLUMNS}
             keyExtractor={(invoice) => invoice.id}
             loading={invoices.isPending}
-            emptyMessage={invoices.isError
-              ? 'Sin facturas globales que mostrar.'
-              : search ? 'Ninguna factura global con esa búsqueda.' : 'Todavía no emites facturas globales.'}
+            // With a search, the table says it found nothing.
+            emptyMessage={invoices.isError ? 'Sin facturas globales que mostrar.' : 'Todavía no emites facturas globales.'}
             searchPlaceholder="Buscar folio, UUID o folio de una venta"
             searchMaxLength={MAX_SEARCH_LENGTH}
             pageSizeOptions={PAGE_SIZES}

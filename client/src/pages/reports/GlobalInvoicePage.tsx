@@ -36,7 +36,8 @@ export default function GlobalInvoicePage() {
       </>
     );
   }
-  if (invoice.isError) {
+  // Only without the invoice: a background read that fails (while it stamps, after a change) keeps it on screen.
+  if (!invoice.data) {
     const missing = getApiErrorStatus(invoice.error) === 404;
     return (
       <>
@@ -50,10 +51,23 @@ export default function GlobalInvoicePage() {
       </>
     );
   }
-  return <GlobalInvoiceScreen invoice={invoice.data} />;
+  return (
+    <GlobalInvoiceScreen
+      invoice={invoice.data}
+      refreshError={invoice.isError ? getApiErrorMessage(invoice.error, 'No se pudo actualizar la factura global.') : null}
+      onRefresh={() => void invoice.refetch()}
+    />
+  );
 }
 
-function GlobalInvoiceScreen({ invoice }: { invoice: GlobalInvoiceDetail }) {
+interface GlobalInvoiceScreenProps {
+  invoice: GlobalInvoiceDetail;
+  /** Why the last read failed, while what was read before stays on screen. */
+  refreshError: string | null;
+  onRefresh: () => void;
+}
+
+function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoiceScreenProps) {
   const id = useId();
   const toast = useToast();
   const retry = useRetryGlobalInvoice();
@@ -87,6 +101,12 @@ function GlobalInvoiceScreen({ invoice }: { invoice: GlobalInvoiceDetail }) {
   return (
     <>
       <PageTitle title={`Factura global ${invoice.number}`} parent={PARENT} />
+      {refreshError && (
+        <div className="alert alert-warning d-flex flex-wrap align-items-center gap-2" role="alert">
+          <span className="me-auto">{refreshError} Esto es lo último que se leyó.</span>
+          <button type="button" className="btn btn-sm btn-light" onClick={onRefresh}>Reintentar</button>
+        </div>
+      )}
       <section className="card" aria-labelledby={`${id}-title`}>
         <div className="card-body">
           <div className="d-flex flex-wrap align-items-center gap-2 mb-1">

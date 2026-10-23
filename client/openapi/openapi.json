@@ -22324,6 +22324,7 @@
           "available",
           "blockers",
           "conceptCount",
+          "fingerprint",
           "isReadyToStamp",
           "leftOut",
           "months",
@@ -22426,6 +22427,9 @@
             "items": {
               "$ref": "#/components/schemas/GlobalInvoiceLeftOutDto"
             }
+          },
+          "fingerprint": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -24622,6 +24626,10 @@
           "expectedTotal": {
             "type": "number",
             "format": "double"
+          },
+          "expectedFingerprint": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

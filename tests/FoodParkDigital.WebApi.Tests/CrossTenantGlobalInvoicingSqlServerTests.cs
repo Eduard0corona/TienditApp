@@ -201,7 +201,8 @@ public sealed class CrossTenantGlobalInvoicingSqlServerTests
         periodicity = Daily,
         day,
         expectedSaleCount = draft.GetProperty("saleCount").GetInt32(),
-        expectedTotal = draft.GetProperty("total").GetDecimal()
+        expectedTotal = draft.GetProperty("total").GetDecimal(),
+        expectedFingerprint = draft.GetProperty("fingerprint").GetString()
     };
 
     private static async Task<JsonElement> IssueAsync(HttpClient client, DateOnly day, JsonElement draft)

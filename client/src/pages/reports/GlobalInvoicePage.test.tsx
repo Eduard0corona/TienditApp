@@ -131,6 +131,53 @@ describe('GlobalInvoicePage', () => {
     expect(screen.queryByRole('button', { name: 'Cancelar factura global' })).not.toBeInTheDocument();
   });
 
+  it('keeps the invoice on screen when reading it again fails, and reads it again on request', async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    const stamping = invoice({ status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, hasXml: false, hasPdf: false });
+    renderPage(
+      () => (reads++ === 1
+        ? Promise.reject(Object.assign(new Error('503'), { isAxiosError: true, response: { status: 503, data: {} } }))
+        : Promise.resolve(stamping)),
+      () => Promise.resolve(stamping),
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Volver a pedir el timbre' }));
+
+    expect(await screen.findByText(/No se pudo actualizar la factura global\./)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Semanal · 12 al 18 oct. 2026' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+    await waitFor(() => expect(screen.queryByText(/No se pudo actualizar/)).not.toBeInTheDocument());
+  });
+
+  it('keeps the cancel dialog open with the reason when the SAT refuses', async () => {
+    const user = userEvent.setup();
+    renderPage(
+      () => Promise.resolve(invoice()),
+      () => Promise.reject(Object.assign(new Error('400'), { isAxiosError: true, response: { status: 400, data: { detail: 'El SAT no permite cancelarla todavía.' } } })),
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar factura global' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancelar la factura global F-5' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar factura global' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('El SAT no permite cancelarla todavía.'));
+    expect(screen.getByRole('dialog', { name: 'Cancelar la factura global F-5' })).toBeInTheDocument();
+  });
+
+  it('offers to read it again when it could not be read', async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    renderPage(() => (reads++ === 0
+      ? Promise.reject(Object.assign(new Error('503'), { isAxiosError: true, response: { status: 503, data: {} } }))
+      : Promise.resolve(invoice())));
+
+    expect(await screen.findByText('No se pudo cargar la factura global.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    expect(await screen.findByRole('heading', { name: 'Semanal · 12 al 18 oct. 2026' })).toBeInTheDocument();
+  });
+
   it('says so when the global invoice is not the business\'s', async () => {
     renderPage(() => Promise.reject(Object.assign(new Error('404'), { isAxiosError: true, response: { status: 404, data: {} } })));
 

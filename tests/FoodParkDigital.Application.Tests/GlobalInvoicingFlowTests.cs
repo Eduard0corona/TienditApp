@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
@@ -9,6 +10,7 @@ using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
+using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -151,6 +153,9 @@ public class GlobalInvoicingFlowTests
 
         Assert.Equal(GlobalInvoicing.SalesChangedMessage, (await book.IssueAsync(2, 200m)).Error);
         Assert.Equal(GlobalInvoicing.SalesChangedMessage, (await book.IssueAsync(1, 300m)).Error);
+        // The same number of sales and total, but other sales: what was reviewed is not what is there.
+        var other = GlobalInvoiceDrafts.Fingerprint([new GlobalInvoiceSale(Guid.NewGuid(), "ORD-000099", 200m)]);
+        Assert.Equal(GlobalInvoicing.SalesChangedMessage, (await book.IssueAsync(1, 200m, other)).Error);
         Assert.Empty(book.Gateway.StampRequests);
         Assert.Empty(await book.Context.GlobalInvoices.ToListAsync());
     }
@@ -236,6 +241,9 @@ public class GlobalInvoicingFlowTests
         var refunded = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
         var order = await book.Context.Orders.Include(o => o.Payments).SingleAsync(o => o.Id == refunded.Id);
         order.RegisterRefund(10m, OrderPaymentMethod.Cash, "Cambio", SalesTestFixture.Now, "cajero", null, null, false, []);
+        var refunding = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
+        book.Context.OnlinePaymentRefunds.Add(OnlinePaymentRefund.ForOrder(
+            book.Tenant.Id, refunding.Id, Guid.NewGuid(), "MP-881", 100m, SalesTestFixture.Now));
         await book.Context.SaveChangesAsync();
         book.Clock.UtcNow = NextMorning;
 
@@ -247,7 +255,8 @@ public class GlobalInvoicingFlowTests
             {
                 [invoiced.OrderNumber] = GlobalInvoiceDrafts.OwnInvoiceReason("F-1"),
                 [onCredit.OrderNumber] = GlobalInvoiceDrafts.CreditReason,
-                [refunded.OrderNumber] = GlobalInvoiceDrafts.RefundedReason
+                [refunded.OrderNumber] = GlobalInvoiceDrafts.RefundedReason,
+                [refunding.OrderNumber] = GlobalInvoiceDrafts.RefundInCourseReason
             },
             draft.LeftOut.ToDictionary(sale => sale.OrderNumber, sale => sale.Reason));
     }
@@ -275,6 +284,138 @@ public class GlobalInvoicingFlowTests
         Assert.Contains(GlobalInvoiceDrafts.BimonthlyBlocker, (await book.DraftAsync(GlobalInvoicePeriodicity.Bimonthly)).Blockers);
         Assert.Contains(GlobalInvoiceDrafts.TooOldMessage(2021),
             (await book.DraftAsync(GlobalInvoicePeriodicity.Monthly, new DateOnly(2020, 12, 1))).Blockers);
+    }
+
+    [Fact]
+    public async Task OpenTab_ShouldStayOut_UntilItIsClosed_SinceItCanStillTakeRounds()
+    {
+        await using var book = await Book.OpenAsync(food: true);
+        var tab = await book.Fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+        {
+            OpenTab = true,
+            CustomerName = "Barra",
+            Items = [new CreateOrderItemDto { ProductId = book.Product.Id, Quantity = 1 }]
+        }, CancellationToken.None);
+        Assert.True(tab.IsSuccess, tab.Error);
+        // Paid as it goes: another round would stay out of the global invoice and could not be invoiced on its own.
+        await book.PayAsync(tab.Value.Id, 100m);
+        book.Clock.UtcNow = NextMorning;
+
+        var draft = await book.DraftAsync();
+        Assert.Equal((tab.Value.OrderNumber, GlobalInvoiceDrafts.CanStillChangeReason),
+            (Assert.Single(draft.LeftOut).OrderNumber, draft.LeftOut[0].Reason));
+        Assert.Equal([GlobalInvoiceDrafts.NoSalesMessage], draft.Blockers);
+
+        var closed = await new CloseTabCommandHandler(book.Context, book.Fixture.CurrentUser,
+                new OrderInventoryService(book.Context, book.Clock, new FolioGenerator(book.Context), NullLogger<OrderInventoryService>.Instance))
+            .Handle(new CloseTabCommand(tab.Value.Id), CancellationToken.None);
+        Assert.True(closed.IsSuccess, closed.Error);
+        Assert.Equal([tab.Value.OrderNumber], (await book.DraftAsync()).Sales.Select(sale => sale.OrderNumber));
+    }
+
+    [Fact]
+    public async Task FreeLineAtAnotherRate_ShouldAddNoTransferWithBaseZero()
+    {
+        await using var book = await Book.OpenAsync();
+        var napkin = await book.Fixture.AddProductAsync(book.Tenant, "Servilleta", 0m, taxRate: 0m);
+        await book.SaleAsync(OrderPaymentMethod.Cash, (book.Product, 1), (napkin, 1));
+        book.Clock.UtcNow = NextMorning;
+
+        var issued = await book.IssueAsync(1, 100m);
+
+        Assert.True(issued.IsSuccess, issued.Error);
+        var document = book.Gateway.StampRequests.Single().Document;
+        var concept = Assert.Single(document.Concepts);
+        Assert.Equal((0.16m, 86.21m), (Assert.Single(concept.AllTransfers).Rate, concept.AllTransfers[0].Base));
+        Assert.Equal(0.16m, Assert.Single(document.Transfers).Rate);
+    }
+
+    [Fact]
+    public async Task SaleRefundedAfterItsGlobal_ShouldBeIssuedAgainAsItWas_WhenTheGlobalIsCancelledWith04()
+    {
+        await using var book = await Book.OpenAsync();
+        var cash = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        var card = await book.PaidOrderAsync(2, OrderPaymentMethod.Card);
+        book.Clock.UtcNow = NextMorning;
+        var first = (await book.IssueAsync(2, 300m)).Value;
+
+        // After it, the cash sale gives $10 back, and the card customer asks for their invoice.
+        var order = await book.Context.Orders.Include(o => o.Payments).SingleAsync(o => o.Id == cash.Id);
+        order.RegisterRefund(10m, OrderPaymentMethod.Cash, "Cambio", NextMorning, "cajero", null, null, false, []);
+        await book.Context.SaveChangesAsync();
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        Assert.True((await book.CancelAsync(first.Id, CfdiCancellationMotive.NominativeInGlobalInvoice)).IsSuccess);
+        Assert.True((await book.IssueOrderInvoiceAsync(card.Id)).IsSuccess);
+
+        // The cash sale had its CFDI: it keeps one, for what it was; its refund asks for a credit note.
+        var draft = await book.DraftAsync();
+        Assert.Equal([cash.OrderNumber], draft.Sales.Select(sale => sale.OrderNumber));
+        Assert.Equal((100m, true), (draft.Total, draft.IsReadyToStamp));
+        Assert.Contains(GlobalInvoiceDrafts.CoveredRefundsWarning(1), draft.Warnings);
+        Assert.Equal(OrderInvoiceStatus.Stamped, (await book.IssueAsync(1, 100m)).Value.Status);
+    }
+
+    [Fact]
+    public async Task SalePaidLateAtNight_ShouldBeInTheBusinessDay_NotTheUtcOne()
+    {
+        await using var book = await Book.OpenAsync();
+        // 23:30 of Sunday the 4th in Mexico City, already Monday in UTC.
+        book.Clock.UtcNow = new DateTimeOffset(2026, 10, 5, 5, 30, 0, TimeSpan.Zero);
+        var night = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        book.Clock.UtcNow = NextMorning.AddDays(1);
+
+        Assert.Equal([night.OrderNumber], (await book.DraftAsync()).Sales.Select(sale => sale.OrderNumber));
+        Assert.Empty((await book.DraftAsync(day: SaleDay.AddDays(1))).Sales);
+    }
+
+    [Fact]
+    public async Task SalePaidInTwoPeriods_ShouldGoInThePeriodOfItsLastPayment()
+    {
+        await using var book = await Book.OpenAsync();
+        var split = await book.OrderAsync(1);
+        await book.PayAsync(split.Id, 40m);
+        book.Clock.UtcNow = NextMorning;
+        await book.PayAsync(split.Id, 60m);
+        book.Clock.UtcNow = NextMorning.AddDays(1);
+
+        var sunday = await book.DraftAsync();
+        Assert.Empty(sunday.Sales);
+        Assert.Empty(sunday.LeftOut);
+        Assert.Equal([split.OrderNumber], (await book.DraftAsync(day: SaleDay.AddDays(1))).Sales.Select(sale => sale.OrderNumber));
+    }
+
+    [Fact]
+    public async Task Bimonthly_ShouldBeOffered_ToTheIncorporacionFiscalRegime()
+    {
+        await using var book = await Book.OpenAsync();
+        book.Tenant.SetBusinessInfo(
+            Rfc,
+            "ESCUELA KEMPER URGATE",
+            "Comercio",
+            "621 - Incorporación Fiscal",
+            new Address("Reforma", "1", null, "Centro", "06000", "Cuauhtémoc", "Ciudad de México"));
+        await book.Context.SaveChangesAsync();
+        await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        book.Clock.UtcNow = NextMorning;
+
+        var draft = await book.DraftAsync(GlobalInvoicePeriodicity.Bimonthly);
+
+        // September and October, the fifth bimester (17); it is stamped once October is over.
+        Assert.Equal((new DateOnly(2026, 9, 1), new DateOnly(2026, 10, 31), "17"), (draft.PeriodFrom, draft.PeriodTo, draft.Months));
+        Assert.Equal([GlobalInvoiceDrafts.NotEndedMessage(new DateOnly(2026, 10, 31))], draft.Blockers);
+    }
+
+    [Fact]
+    public void Fingerprint_ShouldTellTheSalesApart_WhateverTheirOrder()
+    {
+        var a = new GlobalInvoiceSale(Guid.NewGuid(), "ORD-000001", 100m);
+        var b = new GlobalInvoiceSale(Guid.NewGuid(), "ORD-000002", 100m);
+        var c = new GlobalInvoiceSale(Guid.NewGuid(), "ORD-000003", 100m);
+
+        Assert.Equal(GlobalInvoiceDrafts.Fingerprint([a, b]), GlobalInvoiceDrafts.Fingerprint([b, a]));
+        Assert.NotEqual(GlobalInvoiceDrafts.Fingerprint([a, b]), GlobalInvoiceDrafts.Fingerprint([a, c]));
+        Assert.NotEqual(GlobalInvoiceDrafts.Fingerprint([a, b]), GlobalInvoiceDrafts.Fingerprint([a, b with { Total = 100.01m }]));
+        Assert.Equal(GlobalInvoicing.FingerprintLength, GlobalInvoiceDrafts.Fingerprint([a]).Length);
     }
 
     [Fact]
@@ -309,10 +450,13 @@ public class GlobalInvoicingFlowTests
         public SalesDbContext Context => Fixture.Context;
         public SalesClock Clock => Fixture.Clock;
 
-        public static async Task<Book> OpenAsync(bool csd = true)
+        /// <param name="food">A restaurant, which opens tabs, instead of a shop.</param>
+        public static async Task<Book> OpenAsync(bool csd = true, bool food = false)
         {
             var fixture = SalesTestFixture.Create();
-            var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+            var tenant = food
+                ? await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true)
+                : await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
             await fixture.OpenCashSessionAsync(tenant);
             var book = new Book(fixture, tenant, await fixture.AddProductAsync(tenant, "Café", 100m));
             tenant.SetBusinessInfo(
@@ -375,9 +519,13 @@ public class GlobalInvoicingFlowTests
             => new GetGlobalInvoiceDraftQueryHandler(Context, Fixture.TenantService, Gateway, Clock)
                 .Handle(new GetGlobalInvoiceDraftQuery(periodicity, day ?? SaleDay), CancellationToken.None);
 
-        public Task<Result<GlobalInvoiceDto>> IssueAsync(int saleCount, decimal total)
-            => new IssueGlobalInvoiceCommandHandler(this, Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
-                .Handle(new IssueGlobalInvoiceCommand(GlobalInvoicePeriodicity.Daily, SaleDay, saleCount, total), CancellationToken.None);
+        /// <summary>Stamps yesterday's global invoice as a preview with that number of sales and total showed it.</summary>
+        /// <param name="fingerprint">The preview's; by default the one of the preview read now.</param>
+        public async Task<Result<GlobalInvoiceDto>> IssueAsync(int saleCount, decimal total, string? fingerprint = null)
+            => await new IssueGlobalInvoiceCommandHandler(this, Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
+                .Handle(new IssueGlobalInvoiceCommand(
+                    GlobalInvoicePeriodicity.Daily, SaleDay, saleCount, total, fingerprint ?? (await DraftAsync()).Fingerprint),
+                    CancellationToken.None);
 
         /// <returns>The folios the list shows for that search.</returns>
         public async Task<List<string>> ListAsync(string? search)

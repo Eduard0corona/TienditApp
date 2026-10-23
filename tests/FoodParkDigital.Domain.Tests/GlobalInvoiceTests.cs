@@ -78,7 +78,9 @@ public class GlobalInvoiceTests
         // The same sale twice, a sale without its folio or amount, or sales that do not add up to the total.
         Assert.Throws<DomainException>(() => Global(sales: [sale, sale], total: 232m));
         Assert.Throws<DomainException>(() => Global(sales: [sale with { OrderNumber = " " }], subTotal: 100m, tax: 16m, total: 116m));
-        Assert.Throws<DomainException>(() => Global(sales: [sale with { Total = 0m }], subTotal: 0m, tax: 0m, total: 0m));
+        // A sale of $0 among others that add up: the sale is refused, not the total.
+        Assert.Throws<DomainException>(() => Global(
+            sales: [sale, sale with { OrderId = Guid.NewGuid(), OrderNumber = "ORD-000002", Total = 0m }], subTotal: 100m, tax: 16m, total: 116m));
         Assert.Throws<DomainException>(() => Global(sales: [sale], subTotal: 200m, tax: 32m, total: 232m));
         var tooMany = Enumerable.Range(1, GlobalInvoice.MaxSales + 1)
             .Select(index => new GlobalInvoiceSale(Guid.NewGuid(), $"ORD-{index:000000}", 1m))
