@@ -393,6 +393,27 @@ public class GlobalInvoicingFlowTests
     }
 
     [Fact]
+    public async Task SaleRefundedAfterItsGlobal_ShouldBeIssuedAgainAsItWas_WhenTheGlobalIsCancelledWith02()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        book.Clock.UtcNow = NextMorning;
+        var first = (await book.IssueAsync(1, 100m)).Value;
+
+        // It gives $10 back, and the global invoice is cancelled for an error: the one that corrects it covers the sale as it was.
+        var order = await book.Context.Orders.Include(o => o.Payments).SingleAsync(o => o.Id == sale.Id);
+        order.RegisterRefund(10m, OrderPaymentMethod.Cash, "Cambio", NextMorning, "cajero", null, null, false, []);
+        await book.Context.SaveChangesAsync();
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        Assert.True((await book.CancelAsync(first.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+
+        var draft = await book.DraftAsync();
+        Assert.Equal([sale.OrderNumber], draft.Sales.Select(s => s.OrderNumber));
+        Assert.Equal(100m, draft.Total);
+        Assert.Contains(GlobalInvoiceDrafts.CoveredRefundsWarning(1), draft.Warnings);
+    }
+
+    [Fact]
     public async Task SalePaidLateAtNight_ShouldBeInTheBusinessDay_NotTheUtcOne()
     {
         await using var book = await Book.OpenAsync();

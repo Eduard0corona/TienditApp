@@ -294,8 +294,8 @@ public static class GlobalInvoiceDrafts
             .Where(r => r.Status == OnlinePaymentRefundStatus.Requested && r.OrderId != null && candidateIds.Contains(r.OrderId.Value))
             .Select(r => r.OrderId!.Value)
             .ToListAsync(cancellationToken);
-        // Sales a stamped global invoice covered until it was cancelled (motive 04, a customer asked for theirs): issued again
-        // as they were then. A refund since asks for a credit note, not for leaving the sale without a CFDI.
+        // Sales a stamped global invoice covered until it was cancelled (02, to correct it, or 04, a customer asked for theirs):
+        // issued again as they were then. A refund since asks for a credit note, not for leaving the sale without a CFDI.
         var coveredBefore = (await context.GlobalInvoiceOrders.AsNoTracking()
             .Where(o => o.Released && candidateIds.Contains(o.OrderId))
             .Join(context.GlobalInvoices.AsNoTracking().Where(g => g.Status == OrderInvoiceStatus.Cancelled),
