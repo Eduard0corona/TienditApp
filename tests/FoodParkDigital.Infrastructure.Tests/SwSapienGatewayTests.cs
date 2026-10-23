@@ -109,6 +109,45 @@ public class SwSapienGatewayTests
     }
 
     [Fact]
+    public async Task Stamp_OfAGlobalInvoice_ShouldSendInformacionGlobalBeforeTheIssuer_AndEachSaleWithItsFolioAndRates()
+    {
+        var (gateway, http) = Create(Answer);
+        var sixteen = new CfdiDocumentTransfer(86.21m, "002", "Tasa", 0.16m, 13.79m);
+        var zero = new CfdiDocumentTransfer(20m, "002", "Tasa", 0m, 0m);
+        var document = Document() with
+        {
+            SubTotal = 106.21m,
+            TotalTransferred = 13.79m,
+            Total = 120m,
+            Receiver = new CfdiDocumentReceiver("XAXX010101000", "PUBLICO EN GENERAL", "06000", "616", "S01"),
+            Concepts = [new CfdiDocumentConcept("01010101", "ACT", "Venta", 1m, 106.21m, 106.21m, "02", null, "ORD-000041", [sixteen, zero])],
+            Transfers = [sixteen, zero],
+            GlobalInformation = new CfdiDocumentGlobalInformation("04", "10", 2026)
+        };
+
+        await gateway.StampAsync(document, Key, CancellationToken.None);
+
+        using var cfdi = JsonDocument.Parse(http.Requests[1].Body!);
+        var root = cfdi.RootElement;
+        var global = root.GetProperty("InformacionGlobal");
+        Assert.Equal(("04", "10", "2026"), (global.Str("Periodicidad"), global.Str("Meses"), global.Str("Año")));
+        // The SAT's schema puts InformacionGlobal before Emisor; SW writes the XML in the order it reads.
+        var names = root.EnumerateObject().Select(property => property.Name).ToList();
+        Assert.True(names.IndexOf("InformacionGlobal") < names.IndexOf("Emisor"));
+        var concept = root.GetProperty("Conceptos")[0];
+        Assert.Equal(("ORD-000041", "ACT", "106.21"), (concept.Str("NoIdentificacion"), concept.Str("ClaveUnidad"), concept.Str("Importe")));
+        var transfers = concept.GetProperty("Impuestos").GetProperty("Traslados");
+        Assert.Equal(2, transfers.GetArrayLength());
+        Assert.Equal(("86.21", "0.160000", "13.79"), (transfers[0].Str("Base"), transfers[0].Str("TasaOCuota"), transfers[0].Str("Importe")));
+        Assert.Equal(("20.00", "0.000000", "0.00"), (transfers[1].Str("Base"), transfers[1].Str("TasaOCuota"), transfers[1].Str("Importe")));
+        // An order's invoice has neither.
+        await gateway.StampAsync(Document(), Key, CancellationToken.None);
+        using var order = JsonDocument.Parse(http.Requests[^1].Body!);
+        Assert.False(order.RootElement.TryGetProperty("InformacionGlobal", out _));
+        Assert.False(order.RootElement.GetProperty("Conceptos")[0].TryGetProperty("NoIdentificacion", out _));
+    }
+
+    [Fact]
     public async Task Token_ShouldBeReused_UntilItIsAboutToExpire_AndATokenWithoutExpiryNeedsNoLogin()
     {
         var clock = new TestClock(Now);

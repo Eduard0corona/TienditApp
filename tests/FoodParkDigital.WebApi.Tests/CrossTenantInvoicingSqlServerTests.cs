@@ -15,7 +15,7 @@ namespace FoodParkDigital.WebApi.Tests;
 /// Invoicing (Fase 28A, ADR 0045) through the API: a business sees, stamps, downloads and cancels only the invoices of its
 /// own orders, with its own CSD and folios (the business header of an owner changes nothing); staff who manage the orders
 /// stamp, but only owners and admins cancel and touch the CSD, and only who manages customers keeps their fiscal data; and
-/// the same order invoiced by two people at once is stamped once, on SQL Server's index and transaction.
+/// the same order invoiced by two people at once is stamped once, on the invoicing lock of the business (Fase 28B).
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantInvoicingSqlServerTests
@@ -131,8 +131,9 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Equal("F-1", (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
             $"/api/v1/invoicing/orders/{first}/invoices", body))).GetProperty("number").GetString());
 
-        // Two people stamp the same order at once. While the serie's folio is held, both find no live invoice and wait
-        // for a folio: the second one's insert meets the index of one live invoice per order (2601) after the first commits.
+        // Two people stamp the same order at once. While the serie's folio is held, the first finds no live invoice and
+        // waits for a folio; the second waits for the invoicing lock of the business (Fase 28B) and, once the first
+        // commits, finds its invoice. The index of one live invoice per order stays as the last word.
         var answers = await _api.QueryAsync(mine.TenantId, async db =>
         {
             await using var held = await db.Database.BeginTransactionAsync();
@@ -149,10 +150,10 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Single(answers, answer => answer.StatusCode == HttpStatusCode.OK);
         var refused = Assert.Single(answers, answer => answer.StatusCode != HttpStatusCode.OK);
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
-        Assert.Equal("Otra persona está facturando este pedido en este momento: actualiza la página.",
+        Assert.Equal("Este pedido ya tiene la factura F-2: cancélala para facturarlo otra vez.",
             JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
         Assert.Equal(1, await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.CountAsync(i => i.OrderId == raced)));
-        // The refused one gave its folio back: the next invoice of the serie follows without a hole.
+        // The refused one took no folio: the next invoice of the serie follows without a hole.
         Assert.Equal("F-3", (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
             $"/api/v1/invoicing/orders/{next}/invoices", body))).GetProperty("number").GetString());
     }

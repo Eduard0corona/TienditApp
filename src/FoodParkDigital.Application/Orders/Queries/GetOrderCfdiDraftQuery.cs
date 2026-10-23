@@ -97,19 +97,10 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             .FirstOrDefaultAsync(t => t.Id == order.TenantId, cancellationToken)
             ?? throw new EntityNotFoundException("Tenant", order.TenantId);
 
-        // What the sale charged: dishes cancelled from a tab are not invoiced. The delivery fee, or the visit charge of the
-        // sale of an appointment at the customer's address, is one more concept, with the rate it was charged with.
         var items = order.Items.Where(item => item.ActiveQuantity > 0).ToList();
-        var lines = items
-            .Select(item => new CfdiLineInput(item.Id, item.ActiveQuantity, item.ChargedPrice, item.VatRate, item.TaxObject))
-            .ToList();
         var deliveryFee = order.Delivery is { Fee: > 0 } delivery ? delivery : null;
-        if (deliveryFee is not null)
-            lines.Add(new CfdiLineInput(deliveryFee.Id, 1m, deliveryFee.Fee, deliveryFee.FeeVatRate, CfdiTaxObject.Subject));
         var visitCharge = order.VisitCharge;
-        if (visitCharge is not null)
-            lines.Add(new CfdiLineInput(visitCharge.Id, 1m, visitCharge.Fee, visitCharge.FeeVatRate, CfdiTaxObject.Subject));
-        var amounts = CfdiAmountCalculator.Calculate(order.PricesIncludeTax, lines);
+        var amounts = CfdiAmountCalculator.Calculate(order.PricesIncludeTax, Lines(order));
         var amountsByLine = amounts.Concepts.ToDictionary(concept => concept.LineId);
 
         var draft = new CfdiDraftDto
@@ -221,25 +212,50 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
         return Result.Success(new OrderCfdiDraft(draft, order, tenant));
     }
 
+    /// <summary>
+    /// What a sale charged, as the lines of its CFDI: dishes cancelled from a tab are not invoiced. The delivery fee, or the
+    /// visit charge of the sale of an appointment at the customer's address, is one more line, with the rate it was charged
+    /// with. The global invoice (Fase 28B) adds up the same lines.
+    /// </summary>
+    public static List<CfdiLineInput> Lines(Order order)
+    {
+        var lines = order.Items
+            .Where(item => item.ActiveQuantity > 0)
+            .Select(item => new CfdiLineInput(item.Id, item.ActiveQuantity, item.ChargedPrice, item.VatRate, item.TaxObject))
+            .ToList();
+        if (order.Delivery is { Fee: > 0 } delivery)
+            lines.Add(new CfdiLineInput(delivery.Id, 1m, delivery.Fee, delivery.FeeVatRate, CfdiTaxObject.Subject));
+        if (order.VisitCharge is { } visitCharge)
+            lines.Add(new CfdiLineInput(visitCharge.Id, 1m, visitCharge.Fee, visitCharge.FeeVatRate, CfdiTaxObject.Subject));
+        return lines;
+    }
+
     private static void SetIssuer(CfdiDraftDto draft, string? rfc, string? legalName, string? taxRegime, string? postalCode)
     {
-        var normalizedRfc = rfc?.Trim().ToUpperInvariant();
-        draft.Issuer = new CfdiPartyDto
-        {
-            Rfc = normalizedRfc,
-            Name = legalName?.Trim(),
-            FiscalRegime = SatCatalog.RegimeCode(taxRegime)
-        };
+        draft.Issuer = Issuer(rfc, legalName, taxRegime);
         draft.IssuedAtPostalCode = postalCode?.Trim();
+        draft.Blockers.AddRange(IssuerBlockers(draft.Issuer, draft.IssuedAtPostalCode));
+    }
 
-        if (!SatCatalog.IsValidRfc(normalizedRfc))
-            draft.Blockers.Add("Captura el RFC del negocio en Mi negocio.");
-        if (string.IsNullOrWhiteSpace(draft.Issuer.Name))
-            draft.Blockers.Add("Captura la razón social del negocio, tal como aparece en su constancia de situación fiscal.");
-        if (draft.Issuer.FiscalRegime is null)
-            draft.Blockers.Add("Elige el régimen fiscal del negocio en Mi negocio.");
-        if (!SatCatalog.IsValidPostalCode(draft.IssuedAtPostalCode))
-            draft.Blockers.Add("Captura el código postal fiscal del negocio (5 dígitos) en Mi negocio.");
+    /// <summary>The business as the CFDI's issuer, from Mi negocio.</summary>
+    public static CfdiPartyDto Issuer(string? rfc, string? legalName, string? taxRegime) => new()
+    {
+        Rfc = rfc?.Trim().ToUpperInvariant(),
+        Name = legalName?.Trim(),
+        FiscalRegime = SatCatalog.RegimeCode(taxRegime)
+    };
+
+    /// <summary>What Mi negocio is missing for the business to issue a CFDI.</summary>
+    public static IEnumerable<string> IssuerBlockers(CfdiPartyDto issuer, string? postalCode)
+    {
+        if (!SatCatalog.IsValidRfc(issuer.Rfc))
+            yield return "Captura el RFC del negocio en Mi negocio.";
+        if (string.IsNullOrWhiteSpace(issuer.Name))
+            yield return "Captura la razón social del negocio, tal como aparece en su constancia de situación fiscal.";
+        if (issuer.FiscalRegime is null)
+            yield return "Elige el régimen fiscal del negocio en Mi negocio.";
+        if (!SatCatalog.IsValidPostalCode(postalCode))
+            yield return "Captura el código postal fiscal del negocio (5 dígitos) en Mi negocio.";
     }
 
     private static void SetReceiver(CfdiDraftDto draft, CfdiReceiverInput? receiver)
@@ -290,19 +306,22 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             return;
         }
 
-        // A sale paid in full declares the form that paid the largest amount.
-        var main = payments
-            .GroupBy(payment => payment.Method)
-            .Select(group => (Method: group.Key, Amount: group.Sum(payment => payment.Amount)))
-            .OrderByDescending(group => group.Amount)
-            .ThenBy(group => group.Method)
-            .First();
         draft.PaymentMethod = "PUE";
-        draft.PaymentForm = SatCatalog.PaymentForm(main.Method);
+        draft.PaymentForm = SatCatalog.PaymentForm(MainPaymentMethod(payments));
         // «Otro» is none of the SAT's forms, and "to be defined" (99) is only for a sale paid in installments (PPD).
         if (draft.PaymentForm == SatCatalog.PaymentFormToBeDefined)
             draft.Blockers.Add(OtherPaymentBlocker);
     }
+
+    /// <summary>A sale paid in full declares the form that paid the largest amount (and so does a global invoice, Fase 28B).</summary>
+    public static OrderPaymentMethod MainPaymentMethod(IEnumerable<(OrderPaymentMethod Method, decimal Amount)> payments)
+        => payments
+            .GroupBy(payment => payment.Method)
+            .Select(group => (Method: group.Key, Amount: group.Sum(payment => payment.Amount)))
+            .OrderByDescending(group => group.Amount)
+            .ThenBy(group => group.Method)
+            .First()
+            .Method;
 
     /// <summary>A sale paid in full (PUE) is invoiced with the form it was paid with: «Otro» says none.</summary>
     public const string OtherPaymentBlocker =

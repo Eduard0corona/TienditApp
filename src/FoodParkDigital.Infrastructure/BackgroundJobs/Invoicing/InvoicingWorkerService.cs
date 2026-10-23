@@ -90,25 +90,38 @@ public sealed class InvoicingWorkerService : BackgroundService
             var max = Math.Max(1, _options.MaxBusinessesPerPass);
             var settled = now - StampPendingInvoicesCommandHandler.SettleTime;
             var oldest = now - StampPendingInvoicesCommandHandler.RetryWindow;
-            // Only to find the businesses with work: each one is handled in its own scope. The longest waiting goes first.
-            stamping = await context.OrderInvoices
-                .IgnoreQueryFilters()
-                .Where(i => i.Status == OrderInvoiceStatus.Stamping && i.RequestedAt <= settled && i.RequestedAt > oldest)
-                .GroupBy(i => i.TenantId)
-                .OrderBy(g => g.Min(i => i.RequestedAt))
-                .Select(g => g.Key)
-                .Take(max)
-                .ToListAsync(cancellationToken);
+            // Only to find the businesses with work: each one is handled in its own scope. The longest waiting goes first,
+            // whether its invoice is an order's or a global one (Fase 28B).
+            stamping = Businesses(
+                await context.OrderInvoices
+                    .IgnoreQueryFilters()
+                    .Where(i => i.Status == OrderInvoiceStatus.Stamping && i.RequestedAt <= settled && i.RequestedAt > oldest)
+                    .GroupBy(i => i.TenantId)
+                    .Select(g => new Waiting(g.Key, g.Min(i => i.RequestedAt)))
+                    .ToListAsync(cancellationToken),
+                await context.GlobalInvoices
+                    .IgnoreQueryFilters()
+                    .Where(i => i.Status == OrderInvoiceStatus.Stamping && i.RequestedAt <= settled && i.RequestedAt > oldest)
+                    .GroupBy(i => i.TenantId)
+                    .Select(g => new Waiting(g.Key, g.Min(i => i.RequestedAt)))
+                    .ToListAsync(cancellationToken),
+                max);
             if (checkCancellations)
             {
-                cancelling = await context.OrderInvoices
-                    .IgnoreQueryFilters()
-                    .Where(i => i.Status == OrderInvoiceStatus.Cancelling)
-                    .GroupBy(i => i.TenantId)
-                    .OrderBy(g => g.Min(i => i.CancellationRequestedAt))
-                    .Select(g => g.Key)
-                    .Take(max)
-                    .ToListAsync(cancellationToken);
+                cancelling = Businesses(
+                    await context.OrderInvoices
+                        .IgnoreQueryFilters()
+                        .Where(i => i.Status == OrderInvoiceStatus.Cancelling)
+                        .GroupBy(i => i.TenantId)
+                        .Select(g => new Waiting(g.Key, g.Min(i => i.CancellationRequestedAt)))
+                        .ToListAsync(cancellationToken),
+                    await context.GlobalInvoices
+                        .IgnoreQueryFilters()
+                        .Where(i => i.Status == OrderInvoiceStatus.Cancelling)
+                        .GroupBy(i => i.TenantId)
+                        .Select(g => new Waiting(g.Key, g.Min(i => i.CancellationRequestedAt)))
+                        .ToListAsync(cancellationToken),
+                    max);
                 _cancellationsCheckedAt = now;
             }
         }
@@ -120,6 +133,17 @@ public sealed class InvoicingWorkerService : BackgroundService
 
         return stamping.Union(cancelling).Count();
     }
+
+    private sealed record Waiting(Guid TenantId, DateTimeOffset? Since);
+
+    /// <summary>The businesses with work of either kind, the one that has waited longest first.</summary>
+    private static List<Guid> Businesses(List<Waiting> orders, List<Waiting> globals, int max)
+        => orders.Concat(globals)
+            .GroupBy(waiting => waiting.TenantId)
+            .OrderBy(group => group.Min(waiting => waiting.Since))
+            .Select(group => group.Key)
+            .Take(max)
+            .ToList();
 
     private async Task SendAsync(Guid tenantId, IRequest<Result<int>> command, string what, CancellationToken cancellationToken)
     {

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Fiscal;
 
@@ -35,6 +36,9 @@ public sealed record CfdiDocument
 
     /// <summary>The invoice's transfers, one per IVA rate (exempt ones without rate or amount).</summary>
     public required IReadOnlyList<CfdiDocumentTransfer> Transfers { get; init; }
+
+    /// <summary>The period a global invoice covers (InformacionGlobal, Fase 28B); an order's invoice has none.</summary>
+    public CfdiDocumentGlobalInformation? GlobalInformation { get; init; }
 
     /// <summary>
     /// The CFDI of a draft ready to stamp, for a named receiver, with its serie, folio and date (local to the business).
@@ -86,6 +90,10 @@ public sealed record CfdiDocumentIssuer(string Rfc, string Name, string FiscalRe
 
 public sealed record CfdiDocumentReceiver(string Rfc, string Name, string PostalCode, string FiscalRegime, string CfdiUse);
 
+/// <summary>
+/// A concept. A global invoice's concept (Fase 28B) is a sale: <paramref name="Identification"/> (NoIdentificacion) is its
+/// folio, and <paramref name="Transfers"/> has one transfer per IVA rate it charged, in place of <paramref name="Transfer"/>.
+/// </summary>
 public sealed record CfdiDocumentConcept(
     string ProductCode,
     string UnitCode,
@@ -94,7 +102,17 @@ public sealed record CfdiDocumentConcept(
     decimal UnitValue,
     decimal Amount,
     string TaxObject,
-    CfdiDocumentTransfer? Transfer);
+    CfdiDocumentTransfer? Transfer,
+    string? Identification = null,
+    IReadOnlyList<CfdiDocumentTransfer>? Transfers = null)
+{
+    /// <summary>Its transfers, however they were written.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<CfdiDocumentTransfer> AllTransfers => Transfers ?? (Transfer is null ? [] : [Transfer]);
+}
+
+/// <summary>InformacionGlobal: c_Periodicidad, c_Meses and the year of the period a global invoice covers.</summary>
+public sealed record CfdiDocumentGlobalInformation(string Periodicity, string Months, int Year);
 
 /// <summary>A transfer (traslado) of IVA: «Tasa» with its rate and amount, or «Exento» with neither.</summary>
 public sealed record CfdiDocumentTransfer(decimal Base, string Tax, string FactorType, decimal? Rate, decimal? Amount);

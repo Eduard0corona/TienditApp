@@ -234,6 +234,10 @@ internal sealed class SalesDbContext : ApplicationDbContext
             .Property(p => p.Version)
             .IsRequired(false)
             .ValueGeneratedNever();
+        modelBuilder.Entity<GlobalInvoice>()
+            .Property(i => i.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
     }
 }
 

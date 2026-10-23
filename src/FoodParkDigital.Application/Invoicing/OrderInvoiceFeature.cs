@@ -135,6 +135,7 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
         var settings = await InvoicingSettings.ReadAsync(_context, _tenant.TenantId, _gateway, _clock.UtcNow, cancellationToken);
         var problem = InvoicingSettings.ReadinessProblem(settings)
             ?? OrderInvoicing.LiveInvoiceProblem(invoices.FirstOrDefault(i => i.IsLive))
+            ?? await OrderInvoicing.GlobalInvoiceProblemAsync(_context, order.Id, cancellationToken)
             ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
 
         var last = invoices.FirstOrDefault();
@@ -237,6 +238,7 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenant;
     private readonly ICurrentUserService _currentUser;
+    private readonly IInvoicingLock _lock;
     private readonly IFolioGenerator _folios;
     private readonly IPhoneNormalizationService _phones;
     private readonly IDateTimeProvider _clock;
@@ -245,6 +247,7 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         IApplicationDbContext context,
         ICurrentTenantService tenant,
         ICurrentUserService currentUser,
+        IInvoicingLock invoicingLock,
         IFolioGenerator folios,
         IPhoneNormalizationService phones,
         IDateTimeProvider clock)
@@ -252,6 +255,7 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         _context = context;
         _tenant = tenant;
         _currentUser = currentUser;
+        _lock = invoicingLock;
         _folios = folios;
         _phones = phones;
         _clock = clock;
@@ -262,6 +266,9 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         if (!Guid.TryParse(_currentUser.UserId, out var userId))
             return Result.Failure<Guid>(InvoicingSettings.NotAvailableMessage);
 
+        // A global invoice of this business asked for at the same time waits for this one (Fase 28B): the sale is in one or
+        // the other, never in both.
+        await _lock.AcquireAsync(_tenant.TenantId, cancellationToken);
         var built = await GetOrderCfdiDraftQueryHandler.BuildAsync(_context, request.OrderId, request.Receiver, cancellationToken);
         if (built.IsFailure)
             return Result.Failure<Guid>(built.Error!);
@@ -274,6 +281,7 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
                 && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
                     || i.Status == OrderInvoiceStatus.Cancelling), cancellationToken);
         var orderProblem = OrderInvoicing.LiveInvoiceProblem(live)
+            ?? await OrderInvoicing.GlobalInvoiceProblemAsync(_context, order.Id, cancellationToken)
             ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
         if (orderProblem is not null)
             return Result.Failure<Guid>(orderProblem);
@@ -537,33 +545,52 @@ public class GetOrderInvoiceFileQueryHandler : IRequestHandler<GetOrderInvoiceFi
         if (invoice?.XmlFileKey is null || !await OrderInvoicing.SeesOrderAsync(_context, invoice.OrderId, cancellationToken))
             return Result.Failure<PrivateFileDownload>(NotFoundMessage);
 
-        var fileName = $"{invoice.Serie}-{invoice.Folio}_{invoice.Uuid}";
-        if (request.Kind == OrderInvoiceFileKind.Xml)
+        return await InvoiceFiles.DownloadAsync(
+            _storage, _gateway, _logger, request.InvoiceId, $"{invoice.Serie}-{invoice.Folio}_{invoice.Uuid}",
+            invoice.XmlFileKey, invoice.PdfFileKey, request.Kind, cancellationToken);
+    }
+}
+
+/// <summary>Downloading the stamped XML or the PDF of an invoice, of an order or global (Fases 28A and 28B).</summary>
+internal static class InvoiceFiles
+{
+    public static async Task<Result<PrivateFileDownload>> DownloadAsync(
+        IPrivateFileStorage storage,
+        IInvoicingGateway gateway,
+        ILogger logger,
+        Guid invoiceId,
+        string fileName,
+        string xmlFileKey,
+        string? pdfFileKey,
+        OrderInvoiceFileKind kind,
+        CancellationToken cancellationToken)
+    {
+        if (kind == OrderInvoiceFileKind.Xml)
         {
-            var xml = await _storage.OpenReadAsync(invoice.XmlFileKey, cancellationToken);
+            var xml = await storage.OpenReadAsync(xmlFileKey, cancellationToken);
             return xml is null
-                ? Result.Failure<PrivateFileDownload>(NotFoundMessage)
+                ? Result.Failure<PrivateFileDownload>(GetOrderInvoiceFileQueryHandler.NotFoundMessage)
                 : Result.Success(new PrivateFileDownload(xml, "application/xml", fileName + ".xml"));
         }
 
-        if (invoice.PdfFileKey is not null && await _storage.OpenReadAsync(invoice.PdfFileKey, cancellationToken) is { } kept)
+        if (pdfFileKey is not null && await storage.OpenReadAsync(pdfFileKey, cancellationToken) is { } kept)
             return Result.Success(new PrivateFileDownload(kept, "application/pdf", fileName + ".pdf"));
-        if (!_gateway.IsConfigured)
-            return Result.Failure<PrivateFileDownload>(PdfUnavailableMessage);
+        if (!gateway.IsConfigured)
+            return Result.Failure<PrivateFileDownload>(GetOrderInvoiceFileQueryHandler.PdfUnavailableMessage);
 
         // The PAC did not give it when it stamped: it renders it now from the stamped XML.
-        var stampedXml = await OrderInvoiceStamper.ReadTextAsync(_storage, invoice.XmlFileKey, cancellationToken);
+        var stampedXml = await OrderInvoiceStamper.ReadTextAsync(storage, xmlFileKey, cancellationToken);
         if (stampedXml is null)
-            return Result.Failure<PrivateFileDownload>(NotFoundMessage);
+            return Result.Failure<PrivateFileDownload>(GetOrderInvoiceFileQueryHandler.NotFoundMessage);
         try
         {
-            var pdf = await _gateway.RenderPdfAsync(stampedXml, cancellationToken);
+            var pdf = await gateway.RenderPdfAsync(stampedXml, cancellationToken);
             return Result.Success(new PrivateFileDownload(new MemoryStream(pdf), "application/pdf", fileName + ".pdf"));
         }
         catch (Exception ex) when (ex is InvoicingGatewayUnavailableException or InvoicingGatewayRefusedException)
         {
-            _logger.LogWarning("The PAC did not render the PDF of invoice {InvoiceId}: {Error}", request.InvoiceId, ex.GetType().Name);
-            return Result.Failure<PrivateFileDownload>(PdfUnavailableMessage);
+            logger.LogWarning("The PAC did not render the PDF of invoice {InvoiceId}: {Error}", invoiceId, ex.GetType().Name);
+            return Result.Failure<PrivateFileDownload>(GetOrderInvoiceFileQueryHandler.PdfUnavailableMessage);
         }
     }
 }
@@ -612,6 +639,23 @@ internal static class OrderInvoicing
         OrderInvoiceStatus.Cancelling => $"La factura {live.Number} de este pedido espera su cancelación en el SAT.",
         _ => $"Este pedido ya tiene la factura {live.Number}: cancélala para facturarlo otra vez."
     };
+
+    /// <summary>
+    /// A sale in a global invoice that stands with the SAT (Fase 28B) is not invoiced on its own: the SAT asks to cancel the
+    /// global invoice (motive 04), invoice the sale to the customer and issue the period's global invoice again without it.
+    /// </summary>
+    public static async Task<string?> GlobalInvoiceProblemAsync(IApplicationDbContext context, Guid orderId, CancellationToken cancellationToken)
+    {
+        var global = await context.GlobalInvoiceOrders.AsNoTracking()
+            .Where(o => o.OrderId == orderId && !o.Released)
+            .Join(context.GlobalInvoices.AsNoTracking(), o => o.GlobalInvoiceId, g => g.Id, (o, g) => new { g.Serie, g.Folio })
+            .FirstOrDefaultAsync(cancellationToken);
+        return global is null ? null : InGlobalInvoiceMessage($"{global.Serie}-{global.Folio}");
+    }
+
+    public static string InGlobalInvoiceMessage(string number) =>
+        $"Esta venta está en la factura global {number}. Si el cliente pide su factura, cancela esa global con el motivo 04 en " +
+        "Reportes › Factura global, factura esta venta y emite otra vez la global del periodo: ya no la incluirá.";
 
     /// <summary>
     /// Why the order itself cannot be invoiced here (Fase 28A): only a sale paid in full, with nothing given back or
