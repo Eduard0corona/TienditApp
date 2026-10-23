@@ -1,13 +1,13 @@
 import { CfdiCancellationMotive, OrderInvoiceStatus, type CustomerFiscalData } from '../types';
 
-// c_RegimenFiscal and c_UsoCFDI entries a sale usually needs (the API accepts the whole catalog).
+// c_RegimenFiscal and c_UsoCFDI entries a sale usually needs (the API accepts the whole catalog). 616, «Sin obligaciones
+// fiscales», is the general public's: those sales go in the global invoice.
 export const CFDI_REGIMES: Array<[string, string]> = [
   ['601', 'General de Ley Personas Morales'],
   ['603', 'Personas Morales con Fines no Lucrativos'],
   ['605', 'Sueldos y Salarios'],
   ['606', 'Arrendamiento'],
   ['612', 'Personas Físicas con Actividades Empresariales y Profesionales'],
-  ['616', 'Sin obligaciones fiscales'],
   ['621', 'Incorporación Fiscal'],
   ['625', 'Actividades con Plataformas Tecnológicas'],
   ['626', 'Régimen Simplificado de Confianza'],
@@ -19,6 +19,16 @@ export const CFDI_USES: Array<[string, string]> = [
   ['D01', 'Honorarios médicos, dentales y gastos hospitalarios'],
   ['S01', 'Sin efectos fiscales'],
 ];
+
+// c_UsoCFDI says which regimes may ask for each use; the PAC refuses any other pair (CFDI40161), as the API does first.
+const BUSINESS_USE_REGIMES = ['601', '603', '606', '612', '620', '621', '622', '623', '624', '625', '626'];
+const PERSONAL_DEDUCTION_REGIMES = ['605', '606', '607', '608', '611', '612', '614', '615', '625'];
+
+/** The uses a receiver in that regime may ask for: G for those with an activity, D for individuals, S01 for anyone. */
+export function cfdiUsesFor(regime: string): Array<[string, string]> {
+  return CFDI_USES.filter(([use]) => use === 'S01'
+    || (use.startsWith('D') ? PERSONAL_DEDUCTION_REGIMES : BUSINESS_USE_REGIMES).includes(regime));
+}
 
 export const PAYMENT_FORMS: Record<string, string> = {
   '01': 'Efectivo',

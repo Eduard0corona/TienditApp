@@ -1,8 +1,7 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
-import { useIssueOrderInvoice, useOrderInvoicing, type OrderInvoicing } from '../../api/invoicing';
-import { useCfdiDraft, type CfdiReceiver } from '../../api/queries';
+import { useCfdiDraft, useIssueOrderInvoice, useOrderInvoicing, type CfdiReceiver, type OrderInvoicing } from '../../api/invoicing';
 import type { Schemas } from '../../api/typedClient';
 import { useToast } from '../../hooks/useToast';
 import { OrderInvoiceStatus } from '../../types';
@@ -35,19 +34,35 @@ function formatTransfer(transfer: Transfer | null | undefined): string {
 export default function CfdiDraftModal({ orderId, orderNumber, canCancel, onClose }: CfdiDraftModalProps) {
   const titleId = useId();
   const invoicing = useOrderInvoicing(orderId);
-  const available = invoicing.data?.available ?? false;
+  // What a previous opening left in the cache may be old (the order since paid, the customer's data changed): the body
+  // waits for this opening's answer, and a failed one is said, never taken for invoicing not being available.
+  const data = invoicing.isError ? undefined : invoicing.data;
+  const title = !data ? `Factura de ${orderNumber}` : data.available ? `Facturar ${orderNumber}` : `Factura de ${orderNumber} (vista previa)`;
 
   return (
     <Modal show onHide={onClose} size="xl" centered fullscreen="md-down" aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title id={titleId} as="h2" className="h5">
-          {available ? `Facturar ${orderNumber}` : `Factura de ${orderNumber} (vista previa)`}
-        </Modal.Title>
+        <Modal.Title id={titleId} as="h2" className="h5">{title}</Modal.Title>
       </Modal.Header>
-      {invoicing.isPending ? (
+      {!invoicing.isFetchedAfterMount ? (
         <Modal.Body><p className="text-muted" aria-busy="true">Cargando…</p></Modal.Body>
       ) : (
-        <InvoiceBody orderId={orderId} invoicing={invoicing.data} canCancel={canCancel} onClose={onClose} />
+        <InvoiceBody
+          // Read again after failing, it starts over with the proposed fiscal data.
+          key={data ? 'read' : 'failed'}
+          orderId={orderId}
+          invoicing={data}
+          canCancel={canCancel}
+          onClose={onClose}
+          loadError={invoicing.isError && (
+            <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+              <span className="me-auto">{getApiErrorMessage(invoicing.error, 'No se pudieron cargar las facturas de este pedido.')}</span>
+              <button type="button" className="btn btn-sm btn-outline-danger" disabled={invoicing.isFetching} onClick={() => void invoicing.refetch()}>
+                Reintentar
+              </button>
+            </div>
+          )}
+        />
       )}
     </Modal>
   );
@@ -59,9 +74,11 @@ interface InvoiceBodyProps {
   invoicing: OrderInvoicing | undefined;
   canCancel: boolean;
   onClose: () => void;
+  /** Why the order's invoicing could not be read, with a way to try again. */
+  loadError: ReactNode;
 }
 
-function InvoiceBody({ orderId, invoicing, canCancel, onClose }: InvoiceBodyProps) {
+function InvoiceBody({ orderId, invoicing, canCancel, onClose, loadError }: InvoiceBodyProps) {
   const toast = useToast();
   const issue = useIssueOrderInvoice(orderId);
   const proposed = invoicing?.proposedReceiver ?? null;
@@ -75,8 +92,9 @@ function InvoiceBody({ orderId, invoicing, canCancel, onClose }: InvoiceBodyProp
 
   const available = invoicing?.available ?? false;
   const edited = receiver === undefined || JSON.stringify(normalizeReceiver(form)) !== JSON.stringify(receiver);
+  // Only on this opening's preview: while it is read again, what is on screen may be old.
   const canStamp = available && !!invoicing?.canInvoice && !!receiver && !edited && !!cfdi?.isReadyToStamp
-    && !cfdi.isGeneralPublic && !issue.isPending;
+    && !cfdi.isGeneralPublic && !draft.isFetching && !issue.isPending;
 
   const applyReceiver = (event: React.FormEvent) => {
     event.preventDefault();
@@ -98,9 +116,10 @@ function InvoiceBody({ orderId, invoicing, canCancel, onClose }: InvoiceBodyProp
   return (
     <>
       <Modal.Body>
+        {loadError}
         {invoicing && <OrderInvoiceList orderId={orderId} invoices={invoicing.invoices} canCancel={canCancel} />}
 
-        {!available ? (
+        {!invoicing ? null : !available ? (
           <p className="text-muted small">
             Así quedaría el CFDI 4.0 de esta venta. Es una vista previa: la facturación todavía no está disponible en TienditApp.
           </p>
@@ -169,7 +188,8 @@ function InvoiceBody({ orderId, invoicing, canCancel, onClose }: InvoiceBodyProp
               </div>
             ) : cfdi.isGeneralPublic ? (
               <div className="alert alert-secondary py-2 small">
-                Para timbrarla captura los datos fiscales del cliente: la venta a público en general va en la factura global.
+                Para timbrarla captura los datos fiscales del cliente: la venta a público en general va en la factura global del periodo,
+                que TienditApp todavía no genera.
               </div>
             ) : (
               <div className="alert alert-success py-2">

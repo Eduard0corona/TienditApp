@@ -147,6 +147,8 @@ function CertificateCard({ data }: { data: InvoicingSettings }) {
       toast.error(getApiErrorMessage(err, 'No se pudo guardar el certificado.'));
     } finally {
       setPassword('');
+      // The mutation kept the key and its password as its variables: reset, they leave memory with it.
+      upload.reset();
     }
   };
 

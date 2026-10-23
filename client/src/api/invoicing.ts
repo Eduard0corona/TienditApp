@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import api from './axios';
 import { apiRequest, type Schemas } from './typedClient';
-import type { CfdiReceiver } from './queries';
 import { CfdiCancellationMotive, OrderInvoiceStatus } from '../types';
 
 // Invoicing (Fase 28A, ADR 0045): Configuración › Facturación and the invoice of an order. Kept out of queries.ts, which the
@@ -13,6 +13,16 @@ export type OrderInvoice = Schemas['OrderInvoiceDto'];
 
 export const invoicingSettingsKey = ['invoicing', 'settings'] as const;
 export const orderInvoicingKey = (orderId: string) => ['invoicing', 'orders', orderId] as const;
+const cfdiDraftKey = (orderId: string, receiver?: CfdiReceiver) => ['orders', orderId, 'cfdi-draft', receiver ?? null] as const;
+
+/** Fiscal data of the customer an invoice is for (CFDI 4.0 receptor). */
+export interface CfdiReceiver {
+  rfc: string;
+  name: string;
+  postalCode: string;
+  fiscalRegime: string;
+  cfdiUse: string;
+}
 
 /** While an invoice waits for the PAC or the SAT, it is asked again. */
 export const PENDING_REFRESH_MS = 30_000;
@@ -25,11 +35,12 @@ export function useInvoicingSettings() {
   });
 }
 
-/** Each change answers the settings as they are now. */
-function useSettingsChange<TVariables>(change: (variables: TVariables) => Promise<InvoicingSettings>) {
+/** Each change answers the settings as they are now. With `forget`, what it sent leaves the cache as soon as it ends. */
+function useSettingsChange<TVariables>(change: (variables: TVariables) => Promise<InvoicingSettings>, forget = false) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: change,
+    gcTime: forget ? 0 : undefined,
     onSuccess: (settings) => {
       client.setQueryData(invoicingSettingsKey, settings);
       void client.invalidateQueries({ queryKey: ['invoicing', 'orders'] });
@@ -38,10 +49,13 @@ function useSettingsChange<TVariables>(change: (variables: TVariables) => Promis
   });
 }
 
-/** The .cer and .key go in base64 with the key's password; TienditApp checks them and the PAC keeps them. */
+/**
+ * The .cer and .key go in base64 with the key's password; TienditApp checks them and the PAC keeps them. The page resets
+ * the mutation when it ends, so neither the key nor its password stays in memory.
+ */
 export function useUploadInvoicingCertificate() {
   return useSettingsChange((body: { certificate: string; privateKey: string; password: string }) =>
-    apiRequest('put', '/api/v1/invoicing/settings/certificate', { body }));
+    apiRequest('put', '/api/v1/invoicing/settings/certificate', { body }), true);
 }
 
 export function useRemoveInvoicingCertificate() {
@@ -52,13 +66,27 @@ export function useChangeInvoiceSerie() {
   return useSettingsChange((serie: string) => apiRequest('put', '/api/v1/invoicing/settings/serie', { body: { serie } }));
 }
 
-/** Whether the order can be invoiced, whom to, and its invoices; asked again while one waits for the PAC or the SAT. */
+/**
+ * Whether the order can be invoiced, whom to, and its invoices: read again each time the invoice opens (the order may have
+ * been paid, or the customer's fiscal data changed) and while one waits for the PAC or the SAT.
+ */
 export function useOrderInvoicing(orderId: string) {
   return useQuery({
     queryKey: orderInvoicingKey(orderId),
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/orders/{orderId}', { path: { orderId }, signal }),
+    refetchOnMount: 'always',
     refetchInterval: (query) =>
       query.state.data?.invoices.some((invoice) => isWaiting(invoice)) ? PENDING_REFRESH_MS : false,
+  });
+}
+
+/** Preview of the invoice of an order, read again each time it opens; without a receiver it goes to the general public. */
+export function useCfdiDraft(orderId: string, receiver?: CfdiReceiver) {
+  return useQuery({
+    queryKey: cfdiDraftKey(orderId, receiver),
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/orders/{id}/cfdi-draft', { path: { id: orderId }, query: receiver, signal }),
+    refetchOnMount: 'always',
+    retry: false,
   });
 }
 
@@ -67,15 +95,18 @@ export function isWaiting(invoice: Pick<OrderInvoice, 'status'>): boolean {
   return invoice.status === OrderInvoiceStatus.Stamping || invoice.status === OrderInvoiceStatus.Cancelling;
 }
 
-/** Each change answers the invoice as it ended up; the order's invoicing and its draft are read again. */
+/**
+ * Each change answers the invoice as it ended up; the order's invoicing and its draft are read again, and the change stays
+ * pending until they are, so what it changed (a live invoice) is on screen before anything else can be pressed.
+ */
 function useInvoiceChange<TVariables>(orderId: string, change: (variables: TVariables) => Promise<OrderInvoice>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: change,
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: orderInvoicingKey(orderId) });
-      void client.invalidateQueries({ queryKey: ['orders', orderId, 'cfdi-draft'] });
-    },
+    onSettled: () => Promise.all([
+      client.invalidateQueries({ queryKey: orderInvoicingKey(orderId) }),
+      client.invalidateQueries({ queryKey: ['orders', orderId, 'cfdi-draft'] }),
+    ]),
   });
 }
 
@@ -96,7 +127,20 @@ export function useCancelOrderInvoice(orderId: string) {
 
 /** The stamped XML or the PDF of an invoice, fetched with the session. */
 export async function downloadInvoiceFile(invoiceId: string, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
-  const response = await api.get<Blob>(`/invoicing/invoices/${encodeURIComponent(invoiceId)}/${kind}`, { responseType: 'blob' });
+  let response;
+  try {
+    response = await api.get<Blob>(`/invoicing/invoices/${encodeURIComponent(invoiceId)}/${kind}`, { responseType: 'blob' });
+  } catch (err: unknown) {
+    // The refusal comes as a blob too: read back, its message (the PDF not available, say) reaches the person.
+    if (isAxiosError(err) && err.response?.data instanceof Blob) {
+      try {
+        err.response.data = JSON.parse(await err.response.data.text()) as unknown;
+      } catch {
+        // Not JSON: the generic message stays.
+      }
+    }
+    throw err;
+  }
   const disposition = String(response.headers['content-disposition'] ?? '');
   const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
   return { blob: response.data, fileName: match ? decodeURIComponent(match[1]) : `factura.${kind}` };
@@ -109,6 +153,10 @@ export function useUpdateCustomerFiscalData(customerId: string) {
     mutationFn: (fiscalData: CfdiReceiver | null) =>
       // Without fiscalData the API forgets it.
       apiRequest('put', '/api/v1/customers/{id}/fiscal-data', { path: { id: customerId }, body: fiscalData ? { fiscalData } : {} }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['customers'] }),
+    // The invoice of their orders proposes it.
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: ['customers'] }),
+      client.invalidateQueries({ queryKey: ['invoicing', 'orders'] }),
+    ]),
   });
 }

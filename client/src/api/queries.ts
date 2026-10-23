@@ -12,7 +12,6 @@ export const queryKeys = {
   messagingSettings: ['messaging', 'settings'] as const,
   reminderHistory: ['messaging', 'reminders', 'history'] as const,
   messagingTemplates: (purpose?: number) => ['messaging', 'templates', purpose ?? 'all'] as const,
-  cfdiDraft: (orderId: string, receiver?: CfdiReceiver) => ['orders', orderId, 'cfdi-draft', receiver ?? null] as const,
   attention: ['attention'] as const,
   currentCashSession: ['cash', 'current-session'] as const,
   specialDays: ['special-days'] as const,
@@ -23,28 +22,6 @@ export const queryKeys = {
 
 // The bell and the drawer chip stay current without a live connection of their own.
 const ATTENTION_REFRESH_MS = 60_000;
-
-/** Fiscal data of the customer an invoice is for (CFDI 4.0 receptor). */
-export interface CfdiReceiver {
-  rfc: string;
-  name: string;
-  postalCode: string;
-  fiscalRegime: string;
-  cfdiUse: string;
-}
-
-/** Preview of the invoice of an order; without a receiver it goes to the general public. */
-export function useCfdiDraft(orderId: string, receiver?: CfdiReceiver) {
-  return useQuery({
-    queryKey: queryKeys.cfdiDraft(orderId, receiver),
-    queryFn: ({ signal }) => apiRequest('get', '/api/v1/orders/{id}/cfdi-draft', {
-      path: { id: orderId },
-      query: receiver,
-      signal,
-    }),
-    retry: false,
-  });
-}
 
 /** What needs someone now, counted by the API only for what the person may handle (the bell and Inicio). */
 export function useAttention(enabled = true) {

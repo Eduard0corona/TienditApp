@@ -46,6 +46,8 @@ public class CfdiReceiver : ValueObject
         var use = cfdiUse?.Trim().ToUpperInvariant();
         if (use is null || !SatCatalog.CfdiUses.Contains(use))
             throw new DomainException("Elige el uso del CFDI.");
+        if (!SatCatalog.UseAppliesToRegime(use, regime))
+            throw new DomainException(UseNotForRegimeMessage(use, regime));
 
         return new CfdiReceiver
         {
@@ -56,6 +58,9 @@ public class CfdiReceiver : ValueObject
             CfdiUse = use
         };
     }
+
+    public static string UseNotForRegimeMessage(string use, string regime) =>
+        $"El uso {use} no corresponde al régimen fiscal {regime} del cliente: el SAT rechaza esa combinación. Elige otro uso del CFDI.";
 
     protected override IEnumerable<object?> GetEqualityComponents()
     {

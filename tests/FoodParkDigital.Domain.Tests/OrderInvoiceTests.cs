@@ -46,6 +46,38 @@ public class OrderInvoiceTests
         Assert.Contains(message, error.Message);
     }
 
+    [Theory]
+    // Purchases and expenses for those with an activity, not for wages.
+    [InlineData("601", "G03", true)]
+    [InlineData("626", "G01", true)]
+    [InlineData("605", "G03", false)]
+    [InlineData("616", "G03", false)]
+    // Personal deductions for individuals, not for companies.
+    [InlineData("612", "D01", true)]
+    [InlineData("605", "D01", true)]
+    [InlineData("601", "D01", false)]
+    [InlineData("626", "D01", false)]
+    // Without fiscal effects, anyone; payroll, only wages.
+    [InlineData("616", "S01", true)]
+    [InlineData("601", "S01", true)]
+    [InlineData("605", "CN01", true)]
+    [InlineData("601", "CN01", false)]
+    // Outside the catalogs, nothing.
+    [InlineData("999", "S01", false)]
+    [InlineData("601", "X99", false)]
+    public void Use_ShouldApplyOnlyToTheRegimesTheSatAllows(string regime, string use, bool applies)
+    {
+        Assert.Equal(applies, SatCatalog.UseAppliesToRegime(use, regime));
+    }
+
+    [Fact]
+    public void Receiver_ShouldBeRefused_WithAUseItsRegimeCannotAskFor()
+    {
+        // The PAC would refuse it (CFDI40161) and the folio would be spent.
+        var error = Assert.Throws<DomainException>(() => CfdiReceiver.Create("URE180429TM6", "UNIVERSIDAD", "86991", "601", "d01"));
+        Assert.Equal(CfdiReceiver.UseNotForRegimeMessage("D01", "601"), error.Message);
+    }
+
     [Fact]
     public void Receiver_ShouldTakeUpToTheSatsLengthOfName()
     {

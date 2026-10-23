@@ -25,6 +25,11 @@ public class CfdiReceiverInputValidator : AbstractValidator<CfdiReceiverInput>
         RuleFor(x => x.CfdiUse)
             .Must(use => use is not null && SatCatalog.CfdiUses.Contains(use))
             .WithMessage("Elige el uso del CFDI.");
+        RuleFor(x => x.CfdiUse)
+            .Must((input, use) => SatCatalog.UseAppliesToRegime(use!, input.FiscalRegime!))
+            .When(x => x.CfdiUse is not null && SatCatalog.CfdiUses.Contains(x.CfdiUse)
+                && x.FiscalRegime is not null && SatCatalog.FiscalRegimes.Contains(x.FiscalRegime))
+            .WithMessage(input => CfdiReceiver.UseNotForRegimeMessage(input.CfdiUse!, input.FiscalRegime!));
     }
 }
 

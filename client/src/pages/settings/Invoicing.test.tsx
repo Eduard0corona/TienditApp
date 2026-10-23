@@ -36,8 +36,7 @@ function serve(settings: Settings, write: (method: string, path: string, body: u
   }) as unknown as typeof apiRequest);
 }
 
-function renderPage() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderPage(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
@@ -75,7 +74,8 @@ describe('Invoicing settings', () => {
       sent = { method, path, body };
       return Promise.resolve(WITH_CERTIFICATE);
     });
-    renderPage();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderPage(queryClient);
 
     await userEvent.upload(await screen.findByLabelText('Certificado (.cer)'), new File(['CER'], 'csd.cer'));
     await userEvent.upload(screen.getByLabelText('Llave privada (.key)'), new File(['KEY'], 'csd.key'));
@@ -90,6 +90,8 @@ describe('Invoicing settings', () => {
     });
     expect(await screen.findByText('30001000000400002434')).toBeInTheDocument();
     expect(screen.getByLabelText('Contraseña de la llave privada')).toHaveValue('');
+    // Nor do the key and its password stay in the cache of mutations, where the page's scripts could read them.
+    await waitFor(() => expect(queryClient.getMutationCache().getAll()).toEqual([]));
   });
 
   it('refuses files that cannot be a CSD before sending them', async () => {

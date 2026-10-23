@@ -1,5 +1,5 @@
 import type { CustomerFiscalData } from '../../types';
-import { CFDI_REGIMES, CFDI_USES } from '../../utils/cfdi';
+import { CFDI_REGIMES, cfdiUsesFor } from '../../utils/cfdi';
 
 interface CfdiReceiverFieldsProps {
   /** Prefix of the fields' ids, unique in the page. */
@@ -13,6 +13,16 @@ interface CfdiReceiverFieldsProps {
 export default function CfdiReceiverFields({ idPrefix, value, onChange, disabled = false }: CfdiReceiverFieldsProps) {
   const update = (field: keyof CustomerFiscalData) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     onChange({ ...value, [field]: event.target.value });
+  const uses = cfdiUsesFor(value.fiscalRegime);
+  // Another regime keeps the use when it may ask for it; if not, its first one.
+  const changeRegime = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const allowed = cfdiUsesFor(event.target.value);
+    onChange({
+      ...value,
+      fiscalRegime: event.target.value,
+      cfdiUse: allowed.some(([use]) => use === value.cfdiUse) ? value.cfdiUse : allowed[0][0],
+    });
+  };
 
   return (
     <div className="row g-2">
@@ -34,7 +44,7 @@ export default function CfdiReceiverFields({ idPrefix, value, onChange, disabled
       <div className="col-md-6">
         <label className="form-label small mb-1" htmlFor={`${idPrefix}-regime`}>Régimen fiscal</label>
         <select id={`${idPrefix}-regime`} className="form-select" disabled={disabled}
-          value={value.fiscalRegime} onChange={update('fiscalRegime')}>
+          value={value.fiscalRegime} onChange={changeRegime}>
           {CFDI_REGIMES.map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}
         </select>
       </div>
@@ -42,7 +52,7 @@ export default function CfdiReceiverFields({ idPrefix, value, onChange, disabled
         <label className="form-label small mb-1" htmlFor={`${idPrefix}-use`}>Uso del CFDI</label>
         <select id={`${idPrefix}-use`} className="form-select" disabled={disabled}
           value={value.cfdiUse} onChange={update('cfdiUse')}>
-          {CFDI_USES.map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}
+          {uses.map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}
         </select>
       </div>
     </div>
