@@ -124,7 +124,7 @@ export default function OrderInvoiceList({ orderId, invoices, canCancel }: Order
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-danger"
-                  aria-label={`Cancelar la factura ${invoice.number}`}
+                  aria-label={`Cancelar factura ${invoice.number}`}
                   onClick={() => setCancelling(invoice)}
                 >
                   Cancelar factura

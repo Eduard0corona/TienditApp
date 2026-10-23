@@ -129,7 +129,7 @@ test.describe('Pedidos › Factura', () => {
 
     test('cancelar la factura', async ({ page }) => {
       const invoice = await openInvoice(page);
-      await invoice.getByRole('button', { name: 'Cancelar la factura F-3' }).click();
+      await invoice.getByRole('button', { name: 'Cancelar factura F-3' }).click();
       const cancelling = await dialog(page, 'Cancelar la factura F-3');
       await cancelling.getByLabel('03 · La venta no se llevó a cabo').check();
       await snapScreen(page, 'pedidos-factura-cancelar');

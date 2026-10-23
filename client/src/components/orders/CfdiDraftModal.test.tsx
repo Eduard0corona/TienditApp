@@ -217,7 +217,7 @@ describe('CfdiDraftModal', () => {
     expect(screen.queryByRole('button', { name: 'Timbrar factura' })).not.toBeInTheDocument();
     // Whoever manages the orders downloads it, but only owners and admins cancel it.
     expect(screen.getByRole('button', { name: 'Descargar XML de la factura F-1' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Cancelar la factura F-1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancelar factura F-1' })).not.toBeInTheDocument();
   });
 
   it('lets owners and admins cancel a stamped invoice with its reason', async () => {
@@ -228,7 +228,7 @@ describe('CfdiDraftModal', () => {
     });
     renderModal(true);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Cancelar la factura F-1' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancelar factura F-1' }));
     const dialog = await screen.findByRole('dialog', { name: 'Cancelar la factura F-1' });
     await userEvent.click(within(dialog).getByLabelText('03 · La venta no se llevó a cabo'));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar factura' }));

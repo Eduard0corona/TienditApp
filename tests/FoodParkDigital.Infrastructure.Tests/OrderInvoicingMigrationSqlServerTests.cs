@@ -126,18 +126,18 @@ public class OrderInvoicingMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var seed = await SeedAsync(database);
 
-        // Each one stops it: an invoice (even refused), a CSD, a customer's fiscal data.
-        var refused = Invoice(seed, 1);
-        refused.Refuse("Rechazada", DateTimeOffset.UtcNow);
-        await AddAsync(database, seed, refused);
-        await AssertRollbackStopsAsync(database);
-        await ExecuteAsync(database, $"DELETE FROM [OrderInvoices]");
-
+        // Each one alone stops it: a CSD, an invoice (even refused, and after the CSD was removed), a customer's fiscal data.
         await AssertRollbackStopsAsync(database);
         await ExecuteAsync(database, $"""
             UPDATE [InvoicingProfiles] SET [CertificateNumber] = NULL, [CertificateRfc] = NULL, [CertificateValidFrom] = NULL,
                 [CertificateValidTo] = NULL, [CertificateUploadedAt] = NULL, [CertificateUploadedByUserId] = NULL
             """);
+
+        var refused = Invoice(seed, 1);
+        refused.Refuse("Rechazada", DateTimeOffset.UtcNow);
+        await AddAsync(database, seed, refused);
+        await AssertRollbackStopsAsync(database);
+        await ExecuteAsync(database, $"DELETE FROM [OrderInvoices]");
 
         await using (var context = database.CreateContext(seed.TenantId))
         {
