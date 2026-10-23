@@ -18,7 +18,7 @@ namespace FoodParkDigital.WebApi.Tests;
 /// only its own, with its own sales, CSD and folios (the business header of an owner changes nothing); only owners and
 /// admins touch it; the invoice of an order and the global invoice of its period asked at once cover the sale once,
 /// on SQL Server's invoicing lock of the business; and a sale of a day already stamped that no invoice covers goes in the
-/// next global invoice of its business only.
+/// next global invoice only if its own business stamped that day.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantGlobalInvoicingSqlServerTests
@@ -112,31 +112,33 @@ public sealed class CrossTenantGlobalInvoicingSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task ASaleOfAStampedDay_InNoInvoice_ShouldGoInTheNextGlobalInvoice_OfItsBusinessOnly()
+    public async Task ASaleOfAStampedDay_InNoInvoice_ShouldGoInTheNextGlobalInvoice_OnlyIfItsOwnBusinessStampedThatDay()
     {
         var mine = await _api.SignUpAsync("global-tarde-a", TwoBusinessesApi.FoodBusiness);
         var theirs = await _api.SignUpAsync("global-tarde-b", TwoBusinessesApi.FoodBusiness);
         await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
         await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
-        var product = await ProductAsync(mine.Client, "Tarde A");
         var theirProduct = await ProductAsync(theirs.Client, "Tarde B");
-        var (first, _) = await PaidOrderAsync(mine.Client, product, phone: null, name: "Mostrador");
+        var (mineSale, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Tarde A"), phone: null, name: "Mostrador");
         var (their, _) = await PaidOrderAsync(theirs.Client, theirProduct, phone: null, name: "Mostrador");
-        var day = await PaidYesterdayAsync(mine.TenantId, first);
+        var day = await PaidYesterdayAsync(mine.TenantId, mineSale);
         await PaidYesterdayAsync(theirs.TenantId, their);
-        await IssueAsync(mine.Client, day, await DraftAsync(mine.Client, day));
+        // Only they stamp yesterday's global invoice.
         await IssueAsync(theirs.Client, day, await DraftAsync(theirs.Client, day));
 
-        // Paid yesterday as well, and in no invoice after the day's global invoice was stamped (as one whose own invoice
-        // was refused then).
-        var (late, _) = await PaidOrderAsync(mine.Client, product, phone: null, name: "Mostrador");
+        // Paid yesterday as well, and in no invoice after their day's global invoice was stamped (as one whose own
+        // invoice was refused then): it goes in their next one.
         var (theirLate, _) = await PaidOrderAsync(theirs.Client, theirProduct, phone: null, name: "Mostrador");
-        await PaidYesterdayAsync(mine.TenantId, late);
         await PaidYesterdayAsync(theirs.TenantId, theirLate);
+        var theirToday = await DraftAsync(theirs.Client, day.AddDays(1));
+        Assert.Equal(theirLate, Assert.Single(theirToday.GetProperty("sales").EnumerateArray()).GetProperty("orderId").GetGuid());
+        Assert.Contains(GlobalInvoiceDrafts.LateSalesWarning(1), theirToday.GetProperty("warnings").EnumerateArray().Select(w => w.GetString()));
 
-        var today = await DraftAsync(mine.Client, day.AddDays(1));
-        Assert.Equal(late, Assert.Single(today.GetProperty("sales").EnumerateArray()).GetProperty("orderId").GetGuid());
-        Assert.Contains(GlobalInvoiceDrafts.LateSalesWarning(1), today.GetProperty("warnings").EnumerateArray().Select(w => w.GetString()));
+        // Mine has no global invoice of yesterday, whatever theirs: my sale waits for my own.
+        var mineToday = await DraftAsync(mine.Client, day.AddDays(1));
+        Assert.Empty(mineToday.GetProperty("sales").EnumerateArray());
+        Assert.DoesNotContain(GlobalInvoiceDrafts.LateSalesWarning(1), mineToday.GetProperty("warnings").EnumerateArray().Select(w => w.GetString()));
+        Assert.Equal(mineSale, Assert.Single((await DraftAsync(mine.Client, day)).GetProperty("sales").EnumerateArray()).GetProperty("orderId").GetGuid());
     }
 
     [SqlServerFact]
