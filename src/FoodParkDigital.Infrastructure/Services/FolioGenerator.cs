@@ -65,13 +65,17 @@ public sealed class FolioGenerator : IFolioGenerator
         return Folios.DailyNumber(scope, await NextAsync(tenantId, scope, FolioKind.InventoryTransfer, cancellationToken));
     }
 
-    private async Task<long> NextAsync(Guid tenantId, string scope, FolioKind kind, CancellationToken cancellationToken)
+    public Task<long> NextInvoiceFolioAsync(Guid tenantId, string serie, CancellationToken cancellationToken)
+        => NextAsync(tenantId, Folios.InvoiceScope(serie), FolioKind.Invoice, cancellationToken, serie);
+
+    private async Task<long> NextAsync(
+        Guid tenantId, string scope, FolioKind kind, CancellationToken cancellationToken, string? serie = null)
     {
         if (tenantId == Guid.Empty)
             throw new ArgumentException("Un folio es de un negocio.", nameof(tenantId));
 
         if (_context.Database.IsSqlServer())
-            return await NextOnSqlServerAsync(tenantId, scope, kind, cancellationToken);
+            return await NextOnSqlServerAsync(tenantId, scope, kind, cancellationToken, serie);
 
         // IgnoreQueryFilters: orders placed from the public menu have no business in context; filtered by tenant.
         var sequence = _context.FolioSequences.Local.FirstOrDefault(s => s.TenantId == tenantId && s.Scope == scope)
@@ -79,14 +83,15 @@ public sealed class FolioGenerator : IFolioGenerator
                 .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.Scope == scope, cancellationToken);
         if (sequence is null)
         {
-            sequence = new FolioSequence(tenantId, scope, await LastGivenAsync(tenantId, scope, kind, cancellationToken));
+            sequence = new FolioSequence(tenantId, scope, await LastGivenAsync(tenantId, scope, kind, cancellationToken, serie));
             _context.FolioSequences.Add(sequence);
         }
 
         return sequence.Next();
     }
 
-    private async Task<long> NextOnSqlServerAsync(Guid tenantId, string scope, FolioKind kind, CancellationToken cancellationToken)
+    private async Task<long> NextOnSqlServerAsync(
+        Guid tenantId, string scope, FolioKind kind, CancellationToken cancellationToken, string? serie)
     {
         if (await IncrementOnSqlServerAsync(tenantId, scope, cancellationToken) is { } number)
             return number;
@@ -147,6 +152,16 @@ public sealed class FolioGenerator : IFolioGenerator
                     WHERE [TenantId] = {tenantId} AND [TransferNumber] LIKE {scope + "-%"};
                 COMMIT TRANSACTION;
                 """, cancellationToken),
+            FolioKind.Invoice => _context.Database.ExecuteSqlAsync($"""
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+                IF NOT EXISTS (SELECT 1 FROM [FolioSequences] WITH (UPDLOCK, HOLDLOCK) WHERE [TenantId] = {tenantId} AND [Scope] = {scope})
+                    INSERT INTO [FolioSequences] ([TenantId], [Scope], [LastNumber])
+                    SELECT {tenantId}, {scope}, ISNULL(MAX([Folio]), 0)
+                    FROM [OrderInvoices]
+                    WHERE [TenantId] = {tenantId} AND [Serie] = {serie};
+                COMMIT TRANSACTION;
+                """, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
         });
 
@@ -165,8 +180,18 @@ public sealed class FolioGenerator : IFolioGenerator
     }
 
     /// <summary>The highest folio the business already has with the counter's prefix (0 without any).</summary>
-    private async Task<long> LastGivenAsync(Guid tenantId, string scope, FolioKind kind, CancellationToken cancellationToken)
+    private async Task<long> LastGivenAsync(
+        Guid tenantId, string scope, FolioKind kind, CancellationToken cancellationToken, string? serie)
     {
+        // Invoices are asked for in the business's own scope, so its filter applies.
+        if (kind == FolioKind.Invoice)
+        {
+            return await _context.OrderInvoices
+                .Where(i => i.TenantId == tenantId && i.Serie == serie)
+                .Select(i => (long?)i.Folio)
+                .MaxAsync(cancellationToken) ?? 0;
+        }
+
         var prefix = kind == FolioKind.Order ? Folios.OrderPrefix : scope + "-";
         var numbers = kind switch
         {
@@ -205,6 +230,7 @@ public sealed class FolioGenerator : IFolioGenerator
         InventoryMovement,
         PurchaseOrder,
         InventoryCount,
-        InventoryTransfer
+        InventoryTransfer,
+        Invoice
     }
 }

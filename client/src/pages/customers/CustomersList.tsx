@@ -6,6 +6,7 @@ import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import CreditLimitModal from '../../components/customers/CreditLimitModal';
+import CustomerFiscalDataModal from '../../components/customers/CustomerFiscalDataModal';
 import { describeTerm } from '../../components/customers/customerAccount';
 import { customersApi } from '../../api/customersApi';
 import type { CreateCustomerRequest, CustomerDto, PaginatedList } from '../../types';
@@ -49,6 +50,7 @@ export default function CustomersList() {
   const [filterActive, setFilterActive] = useState('');
   const [cardCustomer, setCardCustomer] = useState<CustomerDto | null>(null);
   const [creditCustomer, setCreditCustomer] = useState<CustomerDto | null>(null);
+  const [fiscalCustomer, setFiscalCustomer] = useState<CustomerDto | null>(null);
   const { user } = useAuth();
   const { capabilities } = useTenant();
   // How much a customer may owe is the owner's decision (owners and admins, as the API asks).
@@ -58,7 +60,7 @@ export default function CustomersList() {
     register,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<CreateCustomerRequest>({
     defaultValues: {
       name: '',
@@ -251,6 +253,9 @@ export default function CustomersList() {
                           Paga en {describeTerm(customer.creditTermDays)}
                         </span>
                       )}
+                      {customer.fiscalData && (
+                        <span className="badge bg-secondary-subtle text-secondary-emphasis ms-1">RFC {customer.fiscalData.rfc}</span>
+                      )}
                     </td>
                     <td className="text-nowrap">{customer.phone || '-'}</td>
                     <td>{customer.email || '-'}</td>
@@ -383,6 +388,32 @@ export default function CustomersList() {
               />
               {errors.notes && <div className="invalid-feedback">{errors.notes.message}</div>}
             </div>
+            {editingCustomer && !editingCustomer.isPublicGeneral && (
+              // The fiscal data has its own dialog (Fase 28A): the invoice of the customer's orders proposes it.
+              <div className="border-top pt-3 d-flex flex-wrap align-items-center gap-2">
+                <div className="small me-auto">
+                  <div className="fw-semibold">Datos fiscales</div>
+                  <div className="text-muted">
+                    {editingCustomer.fiscalData
+                      ? `RFC ${editingCustomer.fiscalData.rfc} · ${editingCustomer.fiscalData.name}`
+                      : 'Sin datos fiscales: la factura de sus pedidos los pide.'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  disabled={isDirty}
+                  onClick={() => {
+                    const customer = editingCustomer;
+                    closeModal();
+                    setFiscalCustomer(customer);
+                  }}
+                >
+                  {editingCustomer.fiscalData ? 'Cambiar datos fiscales' : 'Agregar datos fiscales'}
+                </button>
+                {isDirty && <p className="small text-muted w-100 mb-0">Guarda primero los cambios del cliente.</p>}
+              </div>
+            )}
           </Modal.Body>
           <Modal.Footer>
             <button type="button" className="btn btn-light" onClick={closeModal}>
@@ -397,6 +428,15 @@ export default function CustomersList() {
 
       {cardCustomer && (
         <CustomerCardModal customerId={cardCustomer.id} name={cardCustomer.name} onClose={() => setCardCustomer(null)} />
+      )}
+      {fiscalCustomer && (
+        <CustomerFiscalDataModal
+          customer={fiscalCustomer}
+          onClose={(changed) => {
+            setFiscalCustomer(null);
+            if (changed) void loadCustomers();
+          }}
+        />
       )}
       {creditCustomer && (
         <CreditLimitModal

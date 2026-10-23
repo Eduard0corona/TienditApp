@@ -101,6 +101,14 @@ export const CashTransactionType = {
 } as const;
 export type CashTransactionType = (typeof CashTransactionType)[keyof typeof CashTransactionType];
 
+export const CfdiCancellationMotive = {
+  ErrorsWithReplacement: 1,
+  ErrorsWithoutReplacement: 2,
+  NotCarriedOut: 3,
+  NominativeInGlobalInvoice: 4,
+} as const;
+export type CfdiCancellationMotive = (typeof CfdiCancellationMotive)[keyof typeof CfdiCancellationMotive];
+
 export const CfdiTaxObject = {
   NotSubject: 1,
   Subject: 2,
@@ -287,6 +295,15 @@ export const OrderChannel = {
   DidiFood: 5,
 } as const;
 export type OrderChannel = (typeof OrderChannel)[keyof typeof OrderChannel];
+
+export const OrderInvoiceStatus = {
+  Stamping: 0,
+  Stamped: 1,
+  Refused: 2,
+  Cancelling: 3,
+  Cancelled: 4,
+} as const;
+export type OrderInvoiceStatus = (typeof OrderInvoiceStatus)[keyof typeof OrderInvoiceStatus];
 
 export const OrderNotificationPolicy = {
   RemoteAndServices: 0,

@@ -865,10 +865,8 @@ export default function OrdersList() {
                 }}
               />
 
-              {((canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel))
-                || (canCharge && selectedOrder.balance > 0)
-                || canRefundSelected
-                || (canSell && selectedOrder.status !== OrderStatusConst.Cancelled)) && (
+              {/* Whoever sells always has «Factura», also on a cancelled order (its invoices). */}
+              {(canSell || (canCharge && selectedOrder.balance > 0) || canRefundSelected) && (
                 <div className="border rounded p-2 mb-3">
                   <div className="fw-semibold mb-2">Acciones</div>
                   <div className="d-flex flex-wrap gap-2">
@@ -903,13 +901,14 @@ export default function OrdersList() {
                         Cancelar pedido
                       </button>
                     )}
-                    {canSell && selectedOrder.status !== OrderStatusConst.Cancelled && (
+                    {/* A cancelled order is not invoiced, but its invoices stay reachable to download or cancel them. */}
+                    {canSell && (
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-secondary"
                         onClick={() => setCfdiFor(selectedOrder)}
                       >
-                        <i className="ri-file-text-line me-1" aria-hidden="true"></i>Factura (vista previa)
+                        <i className="ri-file-text-line me-1" aria-hidden="true"></i>Factura
                       </button>
                     )}
                     {canRefundSelected && (
@@ -1231,7 +1230,14 @@ export default function OrdersList() {
       )}
 
       {cfdiFor && (
-        <CfdiDraftModal orderId={cfdiFor.id} orderNumber={cfdiFor.orderNumber} onClose={() => setCfdiFor(null)} />
+        <CfdiDraftModal
+          orderId={cfdiFor.id}
+          orderNumber={cfdiFor.orderNumber}
+          canCancel={access.businessSettings}
+          canSaveToCustomer={access.customers}
+          orderCancelled={cfdiFor.status === OrderStatusConst.Cancelled}
+          onClose={() => setCfdiFor(null)}
+        />
       )}
 
       {refundTarget && (refundTarget.mode === 'void' ? (

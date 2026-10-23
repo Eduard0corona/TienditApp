@@ -34,6 +34,7 @@ const InventoryManagement = lazy(() => import('./pages/inventory/InventoryManage
 const BranchesList = lazy(() => import('./pages/branches/BranchesList'));
 const DeliveryZones = lazy(() => import('./pages/settings/DeliveryZones'));
 const OnlinePayments = lazy(() => import('./pages/settings/OnlinePayments'));
+const Invoicing = lazy(() => import('./pages/settings/Invoicing'));
 const SuppliersList = lazy(() => import('./pages/suppliers/SuppliersList'));
 const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersList'));
 const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
@@ -250,6 +251,14 @@ export default function App() {
                 element={(
                   <AccessRoute area="businessSettings">
                     <OnlinePayments />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/settings/invoicing"
+                element={(
+                  <AccessRoute area="businessSettings">
+                    <Invoicing />
                   </AccessRoute>
                 )}
               />

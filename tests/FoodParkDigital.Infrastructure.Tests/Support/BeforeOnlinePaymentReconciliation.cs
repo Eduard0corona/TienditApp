@@ -22,6 +22,7 @@ internal static class BeforeOnlinePaymentReconciliation
         modelBuilder.Entity<OnlineCheckout>().Ignore(c => c.Dispute);
         modelBuilder.Entity<OnlineCheckout>().Ignore(c => c.DisputeUpdatedAt);
         modelBuilder.Entity<OnlinePaymentAccount>().Ignore(a => a.PaymentsReviewedUntil);
+        BeforeOrderInvoicing.Ignore(modelBuilder);
     }
 
     private sealed class Context(

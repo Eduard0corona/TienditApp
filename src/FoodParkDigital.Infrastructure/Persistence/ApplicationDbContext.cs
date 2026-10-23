@@ -19,6 +19,7 @@ using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
+using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -170,6 +171,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OnlinePaymentAuthorization> OnlinePaymentAuthorizations => Set<OnlinePaymentAuthorization>();
     public DbSet<OnlineCheckout> OnlineCheckouts => Set<OnlineCheckout>();
     public DbSet<OnlinePaymentRefund> OnlinePaymentRefunds => Set<OnlinePaymentRefund>();
+    public DbSet<OrderInvoice> OrderInvoices => Set<OrderInvoice>();
+    public DbSet<InvoicingProfile> InvoicingProfiles => Set<InvoicingProfile>();
     public DbSet<TemporaryCustomer> TemporaryCustomers => Set<TemporaryCustomer>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<FolioSequence> FolioSequences => Set<FolioSequence>();

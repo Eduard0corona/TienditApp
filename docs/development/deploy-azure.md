@@ -791,6 +791,29 @@ La Fase 24K trae una migración, [`database/production/20261022213253_AddOnlineP
 - **Volver a la versión anterior:** funciona sin tocar la base. Deja de revisar Mercado Pago; lo ya registrado se queda en los pedidos, y una rechazada que el negocio hizo se lee como «en curso».
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50035, sin cambiar nada, en cuanto hay una devolución hecha en Mercado Pago, por reclamación o por contracargo, una rechazada que el negocio hizo, o una disputa. Sin ninguna, quita las columnas, los índices y la restricción nueva y regresa las otras restricciones a como estaban; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## La factura del pedido, timbrada con un PAC (Fase 28A)
+
+La Fase 28A trae una migración, [`database/production/20261023064133_AddOrderInvoicing`](../../database/production/20261023064133_AddOrderInvoicing). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0045](../adr/0045-order-invoicing.md)).
+
+- **La migración:**
+  - crea dos tablas vacías: `OrderInvoices` (las facturas de los pedidos, con su CFDI, folio, estado, timbre y cancelación) e `InvoicingProfiles` (la serie y los datos del CSD de cada negocio, nunca sus archivos; un índice único deja cada CSD a un solo negocio);
+  - agrega a `Customers` las columnas `FiscalData_*` (con nulos) y `CK_Customers_FiscalData` (completos o nada, nunca en público en general).
+  - No cambia pedidos, pagos ni clientes. Después de aplicarla, el `verify.sql` muestra las tablas, columnas, restricciones e índices; su consulta 3 cuenta los clientes por negocio (igual antes y después) y la 4 las facturas, los CSD y los clientes con datos fiscales: todo en cero hasta desplegar.
+- **Mientras se publica:** la versión de `master` (Fase 24K) no conoce las tablas ni las columnas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** las rutas bajo `/api/v1/invoicing` (configuración y CSD para dueños y administradores; la factura de cada pedido con `ManageOrders`), `PUT /api/v1/customers/{id}/fiscal-data`, `fiscalData` en el cliente y los enums `OrderInvoiceStatus` y `CfdiCancellationMotive`. Nada se quita ni cambia de nombre.
+- **Sin configuración, nada se timbra:** Pedidos muestra la vista previa de siempre y Configuración › Facturación dice que no está disponible. Para encenderlo:
+  1. **Una cuenta de SW Sapien** con timbres. Primero en su ambiente de pruebas.
+  2. **En el App Service** (*Configuration* → *Application settings*, o referencias a Key Vault; son secretos y no van en `appsettings.json`):
+     - `SwSapien__User` y `SwSapien__Password` (TienditApp pide un token de 2 horas y lo renueva solo), o `SwSapien__Token` con un token sin vigencia;
+     - `SwSapien__Sandbox` = `true` para el ambiente de pruebas de SW (`services.test.sw.com.mx` y `api.test.sw.com.mx`): las facturas no tienen validez fiscal y la app lo dice. En producción, `false`;
+     - `SwSapien__ServicesUrl`, `SwSapien__ApiUrl` y `SwSapien__StatusUrl` solo si SW cambia sus direcciones.
+  3. **Cada negocio** completa RFC, razón social, régimen y código postal fiscal en Mi negocio y sube su CSD en Configuración › Facturación. Los archivos y la contraseña van directo al PAC; TienditApp guarda solo número, RFC y vigencia.
+  4. **Los workers** (`BackgroundJobs__Enabled`): cada 2 minutos se vuelven a pedir las facturas que siguen «Timbrando» (`BackgroundJobs__Invoicing__IntervalMinutes`) y cada 30 se pregunta al SAT por las cancelaciones que esperan al cliente (`BackgroundJobs__Invoicing__CancellationIntervalMinutes`).
+- **Archivos:** el XML y el PDF de cada factura van al almacenamiento privado (`invoices/{negocio}/{aaaamm}/…`), igual que los comprobantes; nunca son públicos.
+- **Registros:** ni el CSD, ni su contraseña, ni el token de SW, ni el XML se escriben en los logs; solo el id de la factura y el código de error del PAC.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas. Las facturas y el CSD se quedan en la base y en el PAC, y Pedidos vuelve a mostrar solo la vista previa.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50037, sin cambiar nada, en cuanto hay una factura (aunque sea rechazada), un CSD o datos fiscales de un cliente. Sin ninguno, quita las tablas, las columnas y la restricción; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

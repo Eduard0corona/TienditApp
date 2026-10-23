@@ -318,6 +318,10 @@ public class FractionalSaleAndCfdiDraftTests
     [InlineData("EKU9003173C9", "Cliente", "6000", "601", "G03", false)]
     [InlineData("EKU9003173C9", "Cliente", "06000", "999", "G03", false)]
     [InlineData("EKU9003173C9", "Cliente", "06000", "601", "Z99", false)]
+    // A use the regime cannot ask for (Fase 28A): the PAC would refuse it with CFDI40161.
+    [InlineData("EKU9003173C9", "Cliente", "06000", "601", "D01", false)]
+    [InlineData("EKU9003173C9", "Cliente", "06000", "605", "G03", false)]
+    [InlineData("EKU9003173C9", "Cliente", "06000", "605", "D01", true)]
     public void CfdiDraftValidator_ShouldCheckTheReceiver(string rfc, string name, string postalCode, string regime, string use, bool valid)
     {
         var result = new GetOrderCfdiDraftQueryValidator().Validate(new GetOrderCfdiDraftQuery

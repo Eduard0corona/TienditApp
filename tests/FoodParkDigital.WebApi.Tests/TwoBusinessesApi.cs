@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -79,6 +80,9 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     /// <summary>Mercado Pago, as the API sees it.</summary>
     public TestOnlinePaymentGateway OnlinePayments { get; } = new();
 
+    /// <summary>The PAC, as the API sees it (Fase 28A).</summary>
+    public TestInvoicingGateway Invoicing { get; } = new();
+
     public async Task InitializeAsync()
     {
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(SqlServerTestDatabase.ConnectionVariable)))
@@ -103,6 +107,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             {
                 services.AddSingleton<IEmailService>(_emails);
                 services.AddSingleton<IOnlinePaymentGateway>(OnlinePayments);
+                services.AddSingleton<IInvoicingGateway>(Invoicing);
             });
             // Paying online (Fase 24I): the businesses' keys are encrypted with a test key and the notifications signed
             // with a test secret; Mercado Pago itself is TestOnlinePaymentGateway.

@@ -1139,6 +1139,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("Customers", null, t =>
                         {
                             t.HasCheckConstraint("CK_Customers_CreditTermDays", "[CreditTermDays] IS NULL OR ([CreditTermDays] >= 1 AND [CreditTermDays] <= 120)");
+
+                            t.HasCheckConstraint("CK_Customers_FiscalData", "([FiscalData_Rfc] IS NULL AND [FiscalData_Name] IS NULL AND [FiscalData_PostalCode] IS NULL AND [FiscalData_FiscalRegime] IS NULL AND [FiscalData_CfdiUse] IS NULL) OR ([IsPublicGeneral] = 0 AND [FiscalData_Rfc] IS NOT NULL AND [FiscalData_Name] IS NOT NULL AND [FiscalData_PostalCode] IS NOT NULL AND [FiscalData_FiscalRegime] IS NOT NULL AND [FiscalData_CfdiUse] IS NOT NULL)");
                         });
                 });
 
@@ -1700,6 +1702,235 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "InventoryLocationId", "OccurredAt");
 
                     b.ToTable("CashTransactions", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.InvoicingProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CertificateNumber")
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("CertificateRfc")
+                        .HasMaxLength(13)
+                        .HasColumnType("nvarchar(13)");
+
+                    b.Property<DateTimeOffset?>("CertificateUploadedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CertificateUploadedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("CertificateValidFrom")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("CertificateValidTo")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Serie")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CertificateNumber")
+                        .IsUnique()
+                        .HasFilter("[CertificateNumber] IS NOT NULL");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("InvoicingProfiles", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InvoicingProfiles_Certificate", "([CertificateNumber] IS NULL AND [CertificateRfc] IS NULL AND [CertificateValidFrom] IS NULL AND [CertificateValidTo] IS NULL AND [CertificateUploadedAt] IS NULL AND [CertificateUploadedByUserId] IS NULL) OR ([CertificateNumber] IS NOT NULL AND [CertificateRfc] IS NOT NULL AND [CertificateValidFrom] IS NOT NULL AND [CertificateValidTo] > [CertificateValidFrom] AND [CertificateUploadedAt] IS NOT NULL AND [CertificateUploadedByUserId] IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.OrderInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("CancellationMotive")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("CancellationRequestedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CancellationRequestedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Document")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<long>("Folio")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PaymentForm")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(2)");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(3)");
+
+                    b.Property<string>("PdfFileKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("ProviderInvoiceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTimeOffset?>("RefusedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Serie")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<DateTimeOffset?>("StampedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TaxTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Uuid")
+                        .HasMaxLength(36)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(36)");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("XmlFileKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("Status", "RequestedAt")
+                        .HasFilter("[Status] IN (0, 3)");
+
+                    b.HasIndex("TenantId", "Uuid")
+                        .IsUnique()
+                        .HasFilter("[Uuid] IS NOT NULL");
+
+                    b.HasIndex("TenantId", "Serie", "Folio")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "TenantId", "OrderId" }, "IX_OrderInvoices_TenantId_OrderId_Live")
+                        .IsUnique()
+                        .HasFilter("[Status] IN (0, 1, 3)");
+
+                    b.ToTable("OrderInvoices", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OrderInvoices_Amounts", "[Total] > 0 AND [SubTotal] >= 0 AND [TaxTotal] >= 0 AND [SubTotal] + [TaxTotal] = [Total]");
+
+                            t.HasCheckConstraint("CK_OrderInvoices_Cancellation", "([Status] IN (0, 2) AND [CancellationMotive] IS NULL AND [CancellationRequestedAt] IS NULL AND [CancellationRequestedByUserId] IS NULL AND [CancelledAt] IS NULL) OR ([Status] = 1 AND [CancelledAt] IS NULL) OR ([Status] IN (3, 4) AND [CancellationMotive] IS NOT NULL AND [CancellationRequestedAt] IS NOT NULL AND [CancellationRequestedByUserId] IS NOT NULL AND (([Status] = 3 AND [CancelledAt] IS NULL) OR ([Status] = 4 AND [CancelledAt] IS NOT NULL)))");
+
+                            t.HasCheckConstraint("CK_OrderInvoices_CancellationMotive", "[CancellationMotive] IS NULL OR [CancellationMotive] IN (2, 3)");
+
+                            t.HasCheckConstraint("CK_OrderInvoices_Folio", "[Folio] > 0");
+
+                            t.HasCheckConstraint("CK_OrderInvoices_PaymentMethod", "[PaymentMethod] = 'PUE'");
+
+                            t.HasCheckConstraint("CK_OrderInvoices_Refused", "([Status] = 2 AND [RefusedAt] IS NOT NULL AND [FailureMessage] IS NOT NULL) OR ([Status] <> 2 AND [RefusedAt] IS NULL)");
+
+                            t.HasCheckConstraint("CK_OrderInvoices_Stamp", "([Status] IN (0, 2) AND [Uuid] IS NULL AND [ProviderInvoiceId] IS NULL AND [StampedAt] IS NULL AND [XmlFileKey] IS NULL AND [PdfFileKey] IS NULL) OR ([Status] IN (1, 3, 4) AND [Uuid] IS NOT NULL AND [ProviderInvoiceId] IS NOT NULL AND [StampedAt] IS NOT NULL AND [XmlFileKey] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_OrderInvoices_Status", "[Status] IN (0, 1, 2, 3, 4)");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Identity.Entities.ApplicationRole", b =>
@@ -6157,6 +6388,57 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.Customer", b =>
+                {
+                    b.OwnsOne("FoodParkDigital.Domain.Fiscal.CfdiReceiver", "FiscalData", b1 =>
+                        {
+                            b1.Property<Guid>("CustomerId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<string>("CfdiUse")
+                                .IsRequired()
+                                .HasMaxLength(4)
+                                .IsUnicode(false)
+                                .HasColumnType("varchar(4)")
+                                .HasColumnName("FiscalData_CfdiUse");
+
+                            b1.Property<string>("FiscalRegime")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .IsUnicode(false)
+                                .HasColumnType("varchar(3)")
+                                .HasColumnName("FiscalData_FiscalRegime");
+
+                            b1.Property<string>("Name")
+                                .IsRequired()
+                                .HasMaxLength(254)
+                                .HasColumnType("nvarchar(254)")
+                                .HasColumnName("FiscalData_Name");
+
+                            b1.Property<string>("PostalCode")
+                                .IsRequired()
+                                .HasMaxLength(5)
+                                .IsUnicode(false)
+                                .HasColumnType("varchar(5)")
+                                .HasColumnName("FiscalData_PostalCode");
+
+                            b1.Property<string>("Rfc")
+                                .IsRequired()
+                                .HasMaxLength(13)
+                                .HasColumnType("nvarchar(13)")
+                                .HasColumnName("FiscalData_Rfc");
+
+                            b1.HasKey("CustomerId");
+
+                            b1.ToTable("Customers");
+
+                            b1.WithOwner()
+                                .HasForeignKey("CustomerId");
+                        });
+
+                    b.Navigation("FiscalData");
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.CustomerAddress", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Customers.Entities.Customer", null)
@@ -6240,6 +6522,79 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("CashSession");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.InvoicingProfile", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.OrderInvoice", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsOne("FoodParkDigital.Domain.Fiscal.CfdiReceiver", "Receiver", b1 =>
+                        {
+                            b1.Property<Guid>("OrderInvoiceId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<string>("CfdiUse")
+                                .IsRequired()
+                                .HasMaxLength(4)
+                                .IsUnicode(false)
+                                .HasColumnType("varchar(4)")
+                                .HasColumnName("Receiver_CfdiUse");
+
+                            b1.Property<string>("FiscalRegime")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .IsUnicode(false)
+                                .HasColumnType("varchar(3)")
+                                .HasColumnName("Receiver_FiscalRegime");
+
+                            b1.Property<string>("Name")
+                                .IsRequired()
+                                .HasMaxLength(254)
+                                .HasColumnType("nvarchar(254)")
+                                .HasColumnName("Receiver_Name");
+
+                            b1.Property<string>("PostalCode")
+                                .IsRequired()
+                                .HasMaxLength(5)
+                                .IsUnicode(false)
+                                .HasColumnType("varchar(5)")
+                                .HasColumnName("Receiver_PostalCode");
+
+                            b1.Property<string>("Rfc")
+                                .IsRequired()
+                                .HasMaxLength(13)
+                                .HasColumnType("nvarchar(13)")
+                                .HasColumnName("Receiver_Rfc");
+
+                            b1.HasKey("OrderInvoiceId");
+
+                            b1.ToTable("OrderInvoices");
+
+                            b1.WithOwner()
+                                .HasForeignKey("OrderInvoiceId");
+                        });
+
+                    b.Navigation("Receiver")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Identity.Entities.OwnerWhatsAppConfig", b =>

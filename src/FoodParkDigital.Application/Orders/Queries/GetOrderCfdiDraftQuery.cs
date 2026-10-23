@@ -3,12 +3,14 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
@@ -39,25 +41,7 @@ public class GetOrderCfdiDraftQueryValidator : AbstractValidator<GetOrderCfdiDra
     public GetOrderCfdiDraftQueryValidator()
     {
         RuleFor(x => x.OrderId).NotEmpty();
-        When(x => x.Receiver is not null, () =>
-        {
-            RuleFor(x => x.Receiver!.Rfc)
-                .NotEmpty()
-                .Must(rfc => SatCatalog.IsValidRfc(rfc?.Trim().ToUpperInvariant()))
-                .WithMessage("El RFC del cliente no tiene un formato válido.");
-            RuleFor(x => x.Receiver!.Name)
-                .NotEmpty().WithMessage("Escribe el nombre o razón social del cliente como aparece en su constancia.")
-                .MaximumLength(254);
-            RuleFor(x => x.Receiver!.PostalCode)
-                .Must(SatCatalog.IsValidPostalCode)
-                .WithMessage("El código postal fiscal del cliente tiene 5 dígitos.");
-            RuleFor(x => x.Receiver!.FiscalRegime)
-                .Must(regime => regime is not null && SatCatalog.FiscalRegimes.Contains(regime))
-                .WithMessage("Elige el régimen fiscal del cliente.");
-            RuleFor(x => x.Receiver!.CfdiUse)
-                .Must(use => use is not null && SatCatalog.CfdiUses.Contains(use))
-                .WithMessage("Elige el uso del CFDI.");
-        });
+        RuleFor(x => x.Receiver!).SetValidator(new CfdiReceiverInputValidator()).When(x => x.Receiver is not null);
     }
 }
 
@@ -83,21 +67,32 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
 
     public async Task<Result<CfdiDraftDto>> Handle(GetOrderCfdiDraftQuery request, CancellationToken cancellationToken)
     {
-        var order = await _context.Orders
+        var built = await BuildAsync(_context, request.OrderId, request.Receiver, cancellationToken);
+        return built.IsSuccess ? Result.Success(built.Value.Draft) : Result.Failure<CfdiDraftDto>(built.Error!);
+    }
+
+    /// <summary>
+    /// The CFDI draft of an order with the order and the business it was built from: what the preview shows is what an
+    /// invoice stamps (Fase 28A).
+    /// </summary>
+    public static async Task<Result<OrderCfdiDraft>> BuildAsync(
+        IApplicationDbContext context, Guid orderId, CfdiReceiverInput? receiver, CancellationToken cancellationToken)
+    {
+        var order = await context.Orders
             .AsNoTracking()
             .Include(o => o.Items).ThenInclude(i => i.Options)
             .Include(o => o.Payments)
-            .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
-            ?? throw new EntityNotFoundException("Order", request.OrderId);
+            .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
+            ?? throw new EntityNotFoundException("Order", orderId);
 
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, order.TenantId, cancellationToken);
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(context, order.TenantId, cancellationToken);
         if (!TenantCapabilityRules.CanCreateOrderType(tenantCapabilities, order.OrderType))
-            throw new EntityNotFoundException("Order", request.OrderId);
+            throw new EntityNotFoundException("Order", orderId);
 
         if (order.Status == OrderStatus.Cancelled)
-            return Result.Failure<CfdiDraftDto>("Una orden cancelada no se factura.");
+            return Result.Failure<OrderCfdiDraft>("Una orden cancelada no se factura.");
 
-        var tenant = await _context.Tenants
+        var tenant = await context.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == order.TenantId, cancellationToken)
             ?? throw new EntityNotFoundException("Tenant", order.TenantId);
@@ -186,13 +181,13 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
         }
 
         SetIssuer(draft, tenant.Rfc, tenant.LegalName, tenant.TaxRegime, tenant.Address?.ZipCode);
-        SetReceiver(draft, request.Receiver);
+        SetReceiver(draft, receiver);
         // What the business forgave was not paid (Fase 26B): the invoice goes for the whole sale, so it stays unpaid here.
         SetPayment(draft, order.Total - order.PaidAmount, order.Payments.Select(payment => (payment.Method, payment.Amount)).ToList());
         if (order.WrittenOffAmount > 0)
             draft.Warnings.Add(WrittenOffWarning(order.WrittenOffAmount));
         if (order.IsDeliveryPlatformOrder)
-            AddDeliveryPlatformWarnings(draft, order, hasReceiver: request.Receiver is not null);
+            AddDeliveryPlatformWarnings(draft, order, hasReceiver: receiver is not null);
         // Paid online (Fase 24I): Mercado Pago charged it for the business, an intermediary of payments.
         if (order.Payments.Any(payment => payment.Method == OrderPaymentMethod.Online))
             draft.Warnings.Add(
@@ -223,7 +218,7 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
         }
 
         draft.IsReadyToStamp = draft.Blockers.Count == 0;
-        return Result.Success(draft);
+        return Result.Success(new OrderCfdiDraft(draft, order, tenant));
     }
 
     private static void SetIssuer(CfdiDraftDto draft, string? rfc, string? legalName, string? taxRegime, string? postalCode)
@@ -304,7 +299,15 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             .First();
         draft.PaymentMethod = "PUE";
         draft.PaymentForm = SatCatalog.PaymentForm(main.Method);
+        // «Otro» is none of the SAT's forms, and "to be defined" (99) is only for a sale paid in installments (PPD).
+        if (draft.PaymentForm == SatCatalog.PaymentFormToBeDefined)
+            draft.Blockers.Add(OtherPaymentBlocker);
     }
+
+    /// <summary>A sale paid in full (PUE) is invoiced with the form it was paid with: «Otro» says none.</summary>
+    public const string OtherPaymentBlocker =
+        "El pago principal de la venta es «Otro», que no es una forma de pago del SAT: una venta pagada se factura con la forma "
+        + "en que se pagó. Cobra con efectivo, tarjeta, transferencia o monedero las ventas que vayas a facturar.";
 
     /// <summary>
     /// What a customer paid with the balance they left before (Fase 26D, ADR 0036) is an advance applied: when it is the main
@@ -350,3 +353,6 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
 
     private static string Money(decimal amount) => amount.ToString("$#,0.00", CultureInfo.InvariantCulture);
 }
+
+/// <summary>The CFDI draft of an order, with the order (read without tracking) and its business.</summary>
+public sealed record OrderCfdiDraft(CfdiDraftDto Draft, Order Order, Tenant Tenant);

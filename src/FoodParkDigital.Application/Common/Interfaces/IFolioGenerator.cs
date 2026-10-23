@@ -27,4 +27,7 @@ public interface IFolioGenerator
 
     /// <summary>TRF-20261021-0001, numbered by the UTC day of the transfer between locations.</summary>
     Task<string> NextInventoryTransferNumberAsync(Guid tenantId, DateTimeOffset transferredAt, CancellationToken cancellationToken);
+
+    /// <summary>The next folio of the business's invoices of <paramref name="serie"/> (Fase 28A): 1, 2, 3… without end.</summary>
+    Task<long> NextInvoiceFolioAsync(Guid tenantId, string serie, CancellationToken cancellationToken);
 }

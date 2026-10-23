@@ -37,6 +37,35 @@ public static partial class SatCatalog
         "D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08", "D09", "D10", "S01", "CP01", "CN01"
     };
 
+    // c_UsoCFDI says which receiver regimes may ask for each use; the PAC refuses any other pair (CFDI40161).
+    private static readonly IReadOnlySet<string> BusinessUseRegimes = new HashSet<string>
+    {
+        "601", "603", "606", "612", "620", "621", "622", "623", "624", "625", "626"
+    };
+
+    private static readonly IReadOnlySet<string> PersonalDeductionRegimes = new HashSet<string>
+    {
+        "605", "606", "607", "608", "611", "612", "614", "615", "625"
+    };
+
+    /// <summary>
+    /// Whether a receiver in that regime may ask for that use: purchases, expenses and investments (G, I) for those with an
+    /// activity, personal deductions (D) for individuals, payroll (CN01) for wages and S01 or CP01 for anyone.
+    /// </summary>
+    public static bool UseAppliesToRegime(string use, string regime)
+    {
+        if (!CfdiUses.Contains(use) || !FiscalRegimes.Contains(regime))
+            return false;
+
+        return use switch
+        {
+            "S01" or "CP01" => true,
+            "CN01" => regime == "605",
+            _ when use[0] == 'D' => PersonalDeductionRegimes.Contains(regime),
+            _ => BusinessUseRegimes.Contains(regime)
+        };
+    }
+
     [GeneratedRegex("^[0-9]{8}$")]
     private static partial Regex ProductCodePattern();
 

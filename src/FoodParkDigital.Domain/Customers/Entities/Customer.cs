@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Tenants.Entities;
 
 namespace FoodParkDigital.Domain.Customers.Entities;
@@ -16,6 +17,7 @@ public class Customer : AuditableEntity, ITenantScoped
     public const string CreditTermRangeMessage = "El plazo de un cliente va de 1 a 120 días, o el del negocio.";
     public const string PublicGeneralCreditTermMessage = "«Público en general» no tiene plazo propio: elige al cliente.";
     public const string NoPhoneCreditTermMessage = "Para darle un plazo, el cliente necesita teléfono: con él se juntan sus pedidos.";
+    public const string PublicGeneralFiscalDataMessage = "«Público en general» no tiene datos fiscales: sus ventas van en la factura global.";
 
     private readonly List<CustomerAddress> _addresses = new();
 
@@ -58,6 +60,12 @@ public class Customer : AuditableEntity, ITenantScoped
     /// </summary>
     public int? CreditTermDays { get; private set; }
 
+    /// <summary>
+    /// The customer's fiscal data (Fase 28A, ADR 0045): the invoice of their next order proposes it. Null when the business
+    /// does not have it.
+    /// </summary>
+    public CfdiReceiver? FiscalData { get; private set; }
+
     /// <summary>The business sells to them on credit now: active, with a limit and a phone to gather their orders by.</summary>
     public bool SellsOnCredit => IsActive && !IsPublicGeneral && CreditLimit is not null && !string.IsNullOrWhiteSpace(Phone);
 
@@ -96,6 +104,14 @@ public class Customer : AuditableEntity, ITenantScoped
         if (days is < TenantSettings.MinCreditTermDays or > TenantSettings.MaxCreditTermDays)
             throw new DomainException(CreditTermRangeMessage);
         CreditTermDays = days;
+    }
+
+    /// <summary>Keeps the customer's fiscal data for their next invoices, or forgets it (null).</summary>
+    public void SetFiscalData(CfdiReceiver? fiscalData)
+    {
+        if (fiscalData is not null && IsPublicGeneral)
+            throw new DomainException(PublicGeneralFiscalDataMessage);
+        FiscalData = fiscalData;
     }
 
     public void Update(string name, string? phone, string? email)
