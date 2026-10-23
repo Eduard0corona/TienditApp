@@ -60,7 +60,7 @@ export default function CustomersList() {
     register,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<CreateCustomerRequest>({
     defaultValues: {
       name: '',
@@ -291,15 +291,6 @@ export default function CustomersList() {
                       >
                         Editar
                       </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-light me-1"
-                        aria-label={`Datos fiscales de ${customer.name}`}
-                        onClick={() => setFiscalCustomer(customer)}
-                        disabled={customer.isPublicGeneral}
-                      >
-                        Datos fiscales
-                      </button>
                       {canGiveCredit && (
                         <button
                           type="button"
@@ -397,6 +388,32 @@ export default function CustomersList() {
               />
               {errors.notes && <div className="invalid-feedback">{errors.notes.message}</div>}
             </div>
+            {editingCustomer && !editingCustomer.isPublicGeneral && (
+              // The fiscal data has its own dialog (Fase 28A): the invoice of the customer's orders proposes it.
+              <div className="border-top pt-3 d-flex flex-wrap align-items-center gap-2">
+                <div className="small me-auto">
+                  <div className="fw-semibold">Datos fiscales</div>
+                  <div className="text-muted">
+                    {editingCustomer.fiscalData
+                      ? `RFC ${editingCustomer.fiscalData.rfc} · ${editingCustomer.fiscalData.name}`
+                      : 'Sin datos fiscales: la factura de sus pedidos los pide.'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  disabled={isDirty}
+                  onClick={() => {
+                    const customer = editingCustomer;
+                    closeModal();
+                    setFiscalCustomer(customer);
+                  }}
+                >
+                  {editingCustomer.fiscalData ? 'Cambiar datos fiscales' : 'Agregar datos fiscales'}
+                </button>
+                {isDirty && <p className="small text-muted w-100 mb-0">Guarda primero los cambios del cliente.</p>}
+              </div>
+            )}
           </Modal.Body>
           <Modal.Footer>
             <button type="button" className="btn btn-light" onClick={closeModal}>

@@ -63,7 +63,7 @@ Tomé las decisiones de la Fase 28A con la autorización permanente del dueño d
 10. **Se ve:**
     - **Pedidos › Factura:** las facturas del pedido con su estado, folio fiscal, «Descargar XML/PDF», «Volver a pedir el timbre» y «Cancelar factura»; la vista previa con los datos fiscales propuestos (los del cliente o los de la última factura) y «Timbrar factura» cuando la vista previa revisada es la de esos datos.
     - **Configuración › Facturación:** lo que falta en Mi negocio, el CSD (subir, reemplazar, quitar, vigencia y aviso de vencimiento), la serie, el modo de pruebas y «Cómo funciona».
-    - **Clientes:** «Datos fiscales» por cliente y su RFC en la lista.
+    - **Clientes:** sus datos fiscales desde «Editar» (en la fila ya no cabe otra acción) y su RFC en la lista.
 11. **La API se mantiene compatible:** rutas nuevas bajo `/api/v1/invoicing` y `PUT /api/v1/customers/{id}/fiscal-data`; `CustomerDto` suma `fiscalData`; llegan los enums `OrderInvoiceStatus` y `CfdiCancellationMotive`. Nada se quita ni cambia de nombre.
 12. **Fuera de esta fase:** factura global de público en general (28B), PPD y complementos de pago (28C), notas de crédito (28D), sustitución con motivo 01, autofactura del cliente, mandar la factura por correo o WhatsApp, logo en el PDF, otras monedas, retenciones y varios CSD o series por sucursal.
 13. **La migración** `20261023064133_AddOrderInvoicing`:
