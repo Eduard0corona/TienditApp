@@ -124,6 +124,37 @@ describe('CfdiDraftModal', () => {
     expect(screen.getByLabelText('RFC')).toHaveValue('XIQB891116QE4');
   });
 
+  it('keeps the invoices and what the person typed when a read in the background fails', async () => {
+    let calls = 0;
+    const stamping: Invoice = { ...STAMPED, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, hasXml: false, hasPdf: false };
+    serve(() => (++calls === 1 ? Promise.resolve({ ...INVOICING, invoices: [stamping] }) : Promise.reject(new Error('sin conexión'))));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderModal(false, queryClient);
+    await screen.findByRole('heading', { name: 'Facturar ORD-000001' });
+    await userEvent.type(screen.getByLabelText('Nombre o razón social'), ' X');
+
+    // While F-1 waits for its stamp the invoices are read every 30 s; one of those reads fails.
+    await queryClient.invalidateQueries({ queryKey: ['invoicing', 'orders', 'o-1'] });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron leer de nuevo las facturas de este pedido');
+    expect(screen.getByRole('heading', { name: 'Facturar ORD-000001' })).toBeInTheDocument();
+    expect(screen.getByText('F-1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Nombre o razón social')).toHaveValue('KARLA FUENTE NOLASCO X');
+  });
+
+  it('does not show what an earlier opening left in the cache when this opening\'s read fails', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const notPaid = 'Solo se factura una venta pagada por completo.';
+    queryClient.setQueryData(['invoicing', 'orders', 'o-1'], { ...INVOICING, canInvoice: false, problem: notPaid, invoices: [STAMPED] });
+    serve(() => Promise.reject(new Error('sin conexión')));
+    renderModal(false, queryClient);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron cargar las facturas de este pedido.');
+    expect(screen.getByRole('heading', { name: 'Factura de ORD-000001' })).toBeInTheDocument();
+    expect(screen.queryByText(notPaid)).not.toBeInTheDocument();
+    expect(screen.queryByText('F-1')).not.toBeInTheDocument();
+  });
+
   it('keeps the stamp pending until the order\'s invoices are read again, so it cannot be pressed twice', async () => {
     let calls = 0;
     let answer: (value: Invoicing) => void = () => {};

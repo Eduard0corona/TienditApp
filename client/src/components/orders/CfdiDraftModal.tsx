@@ -35,8 +35,12 @@ export default function CfdiDraftModal({ orderId, orderNumber, canCancel, onClos
   const titleId = useId();
   const invoicing = useOrderInvoicing(orderId);
   // What a previous opening left in the cache may be old (the order since paid, the customer's data changed): the body
-  // waits for this opening's answer, and a failed one is said, never taken for invoicing not being available.
-  const data = invoicing.isError ? undefined : invoicing.data;
+  // waits for this opening's answer, and a failed one is said, never taken for invoicing not being available. Once read,
+  // a read in the background that fails (every 30 s while an invoice waits, or after stamping) keeps what is on screen
+  // and what the person typed, and says it.
+  const [read, setRead] = useState(false);
+  if (!read && invoicing.isFetchedAfterMount && invoicing.isSuccess) setRead(true);
+  const data = read ? invoicing.data : undefined;
   const title = !data ? `Factura de ${orderNumber}` : data.available ? `Facturar ${orderNumber}` : `Factura de ${orderNumber} (vista previa)`;
 
   return (
@@ -56,7 +60,11 @@ export default function CfdiDraftModal({ orderId, orderNumber, canCancel, onClos
           onClose={onClose}
           loadError={invoicing.isError && (
             <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
-              <span className="me-auto">{getApiErrorMessage(invoicing.error, 'No se pudieron cargar las facturas de este pedido.')}</span>
+              <span className="me-auto">
+                {getApiErrorMessage(invoicing.error, data
+                  ? 'No se pudieron leer de nuevo las facturas de este pedido: lo que ves puede no estar al día.'
+                  : 'No se pudieron cargar las facturas de este pedido.')}
+              </span>
               <button type="button" className="btn btn-sm btn-outline-danger" disabled={invoicing.isFetching} onClick={() => void invoicing.refetch()}>
                 Reintentar
               </button>
