@@ -76,24 +76,49 @@ public class InvoicingWorkerTests
         Assert.Equal([cancelling], sent.Checks);
     }
 
-    private static Task<Guid> AddGlobalInvoiceAsync(OutboxTestHost host, string slug, DateTimeOffset requestedAt, bool cancelling = false)
+    [Fact]
+    public async Task Pass_ShouldAskAgain_ForTheGlobalInvoicesStillStamping_WithinThePacsWindow_OnceForABusinessWithBothKinds()
+    {
+        var sent = new SentCommands();
+        await using var host = Host(sent);
+        var now = host.Clock.UtcNow;
+        var both = await AddInvoiceAsync(host, "pedido-y-global", requestedAt: now.AddMinutes(-5));
+        await AddGlobalInvoiceAsync(host, "pedido-y-global", requestedAt: now.AddMinutes(-9), tenantId: both);
+        await AddGlobalInvoiceAsync(host, "global-reciente", requestedAt: now.AddSeconds(-20));
+        await AddGlobalInvoiceAsync(host, "global-vieja", requestedAt: now - StampPendingInvoicesCommandHandler.RetryWindow - TimeSpan.FromMinutes(1));
+        await AddGlobalInvoiceAsync(host, "global-rechazada", requestedAt: now.AddMinutes(-5), refused: true);
+        var worker = host.Get<InvoicingWorkerService>();
+
+        Assert.Equal(1, await worker.RunPassAsync(CancellationToken.None));
+
+        Assert.Equal([both], sent.Stamps);
+        Assert.Empty(sent.Checks);
+    }
+
+    /// <summary>A global invoice of a new business, or of <paramref name="tenantId"/>'s.</summary>
+    private static Task<Guid> AddGlobalInvoiceAsync(
+        OutboxTestHost host, string slug, DateTimeOffset requestedAt, bool refused = false, bool cancelling = false, Guid? tenantId = null)
         => host.InScopeAsync(async services =>
         {
-            var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
-            services.GetRequiredService<ICurrentTenantService>().SetTenant(tenant.Id);
+            var tenant = tenantId is null ? new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com") : null;
+            var id = tenant?.Id ?? tenantId!.Value;
+            services.GetRequiredService<ICurrentTenantService>().SetTenant(id);
             var context = services.GetRequiredService<ApplicationDbContext>();
             var invoice = GlobalInvoice.Request(
-                tenant.Id, GlobalInvoicePeriod.Containing(GlobalInvoicePeriodicity.Monthly, new DateOnly(2026, 9, 1)), "F", 1, "01", "{}",
-                86.21m, 13.79m, 100m, [new GlobalInvoiceSale(Guid.NewGuid(), "ORD-000001", 100m)], Guid.NewGuid(), requestedAt);
+                id, GlobalInvoicePeriod.Containing(GlobalInvoicePeriodicity.Monthly, new DateOnly(2026, 9, 1)), "F", 2, "01", "{}",
+                86.21m, 13.79m, 100m, [new GlobalInvoiceSale(Guid.NewGuid(), "ORD-000002", 100m)], Guid.NewGuid(), requestedAt);
+            if (refused)
+                invoice.Refuse("Rechazada", requestedAt);
             if (cancelling)
             {
                 invoice.Stamp(Guid.NewGuid().ToString(), "sw", requestedAt, "invoices/g.xml");
                 invoice.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, Guid.NewGuid(), requestedAt);
             }
-            context.Tenants.Add(tenant);
+            if (tenant is not null)
+                context.Tenants.Add(tenant);
             context.GlobalInvoices.Add(invoice);
             await context.SaveChangesAsync();
-            return tenant.Id;
+            return id;
         });
 
     private static OutboxTestHost Host(SentCommands sent)

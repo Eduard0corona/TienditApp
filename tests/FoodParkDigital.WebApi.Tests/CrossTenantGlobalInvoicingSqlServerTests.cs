@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
@@ -15,8 +16,9 @@ namespace FoodParkDigital.WebApi.Tests;
 /// <summary>
 /// The global invoice of a period (Fase 28B, ADR 0046) through the API: a business previews, stamps, downloads and cancels
 /// only its own, with its own sales, CSD and folios (the business header of an owner changes nothing); only owners and
-/// admins touch it; and the invoice of an order and the global invoice of its period asked at once cover the sale once,
-/// on SQL Server's invoicing lock of the business.
+/// admins touch it; the invoice of an order and the global invoice of its period asked at once cover the sale once,
+/// on SQL Server's invoicing lock of the business; and a sale of a day already stamped that no invoice covers goes in the
+/// next global invoice of its business only.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantGlobalInvoicingSqlServerTests
@@ -107,6 +109,34 @@ public sealed class CrossTenantGlobalInvoicingSqlServerTests
         Assert.Equal(HttpStatusCode.OK, (await mine.Client.GetAsync($"/api/v1/invoicing/global-invoices/{invoiceId}/pdf")).StatusCode);
         Assert.Equal(2, await _api.QueryAsync(mine.TenantId, db => db.GlobalInvoiceOrders.CountAsync()));
         Assert.Equal(1, await _api.QueryAsync(theirs.TenantId, db => db.GlobalInvoiceOrders.CountAsync()));
+    }
+
+    [SqlServerFact]
+    public async Task ASaleOfAStampedDay_InNoInvoice_ShouldGoInTheNextGlobalInvoice_OfItsBusinessOnly()
+    {
+        var mine = await _api.SignUpAsync("global-tarde-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("global-tarde-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        var product = await ProductAsync(mine.Client, "Tarde A");
+        var theirProduct = await ProductAsync(theirs.Client, "Tarde B");
+        var (first, _) = await PaidOrderAsync(mine.Client, product, phone: null, name: "Mostrador");
+        var (their, _) = await PaidOrderAsync(theirs.Client, theirProduct, phone: null, name: "Mostrador");
+        var day = await PaidYesterdayAsync(mine.TenantId, first);
+        await PaidYesterdayAsync(theirs.TenantId, their);
+        await IssueAsync(mine.Client, day, await DraftAsync(mine.Client, day));
+        await IssueAsync(theirs.Client, day, await DraftAsync(theirs.Client, day));
+
+        // Paid yesterday as well, and in no invoice after the day's global invoice was stamped (as one whose own invoice
+        // was refused then).
+        var (late, _) = await PaidOrderAsync(mine.Client, product, phone: null, name: "Mostrador");
+        var (theirLate, _) = await PaidOrderAsync(theirs.Client, theirProduct, phone: null, name: "Mostrador");
+        await PaidYesterdayAsync(mine.TenantId, late);
+        await PaidYesterdayAsync(theirs.TenantId, theirLate);
+
+        var today = await DraftAsync(mine.Client, day.AddDays(1));
+        Assert.Equal(late, Assert.Single(today.GetProperty("sales").EnumerateArray()).GetProperty("orderId").GetGuid());
+        Assert.Contains(GlobalInvoiceDrafts.LateSalesWarning(1), today.GetProperty("warnings").EnumerateArray().Select(w => w.GetString()));
     }
 
     [SqlServerFact]

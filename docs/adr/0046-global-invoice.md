@@ -33,7 +33,7 @@ Tomé las decisiones de la Fase 28B con la autorización permanente del dueño d
    - no tiene factura propia viva ni está en otra global viva;
    - sus importes cuadran (su borrador de CFDI sin diferencia).
 
-   Las que tuvieron cobros en el periodo y no entran se listan con su motivo.
+   Las que tuvieron cobros en el periodo y no entran se listan con su motivo. Y entran también, con su aviso, las de un periodo anterior que ya tiene su global viva y que no están en ninguna factura viva: una venta que solo pudo entrar después de timbrada la de su periodo (se aceptó o se cerró, se rechazó o canceló su factura, se rechazó su reembolso en línea) no se queda sin CFDI. Las de un periodo sin global esperan la suya.
 4. **Conceptos e importes.** Uno por venta (ObjetoImp 02) con un traslado por cada tasa que cobró (16 %, 8 %, 0 % y exento), con la base y el IVA del borrador de esa venta y dentro de los límites del SAT; una tasa con solo partidas gratis no lleva traslado (el SAT no toma una base de 0); lo no objeto, otro concepto (01) con el mismo folio. Los traslados del comprobante son la suma por tasa y el total, la suma de los totales de las ventas: el backend decide los importes. La forma de pago es la de la venta más grande (en un empate, la que no es 99); «Otro» (99) la bloquea. Hasta 2,000 ventas por global (una solicitud al PAC).
 5. **El agregado** `GlobalInvoice` (`ITenantScoped`) comparte con `OrderInvoice` la base `CfdiInvoice` (serie, folio, fecha, llave de idempotencia, estado, documento, importes, UUID, archivos, rechazo, cancelación y versión) y suma periodicidad, primer y último día, mes(es), año y sus ventas (`GlobalInvoiceOrder`: pedido, folio, total y `Released`). Al rechazarse o cancelarse, sus ventas quedan libres (se conservan las filas). Un índice único filtrado `(TenantId, OrderId) WHERE Released = 0` garantiza que una venta esté en una global viva a lo más.
 6. **El candado de facturación por negocio** (`IInvoicingLock`, `sp_getapplock` en la transacción de la solicitud): la factura de un pedido y la global lo toman primero y revisan dentro de él que la venta no esté en la otra. Así nunca quedan las dos, y dos personas que facturan el mismo pedido a la vez reciben «ya tiene la factura» en lugar de chocar con el índice.
@@ -57,7 +57,7 @@ Tomé las decisiones de la Fase 28B con la autorización permanente del dueño d
   - El cliente que pide su factura después tiene un camino que el SAT acepta, guiado desde Pedidos.
 - **Lo que limita:**
   - Las ventas a crédito, con reembolsos o condonación no entran: esperan sus fases (parcialidades y notas de crédito).
-  - Una cuenta que sigue abierta al terminar el periodo entra en la global del periodo en que se cierre y se termine de pagar, no en la de sus primeros cobros.
+  - Una cuenta que sigue abierta al terminar el periodo entra en la global del periodo en que se termine de pagar; si ya estaba pagada y se cierra después de timbrada la global de ese periodo, en la siguiente global que se emita, no en la de su periodo.
   - Más de 2,000 ventas en un periodo piden una periodicidad más corta.
   - La forma de pago es una por global (la de la venta más grande), como el SAT la pide.
   - El candado espera hasta 10 segundos: si otra factura del negocio tarda más, la persona lo intenta otra vez.

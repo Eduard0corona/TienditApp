@@ -314,6 +314,43 @@ public class GlobalInvoicingFlowTests
     }
 
     [Fact]
+    public async Task TabClosedAfterItsDaysGlobalWasStamped_ShouldGoInTheNextOne_WithoutTheSalesOfDaysWithoutOne()
+    {
+        await using var book = await Book.OpenAsync(food: true);
+        var tab = await book.Fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+        {
+            OpenTab = true,
+            CustomerName = "Barra",
+            Items = [new CreateOrderItemDto { ProductId = book.Product.Id, Quantity = 1 }]
+        }, CancellationToken.None);
+        Assert.True(tab.IsSuccess, tab.Error);
+        await book.PayAsync(tab.Value.Id, 100m);
+        var counter = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        book.Clock.UtcNow = NextMorning;
+        Assert.True((await book.IssueAsync(1, 100m)).IsSuccess);
+
+        // Paid in full that day and closed the next morning, after the day's global invoice was stamped.
+        var closed = await new CloseTabCommandHandler(book.Context, book.Fixture.CurrentUser,
+                new OrderInventoryService(book.Context, book.Clock, new FolioGenerator(book.Context), NullLogger<OrderInventoryService>.Instance))
+            .Handle(new CloseTabCommand(tab.Value.Id), CancellationToken.None);
+        Assert.True(closed.IsSuccess, closed.Error);
+        // A sale of a day that has no global invoice yet waits for its own.
+        var nextDays = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        book.Clock.UtcNow = NextMorning.AddDays(2);
+
+        var nextDay = await book.DraftAsync(day: SaleDay.AddDays(1));
+        Assert.Equal([tab.Value.OrderNumber, nextDays.OrderNumber], nextDay.Sales.Select(sale => sale.OrderNumber));
+        var dayAfter = await book.DraftAsync(day: SaleDay.AddDays(2));
+        Assert.Equal([tab.Value.OrderNumber], dayAfter.Sales.Select(sale => sale.OrderNumber));
+        Assert.Equal([GlobalInvoiceDrafts.LateSalesWarning(1)], dayAfter.Warnings);
+        Assert.Empty(dayAfter.LeftOut);
+
+        Assert.True((await book.IssueAsync(1, 100m, day: SaleDay.AddDays(2))).IsSuccess);
+        Assert.Equal([nextDays.OrderNumber], (await book.DraftAsync(day: SaleDay.AddDays(1))).Sales.Select(sale => sale.OrderNumber));
+        Assert.DoesNotContain(counter.OrderNumber, (await book.DraftAsync(day: SaleDay.AddDays(2))).Sales.Select(sale => sale.OrderNumber));
+    }
+
+    [Fact]
     public async Task FreeLineAtAnotherRate_ShouldAddNoTransferWithBaseZero()
     {
         await using var book = await Book.OpenAsync();
@@ -521,10 +558,12 @@ public class GlobalInvoicingFlowTests
 
         /// <summary>Stamps yesterday's global invoice as a preview with that number of sales and total showed it.</summary>
         /// <param name="fingerprint">The preview's; by default the one of the preview read now.</param>
-        public async Task<Result<GlobalInvoiceDto>> IssueAsync(int saleCount, decimal total, string? fingerprint = null)
+        /// <param name="day">The day of the sales; by default the sale day.</param>
+        public async Task<Result<GlobalInvoiceDto>> IssueAsync(int saleCount, decimal total, string? fingerprint = null, DateOnly? day = null)
             => await new IssueGlobalInvoiceCommandHandler(this, Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
                 .Handle(new IssueGlobalInvoiceCommand(
-                    GlobalInvoicePeriodicity.Daily, SaleDay, saleCount, total, fingerprint ?? (await DraftAsync()).Fingerprint),
+                    GlobalInvoicePeriodicity.Daily, day ?? SaleDay, saleCount, total,
+                    fingerprint ?? (await DraftAsync(day: day)).Fingerprint),
                     CancellationToken.None);
 
         /// <returns>The folios the list shows for that search.</returns>

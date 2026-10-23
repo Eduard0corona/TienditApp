@@ -20,7 +20,10 @@ public class GlobalInvoiceSaleDto
 {
     public Guid OrderId { get; set; }
     public string OrderNumber { get; set; } = null!;
-    /// <summary>When it was paid in full (its last payment): the day that puts it in the period.</summary>
+    /// <summary>
+    /// When it was paid in full (its last payment): the day that puts it in the period, or in an earlier one that already has
+    /// its global invoice (see <see cref="GlobalInvoiceDrafts.LateSalesWarning"/>).
+    /// </summary>
     public DateTimeOffset PaidAt { get; set; }
     public decimal Total { get; set; }
 }
@@ -126,7 +129,9 @@ public sealed record GlobalInvoiceDraft(
 /// charged; what a sale charged that is not subject to IVA is a second concept with the same folio. A sale goes in when it
 /// was paid in full during the period (the day of its last payment, in the business's time zone), at once (not on credit:
 /// those go in a global invoice of their own), is not cancelled, has nothing given back or forgiven (that needs a credit
-/// note), has no invoice of its own and is not in another global invoice. FormaPago is the form of its largest sale.
+/// note), has no invoice of its own and is not in another global invoice. A sale paid in an earlier period that already has
+/// its global invoice, and could only go in after it was stamped, goes in the next one. FormaPago is the form of its largest
+/// sale.
 /// </summary>
 public static class GlobalInvoiceDrafts
 {
@@ -165,7 +170,12 @@ public static class GlobalInvoiceDrafts
     public const string WrittenOffReason = "Se condonó parte de ella: lo condonado requiere una nota de crédito, que TienditApp todavía no genera.";
     public const string RefundInCourseReason = "Tiene un reembolso en curso en Mercado Pago.";
     public const string CanStillChangeReason =
-        "Todavía puede cambiar (sigue pendiente o es una cuenta abierta): ciérrala para que entre en la factura global.";
+        "Todavía puede cambiar (sigue pendiente o es una cuenta abierta): acéptala o ciérrala para que entre en esta factura global; "
+        + "si lo haces después de timbrarla, entra en la siguiente que emitas.";
+
+    public static string LateSalesWarning(int count) => count == 1
+        ? "Incluye 1 venta de un periodo anterior que no entró en su factura global: se aceptó o se cerró, o se resolvió su factura o su reembolso, después de timbrarla."
+        : $"Incluye {count} ventas de periodos anteriores que no entraron en su factura global: se aceptaron o se cerraron, o se resolvió su factura o su reembolso, después de timbrarla.";
 
     public static string CoveredRefundsWarning(int count) => count == 1
         ? "Incluye 1 venta con devoluciones que ya estaba en una factura global cancelada: va por su total, como la primera; la devolución requiere una nota de crédito."
@@ -221,24 +231,55 @@ public static class GlobalInvoiceDrafts
                 && o.Payments.Any()
                 && o.Payments.Max(p => p.PaidAt) >= start
                 && o.Payments.Max(p => p.PaidAt) < end);
-        var candidates = await paidInPeriod
-            .Select(o => new
+        var candidates = await Candidates(paidInPeriod).ToListAsync(cancellationToken);
+
+        // And the ones paid in an earlier period that already has its global invoice, in no live invoice: a sale that could
+        // only go in after it was stamped (accepted or closed, its own invoice refused or cancelled, its refund in Mercado Pago
+        // turned down) would otherwise stay without a CFDI, so it goes in this one.
+        var stampedBefore = (await context.GlobalInvoices.AsNoTracking()
+                .Where(g => (g.Status == OrderInvoiceStatus.Stamping || g.Status == OrderInvoiceStatus.Stamped
+                        || g.Status == OrderInvoiceStatus.Cancelling)
+                    && g.PeriodTo < period.From)
+                .Select(g => new { g.PeriodFrom, g.PeriodTo })
+                .Distinct()
+                .ToListAsync(cancellationToken))
+            .Select(g => (
+                From: TenantDateTimeResolver.StartOfLocalDayUtc(g.PeriodFrom.ToDateTime(TimeOnly.MinValue), zone),
+                To: TenantDateTimeResolver.StartOfLocalDayUtc(g.PeriodTo.AddDays(1).ToDateTime(TimeOnly.MinValue), zone)))
+            .OrderBy(range => range.From)
+            .Aggregate(new List<(DateTimeOffset From, DateTimeOffset To)>(), (merged, range) =>
             {
-                o.Id,
-                o.OrderNumber,
-                o.Total,
-                o.PaidAmount,
-                o.RefundedAmount,
-                o.WrittenOffAmount,
-                o.SoldOnCredit,
-                o.Status,
-                o.IsTab,
-                PaidAt = o.Payments.Max(p => p.PaidAt)
-            })
-            .OrderBy(o => o.PaidAt)
-            .ThenBy(o => o.OrderNumber)
-            .ToListAsync(cancellationToken);
-        var candidateIds = paidInPeriod.Select(o => o.Id);
+                // Day after day, one stretch.
+                if (merged.Count > 0 && range.From <= merged[^1].To)
+                    merged[^1] = (merged[^1].From, range.To > merged[^1].To ? range.To : merged[^1].To);
+                else
+                    merged.Add(range);
+                return merged;
+            });
+        var earliest = stampedBefore.Count == 0 ? start : stampedBefore.Min(range => range.From);
+        var paidBefore = context.Orders.AsNoTracking()
+            .Where(o => stampedBefore.Count > 0
+                && o.Status != OrderStatus.Cancelled
+                && o.Status != OrderStatus.Pending
+                && (!o.IsTab || o.Status == OrderStatus.Delivered || o.Status == OrderStatus.Completed)
+                && !o.SoldOnCredit
+                && o.Total > 0
+                && o.Total - o.PaidAmount <= 0
+                && o.WrittenOffAmount == 0
+                && o.Payments.Any()
+                && o.Payments.Max(p => p.PaidAt) >= earliest
+                && o.Payments.Max(p => p.PaidAt) < start
+                && !context.OrderInvoices.Any(i => i.OrderId == o.Id
+                    && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
+                        || i.Status == OrderInvoiceStatus.Cancelling))
+                && !context.GlobalInvoiceOrders.Any(g => g.OrderId == o.Id && !g.Released));
+        var late = stampedBefore.Count == 0
+            ? []
+            : (await Candidates(paidBefore).ToListAsync(cancellationToken))
+                .Where(candidate => stampedBefore.Any(range => candidate.PaidAt >= range.From && candidate.PaidAt < range.To))
+                .ToList();
+
+        var candidateIds = paidInPeriod.Select(o => o.Id).Concat(paidBefore.Select(o => o.Id));
         var ownInvoices = await context.OrderInvoices.AsNoTracking()
             .Where(i => candidateIds.Contains(i.OrderId)
                 && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
@@ -264,9 +305,10 @@ public static class GlobalInvoiceDrafts
         var globalByOrder = inGlobals.GroupBy(i => i.OrderId).ToDictionary(g => g.Key, g => $"{g.First().Serie}-{g.First().Folio}");
         var refunding = refundsInCourse.ToHashSet();
 
-        var included = new List<(Guid Id, DateTimeOffset PaidAt)>();
+        var included = new List<(Guid Id, DateTimeOffset PaidAt, bool Late)>();
         var coveredWithRefunds = 0;
-        foreach (var candidate in candidates)
+        // The earlier periods' first, in the order they were paid.
+        foreach (var (candidate, isLate) in late.Select(c => (c, true)).Concat(candidates.Select(c => (c, false))))
         {
             var covered = coveredBefore.Contains(candidate.Id);
             var reason = ownByOrder.TryGetValue(candidate.Id, out var own) ? OwnInvoiceReason(own)
@@ -280,13 +322,14 @@ public static class GlobalInvoiceDrafts
                 : candidate.RefundedAmount > 0 && !covered ? RefundedReason
                 : refunding.Contains(candidate.Id) && !covered ? RefundInCourseReason
                 : string.Empty;
-            if (reason?.Length == 0 && covered && (candidate.RefundedAmount > 0 || refunding.Contains(candidate.Id)))
-                coveredWithRefunds++;
-            // A sale without amount is not invoiced, nor listed.
-            if (reason is null)
+            // A sale without amount is not invoiced, nor listed; one of an earlier period, only when it goes in: why it does
+            // not was said in its own period's preview.
+            if (reason is null || (isLate && reason.Length > 0))
                 continue;
+            if (reason.Length == 0 && covered && (candidate.RefundedAmount > 0 || refunding.Contains(candidate.Id)))
+                coveredWithRefunds++;
             if (reason.Length == 0)
-                included.Add((candidate.Id, candidate.PaidAt));
+                included.Add((candidate.Id, candidate.PaidAt, isLate));
             else
                 dto.LeftOut.Add(new GlobalInvoiceLeftOutDto
                 {
@@ -311,12 +354,15 @@ public static class GlobalInvoiceDrafts
         var sales = new List<GlobalInvoiceSale>();
         var largest = (Total: 0m, Form: (string?)null);
         var platformSales = 0;
-        foreach (var (orderId, paidAt) in included)
+        var lateSales = 0;
+        foreach (var (orderId, paidAt, isLate) in included)
         {
             // Read a moment ago; outside a transaction a sale can be cancelled in between, and then it is not a sale.
             if (!ordersById.TryGetValue(orderId, out var order))
                 continue;
             var orderConcepts = Concepts(order);
+            if (orderConcepts is null && isLate)
+                continue;
             if (orderConcepts is null)
             {
                 dto.LeftOut.Add(new GlobalInvoiceLeftOutDto
@@ -339,6 +385,8 @@ public static class GlobalInvoiceDrafts
                 largest = (order.Total, form);
             if (order.IsDeliveryPlatformOrder)
                 platformSales++;
+            if (isLate)
+                lateSales++;
             dto.Sales.Add(new GlobalInvoiceSaleDto { OrderId = order.Id, OrderNumber = order.OrderNumber, PaidAt = paidAt, Total = order.Total });
         }
 
@@ -378,6 +426,8 @@ public static class GlobalInvoiceDrafts
             if (dto.PaymentForm == SatCatalog.PaymentFormToBeDefined)
                 dto.Blockers.Add(OtherPaymentBlocker);
         }
+        if (lateSales > 0)
+            dto.Warnings.Add(LateSalesWarning(lateSales));
         if (coveredWithRefunds > 0)
             dto.Warnings.Add(CoveredRefundsWarning(coveredWithRefunds));
         if (platformSales > 0)
@@ -405,6 +455,40 @@ public static class GlobalInvoiceDrafts
             transfers,
             sales);
     }
+
+    /// <summary>A sale the global invoice may cover, with what decides whether it goes in.</summary>
+    private sealed class Candidate
+    {
+        public Guid Id { get; init; }
+        public string OrderNumber { get; init; } = null!;
+        public decimal Total { get; init; }
+        public decimal PaidAmount { get; init; }
+        public decimal RefundedAmount { get; init; }
+        public decimal WrittenOffAmount { get; init; }
+        public bool SoldOnCredit { get; init; }
+        public OrderStatus Status { get; init; }
+        public bool IsTab { get; init; }
+        public DateTimeOffset PaidAt { get; init; }
+    }
+
+    /// <summary>Those sales, in the order they were paid in full.</summary>
+    private static IQueryable<Candidate> Candidates(IQueryable<Order> sales)
+        => sales
+            .OrderBy(o => o.Payments.Max(p => p.PaidAt))
+            .ThenBy(o => o.OrderNumber)
+            .Select(o => new Candidate
+            {
+                Id = o.Id,
+                OrderNumber = o.OrderNumber,
+                Total = o.Total,
+                PaidAmount = o.PaidAmount,
+                RefundedAmount = o.RefundedAmount,
+                WrittenOffAmount = o.WrittenOffAmount,
+                SoldOnCredit = o.SoldOnCredit,
+                Status = o.Status,
+                IsTab = o.IsTab,
+                PaidAt = o.Payments.Max(p => p.PaidAt)
+            });
 
     /// <summary>
     /// The concepts of one sale: its subtotal before taxes, with a transfer per IVA rate it charged (the bases and IVA of its
