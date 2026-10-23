@@ -27,7 +27,7 @@
   - exentos y tasa 0 no causan impuesto.
 - `SubTotal` es la suma de las bases, `Tax` la suma de los impuestos y `Total = SubTotal + Tax`. Con todas las líneas al 16 % sumado el resultado es idéntico al cálculo anterior (`round(SubTotal × 0.16)`), así que las órdenes existentes no cambian.
 - `OrderDto.TaxBreakdown` expone el desglose por tasa y el ticket lo imprime. El SPA lo estima con el mismo algoritmo en centavos enteros (`estimateOrderTotals`); la venta envía `ExpectedTotal` y la API la rechaza sin guardarla si un precio cambió mientras se capturaba.
-- No hay timbrado (PAC), descuentos por línea ni notas de crédito fiscales. Las claves SAT por línea y la vista previa del CFDI están en [cantidades decimales y CFDI](#cantidades-decimales-y-datos-para-cfdi-fase-3).
+- No hay descuentos por línea ni notas de crédito fiscales. Las claves SAT por línea y la vista previa del CFDI están en [cantidades decimales y CFDI](#cantidades-decimales-y-datos-para-cfdi-fase-3); el timbrado de la factura de un pedido, en [la factura del pedido](#la-factura-del-pedido-timbrada-con-un-pac-fase-28a).
 
 ## Cantidades decimales y datos para CFDI (Fase 3)
 
@@ -38,7 +38,18 @@
 - Cada línea copia al venderse la unidad y las claves del producto (`OrderLineFiscalData`); cambiar el producto después no altera ventas anteriores. La migración completó las líneas existentes con la unidad actual de su producto.
 - `CfdiAmountCalculator` reparte una orden en conceptos CFDI 4.0: por tasa, las bases suman la base de la orden y los IVA de los conceptos suman el IVA de la orden. Cada IVA queda dentro del rango que acepta el SAT para su base (base ± medio centavo por la tasa, truncado y redondeado hacia arriba); el centavo que deja el redondeo por grupo pasa al concepto que más se acerca. Exentos se declaran con TipoFactor Exento, 0 % con Tasa 0.000000 y los conceptos 01 sin traslado. Una prueba con 500 órdenes aleatorias comprueba que siempre cuadra.
 - `GET /api/v1/orders/{id}/cfdi-draft` (con `ManageOrders`) devuelve la vista previa: emisor (RFC, razón social, régimen y código postal de "Mi negocio"), receptor (público en general por defecto, o el RFC, nombre, código postal, régimen y uso que se den), forma y método de pago (PUE con la forma del mayor pago si está pagada; PPD y 99 si tiene saldo), conceptos, traslados y totales. Separa lo que impide timbrar (datos del emisor faltantes, diferencia de redondeo) de los avisos (claves genéricas, reembolsos que requieren nota de crédito, factura global). Una orden cancelada no se factura.
-- Pendiente: timbrado con un PAC y certificados CSD, factura global del periodo, complementos de pago y notas de crédito (CFDI de egreso).
+- Pendiente: factura global del periodo, complementos de pago y notas de crédito (CFDI de egreso). El timbrado de la factura de un pedido llegó en la Fase 28A (siguiente sección).
+
+## La factura del pedido, timbrada con un PAC (Fase 28A)
+
+Decisión completa en el [ADR 0045](../adr/0045-order-invoicing.md).
+
+- La plataforma timbra con SW Sapien detrás de `IInvoicingGateway`; sin su configuración (`SwSapien`), Pedidos solo muestra la vista previa.
+- El negocio sube su CSD en Configuración › Facturación (dueños y administradores). TienditApp revisa que sea de sello, vigente, del RFC de Mi negocio y que la llave abra con la contraseña; el PAC lo guarda y TienditApp solo guarda número, RFC y vigencia (`InvoicingProfile`). Los archivos y la contraseña nunca se guardan ni se registran.
+- Se factura una venta pagada por completo (PUE), sin reembolsos, condonaciones ni reembolso en línea en curso, a un cliente con RFC (no público en general), sin otra factura viva. Los importes son los de la vista previa y el total es el de la venta.
+- `OrderInvoice` fija serie, folio (contador por negocio y serie, `CFDI-{serie}`), fecha local, llave de idempotencia y el CFDI completo antes de llamar al PAC, en una transacción; el PAC se llama después del commit. Sin respuesta queda «Timbrando» y se vuelve a pedir con la misma llave (la persona o el worker cada 2 minutos, hasta 71 horas); un rechazo la deja «Rechazada» y el pedido se factura otra vez con el siguiente folio. El XML y el PDF van a los archivos privados del negocio.
+- Cancelar (dueños y administradores, motivo 02 o 03) pregunta primero al PAC; si el SAT espera al receptor queda «Cancelándose» y el worker pregunta cada 30 minutos. Una factura nunca se borra; una cancelada deja facturar el pedido otra vez.
+- El cliente guarda sus datos fiscales (`Customer.FiscalData`) desde Clientes o al timbrar; la factura del pedido los propone por el teléfono del pedido.
 
 ## Cobro en la venta y cierre automático
 
@@ -225,6 +236,6 @@ Compras redondean línea a 4 decimales y órdenes a 2, sin política transversal
 - reglas por artículo/servicio y entidad legal;
 - orden explícito de descuentos;
 - otros impuestos (IEPS, retenciones);
-- timbrado, factura global, complementos de pago y notas de crédito.
+- factura global, complementos de pago y notas de crédito.
 
 La adopción requiere especificación fiscal, pruebas con casos límite, migración compatible y revisión contable/legal.

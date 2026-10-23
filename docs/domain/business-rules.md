@@ -518,6 +518,27 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - «Tienes $X a tu favor» en el estado de cuenta por WhatsApp.
 - **Sin** intereses, saldo sin teléfono, anticipos ligados a un pedido o una cita, ni CFDI del anticipo.
 
+## La factura del pedido (Fase 28A)
+
+[ADR 0045](../adr/0045-order-invoicing.md):
+
+- **Qué se factura:** un pedido a un cliente con RFC, con un CFDI 4.0 de ingreso timbrado por el PAC de la plataforma (SW Sapien). Los conceptos, el IVA, la forma de pago y el total son los de la vista previa del CFDI (Fase 3); el backend los decide y el PAC solo los valida.
+- **Cuándo se puede:**
+  - la vista previa no tiene bloqueos y el receptor no es público en general (esas ventas esperan la factura global);
+  - el pedido está pagado por completo (PUE) y no está cancelado; sin reembolsos, condonaciones ni un reembolso en línea en curso;
+  - no tiene otra factura viva (timbrando, timbrada o cancelándose);
+  - el negocio subió su CSD, vigente y del RFC de Mi negocio, y la plataforma tiene su PAC.
+- **El receptor:** RFC, nombre o razón social, código postal, régimen y uso del CFDI como aparecen en su constancia. Pedidos propone los del cliente del teléfono del pedido o, si no tiene, los de la última factura del pedido; «Guardar estos datos en el cliente» los deja en su ficha. Clientes › «Datos fiscales» los cambia (`ManageCustomers`): completos o ninguno, y nunca en «Público en general».
+- **Folio:** serie del negocio («F» por omisión, de 1 a 10 letras o números) y folio consecutivo por serie, sin huecos. Un rechazo del PAC usa el folio; uno de la base lo regresa.
+- **Timbrar:** la factura se guarda antes de llamar al PAC con el CFDI completo y una llave; cada intento manda exactamente ese, así que una respuesta perdida nunca timbra dos veces.
+  - timbrada → el XML queda en los archivos privados del negocio con su folio fiscal (UUID), y el PDF si el PAC lo da;
+  - rechazada → con el mensaje del PAC; el pedido se puede facturar otra vez con el folio siguiente;
+  - sin respuesta → «Timbrando»: «Volver a pedir el timbre» o el worker (cada 2 minutos, hasta 71 horas después de pedirla) la resuelven.
+- **Cancelar** (dueños y administradores): con motivo 02 (errores sin relación) o 03 (la venta no se llevó a cabo); se pide primero al PAC y, si se niega, nada cambia. Si el SAT pide la aceptación del receptor, queda «Cancelándose» y el worker pregunta cada 30 minutos: cancelada, o «Timbrada» otra vez si el receptor la rechazó. Una cancelada deja facturar el pedido otra vez con factura y folio nuevos. Nunca se borra una factura.
+- **El CSD** (dueños y administradores, Configuración › Facturación): `.cer`, `.key` y la contraseña de la llave. TienditApp revisa que sea de sello, vigente, del RFC de Mi negocio y que la llave corresponda; el PAC lo guarda y TienditApp solo su número, RFC y vigencia. Los archivos y la contraseña nunca se guardan ni se registran. Avisa 30 días antes de vencer; reemplazarlo o quitarlo pide al PAC que olvide el anterior.
+- **Acceso:** timbrar, volver a pedir, ver y descargar el XML y el PDF, quien gestiona los pedidos (`ManageOrders`); cancelar, el CSD y la serie, dueños y administradores. Otro negocio recibe 404.
+- **Sin** factura global de público en general, PPD y complementos de pago, notas de crédito, sustitución (motivo 01), autofactura, envío por correo o WhatsApp, logo en el PDF, otras monedas ni retenciones.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

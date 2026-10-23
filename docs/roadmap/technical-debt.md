@@ -588,7 +588,7 @@ Pendientes detectados en la Fase 2:
 
 Pendientes detectados en la Fase 3:
 
-- Timbrado con un PAC y certificados CSD, factura global, complementos de pago y notas de crédito.
+- Factura global, complementos de pago y notas de crédito. El timbrado de la factura de un pedido con un PAC y el CSD del negocio llegó en la Fase 28A ([ADR 0045](../adr/0045-order-invoicing.md)); quedan: sustitución con motivo 01, logo en el PDF, mandar la factura por correo o WhatsApp, autofactura del cliente y revisar en el PAC una factura que se quedó «Timbrando» más de 71 horas.
 - Las opciones de un producto no consumen insumos propios; falta dividir cuentas y unir mesas (cancelar un platillo de una ronda enviada se resolvió en la Fase 15); las mesas son del negocio, no de la sucursal.
 - Menú en línea sin pago en línea, entrega a domicilio ni aviso automático de confirmación.
 - Cada ubicación de inventario se volvió sucursal: las que solo eran almacén hay que desactivarlas a mano después de aplicar la migración.
