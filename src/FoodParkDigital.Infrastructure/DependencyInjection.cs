@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Identity;
 using FoodParkDigital.Application.Identity.Services;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
@@ -14,6 +15,7 @@ using FoodParkDigital.Infrastructure.BackgroundJobs.OnlinePayments;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Reporting;
 using FoodParkDigital.Infrastructure.Identity;
+using FoodParkDigital.Infrastructure.Invoicing;
 using FoodParkDigital.Infrastructure.OnlinePayments;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Interceptors;
@@ -155,6 +157,7 @@ public static class DependencyInjection
         services.AddHttpClient(WhatsAppCloudClient.HttpClientName).AddResilienceHandler("whatsapp", ConfigureProviderResilience);
         services.AddHttpClient("Twilio").AddResilienceHandler("twilio", ConfigureProviderResilience);
         services.AddHttpClient(MercadoPagoGateway.HttpClientName).AddResilienceHandler("mercadopago", ConfigureProviderResilience);
+        services.AddHttpClient(SwSapienGateway.HttpClientName).AddResilienceHandler("swsapien", ConfigureProviderResilience);
 
         // Background work: outbox (durable side effects of domain events), webhook inbox, messaging
         // (campaigns, reminders and the queue of outgoing WhatsApp messages), daily sales snapshots, billing status and
@@ -207,6 +210,9 @@ public static class DependencyInjection
         services.Configure<MercadoPagoOptions>(configuration.GetSection(MercadoPagoOptions.SectionName));
         services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
         services.AddSingleton<IOnlinePaymentGateway, MercadoPagoGateway>();
+        // Invoicing (Fase 28A, ADR 0045): offered only when the SwSapien section has the platform's account.
+        services.Configure<SwSapienOptions>(configuration.GetSection(SwSapienOptions.SectionName));
+        services.AddSingleton<IInvoicingGateway, SwSapienGateway>();
         services.AddScoped<IWhatsAppService, WhatsAppService>();
         services.AddSingleton<ITwoFactorService, TwoFactorService>();
         var fileStorageProvider = configuration["FileStorage:Provider"];

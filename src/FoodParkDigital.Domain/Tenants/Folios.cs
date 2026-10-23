@@ -3,7 +3,7 @@ namespace FoodParkDigital.Domain.Tenants;
 /// <summary>
 /// The folio formats of a business. Orders count without end (ORD-000123); inventory movements, purchase orders,
 /// physical counts and transfers start again every day (INV-20261005-0007, PO-20261005-0002, CNT-20261021-0001,
-/// TRF-20261021-0001, by the UTC day).
+/// TRF-20261021-0001, by the UTC day). The invoices count without end within their serie (F-123, Fase 28A).
 /// </summary>
 public static class Folios
 {
@@ -28,6 +28,9 @@ public static class Folios
 
     /// <summary>The folio of a daily counter: its scope and the number of the day.</summary>
     public static string DailyNumber(string scope, long number) => $"{scope}-{number:0000}";
+
+    /// <summary>CFDI-F: the folios of the invoices of a serie (Fase 28A).</summary>
+    public static string InvoiceScope(string serie) => $"CFDI-{serie}";
 
     private static string DailyScope(string prefix, DateTimeOffset date) => $"{prefix}-{date.UtcDateTime:yyyyMMdd}";
 }

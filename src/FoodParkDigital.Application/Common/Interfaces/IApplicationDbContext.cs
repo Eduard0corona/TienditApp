@@ -16,6 +16,7 @@ using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
+using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -49,6 +50,8 @@ public interface IApplicationDbContext
     DbSet<OnlinePaymentAuthorization> OnlinePaymentAuthorizations { get; }
     DbSet<OnlineCheckout> OnlineCheckouts { get; }
     DbSet<OnlinePaymentRefund> OnlinePaymentRefunds { get; }
+    DbSet<OrderInvoice> OrderInvoices { get; }
+    DbSet<InvoicingProfile> InvoicingProfiles { get; }
     DbSet<TemporaryCustomer> TemporaryCustomers { get; }
     DbSet<Order> Orders { get; }
     DbSet<OrderItem> OrderItems { get; }
