@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,8 @@ namespace FoodParkDigital.Application.OnlinePayments;
 /// <summary>
 /// Mercado Pago notified a payment into an account this business connected (the webhook processor sends it in the business's
 /// scope). The notification only says which payment: it is read from Mercado Pago with the business's key, and applied to
-/// the checkout of its external reference if it is one of this business.
+/// the checkout of its external reference if it is one of this business. Any change of a paid one (a refund, a dispute)
+/// reaches its order too (Fase 24K).
 /// </summary>
 [AllowAnonymousRequest("Lo envía el procesador del webhook de Mercado Pago (sistema), sin usuario, en el alcance del negocio.")]
 public record ApplyOnlinePaymentNotificationCommand(string PaymentId) : IRequest<Result<OnlinePaymentApplication>>;
@@ -21,6 +23,7 @@ public class ApplyOnlinePaymentNotificationCommandHandler
 {
     private readonly IOnlinePaymentGateway _gateway;
     private readonly OnlinePaymentChecker _checker;
+    private readonly OnlinePaymentReconciler _reconciler;
 
     public ApplyOnlinePaymentNotificationCommandHandler(
         IApplicationDbContext context,
@@ -32,6 +35,7 @@ public class ApplyOnlinePaymentNotificationCommandHandler
     {
         _gateway = gateway;
         _checker = new OnlinePaymentChecker(context, gateway, protector, clock, sender, logger);
+        _reconciler = new OnlinePaymentReconciler(context, gateway, sender);
     }
 
     /// <exception cref="OnlinePaymentGatewayUnavailableException">Mercado Pago did not answer: the delivery is retried.</exception>
@@ -55,8 +59,241 @@ public class ApplyOnlinePaymentNotificationCommandHandler
         if (payment is null || !Guid.TryParse(payment.ExternalReference, out var checkoutId))
             return Result.Success(OnlinePaymentApplication.Ignored);
 
-        return Result.Success(await _checker.ApplyAsync(checkoutId, payment, cancellationToken));
+        // An approved one is applied first (it may place the order); then whatever Mercado Pago did to it since reaches it.
+        var applied = payment.IsApproved ? await _checker.ApplyAsync(checkoutId, payment, cancellationToken) : OnlinePaymentApplication.Ignored;
+        try
+        {
+            await _reconciler.ReconcileAsync(accessToken, checkoutId, payment, cancellationToken);
+        }
+        catch (OnlinePaymentAccountRejectedException)
+        {
+            await _checker.RejectKeyAsync(cancellationToken);
+        }
+        return Result.Success(applied);
     }
+}
+
+/// <summary>
+/// The review of a business's payments in Mercado Pago (Fase 24K, ADR 0044; the online payments worker sends it in the
+/// business's scope, every <see cref="ReviewOnlinePaymentsCommandHandler.ReviewEvery"/>): it asks Mercado Pago for the
+/// payments of the account that changed since the last review and reflects the ones of this business's checkouts, so a
+/// refund made in Mercado Pago or a dispute reaches the order even when its notification was lost. Without a key that works
+/// nothing is reviewed, and it waits.
+/// <para>The account keeps until when everything was read (<see cref="OnlinePaymentAccount.PaymentsReviewedUntil"/>): a review
+/// that read all of it, until <see cref="ReviewOnlinePaymentsCommandHandler.Overlap"/> before now (Mercado Pago's clock and
+/// ours may differ); one that stopped at its page limit, until the last change it read, by Mercado Pago's clock, and the next
+/// one goes on from there. Each page starts at the last change of the one before, so a payment that changes again while the
+/// review runs (it moves to the end) shifts nothing.</para>
+/// </summary>
+[AllowAnonymousRequest("Lo envía la revisión de pagos en línea (sistema), sin usuario, en el alcance del negocio.")]
+public record ReviewOnlinePaymentsCommand : IRequest<Result<OnlinePaymentReview>>;
+
+/// <param name="Read">Payments of the account Mercado Pago gave back as changed.</param>
+/// <param name="Reflected">Payments of this business's checkouts whose refunds or dispute reached the order.</param>
+/// <param name="ReviewedUntil">Until when the account is reviewed now; null when nothing was reviewed.</param>
+public sealed record OnlinePaymentReview(int Read, int Reflected, DateTimeOffset? ReviewedUntil);
+
+public class ReviewOnlinePaymentsCommandHandler : IRequestHandler<ReviewOnlinePaymentsCommand, Result<OnlinePaymentReview>>
+{
+    /// <summary>How often a business's account is reviewed: the notification usually brings each change at once.</summary>
+    public static readonly TimeSpan ReviewEvery = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// A review that read everything counts as read until this much before now: Mercado Pago's clock and ours may differ, and
+    /// the next review reads it again.
+    /// </summary>
+    public static readonly TimeSpan Overlap = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// The first review of an account reads from its oldest checkout paid with it (or its connection), at most this far back:
+    /// Mercado Pago's window for refunds.
+    /// </summary>
+    public static readonly TimeSpan FirstReviewWindow = TimeSpan.FromDays(180);
+
+    public const int PageSize = 50;
+    public const int MaxPagesPerReview = 4;
+
+    /// <summary>
+    /// An account reviewed until before this is due a review: one that read everything is due <see cref="ReviewEvery"/>
+    /// after it ran, and one that stopped at its page limit goes on at once, unless what it read is that recent.
+    /// </summary>
+    public static DateTimeOffset DueIfReviewedBefore(DateTimeOffset now) => now - ReviewEvery - Overlap;
+
+    private readonly IApplicationDbContext _context;
+    private readonly IOnlinePaymentGateway _gateway;
+    private readonly ISecretProtector _protector;
+    private readonly IDateTimeProvider _clock;
+    private readonly OnlinePaymentChecker _checker;
+    private readonly OnlinePaymentReconciler _reconciler;
+    private readonly ILogger<ReviewOnlinePaymentsCommandHandler> _logger;
+
+    public ReviewOnlinePaymentsCommandHandler(
+        IApplicationDbContext context,
+        IOnlinePaymentGateway gateway,
+        ISecretProtector protector,
+        IDateTimeProvider clock,
+        ISender sender,
+        ILogger<ReviewOnlinePaymentsCommandHandler> logger)
+    {
+        _context = context;
+        _gateway = gateway;
+        _protector = protector;
+        _clock = clock;
+        _logger = logger;
+        _checker = new OnlinePaymentChecker(context, gateway, protector, clock, sender, logger);
+        _reconciler = new OnlinePaymentReconciler(context, gateway, sender);
+    }
+
+    public async Task<Result<OnlinePaymentReview>> Handle(ReviewOnlinePaymentsCommand request, CancellationToken cancellationToken)
+    {
+        var nothing = new OnlinePaymentReview(0, 0, null);
+        var now = _clock.UtcNow;
+        var account = await _context.OnlinePaymentAccounts.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        if (account is null || account.PaymentsReviewedUntil > DueIfReviewedBefore(now))
+            return Result.Success(nothing);
+        var accessToken = await _checker.AccessTokenAsync(cancellationToken);
+        if (accessToken is null)
+            return Result.Success(nothing);
+
+        var start = account.PaymentsReviewedUntil ?? await FirstReviewStartAsync(account, now, cancellationToken);
+        var from = start;
+        var offset = 0;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var read = 0;
+        var reflected = 0;
+        DateTimeOffset? lastChanged = null;
+        var complete = false;
+        try
+        {
+            for (var page = 0; page < MaxPagesPerReview; page++)
+            {
+                var changes = await _gateway.FindChangedPaymentsAsync(accessToken, from, now, offset, PageSize, cancellationToken);
+                // A page that starts at the last change of the one before gives back the payments of that same instant again.
+                var fresh = changes.Payments.Where(p => seen.Add(p.Id)).ToList();
+                read += fresh.Count;
+                reflected += await ReflectAsync(accessToken, fresh, cancellationToken);
+                if (changes.Returned < PageSize)
+                {
+                    complete = true;
+                    break;
+                }
+
+                var last = changes.Payments.Select(p => p.LastChangedAt).LastOrDefault(at => at is not null);
+                lastChanged = last ?? lastChanged;
+                // The next page starts at the last change read; only when the whole page changed at that same instant does it
+                // go on by position.
+                if (last is { } at && at > from)
+                {
+                    from = at;
+                    offset = 0;
+                }
+                else
+                {
+                    offset += PageSize;
+                }
+            }
+        }
+        catch (OnlinePaymentAccountRejectedException)
+        {
+            await _checker.RejectKeyAsync(cancellationToken);
+            return Result.Success(nothing);
+        }
+        catch (OnlinePaymentGatewayUnavailableException)
+        {
+            // Mercado Pago did not answer: the review starts again from where the last one ended.
+            _logger.LogWarning("Mercado Pago did not answer the review of the payments of tenant {TenantId}", account.TenantId);
+            return Result.Success(new OnlinePaymentReview(read, reflected, null));
+        }
+
+        var until = complete ? now - Overlap : ContinueFrom(lastChanged, start, account.TenantId);
+        _context.ChangeTracker.Clear();
+        var stored = await _context.OnlinePaymentAccounts.FirstOrDefaultAsync(cancellationToken);
+        if (stored is null || stored.ProviderUserId != account.ProviderUserId)
+            return Result.Success(new OnlinePaymentReview(read, reflected, null));
+        stored.ReviewPaymentsUntil(until);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The owner or the renewal changed the account meanwhile: the next review reads this part again.
+            _context.ChangeTracker.Clear();
+            return Result.Success(new OnlinePaymentReview(read, reflected, null));
+        }
+
+        return Result.Success(new OnlinePaymentReview(read, reflected, stored.PaymentsReviewedUntil));
+    }
+
+    /// <summary>
+    /// Where the next review goes on after one that stopped at its page limit: the last change it read, which it reads again
+    /// (the ones of that instant it had not reached yet). It always moves forward: if every payment it read changed at the
+    /// instant it started from, the rest of that instant is left out (and logged) rather than read again forever.
+    /// </summary>
+    private DateTimeOffset ContinueFrom(DateTimeOffset? lastChanged, DateTimeOffset start, Guid tenantId)
+    {
+        if (lastChanged is { } last && last > start)
+            return last;
+        _logger.LogWarning(
+            "The review of the payments of tenant {TenantId} read a whole review of changes at one instant; it goes on after it", tenantId);
+        return start.AddMilliseconds(1);
+    }
+
+    /// <summary>
+    /// The first review reads from the oldest checkout paid with this account (it may have been connected before, and connected
+    /// again) or from its connection, at most <see cref="FirstReviewWindow"/> back.
+    /// </summary>
+    private async Task<DateTimeOffset> FirstReviewStartAsync(OnlinePaymentAccount account, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var oldestPaid = await _context.OnlineCheckouts.AsNoTracking()
+            .Where(c => c.ProviderUserId == account.ProviderUserId
+                && (c.Status == OnlineCheckoutStatus.Placed || c.Status == OnlineCheckoutStatus.NotPlaced))
+            .MinAsync(c => (DateTimeOffset?)c.StartedAt, cancellationToken);
+        var start = oldestPaid is { } paid && paid < account.ConnectedAt ? paid : account.ConnectedAt;
+        return Max(start, now - FirstReviewWindow);
+    }
+
+    /// <returns>How many payments reached their orders.</returns>
+    private async Task<int> ReflectAsync(string accessToken, IReadOnlyList<OnlinePaymentDetails> payments, CancellationToken cancellationToken)
+    {
+        // Every payment of the account comes: only the ones of this business's checkouts are reflected.
+        var references = payments
+            .Select(p => Guid.TryParse(p.ExternalReference, out var id) ? id : (Guid?)null)
+            .Where(id => id is not null)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        if (references.Count == 0)
+            return 0;
+        var checkouts = (await _context.OnlineCheckouts.AsNoTracking()
+            .Where(c => references.Contains(c.Id))
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken)).ToHashSet();
+
+        var reflected = 0;
+        foreach (var payment in payments)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Guid.TryParse(payment.ExternalReference, out var checkoutId) || !checkouts.Contains(checkoutId))
+                continue;
+            try
+            {
+                if ((await _reconciler.ReconcileAsync(accessToken, checkoutId, payment, cancellationToken)).ChangedAnything)
+                    reflected++;
+            }
+            catch (Exception ex) when (ex is not (OperationCanceledException or OnlinePaymentGatewayUnavailableException or OnlinePaymentAccountRejectedException))
+            {
+                // Something unexpected with this one: the others are reflected, and the next review reads it again only if it
+                // changes. Only the type: a database message can quote what the customer typed.
+                _context.ChangeTracker.Clear();
+                _logger.LogError("The review could not reflect the payment of online checkout {CheckoutId} ({Exception})", checkoutId, ex.GetType().Name);
+            }
+        }
+
+        return reflected;
+    }
+
+    private static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
 }
 
 /// <summary>

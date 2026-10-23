@@ -21,6 +21,7 @@ internal static class BeforeCreditDueSoon
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.CreditDueSoonEnabled);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.CreditDueSoonDaysBefore);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.CreditDueSoonTemplateId);
+        BeforeOnlinePaymentReconciliation.Ignore(modelBuilder);
     }
 
     private sealed class Context(

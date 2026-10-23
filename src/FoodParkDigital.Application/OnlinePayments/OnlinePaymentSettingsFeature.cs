@@ -14,7 +14,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.OnlinePayments;
 
-/// <summary>Configuración › Pagos en línea (Fase 24I): the business's Mercado Pago account and whether the menu offers it.</summary>
+/// <summary>
+/// Configuración › Pagos en línea (Fase 24I): the business's Mercado Pago account and whether the menu offers it, and what
+/// went wrong in Mercado Pago (Fase 24K).
+/// </summary>
 public class OnlinePaymentSettingsDto
 {
     /// <summary>Whether the platform configured Mercado Pago; without it nothing else applies.</summary>
@@ -36,8 +39,15 @@ public class OnlinePaymentSettingsDto
     public int CheckoutsInCourse { get; set; }
     /// <summary>Money still going back to customers through Mercado Pago.</summary>
     public int RefundsInCourse { get; set; }
-    /// <summary>Refunds Mercado Pago refused: the business gives that money back from its account.</summary>
+    /// <summary>
+    /// Refunds Mercado Pago refused: the business gives that money back from its account. One the business then made there
+    /// no longer counts (Fase 24K).
+    /// </summary>
     public int RefundsRefused { get; set; }
+    /// <summary>Orders whose payment a chargeback or a claim disputes: Mercado Pago holds the money until it decides (Fase 24K).</summary>
+    public int DisputesOpen { get; set; }
+    /// <summary>Until when the account's payments were reviewed in Mercado Pago for refunds and disputes (Fase 24K).</summary>
+    public DateTimeOffset? PaymentsReviewedUntil { get; set; }
 }
 
 public class OnlinePaymentConnectionStartDto
@@ -425,7 +435,9 @@ internal static class OnlinePaymentSettings
             MenuTakesOrders = mode == OnlineMenuMode.Orders,
             CheckoutsInCourse = await context.OnlineCheckouts.CountAsync(c => c.Status == OnlineCheckoutStatus.AwaitingPayment, cancellationToken),
             RefundsInCourse = await context.OnlinePaymentRefunds.CountAsync(r => r.Status == OnlinePaymentRefundStatus.Requested, cancellationToken),
-            RefundsRefused = await context.OnlinePaymentRefunds.CountAsync(r => r.Status == OnlinePaymentRefundStatus.Failed, cancellationToken)
+            RefundsRefused = await context.OnlinePaymentRefunds.CountAsync(r => r.Status == OnlinePaymentRefundStatus.Failed, cancellationToken),
+            DisputesOpen = await context.OnlineCheckouts.CountAsync(c => c.Dispute == OnlinePaymentDispute.Open, cancellationToken),
+            PaymentsReviewedUntil = account?.PaymentsReviewedUntil
         };
     }
 }

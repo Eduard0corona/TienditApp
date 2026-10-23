@@ -10,6 +10,9 @@ namespace FoodParkDigital.Domain.OnlinePayments.Entities;
 /// checkout could not become an order (or was paid twice), or when the business refunds an order with the «En línea»
 /// method. Asking for it is a domain event, so the queue retries until Mercado Pago answers; its id is the idempotency key,
 /// so retrying never gives the money back twice. It records whether Mercado Pago did it or refused it.
+/// Since the Fase 24K (ADR 0044) it also records what went back in Mercado Pago without TienditApp asking: a refund the
+/// business made from its account, one Mercado Pago made for a claim, and a chargeback the business lost. Those are
+/// already done, so nothing is asked.
 /// </summary>
 public class OnlinePaymentRefund : AuditableEntity, IAggregateRoot, ITenantScoped
 {
@@ -74,6 +77,35 @@ public class OnlinePaymentRefund : AuditableEntity, IAggregateRoot, ITenantScope
         });
     }
 
+    /// <summary>
+    /// A refund Mercado Pago already made without TienditApp asking (Fase 24K), recorded with the order's «En línea» refund
+    /// it became: the business made it from its account, or Mercado Pago made it (also for a claim). Its id in Mercado Pago
+    /// is what keeps it from being recorded twice.
+    /// </summary>
+    public static OnlinePaymentRefund MadeInMercadoPago(
+        Guid tenantId, Guid orderId, Guid orderRefundId, string paymentId, decimal amount, string providerRefundId,
+        OnlinePaymentRefundReason reason, DateTimeOffset now)
+    {
+        if (reason is not (OnlinePaymentRefundReason.InMercadoPago or OnlinePaymentRefundReason.Claim))
+            throw new DomainException("Una devolución hecha en Mercado Pago es del negocio desde su cuenta, de Mercado Pago o de una reclamación.");
+        var id = ProviderId(providerRefundId)
+            ?? throw new DomainException("La devolución de Mercado Pago necesita su referencia.");
+
+        return Done(tenantId, orderId, orderRefundId, paymentId, amount, reason, now, id);
+    }
+
+    /// <summary>
+    /// The customer's bank took the payment back and the business lost the dispute (Fase 24K): what was left paid online
+    /// went back, recorded with the order's «En línea» refund. One per payment.
+    /// </summary>
+    public static OnlinePaymentRefund LostChargeback(
+        Guid tenantId, Guid orderId, Guid orderRefundId, string paymentId, decimal amount, DateTimeOffset now)
+        => Done(tenantId, orderId, orderRefundId, paymentId, amount, OnlinePaymentRefundReason.Chargeback, now, providerRefundId: null);
+
+    /// <summary>Whether TienditApp learned of it in Mercado Pago instead of asking for it.</summary>
+    public bool WasMadeInMercadoPago =>
+        Reason is OnlinePaymentRefundReason.InMercadoPago or OnlinePaymentRefundReason.Claim or OnlinePaymentRefundReason.Chargeback;
+
     /// <summary>Mercado Pago gave the money back. Asking again for one it already gave is not an error.</summary>
     public void Complete(string? providerRefundId, DateTimeOffset now)
     {
@@ -82,8 +114,7 @@ public class OnlinePaymentRefund : AuditableEntity, IAggregateRoot, ITenantScope
         if (Status != OnlinePaymentRefundStatus.Requested)
             throw new DomainException("Mercado Pago ya rechazó esta devolución.");
 
-        var id = string.IsNullOrWhiteSpace(providerRefundId) ? null : providerRefundId.Trim();
-        ProviderRefundId = id is { Length: > MaxProviderRefundIdLength } ? id[..MaxProviderRefundIdLength] : id;
+        ProviderRefundId = ProviderId(providerRefundId);
         Status = OnlinePaymentRefundStatus.Completed;
         SettledAt = now;
     }
@@ -100,9 +131,64 @@ public class OnlinePaymentRefund : AuditableEntity, IAggregateRoot, ITenantScope
         SettledAt = now;
     }
 
+    /// <summary>
+    /// The id Mercado Pago gave the refund, for one it made without saying it when it answered (Fase 24K): found by its
+    /// amount, so it is not taken for a refund made elsewhere.
+    /// </summary>
+    public void IdentifyInMercadoPago(string providerRefundId)
+    {
+        if (Status != OnlinePaymentRefundStatus.Completed || ProviderRefundId is not null)
+            throw new DomainException("Solo una devolución hecha sin su referencia de Mercado Pago la recibe después.");
+
+        ProviderRefundId = ProviderId(providerRefundId)
+            ?? throw new DomainException("La devolución de Mercado Pago necesita su referencia.");
+    }
+
+    /// <summary>
+    /// Mercado Pago refused it and the business gave it back from its account, as it was told (Fase 24K): found in Mercado
+    /// Pago with its amount. It keeps why Mercado Pago refused it.
+    /// </summary>
+    public void CompleteInMercadoPago(string providerRefundId, DateTimeOffset now)
+    {
+        if (Status != OnlinePaymentRefundStatus.Failed)
+            throw new DomainException("Solo una devolución que Mercado Pago rechazó se da por hecha desde la cuenta del negocio.");
+
+        ProviderRefundId = ProviderId(providerRefundId)
+            ?? throw new DomainException("La devolución de Mercado Pago necesita su referencia.");
+        Status = OnlinePaymentRefundStatus.DoneInMercadoPago;
+        SettledAt = now;
+    }
+
     private static OnlinePaymentRefund Request(
         Guid tenantId, string paymentId, decimal amount, OnlinePaymentRefundReason reason, DateTimeOffset now,
         Action<OnlinePaymentRefund> link)
+    {
+        var refund = Create(tenantId, paymentId, amount, reason, now);
+        refund.Status = OnlinePaymentRefundStatus.Requested;
+        link(refund);
+        refund.AddDomainEvent(new OnlinePaymentRefundRequestedEvent(refund.Id, tenantId));
+        return refund;
+    }
+
+    /// <summary>Already done in Mercado Pago, so nothing is asked: it only records what went back and the order's refund.</summary>
+    private static OnlinePaymentRefund Done(
+        Guid tenantId, Guid orderId, Guid orderRefundId, string paymentId, decimal amount, OnlinePaymentRefundReason reason,
+        DateTimeOffset now, string? providerRefundId)
+    {
+        if (orderId == Guid.Empty || orderRefundId == Guid.Empty)
+            throw new DomainException("La devolución necesita su pedido y su reembolso.");
+
+        var refund = Create(tenantId, paymentId, amount, reason, now);
+        refund.OrderId = orderId;
+        refund.OrderRefundId = orderRefundId;
+        refund.ProviderRefundId = providerRefundId;
+        refund.Status = OnlinePaymentRefundStatus.Completed;
+        refund.SettledAt = now;
+        return refund;
+    }
+
+    private static OnlinePaymentRefund Create(
+        Guid tenantId, string paymentId, decimal amount, OnlinePaymentRefundReason reason, DateTimeOffset now)
     {
         if (tenantId == Guid.Empty)
             throw new DomainException("La devolución necesita un negocio.");
@@ -111,17 +197,19 @@ public class OnlinePaymentRefund : AuditableEntity, IAggregateRoot, ITenantScope
         if (amount <= 0 || decimal.Round(amount, 2) != amount)
             throw new DomainException("El monto a devolver no es válido.");
 
-        var refund = new OnlinePaymentRefund
+        return new OnlinePaymentRefund
         {
             TenantId = tenantId,
             PaymentId = paymentId.Trim(),
             Amount = amount,
             Reason = reason,
-            Status = OnlinePaymentRefundStatus.Requested,
             RequestedAt = now
         };
-        link(refund);
-        refund.AddDomainEvent(new OnlinePaymentRefundRequestedEvent(refund.Id, tenantId));
-        return refund;
+    }
+
+    private static string? ProviderId(string? providerRefundId)
+    {
+        var id = string.IsNullOrWhiteSpace(providerRefundId) ? null : providerRefundId.Trim();
+        return id is { Length: > MaxProviderRefundIdLength } ? id[..MaxProviderRefundIdLength] : id;
     }
 }

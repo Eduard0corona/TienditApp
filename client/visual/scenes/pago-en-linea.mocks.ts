@@ -8,9 +8,11 @@ type PrepareData = NonNullable<SceneOptions['prepareData']>;
 
 // Paying online with Mercado Pago (Fase 24I, ADR 0031): Configuración › Pagos en línea (`data.onlinePayments`, the
 // OnlinePaymentSettingsDto), the store that offers it (`data.menuPaysOnline`), the page Mercado Pago sends the customer
-// back to (`data.onlineCheckout`, the OnlineCheckoutStatusDto) and an order paid online with its refunds.
+// back to (`data.onlineCheckout`, the OnlineCheckoutStatusDto) and an order paid online with its refunds; since the Fase 24K
+// (ADR 0044) also what happened in Mercado Pago: refunds made there, chargebacks and claims.
 
-// OnlineCheckoutStatus, OnlinePaymentRefundStatus, OrderChannel and OrderPaymentMethod as the contract numbers them.
+// OnlineCheckoutStatus, OnlinePaymentRefundStatus, OnlinePaymentRefundReason, OnlinePaymentDispute, OrderChannel and
+// OrderPaymentMethod as the contract numbers them.
 const AWAITING_PAYMENT = 0;
 const PLACED = 1;
 const EXPIRED = 2;
@@ -18,6 +20,12 @@ const NOT_PLACED = 3;
 const REFUND_REQUESTED = 0;
 const REFUND_COMPLETED = 1;
 const REFUND_FAILED = 2;
+const REFUND_DONE_IN_MERCADO_PAGO = 3;
+const BY_BUSINESS = 3;
+const IN_MERCADO_PAGO = 4;
+const CHARGEBACK = 6;
+const DISPUTE_OPEN = 1;
+const DISPUTE_LOST = 2;
 const ONLINE_CHANNEL = 2;
 const ONLINE_PAYMENT = 6;
 const CASH_PAYMENT = 0;
@@ -33,12 +41,13 @@ const minutesFromNow = (minutes: number) => new Date(Date.parse(NOW_ISO) + minut
 const NOT_CONNECTED = {
   available: true, sandbox: false, connected: false, accountId: null, connectedAt: null, keyExpiresAt: null,
   needsReconnect: false, acceptsPayments: false, menuTakesOrders: true, checkoutsInCourse: 0, refundsInCourse: 0, refundsRefused: 0,
+  disputesOpen: 0, paymentsReviewedUntil: null,
 };
 
-/** Connected on September 28 and offered in the menu. */
+/** Connected on September 28 and offered in the menu; its payments were reviewed in Mercado Pago 6 minutes ago. */
 const CONNECTED = {
   ...NOT_CONNECTED, connected: true, accountId: 1928374650, connectedAt: '2026-09-28T17:40:00Z', keyExpiresAt: '2027-03-27T17:40:00Z',
-  acceptsPayments: true,
+  acceptsPayments: true, paymentsReviewedUntil: minutesFromNow(-6),
 };
 
 const settings = (value: Record<string, unknown>): PrepareData => (data) => {
@@ -50,11 +59,12 @@ export const PAGOS_NO_DISPONIBLES = asOption(settings({ ...NOT_CONNECTED, availa
 export const PAGOS_SIN_CONECTAR = asOption(settings(NOT_CONNECTED));
 export const PAGOS_CONECTADOS = asOption(settings(CONNECTED));
 /**
- * The account stopped answering (its key could not be renewed) while a payment and a refund are in course, and Mercado
- * Pago refused one refund: reconnecting and disconnecting wait, and the owner is told to give that refund back.
+ * The account stopped answering (its key could not be renewed) while a payment and a refund are in course, Mercado Pago
+ * refused one refund and two payments are in dispute: reconnecting and disconnecting wait, the owner is told to give that
+ * refund back and to answer the disputes in Mercado Pago.
  */
 export const PAGOS_CON_AVISOS = asOption(settings({
-  ...CONNECTED, needsReconnect: true, checkoutsInCourse: 1, refundsInCourse: 1, refundsRefused: 1,
+  ...CONNECTED, needsReconnect: true, checkoutsInCourse: 1, refundsInCourse: 1, refundsRefused: 1, disputesOpen: 2,
 }));
 
 /** The store offers paying online; with `delivers` it also takes orders to Roma and Condesa. */
@@ -126,6 +136,56 @@ function withOrderPaidOnline(data: DemoData) {
 }
 
 export const PEDIDO_PAGADO_EN_LINEA = asOption(withOrderPaidOnline);
+
+/**
+ * What happened in Mercado Pago to an order Renata paid online ($236), as TienditApp reflects it (Fase 24K): one refund
+ * Mercado Pago refused that the business then gave back from its account, one made there from the business's account
+ * and, with `lost`, the customer's bank took back the rest (a lost chargeback); without it, the chargeback is open.
+ */
+const withOrderDisputed = (lost: boolean) => (data: DemoData) => {
+  const product = (name: string) => data.products.find((candidate: { name: string }) => candidate.name === name).id;
+  const order = createSale(data, {
+    channel: ONLINE_CHANNEL, customerName: 'Renata Ibarra', customerPhone: '5531907742',
+    items: [{ productId: product('Chilaquiles verdes'), quantity: 2 }, { productId: product('Café americano'), quantity: 2 }],
+  });
+  // Mexico City time, before the day the scenes happen (October 4).
+  const at = (date: string, hour: number, minute: number) =>
+    `2026-${date}T${String(hour + 6).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`;
+  const refund = (id: string, amount: number, fields: Record<string, unknown>) => ({
+    id: `${order.id}-devolucion-${id}`, amount, method: ONLINE_PAYMENT, reference: null, restockItems: false, lines: [],
+    onlineFailure: null, ...fields,
+  });
+  const refunds = [
+    refund('1', 38, {
+      reason: 'Faltó un café americano', refundedAt: at('09-20', 13, 2), refundedBy: 'mariana@cafelaesquina.mx',
+      onlineStatus: REFUND_DONE_IN_MERCADO_PAGO, onlineReason: BY_BUSINESS,
+      onlineFailure: 'Mercado Pago no permite devolver este pago desde la aplicación.',
+    }),
+    refund('2', 20, {
+      reason: 'Devolución hecha desde la cuenta de Mercado Pago.', refundedAt: at('09-21', 10, 30), refundedBy: 'Mercado Pago',
+      onlineStatus: REFUND_COMPLETED, onlineReason: IN_MERCADO_PAGO,
+    }),
+  ];
+  if (lost) {
+    refunds.push(refund('3', order.total - 58, {
+      reason: 'Contracargo: el banco del cliente le regresó el pago.', refundedAt: at('10-02', 9, 15),
+      refundedBy: 'Mercado Pago', onlineStatus: REFUND_COMPLETED, onlineReason: CHARGEBACK,
+    }));
+  }
+  const refunded = refunds.reduce((sum, item) => sum + item.amount, 0);
+  Object.assign(order, {
+    createdByBusiness: false, createdAt: at('09-20', 12, 40), status: 6, allowedTransitions: [], canCancel: false,
+    payments: [{
+      id: `${order.id}-pago-1`, amount: order.total, method: ONLINE_PAYMENT, paidAt: at('09-20', 12, 41), reference: '128734659012',
+      notes: null, tip: 0, cashReceived: null, change: 0,
+    }],
+    paidAmount: order.total, balance: 0, refunds, refundedAmount: refunded, netPaidAmount: order.total - refunded,
+    onlineDispute: lost ? DISPUTE_LOST : DISPUTE_OPEN, onlineDisputeUpdatedAt: lost ? at('10-02', 9, 15) : at('09-26', 16, 5),
+  });
+};
+
+export const PEDIDO_EN_DISPUTA = asOption(withOrderDisputed(false));
+export const PEDIDO_CONTRACARGO_PERDIDO = asOption(withOrderDisputed(true));
 
 /** The settings, the store's checkouts and the return page's answers, on top of the public menu's. */
 const onlinePaymentRoutes: ExtraRoutes = (data, helpers) => [

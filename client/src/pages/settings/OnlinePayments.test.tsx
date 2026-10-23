@@ -7,6 +7,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { IN_COURSE_REFRESH_MS } from '../../api/onlinePayments';
 import { apiRequest, type Schemas } from '../../api/typedClient';
+import { setBusinessTimeZone } from '../../utils/dates';
 import { goToExternalPage } from '../../utils/externalNavigation';
 import OnlinePayments from './OnlinePayments';
 
@@ -24,6 +25,7 @@ type Settings = Schemas['OnlinePaymentSettingsDto'];
 const NOT_CONNECTED: Settings = {
   available: true, sandbox: false, connected: false, accountId: null, connectedAt: null, keyExpiresAt: null,
   needsReconnect: false, acceptsPayments: false, menuTakesOrders: true, checkoutsInCourse: 0, refundsInCourse: 0, refundsRefused: 0,
+  disputesOpen: 0, paymentsReviewedUntil: null,
 };
 const CONNECTED: Settings = {
   ...NOT_CONNECTED, connected: true, accountId: 123456789, connectedAt: '2026-10-19T17:00:00Z', keyExpiresAt: '2027-04-17T17:00:00Z',
@@ -191,6 +193,28 @@ describe('OnlinePayments', () => {
     serve({ ...CONNECTED, refundsRefused: 2, needsReconnect: true });
     await vi.advanceTimersByTimeAsync(IN_COURSE_REFRESH_MS);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Desconectar' })).toBeEnabled());
+  });
+
+  it('says until when Mercado Pago was reviewed and points to the payments in dispute (Fase 24K)', async () => {
+    setBusinessTimeZone('America/Mexico_City');
+    onTestFinished(() => setBusinessTimeZone(null));
+    serve({ ...CONNECTED, disputesOpen: 2, paymentsReviewedUntil: '2026-10-22T18:15:00Z' });
+
+    renderPage();
+
+    expect(await screen.findByText(/2 pagos están en disputa: Mercado Pago retiene el dinero mientras se resuelven/)).toHaveClass('alert-warning');
+    // 18:15 UTC is 12:15 in Mexico City.
+    expect(screen.getByText('Revisada hasta').nextElementSibling).toHaveTextContent(/22 oct 2026.*12:15/);
+    expect(screen.getByText(/TienditApp revisa tu cuenta cada 15 minutos/)).toBeInTheDocument();
+  });
+
+  it('says the account was not reviewed yet, and one payment in dispute', async () => {
+    serve({ ...CONNECTED, disputesOpen: 1 });
+
+    renderPage();
+
+    expect(await screen.findByText(/^Un pago está en disputa/)).toBeInTheDocument();
+    expect(screen.getByText('Revisada hasta').nextElementSibling).toHaveTextContent('Todavía no');
   });
 
   it('tells the owner the menu must take orders for paying online to show', async () => {

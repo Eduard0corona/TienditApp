@@ -15,7 +15,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// Paying online (Fase 24I, ADR 0031) through the API: each business connects, reads, turns on and disconnects only its
 /// own Mercado Pago account (the business header of an owner changes nothing, and an authorization started in one business
 /// is not finished in another); a customer's payment is confirmed only through the menu of its business; and a signed
-/// notification of an account places the order only in the business that connected it, with an «En línea» payment.
+/// notification of an account places the order only in the business that connected it, with an «En línea» payment, and
+/// brings a refund made in Mercado Pago to that order only (Fase 24K).
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantOnlinePaymentsSqlServerTests
@@ -129,6 +130,27 @@ public sealed class CrossTenantOnlinePaymentsSqlServerTests
         await _api.ProcessWebhookInboxAsync();
         Assert.Equal(1, await _api.QueryAsync(mine.TenantId, db => db.Orders.CountAsync()));
         Assert.Empty(await _api.QueryAsync(mine.TenantId, db => db.OnlinePaymentRefunds.ToListAsync()));
+
+        // Fase 24K: I give back part of it from my Mercado Pago account; its notification reaches my order only, once.
+        var refunded = _api.OnlinePayments.RefundInMercadoPago(payment.Id, 20m);
+        Assert.Equal(HttpStatusCode.OK, (await _api.PostMercadoPagoWebhookAsync(refunded.Id, account)).StatusCode);
+        await _api.ProcessWebhookInboxAsync();
+        Assert.Equal(HttpStatusCode.OK, (await _api.PostMercadoPagoWebhookAsync(refunded.Id, account)).StatusCode);
+        await _api.ProcessWebhookInboxAsync();
+
+        var shown = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/orders/{order.Id}"));
+        var refund = Assert.Single(shown.GetProperty("refunds").EnumerateArray());
+        Assert.Equal((20m, (int)OrderPaymentMethod.Online, "Mercado Pago", (int)OnlinePaymentRefundReason.InMercadoPago),
+            (refund.GetProperty("amount").GetDecimal(), refund.GetProperty("method").GetInt32(), refund.GetProperty("refundedBy").GetString(),
+                refund.GetProperty("onlineReason").GetInt32()));
+        var made = await _api.QueryAsync(mine.TenantId, db => db.OnlinePaymentRefunds.SingleAsync());
+        Assert.Equal((OnlinePaymentRefundReason.InMercadoPago, OnlinePaymentRefundStatus.Completed, mine.TenantId),
+            (made.Reason, made.Status, made.TenantId));
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.OnlinePaymentRefunds.ToListAsync()));
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.OrderRefunds.ToListAsync()));
+        // The other owner, with my business's header, does not see my order.
+        using var asOther = AsOther(mine, HttpMethod.Get, $"/api/v1/orders/{order.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(asOther)).StatusCode);
     }
 
     /// <summary>A member of the owner's team with the permissions given, signed in with its own password.</summary>

@@ -60,6 +60,12 @@ public class OrderDto
     public List<ServiceOrderPieceDto> ServicePieces { get; set; } = new();
     public List<OrderPaymentDto> Payments { get; set; } = new();
     public List<OrderRefundDto> Refunds { get; set; } = new();
+    /// <summary>
+    /// A chargeback or a claim on the payment of an order paid online, as Mercado Pago last reported it (Fase 24K): while it is
+    /// open Mercado Pago holds the money. Null for an order not paid online, or with no dispute.
+    /// </summary>
+    public OnlinePaymentDispute? OnlineDispute { get; set; }
+    public DateTimeOffset? OnlineDisputeUpdatedAt { get; set; }
     /// <summary>What the business forgave, each with its reason and who forgave it (Fase 26B).</summary>
     public List<OrderWriteOffDto> WriteOffs { get; set; } = new();
     /// <summary>Dishes of the tab cancelled after they went to the kitchen, with the reason and who cancelled them.</summary>
@@ -208,6 +214,11 @@ public class OrderRefundDto
     public OnlinePaymentRefundStatus? OnlineStatus { get; set; }
     /// <summary>What Mercado Pago answered when it refused it.</summary>
     public string? OnlineFailure { get; set; }
+    /// <summary>
+    /// Why it went back (Fase 24K): asked by the business, or made in Mercado Pago (from the business's account, by Mercado
+    /// Pago, for a claim) or a lost chargeback. Null for any other method.
+    /// </summary>
+    public OnlinePaymentRefundReason? OnlineReason { get; set; }
 }
 
 public class OrderRefundLineDto

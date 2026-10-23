@@ -29,7 +29,7 @@ namespace FoodParkDigital.Application.Tests;
 /// only once an approved payment of the business's account, for exactly that amount, comes back (by the notification, the
 /// customer's return or the sweep), and otherwise the money goes back. The business connects its own account.
 /// </summary>
-public class OnlinePaymentsFlowTests
+public partial class OnlinePaymentsFlowTests
 {
     private const string Slug = "cafe-luna";
 
@@ -792,6 +792,11 @@ public class OnlinePaymentsFlowTests
                     Context, Gateway, Protector, Clock, this, NullLogger<ApplyOnlinePaymentNotificationCommandHandler>.Instance)
                 .Handle(new ApplyOnlinePaymentNotificationCommand(paymentId), CancellationToken.None);
 
+        public Task<Common.Models.Result<OnlinePaymentReview>> ReviewAsync()
+            => new ReviewOnlinePaymentsCommandHandler(
+                    Context, Gateway, Protector, Clock, this, NullLogger<ReviewOnlinePaymentsCommandHandler>.Instance)
+                .Handle(new ReviewOnlinePaymentsCommand(), CancellationToken.None);
+
         public Task<Common.Models.Result<OnlinePaymentSweep>> SweepAsync()
             => new SweepOnlinePaymentsCommandHandler(
                     Context, Gateway, Protector, Clock, this, NullLogger<SweepOnlinePaymentsCommandHandler>.Instance)
@@ -861,8 +866,31 @@ public class OnlinePaymentsFlowTests
         /// <summary>Runs before each application of a payment (another path saving first throws from here).</summary>
         public Func<ApplyOnlinePaymentCommand, Task>? BeforeApplying { get; set; }
 
+        /// <summary>Runs before each reflection of a payment of Mercado Pago (another path saving first throws from here).</summary>
+        public Func<ReconcileOnlinePaymentCommand, Task>? BeforeReconciling { get; set; }
+
+        /// <summary>
+        /// Once, instead of the next reflection of a payment: what it runs (another path saving first, this one tracking what it
+        /// would add) and then the database refusing the save, as SQL Server's unique indexes do.
+        /// </summary>
+        public Func<ReconcileOnlinePaymentCommand, Task>? RefuseNextReconcile { get; set; }
+
         public async Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
         {
+            if (request is ReconcileOnlinePaymentCommand reconcile)
+            {
+                if (BeforeReconciling is { } beforeReconciling)
+                    await beforeReconciling(reconcile);
+                if (RefuseNextReconcile is { } refuse)
+                {
+                    RefuseNextReconcile = null;
+                    await refuse(reconcile);
+                    throw new DbUpdateException("Another path recorded it first.");
+                }
+                var reconciler = new ReconcileOnlinePaymentCommandHandler(
+                    Context, Gateway, Clock, NullLogger<ReconcileOnlinePaymentCommandHandler>.Instance);
+                return (TResponse)(object)await reconciler.Handle(reconcile, cancellationToken);
+            }
             if (request is not ApplyOnlinePaymentCommand apply)
                 throw new NotSupportedException(request.GetType().Name);
             if (BeforeApplying is { } before)

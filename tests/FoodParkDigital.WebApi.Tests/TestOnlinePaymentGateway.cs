@@ -12,6 +12,7 @@ public sealed class TestOnlinePaymentGateway : IOnlinePaymentGateway
 
     private readonly object _gate = new();
     private readonly Dictionary<string, OnlinePaymentDetails> _payments = new();
+    private readonly Dictionary<string, List<OnlinePaymentProviderRefund>> _refunds = new();
     private long _nextAccount = 900_000_001;
     private long _nextPayment = 5_000_000_001;
 
@@ -63,6 +64,36 @@ public sealed class TestOnlinePaymentGateway : IOnlinePaymentGateway
         }
     }
 
+    public Task<OnlinePaymentChanges> FindChangedPaymentsAsync(
+        string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var changed = _payments.Values
+                .Where(p => Key(p.CollectorId!.Value) == accessToken && p.LastChangedAt >= from && p.LastChangedAt <= to)
+                .OrderBy(p => p.LastChangedAt)
+                .ThenBy(p => p.Id, StringComparer.Ordinal)
+                .Skip(offset)
+                .Take(limit)
+                .ToList();
+            return Task.FromResult(OnlinePaymentChanges.Of(changed));
+        }
+    }
+
+    public Task<IReadOnlyList<OnlinePaymentProviderRefund>> GetRefundsAsync(
+        string accessToken, string paymentId, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            IReadOnlyList<OnlinePaymentProviderRefund> refunds =
+                _payments.TryGetValue(paymentId, out var payment) && Key(payment.CollectorId!.Value) == accessToken
+                && _refunds.TryGetValue(paymentId, out var list)
+                    ? list.ToList()
+                    : [];
+            return Task.FromResult(refunds);
+        }
+    }
+
     public Task<OnlinePaymentRefundOutcome> RefundAsync(
         string accessToken, string paymentId, decimal amount, Guid idempotencyKey, CancellationToken cancellationToken)
         => Task.FromResult<OnlinePaymentRefundOutcome>(new OnlinePaymentRefundOutcome.Done($"refund-{idempotencyKey:N}"));
@@ -74,9 +105,31 @@ public sealed class TestOnlinePaymentGateway : IOnlinePaymentGateway
         {
             var payment = new OnlinePaymentDetails(
                 (_nextPayment++).ToString(), OnlinePaymentDetails.ApprovedStatus, "accredited", checkoutId.ToString(),
-                amount, "MXN", DateTimeOffset.UtcNow, account, LiveMode: true);
+                amount, "MXN", DateTimeOffset.UtcNow, account, LiveMode: true, LastChangedAt: DateTimeOffset.UtcNow);
             _payments[payment.Id] = payment;
             return payment;
+        }
+    }
+
+    /// <summary>The business gives back part of a payment from its Mercado Pago account, without TienditApp (Fase 24K).</summary>
+    public OnlinePaymentDetails RefundInMercadoPago(string paymentId, decimal amount, string source = "collector")
+    {
+        lock (_gate)
+        {
+            var refunds = _refunds.TryGetValue(paymentId, out var list) ? list : _refunds[paymentId] = [];
+            refunds.Add(new OnlinePaymentProviderRefund(
+                (_nextPayment++).ToString(), amount, OnlinePaymentProviderRefund.ApprovedStatus, source, DateTimeOffset.UtcNow));
+            var payment = _payments[paymentId];
+            var refunded = payment.RefundedAmount + amount;
+            var changed = payment with
+            {
+                Status = refunded >= payment.Amount ? OnlinePaymentDetails.RefundedStatus : OnlinePaymentDetails.ApprovedStatus,
+                StatusDetail = refunded >= payment.Amount ? "refunded" : "partially_refunded",
+                RefundedAmount = refunded,
+                LastChangedAt = DateTimeOffset.UtcNow
+            };
+            _payments[paymentId] = changed;
+            return changed;
         }
     }
 

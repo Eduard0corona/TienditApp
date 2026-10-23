@@ -66,6 +66,15 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
 
     public string? FailureMessage { get; private set; }
 
+    /// <summary>
+    /// A chargeback or a claim on the payment that placed the order, as Mercado Pago last reported it (Fase 24K): while
+    /// it is open Mercado Pago holds the money.
+    /// </summary>
+    public OnlinePaymentDispute Dispute { get; private set; }
+
+    /// <summary>When the payment changed in Mercado Pago to say the dispute as it is now (by Mercado Pago's clock).</summary>
+    public DateTimeOffset? DisputeUpdatedAt { get; private set; }
+
     /// <summary>The notification, the customer's return and the sweep may apply a payment at once: one wins (409).</summary>
     public byte[] Version { get; private set; } = null!;
 
@@ -172,6 +181,25 @@ public class OnlineCheckout : AuditableEntity, IAggregateRoot, ITenantScoped
 
         Status = OnlineCheckoutStatus.Expired;
         Forget();
+    }
+
+    /// <summary>
+    /// Mercado Pago reports a chargeback or a claim on the payment that placed the order, or how it ended (Fase 24K).
+    /// </summary>
+    /// <param name="reportedAt">When the payment changed in Mercado Pago to say it.</param>
+    /// <returns>Whether it changed.</returns>
+    public bool RecordDispute(OnlinePaymentDispute dispute, DateTimeOffset reportedAt)
+    {
+        if (Status != OnlineCheckoutStatus.Placed)
+            throw new DomainException("Solo el pago de un pedido tiene disputas.");
+        if (dispute == OnlinePaymentDispute.None || !Enum.IsDefined(dispute))
+            throw new DomainException("La disputa no es válida.");
+        if (Dispute == dispute)
+            return false;
+
+        Dispute = dispute;
+        DisputeUpdatedAt = reportedAt;
+        return true;
     }
 
     private void SetPayment(string paymentId, DateTimeOffset paidAt)

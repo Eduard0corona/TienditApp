@@ -15,7 +15,8 @@ namespace FoodParkDigital.Infrastructure.OnlinePayments;
 
 /// <summary>
 /// The only client of Mercado Pago's API (Fase 24I, ADR 0031): OAuth with PKCE for a business's account, Checkout Pro
-/// preferences, payments and refunds. Every payment call carries the business's key, so the money stays in its account.
+/// preferences, payments and refunds, and since the Fase 24K (ADR 0044) the payments that changed and the refunds of a
+/// payment. Every payment call carries the business's key, so the money stays in its account.
 /// The checkout takes only payments that are decided at once (cards and Mercado Pago's balance, <c>binary_mode</c>), in
 /// one installment. Keys, codes and the payer never reach the logs: only the status and Mercado Pago's error code.
 /// </summary>
@@ -198,6 +199,67 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
             .ToList();
     }
 
+    public async Task<OnlinePaymentChanges> FindChangedPaymentsAsync(
+        string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken)
+    {
+        EnsureConfigured();
+        var query = string.Join('&',
+            "sort=date_last_updated",
+            "criteria=asc",
+            "range=date_last_updated",
+            $"begin_date={Uri.EscapeDataString(MercadoPagoDate(from))}",
+            $"end_date={Uri.EscapeDataString(MercadoPagoDate(to))}",
+            $"offset={Math.Max(0, offset)}",
+            $"limit={Math.Clamp(limit, 1, 100)}");
+        using var message = new HttpRequestMessage(HttpMethod.Get, $"{_options.ApiBaseUrl}/v1/payments/search?{query}");
+        Authorize(message, accessToken);
+        using var response = await SendAsync(message, "changes", cancellationToken);
+        await ThrowIfKeyRejectedAsync(response, "changes", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw await UnavailableAsync(response, "changes", cancellationToken);
+
+        using var json = await ReadJsonAsync(response, cancellationToken);
+        // Without its page the review cannot tell whether it read everything: as if Mercado Pago did not answer.
+        if (json.RootElement.ValueKind != JsonValueKind.Object
+            || !json.RootElement.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array)
+            throw new OnlinePaymentGatewayUnavailableException("Mercado Pago no devolvió la lista de los pagos que cambiaron.");
+
+        var payments = results.EnumerateArray()
+            .Select(ParsePayment)
+            .Where(payment => payment is not null)
+            .Select(payment => payment!)
+            .ToList();
+        return new OnlinePaymentChanges(payments, results.GetArrayLength());
+    }
+
+    public async Task<IReadOnlyList<OnlinePaymentProviderRefund>> GetRefundsAsync(
+        string accessToken, string paymentId, CancellationToken cancellationToken)
+    {
+        EnsureConfigured();
+        if (!PaymentIdPattern().IsMatch(paymentId))
+            return [];
+
+        using var message = new HttpRequestMessage(HttpMethod.Get, $"{_options.ApiBaseUrl}/v1/payments/{paymentId}/refunds");
+        Authorize(message, accessToken);
+        using var response = await SendAsync(message, "refunds", cancellationToken);
+        // Not found, or not this account's to read: no refunds of a payment of this business.
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+            return [];
+        await ThrowIfKeyRejectedAsync(response, "refunds", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw await UnavailableAsync(response, "refunds", cancellationToken);
+
+        using var json = await ReadJsonAsync(response, cancellationToken);
+        if (json.RootElement.ValueKind != JsonValueKind.Array)
+            return [];
+
+        return json.RootElement.EnumerateArray()
+            .Select(ParseRefund)
+            .Where(refund => refund is not null)
+            .Select(refund => refund!)
+            .ToList();
+    }
+
     public async Task<OnlinePaymentRefundOutcome> RefundAsync(
         string accessToken, string paymentId, decimal amount, Guid idempotencyKey, CancellationToken cancellationToken)
     {
@@ -331,17 +393,41 @@ public sealed partial class MercadoPagoGateway : IOnlinePaymentGateway
             return null;
 
         var amount = payment.TryGetProperty("transaction_amount", out var value) && value.TryGetDecimal(out var number) ? number : 0m;
-        DateTimeOffset? approvedAt = GetString(payment, "date_approved") is { } date
-            && DateTimeOffset.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
-                ? parsed
-                : null;
+        var approvedAt = GetDate(payment, "date_approved");
         long? collector = payment.TryGetProperty("collector_id", out var collectorId) && collectorId.TryGetInt64(out var c) ? c : null;
         var liveMode = payment.TryGetProperty("live_mode", out var live) && live.ValueKind == JsonValueKind.True;
+        var refunded = payment.TryGetProperty("transaction_amount_refunded", out var given) && given.TryGetDecimal(out var back) ? back : 0m;
 
         return new OnlinePaymentDetails(
             id, status, GetString(payment, "status_detail"), GetString(payment, "external_reference"), amount,
-            GetString(payment, "currency_id"), approvedAt, collector, liveMode);
+            GetString(payment, "currency_id"), approvedAt, collector, liveMode, refunded, GetDate(payment, "date_last_updated"));
     }
+
+    private static OnlinePaymentProviderRefund? ParseRefund(JsonElement refund)
+    {
+        var id = GetNumberOrString(refund, "id");
+        var status = GetString(refund, "status");
+        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(status)
+            || !refund.TryGetProperty("amount", out var value) || !value.TryGetDecimal(out var amount))
+            return null;
+
+        // Documented as an object and as a list of one: who made it.
+        var source = refund.TryGetProperty("source", out var by)
+            ? by.ValueKind switch
+            {
+                JsonValueKind.Object => GetString(by, "type"),
+                JsonValueKind.Array when by.GetArrayLength() > 0 => GetString(by[0], "type"),
+                _ => null
+            }
+            : null;
+        return new OnlinePaymentProviderRefund(id, amount, status, source?.ToLowerInvariant(), GetDate(refund, "date_created"));
+    }
+
+    private static DateTimeOffset? GetDate(JsonElement element, string name) =>
+        GetString(element, name) is { } date
+        && DateTimeOffset.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+            ? parsed
+            : null;
 
     private static string? GetString(JsonElement element, string name) =>
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

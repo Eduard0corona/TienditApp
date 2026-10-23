@@ -219,6 +219,106 @@ public class MercadoPagoGatewayTests
     }
 
     [Fact]
+    public async Task FindChangedPaymentsAsync_ShouldSearchByTheLastChange_OldestFirst_AndReadWhatWasGivenBack()
+    {
+        var (gateway, http) = Create(_ => Json(HttpStatusCode.OK, $$"""
+            {"paging":{"total":2,"limit":50,"offset":50},"results":[
+              {"id":7,"status":"approved","status_detail":"partially_refunded","external_reference":"{{CheckoutId}}",
+               "transaction_amount":110,"transaction_amount_refunded":20.5,"currency_id":"MXN","collector_id":5,
+               "date_approved":"2026-10-19T12:05:31.000-06:00","date_last_updated":"2026-10-20T09:00:00.000-06:00","live_mode":true},
+              {"id":8,"status":"charged_back","status_detail":"in_process","external_reference":"otra-tienda","transaction_amount":10}]}
+            """));
+
+        var changes = await gateway.FindChangedPaymentsAsync(
+            "APP_USR-business", Now.AddDays(-1), Now, offset: 50, limit: 50, CancellationToken.None);
+
+        var payments = changes.Payments;
+        Assert.Equal(2, changes.Returned);
+        Assert.Equal(["7", "8"], payments.Select(payment => payment.Id));
+        Assert.Equal((20.5m, DateTimeOffset.Parse("2026-10-20T15:00:00Z"), true), (payments[0].RefundedAmount, payments[0].LastChangedAt, payments[0].MayHaveRefunds));
+        Assert.Equal((0m, (DateTimeOffset?)null, false), (payments[1].RefundedAmount, payments[1].LastChangedAt, payments[1].MayHaveRefunds));
+        var request = Assert.Single(http.Requests);
+        Assert.Equal("Bearer APP_USR-business", request.Authorization);
+        Assert.StartsWith("https://api.mercadopago.com/v1/payments/search?sort=date_last_updated&criteria=asc&range=date_last_updated&", request.Url);
+        Assert.Contains("begin_date=2026-10-18T18%3A00%3A00.000%2B00%3A00", request.Url);
+        Assert.Contains("end_date=2026-10-19T18%3A00%3A00.000%2B00%3A00", request.Url);
+        Assert.EndsWith("&offset=50&limit=50", request.Url);
+    }
+
+    [Fact]
+    public async Task FindChangedPaymentsAsync_ShouldStop_WhenTheKeyIsRejectedOrMercadoPagoFails()
+    {
+        var (rejected, _) = Create(_ => Json(HttpStatusCode.Unauthorized, """{"message":"invalid access token","status":401}"""));
+        var (failing, _) = Create(_ => Json(HttpStatusCode.BadGateway, "{}"));
+
+        await Assert.ThrowsAsync<OnlinePaymentAccountRejectedException>(
+            () => rejected.FindChangedPaymentsAsync("APP_USR-business", Now.AddDays(-1), Now, 0, 50, CancellationToken.None));
+        await Assert.ThrowsAsync<OnlinePaymentGatewayUnavailableException>(
+            () => failing.FindChangedPaymentsAsync("APP_USR-business", Now.AddDays(-1), Now, 0, 50, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindChangedPaymentsAsync_ShouldCountWhatItCouldNotRead_AndTakeAnAnswerWithoutResultsAsNoAnswer()
+    {
+        // A result without its id still counts: the review must not take a full page for the last one.
+        var (gateway, _) = Create(_ => Json(HttpStatusCode.OK, """
+            {"results":[{"id":7,"status":"approved"},{"status":"approved"},{"id":9}]}
+            """));
+        var (withoutResults, _) = Create(_ => Json(HttpStatusCode.OK, """{"paging":{"total":0}}"""));
+
+        var changes = await gateway.FindChangedPaymentsAsync("APP_USR-business", Now.AddDays(-1), Now, 0, 50, CancellationToken.None);
+
+        Assert.Equal(3, changes.Returned);
+        Assert.Equal(["7"], changes.Payments.Select(payment => payment.Id));
+        await Assert.ThrowsAsync<OnlinePaymentGatewayUnavailableException>(
+            () => withoutResults.FindChangedPaymentsAsync("APP_USR-business", Now.AddDays(-1), Now, 0, 50, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetRefundsAsync_ShouldReadEachRefund_WithWhoMadeIt()
+    {
+        var (gateway, http) = Create(_ => Json(HttpStatusCode.OK, """
+            [{"id":555666777,"payment_id":1234567890,"amount":20.50,"status":"approved","source":{"id":"5","name":"Café Luna","type":"collector"},
+              "date_created":"2026-10-20T09:00:00.000-06:00"},
+             {"id":"555666778","amount":10,"status":"in_process","source":[{"type":"BPP"}]},
+             {"id":555666779,"amount":5,"status":"approved"},
+             {"id":555666780,"status":"approved"}]
+            """));
+
+        var refunds = await gateway.GetRefundsAsync("APP_USR-business", "1234567890", CancellationToken.None);
+
+        Assert.Equal(
+            [
+                new OnlinePaymentProviderRefund("555666777", 20.50m, "approved", "collector", DateTimeOffset.Parse("2026-10-20T15:00:00Z")),
+                new OnlinePaymentProviderRefund("555666778", 10m, "in_process", "bpp", null),
+                new OnlinePaymentProviderRefund("555666779", 5m, "approved", null, null)
+            ],
+            refunds);
+        Assert.True(refunds[0].IsApproved);
+        Assert.False(refunds[1].IsApproved);
+        var request = Assert.Single(http.Requests);
+        Assert.Equal("https://api.mercadopago.com/v1/payments/1234567890/refunds", request.Url);
+        Assert.Equal("Bearer APP_USR-business", request.Authorization);
+    }
+
+    [Fact]
+    public async Task GetRefundsAsync_ShouldBeEmpty_ForWhatIsNotAPaymentOfTheAccount_AndStopWhenMercadoPagoFails()
+    {
+        var (missing, _) = Create(_ => Json(HttpStatusCode.NotFound, """{"message":"Payment not found","status":404}"""));
+        var (foreign, _) = Create(_ => Json(HttpStatusCode.Forbidden, "{}"));
+        var (rejected, _) = Create(_ => Json(HttpStatusCode.Unauthorized, "{}"));
+        var (failing, _) = Create(_ => Json(HttpStatusCode.InternalServerError, "oops"));
+        var (never, http) = Create(_ => Json(HttpStatusCode.OK, "[]"));
+
+        Assert.Empty(await missing.GetRefundsAsync("APP_USR-business", "123", CancellationToken.None));
+        Assert.Empty(await foreign.GetRefundsAsync("APP_USR-business", "123", CancellationToken.None));
+        await Assert.ThrowsAsync<OnlinePaymentAccountRejectedException>(() => rejected.GetRefundsAsync("APP_USR-business", "123", CancellationToken.None));
+        await Assert.ThrowsAsync<OnlinePaymentGatewayUnavailableException>(() => failing.GetRefundsAsync("APP_USR-business", "123", CancellationToken.None));
+        Assert.Empty(await never.GetRefundsAsync("APP_USR-business", "../123", CancellationToken.None));
+        Assert.Empty(http.Requests);
+    }
+
+    [Fact]
     public async Task FindPaymentsAsync_ShouldSearchByTheCheckout()
     {
         var (gateway, http) = Create(_ => Json(HttpStatusCode.OK, $$"""

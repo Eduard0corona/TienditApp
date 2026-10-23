@@ -3010,6 +3010,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CustomerUserId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int>("Dispute")
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTimeOffset?>("DisputeUpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("datetimeoffset");
 
@@ -3075,9 +3082,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "CustomerPhone")
                         .HasFilter("[Status] = 0");
 
+                    b.HasIndex("TenantId", "Dispute")
+                        .HasFilter("[Dispute] = 1");
+
                     b.ToTable("OnlineCheckouts", null, t =>
                         {
                             t.HasCheckConstraint("CK_OnlineCheckouts_Amount", "[Amount] > 0");
+
+                            t.HasCheckConstraint("CK_OnlineCheckouts_Dispute", "([Dispute] = 0 AND [DisputeUpdatedAt] IS NULL) OR ([Dispute] IN (1, 2, 3) AND [Status] = 1 AND [DisputeUpdatedAt] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_OnlineCheckouts_Outcome", "([Status] = 0 AND [Request] IS NOT NULL AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [Failure] IS NULL) OR ([Status] = 1 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL AND [OrderId] IS NOT NULL AND [Failure] IS NULL) OR ([Status] = 2 AND [Request] IS NULL AND [PaymentId] IS NULL AND [OrderId] IS NULL AND [Failure] IS NULL) OR ([Status] = 3 AND [Request] IS NULL AND [PaymentId] IS NOT NULL AND [PaidAt] IS NOT NULL AND [OrderId] IS NULL AND [Failure] IS NOT NULL AND [Failure] BETWEEN 1 AND 4)");
 
@@ -3110,6 +3122,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("LiveMode")
                         .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset?>("PaymentsReviewedUntil")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("ProtectedAccessToken")
                         .IsRequired()
@@ -3263,15 +3278,25 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("[OrderRefundId] IS NULL");
 
+                    b.HasIndex("TenantId", "ProviderRefundId")
+                        .IsUnique()
+                        .HasFilter("[ProviderRefundId] IS NOT NULL");
+
+                    b.HasIndex(new[] { "TenantId", "PaymentId" }, "IX_OnlinePaymentRefunds_TenantId_PaymentId_Chargeback")
+                        .IsUnique()
+                        .HasFilter("[Reason] = 6");
+
                     b.ToTable("OnlinePaymentRefunds", null, t =>
                         {
                             t.HasCheckConstraint("CK_OnlinePaymentRefunds_Amount", "[Amount] > 0");
 
-                            t.HasCheckConstraint("CK_OnlinePaymentRefunds_Link", "([Reason] IN (1, 2) AND [CheckoutId] IS NOT NULL AND [OrderId] IS NULL AND [OrderRefundId] IS NULL) OR ([Reason] = 3 AND [CheckoutId] IS NULL AND [OrderId] IS NOT NULL AND [OrderRefundId] IS NOT NULL)");
+                            t.HasCheckConstraint("CK_OnlinePaymentRefunds_Link", "([Reason] IN (1, 2) AND [CheckoutId] IS NOT NULL AND [OrderId] IS NULL AND [OrderRefundId] IS NULL) OR ([Reason] IN (3, 4, 5, 6) AND [CheckoutId] IS NULL AND [OrderId] IS NOT NULL AND [OrderRefundId] IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_OnlinePaymentRefunds_Settled", "([Status] = 0 AND [SettledAt] IS NULL AND [FailureMessage] IS NULL) OR ([Status] = 1 AND [SettledAt] IS NOT NULL AND [FailureMessage] IS NULL) OR ([Status] = 2 AND [SettledAt] IS NOT NULL AND [FailureMessage] IS NOT NULL)");
+                            t.HasCheckConstraint("CK_OnlinePaymentRefunds_MadeInMercadoPago", "[Reason] NOT IN (4, 5, 6) OR ([Status] = 1 AND ([Reason] = 6 OR [ProviderRefundId] IS NOT NULL))");
 
-                            t.HasCheckConstraint("CK_OnlinePaymentRefunds_Status", "[Status] IN (0, 1, 2)");
+                            t.HasCheckConstraint("CK_OnlinePaymentRefunds_Settled", "([Status] = 0 AND [SettledAt] IS NULL AND [FailureMessage] IS NULL) OR ([Status] = 1 AND [SettledAt] IS NOT NULL AND [FailureMessage] IS NULL) OR ([Status] = 2 AND [SettledAt] IS NOT NULL AND [FailureMessage] IS NOT NULL) OR ([Status] = 3 AND [SettledAt] IS NOT NULL AND [FailureMessage] IS NOT NULL AND [ProviderRefundId] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_OnlinePaymentRefunds_Status", "[Status] IN (0, 1, 2, 3)");
                         });
                 });
 

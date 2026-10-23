@@ -53,7 +53,7 @@ import {
   getPaymentMethodLabel,
 } from '../../utils/labels';
 import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
-import { describeOnlineRefund } from '../../utils/onlineRefunds';
+import { describeOnlineDispute, describeOnlineRefund, isDisputeRefund } from '../../utils/onlineRefunds';
 import { getApiErrorMessage } from '../../api/errors';
 import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 
@@ -280,6 +280,14 @@ export default function OrdersList() {
     // The detail may have been closed or switched while the request ran.
     if (selectedOrderIdRef.current === orderId) setSelectedOrder(order);
   }, []);
+
+  const openOrder = (order: OrderDto) => {
+    selectedOrderIdRef.current = order.id;
+    setSelectedOrder(order);
+    // The list does not say what became of each «En línea» refund nor the dispute of the payment (Fases 24I and 24K):
+    // the detail of an order paid online reads the whole order.
+    if (order.channel === OrderChannel.Online) void refreshSelectedOrder(order.id).catch(() => undefined);
+  };
 
   useEffect(() => {
     loadOrders();
@@ -644,7 +652,7 @@ export default function OrdersList() {
                       <button
                         type="button"
                         className="btn btn-link p-0 fw-semibold text-decoration-none text-nowrap"
-                        onClick={() => setSelectedOrder(order)}
+                        onClick={() => openOrder(order)}
                       >
                         {order.orderNumber}
                       </button>
@@ -735,7 +743,7 @@ export default function OrdersList() {
                         <button
                           type="button"
                           className="btn btn-sm btn-light"
-                          onClick={() => setSelectedOrder(order)}
+                          onClick={() => openOrder(order)}
                         >
                           Ver detalle
                         </button>
@@ -1070,6 +1078,19 @@ export default function OrdersList() {
                 </div>
               )}
 
+              {(() => {
+                const refunded = (selectedOrder.refunds ?? []).some((refund) => isDisputeRefund(refund.onlineReason));
+                const dispute = describeOnlineDispute(selectedOrder.onlineDispute, refunded);
+                return dispute && (
+                  <div className={`alert alert-${dispute.variant} mt-3 mb-0`} role="status">
+                    <strong>{dispute.title}.</strong> {dispute.text}
+                    {selectedOrder.onlineDisputeUpdatedAt && (
+                      <div className="small">Última noticia de Mercado Pago: {toLocalDateTime(selectedOrder.onlineDisputeUpdatedAt)}</div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {selectedOrder.payments.length > 0 && (
                 <div className="mt-3">
                   <h5 className="mb-2">Pagos</h5>
@@ -1129,8 +1150,8 @@ export default function OrdersList() {
                             <td>
                               {getPaymentMethodLabel(refund.method)}
                               {refund.method === OrderPaymentMethod.Online && (() => {
-                                const online = describeOnlineRefund(refund.onlineStatus, refund.onlineFailure);
-                                return <div className={`small text-${online.tone}`}>{online.text}</div>;
+                                const online = describeOnlineRefund(refund.onlineStatus, refund.onlineFailure, refund.onlineReason);
+                                return online && <div className={`small text-${online.tone}`}>{online.text}</div>;
                               })()}
                             </td>
                             <td>{refund.reason}</td>

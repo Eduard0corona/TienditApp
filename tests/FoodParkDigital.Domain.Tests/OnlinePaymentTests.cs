@@ -320,6 +320,131 @@ public class OnlinePaymentTests
             counter.RegisterRefund(10m, OrderPaymentMethod.Online, "Otro", Now, "dueño", null, null, false, [])).Message);
     }
 
+    [Fact]
+    public void Refund_MadeInMercadoPago_ShouldBeDoneAlready_WithItsIdAndTheOrdersRefund_WithoutAskingTheQueue()
+    {
+        var orderId = Guid.NewGuid();
+        var orderRefundId = Guid.NewGuid();
+
+        var refund = OnlinePaymentRefund.MadeInMercadoPago(
+            TenantId, orderId, orderRefundId, "98765", 80m, " 4455 ", OnlinePaymentRefundReason.InMercadoPago, Now);
+
+        Assert.Equal((OnlinePaymentRefundStatus.Completed, "4455", Now, Now, orderId, orderRefundId),
+            (refund.Status, refund.ProviderRefundId, refund.RequestedAt, refund.SettledAt, refund.OrderId, refund.OrderRefundId));
+        Assert.Null(refund.CheckoutId);
+        Assert.True(refund.WasMadeInMercadoPago);
+        // Mercado Pago already gave it back: nothing is asked.
+        Assert.Empty(refund.DomainEvents);
+        Assert.Equal(OnlinePaymentRefundReason.Claim, OnlinePaymentRefund.MadeInMercadoPago(
+            TenantId, orderId, Guid.NewGuid(), "98765", 10m, "4456", OnlinePaymentRefundReason.Claim, Now).Reason);
+    }
+
+    [Fact]
+    public void Refund_MadeInMercadoPago_ShouldRefuse_AnotherReason_AMissingId_OrNoOrder()
+    {
+        var orderId = Guid.NewGuid();
+
+        foreach (var reason in new[] { OnlinePaymentRefundReason.ByBusiness, OnlinePaymentRefundReason.NotPlaced, OnlinePaymentRefundReason.Chargeback })
+            Assert.Throws<DomainException>(() =>
+                OnlinePaymentRefund.MadeInMercadoPago(TenantId, orderId, Guid.NewGuid(), "98765", 10m, "4455", reason, Now));
+        Assert.Throws<DomainException>(() => OnlinePaymentRefund.MadeInMercadoPago(
+            TenantId, orderId, Guid.NewGuid(), "98765", 10m, "  ", OnlinePaymentRefundReason.InMercadoPago, Now));
+        Assert.Throws<DomainException>(() => OnlinePaymentRefund.MadeInMercadoPago(
+            TenantId, Guid.Empty, Guid.NewGuid(), "98765", 10m, "4455", OnlinePaymentRefundReason.InMercadoPago, Now));
+        Assert.Throws<DomainException>(() => OnlinePaymentRefund.MadeInMercadoPago(
+            TenantId, orderId, Guid.NewGuid(), "98765", 10.001m, "4455", OnlinePaymentRefundReason.InMercadoPago, Now));
+    }
+
+    [Fact]
+    public void Refund_OfALostChargeback_ShouldBeDone_WithoutAMercadoPagoRefundId()
+    {
+        var orderId = Guid.NewGuid();
+        var orderRefundId = Guid.NewGuid();
+
+        var refund = OnlinePaymentRefund.LostChargeback(TenantId, orderId, orderRefundId, "98765", 235.50m, Now);
+
+        Assert.Equal((OnlinePaymentRefundReason.Chargeback, OnlinePaymentRefundStatus.Completed, 235.50m, orderId, orderRefundId),
+            (refund.Reason, refund.Status, refund.Amount, refund.OrderId, refund.OrderRefundId));
+        Assert.Null(refund.ProviderRefundId);
+        Assert.True(refund.WasMadeInMercadoPago);
+        Assert.Empty(refund.DomainEvents);
+        Assert.False(OnlinePaymentRefund.ForOrder(TenantId, orderId, Guid.NewGuid(), "98765", 1m, Now).WasMadeInMercadoPago);
+    }
+
+    [Fact]
+    public void Refund_DoneWithoutItsId_ShouldTakeIt_Once_AndOnlyWhenDone()
+    {
+        var refund = OnlinePaymentRefund.ForOrder(TenantId, Guid.NewGuid(), Guid.NewGuid(), "98765", 50m, Now);
+        Assert.Throws<DomainException>(() => refund.IdentifyInMercadoPago("4455"));
+
+        refund.Complete(null, Now.AddMinutes(1));
+        refund.IdentifyInMercadoPago(" 4455 ");
+
+        Assert.Equal(("4455", OnlinePaymentRefundStatus.Completed), (refund.ProviderRefundId, refund.Status));
+        Assert.Throws<DomainException>(() => refund.IdentifyInMercadoPago("4456"));
+    }
+
+    [Fact]
+    public void Refund_RefusedByMercadoPago_ThatTheBusinessThenMadeInItsAccount_ShouldBeDone_KeepingWhyItWasRefused()
+    {
+        var refund = OnlinePaymentRefund.ForOrder(TenantId, Guid.NewGuid(), Guid.NewGuid(), "98765", 50m, Now);
+        Assert.Throws<DomainException>(() => refund.CompleteInMercadoPago("4455", Now));
+        refund.Fail("Sin saldo en la cuenta.", Now.AddMinutes(1));
+
+        refund.CompleteInMercadoPago("4455", Now.AddDays(1));
+
+        Assert.Equal((OnlinePaymentRefundStatus.DoneInMercadoPago, "4455", Now.AddDays(1), "Sin saldo en la cuenta."),
+            (refund.Status, refund.ProviderRefundId, refund.SettledAt, refund.FailureMessage));
+        Assert.Throws<DomainException>(() => refund.CompleteInMercadoPago("4456", Now.AddDays(2)));
+        Assert.Throws<DomainException>(() => refund.Complete("4456", Now.AddDays(2)));
+    }
+
+    [Fact]
+    public void Checkout_OfAnOrder_ShouldRecordItsDispute_AndWhenItLastChanged()
+    {
+        var checkout = Checkout();
+        checkout.Place("98765", Now, Guid.NewGuid());
+        Assert.Equal(OnlinePaymentDispute.None, checkout.Dispute);
+
+        Assert.True(checkout.RecordDispute(OnlinePaymentDispute.Open, Now.AddDays(3)));
+        Assert.False(checkout.RecordDispute(OnlinePaymentDispute.Open, Now.AddDays(4)));
+        Assert.Equal((OnlinePaymentDispute.Open, Now.AddDays(3)), (checkout.Dispute, checkout.DisputeUpdatedAt));
+
+        Assert.True(checkout.RecordDispute(OnlinePaymentDispute.Won, Now.AddDays(30)));
+        Assert.Equal((OnlinePaymentDispute.Won, Now.AddDays(30)), (checkout.Dispute, checkout.DisputeUpdatedAt));
+        Assert.Throws<DomainException>(() => checkout.RecordDispute(OnlinePaymentDispute.None, Now));
+        Assert.Throws<DomainException>(() => checkout.RecordDispute((OnlinePaymentDispute)7, Now));
+    }
+
+    [Fact]
+    public void Checkout_WithoutAnOrder_ShouldHaveNoDispute()
+    {
+        var awaiting = Checkout();
+        Assert.Throws<DomainException>(() => awaiting.RecordDispute(OnlinePaymentDispute.Open, Now));
+
+        var notPlaced = Checkout();
+        notPlaced.FailToPlace("98765", Now, OnlineCheckoutFailure.OrderRefused, "Se agotó.");
+        Assert.Throws<DomainException>(() => notPlaced.RecordDispute(OnlinePaymentDispute.Open, Now));
+    }
+
+    [Fact]
+    public void Account_ShouldReviewItsPaymentsForward_AndFromTheStart_WhenAnotherAccountIsConnected()
+    {
+        var account = Account();
+        Assert.Null(account.PaymentsReviewedUntil);
+
+        account.ReviewPaymentsUntil(Now.AddHours(1));
+        // A review that read less leaves it where it was.
+        account.ReviewPaymentsUntil(Now.AddMinutes(30));
+        Assert.Equal(Now.AddHours(1), account.PaymentsReviewedUntil);
+
+        // The same account again keeps what was reviewed; another one has other payments.
+        account.Reconnect(ProviderUserId, "access-2", "refresh-2", Now.AddDays(200), true, OwnerId, Now.AddDays(1));
+        Assert.Equal(Now.AddHours(1), account.PaymentsReviewedUntil);
+        account.Reconnect(ProviderUserId + 1, "access-3", "refresh-3", Now.AddDays(200), true, OwnerId, Now.AddDays(2));
+        Assert.Null(account.PaymentsReviewedUntil);
+    }
+
     private static OnlinePaymentAccount Account(
         string access = "access-cipher", DateTimeOffset? expiresAt = null, long providerUserId = ProviderUserId) =>
         OnlinePaymentAccount.Connect(

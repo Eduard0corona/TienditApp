@@ -2,14 +2,15 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ordersApi } from '../../api/ordersApi';
 import { apiRequest } from '../../api/typedClient';
 import { useAuth } from '../../hooks/useAuth';
 import type { OrderCreatedPayload, OrderUpdatedPayload } from '../../hooks/useOrderSignalR';
-import { OnlinePaymentRefundStatus } from '../../api/generated/enums';
+import { OnlinePaymentDispute, OnlinePaymentRefundReason, OnlinePaymentRefundStatus } from '../../api/generated/enums';
 import { useTenant } from '../../hooks/useTenant';
 import { DeliveryCourier, OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, TenantCapability, type OrderDto } from '../../types';
+import { setBusinessTimeZone } from '../../utils/dates';
 import OrdersList from './OrdersList';
 
 // The handler the list gives SignalR for new orders, to play an event as the hub would.
@@ -241,13 +242,27 @@ describe('OrdersList', () => {
     expect(detail).not.toHaveTextContent(/comisi[oó]n|neto/i);
   });
 
-  it('says what became of each refund given back through Mercado Pago (Fase 24I)', async () => {
+  /** An order paid online as the list gives it: what became of its refunds and its dispute only come with its detail. */
+  const asListed = (full: OrderDto): OrderDto => ({
+    ...full,
+    onlineDispute: undefined,
+    onlineDisputeUpdatedAt: undefined,
+    refunds: full.refunds?.map((refund) => ({ ...refund, onlineStatus: undefined, onlineFailure: undefined, onlineReason: undefined })),
+  });
+
+  /** The list shows the order as the list gives it, and its detail asks for the whole order. */
+  function renderOnlineOrder(full: OrderDto) {
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: full } as Awaited<ReturnType<typeof ordersApi.getById>>);
+    return renderOrders(TenantCapability.Food, [asListed(full)]);
+  }
+
+  it('says what became of each refund given back through Mercado Pago, read from the whole order (Fase 24I)', async () => {
     const user = userEvent.setup();
     const refund = (id: string, onlineStatus: number, onlineFailure: string | null = null) => ({
       id, amount: 40, method: OrderPaymentMethod.Online, reason: 'Faltó un refresco', refundedAt: '2026-10-09T17:00:00Z',
       refundedBy: 'Mariana', restockItems: false, lines: [], onlineStatus, onlineFailure,
     });
-    renderOrders(TenantCapability.Food, [order({
+    renderOnlineOrder(order({
       channel: OrderChannel.Online, createdByBusiness: false, items: [], taxBreakdown: [], statusHistory: [], servicePieces: [],
       allowedTransitions: [], refundedAmount: 120,
       payments: [{ id: 'p1', amount: 120, method: OrderPaymentMethod.Online, paidAt: '2026-10-09T16:00:00Z', reference: '987654321' }],
@@ -256,14 +271,108 @@ describe('OrdersList', () => {
         refund('f2', OnlinePaymentRefundStatus.Completed),
         refund('f3', OnlinePaymentRefundStatus.Failed, 'El pago ya no se puede devolver.'),
       ],
-    } as Partial<OrderDto>)]);
+    } as Partial<OrderDto>));
 
     await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
 
     const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
-    expect(within(detail).getByText('Mercado Pago lo está devolviendo.')).toHaveClass('text-muted');
+    expect(await within(detail).findByText('Mercado Pago lo está devolviendo.')).toHaveClass('text-muted');
     expect(within(detail).getByText('Mercado Pago ya lo devolvió.')).toHaveClass('text-success');
     expect(within(detail).getByText('El pago ya no se puede devolver. Devuélvelo desde tu cuenta de Mercado Pago.')).toHaveClass('text-danger');
+    expect(ordersApi.getById).toHaveBeenCalledWith('o1');
+  });
+
+  it('says nothing of a refund made online while the whole order has not come, rather than a guess', async () => {
+    const user = userEvent.setup();
+    vi.mocked(ordersApi.getById).mockReturnValue(new Promise(() => undefined));
+    renderOrders(TenantCapability.Food, [asListed(order({
+      channel: OrderChannel.Online, createdByBusiness: false, items: [], taxBreakdown: [], statusHistory: [], servicePieces: [],
+      allowedTransitions: [], refundedAmount: 40,
+      payments: [{ id: 'p1', amount: 120, method: OrderPaymentMethod.Online, paidAt: '2026-10-09T16:00:00Z', reference: '987654321' }],
+      refunds: [{
+        id: 'f1', amount: 40, method: OrderPaymentMethod.Online, reason: 'Contracargo: el banco del cliente le regresó el pago.',
+        refundedAt: '2026-10-09T17:00:00Z', refundedBy: 'Mercado Pago', restockItems: false, lines: [],
+      }],
+    } as Partial<OrderDto>))]);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    expect(within(detail).getByRole('heading', { name: 'Reembolsos' })).toBeInTheDocument();
+    expect(detail).not.toHaveTextContent(/lo está devolviendo|ya lo devolvió/);
+  });
+
+  it('warns of a payment in dispute and says where each refund made in Mercado Pago came from (Fase 24K)', async () => {
+    const user = userEvent.setup();
+    setBusinessTimeZone('America/Mexico_City');
+    onTestFinished(() => setBusinessTimeZone(null));
+    const refund = (id: string, reason: string, onlineReason: number, onlineStatus: number = OnlinePaymentRefundStatus.Completed) => ({
+      id, amount: 40, method: OrderPaymentMethod.Online, reason, refundedAt: '2026-10-09T17:00:00Z', refundedBy: 'Mercado Pago',
+      restockItems: false, lines: [], onlineStatus, onlineFailure: null, onlineReason,
+    });
+    renderOnlineOrder(order({
+      channel: OrderChannel.Online, createdByBusiness: false, items: [], taxBreakdown: [], statusHistory: [], servicePieces: [],
+      allowedTransitions: [], refundedAmount: 80, onlineDispute: OnlinePaymentDispute.Open, onlineDisputeUpdatedAt: '2026-10-10T17:00:00Z',
+      payments: [{ id: 'p1', amount: 160, method: OrderPaymentMethod.Online, paidAt: '2026-10-09T16:00:00Z', reference: '987654321' }],
+      refunds: [
+        refund('f1', 'Devolución hecha desde la cuenta de Mercado Pago.', OnlinePaymentRefundReason.InMercadoPago),
+        refund('f2', 'Faltó un refresco', OnlinePaymentRefundReason.ByBusiness, OnlinePaymentRefundStatus.DoneInMercadoPago),
+      ],
+    } as Partial<OrderDto>));
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    const alert = await within(detail).findByRole('status');
+    expect(alert).toHaveTextContent(/^Pago en disputa\. .*Mercado Pago retiene el dinero mientras se resuelve/);
+    expect(alert).toHaveClass('alert-warning');
+    // 17:00 UTC is 11:00 in Mexico City.
+    expect(within(alert).getByText(/^Última noticia de Mercado Pago: 10\/10\/2026.*11:00.*\.$/)).toBeInTheDocument();
+    expect(within(detail).getByText('Se hizo en Mercado Pago.')).toHaveClass('text-success');
+    expect(within(detail).getByText('Mercado Pago no lo devolvió al pedirlo; después se devolvió en tu cuenta de Mercado Pago.')).toHaveClass('text-success');
+  });
+
+  it('says a lost dispute with its refund, and a won one that keeps the refund recorded when it was lost (Fase 24K)', async () => {
+    const user = userEvent.setup();
+    const claim = {
+      id: 'f1', amount: 120, method: OrderPaymentMethod.Online, reason: 'Mercado Pago se lo devolvió al cliente por una reclamación.',
+      refundedAt: '2026-10-09T17:00:00Z', refundedBy: 'Mercado Pago', restockItems: false, lines: [],
+      onlineStatus: OnlinePaymentRefundStatus.Completed, onlineFailure: null, onlineReason: OnlinePaymentRefundReason.Claim,
+    };
+    const disputed = (dispute: OnlinePaymentDispute) => order({
+      channel: OrderChannel.Online, createdByBusiness: false, items: [], taxBreakdown: [], statusHistory: [], servicePieces: [],
+      allowedTransitions: [], refundedAmount: 120, onlineDispute: dispute, refunds: [claim],
+      payments: [{ id: 'p1', amount: 120, method: OrderPaymentMethod.Online, paidAt: '2026-10-09T16:00:00Z', reference: '987654321' }],
+    } as Partial<OrderDto>);
+    const view = renderOnlineOrder(disputed(OnlinePaymentDispute.Lost));
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+    let alert = await within(screen.getByRole('dialog', { name: 'Pedido ORD-000001' })).findByRole('status');
+    expect(alert).toHaveClass('alert-danger');
+    expect(alert).toHaveTextContent(/^Disputa perdida\. .*Lo ves en los reembolsos del pedido\.$/);
+    expect(screen.getByText('Mercado Pago lo devolvió por una reclamación.')).toHaveClass('text-warning');
+    view.unmount();
+
+    renderOnlineOrder(disputed(OnlinePaymentDispute.Won));
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+    alert = await within(screen.getByRole('dialog', { name: 'Pedido ORD-000001' })).findByRole('status');
+    expect(alert).toHaveClass('alert-success');
+    expect(alert).toHaveTextContent(/^Disputa ganada\. Se resolvió a tu favor, pero el reembolso de la disputa sigue anotado en el pedido\./);
+  });
+
+  it('shows no dispute for an order paid online with none', async () => {
+    const user = userEvent.setup();
+    renderOnlineOrder(order({
+      channel: OrderChannel.Online, createdByBusiness: false, items: [], taxBreakdown: [], statusHistory: [], servicePieces: [],
+      allowedTransitions: [], refunds: [], onlineDispute: null,
+      payments: [{ id: 'p1', amount: 120, method: OrderPaymentMethod.Online, paidAt: '2026-10-09T16:00:00Z', reference: '987654321' }],
+    } as Partial<OrderDto>));
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    await waitFor(() => expect(ordersApi.getById).toHaveBeenCalledWith('o1'));
+    expect(detail).not.toHaveTextContent(/disputa/i);
   });
 
   it('says «Saldado», not «Pagado», for a sale settled by what was forgiven, and what was undone (Fase 26B)', async () => {

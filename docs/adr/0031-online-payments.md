@@ -52,7 +52,7 @@ Cobrar en línea trae decisiones que no se pueden tomar a medias: de quién es e
   - Un aviso perdido y un cliente que no regresa se resuelven con el barrido, en minutos, no al instante.
   - Si el negocio cierra entre el pago y el aviso, el pedido no se crea y el pago regresa.
   - Sin cuenta conectada (o con la llave vencida) una devolución no se pide sola: queda rechazada para que el negocio la haga en Mercado Pago.
-  - Lo que pasa solo en Mercado Pago (un contracargo, una devolución hecha desde la cuenta del negocio) no regresa al pedido.
+  - Lo que pasa solo en Mercado Pago (un contracargo, una devolución hecha desde la cuenta del negocio) no regresa al pedido. Llegó en la Fase 24K ([ADR 0044](0044-online-payment-reconciliation.md)).
   - El enlace de seguimiento solo aparece en el dispositivo que empezó el pago.
 - **Lo que hay que operar:**
   - La aplicación de TienditApp en Mercado Pago, con la URL de regreso `{AppUrl}/settings/online-payments` y el webhook `{AppUrl}/api/v1/payments/mercadopago/webhook` (evento «Pagos»).

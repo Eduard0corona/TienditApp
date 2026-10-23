@@ -44,6 +44,25 @@ public interface IOnlinePaymentGateway
         string accessToken, Guid checkoutId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The payments of the business's account whose last change in Mercado Pago falls between <paramref name="from"/> and
+    /// <paramref name="to"/>, the oldest change first (Fase 24K): a refund or a dispute changes a payment. Every payment of
+    /// the account comes, also the ones TienditApp did not charge; at most <paramref name="limit"/>, from
+    /// <paramref name="offset"/>.
+    /// </summary>
+    /// <exception cref="OnlinePaymentAccountRejectedException">Mercado Pago no longer takes the account's key.</exception>
+    /// <exception cref="OnlinePaymentGatewayUnavailableException">Mercado Pago did not answer, or not with a page of results.</exception>
+    Task<OnlinePaymentChanges> FindChangedPaymentsAsync(
+        string accessToken, DateTimeOffset from, DateTimeOffset to, int offset, int limit, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The refunds Mercado Pago has of a payment of the business's account (Fase 24K): the ones TienditApp asked for and the
+    /// ones made elsewhere. Empty when there is no such payment.
+    /// </summary>
+    /// <exception cref="OnlinePaymentAccountRejectedException">Mercado Pago no longer takes the account's key.</exception>
+    Task<IReadOnlyList<OnlinePaymentProviderRefund>> GetRefundsAsync(
+        string accessToken, string paymentId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Gives back <paramref name="amount"/> of a payment. The same <paramref name="idempotencyKey"/> never gives it back
     /// twice, so it is safe to retry.
     /// </summary>
@@ -75,6 +94,8 @@ public sealed record OnlinePaymentCheckoutRequest(
 public sealed record OnlinePaymentCheckoutPage(string PreferenceId, string CheckoutUrl);
 
 /// <summary>What Mercado Pago says of a payment; only an approved one in the right amount places an order.</summary>
+/// <param name="RefundedAmount">What Mercado Pago gave back of it, whoever asked (Fase 24K).</param>
+/// <param name="LastChangedAt">When it last changed in Mercado Pago: approved, refunded, disputed (Fase 24K).</param>
 public sealed record OnlinePaymentDetails(
     string Id,
     string Status,
@@ -84,11 +105,42 @@ public sealed record OnlinePaymentDetails(
     string? Currency,
     DateTimeOffset? ApprovedAt,
     long? CollectorId,
-    bool LiveMode)
+    bool LiveMode,
+    decimal RefundedAmount = 0,
+    DateTimeOffset? LastChangedAt = null)
 {
     public const string ApprovedStatus = "approved";
+    public const string RefundedStatus = "refunded";
+    /// <summary>The customer's bank took it back: <c>in_process</c> while disputed, <c>settled</c> lost, <c>reimbursed</c> won.</summary>
+    public const string ChargedBackStatus = "charged_back";
+    /// <summary>The customer opened a claim in Mercado Pago, which holds the money until it decides.</summary>
+    public const string InMediationStatus = "in_mediation";
 
     public bool IsApproved => Status == ApprovedStatus && ApprovedAt is not null;
+
+    /// <summary>Whether Mercado Pago may have given part of it back: then its refunds are read.</summary>
+    public bool MayHaveRefunds => RefundedAmount > 0 || Status == RefundedStatus || StatusDetail == "partially_refunded";
+}
+
+/// <summary>A page of the payments that changed in Mercado Pago (Fase 24K).</summary>
+/// <param name="Payments">The ones that could be read, in the order Mercado Pago gave them.</param>
+/// <param name="Returned">How many Mercado Pago gave back, also the ones that could not be read: a page is the last one only
+/// when this is less than what was asked for.</param>
+public sealed record OnlinePaymentChanges(IReadOnlyList<OnlinePaymentDetails> Payments, int Returned)
+{
+    public static OnlinePaymentChanges Of(IReadOnlyList<OnlinePaymentDetails> payments) => new(payments, payments.Count);
+}
+
+/// <summary>A refund Mercado Pago has of a payment (Fase 24K); only an approved one gave the money back.</summary>
+/// <param name="Source">Who made it, as Mercado Pago says: <c>collector</c> (the business), <c>admin</c> (Mercado Pago),
+/// <c>bpp</c> (a claim of the customer) or <c>marketplace</c>.</param>
+public sealed record OnlinePaymentProviderRefund(string Id, decimal Amount, string Status, string? Source, DateTimeOffset? CreatedAt)
+{
+    public const string ApprovedStatus = "approved";
+    public const string ClaimSource = "bpp";
+    public const string MercadoPagoSource = "admin";
+
+    public bool IsApproved => Status == ApprovedStatus;
 }
 
 /// <summary>Mercado Pago gave the money back, or refused to (it answered, so retrying will not change it).</summary>

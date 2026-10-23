@@ -8,6 +8,8 @@ import {
   PAGOS_NO_DISPONIBLES,
   PAGOS_SIN_CONECTAR,
   PAGO_EN_LINEA_ROUTES,
+  PEDIDO_CONTRACARGO_PERDIDO,
+  PEDIDO_EN_DISPUTA,
   PEDIDO_PAGADO_EN_LINEA,
   REGRESO_NO_SE_ENVIO,
   REGRESO_PEDIDO_RECIBIDO,
@@ -21,7 +23,8 @@ import { SELL_ROUTES } from './vender-pedidos.mocks';
 // Paying online with Mercado Pago (Fase 24I, ADR 0031): Configuración › Pagos en línea (to connect, connected and
 // offered, with its notices, and not available), the store's cart that pays online for pickup and to an address, the page
 // Mercado Pago sends the customer back to (placed, not placed with its refund, expired and still to pay), and an order
-// paid online with its «En línea» refunds and the refund dialog that offers it.
+// paid online with its «En línea» refunds and the refund dialog that offers it. Since the Fase 24K (ADR 0044), what
+// happened in Mercado Pago: an order whose payment is in dispute, and one whose chargeback was lost.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -84,6 +87,7 @@ test.describe('Configuración › Pagos en línea', () => {
       await open(page, '/settings/online-payments');
       await expect(page.getByRole('button', { name: 'Desconectar' })).toBeDisabled();
       await expect(page.getByText(/Mercado Pago no hizo una devolución/)).toBeVisible();
+      await expect(page.getByText(/^2 pagos están en disputa/)).toBeVisible();
       await snap(page, 'pagos-en-linea-con-avisos');
     });
   });
@@ -247,5 +251,50 @@ test.describe('Un pedido pagado en línea', () => {
     await refund.getByLabel('Monto a devolver').fill('38');
     await refund.getByLabel('Motivo').fill('Faltó un café americano');
     await snapScreen(page, 'pedidos-reembolsar-en-linea');
+  });
+});
+
+test.describe('Lo que pasó en Mercado Pago', () => {
+  /** Renata's order of September, found by her name (Pedidos shows today's), its detail open where the dispute reads. */
+  async function openOrder(page: Page) {
+    await open(page, '/orders?search=Renata');
+    const row = page.getByRole('row').filter({ hasText: 'Renata Ibarra' });
+    const folio = (await row.getByRole('button', { name: /^ORD-\d+$/ }).textContent()) ?? '';
+    await row.getByRole('button', { name: folio, exact: true }).click();
+    return dialog(page, `Pedido ${folio}`);
+  }
+
+  test.describe('en disputa', () => {
+    test.use({ extraRoutes: SELL_ROUTES, prepareData: PEDIDO_EN_DISPUTA });
+
+    test('pedidos detalle pago en disputa', async ({ page }) => {
+      const detail = await openOrder(page);
+      await expect(detail.getByRole('status').filter({ hasText: 'Pago en disputa.' })).toBeVisible();
+      await expect(detail.getByText('Se hizo en Mercado Pago.')).toBeVisible();
+      await detail.getByRole('heading', { name: 'Pagos' }).scrollIntoViewIfNeeded();
+      await snapScreen(page, 'pedidos-detalle-pago-en-disputa');
+    });
+
+    test('pedidos detalle pago en disputa teléfono', async ({ page }) => {
+      await page.setViewportSize(SIZES.phone);
+      const detail = await openOrder(page);
+      const alert = detail.getByRole('status').filter({ hasText: 'Pago en disputa.' });
+      await alert.scrollIntoViewIfNeeded();
+      await expect(alert).toBeVisible();
+      await snapScreen(page, 'pedidos-detalle-pago-en-disputa-telefono');
+    });
+  });
+
+  test.describe('contracargo perdido', () => {
+    test.use({ extraRoutes: SELL_ROUTES, prepareData: PEDIDO_CONTRACARGO_PERDIDO });
+
+    test('pedidos detalle contracargo perdido', async ({ page }) => {
+      const detail = await openOrder(page);
+      await expect(detail.getByRole('status').filter({ hasText: 'Disputa perdida.' })).toBeVisible();
+      const refunds = detail.getByRole('table').filter({ hasText: 'Motivo' });
+      await expect(refunds.getByText('El banco se lo regresó al cliente (contracargo).')).toBeVisible();
+      await refunds.scrollIntoViewIfNeeded();
+      await snapScreen(page, 'pedidos-detalle-contracargo-perdido');
+    });
   });
 });

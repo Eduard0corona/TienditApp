@@ -341,7 +341,7 @@ export { TenantCapability } from '../api/generated/enums';
  * keeps its address for the team.
  */
 export { BranchServiceMode } from '../api/generated/enums';
-import type { OnlinePaymentRefundStatus } from '../api/generated/enums';
+import type { OnlinePaymentDispute, OnlinePaymentRefundReason, OnlinePaymentRefundStatus } from '../api/generated/enums';
 
 export interface RegisterBusinessRequest {
   email: string;
@@ -1652,6 +1652,12 @@ export interface OrderDto {
   servicePieces: ServiceOrderPieceDto[];
   payments: OrderPaymentDto[];
   refunds?: OrderRefundDto[];
+  /**
+   * A chargeback or a claim on the payment of an order paid online, as Mercado Pago last reported it (Fase 24K): while it
+   * is open Mercado Pago holds the money.
+   */
+  onlineDispute?: OnlinePaymentDispute | null;
+  onlineDisputeUpdatedAt?: string | null;
   /** What the business forgave, each with its reason and who forgave it (Fase 26B). */
   writeOffs?: OrderWriteOffDto[];
   /** Dishes of the tab cancelled after they went to the kitchen, with the reason and who cancelled them. */
@@ -1767,6 +1773,8 @@ export interface OrderRefundDto {
   onlineStatus?: OnlinePaymentRefundStatus | null;
   /** What Mercado Pago answered when it refused it. */
   onlineFailure?: string | null;
+  /** Why it went back (Fase 24K): asked by the business, made in Mercado Pago, for a claim or a lost chargeback. */
+  onlineReason?: OnlinePaymentRefundReason | null;
 }
 
 export { OrderWriteOffReason } from '../api/generated/enums';
