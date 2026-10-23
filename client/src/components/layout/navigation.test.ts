@@ -104,7 +104,9 @@ describe('navigation', () => {
     expect(found('depósitos')).toEqual(['Liquidaciones']);
     // Retenciones hangs from Liquidaciones (Fase 22J).
     expect(found('retenciones')).toEqual(['Liquidaciones']);
-    expect(found('cfdi')).toEqual(['Liquidaciones']);
+    // The CFDI of withholdings, and since the Fase 28A the business's own invoices.
+    expect(found('cfdi')).toEqual(['Liquidaciones', 'Facturación']);
+    expect(found('csd')).toEqual(['Facturación']);
     expect(found('reportes')).toEqual(['Ventas']);
   });
 });

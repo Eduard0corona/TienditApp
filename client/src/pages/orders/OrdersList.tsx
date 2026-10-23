@@ -909,7 +909,7 @@ export default function OrdersList() {
                         className="btn btn-sm btn-outline-secondary"
                         onClick={() => setCfdiFor(selectedOrder)}
                       >
-                        <i className="ri-file-text-line me-1" aria-hidden="true"></i>Factura (vista previa)
+                        <i className="ri-file-text-line me-1" aria-hidden="true"></i>Factura
                       </button>
                     )}
                     {canRefundSelected && (
@@ -1231,7 +1231,12 @@ export default function OrdersList() {
       )}
 
       {cfdiFor && (
-        <CfdiDraftModal orderId={cfdiFor.id} orderNumber={cfdiFor.orderNumber} onClose={() => setCfdiFor(null)} />
+        <CfdiDraftModal
+          orderId={cfdiFor.id}
+          orderNumber={cfdiFor.orderNumber}
+          canCancel={access.businessSettings}
+          onClose={() => setCfdiFor(null)}
+        />
       )}
 
       {refundTarget && (refundTarget.mode === 'void' ? (

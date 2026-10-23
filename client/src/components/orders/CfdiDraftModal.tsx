@@ -1,47 +1,23 @@
 import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
+import { useIssueOrderInvoice, useOrderInvoicing, type OrderInvoicing } from '../../api/invoicing';
 import { useCfdiDraft, type CfdiReceiver } from '../../api/queries';
 import type { Schemas } from '../../api/typedClient';
+import { useToast } from '../../hooks/useToast';
+import { OrderInvoiceStatus } from '../../types';
+import { EMPTY_RECEIVER, normalizeReceiver, PAYMENT_FORMS } from '../../utils/cfdi';
 import { formatMoney } from '../../utils/money';
+import CfdiReceiverFields from '../invoicing/CfdiReceiverFields';
+import OrderInvoiceList from '../invoicing/OrderInvoiceList';
 
 interface CfdiDraftModalProps {
   orderId: string;
   orderNumber: string;
+  /** Owners and admins cancel the order's invoices. */
+  canCancel: boolean;
   onClose: () => void;
 }
-
-// c_RegimenFiscal and c_UsoCFDI entries a counter sale usually needs (the API accepts the whole catalog).
-const REGIMES: Array<[string, string]> = [
-  ['601', 'General de Ley Personas Morales'],
-  ['603', 'Personas Morales con Fines no Lucrativos'],
-  ['605', 'Sueldos y Salarios'],
-  ['606', 'Arrendamiento'],
-  ['612', 'Personas Físicas con Actividades Empresariales y Profesionales'],
-  ['616', 'Sin obligaciones fiscales'],
-  ['621', 'Incorporación Fiscal'],
-  ['625', 'Actividades con Plataformas Tecnológicas'],
-  ['626', 'Régimen Simplificado de Confianza'],
-];
-
-const USES: Array<[string, string]> = [
-  ['G01', 'Adquisición de mercancías'],
-  ['G03', 'Gastos en general'],
-  ['D01', 'Honorarios médicos, dentales y gastos hospitalarios'],
-  ['S01', 'Sin efectos fiscales'],
-];
-
-const PAYMENT_FORMS: Record<string, string> = {
-  '01': 'Efectivo',
-  '03': 'Transferencia',
-  '04': 'Tarjeta',
-  '06': 'Dinero electrónico',
-  // Paid with the balance in the customer's favor (Fase 26D): an advance applied.
-  '30': 'Aplicación de anticipos',
-  '99': 'Por definir',
-};
-
-const EMPTY_RECEIVER: CfdiReceiver = { rfc: '', name: '', postalCode: '', fiscalRegime: '616', cfdiUse: 'G03' };
 
 type Transfer = Schemas['CfdiTransferDto'];
 
@@ -52,40 +28,92 @@ function formatTransfer(transfer: Transfer | null | undefined): string {
 }
 
 /**
- * What the invoice of an order would say: concepts with their SAT codes, IVA per rate and what is still
- * missing to stamp it. Nothing is sent to the SAT.
+ * The invoice of an order (Fase 28A): its invoices, and the CFDI 4.0 it would stamp (concepts with their SAT codes, IVA per
+ * rate and what is still missing) for the customer's fiscal data. With the platform's PAC and the business's CSD, it is
+ * stamped from here; without them it is only a preview.
  */
-export default function CfdiDraftModal({ orderId, orderNumber, onClose }: CfdiDraftModalProps) {
+export default function CfdiDraftModal({ orderId, orderNumber, canCancel, onClose }: CfdiDraftModalProps) {
   const titleId = useId();
-  const [form, setForm] = useState<CfdiReceiver>(EMPTY_RECEIVER);
-  const [receiver, setReceiver] = useState<CfdiReceiver | undefined>(undefined);
-  const [showReceiver, setShowReceiver] = useState(false);
-  const draft = useCfdiDraft(orderId, receiver);
-  const cfdi = draft.data;
-
-  const update = (field: keyof CfdiReceiver) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm((current) => ({ ...current, [field]: event.target.value }));
-
-  const applyReceiver = (event: React.FormEvent) => {
-    event.preventDefault();
-    setReceiver({
-      rfc: form.rfc.trim().toUpperCase(),
-      name: form.name.trim(),
-      postalCode: form.postalCode.trim(),
-      fiscalRegime: form.fiscalRegime,
-      cfdiUse: form.cfdiUse,
-    });
-  };
+  const invoicing = useOrderInvoicing(orderId);
+  const available = invoicing.data?.available ?? false;
 
   return (
     <Modal show onHide={onClose} size="xl" centered fullscreen="md-down" aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title id={titleId} as="h2" className="h5">Factura de {orderNumber} (vista previa)</Modal.Title>
+        <Modal.Title id={titleId} as="h2" className="h5">
+          {available ? `Facturar ${orderNumber}` : `Factura de ${orderNumber} (vista previa)`}
+        </Modal.Title>
       </Modal.Header>
+      {invoicing.isPending ? (
+        <Modal.Body><p className="text-muted" aria-busy="true">Cargando…</p></Modal.Body>
+      ) : (
+        <InvoiceBody orderId={orderId} invoicing={invoicing.data} canCancel={canCancel} onClose={onClose} />
+      )}
+    </Modal>
+  );
+}
+
+interface InvoiceBodyProps {
+  orderId: string;
+  /** Missing when it could not be read: the preview still works. */
+  invoicing: OrderInvoicing | undefined;
+  canCancel: boolean;
+  onClose: () => void;
+}
+
+function InvoiceBody({ orderId, invoicing, canCancel, onClose }: InvoiceBodyProps) {
+  const toast = useToast();
+  const issue = useIssueOrderInvoice(orderId);
+  const proposed = invoicing?.proposedReceiver ?? null;
+  // Whom the invoice goes to: the customer's fiscal data, or the order's last invoice, to correct it.
+  const [form, setForm] = useState<CfdiReceiver>(proposed ?? EMPTY_RECEIVER);
+  const [receiver, setReceiver] = useState<CfdiReceiver | undefined>(proposed ? normalizeReceiver(proposed) : undefined);
+  const [showReceiver, setShowReceiver] = useState(invoicing?.available ?? false);
+  const [saveToCustomer, setSaveToCustomer] = useState(true);
+  const draft = useCfdiDraft(orderId, receiver);
+  const cfdi = draft.data;
+
+  const available = invoicing?.available ?? false;
+  const edited = receiver === undefined || JSON.stringify(normalizeReceiver(form)) !== JSON.stringify(receiver);
+  const canStamp = available && !!invoicing?.canInvoice && !!receiver && !edited && !!cfdi?.isReadyToStamp
+    && !cfdi.isGeneralPublic && !issue.isPending;
+
+  const applyReceiver = (event: React.FormEvent) => {
+    event.preventDefault();
+    setReceiver(normalizeReceiver(form));
+  };
+
+  const stamp = async () => {
+    if (!receiver) return;
+    try {
+      const invoice = await issue.mutateAsync({ receiver, saveToCustomer: !!invoicing?.customerId && saveToCustomer });
+      if (invoice.status === OrderInvoiceStatus.Stamped) toast.success(`Factura ${invoice.number} timbrada.`);
+      else if (invoice.status === OrderInvoiceStatus.Refused) toast.error(invoice.failureMessage ?? 'El PAC rechazó la factura.');
+      else toast.info(`El PAC no respondió: TienditApp sigue pidiendo el timbre de ${invoice.number}.`);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo timbrar la factura.'));
+    }
+  };
+
+  return (
+    <>
       <Modal.Body>
-        <p className="text-muted small">
-          Así quedaría el CFDI 4.0 de esta venta. Es una vista previa: todavía no se timbra ni se envía al SAT.
-        </p>
+        {invoicing && <OrderInvoiceList orderId={orderId} invoices={invoicing.invoices} canCancel={canCancel} />}
+
+        {!available ? (
+          <p className="text-muted small">
+            Así quedaría el CFDI 4.0 de esta venta. Es una vista previa: la facturación todavía no está disponible en TienditApp.
+          </p>
+        ) : (
+          <>
+            {invoicing?.sandbox && (
+              <div className="alert alert-warning py-2 small">Modo de pruebas: las facturas que timbres no tienen validez fiscal.</div>
+            )}
+            {invoicing?.problem && !invoicing.canInvoice && (
+              <div className="alert alert-info py-2 small" role="status">{invoicing.problem}</div>
+            )}
+          </>
+        )}
 
         <button
           type="button"
@@ -98,43 +126,32 @@ export default function CfdiDraftModal({ orderId, orderNumber, onClose }: CfdiDr
         </button>
         {showReceiver && (
           <form className="border rounded p-2 mb-3" onSubmit={applyReceiver}>
-            <div className="row g-2">
-              <div className="col-md-3">
-                <label className="form-label small mb-1" htmlFor="cfdi-rfc">RFC</label>
-                <input id="cfdi-rfc" className="form-control text-uppercase" maxLength={13} required
-                  value={form.rfc} onChange={update('rfc')} />
+            <CfdiReceiverFields idPrefix="cfdi" value={form} onChange={setForm} />
+            {available && invoicing?.customerId && (
+              <div className="form-check mt-2">
+                <input
+                  id="cfdi-save-to-customer"
+                  type="checkbox"
+                  className="form-check-input"
+                  checked={saveToCustomer}
+                  onChange={(event) => setSaveToCustomer(event.target.checked)}
+                />
+                <label className="form-check-label small" htmlFor="cfdi-save-to-customer">
+                  Guardar estos datos en {invoicing.customerName ?? 'el cliente'} para sus próximas facturas
+                </label>
               </div>
-              <div className="col-md-5">
-                <label className="form-label small mb-1" htmlFor="cfdi-name">Nombre o razón social</label>
-                <input id="cfdi-name" className="form-control" maxLength={254} required
-                  value={form.name} onChange={update('name')} />
-              </div>
-              <div className="col-md-4">
-                <label className="form-label small mb-1" htmlFor="cfdi-zip">Código postal fiscal</label>
-                <input id="cfdi-zip" className="form-control" inputMode="numeric" maxLength={5} required
-                  value={form.postalCode} onChange={update('postalCode')} />
-              </div>
-              <div className="col-md-6">
-                <label className="form-label small mb-1" htmlFor="cfdi-regime">Régimen fiscal</label>
-                <select id="cfdi-regime" className="form-select" value={form.fiscalRegime} onChange={update('fiscalRegime')}>
-                  {REGIMES.map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}
-                </select>
-              </div>
-              <div className="col-md-6">
-                <label className="form-label small mb-1" htmlFor="cfdi-use">Uso del CFDI</label>
-                <select id="cfdi-use" className="form-select" value={form.cfdiUse} onChange={update('cfdiUse')}>
-                  {USES.map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}
-                </select>
-              </div>
-            </div>
+            )}
             <div className="d-flex gap-2 mt-2">
-              <button type="submit" className="btn btn-sm btn-primary">Ver con estos datos</button>
+              <button type="submit" className="btn btn-sm btn-outline-secondary">Ver con estos datos</button>
               {receiver && (
                 <button type="button" className="btn btn-sm btn-light" onClick={() => setReceiver(undefined)}>
                   Público en general
                 </button>
               )}
             </div>
+            {available && receiver && edited && (
+              <p className="small text-muted mb-0 mt-2">Cambiaste los datos: revisa la factura con ellos antes de timbrarla.</p>
+            )}
           </form>
         )}
 
@@ -149,6 +166,10 @@ export default function CfdiDraftModal({ orderId, orderNumber, onClose }: CfdiDr
               <div className="alert alert-danger">
                 <div className="fw-semibold mb-1">Falta para poder timbrarla:</div>
                 <ul className="mb-0">{cfdi.blockers.map((item) => <li key={item}>{item}</li>)}</ul>
+              </div>
+            ) : cfdi.isGeneralPublic ? (
+              <div className="alert alert-secondary py-2 small">
+                Para timbrarla captura los datos fiscales del cliente: la venta a público en general va en la factura global.
               </div>
             ) : (
               <div className="alert alert-success py-2">
@@ -226,7 +247,12 @@ export default function CfdiDraftModal({ orderId, orderNumber, onClose }: CfdiDr
       </Modal.Body>
       <Modal.Footer>
         <button type="button" className="btn btn-light" onClick={onClose}>Cerrar</button>
+        {available && invoicing?.canInvoice && (
+          <button type="button" className="btn btn-primary" disabled={!canStamp} onClick={() => void stamp()}>
+            {issue.isPending ? 'Timbrando…' : 'Timbrar factura'}
+          </button>
+        )}
       </Modal.Footer>
-    </Modal>
+    </>
   );
 }

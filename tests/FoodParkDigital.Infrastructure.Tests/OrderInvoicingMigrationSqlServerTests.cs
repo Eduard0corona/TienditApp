@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Customers.Queries;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Entities;
@@ -54,6 +55,11 @@ public class OrderInvoicingMigrationSqlServerTests
         await using var check = database.CreateContext(seed.TenantId);
         Assert.Equal("XIQB891116QE4", (await check.Customers.SingleAsync(c => c.Name == "Karla")).FiscalData!.Rfc);
         Assert.Null((await check.Customers.SingleAsync(c => c.Name == "Luis")).FiscalData);
+        // Clientes lists it, projected in SQL.
+        var listed = await new GetCustomersQueryHandler(check).Handle(new GetCustomersQuery(), CancellationToken.None);
+        Assert.Equal(("XIQB891116QE4", "KARLA FUENTE NOLASCO", "26015", "612", "G03"),
+            listed.Items.Where(c => c.Name == "Karla").Select(c => (c.FiscalData!.Rfc, c.FiscalData.Name, c.FiscalData.PostalCode, c.FiscalData.FiscalRegime, c.FiscalData.CfdiUse)).Single());
+        Assert.Null(listed.Items.Single(c => c.Name == "Luis").FiscalData);
     }
 
     [SqlServerFact]

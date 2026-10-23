@@ -104,6 +104,7 @@ export const NAV_GROUPS: NavGroup[] = [
           { label: 'Sucursales', path: '/branches', icon: 'ri-store-3-line', area: 'businessSettings', keywords: 'tiendas locales puntos de venta matriz' },
           { label: 'Zonas de entrega', path: '/settings/delivery-zones', icon: 'ri-map-pin-range-line', area: 'businessSettings', keywords: 'envío a domicilio código postal costo de envío reparto colonias cobertura' },
           { label: 'Pagos en línea', path: '/settings/online-payments', icon: 'ri-bank-card-line', area: 'businessSettings', keywords: 'mercado pago cobrar con tarjeta pago en línea menú en línea' },
+          { label: 'Facturación', path: '/settings/invoicing', icon: 'ri-file-text-line', area: 'businessSettings', keywords: 'factura cfdi timbrar sat csd certificado sello digital pac' },
           { label: 'Equipo y permisos', path: '/employees', icon: 'ri-user-settings-line', area: 'employees', keywords: 'equipo empleados usuarios roles invitaciones' },
           { label: 'WhatsApp', path: '/settings/whatsapp', icon: 'ri-whatsapp-line', area: 'whatsAppSettings' },
           { label: 'Respuestas automáticas', path: '/ai-agent', icon: 'ri-robot-2-line', area: 'aiAgent', keywords: 'agente ia bot' },

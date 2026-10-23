@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.DTOs;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +47,7 @@ public class GetCustomersQueryHandler : IRequestHandler<GetCustomersQuery, Pagin
             .OrderByDescending(c => c.IsPublicGeneral)
             .ThenBy(c => c.Name);
 
-        // The list carries the notes but not the addresses: the detail loads them.
+        // The list carries the notes and the fiscal data but not the addresses: the detail loads them.
         var projected = query.Select(c => new CustomerDto
         {
             Id = c.Id,
@@ -58,6 +59,14 @@ public class GetCustomersQueryHandler : IRequestHandler<GetCustomersQuery, Pagin
             Notes = c.Notes,
             CreditLimit = c.CreditLimit,
             CreditTermDays = c.CreditTermDays,
+            FiscalData = c.FiscalData == null ? null : new CfdiReceiverDto
+            {
+                Rfc = c.FiscalData.Rfc,
+                Name = c.FiscalData.Name,
+                PostalCode = c.FiscalData.PostalCode,
+                FiscalRegime = c.FiscalData.FiscalRegime,
+                CfdiUse = c.FiscalData.CfdiUse
+            },
             CreatedAt = c.CreatedAt,
             UpdatedAt = c.UpdatedAt
         });
