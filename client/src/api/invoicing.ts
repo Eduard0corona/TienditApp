@@ -81,12 +81,14 @@ export function useOrderInvoicing(orderId: string) {
 }
 
 /** Preview of the invoice of an order, read again each time it opens; without a receiver it goes to the general public. */
-export function useCfdiDraft(orderId: string, receiver?: CfdiReceiver) {
+/** The CFDI the order would stamp; never read for a cancelled order, which is not invoiced. */
+export function useCfdiDraft(orderId: string, receiver?: CfdiReceiver, enabled = true) {
   return useQuery({
     queryKey: cfdiDraftKey(orderId, receiver),
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/orders/{id}/cfdi-draft', { path: { id: orderId }, query: receiver, signal }),
     refetchOnMount: 'always',
     retry: false,
+    enabled,
   });
 }
 

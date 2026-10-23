@@ -525,7 +525,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Qué se factura:** un pedido a un cliente con RFC, con un CFDI 4.0 de ingreso timbrado por el PAC de la plataforma (SW Sapien). Los conceptos, el IVA, la forma de pago y el total son los de la vista previa del CFDI (Fase 3); el backend los decide y el PAC solo los valida.
 - **Cuándo se puede:**
   - la vista previa no tiene bloqueos y el receptor no es público en general (esas ventas esperan la factura global);
-  - el pedido está pagado por completo (PUE) y no está cancelado; sin reembolsos, condonaciones ni un reembolso en línea en curso;
+  - el pedido está pagado por completo (PUE) y no está cancelado (sus facturas siguen en «Factura» para descargarlas y cancelar la timbrada con el motivo 03); sin reembolsos, condonaciones ni un reembolso en línea en curso;
   - el pago principal no es «Otro», que no es una forma de pago del SAT (un PUE no se declara «por definir», 99);
   - no tiene otra factura viva (timbrando, timbrada o cancelándose);
   - el negocio subió su CSD, vigente y del RFC de Mi negocio, y la plataforma tiene su PAC.

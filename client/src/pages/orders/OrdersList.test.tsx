@@ -466,6 +466,19 @@ describe('OrdersList', () => {
     }));
   });
 
+  it('keeps «Factura» on a cancelled order, where its invoices are downloaded or cancelled', async () => {
+    const user = userEvent.setup();
+    const cancelled = order({ id: 'c1', orderNumber: 'ORD-000125', status: 99, canCancel: false, items: [], payments: [], refunds: [], statusHistory: [], servicePieces: [], allowedTransitions: [], taxBreakdown: [] });
+    renderOrders(TenantCapability.Food, [cancelled]);
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: cancelled } as Awaited<ReturnType<typeof ordersApi.getById>>);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000125' }));
+
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000125' });
+    expect(within(detail).getByRole('button', { name: 'Factura' })).toBeInTheDocument();
+    expect(within(detail).queryByRole('button', { name: 'Cancelar pedido' })).not.toBeInTheDocument();
+  });
+
   it('cancels a counter order as always, without asking about the supplies', async () => {
     const user = userEvent.setup();
     const counter = order({ id: 'c1', orderNumber: 'ORD-000125', status: 1, canCancel: true, paidAmount: 0, balance: 120, items: [], payments: [], refunds: [], statusHistory: [], servicePieces: [], allowedTransitions: [], taxBreakdown: [] });

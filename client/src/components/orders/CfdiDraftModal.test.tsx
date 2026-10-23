@@ -55,10 +55,18 @@ function renderModal(
   canCancel = false,
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
   canSaveToCustomer = true,
+  orderCancelled = false,
 ) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <CfdiDraftModal orderId="o-1" orderNumber="ORD-000001" canCancel={canCancel} canSaveToCustomer={canSaveToCustomer} onClose={() => {}} />
+      <CfdiDraftModal
+        orderId="o-1"
+        orderNumber="ORD-000001"
+        canCancel={canCancel}
+        canSaveToCustomer={canSaveToCustomer}
+        orderCancelled={orderCancelled}
+        onClose={() => {}}
+      />
     </QueryClientProvider>,
   );
 }
@@ -199,6 +207,26 @@ describe('CfdiDraftModal', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada.'));
     expect(screen.queryByRole('button', { name: /Timbr/ })).not.toBeInTheDocument();
     expect(vi.mocked(apiRequest).mock.calls.filter(([method]) => method === 'post')).toHaveLength(1);
+  });
+
+  it('keeps the invoices of a cancelled order, to download them or cancel a stamped one, without a preview', async () => {
+    serve({ ...INVOICING, canInvoice: false, problem: 'Una orden cancelada no se factura.', invoices: [STAMPED] });
+    renderModal(true, undefined, true, true);
+
+    expect(await screen.findByRole('heading', { name: 'Facturas de ORD-000001' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Descargar XML de la factura F-1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar factura F-1' })).toBeInTheDocument();
+    expect(screen.getByText(/si una de sus facturas sigue timbrada, cancélala ante el SAT con el motivo 03/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Timbrar factura' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Facturar a un cliente con RFC' })).not.toBeInTheDocument();
+    expect(vi.mocked(apiRequest).mock.calls.some(([, path]) => path === '/api/v1/orders/{id}/cfdi-draft')).toBe(false);
+  });
+
+  it('says a cancelled order has no invoices when it has none', async () => {
+    serve({ ...INVOICING, canInvoice: false, problem: 'Una orden cancelada no se factura.', invoices: [] });
+    renderModal(false, undefined, true, true);
+
+    expect(await screen.findByText('Este pedido está cancelado y no tiene facturas.')).toBeInTheDocument();
   });
 
   it('is only a preview while the platform does not invoice', async () => {

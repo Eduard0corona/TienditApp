@@ -46,9 +46,12 @@ public class InvoicingWorkerTests
         var worker = host.Get<InvoicingWorkerService>();
 
         await worker.RunPassAsync(CancellationToken.None);
-        host.Clock.Advance(TimeSpan.FromMinutes(2));
-        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal([cancelling], sent.Checks);
+        // A minute short of the half hour it does not ask again; at the half hour it does.
         host.Clock.Advance(TimeSpan.FromMinutes(29));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal([cancelling], sent.Checks);
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
         await worker.RunPassAsync(CancellationToken.None);
 
         Assert.Equal([cancelling, cancelling], sent.Checks);

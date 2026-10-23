@@ -71,8 +71,19 @@ public class SealingCertificateReaderTests
         Assert.Equal(SealingCertificateReader.NotACertificateMessage,
             SealingCertificateReader.Read(Encoding.UTF8.GetBytes("no soy un certificado"), key, Password).Error);
         Assert.Equal(SealingCertificateReader.NotACertificateMessage, SealingCertificateReader.Read([], key, Password).Error);
-        Assert.Equal(SealingCertificateReader.NotACertificateMessage,
-            SealingCertificateReader.Read(new byte[SealingCertificateReader.MaxFileBytes + 1], key, Password).Error);
+    }
+
+    [Fact]
+    public void FilesLargerThanACsdEverIs_ShouldBeRefused_BeforeBeingRead_EvenIfTheyAreACsd()
+    {
+        // A real certificate made larger than 16 KB, and a real key with bytes after it (the key's reader would ignore them).
+        var (largeCer, itsKey) = Make(filler: SealingCertificateReader.MaxFileBytes);
+        var (cer, key) = Make();
+        var paddedKey = key.Concat(new byte[SealingCertificateReader.MaxFileBytes]).ToArray();
+
+        Assert.True(SealingCertificateReader.Read(cer, key, Password).IsSuccess);
+        Assert.Equal(SealingCertificateReader.NotACertificateMessage, SealingCertificateReader.Read(largeCer, itsKey, Password).Error);
+        Assert.Equal(SealingCertificateReader.WrongPasswordMessage, SealingCertificateReader.Read(cer, paddedKey, Password).Error);
     }
 
     [Fact]
@@ -94,6 +105,7 @@ public class SealingCertificateReaderTests
     private static (byte[] Cer, byte[] Key) Make(
         string? uniqueIdentifier = "EKU9003173C9 / VADA800927HSRSRL05",
         X509KeyUsageFlags usage = X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.NonRepudiation,
-        byte[]? serial = null)
-        => TestCsd.Make(uniqueIdentifier, usage, serial);
+        byte[]? serial = null,
+        int filler = 0)
+        => TestCsd.Make(uniqueIdentifier, usage, serial, filler: filler);
 }

@@ -17,6 +17,11 @@ interface CfdiDraftModalProps {
   canCancel: boolean;
   /** Who manages customers keeps the fiscal data in the customer (ManageCustomers, as Clientes). */
   canSaveToCustomer: boolean;
+  /**
+   * A cancelled order is not invoiced, but the invoices it already has stay here: to download them and to cancel a
+   * stamped one before the SAT (motive 03, the sale did not happen).
+   */
+  orderCancelled: boolean;
   onClose: () => void;
 }
 
@@ -33,7 +38,7 @@ function formatTransfer(transfer: Transfer | null | undefined): string {
  * rate and what is still missing) for the customer's fiscal data. With the platform's PAC and the business's CSD, it is
  * stamped from here; without them it is only a preview.
  */
-export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSaveToCustomer, onClose }: CfdiDraftModalProps) {
+export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSaveToCustomer, orderCancelled, onClose }: CfdiDraftModalProps) {
   const titleId = useId();
   const invoicing = useOrderInvoicing(orderId);
   // What a previous opening left in the cache may be old (the order since paid, the customer's data changed): the body
@@ -43,7 +48,9 @@ export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSav
   const [read, setRead] = useState(false);
   if (!read && invoicing.isFetchedAfterMount && invoicing.isSuccess) setRead(true);
   const data = read ? invoicing.data : undefined;
-  const title = !data ? `Factura de ${orderNumber}` : data.available ? `Facturar ${orderNumber}` : `Factura de ${orderNumber} (vista previa)`;
+  const title = orderCancelled
+    ? `Facturas de ${orderNumber}`
+    : !data ? `Factura de ${orderNumber}` : data.available ? `Facturar ${orderNumber}` : `Factura de ${orderNumber} (vista previa)`;
 
   return (
     <Modal show onHide={onClose} size="xl" centered fullscreen="md-down" aria-labelledby={titleId}>
@@ -60,6 +67,7 @@ export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSav
           invoicing={data}
           canCancel={canCancel}
           canSaveToCustomer={canSaveToCustomer}
+          orderCancelled={orderCancelled}
           onClose={onClose}
           loadError={invoicing.isError && (
             <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
@@ -85,12 +93,13 @@ interface InvoiceBodyProps {
   invoicing: OrderInvoicing | undefined;
   canCancel: boolean;
   canSaveToCustomer: boolean;
+  orderCancelled: boolean;
   onClose: () => void;
   /** Why the order's invoicing could not be read, with a way to try again. */
   loadError: ReactNode;
 }
 
-function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, onClose, loadError }: InvoiceBodyProps) {
+function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCancelled, onClose, loadError }: InvoiceBodyProps) {
   const toast = useToast();
   const issue = useIssueOrderInvoice(orderId);
   const proposed = invoicing?.proposedReceiver ?? null;
@@ -101,7 +110,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, onClose
   const [saveToCustomer, setSaveToCustomer] = useState(true);
   // Offered to who manages customers only: the API asks for ManageCustomers to keep it.
   const offerSaveToCustomer = canSaveToCustomer && !!invoicing?.customerId;
-  const draft = useCfdiDraft(orderId, receiver);
+  const draft = useCfdiDraft(orderId, receiver, !orderCancelled);
   const cfdi = draft.data;
 
   const available = invoicing?.available ?? false;
@@ -133,155 +142,166 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, onClose
         {loadError}
         {invoicing && <OrderInvoiceList orderId={orderId} invoices={invoicing.invoices} canCancel={canCancel} />}
 
-        {!invoicing ? null : !available ? (
-          <p className="text-muted small">
-            Así quedaría el CFDI 4.0 de esta venta. Es una vista previa: la facturación todavía no está disponible en TienditApp.
+        {orderCancelled && invoicing && (
+          <p className="text-muted small mb-0">
+            {invoicing.invoices.length === 0
+              ? 'Este pedido está cancelado y no tiene facturas.'
+              : 'El pedido está cancelado: si una de sus facturas sigue timbrada, cancélala ante el SAT con el motivo 03 (la venta no se llevó a cabo).'}
           </p>
-        ) : (
-          <>
-            {invoicing?.sandbox && (
-              <div className="alert alert-warning py-2 small">Modo de pruebas: las facturas que timbres no tienen validez fiscal.</div>
-            )}
-            {invoicing?.problem && !invoicing.canInvoice && (
-              <div className="alert alert-info py-2 small" role="status">{invoicing.problem}</div>
-            )}
-          </>
         )}
-
-        <button
-          type="button"
-          className="btn btn-link btn-sm px-0 mb-2"
-          onClick={() => setShowReceiver((value) => !value)}
-          aria-expanded={showReceiver}
-        >
-          <i className={`${showReceiver ? 'ri-arrow-up-s-line' : 'ri-user-line'} me-1`} aria-hidden="true"></i>
-          {receiver ? `Factura para ${receiver.rfc}` : 'Facturar a un cliente con RFC'}
-        </button>
-        {showReceiver && (
-          <form className="border rounded p-2 mb-3" onSubmit={applyReceiver}>
-            <CfdiReceiverFields idPrefix="cfdi" value={form} onChange={setForm} />
-            {available && offerSaveToCustomer && (
-              <div className="form-check mt-2">
-                <input
-                  id="cfdi-save-to-customer"
-                  type="checkbox"
-                  className="form-check-input"
-                  checked={saveToCustomer}
-                  onChange={(event) => setSaveToCustomer(event.target.checked)}
-                />
-                <label className="form-check-label small" htmlFor="cfdi-save-to-customer">
-                  Guardar estos datos en {invoicing.customerName ?? 'el cliente'} para sus próximas facturas
-                </label>
-              </div>
-            )}
-            <div className="d-flex gap-2 mt-2">
-              <button type="submit" className="btn btn-sm btn-outline-secondary">Ver con estos datos</button>
-              {receiver && (
-                <button type="button" className="btn btn-sm btn-light" onClick={() => setReceiver(undefined)}>
-                  Público en general
-                </button>
+        {!orderCancelled && (
+          <>
+          {!invoicing ? null : !available ? (
+            <p className="text-muted small">
+              Así quedaría el CFDI 4.0 de esta venta. Es una vista previa: la facturación todavía no está disponible en TienditApp.
+            </p>
+          ) : (
+            <>
+              {invoicing?.sandbox && (
+                <div className="alert alert-warning py-2 small">Modo de pruebas: las facturas que timbres no tienen validez fiscal.</div>
               )}
-            </div>
-            {available && receiver && edited && (
-              <p className="small text-muted mb-0 mt-2">Cambiaste los datos: revisa la factura con ellos antes de timbrarla.</p>
-            )}
-          </form>
-        )}
+              {invoicing?.problem && !invoicing.canInvoice && (
+                <div className="alert alert-info py-2 small" role="status">{invoicing.problem}</div>
+              )}
+            </>
+          )}
 
-        {draft.isPending && <p className="text-muted" aria-busy="true">Calculando…</p>}
-        {draft.isError && (
-          <div className="alert alert-danger">{getApiErrorMessage(draft.error, 'No se pudo calcular la factura.')}</div>
-        )}
+          <button
+            type="button"
+            className="btn btn-link btn-sm px-0 mb-2"
+            onClick={() => setShowReceiver((value) => !value)}
+            aria-expanded={showReceiver}
+          >
+            <i className={`${showReceiver ? 'ri-arrow-up-s-line' : 'ri-user-line'} me-1`} aria-hidden="true"></i>
+            {receiver ? `Factura para ${receiver.rfc}` : 'Facturar a un cliente con RFC'}
+          </button>
+          {showReceiver && (
+            <form className="border rounded p-2 mb-3" onSubmit={applyReceiver}>
+              <CfdiReceiverFields idPrefix="cfdi" value={form} onChange={setForm} />
+              {available && offerSaveToCustomer && (
+                <div className="form-check mt-2">
+                  <input
+                    id="cfdi-save-to-customer"
+                    type="checkbox"
+                    className="form-check-input"
+                    checked={saveToCustomer}
+                    onChange={(event) => setSaveToCustomer(event.target.checked)}
+                  />
+                  <label className="form-check-label small" htmlFor="cfdi-save-to-customer">
+                    Guardar estos datos en {invoicing.customerName ?? 'el cliente'} para sus próximas facturas
+                  </label>
+                </div>
+              )}
+              <div className="d-flex gap-2 mt-2">
+                <button type="submit" className="btn btn-sm btn-outline-secondary">Ver con estos datos</button>
+                {receiver && (
+                  <button type="button" className="btn btn-sm btn-light" onClick={() => setReceiver(undefined)}>
+                    Público en general
+                  </button>
+                )}
+              </div>
+              {available && receiver && edited && (
+                <p className="small text-muted mb-0 mt-2">Cambiaste los datos: revisa la factura con ellos antes de timbrarla.</p>
+              )}
+            </form>
+          )}
 
-        {cfdi && (
-          <>
-            {cfdi.blockers.length > 0 ? (
-              <div className="alert alert-danger">
-                <div className="fw-semibold mb-1">Falta para poder timbrarla:</div>
-                <ul className="mb-0">{cfdi.blockers.map((item) => <li key={item}>{item}</li>)}</ul>
-              </div>
-            ) : cfdi.isGeneralPublic ? (
-              <div className="alert alert-secondary py-2 small">
-                Para timbrarla captura los datos fiscales del cliente: la venta a público en general va en la factura global del periodo,
-                que TienditApp todavía no genera.
-              </div>
-            ) : (
-              <div className="alert alert-success py-2">
-                <i className="ri-checkbox-circle-line me-1" aria-hidden="true"></i>Lista para timbrar.
-              </div>
-            )}
-            {cfdi.warnings.length > 0 && (
-              <div className="alert alert-warning">
-                <ul className="mb-0">{cfdi.warnings.map((item) => <li key={item}>{item}</li>)}</ul>
-              </div>
-            )}
+          {draft.isPending && <p className="text-muted" aria-busy="true">Calculando…</p>}
+          {draft.isError && (
+            <div className="alert alert-danger">{getApiErrorMessage(draft.error, 'No se pudo calcular la factura.')}</div>
+          )}
 
-            <div className="row g-3 mb-3 small">
-              <div className="col-md-6">
-                <div className="fw-semibold">Emisor</div>
-                <div>{cfdi.issuer.name || <span className="text-danger">Sin razón social</span>}</div>
-                <div>RFC {cfdi.issuer.rfc || '—'} · Régimen {cfdi.issuer.fiscalRegime || '—'}</div>
-                <div>Lugar de expedición {cfdi.issuedAtPostalCode || '—'}</div>
-              </div>
-              <div className="col-md-6">
-                <div className="fw-semibold">Receptor</div>
-                <div>{cfdi.receiver.name}</div>
-                <div>RFC {cfdi.receiver.rfc} · Régimen {cfdi.receiver.fiscalRegime} · Uso {cfdi.receiver.cfdiUse}</div>
-                <div>
-                  Pago {cfdi.paymentMethod} · Forma {cfdi.paymentForm} {PAYMENT_FORMS[cfdi.paymentForm] ? `(${PAYMENT_FORMS[cfdi.paymentForm]})` : ''}
+          {cfdi && (
+            <>
+              {cfdi.blockers.length > 0 ? (
+                <div className="alert alert-danger">
+                  <div className="fw-semibold mb-1">Falta para poder timbrarla:</div>
+                  <ul className="mb-0">{cfdi.blockers.map((item) => <li key={item}>{item}</li>)}</ul>
+                </div>
+              ) : cfdi.isGeneralPublic ? (
+                <div className="alert alert-secondary py-2 small">
+                  Para timbrarla captura los datos fiscales del cliente: la venta a público en general va en la factura global del periodo,
+                  que TienditApp todavía no genera.
+                </div>
+              ) : (
+                <div className="alert alert-success py-2">
+                  <i className="ri-checkbox-circle-line me-1" aria-hidden="true"></i>Lista para timbrar.
+                </div>
+              )}
+              {cfdi.warnings.length > 0 && (
+                <div className="alert alert-warning">
+                  <ul className="mb-0">{cfdi.warnings.map((item) => <li key={item}>{item}</li>)}</ul>
+                </div>
+              )}
+
+              <div className="row g-3 mb-3 small">
+                <div className="col-md-6">
+                  <div className="fw-semibold">Emisor</div>
+                  <div>{cfdi.issuer.name || <span className="text-danger">Sin razón social</span>}</div>
+                  <div>RFC {cfdi.issuer.rfc || '—'} · Régimen {cfdi.issuer.fiscalRegime || '—'}</div>
+                  <div>Lugar de expedición {cfdi.issuedAtPostalCode || '—'}</div>
+                </div>
+                <div className="col-md-6">
+                  <div className="fw-semibold">Receptor</div>
+                  <div>{cfdi.receiver.name}</div>
+                  <div>RFC {cfdi.receiver.rfc} · Régimen {cfdi.receiver.fiscalRegime} · Uso {cfdi.receiver.cfdiUse}</div>
+                  <div>
+                    Pago {cfdi.paymentMethod} · Forma {cfdi.paymentForm} {PAYMENT_FORMS[cfdi.paymentForm] ? `(${PAYMENT_FORMS[cfdi.paymentForm]})` : ''}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="table-responsive">
-              <table className="table table-sm align-middle">
-                <thead>
-                  <tr>
-                    <th>Clave</th>
-                    <th>Unidad</th>
-                    <th>Descripción</th>
-                    <th className="text-end">Cantidad</th>
-                    <th className="text-end">Valor unitario</th>
-                    <th className="text-end">Importe</th>
-                    <th className="text-end">IVA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cfdi.concepts.map((concept) => (
-                    <tr key={concept.orderItemId}>
-                      <td className="ta-money">{concept.productCode}</td>
-                      <td>{concept.unitCode}</td>
-                      <td>{concept.description}</td>
-                      <td className="text-end ta-money">{concept.quantity.toLocaleString('es-MX', { maximumFractionDigits: 3 })}</td>
-                      <td className="text-end ta-money">
-                        {concept.unitValue.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
-                      </td>
-                      <td className="text-end ta-money">{formatMoney(concept.amount)}</td>
-                      <td className="text-end ta-money small">{formatTransfer(concept.transfer as Transfer | null)}</td>
+              <div className="table-responsive">
+                <table className="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>Clave</th>
+                      <th>Unidad</th>
+                      <th>Descripción</th>
+                      <th className="text-end">Cantidad</th>
+                      <th className="text-end">Valor unitario</th>
+                      <th className="text-end">Importe</th>
+                      <th className="text-end">IVA</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="ms-auto" style={{ maxWidth: '22rem' }}>
-              <div className="d-flex justify-content-between"><span>Subtotal</span><span className="ta-money">{formatMoney(cfdi.subTotal)}</span></div>
-              {cfdi.transfers.filter((transfer) => transfer.factorType !== 'Exento').map((transfer) => (
-                <div className="d-flex justify-content-between small text-muted" key={`${transfer.factorType}-${transfer.rateOrQuota}`}>
-                  <span>IVA {((transfer.rateOrQuota ?? 0) * 100).toFixed(0)} % sobre {formatMoney(transfer.base)}</span>
-                  <span className="ta-money">{formatMoney(transfer.amount ?? 0)}</span>
-                </div>
-              ))}
-              <div className="d-flex justify-content-between fw-bold border-top pt-1">
-                <span>Total</span><span className="ta-money">{formatMoney(cfdi.total)}</span>
+                  </thead>
+                  <tbody>
+                    {cfdi.concepts.map((concept) => (
+                      <tr key={concept.orderItemId}>
+                        <td className="ta-money">{concept.productCode}</td>
+                        <td>{concept.unitCode}</td>
+                        <td>{concept.description}</td>
+                        <td className="text-end ta-money">{concept.quantity.toLocaleString('es-MX', { maximumFractionDigits: 3 })}</td>
+                        <td className="text-end ta-money">
+                          {concept.unitValue.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                        </td>
+                        <td className="text-end ta-money">{formatMoney(concept.amount)}</td>
+                        <td className="text-end ta-money small">{formatTransfer(concept.transfer as Transfer | null)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
+
+              <div className="ms-auto" style={{ maxWidth: '22rem' }}>
+                <div className="d-flex justify-content-between"><span>Subtotal</span><span className="ta-money">{formatMoney(cfdi.subTotal)}</span></div>
+                {cfdi.transfers.filter((transfer) => transfer.factorType !== 'Exento').map((transfer) => (
+                  <div className="d-flex justify-content-between small text-muted" key={`${transfer.factorType}-${transfer.rateOrQuota}`}>
+                    <span>IVA {((transfer.rateOrQuota ?? 0) * 100).toFixed(0)} % sobre {formatMoney(transfer.base)}</span>
+                    <span className="ta-money">{formatMoney(transfer.amount ?? 0)}</span>
+                  </div>
+                ))}
+                <div className="d-flex justify-content-between fw-bold border-top pt-1">
+                  <span>Total</span><span className="ta-money">{formatMoney(cfdi.total)}</span>
+                </div>
+              </div>
+            </>
+          )}
           </>
         )}
       </Modal.Body>
       <Modal.Footer>
         <button type="button" className="btn btn-light" onClick={onClose}>Cerrar</button>
-        {available && invoicing?.canInvoice && (
+        {!orderCancelled && available && invoicing?.canInvoice && (
           <button type="button" className="btn btn-primary" disabled={!canStamp} onClick={() => void stamp()}>
             {issue.isPending ? 'Timbrando…' : 'Timbrar factura'}
           </button>

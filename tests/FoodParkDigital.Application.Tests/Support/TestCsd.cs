@@ -23,7 +23,8 @@ internal static class TestCsd
         byte[]? serial = null,
         string number = Number,
         DateTimeOffset? from = null,
-        DateTimeOffset? to = null)
+        DateTimeOffset? to = null,
+        int filler = 0)
     {
         using var rsa = RSA.Create(2048);
         var subject = new X500DistinguishedNameBuilder();
@@ -35,6 +36,9 @@ internal static class TestCsd
 
         var request = new CertificateRequest(name, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         request.CertificateExtensions.Add(new X509KeyUsageExtension(usage, critical: true));
+        // A private, non-critical extension that only makes the certificate larger.
+        if (filler > 0)
+            request.CertificateExtensions.Add(new X509Extension("1.3.6.1.4.1.55555.1", new byte[filler], critical: false));
         using var certificate = request.Create(
             name, X509SignatureGenerator.CreateForRSA(rsa, RSASignaturePadding.Pkcs1), from ?? From, to ?? To,
             serial ?? Encoding.ASCII.GetBytes(number));
