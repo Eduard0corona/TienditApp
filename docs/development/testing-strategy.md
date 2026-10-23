@@ -1223,7 +1223,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `cfdi.test.ts` (3, nuevo): los nombres y chips de los estados, los usos de cada régimen y 616 fuera de la lista.
     - `CustomerFiscalDataModal.test.tsx` (3, nuevo): guarda los datos fiscales como los toma la API, con un uso que el régimen puede pedir; los quita sin datos en el cuerpo; y el motivo del servidor deja el diálogo abierto.
     - `navigation.test.ts`: «cfdi» y «csd» encuentran Facturación.
-  - **Total:** `dotnet test` con SQL Server 2022, 3,600 pruebas sin fallos ni omitidas (Domain 1,037, Application 1,600, Infrastructure 522, WebApi 441).
+  - **Total:** `dotnet test` con SQL Server 2022, 3,602 pruebas sin fallos ni omitidas (Domain 1,037, Application 1,601, Infrastructure 522, WebApi 442).
   - **Cliente en total:** 160 archivos y 1,079 pruebas.
   - **Primera visita:** 179,451 B de 179,500 B (+143 B contra `master`; el presupuesto sube de 179,400): los enums `OrderInvoiceStatus` y `CfdiCancellationMotive` y la entrada de Facturación en el menú. La vista previa del CFDI salió de la primera visita y se carga con su pantalla.
   - **Escenas visuales:** `facturacion.spec.ts` (14, nuevas): Configuración › Facturación lista (escritorio, teléfono y oscuro), sin certificado, en pruebas con el CSD por vencer y no disponible; la factura de ORD-000343 por timbrar (escritorio y teléfono), timbrada después de una rechazada y una cancelada (claro y oscuro), el diálogo para cancelarla y cancelándose; y los datos fiscales de un cliente desde «Editar».
