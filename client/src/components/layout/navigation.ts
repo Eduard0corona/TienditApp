@@ -94,6 +94,8 @@ export const NAV_GROUPS: NavGroup[] = [
           // Exact: Liquidaciones hangs from its path.
           { label: 'Ventas', path: '/reports', icon: 'ri-bar-chart-box-line', area: 'reports', exact: true, keywords: 'reportes utilidad ventas del mes' },
           { label: 'Liquidaciones', path: '/reports/settlements', icon: 'ri-bank-line', area: 'reports', keywords: 'depósitos rappi uber eats didi food conciliación por cobrar retenciones cfdi isr iva' },
+          // Owners and admins: the global invoice is the business's fiscal side, like Configuración › Facturación.
+          { label: 'Factura global', path: '/reports/global-invoices', icon: 'ri-bill-line', area: 'businessSettings', keywords: 'cfdi público en general xaxx010101000 factura del día timbrar ventas sin factura sat' },
         ],
       },
       {
