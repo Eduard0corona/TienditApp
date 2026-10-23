@@ -52,6 +52,8 @@ public interface IApplicationDbContext
     DbSet<OnlinePaymentRefund> OnlinePaymentRefunds { get; }
     DbSet<OrderInvoice> OrderInvoices { get; }
     DbSet<InvoicingProfile> InvoicingProfiles { get; }
+    DbSet<GlobalInvoice> GlobalInvoices { get; }
+    DbSet<GlobalInvoiceOrder> GlobalInvoiceOrders { get; }
     DbSet<TemporaryCustomer> TemporaryCustomers { get; }
     DbSet<Order> Orders { get; }
     DbSet<OrderItem> OrderItems { get; }
