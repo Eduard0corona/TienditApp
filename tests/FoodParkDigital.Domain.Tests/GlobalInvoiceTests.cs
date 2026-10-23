@@ -74,7 +74,9 @@ public class GlobalInvoiceTests
     {
         var sale = new GlobalInvoiceSale(Guid.NewGuid(), "ORD-000001", 116m);
 
-        Assert.Throws<DomainException>(() => Global(sales: []));
+        // Without sales, even with amounts that add up to nothing.
+        Assert.Equal("La factura global necesita al menos una venta.",
+            Assert.Throws<DomainException>(() => Global(sales: [], subTotal: 0m, tax: 0m, total: 0m)).Message);
         // The same sale twice, a sale without its folio or amount, or sales that do not add up to the total.
         Assert.Throws<DomainException>(() => Global(sales: [sale, sale], total: 232m));
         Assert.Throws<DomainException>(() => Global(sales: [sale with { OrderNumber = " " }], subTotal: 100m, tax: 16m, total: 116m));
