@@ -414,6 +414,35 @@ public class GlobalInvoicingFlowTests
     }
 
     [Fact]
+    public async Task SaleInvoicedOnItsOwnAfterTheGlobalWasCancelled_ShouldNotComeBack_OnceRefundedAndItsInvoiceCancelled()
+    {
+        await using var book = await Book.OpenAsync();
+        var cash = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        var card = await book.PaidOrderAsync(2, OrderPaymentMethod.Card);
+        book.Clock.UtcNow = NextMorning;
+        var first = (await book.IssueAsync(2, 300m)).Value;
+        // The cash customer asks for their invoice: 04, their own invoice, and the day's global invoice again without them.
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        Assert.True((await book.CancelAsync(first.Id, CfdiCancellationMotive.NominativeInGlobalInvoice)).IsSuccess);
+        var own = (await book.IssueOrderInvoiceAsync(cash.Id)).Value;
+        Assert.True((await book.IssueAsync(1, 200m)).IsSuccess);
+
+        // Then they give everything back, and their invoice is cancelled: the sale did not happen.
+        var order = await book.Context.Orders.Include(o => o.Payments).SingleAsync(o => o.Id == cash.Id);
+        order.RegisterRefund(100m, OrderPaymentMethod.Cash, "Devolución", NextMorning, "cajero", null, null, false, []);
+        await book.Context.SaveChangesAsync();
+        Assert.True((await new CancelOrderInvoiceCommandHandler(book.Context, book.Fixture.CurrentUser, book.Gateway, book.Clock)
+            .Handle(new CancelOrderInvoiceCommand(own.Id, CfdiCancellationMotive.NotCarriedOut), CancellationToken.None)).IsSuccess);
+
+        // Its own invoice was its CFDI after the global one: it does not come back in a global invoice for what it was.
+        book.Clock.UtcNow = NextMorning.AddDays(2);
+        var next = await book.DraftAsync(day: SaleDay.AddDays(1));
+        Assert.DoesNotContain(cash.OrderNumber, next.Sales.Select(sale => sale.OrderNumber));
+        Assert.DoesNotContain(GlobalInvoiceDrafts.CoveredRefundsWarning(1), next.Warnings);
+        Assert.Equal(GlobalInvoiceDrafts.RefundedReason, Assert.Single((await book.DraftAsync()).LeftOut, sale => sale.OrderNumber == cash.OrderNumber).Reason);
+    }
+
+    [Fact]
     public async Task SalePaidLateAtNight_ShouldBeInTheBusinessDay_NotTheUtcOne()
     {
         await using var book = await Book.OpenAsync();

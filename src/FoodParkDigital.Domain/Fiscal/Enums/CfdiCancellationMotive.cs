@@ -12,6 +12,6 @@ public enum CfdiCancellationMotive
     /// <summary>03: the sale did not happen.</summary>
     NotCarriedOut = 3,
 
-    /// <summary>04: a nominative sale related to a global invoice. Not offered: TienditApp does not issue global invoices yet.</summary>
+    /// <summary>04: a nominative sale related to a global invoice: the global invoice is cancelled with it when a customer asks for theirs (Fase 28B).</summary>
     NominativeInGlobalInvoice = 4
 }

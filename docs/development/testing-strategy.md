@@ -1232,7 +1232,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 
 - Fase 28B, la factura global a público en general ([ADR 0046](../adr/0046-global-invoice.md)):
   - **Domain:** `GlobalInvoiceTests` (16, nuevo): el periodo de cada periodicidad con sus días y su clave del SAT (semanas de lunes a domingo y quincenas cortadas al terminar el mes, bimestres 13 a 18), que solo se factura terminado; la global toma sus ventas con folio, fecha y llave fijos antes de llamar al PAC y rechaza ventas repetidas, sin folio, de $0 (aunque las demás cuadren) o que no suman el total, y más de 2,000; el rechazo libera sus ventas y las conserva; la cancelación solo con 02 o 04 y libera sus ventas solo cuando el SAT la cancela, no si la rechaza.
-  - **Application:** `GlobalInvoicingFlowTests` (19, nuevo):
+  - **Application:** `GlobalInvoicingFlowTests` (20, nuevo):
     - la vista previa espera a que termine el periodo y toma las ventas pagadas por completo en él, un concepto por venta con su folio; la forma de la venta más grande;
     - timbrar al público en general con InformacionGlobal, y sus ventas ya no se facturan solas;
     - el cliente que pide su factura: cancelar con 04, facturar la venta y emitir otra vez la global sin ella;
@@ -1240,7 +1240,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - un rechazo libera sus ventas; una respuesta perdida se vuelve a pedir con la misma llave, por la persona o el worker;
     - varias tasas, exento y lo no objeto; una tasa con solo partidas gratis no lleva un traslado con base 0;
     - fuera, con su motivo: las de crédito, con reembolso, con reembolso en línea en curso y con factura propia; una cuenta abierta hasta que se cierra;
-    - una venta con devolución que ya cubría una global cancelada con 04 o con 02 vuelve a entrar por lo que era, con el aviso;
+    - una venta con devolución que ya cubría una global cancelada con 04 o con 02 vuelve a entrar por lo que era, con el aviso; no si después tuvo su factura propia (devuelta y cancelada con 03, se queda fuera por el reembolso);
     - una cuenta pagada que se cierra después de timbrada la global de su día entra en la siguiente, con el aviso, y la venta de un día sin global espera la suya;
     - una venta pagada a las 23:30 va en su día del negocio, no en el de UTC; una pagada en dos días va en el de su último cobro;
     - lo que el SAT rechaza (forma 99, bimestral sin el régimen 621, más de 5 años) y el aviso pasadas 24 horas; la bimestral con 621;
@@ -1257,7 +1257,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `GlobalInvoicePage.test.tsx` (8, nuevo): periodo, importes y ventas; cancelar con 04 por omisión (sin 03); descargar el XML con la sesión; volver a pedir el timbre; una lectura de fondo que falla conserva la global y la lee otra vez a petición; el SAT que rechaza la cancelación deja el diálogo abierto; un error al cargar ofrece reintentar; la de otro negocio no se encuentra.
     - `GlobalInvoices.test.tsx` (4, nuevo): cada global con su estado y periodo (la cancelada se distingue de la emitida otra vez), la búsqueda por el folio de una venta, el error con reintentar y sin globales.
     - `navigation.test.ts`: Factura global en Reportes solo para dueños y administradores, cada una bajo su pestaña, y «cfdi» y «público en general» la encuentran.
-  - **Total:** `dotnet test` con SQL Server 2022, 3,648 pruebas sin fallos ni omitidas (Domain 1,053, Application 1,621, Infrastructure 527, WebApi 447).
+  - **Total:** `dotnet test` con SQL Server 2022, 3,649 pruebas sin fallos ni omitidas (Domain 1,053, Application 1,622, Infrastructure 527, WebApi 447).
   - **Cliente en total:** 163 archivos y 1,103 pruebas.
   - **Primera visita:** 179,787 B de 179,900 B (+319 B contra `master`; el presupuesto sube de 179,500): la entrada de Factura global en el menú con sus palabras de búsqueda y sus tres rutas.
   - **Escenas visuales:** `facturaGlobal.spec.ts` (11, nuevas): la lista, la nueva con la vista previa de ayer y el detalle (escritorio, teléfono y oscuro), una global de un periodo sin terminar y el diálogo para cancelar.

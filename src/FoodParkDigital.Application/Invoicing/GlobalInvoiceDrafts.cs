@@ -295,11 +295,16 @@ public static class GlobalInvoiceDrafts
             .Select(r => r.OrderId!.Value)
             .ToListAsync(cancellationToken);
         // Sales a stamped global invoice covered until it was cancelled (02, to correct it, or 04, a customer asked for theirs):
-        // issued again as they were then. A refund since asks for a credit note, not for leaving the sale without a CFDI.
+        // issued again as they were then. A refund since asks for a credit note, not for leaving the sale without a CFDI. Not
+        // one that had its own invoice afterwards: that became its CFDI, and how it was cancelled is its own story.
         var coveredBefore = (await context.GlobalInvoiceOrders.AsNoTracking()
             .Where(o => o.Released && candidateIds.Contains(o.OrderId))
             .Join(context.GlobalInvoices.AsNoTracking().Where(g => g.Status == OrderInvoiceStatus.Cancelled),
-                o => o.GlobalInvoiceId, g => g.Id, (o, g) => o.OrderId)
+                o => o.GlobalInvoiceId, g => g.Id, (o, g) => new { o.OrderId, g.CancelledAt })
+            .Where(covered => !context.OrderInvoices.Any(i => i.OrderId == covered.OrderId
+                && i.Status != OrderInvoiceStatus.Refused
+                && i.RequestedAt >= covered.CancelledAt))
+            .Select(covered => covered.OrderId)
             .ToListAsync(cancellationToken)).ToHashSet();
         var ownByOrder = ownInvoices.GroupBy(i => i.OrderId).ToDictionary(g => g.Key, g => $"{g.First().Serie}-{g.First().Folio}");
         var globalByOrder = inGlobals.GroupBy(i => i.OrderId).ToDictionary(g => g.Key, g => $"{g.First().Serie}-{g.First().Folio}");
