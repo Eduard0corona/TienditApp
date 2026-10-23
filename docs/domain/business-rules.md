@@ -526,6 +526,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cuándo se puede:**
   - la vista previa no tiene bloqueos y el receptor no es público en general (esas ventas esperan la factura global);
   - el pedido está pagado por completo (PUE) y no está cancelado; sin reembolsos, condonaciones ni un reembolso en línea en curso;
+  - el pago principal no es «Otro», que no es una forma de pago del SAT (un PUE no se declara «por definir», 99);
   - no tiene otra factura viva (timbrando, timbrada o cancelándose);
   - el negocio subió su CSD, vigente y del RFC de Mi negocio, y la plataforma tiene su PAC.
 - **El receptor:** RFC, nombre o razón social, código postal, régimen y uso del CFDI como aparecen en su constancia; el uso tiene que corresponder al régimen (G para quien tiene actividad, D para personas físicas, S01 para todos). Pedidos propone los del cliente del teléfono del pedido o, si no tiene, los de la última factura del pedido; «Guardar estos datos en el cliente» los deja en su ficha. Clientes › Editar › «Cambiar datos fiscales» los cambia (`ManageCustomers`): completos o ninguno, y nunca en «Público en general».

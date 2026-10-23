@@ -299,7 +299,15 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             .First();
         draft.PaymentMethod = "PUE";
         draft.PaymentForm = SatCatalog.PaymentForm(main.Method);
+        // «Otro» is none of the SAT's forms, and "to be defined" (99) is only for a sale paid in installments (PPD).
+        if (draft.PaymentForm == SatCatalog.PaymentFormToBeDefined)
+            draft.Blockers.Add(OtherPaymentBlocker);
     }
+
+    /// <summary>A sale paid in full (PUE) is invoiced with the form it was paid with: «Otro» says none.</summary>
+    public const string OtherPaymentBlocker =
+        "El pago principal de la venta es «Otro», que no es una forma de pago del SAT: una venta pagada se factura con la forma "
+        + "en que se pagó. Cobra con efectivo, tarjeta, transferencia o monedero las ventas que vayas a facturar.";
 
     /// <summary>
     /// What a customer paid with the balance they left before (Fase 26D, ADR 0036) is an advance applied: when it is the main

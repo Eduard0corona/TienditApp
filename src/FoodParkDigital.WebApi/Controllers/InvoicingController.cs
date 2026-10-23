@@ -31,6 +31,8 @@ public class InvoicingController : ControllerBase
 
     /// <summary>Uploads the business's CSD (.cer and .key in base64, with the key's password); it replaces the one before.</summary>
     [HttpPut("settings/certificate")]
+    // Two files of 16 KB (what the reader takes) in base64 and the password fit in 64 KB.
+    [RequestSizeLimit(64 * 1024)]
     public async Task<ActionResult<InvoicingSettingsDto>> UploadCertificate(
         [FromBody] UploadInvoicingCertificateRequest request, CancellationToken cancellationToken)
     {

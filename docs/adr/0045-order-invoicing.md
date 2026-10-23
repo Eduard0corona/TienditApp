@@ -29,13 +29,14 @@ Tomé las decisiones de la Fase 28A con la autorización permanente del dueño d
    - la vista previa no tiene bloqueos y el receptor no es público en general (XAXX010101000 va en la factura global);
    - el uso del CFDI corresponde al régimen del receptor (catálogo c_UsoCFDI: G e I para quien tiene actividad, D para personas físicas, S01 para todos), como el PAC lo exige (CFDI40161); el dominio, la validación y el formulario lo revisan antes;
    - el pedido está pagado por completo (PUE), sin reembolsos, condonaciones ni un reembolso en línea en curso (lo devuelto pide una nota de crédito);
+   - la forma de pago es del SAT: si el pago principal es «Otro», la vista previa lo bloquea (un PUE no se declara con 99 y el PAC lo rechazaría);
    - el pedido no tiene otra factura viva (timbrando, timbrada o cancelándose);
    - el negocio tiene su CSD vigente y del RFC de Mi negocio, y la plataforma tiene su PAC.
 
    El backend decide los importes: los de la vista previa, y el total del CFDI es el de la venta.
 3. **El PAC es SW Sapien**, detrás de `IInvoicingGateway` (Application), con la sección `SwSapien` (`User` y `Password` con un token de 2 horas en memoria, o `Token` sin vigencia; `Sandbox`; URLs opcionales). Sin credenciales, Pedidos solo muestra la vista previa y Configuración › Facturación dice que no está disponible.
 4. **El CSD** lo sube el dueño o un administrador en Configuración › Facturación:
-   - TienditApp lo revisa antes de mandarlo: X.509 de sello (no e.firma), vigente, con el RFC de Mi negocio, y la llave con esa contraseña corresponde al certificado (`SealingCertificateReader`);
+   - TienditApp lo revisa antes de mandarlo: X.509 de sello (no e.firma), vigente, con el RFC de Mi negocio, y la llave con esa contraseña corresponde al certificado (`SealingCertificateReader`). Cada archivo pesa hasta 16 KB y la petición hasta 64 KB, que se rechaza antes de leerla;
    - el PAC lo guarda; TienditApp solo guarda su número, RFC, vigencia, quién y cuándo (`InvoicingProfile`). Los archivos y la contraseña nunca se guardan ni se registran (tampoco en la auditoría);
    - **un CSD por negocio:** la cuenta del PAC de la plataforma guarda cada CSD una vez, por su número; si otro negocio ya lo usa, se rechaza antes de mandarlo (una consulta entre negocios que solo pregunta si existe, y un índice único en la base). Así quitarlo nunca detiene las facturas de otro negocio ni un certificado con el número de otro ocupa su lugar. Dos negocios del mismo RFC tramitan un CSD cada uno (el SAT da varios);
    - reemplazarlo pide al PAC que olvide el anterior después de guardar el nuevo; quitarlo, que lo olvide ya. Avisa 30 días antes de vencer.

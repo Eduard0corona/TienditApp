@@ -329,6 +329,25 @@ public class OrderInvoicingFlowTests
     }
 
     [Fact]
+    public async Task Issue_OfASalePaidWithOther_ShouldNotBeOffered_AndBeRefusedSayingWhy()
+    {
+        // «Otro» is none of the SAT's forms: a paid sale (PUE) cannot be declared with 99, and the PAC would refuse it.
+        await using var book = await Book.OpenAsync();
+        var other = await book.PaidOrderAsync(OrderPaymentMethod.Other);
+
+        var draft = await new GetOrderCfdiDraftQueryHandler(book.Context).Handle(
+            new GetOrderCfdiDraftQuery { OrderId = other.Id, Receiver = Receiver }, CancellationToken.None);
+        var issued = await book.IssueAsync(other.Id);
+
+        Assert.Equal(("PUE", SatCatalog.PaymentFormToBeDefined), (draft.Value.PaymentMethod, draft.Value.PaymentForm));
+        Assert.Equal([GetOrderCfdiDraftQueryHandler.OtherPaymentBlocker], draft.Value.Blockers);
+        Assert.False(draft.Value.IsReadyToStamp);
+        Assert.Equal(GetOrderCfdiDraftQueryHandler.OtherPaymentBlocker, issued.Error);
+        Assert.Empty(book.Gateway.StampRequests);
+        Assert.Empty(await book.Context.OrderInvoices.ToListAsync());
+    }
+
+    [Fact]
     public async Task Issue_ShouldKeepTheFiscalDataInTheCustomer_WhenAsked_AndProposeItNextTime()
     {
         await using var book = await Book.OpenAsync();
@@ -550,16 +569,16 @@ public class OrderInvoicingFlowTests
             => new GetInvoicingSettingsQueryHandler(Context, Fixture.TenantService, Gateway, Clock)
                 .Handle(new GetInvoicingSettingsQuery(), CancellationToken.None);
 
-        public Task<OrderDto> PaidOrderAsync() => OrderAsync(paid: true);
+        public Task<OrderDto> PaidOrderAsync(OrderPaymentMethod method = OrderPaymentMethod.Card) => OrderAsync(paid: true, method);
 
-        public async Task<OrderDto> OrderAsync(bool paid)
+        public async Task<OrderDto> OrderAsync(bool paid, OrderPaymentMethod method = OrderPaymentMethod.Card)
         {
             var created = await Fixture.CreateOrderHandler().Handle(new CreateOrderCommand
             {
                 CustomerName = "Karla",
                 CustomerPhone = CustomerPhone,
                 Items = [new CreateOrderItemDto { ProductId = Product.Id, Quantity = 2 }],
-                Payments = paid ? [new CreateOrderPaymentDto { Amount = 200m, Method = OrderPaymentMethod.Card }] : []
+                Payments = paid ? [new CreateOrderPaymentDto { Amount = 200m, Method = method }] : []
             }, CancellationToken.None);
             Assert.True(created.IsSuccess, created.Error);
             return created.Value;
