@@ -8119,6 +8119,14 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261023064133_AddOrderInvoicing'
 )
 BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_InvoicingProfiles_CertificateNumber] ON [InvoicingProfiles] ([CertificateNumber]) WHERE [CertificateNumber] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261023064133_AddOrderInvoicing'
+)
+BEGIN
     CREATE UNIQUE INDEX [IX_InvoicingProfiles_TenantId] ON [InvoicingProfiles] ([TenantId]);
 END;
 

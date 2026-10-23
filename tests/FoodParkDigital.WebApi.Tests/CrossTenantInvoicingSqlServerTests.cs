@@ -139,7 +139,9 @@ public sealed class CrossTenantInvoicingSqlServerTests
             tenant.SetBusinessInfo(rfc, "ESCUELA KEMPER URGATE", "Comercio", "601 - General de Ley Personas Morales",
                 new Address("Reforma", "1", null, "Centro", "06000", "Cuauhtémoc", "Ciudad de México"));
             var profile = InvoicingProfile.Create(tenantId);
-            profile.UseCertificate("30001000000400002434", rfc, DateTimeOffset.UtcNow.AddYears(-1), DateTimeOffset.UtcNow.AddYears(3),
+            // Each business its own CSD: the database keeps a number for one business only.
+            var number = $"3000100000{Random.Shared.NextInt64(1_000_000_000L, 10_000_000_000L)}";
+            profile.UseCertificate(number, rfc, DateTimeOffset.UtcNow.AddYears(-1), DateTimeOffset.UtcNow.AddYears(3),
                 Guid.NewGuid(), DateTimeOffset.UtcNow);
             db.InvoicingProfiles.Add(profile);
             return await db.SaveChangesAsync();

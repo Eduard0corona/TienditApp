@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Finance;
@@ -9,14 +10,19 @@ using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
@@ -113,6 +119,25 @@ public class OrderInvoicingFlowTests
     }
 
     [Fact]
+    public async Task Csd_ThatAnotherBusinessUses_ShouldBeRefused_BeforeReachingThePac()
+    {
+        await using var book = await Book.OpenAsync(csd: false);
+        // Another business uploaded it first: the PAC keeps it once, for that business.
+        var other = InvoicingProfile.Create(Guid.NewGuid());
+        other.UseCertificate(TestCsd.Number, Rfc, TestCsd.From, TestCsd.To, Guid.NewGuid(), SalesTestFixture.Now);
+        book.Context.InvoicingProfiles.Add(other);
+        await book.Context.SaveChangesAsync();
+
+        Assert.Equal(InvoicingSettings.CertificateOfAnotherBusinessMessage, (await book.UploadCsdAsync()).Error);
+        Assert.Empty(book.Gateway.SavedCertificates);
+        Assert.Null((await book.SettingsAsync()).Certificate);
+
+        // Its own one, with another number, goes through.
+        var (cer, key) = TestCsd.Make(number: "30001000000500003416");
+        Assert.True((await book.UploadCsdAsync(cer, key)).IsSuccess);
+    }
+
+    [Fact]
     public async Task Issue_ShouldStampAPaidOrder_WithTheAmountsOfItsDraft_AndKeepItsXmlAndPdf()
     {
         await using var book = await Book.OpenAsync();
@@ -194,17 +219,62 @@ public class OrderInvoicingFlowTests
     }
 
     [Fact]
-    public async Task Worker_ShouldLeaveAloneInvoicesOlderThanThePacsWindow()
+    public async Task Worker_ShouldStampTheOthers_WhenOneFails()
+    {
+        await using var book = await Book.OpenAsync();
+        var first = await book.PaidOrderAsync();
+        var second = await book.PaidOrderAsync();
+        book.Gateway.Unavailable = true;
+        var stuck = await book.IssueAsync(first.Id);
+        await book.IssueAsync(second.Id);
+        book.Gateway.Unavailable = false;
+
+        // The oldest one's file cannot be written: the pass goes on with the next one.
+        book.Storage.FailsToSave = key => key.Contains(stuck.Value.Id.ToString(), StringComparison.Ordinal);
+        book.Clock.UtcNow = SalesTestFixture.Now.AddMinutes(5);
+
+        Assert.Equal(1, (await book.StampPendingAsync()).Value);
+        var invoices = await book.Context.OrderInvoices.AsNoTracking().ToDictionaryAsync(i => i.OrderId, i => i.Status);
+        Assert.Equal((OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Stamped), (invoices[first.Id], invoices[second.Id]));
+    }
+
+    [Fact]
+    public async Task Worker_ShouldLeaveAloneInvoicesOlderThanThePacsWindow_AndALateRefusalSaysToCheckThePac()
     {
         await using var book = await Book.OpenAsync();
         var order = await book.PaidOrderAsync();
         book.Gateway.Unavailable = true;
-        await book.IssueAsync(order.Id);
+        var issued = await book.IssueAsync(order.Id);
         book.Gateway.Unavailable = false;
 
         book.Clock.UtcNow = SalesTestFixture.Now + StampPendingInvoicesCommandHandler.RetryWindow + TimeSpan.FromMinutes(1);
         Assert.Equal(0, (await book.StampPendingAsync()).Value);
         Assert.Empty(book.Gateway.StampRequests);
+
+        // Asked for by a person after the PAC's window: its refusal of the date may hide a stamp it did make.
+        book.Gateway.Refusal = "CFDI40101 - La fecha de emisión no está dentro del rango permitido.";
+        var late = await book.RetryAsync(issued.Value.Id);
+        Assert.Equal(OrderInvoiceStatus.Refused, late.Value.Status);
+        Assert.Equal($"{OrderInvoiceStamper.LateRefusalNote} {book.Gateway.Refusal}", late.Value.FailureMessage);
+    }
+
+    [Fact]
+    public async Task Issue_AtTheSameTimeAsSomeoneElse_ShouldSayItIsBeingInvoiced_ButAnyOtherFailureIsThrownOn()
+    {
+        var meanwhile = new InvoicedMeanwhile();
+        await using var book = await Book.OpenAsync(interceptor: meanwhile);
+        meanwhile.Tenant = book.Fixture.TenantService;
+        var order = await book.PaidOrderAsync();
+
+        // Another person's invoice of the same order is saved first: the index of one live invoice per order refuses this one.
+        meanwhile.Arm(competing: true);
+        Assert.Equal(OrderInvoicing.AlreadyInvoicingMessage, (await book.IssueAsync(order.Id)).Error);
+        Assert.Empty(book.Gateway.StampRequests);
+
+        // A failure of the database that is not that one is not taken for it: the execution strategy gets to retry it.
+        var otherOrder = await book.PaidOrderAsync();
+        meanwhile.Arm(competing: false);
+        await Assert.ThrowsAsync<DbUpdateException>(() => book.IssueAsync(otherOrder.Id));
     }
 
     [Fact]
@@ -366,6 +436,62 @@ public class OrderInvoicingFlowTests
         Assert.Equal(("application/pdf", $"F-1_{invoice.Uuid}.pdf"), (pdf.Value.ContentType, pdf.Value.FileName));
     }
 
+    [Fact]
+    public async Task Invoices_OfAnOrderOfAModuleTheBusinessNoLongerHas_ShouldNotBeThere()
+    {
+        await using var book = await Book.OpenAsync();
+        var order = await book.PaidOrderAsync();
+        var invoice = (await book.IssueAsync(order.Id)).Value;
+
+        // The business keeps only services: its sales are not there, and neither are their invoices, as with their detail.
+        (await book.Context.TenantSettings.SingleAsync()).UpdateCapabilities(TenantCapability.Service);
+        await book.Context.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.InvoicingAsync(order.Id));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.RetryAsync(invoice.Id));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.CancelAsync(invoice.Id));
+        Assert.Equal(GetOrderInvoiceFileQueryHandler.NotFoundMessage, (await book.DownloadAsync(invoice.Id, OrderInvoiceFileKind.Xml)).Error);
+        Assert.Empty(book.Gateway.Cancellations);
+    }
+
+    /// <summary>
+    /// The next save of an invoice fails as the database would refuse it. With <c>competing</c>, another live invoice of the
+    /// same order was saved just before (by another request, with its own context).
+    /// </summary>
+    private sealed class InvoicedMeanwhile : SaveChangesInterceptor
+    {
+        private bool? _competing;
+
+        /// <summary>The tenant the other request's context filters by.</summary>
+        public ICurrentTenantService? Tenant { get; set; }
+
+        public void Arm(bool competing) => _competing = competing;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var requested = eventData.Context!.ChangeTracker.Entries<OrderInvoice>()
+                .FirstOrDefault(entry => entry.State == EntityState.Added)?.Entity;
+            if (_competing is not { } competing || requested is null)
+                return result;
+            _competing = null;
+
+            if (competing)
+            {
+                var receiver = requested.Receiver;
+                await using var other = new SalesDbContext(
+                    (DbContextOptions<ApplicationDbContext>)eventData.Context.GetService<IDbContextOptions>(), Tenant!);
+                other.OrderInvoices.Add(OrderInvoice.Request(
+                    requested.TenantId, requested.OrderId, requested.Serie, requested.Folio + 100,
+                    CfdiReceiver.Create(receiver.Rfc, receiver.Name, receiver.PostalCode, receiver.FiscalRegime, receiver.CfdiUse),
+                    requested.PaymentForm, requested.Document, requested.SubTotal, requested.TaxTotal, requested.Total,
+                    requested.RequestedByUserId, requested.RequestedAt));
+                await other.SaveChangesAsync(cancellationToken);
+            }
+            throw new DbUpdateException("Cannot insert duplicate key row.");
+        }
+    }
+
     private sealed class Book : IAsyncDisposable, ISender
     {
         private Book(SalesTestFixture fixture, Tenant tenant, Product product)
@@ -383,9 +509,9 @@ public class OrderInvoicingFlowTests
         public SalesDbContext Context => Fixture.Context;
         public SalesClock Clock => Fixture.Clock;
 
-        public static async Task<Book> OpenAsync(bool fiscalProfile = true, bool csd = true)
+        public static async Task<Book> OpenAsync(bool fiscalProfile = true, bool csd = true, IInterceptor? interceptor = null)
         {
-            var fixture = SalesTestFixture.Create();
+            var fixture = interceptor is null ? SalesTestFixture.Create() : SalesTestFixture.Create(null, interceptor);
             var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
             await fixture.OpenCashSessionAsync(tenant);
             var book = new Book(fixture, tenant, await fixture.AddProductAsync(tenant, "Café", 100m));

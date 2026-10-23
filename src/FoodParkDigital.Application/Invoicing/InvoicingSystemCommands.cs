@@ -33,6 +33,7 @@ public class StampPendingInvoicesCommandHandler : IRequestHandler<StampPendingIn
     private readonly IInvoicingGateway _gateway;
     private readonly IDateTimeProvider _clock;
     private readonly OrderInvoiceStamper _stamper;
+    private readonly ILogger<OrderInvoiceStamper> _logger;
 
     public StampPendingInvoicesCommandHandler(
         IApplicationDbContext context,
@@ -44,6 +45,7 @@ public class StampPendingInvoicesCommandHandler : IRequestHandler<StampPendingIn
         _context = context;
         _gateway = gateway;
         _clock = clock;
+        _logger = logger;
         _stamper = new OrderInvoiceStamper(context, gateway, storage, clock, logger);
     }
 
@@ -66,9 +68,17 @@ public class StampPendingInvoicesCommandHandler : IRequestHandler<StampPendingIn
         var stamped = 0;
         foreach (var invoiceId in pending)
         {
-            var invoice = await _stamper.StampAsync(invoiceId, cancellationToken);
-            if (invoice.Status == OrderInvoiceStatus.Stamped)
-                stamped++;
+            try
+            {
+                var invoice = await _stamper.StampAsync(invoiceId, cancellationToken);
+                if (invoice.Status == OrderInvoiceStatus.Stamped)
+                    stamped++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One that fails (its file, its XML, the database) does not hold up the others: the next pass asks again.
+                _logger.LogError("Invoice {InvoiceId} could not be stamped in this pass: {Error}", invoiceId, ex.GetType().Name);
+            }
             _context.ChangeTracker.Clear();
         }
         return Result.Success(stamped);
@@ -124,29 +134,46 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
         var settled = 0;
         foreach (var invoice in waiting)
         {
-            var status = await StatusAsync(invoice, cancellationToken);
-            if (status is null || (status.State != CfdiSatState.Cancelled && !status.CancellationRefused))
-                continue;
-
-            var tracked = await _context.OrderInvoices.FirstAsync(i => i.Id == invoice.Id, cancellationToken);
-            if (tracked.Status != OrderInvoiceStatus.Cancelling)
-                continue;
-            if (status.State == CfdiSatState.Cancelled)
-                tracked.Cancel(_clock.UtcNow);
-            else
-                tracked.KeepAfterRefusedCancellation(RefusedByReceiverMessage);
             try
             {
-                await _context.SaveChangesAsync(cancellationToken);
-                settled++;
+                if (await SettleAsync(invoice, cancellationToken))
+                    settled++;
             }
-            catch (DbUpdateConcurrencyException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Someone changed it meanwhile: the next pass asks again.
+                // One that fails (its file, its XML, the database) does not hold up the others: the next pass asks again.
+                _logger.LogError("The cancellation of invoice {InvoiceId} could not be checked in this pass: {Error}",
+                    invoice.Id, ex.GetType().Name);
             }
             _context.ChangeTracker.Clear();
         }
         return Result.Success(settled);
+    }
+
+    /// <returns>Whether the SAT settled its cancellation and that was saved.</returns>
+    private async Task<bool> SettleAsync(OrderInvoice invoice, CancellationToken cancellationToken)
+    {
+        var status = await StatusAsync(invoice, cancellationToken);
+        if (status is null || (status.State != CfdiSatState.Cancelled && !status.CancellationRefused))
+            return false;
+
+        var tracked = await _context.OrderInvoices.FirstAsync(i => i.Id == invoice.Id, cancellationToken);
+        if (tracked.Status != OrderInvoiceStatus.Cancelling)
+            return false;
+        if (status.State == CfdiSatState.Cancelled)
+            tracked.Cancel(_clock.UtcNow);
+        else
+            tracked.KeepAfterRefusedCancellation(RefusedByReceiverMessage);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Someone changed it meanwhile: the next pass asks again.
+            return false;
+        }
     }
 
     private async Task<CfdiSatStatus?> StatusAsync(OrderInvoice invoice, CancellationToken cancellationToken)

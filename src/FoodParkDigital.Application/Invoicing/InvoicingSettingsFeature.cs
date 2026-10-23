@@ -160,6 +160,9 @@ public class UploadInvoicingCertificateCommandHandler
         if (certificate.Rfc != businessRfc)
             return Result.Failure<InvoicingSettingsDto>(string.Format(OtherRfcMessage, certificate.Rfc, businessRfc));
 
+        if (await InvoicingSettings.CertificateUsedByAnotherBusinessAsync(_context, certificate.Number, tenantId, cancellationToken))
+            return Result.Failure<InvoicingSettingsDto>(InvoicingSettings.CertificateOfAnotherBusinessMessage);
+
         var now = _clock.UtcNow;
         var profile = await _context.InvoicingProfiles.FirstOrDefaultAsync(cancellationToken);
         var previous = profile?.CertificateNumber;
@@ -199,7 +202,19 @@ public class UploadInvoicingCertificateCommandHandler
         }
         InvoicingSettings.Audit(_context, tenantId, _currentUser, "InvoicingCertificateUploaded",
             new { certificate.Number, certificate.Rfc, certificate.ValidTo });
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Another business saved the same CSD at the same moment (the unique index kept theirs); anything else is
+            // thrown on.
+            _context.ChangeTracker.Clear();
+            if (await InvoicingSettings.CertificateUsedByAnotherBusinessAsync(_context, certificate.Number, tenantId, cancellationToken))
+                return Result.Failure<InvoicingSettingsDto>(InvoicingSettings.CertificateOfAnotherBusinessMessage);
+            throw;
+        }
 
         // The PAC stops sealing with the one before; if it does not answer now, the new one is already the one in use.
         if (previous is not null && previous != certificate.Number)
@@ -326,6 +341,20 @@ internal static class InvoicingSettings
         "El certificado de sello digital (CSD) del negocio venció: tramita uno nuevo en el SAT y súbelo en Configuración › Facturación.";
     public const string OtherRfcCertificateMessage =
         "El certificado de sello digital (CSD) no es del RFC de Mi negocio: sube el del negocio en Configuración › Facturación.";
+    public const string CertificateOfAnotherBusinessMessage =
+        "Ese certificado ya lo usa otro negocio en TienditApp: cada negocio sube el suyo. Tramita otro CSD en el SAT para este " +
+        "negocio (un RFC puede tener varios).";
+
+    /// <summary>
+    /// Deliberately cross-tenant: the platform's PAC account keeps each CSD once, by its number, so two businesses with the
+    /// same one would share it there, and one removing it would stop the other's invoices (or a forged certificate with
+    /// another's number could take its place). Only whether another business holds that number is read, nothing of it.
+    /// </summary>
+    public static Task<bool> CertificateUsedByAnotherBusinessAsync(
+        IApplicationDbContext context, string number, Guid tenantId, CancellationToken cancellationToken)
+        => context.InvoicingProfiles
+            .IgnoreQueryFilters()
+            .AnyAsync(p => p.CertificateNumber == number && p.TenantId != tenantId, cancellationToken);
 
     public static void Audit(IApplicationDbContext context, Guid tenantId, ICurrentUserService currentUser, string action, object metadata)
         => context.AuditLogs.Add(new AuditLog(

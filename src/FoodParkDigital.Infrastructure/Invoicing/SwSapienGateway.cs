@@ -26,6 +26,8 @@ namespace FoodParkDigital.Infrastructure.Invoicing;
 public sealed class SwSapienGateway : IInvoicingGateway
 {
     public const string HttpClientName = "SwSapien";
+    /// <summary>The SAT's status service and the signed links to SW's storage, with a breaker of their own.</summary>
+    public const string SatHttpClientName = "SatCfdiStatus";
     private const string PdfTemplate = "cfdi40";
     private const string ProductionStatusUrl = "https://consultaqr.facturaelectronica.sat.gob.mx/ConsultaCFDIService.svc";
     private const string TestStatusUrl = "https://api.test.sw.com.mx/ConsultaCFDIService.svc";
@@ -180,8 +182,10 @@ public sealed class SwSapienGateway : IInvoicingGateway
 
     public async Task<CfdiSatStatus> GetSatStatusAsync(CfdiStatusQuery query, CancellationToken cancellationToken)
     {
+        // The SAT asks for an «&» inside an RFC written as «&amp;» in the expression (the XML element escapes it once more).
+        static string Rfc(string rfc) => rfc.Replace("&", "&amp;", StringComparison.Ordinal);
         var expression = string.Create(CultureInfo.InvariantCulture,
-            $"?re={query.IssuerRfc}&rr={query.ReceiverRfc}&tt={query.Total:0.000000}&id={query.Uuid}&fe={query.SealTail}");
+            $"?re={Rfc(query.IssuerRfc)}&rr={Rfc(query.ReceiverRfc)}&tt={query.Total:0.000000}&id={query.Uuid}&fe={query.SealTail}");
         var envelope = new XDocument(new XElement(Soap + "Envelope",
             new XAttribute(XNamespace.Xmlns + "soapenv", Soap.NamespaceName),
             new XAttribute(XNamespace.Xmlns + "tem", Tempuri.NamespaceName),
@@ -194,7 +198,7 @@ public sealed class SwSapienGateway : IInvoicingGateway
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, StatusUrl) { Content = content };
             request.Headers.Add("SOAPAction", "http://tempuri.org/IConsultaCFDIService/Consulta");
-            response = await _httpClientFactory.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            response = await _httpClientFactory.CreateClient(SatHttpClientName).SendAsync(request, cancellationToken);
         }
         catch (Exception ex) when (IsTransient(ex) && !cancellationToken.IsCancellationRequested)
         {
@@ -318,11 +322,15 @@ public sealed class SwSapienGateway : IInvoicingGateway
 
     private async Task<StampedCfdi> StampedAsync(JsonNode? data, CancellationToken cancellationToken)
     {
+        var xml = Text(data?["cfdi"]);
+        // The v4 answer names the UUID; the one to a repeated customid (CFDI3307) brings only the TimbreFiscalDigital
+        // («tfd») and an empty «cfdi», so the UUID is read from the stamp.
         var uuid = Text(data?["uuid"]);
+        if (string.IsNullOrWhiteSpace(uuid))
+            uuid = StampUuid(xml) ?? StampUuid(Text(data?["tfd"]));
         if (string.IsNullOrWhiteSpace(uuid))
             throw new InvoicingGatewayUnavailableException("El PAC no entregó el folio fiscal de la factura.");
 
-        var xml = Text(data?["cfdi"]);
         // A repeated key may give back only the stamp: the XML is read from what SW keeps.
         if (string.IsNullOrWhiteSpace(xml))
             xml = await StoredXmlAsync(uuid, cancellationToken);
@@ -343,7 +351,7 @@ public sealed class SwSapienGateway : IInvoicingGateway
         try
         {
             // A signed link to SW's storage: it takes no token.
-            using var xmlResponse = await _httpClientFactory.CreateClient(HttpClientName).GetAsync(xmlUri, cancellationToken);
+            using var xmlResponse = await _httpClientFactory.CreateClient(SatHttpClientName).GetAsync(xmlUri, cancellationToken);
             if (!xmlResponse.IsSuccessStatusCode)
                 throw new InvoicingGatewayUnavailableException("El PAC todavía no entrega el XML de la factura.");
             return await xmlResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -351,6 +359,26 @@ public sealed class SwSapienGateway : IInvoicingGateway
         catch (Exception ex) when (IsTransient(ex) && !cancellationToken.IsCancellationRequested)
         {
             throw new InvoicingGatewayUnavailableException("El PAC no respondió. Intenta de nuevo en unos minutos.", ex);
+        }
+    }
+
+    /// <summary>The UUID of the TimbreFiscalDigital in a stamped CFDI, or in the stamp alone.</summary>
+    private static string? StampUuid(string? xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml))
+            return null;
+        try
+        {
+            var root = XDocument.Parse(xml).Root;
+            var stamp = root?.Name == StampNamespace + "TimbreFiscalDigital"
+                ? root
+                : root?.Descendants(StampNamespace + "TimbreFiscalDigital").FirstOrDefault();
+            var uuid = stamp?.Attribute("UUID")?.Value.Trim();
+            return string.IsNullOrEmpty(uuid) ? null : uuid;
+        }
+        catch (XmlException)
+        {
+            return null;
         }
     }
 

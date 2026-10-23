@@ -63,7 +63,7 @@ public class OrderInvoicingMigrationSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task Database_ShouldKeepOneLiveInvoicePerOrder_FoliosPerSerie_AndRefuseWhatTheDomainNeverWrites()
+    public async Task Database_ShouldKeepOneLiveInvoicePerOrder_FoliosPerSerie_OneBusinessPerCsd_AndRefuseWhatTheDomainNeverWrites()
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
@@ -90,6 +90,9 @@ public class OrderInvoicingMigrationSqlServerTests
         sameFolio.Refuse("Duplicada", DateTimeOffset.UtcNow);
         var folio = await Assert.ThrowsAsync<DbUpdateException>(() => AddAsync(database, seed, sameFolio));
         Assert.Contains("IX_OrderInvoices_TenantId_Serie_Folio", folio.InnerException!.Message);
+        // The PAC keeps each CSD once: another business cannot hold the same one.
+        var sameCsd = await Assert.ThrowsAsync<DbUpdateException>(() => SeedAsync(database));
+        Assert.Contains("IX_InvoicingProfiles_CertificateNumber", sameCsd.InnerException!.Message);
 
         Guid invoiceId;
         await using (var context = database.CreateContext(seed.TenantId))

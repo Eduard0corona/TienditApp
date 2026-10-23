@@ -35,5 +35,8 @@ public class InvoicingProfileConfiguration : IEntityTypeConfiguration<InvoicingP
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.TenantId).IsUnique();
+        // The platform's PAC account keeps each CSD once, by its number: one business per CSD, so removing it never stops
+        // another business's invoices.
+        builder.HasIndex(x => x.CertificateNumber).IsUnique().HasFilter("[CertificateNumber] IS NOT NULL");
     }
 }

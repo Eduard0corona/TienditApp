@@ -22,6 +22,7 @@ using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.Application.Tests.Support;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -49,11 +50,13 @@ internal sealed class SalesTestFixture : IAsyncDisposable
     public SalesClock Clock { get; } = new();
 
     /// <param name="mediator">Hears the events of what is saved (none by default).</param>
-    public static SalesTestFixture Create(IMediator? mediator = null)
+    /// <param name="interceptors">Step into what the context saves, to stage what another request did meanwhile.</param>
+    public static SalesTestFixture Create(IMediator? mediator = null, params IInterceptor[] interceptors)
     {
         var tenantService = new SalesTenantService();
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(interceptors)
             .Options;
         return new SalesTestFixture(new SalesDbContext(options, tenantService, mediator), tenantService);
     }

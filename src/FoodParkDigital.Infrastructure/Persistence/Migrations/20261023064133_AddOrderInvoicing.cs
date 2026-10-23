@@ -152,6 +152,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                 sql: "([FiscalData_Rfc] IS NULL AND [FiscalData_Name] IS NULL AND [FiscalData_PostalCode] IS NULL AND [FiscalData_FiscalRegime] IS NULL AND [FiscalData_CfdiUse] IS NULL) OR ([IsPublicGeneral] = 0 AND [FiscalData_Rfc] IS NOT NULL AND [FiscalData_Name] IS NOT NULL AND [FiscalData_PostalCode] IS NOT NULL AND [FiscalData_FiscalRegime] IS NOT NULL AND [FiscalData_CfdiUse] IS NOT NULL)");
 
             migrationBuilder.CreateIndex(
+                name: "IX_InvoicingProfiles_CertificateNumber",
+                table: "InvoicingProfiles",
+                column: "CertificateNumber",
+                unique: true,
+                filter: "[CertificateNumber] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_InvoicingProfiles_TenantId",
                 table: "InvoicingProfiles",
                 column: "TenantId",

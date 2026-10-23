@@ -796,7 +796,7 @@ La Fase 24K trae una migración, [`database/production/20261022213253_AddOnlineP
 La Fase 28A trae una migración, [`database/production/20261023064133_AddOrderInvoicing`](../../database/production/20261023064133_AddOrderInvoicing). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0045](../adr/0045-order-invoicing.md)).
 
 - **La migración:**
-  - crea dos tablas vacías: `OrderInvoices` (las facturas de los pedidos, con su CFDI, folio, estado, timbre y cancelación) e `InvoicingProfiles` (la serie y los datos del CSD de cada negocio, nunca sus archivos);
+  - crea dos tablas vacías: `OrderInvoices` (las facturas de los pedidos, con su CFDI, folio, estado, timbre y cancelación) e `InvoicingProfiles` (la serie y los datos del CSD de cada negocio, nunca sus archivos; un índice único deja cada CSD a un solo negocio);
   - agrega a `Customers` las columnas `FiscalData_*` (con nulos) y `CK_Customers_FiscalData` (completos o nada, nunca en público en general).
   - No cambia pedidos, pagos ni clientes. Después de aplicarla, el `verify.sql` muestra las tablas, columnas, restricciones e índices; su consulta 3 cuenta los clientes por negocio (igual antes y después) y la 4 las facturas, los CSD y los clientes con datos fiscales: todo en cero hasta desplegar.
 - **Mientras se publica:** la versión de `master` (Fase 24K) no conoce las tablas ni las columnas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.

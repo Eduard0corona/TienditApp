@@ -1759,6 +1759,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CertificateNumber")
+                        .IsUnique()
+                        .HasFilter("[CertificateNumber] IS NOT NULL");
+
                     b.HasIndex("TenantId")
                         .IsUnique();
 

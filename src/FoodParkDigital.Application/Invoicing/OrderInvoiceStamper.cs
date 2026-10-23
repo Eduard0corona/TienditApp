@@ -36,6 +36,9 @@ public sealed class OrderInvoiceStamper
         _logger = logger;
     }
 
+    public const string LateRefusalNote =
+        "Se pidió hace más de 71 horas: antes de facturar el pedido otra vez, revisa en el portal del PAC que no se haya timbrado.";
+
     /// <summary>The private file of an invoice: «invoices/{business}/{yyyyMM}/{invoice}.xml».</summary>
     public static string FileKey(OrderInvoice invoice, string extension)
         => $"invoices/{invoice.TenantId}/{invoice.RequestedAt:yyyyMM}/{invoice.Id}.{extension}";
@@ -55,7 +58,12 @@ public sealed class OrderInvoiceStamper
         catch (InvoicingGatewayRefusedException ex)
         {
             _logger.LogWarning("The PAC refused invoice {InvoiceId}", invoice.Id);
-            invoice.Refuse(ex.Message, _clock.UtcNow);
+            var now = _clock.UtcNow;
+            // Past the PAC's window it no longer gives back a stamp it made with this key, and the date it refuses may
+            // belong to an invoice it did stamp: the person checks before invoicing the order again.
+            invoice.Refuse(now - invoice.RequestedAt > StampPendingInvoicesCommandHandler.RetryWindow
+                ? $"{LateRefusalNote} {ex.Message}"
+                : ex.Message, now);
             return await SaveAsync(invoice, cancellationToken);
         }
         catch (InvoicingGatewayUnavailableException)

@@ -159,6 +159,8 @@ public static class DependencyInjection
         services.AddHttpClient("Twilio").AddResilienceHandler("twilio", ConfigureProviderResilience);
         services.AddHttpClient(MercadoPagoGateway.HttpClientName).AddResilienceHandler("mercadopago", ConfigureProviderResilience);
         services.AddHttpClient(SwSapienGateway.HttpClientName).AddResilienceHandler("swsapien", ConfigureProviderResilience);
+        // The SAT's status service and SW's storage of stamped XML fail on their own: their breaker never stops stamping.
+        services.AddHttpClient(SwSapienGateway.SatHttpClientName).AddResilienceHandler("sat-status", ConfigureProviderResilience);
 
         // Background work: outbox (durable side effects of domain events), webhook inbox, messaging
         // (campaigns, reminders and the queue of outgoing WhatsApp messages), daily sales snapshots, billing status and

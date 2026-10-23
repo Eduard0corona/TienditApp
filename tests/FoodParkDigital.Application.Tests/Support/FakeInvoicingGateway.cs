@@ -110,8 +110,13 @@ internal sealed class MemoryPrivateStorage : IPrivateFileStorage
 {
     public Dictionary<string, (byte[] Content, string ContentType)> Files { get; } = [];
 
+    /// <summary>The keys the storage fails to write, as when it does not answer.</summary>
+    public Func<string, bool>? FailsToSave { get; set; }
+
     public async Task SaveAsync(string key, Stream content, string contentType, CancellationToken cancellationToken = default)
     {
+        if (FailsToSave?.Invoke(key) == true)
+            throw new IOException("The storage did not answer.");
         if (Files.ContainsKey(key))
             throw new IOException($"The file {key} exists.");
         using var buffer = new MemoryStream();

@@ -323,8 +323,16 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         }
         catch (DbUpdateException)
         {
-            // Someone invoiced the same order at the same time: this one is undone whole, folio included.
-            return Result.Failure<Guid>(OrderInvoicing.AlreadyInvoicingMessage);
+            // Someone invoiced the same order at the same time (the index of one live invoice per order kept theirs): this
+            // one is undone whole, folio included. Anything else is thrown on, for the execution strategy to retry.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
+            if (await _context.OrderInvoices.AsNoTracking().AnyAsync(
+                    i => i.OrderId == request.OrderId
+                        && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
+                            || i.Status == OrderInvoiceStatus.Cancelling),
+                    cancellationToken))
+                return Result.Failure<Guid>(OrderInvoicing.AlreadyInvoicingMessage);
+            throw;
         }
 
         return Result.Success(invoice.Id);
@@ -358,8 +366,11 @@ public class RetryOrderInvoiceCommandHandler : IRequestHandler<RetryOrderInvoice
 
     public async Task<Result<OrderInvoiceDto>> Handle(RetryOrderInvoiceCommand request, CancellationToken cancellationToken)
     {
-        var exists = await _context.OrderInvoices.AsNoTracking().AnyAsync(i => i.Id == request.InvoiceId, cancellationToken);
-        if (!exists)
+        var orderId = await _context.OrderInvoices.AsNoTracking()
+            .Where(i => i.Id == request.InvoiceId)
+            .Select(i => (Guid?)i.OrderId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (orderId is null || !await OrderInvoicing.SeesOrderAsync(_context, orderId.Value, cancellationToken))
             throw new EntityNotFoundException(nameof(OrderInvoice), request.InvoiceId);
         if (!_gateway.IsConfigured)
             return Result.Failure<OrderInvoiceDto>(InvoicingSettings.NotAvailableMessage);
@@ -409,8 +420,9 @@ public class CancelOrderInvoiceCommandHandler : IRequestHandler<CancelOrderInvoi
 
     public async Task<Result<OrderInvoiceDto>> Handle(CancelOrderInvoiceCommand request, CancellationToken cancellationToken)
     {
-        var invoice = await _context.OrderInvoices.AsNoTracking().FirstOrDefaultAsync(i => i.Id == request.InvoiceId, cancellationToken)
-            ?? throw new EntityNotFoundException(nameof(OrderInvoice), request.InvoiceId);
+        var invoice = await _context.OrderInvoices.AsNoTracking().FirstOrDefaultAsync(i => i.Id == request.InvoiceId, cancellationToken);
+        if (invoice is null || !await OrderInvoicing.SeesOrderAsync(_context, invoice.OrderId, cancellationToken))
+            throw new EntityNotFoundException(nameof(OrderInvoice), request.InvoiceId);
         if (!Guid.TryParse(_currentUser.UserId, out var userId))
             return Result.Failure<OrderInvoiceDto>(InvoicingSettings.NotAvailableMessage);
         if (invoice.Status == OrderInvoiceStatus.Cancelling && invoice.CancellationMotive == request.Motive)
@@ -509,9 +521,9 @@ public class GetOrderInvoiceFileQueryHandler : IRequestHandler<GetOrderInvoiceFi
     {
         var invoice = await _context.OrderInvoices.AsNoTracking()
             .Where(i => i.Id == request.InvoiceId)
-            .Select(i => new { i.Serie, i.Folio, i.Uuid, i.XmlFileKey, i.PdfFileKey })
+            .Select(i => new { i.OrderId, i.Serie, i.Folio, i.Uuid, i.XmlFileKey, i.PdfFileKey })
             .FirstOrDefaultAsync(cancellationToken);
-        if (invoice?.XmlFileKey is null)
+        if (invoice?.XmlFileKey is null || !await OrderInvoicing.SeesOrderAsync(_context, invoice.OrderId, cancellationToken))
             return Result.Failure<PrivateFileDownload>(NotFoundMessage);
 
         var fileName = $"{invoice.Serie}-{invoice.Folio}_{invoice.Uuid}";
@@ -559,11 +571,28 @@ internal static class OrderInvoicing
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", orderId);
-        var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(context, order.TenantId, cancellationToken);
-        if (!TenantCapabilityRules.CanCreateOrderType(capabilities, order.OrderType))
+        if (!await SeesOrderTypeAsync(context, order.TenantId, order.OrderType, cancellationToken))
             throw new EntityNotFoundException("Order", orderId);
         return order;
     }
+
+    /// <summary>
+    /// Whether the business sees the order of an invoice, as its detail does: an order of a module it no longer has is not
+    /// there for its invoices either (to retry, cancel or download).
+    /// </summary>
+    public static async Task<bool> SeesOrderAsync(IApplicationDbContext context, Guid orderId, CancellationToken cancellationToken)
+    {
+        var order = await context.Orders.AsNoTracking()
+            .Where(o => o.Id == orderId)
+            .Select(o => new { o.TenantId, o.OrderType })
+            .FirstOrDefaultAsync(cancellationToken);
+        return order is not null && await SeesOrderTypeAsync(context, order.TenantId, order.OrderType, cancellationToken);
+    }
+
+    private static async Task<bool> SeesOrderTypeAsync(
+        IApplicationDbContext context, Guid tenantId, OrderType orderType, CancellationToken cancellationToken)
+        => TenantCapabilityRules.CanCreateOrderType(
+            await TenantCapabilityRules.ResolveCapabilitiesAsync(context, tenantId, cancellationToken), orderType);
 
     public static string? LiveInvoiceProblem(OrderInvoice? live) => live?.Status switch
     {

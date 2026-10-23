@@ -27,6 +27,7 @@ Tomé las decisiones de la Fase 28A con la autorización permanente del dueño d
 1. **Alcance.** La factura (CFDI de ingreso) de **un** pedido a **un** cliente con RFC, timbrada desde el detalle del pedido, con la vista previa como fuente de los conceptos y los importes.
 2. **Qué se factura.** Solo si:
    - la vista previa no tiene bloqueos y el receptor no es público en general (XAXX010101000 va en la factura global);
+   - el uso del CFDI corresponde al régimen del receptor (catálogo c_UsoCFDI: G e I para quien tiene actividad, D para personas físicas, S01 para todos), como el PAC lo exige (CFDI40161); el dominio, la validación y el formulario lo revisan antes;
    - el pedido está pagado por completo (PUE), sin reembolsos, condonaciones ni un reembolso en línea en curso (lo devuelto pide una nota de crédito);
    - el pedido no tiene otra factura viva (timbrando, timbrada o cancelándose);
    - el negocio tiene su CSD vigente y del RFC de Mi negocio, y la plataforma tiene su PAC.
@@ -36,6 +37,7 @@ Tomé las decisiones de la Fase 28A con la autorización permanente del dueño d
 4. **El CSD** lo sube el dueño o un administrador en Configuración › Facturación:
    - TienditApp lo revisa antes de mandarlo: X.509 de sello (no e.firma), vigente, con el RFC de Mi negocio, y la llave con esa contraseña corresponde al certificado (`SealingCertificateReader`);
    - el PAC lo guarda; TienditApp solo guarda su número, RFC, vigencia, quién y cuándo (`InvoicingProfile`). Los archivos y la contraseña nunca se guardan ni se registran (tampoco en la auditoría);
+   - **un CSD por negocio:** la cuenta del PAC de la plataforma guarda cada CSD una vez, por su número; si otro negocio ya lo usa, se rechaza antes de mandarlo (una consulta entre negocios que solo pregunta si existe, y un índice único en la base). Así quitarlo nunca detiene las facturas de otro negocio ni un certificado con el número de otro ocupa su lugar. Dos negocios del mismo RFC tramitan un CSD cada uno (el SAT da varios);
    - reemplazarlo pide al PAC que olvide el anterior después de guardar el nuevo; quitarlo, que lo olvide ya. Avisa 30 días antes de vencer.
 5. **La factura** (`OrderInvoice`, `ITenantScoped`) se fija antes de llamar al PAC, en una transacción (`RequestOrderInvoiceCommand`, `ITransactionalRequest`):
    - serie (la del negocio, «F» por omisión) y folio del contador por negocio y serie (`FolioSequences`, `CFDI-{serie}`; sin huecos: un rechazo de la base lo regresa);
@@ -47,12 +49,17 @@ Tomé las decisiones de la Fase 28A con la autorización permanente del dueño d
 6. **Timbrar** (`OrderInvoiceStamper`) va después del commit, nunca dentro de la transacción:
    - respuesta → el XML timbrado a los archivos privados (`invoices/{negocio}/{aaaamm}/{factura}.xml`), «Timbrada» con su UUID, y el PDF si el PAC lo da (si no, se pide al descargarlo);
    - rechazo definitivo → «Rechazada» con el mensaje del PAC: el folio se usó y el pedido se puede facturar otra vez con el siguiente;
-   - sin respuesta → sigue «Timbrando». La persona o el worker vuelven a pedirla con la misma llave y el mismo CFDI: el PAC devuelve el timbre que ya hizo, nunca uno segundo. Dos intentos a la vez guardan el mismo XML una vez y la versión de la fila deja ganar al primero.
+   - sin respuesta → sigue «Timbrando». La persona o el worker vuelven a pedirla con la misma llave y el mismo CFDI: el PAC devuelve el timbre que ya hizo (CFDI3307 con el `TimbreFiscalDigital`, de donde se lee el UUID, y el XML se toma de lo que guarda el PAC), nunca uno segundo. Dos intentos a la vez guardan el mismo XML una vez y la versión de la fila deja ganar al primero;
+   - un rechazo después de 71 horas dice que se revise en el portal del PAC que no se haya timbrado antes de facturar otra vez (la llave ya no devuelve el timbre y la fecha que rechaza pudo ser de una factura timbrada).
+
+   Solo el índice de una factura viva por pedido se toma como «otra persona está facturando»; cualquier otra falla de la base sigue su curso (la estrategia de reintentos).
 7. **El worker de facturación** (`InvoicingWorkerService`, en el alcance de cada negocio):
    - cada 2 minutos vuelve a pedir las facturas que siguen «Timbrando» con más de un minuto y menos de 71 horas (la ventana de la llave del PAC y de la fecha del CFDI);
-   - cada 30 minutos pregunta al SAT por las cancelaciones que esperan al receptor: cancelada (aceptó o pasó el plazo) o, si la rechazó, «Timbrada» otra vez con el aviso.
+   - cada 30 minutos pregunta al SAT por las cancelaciones que esperan al receptor: cancelada (aceptó o pasó el plazo) o, si la rechazó, «Timbrada» otra vez con el aviso (un RFC con «&» va como `&amp;` en la expresión, como el SAT lo pide);
+   - una factura que falla (su archivo, su XML, la base) no detiene a las demás del negocio;
+   - el servicio de estatus del SAT y los enlaces al almacenamiento del PAC usan su propio cliente HTTP, con su propio cortocircuito: que el SAT falle no detiene el timbrado.
 8. **Cancelar**: el dueño o un administrador, por errores sin relación (02) o porque la venta no se llevó a cabo (03). Primero se le pide al PAC; si se niega, nada cambia. Si el SAT pide la aceptación del receptor, queda «Cancelándose»; si ya estaba cancelada, «Cancelada». Una cancelada deja facturar el pedido otra vez (factura nueva, folio nuevo). Nunca se borra una factura.
-9. **Acceso:** timbrar, volver a pedir, ver y descargar, quien gestiona los pedidos (`ManageOrders`, como la vista previa); cancelar, el CSD y la serie, dueños y administradores (`RequiresTenantManager`); los datos fiscales del cliente, `ManageCustomers`. La factura, sus archivos y el CSD de otro negocio responden 404 (suite entre negocios).
+9. **Acceso:** timbrar, volver a pedir, ver y descargar, quien gestiona los pedidos (`ManageOrders`, como la vista previa); cancelar, el CSD y la serie, dueños y administradores (`RequiresTenantManager`); los datos fiscales del cliente, `ManageCustomers`. La factura, sus archivos y el CSD de otro negocio responden 404 (suite entre negocios); las facturas de un pedido de un módulo que el negocio ya no tiene tampoco están (como su detalle).
 10. **Se ve:**
     - **Pedidos › Factura:** las facturas del pedido con su estado, folio fiscal, «Descargar XML/PDF», «Volver a pedir el timbre» y «Cancelar factura»; la vista previa con los datos fiscales propuestos (los del cliente o los de la última factura) y «Timbrar factura» cuando la vista previa revisada es la de esos datos.
     - **Configuración › Facturación:** lo que falta en Mi negocio, el CSD (subir, reemplazar, quitar, vigencia y aviso de vencimiento), la serie, el modo de pruebas y «Cómo funciona».
@@ -61,7 +68,7 @@ Tomé las decisiones de la Fase 28A con la autorización permanente del dueño d
 12. **Fuera de esta fase:** factura global de público en general (28B), PPD y complementos de pago (28C), notas de crédito (28D), sustitución con motivo 01, autofactura del cliente, mandar la factura por correo o WhatsApp, logo en el PDF, otras monedas, retenciones y varios CSD o series por sucursal.
 13. **La migración** `20261023064133_AddOrderInvoicing`:
     - `OrderInvoices` con sus restricciones (estado, folio, importes que cuadran, PUE, timbre, rechazo, cancelación y motivo 02/03), el receptor en columnas `Receiver_*`, los índices únicos (una viva por pedido, serie y folio por negocio, la llave, el UUID por negocio) y el de lo pendiente para el worker;
-    - `InvoicingProfiles` (uno por negocio) con `CK_InvoicingProfiles_Certificate` (el CSD completo o nada);
+    - `InvoicingProfiles` (uno por negocio) con `CK_InvoicingProfiles_Certificate` (el CSD completo o nada) y el índice único de su número (`IX_InvoicingProfiles_CertificateNumber`, un negocio por CSD);
     - `Customers`: `FiscalData_*` (con nulos) y `CK_Customers_FiscalData` (completos o nada, nunca en público en general).
 
 ## Consecuencias
@@ -75,6 +82,8 @@ Tomé las decisiones de la Fase 28A con la autorización permanente del dueño d
   - El CFDI lleva la hora local de la zona del negocio: si su zona no es la de su código postal de expedición, el PAC puede rechazar la fecha (se ve el mensaje y se corrige la zona).
   - Si el PAC no responde durante más de 71 horas, el worker deja de pedirla; volver a pedirla a mano después puede recibir un rechazo por la fecha aunque el PAC la hubiera timbrado (se revisa en el portal del PAC).
   - El PDF es el del PAC, sin logo del negocio.
+  - Un CSD sirve a un solo negocio de TienditApp.
+  - TienditApp no revisa que el certificado lo haya emitido el SAT: lo revisan el PAC al guardarlo y el SAT al timbrar.
   - Una cancelación pedida al PAC cuya respuesta no se guarda (caída entre la respuesta y el guardado) deja la factura «Timbrada»; pedirla otra vez la resuelve.
 - **Compatibilidad durante el despliegue:**
   - La versión anterior (24K) funciona con la base migrada: no conoce las tablas ni las columnas nuevas y no las escribe.

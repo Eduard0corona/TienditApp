@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Fiscal.Enums;
@@ -123,11 +124,22 @@ public class SwSapienGatewayTests
     [Fact]
     public async Task Stamp_WithAKeyAlreadyStamped_ShouldGiveBackThatStamp_ReadingItsXmlFromWhatSwKeeps()
     {
+        // As SW documents the answer to a repeated customid: the stamp alone in «tfd», an empty «cfdi» and no «uuid».
+        var duplicate = JsonSerializer.Serialize(new
+        {
+            message = "CFDI3307 - Timbre duplicado. El customId proporcionado está duplicado.",
+            messageDetail = (string?)null,
+            data = new
+            {
+                tfd = $"""<?xml version="1.0" encoding="utf-8"?><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="{Uuid}" FechaTimbrado="2026-10-23T12:00:05" SelloCFD="AAAABBBBCCCCDDDD" NoCertificadoSAT="30001000000400002495" />""",
+                cfdi = ""
+            },
+            status = "error"
+        });
         var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath switch
         {
             "/v2/security/authenticate" => Login(),
-            "/v4/cfdi33/issue/json/v4" => Json(HttpStatusCode.BadRequest,
-                $$"""{"message":"CFDI3307 - Timbre duplicado. El customId proporcionado está duplicado.","messageDetail":null,"data":{"uuid":"{{Uuid}}","cfdi":""},"status":"error"}"""),
+            "/v4/cfdi33/issue/json/v4" => Json(HttpStatusCode.BadRequest, duplicate),
             "/datawarehouse/v1/live/" + Uuid => Json(HttpStatusCode.OK,
                 """{"data":{"records":[{"status":"Vigente","urlXml":"https://swstorage.s3.amazonaws.com/xml/f-7.xml?signature=abc"}]},"status":"success"}"""),
             "/xml/f-7.xml" => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(StampedXml) },
@@ -138,8 +150,11 @@ public class SwSapienGatewayTests
 
         Assert.Equal((Uuid, StampedXml), (stamped.Uuid, stamped.Xml));
         Assert.Equal("https://api.sw.com.mx/datawarehouse/v1/live/" + Uuid, http.Requests[2].Url);
-        // The signed link to SW's storage goes without the platform's token.
+        // The signed link to SW's storage goes without the platform's token, and outside the breaker of stamping.
         Assert.Null(http.Requests[3].Authorization);
+        Assert.Equal(
+            [SwSapienGateway.HttpClientName, SwSapienGateway.HttpClientName, SwSapienGateway.HttpClientName, SwSapienGateway.SatHttpClientName],
+            http.Requests.Select(r => r.Client));
     }
 
     [Fact]
@@ -293,7 +308,25 @@ public class SwSapienGatewayTests
         Assert.Equal(new CfdiSatStatus(expected, refused), status);
         var request = Assert.Single(http.Requests);
         Assert.Equal("https://consultaqr.facturaelectronica.sat.gob.mx/ConsultaCFDIService.svc", request.Url);
+        // The SAT failing often never opens the breaker that stamping goes through.
+        Assert.Equal(SwSapienGateway.SatHttpClientName, request.Client);
         Assert.Contains($"?re=EKU9003173C9&amp;rr=URE180429TM6&amp;tt=220.400000&amp;id={Uuid}&amp;fe=ABCDEFGH", request.Body);
+    }
+
+    [Fact]
+    public async Task Status_OfAnRfcWithAnAmpersand_ShouldWriteItAsTheSatAsks()
+    {
+        var (gateway, http) = Create(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><a:Estado xmlns:a="x">Vigente</a:Estado></s:Body></s:Envelope>""",
+                Encoding.UTF8, "text/xml")
+        });
+
+        await gateway.GetSatStatusAsync(new CfdiStatusQuery("A&B010101AB1", "M&M8001019Z3", 100m, Uuid, "ABCDEFGH"), CancellationToken.None);
+
+        // «&amp;» inside the expression, which the XML of the request escapes once more.
+        var expression = XDocument.Parse(Assert.Single(http.Requests).Body!).Descendants().Single(e => e.Name.LocalName == "expresionImpresa").Value;
+        Assert.Equal($"?re=A&amp;B010101AB1&rr=M&amp;M8001019Z3&tt=100.000000&id={Uuid}&fe=ABCDEFGH", expression);
     }
 
     [Fact]
@@ -368,11 +401,15 @@ public class SwSapienGatewayTests
     private static HttpResponseMessage Json(HttpStatusCode status, string json) =>
         new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 
-    private sealed record RecordedRequest(HttpMethod Method, string Url, string? Authorization, string? CustomId, string? ContentType, string? Body);
+    private sealed record RecordedRequest(
+        HttpMethod Method, string Url, string? Authorization, string? CustomId, string? ContentType, string? Body, string? Client = null);
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         public List<RecordedRequest> Requests { get; } = [];
+
+        /// <summary>The named client the next request goes through (each request asks for its client).</summary>
+        public string? NextClient { get; set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -383,16 +420,19 @@ public class SwSapienGatewayTests
                 request.Headers.Authorization?.ToString(),
                 request.Headers.TryGetValues("customid", out var ids) ? ids.Single() : null,
                 request.Content?.Headers.ContentType?.MediaType,
-                body));
+                body,
+                NextClient));
             return respond(request);
         }
     }
 
-    private sealed class SingleClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    /// <summary>One handler behind both clients; the handler notes which client sent each request.</summary>
+    private sealed class SingleClientFactory(RecordingHandler handler) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name)
         {
-            Assert.Equal(SwSapienGateway.HttpClientName, name);
+            Assert.Contains(name, new[] { SwSapienGateway.HttpClientName, SwSapienGateway.SatHttpClientName });
+            handler.NextClient = name;
             return new HttpClient(handler, disposeHandler: false);
         }
     }
