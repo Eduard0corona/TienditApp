@@ -6472,6 +6472,238 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoicing/refunds/{refundId}/credit-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    refundId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreditNoteDto"];
+                        "application/json": components["schemas"]["CreditNoteDto"];
+                        "text/json": components["schemas"]["CreditNoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/write-offs/{writeOffId}/credit-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    writeOffId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreditNoteDto"];
+                        "application/json": components["schemas"]["CreditNoteDto"];
+                        "text/json": components["schemas"]["CreditNoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    creditNoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreditNoteDto"];
+                        "application/json": components["schemas"]["CreditNoteDto"];
+                        "text/json": components["schemas"]["CreditNoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    creditNoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CancelOrderInvoiceRequest"];
+                    "text/json": components["schemas"]["CancelOrderInvoiceRequest"];
+                    "application/*+json": components["schemas"]["CancelOrderInvoiceRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CreditNoteDto"];
+                        "application/json": components["schemas"]["CreditNoteDto"];
+                        "text/json": components["schemas"]["CreditNoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/xml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    creditNoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    creditNoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoicing/global-invoices": {
         parameters: {
             query?: never;
@@ -13974,6 +14206,7 @@ export interface components {
         ChangeInvoiceSerieRequest: {
             serie: string;
             paymentSerie?: string | null;
+            creditNoteSerie?: string | null;
         };
         ChangePasswordCommand: {
             currentPassword: string;
@@ -14583,6 +14816,42 @@ export interface components {
             minDaysBefore: number;
             /** Format: int32 */
             maxDaysBefore: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        CreditNoteAdjustment: 0 | 1;
+        CreditNoteDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            orderInvoiceId: string;
+            number: string;
+            status: components["schemas"]["OrderInvoiceStatus"];
+            paymentForm: string;
+            /** Format: double */
+            subTotal: number;
+            /** Format: double */
+            taxTotal: number;
+            /** Format: double */
+            total: number;
+            /** Format: date-time */
+            requestedAt: string;
+            issuedAutomatically: boolean;
+            uuid?: string | null;
+            /** Format: date-time */
+            stampedAt?: string | null;
+            hasXml: boolean;
+            hasPdf: boolean;
+            failureMessage?: string | null;
+            /** Format: date-time */
+            refusedAt?: string | null;
+            cancellationMotive?: components["schemas"]["CfdiCancellationMotive"];
+            /** Format: date-time */
+            cancellationRequestedAt?: string | null;
+            /** Format: date-time */
+            cancelledAt?: string | null;
         };
         CreditReminderTemplateDto: {
             /** Format: uuid */
@@ -15914,6 +16183,7 @@ export interface components {
             sandbox: boolean;
             serie: string;
             paymentSerie: string;
+            creditNoteSerie: string;
             rfc?: string | null;
             legalName?: string | null;
             fiscalRegime?: string | null;
@@ -16419,6 +16689,23 @@ export interface components {
          * @enum {integer}
          */
         OptOutSource: 0 | 1;
+        OrderAdjustmentDto: {
+            kind: components["schemas"]["CreditNoteAdjustment"];
+            /** Format: uuid */
+            adjustmentId: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: double */
+            amount: number;
+            method?: components["schemas"]["OrderPaymentMethod"];
+            writeOffReason?: components["schemas"]["OrderWriteOffReason"];
+            notes?: string | null;
+            reversed: boolean;
+            canIssue: boolean;
+            problem?: string | null;
+            awaitsAutomaticIssue: boolean;
+            creditNotes: components["schemas"]["CreditNoteDto"][];
+        };
         /**
          * Format: int32
          * @enum {integer}
@@ -16584,6 +16871,7 @@ export interface components {
             customerName?: string | null;
             invoices: components["schemas"]["OrderInvoiceDto"][];
             payments: components["schemas"]["OrderPaymentComplementsDto"][];
+            adjustments: components["schemas"]["OrderAdjustmentDto"][];
         };
         OrderItemCancellationDto: {
             /** Format: uuid */

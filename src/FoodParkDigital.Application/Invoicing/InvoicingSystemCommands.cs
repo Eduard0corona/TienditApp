@@ -11,8 +11,8 @@ namespace FoodParkDigital.Application.Invoicing;
 
 /// <summary>
 /// Asks the PAC again for a business's invoices that stayed «Timbrando» (the invoicing worker sends it in the business's
-/// scope, Fase 28A; global invoices too, Fase 28B, and payment complements, Fase 28C): each with its own CFDI and key, while
-/// the PAC still answers a repeated key with the stamp it gave.
+/// scope, Fase 28A; global invoices too, Fase 28B, payment complements, Fase 28C, and credit notes, Fase 28D): each with its
+/// own CFDI and key, while the PAC still answers a repeated key with the stamp it gave.
 /// </summary>
 [AllowAnonymousRequest("Lo envía el worker de facturación (sistema), sin usuario, en el alcance del negocio.")]
 public record StampPendingInvoicesCommand : IRequest<Result<int>>;
@@ -58,7 +58,8 @@ public class StampPendingInvoicesCommandHandler : IRequestHandler<StampPendingIn
 
         var stamped = await StampAsync(_context.OrderInvoices, _context.OrderInvoices, cancellationToken)
             + await StampAsync(_context.GlobalInvoices, GlobalInvoicing.WithSales(_context), cancellationToken)
-            + await StampAsync(_context.PaymentComplements, _context.PaymentComplements, cancellationToken);
+            + await StampAsync(_context.PaymentComplements, _context.PaymentComplements, cancellationToken)
+            + await StampAsync(_context.CreditNotes, _context.CreditNotes, cancellationToken);
         return Result.Success(stamped);
     }
 
@@ -98,8 +99,8 @@ public class StampPendingInvoicesCommandHandler : IRequestHandler<StampPendingIn
 
 /// <summary>
 /// Asks the SAT about a business's invoices whose cancellation waits for the customer (the invoicing worker sends it in
-/// the business's scope, Fase 28A; global invoices too, Fase 28B, and payment complements, Fase 28C): cancelled (accepted,
-/// or the customer let the time pass) or kept, with the reason.
+/// the business's scope, Fase 28A; global invoices too, Fase 28B, payment complements, Fase 28C, and credit notes, Fase 28D):
+/// cancelled (accepted, or the customer let the time pass) or kept, with the reason.
 /// </summary>
 [AllowAnonymousRequest("Lo envía el worker de facturación (sistema), sin usuario, en el alcance del negocio.")]
 public record CheckInvoiceCancellationsCommand : IRequest<Result<int>>;
@@ -139,7 +140,8 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
 
         var settled = await CheckAsync(_context.OrderInvoices, _context.OrderInvoices, cancellationToken)
             + await CheckAsync(_context.GlobalInvoices, GlobalInvoicing.WithSales(_context), cancellationToken)
-            + await CheckAsync(_context.PaymentComplements, _context.PaymentComplements, cancellationToken);
+            + await CheckAsync(_context.PaymentComplements, _context.PaymentComplements, cancellationToken)
+            + await CheckAsync(_context.CreditNotes, _context.CreditNotes, cancellationToken);
         return Result.Success(settled);
     }
 

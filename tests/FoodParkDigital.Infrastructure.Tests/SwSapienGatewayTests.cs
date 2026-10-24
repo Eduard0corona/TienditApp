@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Xml.Linq;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Invoicing;
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Infrastructure.Invoicing;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -216,6 +217,48 @@ public class SwSapienGatewayTests
         Assert.Equal(["MontoTotalPagos"], plain.GetProperty("Totales").EnumerateObject().Select(property => property.Name));
         Assert.False(plain.GetProperty("Pago")[0].TryGetProperty("ImpuestosP", out _));
         Assert.False(plain.GetProperty("Pago")[0].GetProperty("DoctoRelacionado")[0].TryGetProperty("ImpuestosDR", out _));
+    }
+
+    [Fact]
+    public async Task Stamp_OfACreditNote_ShouldSendATypeERelatedToItsInvoice_WithAConceptPerRate()
+    {
+        var (gateway, http) = Create(Answer);
+        var document = CfdiDocument.ForCreditNote(
+            new CfdiDocumentIssuer("EKU9003173C9", "Escuela Kemper Urgate", "601"),
+            new CfdiDocumentReceiver("URE180429TM6", "UNIVERSIDAD ROBOTICA ESPAÑOLA", "86991", "601", "G03"),
+            "86991", "NC", 4, new DateTime(2026, 10, 24, 9, 30, 0), "15", "Condonación",
+            [new CfdiTransfer(43.10m, false, 16m, 6.90m), new CfdiTransfer(10m, true, 0m, 0m)], 5m, Uuid);
+
+        await gateway.StampAsync(document, Key, CancellationToken.None);
+
+        using var cfdi = JsonDocument.Parse(http.Requests[1].Body!);
+        var root = cfdi.RootElement;
+        Assert.Equal(("NC", "4", "E", "15", "PUE", "MXN", "58.10", "6.90", "65.00"),
+            (root.Str("Serie"), root.Str("Folio"), root.Str("TipoDeComprobante"), root.Str("FormaPago"), root.Str("MetodoPago"),
+                root.Str("Moneda"), root.Str("SubTotal"), root.GetProperty("Impuestos").Str("TotalImpuestosTrasladados"), root.Str("Total")));
+        // Related to the invoice it lowers (01), where the SAT's schema puts it: before the issuer.
+        var related = Assert.Single(root.GetProperty("CfdiRelacionados").EnumerateArray());
+        Assert.Equal(("01", Uuid), (related.Str("TipoRelacion"), Assert.Single(related.GetProperty("CfdiRelacionado").EnumerateArray()).Str("UUID")));
+        var names = root.EnumerateObject().Select(property => property.Name).ToList();
+        Assert.True(names.IndexOf("CfdiRelacionados") < names.IndexOf("Emisor"));
+        // The invoice's receiver, with the use of a credit note.
+        Assert.Equal("G02", root.GetProperty("Receptor").Str("UsoCFDI"));
+        // A concept per rate, with its base and IVA, and one not subject to tax.
+        var concepts = root.GetProperty("Conceptos");
+        Assert.Equal(3, concepts.GetArrayLength());
+        Assert.Equal(("84111506", "ACT", "Condonación", "43.10", "02"),
+            (concepts[0].Str("ClaveProdServ"), concepts[0].Str("ClaveUnidad"), concepts[0].Str("Descripcion"), concepts[0].Str("Importe"),
+                concepts[0].Str("ObjetoImp")));
+        var sixteen = Assert.Single(concepts[0].GetProperty("Impuestos").GetProperty("Traslados").EnumerateArray());
+        Assert.Equal(("43.10", "0.160000", "6.90"), (sixteen.Str("Base"), sixteen.Str("TasaOCuota"), sixteen.Str("Importe")));
+        var exempt = Assert.Single(concepts[1].GetProperty("Impuestos").GetProperty("Traslados").EnumerateArray());
+        Assert.Equal(("10.00", "Exento"), (exempt.Str("Base"), exempt.Str("TipoFactor")));
+        Assert.Equal(("5.00", "01"), (concepts[2].Str("Importe"), concepts[2].Str("ObjetoImp")));
+        Assert.False(concepts[2].TryGetProperty("Impuestos", out _));
+        // An invoice is related to nothing.
+        await gateway.StampAsync(Document(), Key, CancellationToken.None);
+        using var invoice = JsonDocument.Parse(http.Requests[^1].Body!);
+        Assert.False(invoice.RootElement.TryGetProperty("CfdiRelacionados", out _));
     }
 
     [Fact]

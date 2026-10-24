@@ -166,8 +166,14 @@ public static class GlobalInvoiceDrafts
     public const string NotPaidReason = "No está pagada por completo: entra en la factura global del periodo en que se termine de pagar.";
     public const string CreditReason =
         "Se vendió a crédito (fiado): el SAT pide reflejar las ventas en parcialidades en una factura global aparte, que TienditApp todavía no genera.";
-    public const string RefundedReason = "Tiene reembolsos: lo devuelto requiere una nota de crédito, que TienditApp todavía no genera.";
-    public const string WrittenOffReason = "Se condonó parte de ella: lo condonado requiere una nota de crédito, que TienditApp todavía no genera.";
+    // The global invoice does not take a sale with adjustments: its credit note would have to relate to the global (outside
+    // Fase 28D). With the customer's fiscal data it is invoiced on its own in Pedidos, where each adjustment gets its note.
+    public const string RefundedReason =
+        "Tiene reembolsos: la factura global no la toma. Si el cliente te da sus datos fiscales, factúrala en Pedidos (cada " +
+        "reembolso lleva su nota de crédito); si no, consulta con tu contador.";
+    public const string WrittenOffReason =
+        "Se condonó parte de ella: la factura global no la toma. Si el cliente te da sus datos fiscales, factúrala en Pedidos " +
+        "(lo condonado lleva su nota de crédito); si no, consulta con tu contador.";
     public const string RefundInCourseReason = "Tiene un reembolso en curso en Mercado Pago.";
     public const string CanStillChangeReason =
         "Todavía puede cambiar (sigue pendiente o es una cuenta abierta): acéptala o ciérrala para que entre en esta factura global; "

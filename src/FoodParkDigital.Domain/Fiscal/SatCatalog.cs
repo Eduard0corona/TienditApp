@@ -149,6 +149,24 @@ public static partial class SatCatalog
     /// <summary>c_UsoCFDI «Pagos»: the use of the receiver of a payment complement.</summary>
     public const string PaymentUse = "CP01";
 
+    /// <summary>c_FormaPago «Condonación»: what a credit note of a write-off is settled by (Fase 28D).</summary>
+    public const string PaymentFormWriteOff = "15";
+
+    /// <summary>c_UsoCFDI «Devoluciones, descuentos o bonificaciones» of a credit note's receiver (Fase 28D).</summary>
+    public const string CreditNoteUse = "G02";
+
+    /// <summary>c_TipoRelacion «Nota de crédito de los documentos relacionados»: how a credit note names its invoice.</summary>
+    public const string CreditNoteRelation = "01";
+
+    public const string RefundDescription = "Devolución";
+    public const string WriteOffDescription = "Condonación";
+
+    /// <summary>
+    /// The use a credit note's receiver gets: «Devoluciones, descuentos o bonificaciones» (G02), or «Sin efectos fiscales»
+    /// (S01) when the receiver's regime cannot ask for G02.
+    /// </summary>
+    public static string CreditNoteUseFor(string regime) => UseAppliesToRegime(CreditNoteUse, regime) ? CreditNoteUse : GeneralPublicUse;
+
     /// <summary>
     /// c_FormaPago of a payment in its complement (FormaDePagoP, Fase 28C), or null when none fits: «Por definir» (99) is not
     /// allowed there («Otro» says no form), and what was paid with the customer's balance is an advance applied, whose

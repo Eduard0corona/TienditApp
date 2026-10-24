@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest, type Schemas } from '../../api/typedClient';
-import { CfdiCancellationMotive, OrderInvoiceStatus } from '../../types';
+import { CfdiCancellationMotive, CreditNoteAdjustment, OrderInvoiceStatus } from '../../types';
 import CfdiDraftModal from './CfdiDraftModal';
 
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
@@ -18,7 +18,7 @@ const KARLA = { rfc: 'XIQB891116QE4', name: 'KARLA FUENTE NOLASCO', postalCode: 
 
 const INVOICING: Invoicing = {
   available: true, sandbox: false, canInvoice: true, problem: null, proposedReceiver: KARLA,
-  customerId: 'c-1', customerName: 'Karla', invoices: [], payments: [],
+  customerId: 'c-1', customerName: 'Karla', invoices: [], payments: [], adjustments: [],
 };
 
 const STAMPED: Invoice = {
@@ -264,6 +264,32 @@ describe('CfdiDraftModal', () => {
     expect(await screen.findByRole('heading', { name: 'Complementos de pago' })).toBeInTheDocument();
     expect(screen.getByText('F-1', { exact: true }).closest('li')).toHaveTextContent('en parcialidades (PPD)');
     expect(screen.getByRole('button', { name: /^Emitir ahora el complemento del cobro del/ })).toBeInTheDocument();
+  });
+
+  it('shows the credit notes of its refunds, and says which CFDI go before cancelling the invoice', async () => {
+    const note = {
+      id: 'nc-1', orderInvoiceId: 'inv-1', number: 'NC-1', status: OrderInvoiceStatus.Stamped, paymentForm: '04', subTotal: 17.24,
+      taxTotal: 2.76, total: 20, requestedAt: '2026-10-24T17:05:00Z', issuedAutomatically: true, uuid: null, stampedAt: null,
+      hasXml: false, hasPdf: false, failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null,
+      cancelledAt: null,
+    };
+    serve({
+      ...INVOICING,
+      canInvoice: false,
+      invoices: [STAMPED],
+      adjustments: [{
+        kind: CreditNoteAdjustment.Refund, adjustmentId: 'ref-1', at: '2026-10-24T17:00:00Z', amount: 20, method: 1, writeOffReason: undefined,
+        notes: null, reversed: false, canIssue: false, problem: null, awaitsAutomaticIssue: false, creditNotes: [note],
+      }],
+    });
+    renderModal(true);
+
+    expect(await screen.findByRole('heading', { name: 'Notas de crédito' })).toBeInTheDocument();
+    expect(screen.getByText('NC-1')).toBeInTheDocument();
+    // The SAT does not cancel F-1 while NC-1 stands: the screen says so instead of offering what the API refuses.
+    expect(screen.queryByRole('button', { name: 'Cancelar factura F-1' })).not.toBeInTheDocument();
+    expect(screen.getByText('Para cancelarla, primero cancela NC-1.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-1' })).toBeInTheDocument();
   });
 
   it('lets owners and admins cancel a stamped invoice with its reason', async () => {

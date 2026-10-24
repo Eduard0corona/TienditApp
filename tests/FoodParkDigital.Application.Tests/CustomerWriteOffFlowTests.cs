@@ -454,7 +454,8 @@ public class CustomerWriteOffFlowTests
         fixture.CurrentUser,
         new PhoneNormalizationService(),
         fixture.Clock,
-        new CustomerCreditLock(fixture.Context));
+        new CustomerCreditLock(fixture.Context),
+        new InvoicingLock(fixture.Context));
 
     private static PayCustomerAccountCommandHandler PayHandler(SalesTestFixture fixture) => new(
         fixture.Context,

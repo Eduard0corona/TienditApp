@@ -160,6 +160,38 @@ public class InvoicingWorkerTests
         Assert.Equal([stuck, alsoStuck, owing, owing, stuck, alsoStuck], sent.Complements);
     }
 
+    [Fact]
+    public async Task Pass_ShouldFindTheBusinessesWhoseAdjustmentsOweACreditNote_AndTheCreditNotesStampingOrCancelling()
+    {
+        var sent = new SentCommands();
+        await using var host = Host(sent);
+        var now = host.Clock.UtcNow;
+        var refunding = await AddAdjustmentAsync(host, "debe-nota-reembolso", now.AddDays(-3), writeOff: false);
+        var forgiving = await AddAdjustmentAsync(host, "debe-nota-condonacion", now.AddDays(-2), writeOff: true);
+        // Refunded with «Otro», of a cancelled order (its invoice is cancelled instead), a write-off undone, or already with a
+        // credit note (even refused): nothing owed.
+        await AddAdjustmentAsync(host, "reembolso-otro", now.AddDays(-4), writeOff: false, method: Domain.Orders.Enums.OrderPaymentMethod.Other);
+        await AddAdjustmentAsync(host, "pedido-cancelado", now.AddDays(-4), writeOff: false, orderCancelled: true);
+        await AddAdjustmentAsync(host, "condonacion-deshecha", now.AddDays(-4), writeOff: true, reversed: true);
+        await AddAdjustmentAsync(host, "nota-rechazada", now.AddDays(-4), writeOff: false, note: n => n.Refuse("CFDI40108", now));
+        // It owes one, but cannot issue it until its CSD seals again.
+        await AddAdjustmentAsync(host, "nota-sin-csd", now.AddDays(-9), writeOff: false, csd: Csd.None);
+        var stamping = await AddAdjustmentAsync(host, "nota-timbrando", now.AddDays(-2), writeOff: false, note: _ => { }, requestedAt: now.AddMinutes(-5));
+        var cancelling = await AddAdjustmentAsync(host, "nota-cancelandose", now.AddDays(-2), writeOff: true, note: n =>
+        {
+            n.Stamp(Guid.NewGuid().ToString(), "sw", now, "invoices/nc.xml");
+            n.RequestCancellation(CfdiCancellationMotive.NotCarriedOut, Guid.NewGuid(), now);
+        });
+        var worker = host.Get<InvoicingWorkerService>();
+
+        Assert.Equal(4, await worker.RunPassAsync(CancellationToken.None));
+
+        Assert.Equal([refunding, forgiving], sent.CreditNotes);
+        Assert.Equal([stamping], sent.Stamps);
+        Assert.Equal([cancelling], sent.Checks);
+        Assert.Empty(sent.Complements);
+    }
+
     private enum Csd { Valid, Expired, None }
 
     /// <summary>
@@ -208,6 +240,74 @@ public class InvoicingWorkerTests
                 var issued = PaymentComplement.Request(invoice, payment, "P", 1, 1, 100m, "{}", null, requestedAt ?? paidAt);
                 complement(issued);
                 context.PaymentComplements.Add(issued);
+            }
+            await context.SaveChangesAsync();
+            return tenant.Id;
+        });
+
+    /// <summary>
+    /// A business with a $100 sale on credit, paid $40 and invoiced (stamped; paid in one exhibition, so its payment owes no
+    /// complement and only the credit note counts), its CSD (valid unless said
+    /// otherwise), and a $10 refund (by card unless said otherwise) or a $20 write-off of that sale, with its credit note when
+    /// <paramref name="note"/> says what happened to it.
+    /// </summary>
+    private static Task<Guid> AddAdjustmentAsync(
+        OutboxTestHost host,
+        string slug,
+        DateTimeOffset at,
+        bool writeOff,
+        Domain.Orders.Enums.OrderPaymentMethod method = Domain.Orders.Enums.OrderPaymentMethod.Card,
+        bool reversed = false,
+        Action<CreditNote>? note = null,
+        DateTimeOffset? requestedAt = null,
+        Csd csd = Csd.Valid,
+        bool orderCancelled = false)
+        => host.InScopeAsync(async services =>
+        {
+            var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
+            services.GetRequiredService<ICurrentTenantService>().SetTenant(tenant.Id);
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            if (csd != Csd.None)
+            {
+                var profile = InvoicingProfile.Create(tenant.Id);
+                var uploadedAt = host.Clock.UtcNow.AddDays(-30);
+                profile.UseCertificate("30001000000500003416", "EKU9003173C9", uploadedAt.AddDays(-1), uploadedAt.AddYears(4), Guid.NewGuid(), uploadedAt);
+                context.InvoicingProfiles.Add(profile);
+            }
+            var order = new Domain.Orders.Entities.Order(tenant.Id, null, null, true, "ORD-000001", BusinessType.Retail,
+                Domain.Orders.Enums.OrderType.Retail, "Karla", "+525512345678", null, null, pricesIncludeTax: true);
+            order.AddItem(Guid.NewGuid(), "Café", 1, 100m);
+            order.RegisterPayment(40m, Domain.Orders.Enums.OrderPaymentMethod.Cash, at.AddDays(-2), null, null, null, null);
+            order.SellOnCredit();
+            var invoice = OrderInvoice.Request(
+                tenant.Id, order.Id, "F", 1, CfdiReceiver.Create("XIQB891116QE4", "Karla", "26015", "612", "G03"),
+                "04", "{}", 86.21m, 13.79m, 100m, Guid.NewGuid(), at.AddDays(-1), "PUE");
+            invoice.Stamp(Guid.NewGuid().ToString(), "sw", at.AddDays(-1), "invoices/f.xml");
+            CreditNote? issued = null;
+            if (writeOff)
+            {
+                var forgiven = order.WriteOff(20m, Domain.Orders.Enums.OrderWriteOffReason.WontBeCollected, null, at, "dueña");
+                if (note is not null)
+                    issued = CreditNote.ForWriteOff(invoice, forgiven, "NC", 1, 17.24m, 2.76m, 0, "{}", null, requestedAt ?? at);
+                if (reversed)
+                    order.ReverseWriteOff(forgiven.Id, at.AddHours(1), "dueña");
+            }
+            else
+            {
+                var refund = order.RegisterRefund(10m, method, "Devolución", at, "cajero", null, null, false, []);
+                if (note is not null)
+                    issued = CreditNote.ForRefund(invoice, refund, "NC", 1, 8.62m, 1.38m, 0, "{}", null, requestedAt ?? at);
+            }
+            context.Tenants.Add(tenant);
+            context.Orders.Add(order);
+            // As «Anular venta» leaves an order it voided before delivering it.
+            if (orderCancelled)
+                context.Entry(order).Property(o => o.Status).CurrentValue = Domain.Orders.Enums.OrderStatus.Cancelled;
+            context.OrderInvoices.Add(invoice);
+            if (issued is not null)
+            {
+                note!(issued);
+                context.CreditNotes.Add(issued);
             }
             await context.SaveChangesAsync();
             return tenant.Id;
@@ -278,6 +378,7 @@ public class InvoicingWorkerTests
         public List<Guid> Stamps { get; } = [];
         public List<Guid> Checks { get; } = [];
         public List<Guid> Complements { get; } = [];
+        public List<Guid> CreditNotes { get; } = [];
         /// <summary>The businesses whose complements pass stamps one.</summary>
         public HashSet<Guid> Stamping { get; } = [];
     }
@@ -292,6 +393,7 @@ public class InvoicingWorkerTests
                 StampPendingInvoicesCommand => sent.Stamps,
                 CheckInvoiceCancellationsCommand => sent.Checks,
                 IssuePendingPaymentComplementsCommand => sent.Complements,
+                IssuePendingCreditNotesCommand => sent.CreditNotes,
                 _ => throw new NotSupportedException(request.GetType().Name)
             };
             list.Add(tenant.TenantId);

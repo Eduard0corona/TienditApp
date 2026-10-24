@@ -298,6 +298,17 @@ public sealed class SwSapienGateway : IInvoicingGateway
             };
         }
 
+        // The invoice a credit note lowers (Fase 28D), where the SAT's schema puts it: after InformacionGlobal, before the
+        // issuer. The node repeats per relation type, and each one lists its CFDI.
+        if (document.Related is { } related)
+        {
+            json["CfdiRelacionados"] = new JsonArray(new JsonObject
+            {
+                ["TipoRelacion"] = related.RelationType,
+                ["CfdiRelacionado"] = new JsonArray(related.Uuids.Select(uuid => (JsonNode)new JsonObject { ["UUID"] = uuid }).ToArray())
+            });
+        }
+
         json["Emisor"] = new JsonObject
         {
             ["Rfc"] = document.Issuer.Rfc,

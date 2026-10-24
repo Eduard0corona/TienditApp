@@ -841,6 +841,22 @@ La Fase 28C trae una migración, [`database/production/20261024014559_AddPayment
 - **Volver a la versión anterior:** funciona sin tocar la base. Las facturas PPD y sus complementos se quedan en la base y en el PAC; la 28B no emite complementos nuevos y no impide cancelar una PPD con complementos vigentes (el SAT la rechaza).
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50039, sin cambiar nada, en cuanto hay un complemento o una factura PPD (aunque estén rechazados). Sin ninguno, quita la tabla y la columna y regresa la restricción a «solo PUE»; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Las notas de crédito (Fase 28D)
+
+La Fase 28D trae una migración, [`database/production/20261024084435_AddCreditNotes`](../../database/production/20261024084435_AddCreditNotes). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente (por ejemplo la de la 28C), también la aplica; no sirve para crear una base vacía ([ADR 0048](../adr/0048-credit-notes.md)).
+
+- **La migración:**
+  - crea la tabla vacía `CreditNotes` (las notas de crédito, con su CFDI, factura, reembolso o condonación, importes, folio, estado, timbre y cancelación; dos índices únicos filtrados dejan una sola nota viva por ajuste);
+  - agrega `InvoicingProfiles.CreditNoteSerie` con `'NC'` en los negocios que ya tienen perfil.
+
+  No cambia pedidos, pagos, reembolsos, condonaciones ni facturas. Después de aplicarla, el `verify.sql` muestra la tabla, la columna, las restricciones e índices, y cuenta las notas por estado: cero hasta desplegar.
+- **Mientras se publica:** la versión de `master` (Fase 28C) no conoce la tabla ni la columna y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** las rutas `POST /api/v1/invoicing/refunds/{refundId}/credit-notes`, `POST /api/v1/invoicing/write-offs/{writeOffId}/credit-notes` y `/api/v1/invoicing/credit-notes/{id}/retry|cancel|xml|pdf`, `adjustments` en la facturación del pedido, `creditNoteSerie` en la configuración y el enum `CreditNoteAdjustment`. Nada se quita ni cambia de nombre.
+- **Sin configuración nueva:** usa el PAC, el CSD, los archivos privados y el worker de facturación de la 28A; el worker también emite y timbra las notas pendientes. Sin SW Sapien, la factura sigue siendo vista previa y no se emiten notas.
+- **Lo que ya existía:** en su primera pasada, el worker emite (con la fecha de ese día) la nota de cada reembolso y condonación de un pedido que ya tenía factura timbrada; la consulta 4 del `verify.sql` los cuenta. Si alguno ya tiene su CFDI de egreso hecho a mano, avísalo antes del merge (o cancela después su nota con el motivo 02).
+- **Volver a la versión anterior:** funciona sin tocar la base. Las notas se quedan en la base y en el PAC; la 28C vuelve a bloquear la factura de ventas con reembolsos o condonación, no impide cancelar una factura con notas vigentes (el SAT la rechaza) y deja deshacer una condonación con nota vigente (se cancela a mano). Tampoco conoce las notas de condonación: los complementos que emita después de una salen con el saldo anterior alto, así que con notas de condonación timbradas es mejor corregir hacia adelante.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50040, sin cambiar nada, en cuanto hay una nota de crédito (aunque esté rechazada). Sin ninguna, quita la tabla y la columna; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

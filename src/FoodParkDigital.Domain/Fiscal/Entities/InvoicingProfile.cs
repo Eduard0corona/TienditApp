@@ -5,9 +5,10 @@ using FoodParkDigital.Domain.Exceptions;
 namespace FoodParkDigital.Domain.Fiscal.Entities;
 
 /// <summary>
-/// How a business invoices (Fase 28A, ADR 0045): the serie of its invoices and of its payment complements (Fase 28C), and
-/// the CSD (certificado de sello digital) its CFDI are sealed with. TienditApp checks the CSD and hands it to the PAC, which keeps it: here only what identifies it
-/// is kept (number, RFC, validity, who uploaded it), never its private key or password.
+/// How a business invoices (Fase 28A, ADR 0045): the serie of its invoices, of its payment complements (Fase 28C) and of its
+/// credit notes (Fase 28D), and the CSD (certificado de sello digital) its CFDI are sealed with. TienditApp checks the CSD and
+/// hands it to the PAC, which keeps it: here only what identifies it is kept (number, RFC, validity, who uploaded it), never
+/// its private key or password.
 /// </summary>
 public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenantScoped
 {
@@ -28,6 +29,9 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
     /// so the same serie as the invoices never repeats a folio.
     /// </summary>
     public string PaymentSerie { get; private set; } = PaymentComplement.DefaultSerie;
+
+    /// <summary>The serie of its credit notes (Fase 28D): «NC» unless the business chooses another one.</summary>
+    public string CreditNoteSerie { get; private set; } = CreditNote.DefaultSerie;
 
     /// <summary>The CSD's number (NoCertificado, 20 digits), or null without one.</summary>
     public string? CertificateNumber { get; private set; }
@@ -99,6 +103,12 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
     public void ChangePaymentSerie(string serie)
     {
         PaymentSerie = Cfdi.NormalizeSerie(serie, "los complementos de pago");
+    }
+
+    /// <summary>The serie of the next credit notes; the ones already stamped keep theirs.</summary>
+    public void ChangeCreditNoteSerie(string serie)
+    {
+        CreditNoteSerie = Cfdi.NormalizeSerie(serie, "las notas de crédito");
     }
 
     /// <summary>Whether its CSD seals now for the business's RFC.</summary>
