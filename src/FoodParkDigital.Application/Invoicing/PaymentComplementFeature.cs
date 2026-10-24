@@ -522,17 +522,18 @@ internal sealed class PaymentComplementRequester(
             .FirstOrDefaultAsync(cancellationToken);
         if (existing is not null)
             return Result.Failure<Guid>(PaymentComplements.LiveComplementProblem(existing));
-        var live = await context.PaymentComplements.AsNoTracking()
-            .Where(c => c.OrderInvoiceId == invoice!.Id
-                && (c.Status == OrderInvoiceStatus.Stamping || c.Status == OrderInvoiceStatus.Stamped
-                    || c.Status == OrderInvoiceStatus.Cancelling))
+        var issued = await context.PaymentComplements.AsNoTracking()
+            .Where(c => c.OrderInvoiceId == invoice!.Id)
             .ToListAsync(cancellationToken);
-        // The installment the payment had in a refused or cancelled complement of this invoice, to take it back.
-        var earlier = await context.PaymentComplements.AsNoTracking()
-            .Where(c => c.OrderInvoiceId == invoice!.Id && c.OrderPaymentId == payment.Id)
-            .OrderByDescending(c => c.RequestedAt)
-            .Select(c => (int?)c.Installment)
-            .FirstOrDefaultAsync(cancellationToken);
+        var live = issued.Where(c => c.IsLive).ToList();
+        // Each payment that ever had a complement of this invoice holds the installment of its latest one, and its amount,
+        // even while that one is refused or cancelled: the payment was received, and its complement is issued again.
+        var held = issued
+            .GroupBy(c => c.OrderPaymentId)
+            .Select(g => g.OrderByDescending(c => c.RequestedAt).First())
+            .ToList();
+        var earlier = held.FirstOrDefault(c => c.OrderPaymentId == payment.Id);
+        var others = held.Where(c => c.OrderPaymentId != payment.Id).ToList();
 
         var now = clock.UtcNow;
         var business = await context.Tenants.AsNoTracking()
@@ -550,18 +551,21 @@ internal sealed class PaymentComplementRequester(
         if (InvoicingSettings.CertificateProblem(profile, issuer.Rfc, now) is { } certificateProblem)
             return Result.Failure<Guid>(certificateProblem);
 
-        // What the invoice still owes after its live complements: the payment fits in it, and the one that pays it all settles.
-        var owed = invoice.Total - live.Sum(c => c.Amount);
+        // What the invoice still owes after the other payments that hold an installment: the payment fits in it.
+        var owed = invoice.Total - others.Sum(c => c.Amount);
         if (payment.Amount > owed)
             return Result.Failure<Guid>(PaymentComplements.AboveBalanceMessage(invoice.Number));
-        // The installments go in the order they are issued; one issued again takes back its number if no live one has it,
-        // so the chain stays whole. Each starts where the live installments before it left the invoice.
-        var installment = earlier is { } number && live.All(c => c.Installment != number)
-            ? number
-            : live.Count == 0 ? 1 : live.Max(c => c.Installment) + 1;
+        // The installments go in the order the payments got their first complement; one issued again keeps its number, so
+        // the chain stays whole whatever is issued in between. Each starts where the payments before it left the invoice.
+        var installment = earlier is not null && live.All(c => c.Installment != earlier.Installment)
+            ? earlier.Installment
+            : held.Count == 0 ? 1 : held.Max(c => c.Installment) + 1;
         if (installment > PaymentComplement.MaxInstallment)
             return Result.Failure<Guid>(PaymentComplements.TooManyInstallmentsMessage(invoice.Number));
-        var previousBalance = invoice.Total - live.Where(c => c.Installment < installment).Sum(c => c.Amount);
+        var previousBalance = invoice.Total - others.Where(c => c.Installment < installment).Sum(c => c.Amount);
+        // It settles the invoice when it pays what is left and every other payment's complement stands: then it takes what
+        // is left of each base and its IVA. While another one waits to be issued again, it takes its share like any other.
+        var settles = owed == payment.Amount && others.All(c => c.IsLive);
 
         IReadOnlyList<CfdiTransfer> transfers;
         try
@@ -570,7 +574,7 @@ internal sealed class PaymentComplementRequester(
                 invoiceDocument.Transfers.Select(PaymentComplements.Transfer).ToList(),
                 invoice.Total,
                 payment.Amount,
-                settles: owed == payment.Amount,
+                settles,
                 live.SelectMany(c => CfdiDocument.FromJson(c.Document).Payment!.Invoice.Transfers).Select(PaymentComplements.Transfer).ToList());
         }
         catch (DomainException ex)

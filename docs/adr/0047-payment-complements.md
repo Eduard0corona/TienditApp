@@ -49,17 +49,15 @@ Tomé las decisiones de la Fase 28C con la autorización permanente del dueño d
      - un saldo anterior en cero, con fracciones de centavo o arriba del total;
      - un pago mayor al saldo.
 4. **Serie propia:** `InvoicingProfile.PaymentSerie` («P» por omisión) se cambia en Configuración › Facturación junto a la de las facturas. El folio sale del contador de esa serie (`CFDI-{serie}`). Si el negocio elige la misma serie que sus facturas, comparten el contador y un folio nunca se repite.
-5. **Parcialidad y saldos, en orden de emisión,** dentro del candado de facturación del negocio:
-   - la parcialidad es la mayor de los complementos vivos de la factura más uno;
-   - el que se emite otra vez para un cobro cuyo complemento se rechazó o canceló recupera su número si ningún vivo lo tiene, para que la cadena no tenga huecos (cancelar la parcialidad 1 de 2 y emitirla otra vez da otra 1, no una 3 desde $0);
-   - el saldo anterior es el total de la factura menos lo que cubren los complementos vivos de las parcialidades anteriores;
-   - lo pagado es el monto del cobro sin propina.
-
-   Un complemento rechazado o cancelado deja de contar. Un cobro mayor que lo que la factura todavía debe según todos sus complementos vivos se rechaza.
+5. **Parcialidad y saldos, en orden de emisión,** dentro del candado de facturación del negocio. Cada cobro que ya tuvo un complemento de la factura conserva la parcialidad de su último complemento, y su monto, aunque ese complemento esté rechazado o cancelado: el cobro sí se recibió, y su complemento se emite otra vez.
+   - Un cobro nuevo toma la parcialidad más alta de los cobros que ya la tienen, más uno.
+   - El que se emite otra vez recupera su número (si ningún vivo lo tomó), así que la cadena no tiene huecos: cancelar la parcialidad 1 de 2 y emitirla otra vez da otra 1, no una 3 desde $0.
+   - El saldo anterior es el total de la factura menos los cobros de las parcialidades anteriores. Un cobro que llega mientras otro espera volver a emitirse sigue la cadena: con $300, la 1 de $100 cancelada y la 2 de $50, la 3 de $60 va de $150 a $90, no de $250 a $190.
+   - Lo pagado es el monto del cobro sin propina. Un cobro mayor que lo que la factura todavía debe después de los demás cobros se rechaza.
    - Un cobro nunca tiene dos complementos vivos, ni de facturas distintas: si su complemento de una factura anterior sigue vigente, se cancela primero.
 6. **El IVA de cada complemento** (`PaymentComplementTaxes.Prorate`) sigue la práctica de las fuentes:
    - por cada tasa de la factura (16 %, 8 %, 0 % y exento), BaseDR = redondeo(base × pago ÷ total), sin pasar de lo que queda de esa base, e ImporteDR = redondeo(BaseDR × tasa);
-   - el pago que liquida lo que la factura todavía debe toma lo que queda de cada base y de su IVA si cae dentro de los límites del SAT; si no, toma la tasa sobre esa base;
+   - el pago que liquida lo que la factura todavía debe, cuando los complementos de todos los demás cobros están vigentes, toma lo que queda de cada base y de su IVA si cae dentro de los límites del SAT; si no, toma la tasa sobre esa base (mientras otro espera volver a emitirse, toma su parte como cualquiera, y el centavo lo absorbe ese otro al final);
    - una tasa cuya parte redondea a 0 no lleva traslado (el SAT no acepta una base de 0);
    - sin traslados, ObjetoImpDR es 01;
    - una tasa fuera de las que tienen campo en los Totales se rechaza (es inalcanzable: el PAC no la habría timbrado).
@@ -79,7 +77,7 @@ Tomé las decisiones de la Fase 28C con la autorización permanente del dueño d
 12. **Acceso:** ver, emitir, reintentar y descargar el XML y el PDF de un complemento lo hace quien gestiona los pedidos (`ManageOrders`) y ve el pedido, como sus facturas. Cancelar lo hacen dueños y administradores (`RequiresTenantManager`). El complemento de otro negocio responde 404 (suite entre negocios).
 13. **Se ve en Pedidos › Factura:** debajo de las facturas, «Complementos de pago» lista cada cobro con su fecha, forma y monto. Con él va:
     - su complemento: folio, estado, parcialidad, lo pagado, el saldo anterior y el que queda, folio fiscal y si lo emitió TienditApp;
-    - «Emítelo a más tardar el …» (o «venció el …») mientras no tenga uno vivo, o el motivo por el que no se emite;
+    - mientras no tenga uno vivo, «El SAT lo pide a más tardar el …» (o «El plazo del SAT … venció el …»), con «TienditApp lo emite en unos minutos» si lo emite por su cuenta, y junto con el motivo si no se emite;
     - las acciones: «Emitir ahora» o «Emitir otra vez», «Volver a pedir el timbre», «Cancelar complemento» y las descargas.
 
     La consulta se vuelve a leer cada 30 segundos mientras algo espera al PAC, al SAT o al worker.

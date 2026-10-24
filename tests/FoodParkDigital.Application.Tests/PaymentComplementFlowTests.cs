@@ -213,6 +213,38 @@ public class PaymentComplementFlowTests
     }
 
     [Fact]
+    public async Task PaymentWhoseComplementWaitsToBeIssuedAgain_ShouldStillCount_InTheBalanceOfTheOnesIssuedMeanwhile()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id);
+        var downPayment = (await book.Context.OrderPayments.SingleAsync()).Id;
+        await book.IssuePendingAsync();
+        await book.PayAsync(sale.Id, 100m, OrderPaymentMethod.Transfer);
+        await book.IssuePendingAsync();
+        var first = await book.Context.PaymentComplements.AsNoTracking().SingleAsync(c => c.Installment == 1);
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        Assert.True((await book.CancelComplementAsync(first.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+
+        // The last $50 arrive while the down payment's complement waits to be issued again: the $50 received then still
+        // count, so the new one goes from $50 to $0, not from $150 to $100; and it takes its share of the IVA like any other.
+        await book.PayAsync(sale.Id, 50m, OrderPaymentMethod.Card);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+        var third = await book.Context.PaymentComplements.AsNoTracking().SingleAsync(c => c.Installment == 3);
+        Assert.Equal((50m, 50m, 0m), (third.PreviousBalance, third.Amount, third.RemainingBalance));
+
+        // Issued again, the down payment's takes back installment 1 from $200, and as the last one missing it takes what is
+        // left of the base and the IVA: the complements that stand add up to the invoice.
+        var again = await book.IssueComplementAsync(downPayment);
+        Assert.Equal((1, 200m, 150m), (again.Value.Installment, again.Value.PreviousBalance, again.Value.RemainingBalance));
+        var stamped = await book.Context.PaymentComplements.AsNoTracking()
+            .Where(c => c.Status == OrderInvoiceStatus.Stamped).OrderBy(c => c.Installment).ToListAsync();
+        Assert.Equal([(1, 200m, 150m), (2, 150m, 50m), (3, 50m, 0m)], stamped.Select(c => (c.Installment, c.PreviousBalance, c.RemainingBalance)));
+        var transfers = stamped.SelectMany(c => CfdiDocument.FromJson(c.Document).Payment!.Invoice.Transfers).ToList();
+        Assert.Equal((172.41m, 27.59m), (transfers.Sum(t => t.Base), transfers.Sum(t => t.Amount ?? 0m)));
+    }
+
+    [Fact]
     public async Task Payment_WithALiveComplementOfAnEarlierInvoice_ShouldNotGetAnother_AndSayWhichOne()
     {
         await using var book = await Book.OpenAsync();
