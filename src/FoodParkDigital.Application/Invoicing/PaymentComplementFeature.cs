@@ -525,6 +525,8 @@ internal sealed class PaymentComplementRequester(
         var issued = await context.PaymentComplements.AsNoTracking()
             .Where(c => c.OrderInvoiceId == invoice!.Id)
             .ToListAsync(cancellationToken);
+        // What the business forgave with a credit note of this invoice lowers what it owes (Fase 28D).
+        var writeOffNotes = (await CreditNotes.StandingAsync(context, invoice!, cancellationToken)).WriteOffNotes;
 
         var now = clock.UtcNow;
         var business = await context.Tenants.AsNoTracking()
@@ -543,15 +545,19 @@ internal sealed class PaymentComplementRequester(
         if (PaymentComplements.DocumentProblem(invoice, invoiceDocument, issuer.Rfc) is { } documentProblem)
             return Result.Failure<Guid>(documentProblem);
 
-        var position = PaymentComplements.PositionOf(invoice, issued, payment.Id);
+        var position = PaymentComplements.PositionOf(invoice, issued, writeOffNotes, payment.Id);
         if (PaymentComplements.PositionProblem(invoice, position, payment.Amount) is { } positionProblem)
             return Result.Failure<Guid>(positionProblem);
         var installment = position.Installment;
         var previousBalance = position.PreviousBalance;
-        // It settles the invoice when it pays what is left and every other payment's complement stands: then it takes what
-        // is left of each base and its IVA. While another one waits to be issued again, it takes its share like any other.
+        // It settles the invoice when it pays what is left and every other payment's complement and every write-off's credit
+        // note stand: then it takes what is left of each base and its IVA. While another one waits to be issued again, it
+        // takes its share like any other.
         var settles = position.Owed == payment.Amount && position.OthersStand;
-        var live = issued.Where(c => c.IsLive).ToList();
+        var covered = issued.Where(c => c.IsLive).SelectMany(c => CfdiDocument.FromJson(c.Document).Payment!.Invoice.Transfers)
+            .Concat(writeOffNotes.Where(n => n.IsLive).SelectMany(n => CfdiDocument.FromJson(n.Document).Transfers))
+            .Select(PaymentComplements.Transfer)
+            .ToList();
 
         IReadOnlyList<CfdiTransfer> transfers;
         try
@@ -561,7 +567,7 @@ internal sealed class PaymentComplementRequester(
                 invoice.Total,
                 payment.Amount,
                 settles,
-                live.SelectMany(c => CfdiDocument.FromJson(c.Document).Payment!.Invoice.Transfers).Select(PaymentComplements.Transfer).ToList());
+                covered);
         }
         catch (DomainException ex)
         {
@@ -692,19 +698,25 @@ public static class PaymentComplements
     /// <summary>
     /// Where a payment's complement goes among the ones of its invoice (ADR 0047): each payment that ever had a complement of
     /// it holds the installment of its latest one, and its amount, even while that one is refused or cancelled, because the
-    /// payment was received and its complement is issued again.
+    /// payment was received and its complement is issued again. What the business forgave with a credit note (Fase 28D, ADR
+    /// 0048) lowers what the invoice owes, from the installment after the one it was issued after; a refund's credit note
+    /// does not, because the money it gave back was received first.
     /// </summary>
-    /// <param name="Owed">What the invoice still owes after the other payments that hold an installment.</param>
+    /// <param name="Owed">What the invoice still owes after the other payments that hold an installment and the write-offs.</param>
     /// <param name="Installment">
     /// Its installment: the installments go in the order the payments got their first complement, and one issued again keeps
     /// its number while no live one took it, so the chain stays whole whatever is issued in between.
     /// </param>
-    /// <param name="PreviousBalance">Where the payments of the installments before it left the invoice.</param>
-    /// <param name="OthersStand">Whether the complement of every other payment that holds an installment stands.</param>
+    /// <param name="PreviousBalance">Where the payments of the installments before it, and the write-offs, left the invoice.</param>
+    /// <param name="OthersStand">
+    /// Whether the complement of every other payment that holds an installment, and the credit note of every write-off, stands.
+    /// </param>
     public sealed record Position(decimal Owed, int Installment, decimal PreviousBalance, bool OthersStand);
 
     /// <param name="issued">Every complement of the invoice, whatever its status.</param>
-    public static Position PositionOf(OrderInvoice invoice, IEnumerable<PaymentComplement> issued, Guid orderPaymentId)
+    /// <param name="writeOffNotes">The credit note that holds each write-off of the invoice that still stands.</param>
+    public static Position PositionOf(
+        OrderInvoice invoice, IEnumerable<PaymentComplement> issued, IReadOnlyList<CreditNote> writeOffNotes, Guid orderPaymentId)
     {
         var all = issued.ToList();
         var held = all
@@ -717,10 +729,11 @@ public static class PaymentComplements
             ? earlier.Installment
             : held.Count == 0 ? 1 : held.Max(c => c.Installment) + 1;
         return new Position(
-            invoice.Total - others.Sum(c => c.Amount),
+            invoice.Total - others.Sum(c => c.Amount) - writeOffNotes.Sum(n => n.Total),
             installment,
-            invoice.Total - others.Where(c => c.Installment < installment).Sum(c => c.Amount),
-            others.All(c => c.IsLive));
+            invoice.Total - others.Where(c => c.Installment < installment).Sum(c => c.Amount)
+                - writeOffNotes.Where(n => n.AfterInstallment < installment).Sum(n => n.Total),
+            others.All(c => c.IsLive) && writeOffNotes.All(n => n.IsLive));
     }
 
     /// <summary>Why the payment does not fit where its complement goes, or null when it does.</summary>
@@ -815,6 +828,9 @@ public static class PaymentComplements
         if (invoiceProblem is null)
             invoiceProblem = DocumentProblem(liveInvoice!, CfdiDocument.FromJson(liveInvoice!.Document), settings.Rfc);
         var ofLiveInvoice = complements.Where(c => c.OrderInvoiceId == liveInvoice?.Id).ToList();
+        var writeOffNotes = invoiceProblem is null
+            ? (await CreditNotes.StandingAsync(context, liveInvoice!, cancellationToken)).WriteOffNotes
+            : [];
 
         return order.Payments
             .OrderBy(payment => payment.PaidAt)
@@ -826,7 +842,7 @@ public static class PaymentComplements
                 var problem = live is not null
                     ? null
                     : FormProblem(payment.Method) ?? invoiceProblem
-                        ?? PositionProblem(liveInvoice!, PositionOf(liveInvoice!, ofLiveInvoice, payment.Id), payment.Amount);
+                        ?? PositionProblem(liveInvoice!, PositionOf(liveInvoice!, ofLiveInvoice, writeOffNotes, payment.Id), payment.Amount);
                 return new OrderPaymentComplementsDto
                 {
                     OrderPaymentId = payment.Id,

@@ -205,8 +205,7 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
 
         if (order.RefundedAmount > 0)
         {
-            draft.Warnings.Add(
-                $"La venta tiene reembolsos por {Money(order.RefundedAmount)}: esta factura ampara la venta completa y lo devuelto requiere una nota de crédito.");
+            draft.Warnings.Add(RefundedWarning(order.RefundedAmount));
         }
 
         draft.IsReadyToStamp = draft.Blockers.Count == 0;
@@ -289,12 +288,21 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
     }
 
     /// <summary>
-    /// Part of the sale was forgiven (Fase 26B, ADR 0034): the invoice goes for the whole sale, and what was forgiven needs a
-    /// credit note (CFDI de egreso) that TienditApp does not issue yet.
+    /// Part of the sale was forgiven (Fase 26B, ADR 0034): the invoice goes for the whole sale, and what was forgiven gets its
+    /// credit note (CFDI de egreso, Fase 28D) once the invoice is stamped.
     /// </summary>
     public static string WrittenOffWarning(decimal writtenOff) =>
-        $"Se condonaron {OrderStatusLabels.FormatMoney(writtenOff)} de esta venta: la factura va por el total y lo condonado " +
-        "requiere una nota de crédito (CFDI de egreso), que TienditApp todavía no genera. Consúltalo con tu contador.";
+        $"Se condonaron {OrderStatusLabels.FormatMoney(writtenOff)} de esta venta: la factura va por el total y TienditApp " +
+        "emite la nota de crédito (CFDI de egreso) de lo condonado cuando quede timbrada.";
+
+    /// <summary>
+    /// Part of the sale was given back: the invoice goes for the whole sale, and each refund with a form of the SAT's gets
+    /// its credit note (Fase 28D) once the invoice is stamped.
+    /// </summary>
+    public static string RefundedWarning(decimal refunded) =>
+        $"La venta tiene reembolsos por {OrderStatusLabels.FormatMoney(refunded)}: la factura va por el total y TienditApp emite " +
+        "la nota de crédito (CFDI de egreso) de cada reembolso cuando quede timbrada, salvo los devueltos como «Otro» o como " +
+        "saldo a favor.";
 
     private static void SetPayment(CfdiDraftDto draft, decimal balance, IReadOnlyList<(OrderPaymentMethod Method, decimal Amount)> payments)
     {

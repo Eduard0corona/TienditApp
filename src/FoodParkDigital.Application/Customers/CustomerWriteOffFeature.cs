@@ -2,6 +2,7 @@ using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
@@ -179,6 +180,8 @@ public class WriteOffCustomerAccountCommandHandler : IRequestHandler<WriteOffCus
 /// Deshacer lo condonado (Fase 26B, ADR 0034): the owner or an admin undoes a write-off made by mistake. Its record stays,
 /// with when and who undid it, and what it forgave is owed again (<see cref="Order.ReverseWriteOff"/>). Once: a write-off
 /// undone is refused the second time, so sending it twice undoes it once. Inside the customer's credit lock, like a write-off.
+/// While its credit note stands with the SAT (Fase 28D) it is not undone: the note is cancelled first, under the business's
+/// invoicing lock, so no note is issued for it meanwhile.
 /// </summary>
 [RequiresTenantManager]
 public record ReverseCustomerWriteOffCommand : IRequest<Result<CustomerAccountDto>>, ITransactionalRequest
@@ -194,6 +197,10 @@ public class ReverseCustomerWriteOffCommandHandler : IRequestHandler<ReverseCust
     private readonly IPhoneNormalizationService _phones;
     private readonly IDateTimeProvider _clock;
     private readonly ICustomerCreditLock _creditLock;
+    private readonly IInvoicingLock _invoicingLock;
+
+    public static string LiveCreditNoteMessage(string number) =>
+        $"Esta condonación tiene la nota de crédito {number} vigente: cancélala en Pedidos › Factura antes de deshacerla.";
 
     public ReverseCustomerWriteOffCommandHandler(
         IApplicationDbContext context,
@@ -201,7 +208,8 @@ public class ReverseCustomerWriteOffCommandHandler : IRequestHandler<ReverseCust
         ICurrentUserService currentUser,
         IPhoneNormalizationService phones,
         IDateTimeProvider clock,
-        ICustomerCreditLock creditLock)
+        ICustomerCreditLock creditLock,
+        IInvoicingLock invoicingLock)
     {
         _context = context;
         _tenant = tenant;
@@ -209,6 +217,7 @@ public class ReverseCustomerWriteOffCommandHandler : IRequestHandler<ReverseCust
         _phones = phones;
         _clock = clock;
         _creditLock = creditLock;
+        _invoicingLock = invoicingLock;
     }
 
     public async Task<Result<CustomerAccountDto>> Handle(ReverseCustomerWriteOffCommand request, CancellationToken cancellationToken)
@@ -227,6 +236,10 @@ public class ReverseCustomerWriteOffCommandHandler : IRequestHandler<ReverseCust
 
         // A payment, a sale on credit or a write-off for the same customer waits: each one counts what the other left.
         await _creditLock.AcquireAsync(_tenant.TenantId, account.Phone, cancellationToken);
+        // And its credit note (Fase 28D): none is issued for it while it is undone.
+        await _invoicingLock.AcquireAsync(_tenant.TenantId, cancellationToken);
+        if (await CreditNotes.LiveOfWriteOffAsync(_context, request.WriteOffId, cancellationToken) is { } note)
+            return Result.Failure<CustomerAccountDto>(LiveCreditNoteMessage(note.Number));
         var order = await _context.Orders
             .Include(o => o.WriteOffs)
             .FirstAsync(o => o.Id == target.Id, cancellationToken);

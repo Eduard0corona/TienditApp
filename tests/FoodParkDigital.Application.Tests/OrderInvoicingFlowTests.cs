@@ -300,7 +300,7 @@ public class OrderInvoicingFlowTests
     }
 
     [Fact]
-    public async Task Issue_ShouldOnlyTakeAPaidSale_WithNothingGivenBack_ToANamedCustomer_WithTheBusinessesCsd()
+    public async Task Issue_ShouldOnlyTakeAPaidSale_ToANamedCustomer_WithTheBusinessesCsd_EvenWithSomethingGivenBack()
     {
         await using var book = await Book.OpenAsync(csd: false);
         var unpaid = await book.OrderAsync(paid: false);
@@ -320,7 +320,9 @@ public class OrderInvoicingFlowTests
             .Handle(new RefundOrderCommand { OrderId = paid.Id, Amount = 10m, Method = OrderPaymentMethod.Card, Reason = "Faltó uno", RestockItems = false },
                 CancellationToken.None);
         Assert.True(refund.IsSuccess, refund.Error);
-        Assert.Contains("nota de crédito", (await book.IssueAsync(paid.Id)).Error);
+        // What was given back no longer holds the invoice back (Fase 28D): it goes for the whole sale, and the refund gets
+        // its credit note once it is stamped.
+        Assert.Null((await book.InvoicingAsync(paid.Id)).Problem);
 
         book.Gateway.IsConfigured = false;
         Assert.Equal(InvoicingSettings.NotAvailableMessage, (await book.IssueAsync(paid.Id)).Error);

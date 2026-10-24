@@ -26,6 +26,8 @@ public class InvoicingSettingsDto
     public string Serie { get; set; } = OrderInvoice.DefaultSerie;
     /// <summary>The serie of its payment complements (Fase 28C).</summary>
     public string PaymentSerie { get; set; } = PaymentComplement.DefaultSerie;
+    /// <summary>The serie of its credit notes (Fase 28D).</summary>
+    public string CreditNoteSerie { get; set; } = CreditNote.DefaultSerie;
     /// <summary>The business's RFC, legal name, regime and fiscal postal code, from Mi negocio.</summary>
     public string? Rfc { get; set; }
     public string? LegalName { get; set; }
@@ -288,10 +290,12 @@ public class RemoveInvoicingCertificateCommandHandler
 }
 
 /// <summary>
-/// The serie of the business's next invoices and, when given, of its next payment complements (Fase 28C; owners and admins).
+/// The serie of the business's next invoices and, when given, of its next payment complements (Fase 28C) and credit notes
+/// (Fase 28D; owners and admins).
 /// </summary>
 [RequiresTenantManager]
-public record ChangeInvoiceSerieCommand(string Serie, string? PaymentSerie = null) : IRequest<Result<InvoicingSettingsDto>>;
+public record ChangeInvoiceSerieCommand(string Serie, string? PaymentSerie = null, string? CreditNoteSerie = null)
+    : IRequest<Result<InvoicingSettingsDto>>;
 
 public class ChangeInvoiceSerieCommandHandler : IRequestHandler<ChangeInvoiceSerieCommand, Result<InvoicingSettingsDto>>
 {
@@ -326,13 +330,16 @@ public class ChangeInvoiceSerieCommandHandler : IRequestHandler<ChangeInvoiceSer
             profile.ChangeSerie(request.Serie);
             if (request.PaymentSerie is not null)
                 profile.ChangePaymentSerie(request.PaymentSerie);
+            if (request.CreditNoteSerie is not null)
+                profile.ChangeCreditNoteSerie(request.CreditNoteSerie);
         }
         catch (DomainException ex)
         {
             return Result.Failure<InvoicingSettingsDto>(ex.Message);
         }
 
-        InvoicingSettings.Audit(_context, tenantId, _currentUser, "InvoiceSerieChanged", new { profile.Serie, profile.PaymentSerie });
+        InvoicingSettings.Audit(
+            _context, tenantId, _currentUser, "InvoiceSerieChanged", new { profile.Serie, profile.PaymentSerie, profile.CreditNoteSerie });
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(await InvoicingSettings.ReadAsync(_context, tenantId, _gateway, _clock.UtcNow, cancellationToken));
     }
@@ -425,6 +432,7 @@ internal static class InvoicingSettings
             Sandbox = gateway.Sandbox,
             Serie = profile?.Serie ?? OrderInvoice.DefaultSerie,
             PaymentSerie = profile?.PaymentSerie ?? PaymentComplement.DefaultSerie,
+            CreditNoteSerie = profile?.CreditNoteSerie ?? CreditNote.DefaultSerie,
             Rfc = rfc,
             LegalName = tenant?.LegalName?.Trim(),
             FiscalRegime = regime,

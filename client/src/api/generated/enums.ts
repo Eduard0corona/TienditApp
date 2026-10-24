@@ -123,6 +123,12 @@ export const CourierSettlementAdjustmentKind = {
 } as const;
 export type CourierSettlementAdjustmentKind = (typeof CourierSettlementAdjustmentKind)[keyof typeof CourierSettlementAdjustmentKind];
 
+export const CreditNoteAdjustment = {
+  Refund: 0,
+  WriteOff: 1,
+} as const;
+export type CreditNoteAdjustment = (typeof CreditNoteAdjustment)[keyof typeof CreditNoteAdjustment];
+
 export const CustomerBalanceEntryKind = {
   Deposit: 0,
   Refund: 1,

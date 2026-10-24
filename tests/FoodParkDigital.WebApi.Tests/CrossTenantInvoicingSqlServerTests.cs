@@ -147,6 +147,51 @@ public sealed class CrossTenantInvoicingSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task CreditNotes_OfAnotherBusiness_ShouldBeInvisible_AndUntouchable()
+    {
+        var mine = await _api.SignUpAsync("notas-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("notas-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Nota A"), phone: "5512345678", name: "Karla");
+        var invoice = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }));
+        // Part of it is given back by card: the refund gets its credit note.
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/orders/{order}/refunds",
+            new { amount = 5m, method = 1, reason = "Faltó uno", restockItems = false }));
+        var refund = (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/orders/{order}")))
+            .GetProperty("adjustments")[0].GetProperty("adjustmentId").GetGuid();
+
+        // The other owner, even with the header of my business, cannot issue the credit note of my refund.
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"/api/v1/invoicing/refunds/{refund}/credit-notes", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
+            mine, HttpMethod.Post, $"/api/v1/invoicing/refunds/{refund}/credit-notes"))).StatusCode);
+        var note = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"/api/v1/invoicing/refunds/{refund}/credit-notes", null));
+        var noteId = note.GetProperty("id").GetGuid();
+        Assert.Equal(((int)OrderInvoiceStatus.Stamped, "NC-1", 5m), (
+            note.GetProperty("status").GetInt32(), note.GetProperty("number").GetString(), note.GetProperty("total").GetDecimal()));
+
+        // Nor see, retry, cancel or download it.
+        foreach (var url in new[] { $"/api/v1/invoicing/credit-notes/{noteId}/xml", $"/api/v1/invoicing/credit-notes/{noteId}/pdf" })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync(url)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(mine, HttpMethod.Get, url))).StatusCode);
+        }
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"/api/v1/invoicing/credit-notes/{noteId}/retry", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
+            mine, HttpMethod.Post, $"/api/v1/invoicing/credit-notes/{noteId}/cancel", new { motive = (int)CfdiCancellationMotive.NotCarriedOut }))).StatusCode);
+        Assert.Empty(_api.Invoicing.Cancellations.Where(c => c.Uuid == note.GetProperty("uuid").GetString()));
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.CreditNotes.ToListAsync()));
+
+        // Mine: its XML downloads, and the invoice is not cancelled while the credit note stands.
+        Assert.Equal(HttpStatusCode.OK, (await mine.Client.GetAsync($"/api/v1/invoicing/credit-notes/{noteId}/xml")).StatusCode);
+        var blocked = await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoice.GetProperty("id").GetGuid()}/cancel", new { motive = (int)CfdiCancellationMotive.ErrorsWithoutReplacement });
+        Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
+        Assert.Contains("NC-1", await blocked.Content.ReadAsStringAsync());
+    }
+
+    [SqlServerFact]
     public async Task TheSamePaymentsComplementIssuedAtOnce_ShouldBeStampedOnce_AndGiveTheOtherFolioBack()
     {
         var mine = await _api.SignUpAsync("complementos-carrera", TwoBusinessesApi.FoodBusiness);

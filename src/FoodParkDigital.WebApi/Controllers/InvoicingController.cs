@@ -12,8 +12,9 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// <summary>
 /// Invoicing (Fase 28A, ADR 0045): Configuración › Facturación (the business's CSD and serie, for owners and admins) and
 /// the CFDI 4.0 invoice of an order, stamped through the platform's PAC, downloaded and cancelled; the global invoice of a
-/// period to the general public (Fase 28B, ADR 0046), for owners and admins; and the payment complements of the payments
-/// of an invoice in installments (Fase 28C, ADR 0047).
+/// period to the general public (Fase 28B, ADR 0046), for owners and admins; the payment complements of the payments of an
+/// invoice in installments (Fase 28C, ADR 0047); and the credit notes of the refunds and write-offs of an invoiced order
+/// (Fase 28D, ADR 0048).
 /// </summary>
 [ApiController]
 [Route("api/v1/invoicing")]
@@ -54,7 +55,8 @@ public class InvoicingController : ControllerBase
     public async Task<ActionResult<InvoicingSettingsDto>> ChangeSerie(
         [FromBody] ChangeInvoiceSerieRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new ChangeInvoiceSerieCommand(request.Serie, request.PaymentSerie), cancellationToken);
+        var result = await _mediator.Send(
+            new ChangeInvoiceSerieCommand(request.Serie, request.PaymentSerie, request.CreditNoteSerie), cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
@@ -138,6 +140,44 @@ public class InvoicingController : ControllerBase
         => DownloadAsync(new GetPaymentComplementFileQuery(complementId, OrderInvoiceFileKind.Pdf), cancellationToken);
 
     /// <summary>
+    /// Issues the credit note of a refund of an order whose invoice is stamped (Fase 28D): before TienditApp does it on its
+    /// own, or again after a refused or cancelled one. It answers the credit note as it ended up.
+    /// </summary>
+    [HttpPost("refunds/{refundId:guid}/credit-notes")]
+    public Task<ActionResult<CreditNoteDto>> IssueRefundCreditNote(Guid refundId, CancellationToken cancellationToken)
+        => IssueCreditNoteAsync(CreditNoteAdjustment.Refund, refundId, cancellationToken);
+
+    /// <summary>The same for a write-off that still stands.</summary>
+    [HttpPost("write-offs/{writeOffId:guid}/credit-notes")]
+    public Task<ActionResult<CreditNoteDto>> IssueWriteOffCreditNote(Guid writeOffId, CancellationToken cancellationToken)
+        => IssueCreditNoteAsync(CreditNoteAdjustment.WriteOff, writeOffId, cancellationToken);
+
+    /// <summary>Asks the PAC again for a credit note still stamping, with the same CFDI.</summary>
+    [HttpPost("credit-notes/{creditNoteId:guid}/retry")]
+    public async Task<ActionResult<CreditNoteDto>> RetryCreditNote(Guid creditNoteId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new RetryCreditNoteCommand(creditNoteId), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    /// <summary>Cancels a stamped credit note with the SAT (motive 02 or 03), owners and admins.</summary>
+    [HttpPost("credit-notes/{creditNoteId:guid}/cancel")]
+    public async Task<ActionResult<CreditNoteDto>> CancelCreditNote(
+        Guid creditNoteId, [FromBody] CancelOrderInvoiceRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CancelCreditNoteCommand(creditNoteId, request.Motive), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    [HttpGet("credit-notes/{creditNoteId:guid}/xml")]
+    public Task<IActionResult> DownloadCreditNoteXml(Guid creditNoteId, CancellationToken cancellationToken)
+        => DownloadAsync(new GetCreditNoteFileQuery(creditNoteId, OrderInvoiceFileKind.Xml), cancellationToken);
+
+    [HttpGet("credit-notes/{creditNoteId:guid}/pdf")]
+    public Task<IActionResult> DownloadCreditNotePdf(Guid creditNoteId, CancellationToken cancellationToken)
+        => DownloadAsync(new GetCreditNoteFileQuery(creditNoteId, OrderInvoiceFileKind.Pdf), cancellationToken);
+
+    /// <summary>
     /// The business's global invoices, the newest period first; the search finds one by its folio, its UUID or the folio of
     /// a sale it covers.
     /// </summary>
@@ -203,6 +243,13 @@ public class InvoicingController : ControllerBase
     public Task<IActionResult> DownloadGlobalPdf(Guid invoiceId, CancellationToken cancellationToken)
         => DownloadAsync(new GetGlobalInvoiceFileQuery(invoiceId, OrderInvoiceFileKind.Pdf), cancellationToken);
 
+    private async Task<ActionResult<CreditNoteDto>> IssueCreditNoteAsync(
+        CreditNoteAdjustment adjustment, Guid adjustmentId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new IssueCreditNoteCommand(adjustment, adjustmentId), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
     private async Task<IActionResult> DownloadAsync(IRequest<Result<PrivateFileDownload>> query, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(query, cancellationToken);
@@ -232,6 +279,8 @@ public class ChangeInvoiceSerieRequest
     public string Serie { get; init; } = string.Empty;
     /// <summary>The serie of the payment complements (Fase 28C); left out, it stays as it is.</summary>
     public string? PaymentSerie { get; init; }
+    /// <summary>The serie of the credit notes (Fase 28D); left out, it stays as it is.</summary>
+    public string? CreditNoteSerie { get; init; }
 }
 
 public class IssueOrderInvoiceRequest

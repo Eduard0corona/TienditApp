@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Fiscal.Entities;
 
 namespace FoodParkDigital.Application.Invoicing;
 
@@ -10,6 +11,7 @@ namespace FoodParkDigital.Application.Invoicing;
 /// The CFDI 4.0 an invoice asks the PAC for (Fase 28A, ADR 0045), with every amount TienditApp computed for the order's
 /// draft: the PAC seals it as it is. It is saved with the invoice, so every attempt sends exactly this one. A payment
 /// complement (Fase 28C, ADR 0047) is a CFDI of type P: worth zero, without form or method of payment, with its payment.
+/// A credit note (Fase 28D, ADR 0048) is a CFDI of type E, related to the invoice it lowers.
 /// </summary>
 public sealed record CfdiDocument
 {
@@ -45,9 +47,15 @@ public sealed record CfdiDocument
     /// <summary>The payment a payment complement declares (Pagos 2.0, Fase 28C); an invoice has none.</summary>
     public CfdiDocumentPayment? Payment { get; init; }
 
+    /// <summary>The CFDI it is related to (CfdiRelacionados): a credit note's invoice (Fase 28D); an invoice has none.</summary>
+    public CfdiDocumentRelated? Related { get; init; }
+
     /// <summary>c_TipoDeComprobante of a payment complement, and c_Moneda «no currency» it carries.</summary>
     public const string PaymentVoucherType = "P";
     public const string NoCurrency = "XXX";
+
+    /// <summary>c_TipoDeComprobante of a credit note: «Egreso».</summary>
+    public const string CreditNoteVoucherType = "E";
 
     /// <summary>
     /// The CFDI of a payment complement (Fase 28C): worth zero, in no currency, with the only concept «Pago», for the
@@ -83,6 +91,60 @@ public sealed record CfdiDocument
             Transfers = [],
             Payment = payment
         };
+
+    /// <summary>
+    /// The CFDI of a credit note (Fase 28D): of type E, paid in one exhibition with the form of what it credits, for the
+    /// invoice's receiver with the use a credit note takes, related to the invoice (TipoRelacion 01). It has one concept per
+    /// IVA rate of what it credits, with that rate's base and IVA, and one more, not subject to tax, for the share of the
+    /// invoice without IVA transfers; their amounts add up to exactly what it credits.
+    /// </summary>
+    public static CfdiDocument ForCreditNote(
+        CfdiDocumentIssuer issuer,
+        CfdiDocumentReceiver invoiceReceiver,
+        string expeditionPostalCode,
+        string serie,
+        long folio,
+        DateTime localDate,
+        string paymentForm,
+        string description,
+        IReadOnlyList<CfdiTransfer> transfers,
+        decimal notSubject,
+        string invoiceUuid)
+    {
+        var documentTransfers = transfers.Select(Transfer).ToList();
+        var concepts = documentTransfers
+            .Select(transfer => new CfdiDocumentConcept(
+                SatCatalog.PaymentReceivedProductCode, SatCatalog.ActivityUnitCode, description, 1m, transfer.Base, transfer.Base,
+                SatCatalog.Code(CfdiTaxObject.Subject), transfer))
+            .ToList();
+        if (notSubject > 0)
+        {
+            concepts.Add(new CfdiDocumentConcept(
+                SatCatalog.PaymentReceivedProductCode, SatCatalog.ActivityUnitCode, description, 1m, notSubject, notSubject,
+                SatCatalog.Code(CfdiTaxObject.NotSubject), null));
+        }
+
+        var subTotal = concepts.Sum(concept => concept.Amount);
+        var transferred = documentTransfers.Sum(transfer => transfer.Amount ?? 0m);
+        return new CfdiDocument
+        {
+            Serie = serie,
+            Folio = folio.ToString(CultureInfo.InvariantCulture),
+            Date = localDate.ToString(DateFormat, CultureInfo.InvariantCulture),
+            PaymentForm = paymentForm,
+            PaymentMethod = CfdiInvoice.PaidInOneExhibition,
+            ExpeditionPostalCode = expeditionPostalCode,
+            VoucherType = CreditNoteVoucherType,
+            SubTotal = subTotal,
+            TotalTransferred = transferred,
+            Total = subTotal + transferred,
+            Issuer = issuer,
+            Receiver = invoiceReceiver with { CfdiUse = SatCatalog.CreditNoteUseFor(invoiceReceiver.FiscalRegime) },
+            Concepts = concepts,
+            Transfers = documentTransfers,
+            Related = new CfdiDocumentRelated(SatCatalog.CreditNoteRelation, [invoiceUuid])
+        };
+    }
 
     /// <summary>
     /// The CFDI of a draft ready to stamp, for a named receiver, with its serie, folio and date (local to the business).
@@ -128,6 +190,9 @@ public sealed record CfdiDocument
 
     private static CfdiDocumentTransfer Transfer(CfdiTransferDto transfer)
         => new(transfer.Base, transfer.Tax, transfer.FactorType, transfer.RateOrQuota, transfer.Amount);
+
+    private static CfdiDocumentTransfer Transfer(CfdiTransfer transfer)
+        => new(transfer.Base, CfdiTransfer.IvaTaxCode, transfer.FactorType, transfer.RateOrQuota, transfer.IsExempt ? null : transfer.Amount);
 }
 
 public sealed record CfdiDocumentIssuer(string Rfc, string Name, string FiscalRegime);
@@ -154,6 +219,9 @@ public sealed record CfdiDocumentConcept(
     [JsonIgnore]
     public IReadOnlyList<CfdiDocumentTransfer> AllTransfers => Transfers ?? (Transfer is null ? [] : [Transfer]);
 }
+
+/// <summary>CfdiRelacionados: c_TipoRelacion and the UUIDs of the CFDI it is related to.</summary>
+public sealed record CfdiDocumentRelated(string RelationType, IReadOnlyList<string> Uuids);
 
 /// <summary>InformacionGlobal: c_Periodicidad, c_Meses and the year of the period a global invoice covers.</summary>
 public sealed record CfdiDocumentGlobalInformation(string Periodicity, string Months, int Year);
