@@ -1291,7 +1291,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `invoicing.test.ts` (+4): el archivo del complemento; se vuelve a leer mientras algo espera al PAC, al SAT o al worker, y deja de hacerlo cuando lo que queda es a mano.
     - `CfdiDraftModal.test.tsx` (+1): los complementos bajo la factura PPD, que dice «en parcialidades (PPD)».
     - `Invoicing.test.tsx` (+1): las dos series se guardan juntas.
-  - **Total:** `dotnet test` con SQL Server 2022, 3,701 pruebas sin fallos ni omitidas (Domain 1,085, Application 1,635, Infrastructure 532, WebApi 449).
+  - **Total:** `dotnet test` con SQL Server 2022, 3,702 pruebas sin fallos ni omitidas (Domain 1,085, Application 1,636, Infrastructure 532, WebApi 449).
   - **Cliente en total:** 164 archivos y 1,121 pruebas.
   - **Primera visita:** 179,797 B de 179,900 B, sin subir el presupuesto: la facturación se carga aparte.
   - **Escenas visuales:** `facturacion.spec.ts` (+4): los complementos de pago de la factura en parcialidades (escritorio, teléfono y oscuro) y el diálogo para cancelar uno.
