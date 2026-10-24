@@ -9,6 +9,7 @@ import { EMPTY_RECEIVER, normalizeReceiver, PAYMENT_FORMS, PAYMENT_METHODS } fro
 import { formatMoney } from '../../utils/money';
 import CfdiReceiverFields from '../invoicing/CfdiReceiverFields';
 import OrderInvoiceList from '../invoicing/OrderInvoiceList';
+import CreditNoteList from '../invoicing/CreditNoteList';
 import PaymentComplementList from '../invoicing/PaymentComplementList';
 
 interface CfdiDraftModalProps {
@@ -152,6 +153,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             canCancel={canCancel}
           />
         )}
+        {invoicing && <CreditNoteList orderId={orderId} adjustments={invoicing.adjustments} canCancel={canCancel} />}
 
         {orderCancelled && invoicing && (
           <p className="text-muted small mb-0">

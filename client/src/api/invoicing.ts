@@ -2,17 +2,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import api from './axios';
 import { apiRequest, type Schemas } from './typedClient';
-import { CfdiCancellationMotive, GlobalInvoicePeriodicity, OrderInvoiceStatus } from '../types';
+import { CfdiCancellationMotive, CreditNoteAdjustment, GlobalInvoicePeriodicity, OrderInvoiceStatus } from '../types';
 
 // Invoicing (Fase 28A, ADR 0045): Configuración › Facturación and the invoice of an order; the global invoice of a period
-// (Fase 28B, ADR 0046) in Reportes › Factura global; and the payment complements of an invoice in installments (Fase 28C,
-// ADR 0047). Kept out of queries.ts, which the first visit loads.
+// (Fase 28B, ADR 0046) in Reportes › Factura global; the payment complements of an invoice in installments (Fase 28C,
+// ADR 0047); and the credit notes of an invoiced order's refunds and write-offs (Fase 28D, ADR 0048). Kept out of
+// queries.ts, which the first visit loads.
 
 export type InvoicingSettings = Schemas['InvoicingSettingsDto'];
 export type OrderInvoicing = Schemas['OrderInvoicingDto'];
 export type OrderInvoice = Schemas['OrderInvoiceDto'];
 export type OrderPaymentComplements = Schemas['OrderPaymentComplementsDto'];
 export type PaymentComplement = Schemas['PaymentComplementDto'];
+export type OrderAdjustment = Schemas['OrderAdjustmentDto'];
+export type CreditNote = Schemas['CreditNoteDto'];
 export type GlobalInvoice = Schemas['GlobalInvoiceDto'];
 export type GlobalInvoiceDetail = Schemas['GlobalInvoiceDetailDto'];
 export type GlobalInvoiceDraft = Schemas['GlobalInvoiceDraftDto'];
@@ -70,16 +73,16 @@ export function useRemoveInvoicingCertificate() {
   return useSettingsChange(() => apiRequest('delete', '/api/v1/invoicing/settings/certificate'));
 }
 
-/** The serie of the invoices and the one of the payment complements: each one keeps its own folios. */
+/** The serie of the invoices, the one of the payment complements and the one of the credit notes: each keeps its folios. */
 export function useChangeInvoiceSerie() {
-  return useSettingsChange((body: { serie: string; paymentSerie: string }) =>
+  return useSettingsChange((body: { serie: string; paymentSerie: string; creditNoteSerie: string }) =>
     apiRequest('put', '/api/v1/invoicing/settings/serie', { body }));
 }
 
 /**
- * Whether the order can be invoiced, whom to, its invoices and the complements of its payments: read again each time the
- * invoice opens (the order may have been paid, or the customer's fiscal data changed) and while one of them waits for the
- * PAC or the SAT, or a payment waits for the complement TienditApp issues on its own.
+ * Whether the order can be invoiced, whom to, its invoices, the complements of its payments and the credit notes of its
+ * refunds and write-offs: read again each time the invoice opens (the order may have been paid, or the customer's fiscal
+ * data changed) and while one of them waits for the PAC or the SAT, or for what TienditApp issues on its own.
  */
 export function useOrderInvoicing(orderId: string) {
   return useQuery({
@@ -91,12 +94,13 @@ export function useOrderInvoicing(orderId: string) {
 }
 
 /**
- * Whether something of the order's invoicing changes on its own soon: an invoice or a complement waits for the PAC or the
- * SAT, or a payment waits for the complement TienditApp issues in its next pass.
+ * Whether something of the order's invoicing changes on its own soon: an invoice, a complement or a credit note waits for
+ * the PAC or the SAT, or a payment, a refund or a write-off waits for what TienditApp issues in its next pass.
  */
-export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments'>): boolean {
+export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments' | 'adjustments'>): boolean {
   return data.invoices.some((invoice) => isWaiting(invoice))
-    || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some((complement) => isWaiting(complement)));
+    || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some((complement) => isWaiting(complement)))
+    || data.adjustments.some((adjustment) => adjustment.awaitsAutomaticIssue || adjustment.creditNotes.some((note) => isWaiting(note)));
 }
 
 /** Preview of the invoice of an order, read again each time it opens; without a receiver it goes to the general public. */
@@ -165,6 +169,27 @@ export function useCancelPaymentComplement(orderId: string) {
     apiRequest('post', '/api/v1/invoicing/payment-complements/{complementId}/cancel', { path: { complementId }, body: { motive } }));
 }
 
+/**
+ * Issues the credit note of a refund or of a write-off of an order whose invoice is stamped: before TienditApp does it on
+ * its own, or again after a refused or cancelled one.
+ */
+export function useIssueCreditNote(orderId: string) {
+  return useInvoiceChange(orderId, ({ kind, adjustmentId }: { kind: CreditNoteAdjustment; adjustmentId: string }) =>
+    kind === CreditNoteAdjustment.Refund
+      ? apiRequest('post', '/api/v1/invoicing/refunds/{refundId}/credit-notes', { path: { refundId: adjustmentId } })
+      : apiRequest('post', '/api/v1/invoicing/write-offs/{writeOffId}/credit-notes', { path: { writeOffId: adjustmentId } }));
+}
+
+export function useRetryCreditNote(orderId: string) {
+  return useInvoiceChange(orderId, (creditNoteId: string) =>
+    apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/retry', { path: { creditNoteId } }));
+}
+
+export function useCancelCreditNote(orderId: string) {
+  return useInvoiceChange(orderId, ({ creditNoteId, motive }: { creditNoteId: string; motive: CfdiCancellationMotive }) =>
+    apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/cancel', { path: { creditNoteId }, body: { motive } }));
+}
+
 /** The stamped XML or the PDF of an invoice, fetched with the session. */
 export function downloadInvoiceFile(invoiceId: string, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
   return downloadFile(`/invoicing/invoices/${encodeURIComponent(invoiceId)}/${kind}`, kind);
@@ -173,6 +198,11 @@ export function downloadInvoiceFile(invoiceId: string, kind: 'xml' | 'pdf'): Pro
 /** The stamped XML or the PDF of a payment complement, fetched with the session. */
 export function downloadPaymentComplementFile(complementId: string, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
   return downloadFile(`/invoicing/payment-complements/${encodeURIComponent(complementId)}/${kind}`, kind, 'complemento');
+}
+
+/** The stamped XML or the PDF of a credit note, fetched with the session. */
+export function downloadCreditNoteFile(creditNoteId: string, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
+  return downloadFile(`/invoicing/credit-notes/${encodeURIComponent(creditNoteId)}/${kind}`, kind, 'nota-de-credito');
 }
 
 /** The stamped XML or the PDF of a global invoice, fetched with the session. */

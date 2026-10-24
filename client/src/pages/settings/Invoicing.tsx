@@ -248,15 +248,21 @@ function SerieCard({ data }: { data: InvoicingSettings }) {
   const change = useChangeInvoiceSerie();
   const [serie, setSerie] = useState(data.serie);
   const [paymentSerie, setPaymentSerie] = useState(data.paymentSerie);
-  const unchanged = serie.trim().toUpperCase() === data.serie && paymentSerie.trim().toUpperCase() === data.paymentSerie;
+  const [creditNoteSerie, setCreditNoteSerie] = useState(data.creditNoteSerie);
+  const unchanged = serie.trim().toUpperCase() === data.serie && paymentSerie.trim().toUpperCase() === data.paymentSerie
+    && creditNoteSerie.trim().toUpperCase() === data.creditNoteSerie;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      const updated = await change.mutateAsync({ serie: serie.trim(), paymentSerie: paymentSerie.trim() });
+      const updated = await change.mutateAsync({
+        serie: serie.trim(), paymentSerie: paymentSerie.trim(), creditNoteSerie: creditNoteSerie.trim(),
+      });
       setSerie(updated.serie);
       setPaymentSerie(updated.paymentSerie);
-      toast.success(`Tus próximas facturas llevan la serie ${updated.serie}, y sus complementos de pago, la ${updated.paymentSerie}.`);
+      setCreditNoteSerie(updated.creditNoteSerie);
+      toast.success(`Tus próximas facturas llevan la serie ${updated.serie}; sus complementos de pago, la ${updated.paymentSerie}, `
+        + `y sus notas de crédito, la ${updated.creditNoteSerie}.`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo cambiar la serie.'));
     }
@@ -267,25 +273,30 @@ function SerieCard({ data }: { data: InvoicingSettings }) {
       <div className="card-body">
         <h2 className="h5">Series</h2>
         <form className="row g-2 align-items-end" onSubmit={submit}>
-          <div className="col-sm-4">
+          <div className="col-sm-6 col-lg-3">
             <label className="form-label small mb-1" htmlFor="invoice-serie">Serie de las facturas</label>
             <input id="invoice-serie" className="form-control text-uppercase" maxLength={10} required pattern={SERIE_PATTERN}
               title={SERIE_HINT} value={serie} onChange={(event) => setSerie(event.target.value)} />
           </div>
-          <div className="col-sm-4">
+          <div className="col-sm-6 col-lg-3">
             <label className="form-label small mb-1" htmlFor="payment-serie">Serie de los complementos de pago</label>
             <input id="payment-serie" className="form-control text-uppercase" maxLength={10} required pattern={SERIE_PATTERN}
               title={SERIE_HINT} value={paymentSerie} onChange={(event) => setPaymentSerie(event.target.value)} />
           </div>
-          <div className="col-sm-4">
+          <div className="col-sm-6 col-lg-3">
+            <label className="form-label small mb-1" htmlFor="credit-note-serie">Serie de las notas de crédito</label>
+            <input id="credit-note-serie" className="form-control text-uppercase" maxLength={10} required pattern={SERIE_PATTERN}
+              title={SERIE_HINT} value={creditNoteSerie} onChange={(event) => setCreditNoteSerie(event.target.value)} />
+          </div>
+          <div className="col-sm-6 col-lg-3">
             <button type="submit" className="btn btn-outline-secondary" disabled={change.isPending || unchanged}>
               Guardar series
             </button>
           </div>
         </form>
         <p className="small text-muted mb-0 mt-2">
-          Cada serie lleva sus propios folios: F-1, F-2… y P-1, P-2… (con la misma para las dos, comparten folios). Cambiarlas no
-          toca lo ya timbrado.
+          Cada serie lleva sus propios folios: F-1, F-2…, P-1, P-2… y NC-1, NC-2… (con la misma serie, comparten folios). Cambiarlas
+          no toca lo ya timbrado.
         </p>
       </div>
     </div>

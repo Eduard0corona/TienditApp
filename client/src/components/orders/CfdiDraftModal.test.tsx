@@ -18,7 +18,7 @@ const KARLA = { rfc: 'XIQB891116QE4', name: 'KARLA FUENTE NOLASCO', postalCode: 
 
 const INVOICING: Invoicing = {
   available: true, sandbox: false, canInvoice: true, problem: null, proposedReceiver: KARLA,
-  customerId: 'c-1', customerName: 'Karla', invoices: [], payments: [],
+  customerId: 'c-1', customerName: 'Karla', invoices: [], payments: [], adjustments: [],
 };
 
 const STAMPED: Invoice = {

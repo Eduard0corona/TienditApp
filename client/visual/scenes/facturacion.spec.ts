@@ -11,6 +11,7 @@ import {
   FACTURACION_SIN_CSD,
   ORDER_NUMBER,
   PEDIDO_CANCELANDOSE,
+  PEDIDO_CON_NOTAS_DE_CREDITO,
   PEDIDO_EN_PARCIALIDADES,
   PEDIDO_FACTURADO,
   PEDIDO_POR_FACTURAR,
@@ -21,7 +22,7 @@ import {
 // customer's fiscal data, stamped after a refused and a cancelled one, waiting for the customer to accept the cancellation,
 // and the dialog to cancel it) and the fiscal data of a customer in Clientes, from their edit dialog. Since the Fase 28C
 // (ADR 0047), the invoice in installments of the same order with the payment complements of its payments, and the dialog
-// to cancel one.
+// to cancel one; since the Fase 28D (ADR 0048), its refunds with their credit notes, and the dialog to cancel one.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -184,6 +185,43 @@ test.describe('Pedidos › Factura en parcialidades', () => {
     const cancelling = await dialog(page, 'Cancelar el complemento P-1');
     await cancelling.getByLabel('03 · El cobro no se llevó a cabo').check();
     await snapScreen(page, 'pedidos-factura-cancelar-complemento');
+  });
+});
+
+test.describe('Pedidos › Notas de crédito', () => {
+  test.use({ prepareData: PEDIDO_CON_NOTAS_DE_CREDITO });
+
+  /** The order's invoice, scrolled to the credit notes of its refunds. */
+  async function openCreditNotes(page: Page) {
+    await open(page, '/orders');
+    await page.getByRole('button', { name: ORDER_NUMBER, exact: true }).click();
+    const detail = await dialog(page, `Pedido ${ORDER_NUMBER}`);
+    await detail.getByRole('button', { name: 'Factura' }).click();
+    const invoice = await dialog(page, `Facturar ${ORDER_NUMBER}`);
+    const heading = invoice.getByRole('heading', { name: 'Notas de crédito' });
+    await heading.scrollIntoViewIfNeeded();
+    await expect(invoice.getByText('Sin nota de crédito todavía: TienditApp la emite en unos minutos.')).toBeVisible();
+    return invoice;
+  }
+
+  for (const look of LOOKS) {
+    test.describe(look.suffix, () => {
+      test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+      test(`notas de crédito ${look.suffix}`, async ({ page }) => {
+        const invoice = await openCreditNotes(page);
+        await expect(invoice.getByText('NC-1', { exact: true })).toBeVisible();
+        await snapScreen(page, `pedidos-factura-notas-de-credito-${look.suffix}`);
+      });
+    });
+  }
+
+  test('cancelar una nota de crédito', async ({ page }) => {
+    const invoice = await openCreditNotes(page);
+    await invoice.getByRole('button', { name: 'Cancelar nota de crédito NC-1' }).click();
+    const cancelling = await dialog(page, 'Cancelar la nota de crédito NC-1');
+    await cancelling.getByLabel('03 · El reembolso o la condonación no se llevó a cabo').check();
+    await snapScreen(page, 'pedidos-factura-cancelar-nota-de-credito');
   });
 });
 

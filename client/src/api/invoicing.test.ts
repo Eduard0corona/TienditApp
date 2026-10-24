@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from './axios';
 import { getApiErrorMessage } from './errors';
 import { downloadInvoiceFile, downloadPaymentComplementFile, isOrderInvoicingWaiting, type OrderInvoicing } from './invoicing';
-import { OrderInvoiceStatus } from '../types';
+import { CreditNoteAdjustment, OrderInvoiceStatus } from '../types';
 
 vi.mock('./axios', () => ({ default: { get: vi.fn() } }));
 
@@ -66,13 +66,20 @@ describe('isOrderInvoicingWaiting', () => {
   });
   const complement = (status: OrderInvoiceStatus) => ({ status }) as Payment['complements'][number];
   const invoice = (status: OrderInvoiceStatus) => ({ status }) as OrderInvoicing['invoices'][number];
+  type Adjustment = OrderInvoicing['adjustments'][number];
+  const adjustment = (fields: Partial<Adjustment>): Adjustment => ({
+    kind: CreditNoteAdjustment.Refund, adjustmentId: 'ref-1', at: '2026-10-04T17:00:00Z', amount: 20, method: 1, writeOffReason: undefined,
+    notes: null, reversed: false, canIssue: false, problem: null, awaitsAutomaticIssue: false, creditNotes: [], ...fields,
+  });
+  const note = (status: OrderInvoiceStatus) => ({ status }) as Adjustment['creditNotes'][number];
 
   it('reads again while an invoice or a complement waits for the PAC or the SAT', () => {
-    expect(isOrderInvoicingWaiting({ invoices: [invoice(OrderInvoiceStatus.Stamping)], payments: [] })).toBe(true);
-    expect(isOrderInvoicingWaiting({ invoices: [invoice(OrderInvoiceStatus.Cancelling)], payments: [] })).toBe(true);
+    expect(isOrderInvoicingWaiting({ invoices: [invoice(OrderInvoiceStatus.Stamping)], payments: [], adjustments: [] })).toBe(true);
+    expect(isOrderInvoicingWaiting({ invoices: [invoice(OrderInvoiceStatus.Cancelling)], payments: [], adjustments: [] })).toBe(true);
     expect(isOrderInvoicingWaiting({
       invoices: [invoice(OrderInvoiceStatus.Stamped)],
       payments: [payment({ complements: [complement(OrderInvoiceStatus.Stamping)] })],
+      adjustments: [],
     })).toBe(true);
   });
 
@@ -80,6 +87,7 @@ describe('isOrderInvoicingWaiting', () => {
     expect(isOrderInvoicingWaiting({
       invoices: [invoice(OrderInvoiceStatus.Stamped)],
       payments: [payment({ canIssue: true, awaitsAutomaticIssue: true })],
+      adjustments: [],
     })).toBe(true);
   });
 
@@ -91,6 +99,21 @@ describe('isOrderInvoicingWaiting', () => {
         payment({ canIssue: true, complements: [complement(OrderInvoiceStatus.Refused)] }),
         payment({ problem: 'Este cobro se registró como «Otro».' }),
       ],
+      adjustments: [
+        adjustment({ creditNotes: [note(OrderInvoiceStatus.Stamped)] }),
+        adjustment({ canIssue: true, creditNotes: [note(OrderInvoiceStatus.Refused)] }),
+        adjustment({ problem: 'Este reembolso se registró como «Otro».' }),
+      ],
     })).toBe(false);
+  });
+
+  it('reads again while a refund or a write-off waits for its credit note, or a credit note for the PAC or the SAT', () => {
+    const stamped = [invoice(OrderInvoiceStatus.Stamped)];
+    expect(isOrderInvoicingWaiting({ invoices: stamped, payments: [], adjustments: [adjustment({ canIssue: true, awaitsAutomaticIssue: true })] }))
+      .toBe(true);
+    expect(isOrderInvoicingWaiting({ invoices: stamped, payments: [], adjustments: [adjustment({ creditNotes: [note(OrderInvoiceStatus.Stamping)] })] }))
+      .toBe(true);
+    expect(isOrderInvoicingWaiting({ invoices: stamped, payments: [], adjustments: [adjustment({ creditNotes: [note(OrderInvoiceStatus.Cancelling)] })] }))
+      .toBe(true);
   });
 });

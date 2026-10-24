@@ -35,6 +35,8 @@ export const PAYMENT_FORMS: Record<string, string> = {
   '03': 'Transferencia',
   '04': 'Tarjeta',
   '06': 'Dinero electrónico',
+  // What a write-off's credit note is settled by (Fase 28D).
+  '15': 'Condonación',
   // Paid with the balance in the customer's favor (Fase 26D): an advance applied.
   '30': 'Aplicación de anticipos',
   // Paid online or by a delivery platform: an intermediary of payments.
@@ -87,6 +89,12 @@ export const CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
 export const COMPLEMENT_CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
   [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores (después emites otro para el cobro)'],
   [CfdiCancellationMotive.NotCarriedOut, '03 · El cobro no se llevó a cabo'],
+];
+
+/** The reasons a credit note is cancelled with: 02 when it has errors, 03 when the refund or the write-off did not happen. */
+export const CREDIT_NOTE_CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
+  [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores (después emites otra para el ajuste)'],
+  [CfdiCancellationMotive.NotCarriedOut, '03 · El reembolso o la condonación no se llevó a cabo'],
 ];
 
 /**
