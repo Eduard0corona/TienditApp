@@ -148,6 +148,77 @@ public class SwSapienGatewayTests
     }
 
     [Fact]
+    public async Task Stamp_OfAPaymentComplement_ShouldSendATypePWorthZero_WithItsPagos20Complement()
+    {
+        var (gateway, http) = Create(Answer);
+        var sixteen = new CfdiDocumentTransfer(43.10m, "002", "Tasa", 0.16m, 6.90m);
+        var exempt = new CfdiDocumentTransfer(25m, "002", "Exento", null, null);
+        var payment = new CfdiDocumentPayment(
+            "2026-10-20T13:15:00", "03", 75m,
+            new CfdiDocumentPaidInvoice(Uuid, "F", "7", 2, 150m, 75m, 75m, "02", [sixteen, exempt]));
+        var document = CfdiDocument.ForPayment(
+            new CfdiDocumentIssuer("EKU9003173C9", "Escuela Kemper Urgate", "601"),
+            new CfdiDocumentReceiver("URE180429TM6", "UNIVERSIDAD ROBOTICA ESPAÑOLA", "86991", "601", "G03"),
+            "86991", "P", 3, new DateTime(2026, 10, 23, 11, 59, 0), payment);
+
+        await gateway.StampAsync(document, Key, CancellationToken.None);
+
+        using var cfdi = JsonDocument.Parse(http.Requests[1].Body!);
+        var root = cfdi.RootElement;
+        // Worth zero in no currency (which takes no decimals), without form or method of payment.
+        Assert.Equal(("P", "3", "P", "0", "XXX", "0", "01"),
+            (root.Str("Serie"), root.Str("Folio"), root.Str("TipoDeComprobante"), root.Str("SubTotal"), root.Str("Moneda"), root.Str("Total"),
+                root.Str("Exportacion")));
+        Assert.False(root.TryGetProperty("FormaPago", out _));
+        Assert.False(root.TryGetProperty("MetodoPago", out _));
+        Assert.False(root.TryGetProperty("Impuestos", out _));
+        // The invoice's receiver, with the use «Pagos».
+        Assert.Equal(("URE180429TM6", "CP01"), (root.GetProperty("Receptor").Str("Rfc"), root.GetProperty("Receptor").Str("UsoCFDI")));
+        var concept = root.GetProperty("Conceptos")[0];
+        Assert.Equal(("84111506", "1", "ACT", "Pago", "0", "0", "01"),
+            (concept.Str("ClaveProdServ"), concept.Str("Cantidad"), concept.Str("ClaveUnidad"), concept.Str("Descripcion"),
+                concept.Str("ValorUnitario"), concept.Str("Importe"), concept.Str("ObjetoImp")));
+        Assert.False(concept.TryGetProperty("Impuestos", out _));
+
+        var pagos = root.GetProperty("Complemento").GetProperty("Any")[0].GetProperty("Pago20:Pagos");
+        Assert.Equal("2.0", pagos.Str("Version"));
+        var totals = pagos.GetProperty("Totales");
+        Assert.Equal(("43.10", "6.90", "25.00", "75.00"),
+            (totals.Str("TotalTrasladosBaseIVA16"), totals.Str("TotalTrasladosImpuestoIVA16"), totals.Str("TotalTrasladosBaseIVAExento"),
+                totals.Str("MontoTotalPagos")));
+        Assert.False(totals.TryGetProperty("TotalTrasladosBaseIVA8", out _));
+        var pago = pagos.GetProperty("Pago")[0];
+        Assert.Equal(("2026-10-20T13:15:00", "03", "MXN", "1", "75.00"),
+            (pago.Str("FechaPago"), pago.Str("FormaDePagoP"), pago.Str("MonedaP"), pago.Str("TipoCambioP"), pago.Str("Monto")));
+        var related = pago.GetProperty("DoctoRelacionado")[0];
+        Assert.Equal((Uuid, "F", "7", "MXN", "1", "2", "150.00", "75.00", "75.00", "02"),
+            (related.Str("IdDocumento"), related.Str("Serie"), related.Str("Folio"), related.Str("MonedaDR"), related.Str("EquivalenciaDR"),
+                related.Str("NumParcialidad"), related.Str("ImpSaldoAnt"), related.Str("ImpPagado"), related.Str("ImpSaldoInsoluto"),
+                related.Str("ObjetoImpDR")));
+        var transferDr = related.GetProperty("ImpuestosDR").GetProperty("TrasladosDR");
+        Assert.Equal(("43.10", "002", "Tasa", "0.160000", "6.90"),
+            (transferDr[0].Str("BaseDR"), transferDr[0].Str("ImpuestoDR"), transferDr[0].Str("TipoFactorDR"), transferDr[0].Str("TasaOCuotaDR"),
+                transferDr[0].Str("ImporteDR")));
+        Assert.Equal(("25.00", "Exento"), (transferDr[1].Str("BaseDR"), transferDr[1].Str("TipoFactorDR")));
+        Assert.False(transferDr[1].TryGetProperty("TasaOCuotaDR", out _));
+        var transferP = pago.GetProperty("ImpuestosP").GetProperty("TrasladosP");
+        Assert.Equal(("43.10", "0.160000", "6.90"), (transferP[0].Str("BaseP"), transferP[0].Str("TasaOCuotaP"), transferP[0].Str("ImporteP")));
+        // The SAT's schema puts the related invoice before the payment's taxes.
+        var names = pago.EnumerateObject().Select(property => property.Name).ToList();
+        Assert.True(names.IndexOf("DoctoRelacionado") < names.IndexOf("ImpuestosP"));
+
+        // An invoice not subject to tax: no taxes, only the amount of the payments.
+        await gateway.StampAsync(
+            document with { Payment = payment with { Invoice = payment.Invoice with { TaxObject = "01", Transfers = [] } } },
+            Key, CancellationToken.None);
+        using var withoutTaxes = JsonDocument.Parse(http.Requests[^1].Body!);
+        var plain = withoutTaxes.RootElement.GetProperty("Complemento").GetProperty("Any")[0].GetProperty("Pago20:Pagos");
+        Assert.Equal(["MontoTotalPagos"], plain.GetProperty("Totales").EnumerateObject().Select(property => property.Name));
+        Assert.False(plain.GetProperty("Pago")[0].TryGetProperty("ImpuestosP", out _));
+        Assert.False(plain.GetProperty("Pago")[0].GetProperty("DoctoRelacionado")[0].TryGetProperty("ImpuestosDR", out _));
+    }
+
+    [Fact]
     public async Task Token_ShouldBeReused_UntilItIsAboutToExpire_AndATokenWithoutExpiryNeedsNoLogin()
     {
         var clock = new TestClock(Now);

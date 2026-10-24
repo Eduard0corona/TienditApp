@@ -63,9 +63,11 @@ public class TenantFilterBypassAllowlistTests
         // payments are due a review; each one is then applied in its business's scope.
         ["src/FoodParkDigital.Infrastructure/OnlinePayments/MercadoPagoWebhookProcessor.cs"] = 1,
         ["src/FoodParkDigital.Infrastructure/BackgroundJobs/OnlinePayments/OnlinePaymentsWorkerService.cs"] = 3,
-        // Invoicing (Fases 28A and 28B): the worker finds the businesses with invoices (of orders or global) still stamping
-        // or cancellations waiting for the SAT; each one is then handled in its business's scope.
-        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Invoicing/InvoicingWorkerService.cs"] = 4,
+        // Invoicing (Fases 28A to 28C): the worker finds the businesses with invoices (of orders or global) and payment
+        // complements still stamping, cancellations waiting for the SAT, or payments of invoices in installments that never
+        // had a complement (their payment, invoice and complements, of the same business by their order); each one is then
+        // handled in its business's scope.
+        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Invoicing/InvoicingWorkerService.cs"] = 9,
         // Whether another business holds the CSD's number (the PAC keeps each one once); nothing of it is read.
         ["src/FoodParkDigital.Application/Invoicing/InvoicingSettingsFeature.cs"] = 1,
         // Verification codes by WhatsApp: the platform's account, owned by an active platform admin.

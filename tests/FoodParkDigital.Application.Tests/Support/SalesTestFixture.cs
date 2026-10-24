@@ -238,6 +238,10 @@ internal sealed class SalesDbContext : ApplicationDbContext
             .Property(i => i.Version)
             .IsRequired(false)
             .ValueGeneratedNever();
+        modelBuilder.Entity<PaymentComplement>()
+            .Property(c => c.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
     }
 }
 

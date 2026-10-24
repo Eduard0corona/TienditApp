@@ -14,9 +14,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace FoodParkDigital.Infrastructure.Tests.BackgroundJobs;
 
 /// <summary>
-/// The invoicing worker (Fase 28A; global invoices too, Fase 28B) finds the businesses with invoices still stamping within the
-/// PAC's window, and every half hour the ones with cancellations waiting for the SAT, and sends each one its command in its
-/// own scope.
+/// The invoicing worker (Fase 28A; global invoices too, Fase 28B, and payment complements, Fase 28C) finds the businesses with
+/// invoices still stamping within the PAC's window, the ones whose payments owe a complement, and every half hour the ones
+/// with cancellations waiting for the SAT, and sends each one its command in its own scope.
 /// </summary>
 public class InvoicingWorkerTests
 {
@@ -95,6 +95,71 @@ public class InvoicingWorkerTests
         Assert.Empty(sent.Checks);
     }
 
+    [Fact]
+    public async Task Pass_ShouldFindTheBusinessesWhosePaymentsOweAComplement_AndTheComplementsStampingOrCancelling()
+    {
+        var sent = new SentCommands();
+        await using var host = Host(sent);
+        var now = host.Clock.UtcNow;
+        var owing = await AddInstallmentsAsync(host, "debe-complemento", paidAt: now.AddDays(-3));
+        // Paid with «Otro», of an invoice paid in one exhibition, or already with a complement (even refused): nothing owed.
+        await AddInstallmentsAsync(host, "cobro-otro", paidAt: now.AddDays(-4), method: Domain.Orders.Enums.OrderPaymentMethod.Other);
+        await AddInstallmentsAsync(host, "factura-pue", paidAt: now.AddDays(-4), inInstallments: false);
+        await AddInstallmentsAsync(host, "complemento-rechazado", paidAt: now.AddDays(-4), complement: c => c.Refuse("CRP20206", now));
+        var stamping = await AddInstallmentsAsync(host, "complemento-timbrando", paidAt: now.AddDays(-2), complement: _ => { }, requestedAt: now.AddMinutes(-5));
+        var cancelling = await AddInstallmentsAsync(host, "complemento-cancelandose", paidAt: now.AddDays(-2), complement: c =>
+        {
+            c.Stamp(Guid.NewGuid().ToString(), "sw", now, "invoices/p.xml");
+            c.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, Guid.NewGuid(), now);
+        });
+        var worker = host.Get<InvoicingWorkerService>();
+
+        Assert.Equal(3, await worker.RunPassAsync(CancellationToken.None));
+
+        Assert.Equal([owing], sent.Complements);
+        Assert.Equal([stamping], sent.Stamps);
+        Assert.Equal([cancelling], sent.Checks);
+    }
+
+    /// <summary>
+    /// A business with a $100 sale, a payment of $40 and its stamped invoice (in installments unless said otherwise), and
+    /// the complement of that payment when <paramref name="complement"/> says what happened to it.
+    /// </summary>
+    private static Task<Guid> AddInstallmentsAsync(
+        OutboxTestHost host,
+        string slug,
+        DateTimeOffset paidAt,
+        Domain.Orders.Enums.OrderPaymentMethod method = Domain.Orders.Enums.OrderPaymentMethod.Cash,
+        bool inInstallments = true,
+        Action<PaymentComplement>? complement = null,
+        DateTimeOffset? requestedAt = null)
+        => host.InScopeAsync(async services =>
+        {
+            var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
+            services.GetRequiredService<ICurrentTenantService>().SetTenant(tenant.Id);
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            var order = new Domain.Orders.Entities.Order(tenant.Id, null, null, true, "ORD-000001", BusinessType.Retail,
+                Domain.Orders.Enums.OrderType.Retail, "Karla", null, null, null, pricesIncludeTax: true);
+            order.AddItem(Guid.NewGuid(), "Café", 1, 100m);
+            var payment = order.RegisterPayment(40m, method, paidAt, null, null, null, null);
+            var invoice = OrderInvoice.Request(
+                tenant.Id, order.Id, "F", 1, CfdiReceiver.Create("XIQB891116QE4", "Karla", "26015", "612", "G03"),
+                inInstallments ? "99" : "04", "{}", 86.21m, 13.79m, 100m, Guid.NewGuid(), paidAt.AddDays(-1),
+                inInstallments ? "PPD" : "PUE");
+            invoice.Stamp(Guid.NewGuid().ToString(), "sw", paidAt.AddDays(-1), "invoices/f.xml");
+            context.Tenants.Add(tenant);
+            context.Orders.Add(order);
+            context.OrderInvoices.Add(invoice);
+            if (complement is not null)
+            {
+                var issued = PaymentComplement.Request(invoice, payment, "P", 1, 1, 100m, "{}", null, requestedAt ?? paidAt);
+                complement(issued);
+                context.PaymentComplements.Add(issued);
+            }
+            await context.SaveChangesAsync();
+            return tenant.Id;
+        });
+
     /// <summary>A global invoice of a new business, or of <paramref name="tenantId"/>'s.</summary>
     private static Task<Guid> AddGlobalInvoiceAsync(
         OutboxTestHost host, string slug, DateTimeOffset requestedAt, bool refused = false, bool cancelling = false, Guid? tenantId = null)
@@ -157,6 +222,7 @@ public class InvoicingWorkerTests
     {
         public List<Guid> Stamps { get; } = [];
         public List<Guid> Checks { get; } = [];
+        public List<Guid> Complements { get; } = [];
     }
 
     /// <summary>Records each command with the business whose scope sent it.</summary>
@@ -168,6 +234,7 @@ public class InvoicingWorkerTests
             {
                 StampPendingInvoicesCommand => sent.Stamps,
                 CheckInvoiceCancellationsCommand => sent.Checks,
+                IssuePendingPaymentComplementsCommand => sent.Complements,
                 _ => throw new NotSupportedException(request.GetType().Name)
             };
             list.Add(tenant.TenantId);

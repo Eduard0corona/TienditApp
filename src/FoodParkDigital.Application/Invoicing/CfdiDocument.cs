@@ -8,7 +8,8 @@ namespace FoodParkDigital.Application.Invoicing;
 
 /// <summary>
 /// The CFDI 4.0 an invoice asks the PAC for (Fase 28A, ADR 0045), with every amount TienditApp computed for the order's
-/// draft: the PAC seals it as it is. It is saved with the invoice, so every attempt sends exactly this one.
+/// draft: the PAC seals it as it is. It is saved with the invoice, so every attempt sends exactly this one. A payment
+/// complement (Fase 28C, ADR 0047) is a CFDI of type P: worth zero, without form or method of payment, with its payment.
 /// </summary>
 public sealed record CfdiDocument
 {
@@ -21,8 +22,9 @@ public sealed record CfdiDocument
     /// <summary>Fecha, in the local time of the place it is issued from.</summary>
     public required string Date { get; init; }
 
-    public required string PaymentForm { get; init; }
-    public required string PaymentMethod { get; init; }
+    /// <summary>FormaPago and MetodoPago of an invoice; a payment complement has neither.</summary>
+    public string? PaymentForm { get; init; }
+    public string? PaymentMethod { get; init; }
     public required string ExpeditionPostalCode { get; init; }
     public string Currency { get; init; } = "MXN";
     public string Exportation { get; init; } = "01";
@@ -39,6 +41,48 @@ public sealed record CfdiDocument
 
     /// <summary>The period a global invoice covers (InformacionGlobal, Fase 28B); an order's invoice has none.</summary>
     public CfdiDocumentGlobalInformation? GlobalInformation { get; init; }
+
+    /// <summary>The payment a payment complement declares (Pagos 2.0, Fase 28C); an invoice has none.</summary>
+    public CfdiDocumentPayment? Payment { get; init; }
+
+    /// <summary>c_TipoDeComprobante of a payment complement, and c_Moneda «no currency» it carries.</summary>
+    public const string PaymentVoucherType = "P";
+    public const string NoCurrency = "XXX";
+
+    /// <summary>
+    /// The CFDI of a payment complement (Fase 28C): worth zero, in no currency, with the only concept «Pago», for the
+    /// invoice's receiver with the use «Pagos» (CP01), and the payment it declares.
+    /// </summary>
+    public static CfdiDocument ForPayment(
+        CfdiDocumentIssuer issuer,
+        CfdiDocumentReceiver invoiceReceiver,
+        string expeditionPostalCode,
+        string serie,
+        long folio,
+        DateTime localDate,
+        CfdiDocumentPayment payment)
+        => new()
+        {
+            Serie = serie,
+            Folio = folio.ToString(CultureInfo.InvariantCulture),
+            Date = localDate.ToString(DateFormat, CultureInfo.InvariantCulture),
+            ExpeditionPostalCode = expeditionPostalCode,
+            Currency = NoCurrency,
+            VoucherType = PaymentVoucherType,
+            SubTotal = 0m,
+            TotalTransferred = 0m,
+            Total = 0m,
+            Issuer = issuer,
+            Receiver = invoiceReceiver with { CfdiUse = SatCatalog.PaymentUse },
+            Concepts =
+            [
+                new CfdiDocumentConcept(
+                    SatCatalog.PaymentReceivedProductCode, SatCatalog.ActivityUnitCode, SatCatalog.PaymentReceivedDescription,
+                    1m, 0m, 0m, SatCatalog.Code(CfdiTaxObject.NotSubject), null)
+            ],
+            Transfers = [],
+            Payment = payment
+        };
 
     /// <summary>
     /// The CFDI of a draft ready to stamp, for a named receiver, with its serie, folio and date (local to the business).
@@ -116,3 +160,24 @@ public sealed record CfdiDocumentGlobalInformation(string Periodicity, string Mo
 
 /// <summary>A transfer (traslado) of IVA: «Tasa» with its rate and amount, or «Exento» with neither.</summary>
 public sealed record CfdiDocumentTransfer(decimal Base, string Tax, string FactorType, decimal? Rate, decimal? Amount);
+
+/// <summary>
+/// The payment of a complement (Pago of Pagos 2.0): when it was received (local to the business), its form and amount in
+/// pesos, and the one invoice it pays (DoctoRelacionado). Its taxes (TrasladosP) are the invoice's ones, and so are its totals.
+/// </summary>
+public sealed record CfdiDocumentPayment(string Date, string PaymentForm, decimal Amount, CfdiDocumentPaidInvoice Invoice);
+
+/// <summary>
+/// The invoice a payment pays (DoctoRelacionado): its UUID, serie and folio, which installment it is, what the invoice owed
+/// before and after it, what it paid, whether it is subject to tax (ObjetoImpDR) and the IVA it covers (TrasladosDR).
+/// </summary>
+public sealed record CfdiDocumentPaidInvoice(
+    string Uuid,
+    string Serie,
+    string Folio,
+    int Installment,
+    decimal PreviousBalance,
+    decimal Paid,
+    decimal RemainingBalance,
+    string TaxObject,
+    IReadOnlyList<CfdiDocumentTransfer> Transfers);

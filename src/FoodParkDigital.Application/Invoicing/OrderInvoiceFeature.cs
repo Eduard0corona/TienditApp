@@ -94,6 +94,10 @@ public class OrderInvoicingDto
     public string? CustomerName { get; set; }
     /// <summary>The order's invoices, the newest first (cancelled and refused ones included).</summary>
     public List<OrderInvoiceDto> Invoices { get; set; } = [];
+    /// <summary>
+    /// Its payments with their complements, when it has an invoice in installments (Fase 28C); none otherwise.
+    /// </summary>
+    public List<OrderPaymentComplementsDto> Payments { get; set; } = [];
 }
 
 /// <summary>The invoicing of an order: whether it can be invoiced, whom to, and its invoices.</summary>
@@ -139,6 +143,8 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
             ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
 
         var last = invoices.FirstOrDefault();
+        var payments = await PaymentComplements.ForOrderAsync(
+            _context, order, invoices, InvoicingSettings.ReadinessProblem(settings), cancellationToken);
         return new OrderInvoicingDto
         {
             Available = settings.Available,
@@ -150,13 +156,15 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
                 : last is null ? null : CfdiReceiverDto.From(last.Receiver),
             CustomerId = customer?.Id,
             CustomerName = customer?.Name,
-            Invoices = invoices.Select(OrderInvoiceDto.From).ToList()
+            Invoices = invoices.Select(OrderInvoiceDto.From).ToList(),
+            Payments = payments
         };
     }
 }
 
 /// <summary>
-/// Stamps the invoice of a paid order to a customer with an RFC (whoever manages the orders): its folio and CFDI are saved
+/// Stamps the invoice of an order to a customer with an RFC (whoever manages the orders): paid in full in one exhibition, or
+/// in installments (PPD, Fase 28C) when it is not, and then each payment gets its complement. Its folio and CFDI are saved
 /// first (<see cref="RequestOrderInvoiceCommand"/>), and the PAC is asked after the commit, never inside the transaction.
 /// When the PAC does not answer, the invoice stays «Timbrando» and is asked again with the same key.
 /// </summary>
@@ -285,9 +293,6 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
             ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
         if (orderProblem is not null)
             return Result.Failure<Guid>(orderProblem);
-        // The draft of a paid sale: what the order paid with, in one exhibition.
-        if (draft.PaymentMethod != OrderInvoice.PaidInOneExhibition)
-            return Result.Failure<Guid>(OrderInvoicing.NotPaidMessage);
 
         var now = _clock.UtcNow;
         var tenantId = _tenant.TenantId;
@@ -313,9 +318,10 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         var serie = profile!.Serie;
         var folio = await _folios.NextInvoiceFolioAsync(tenantId, serie, cancellationToken);
         var document = CfdiDocument.From(draft, receiver, serie, folio, TenantDateTimeResolver.LocalNow(now, timeZone));
+        // Paid in full, in one exhibition with what paid it; otherwise in installments, «por definir» (Fase 28C).
         var invoice = OrderInvoice.Request(
             tenantId, order.Id, serie, folio, receiver, draft.PaymentForm, document.ToJson(),
-            draft.SubTotal, draft.TotalTransferred, draft.Total, userId, now);
+            draft.SubTotal, draft.TotalTransferred, draft.Total, userId, now, draft.PaymentMethod);
         _context.OrderInvoices.Add(invoice);
 
         if (request.SaveToCustomer
@@ -334,7 +340,7 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
             entityId: invoice.Id.ToString(),
             action: "OrderInvoiceRequested",
             performedBy: _currentUser.UserName ?? "system",
-            metadata: JsonSerializer.Serialize(new { invoice.OrderId, order.OrderNumber, Number = invoice.Number, receiver.Rfc, invoice.Total })));
+            metadata: JsonSerializer.Serialize(new { invoice.OrderId, order.OrderNumber, Number = invoice.Number, receiver.Rfc, invoice.Total, invoice.PaymentMethod })));
 
         try
         {
@@ -423,6 +429,10 @@ public class CancelOrderInvoiceCommandHandler : IRequestHandler<CancelOrderInvoi
     public const string NoCertificateToCancelMessage =
         "Para cancelar, el negocio necesita su certificado de sello digital (CSD) en Configuración › Facturación.";
 
+    public static string LiveComplementsMessage(IReadOnlyList<string> complements) =>
+        $"Cancela primero los complementos de pago de esta factura ({string.Join(", ", complements)}): el SAT no cancela una " +
+        "factura en parcialidades mientras sus pagos tengan complementos vigentes.";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUser;
     private readonly IInvoicingGateway _gateway;
@@ -452,6 +462,10 @@ public class CancelOrderInvoiceCommandHandler : IRequestHandler<CancelOrderInvoi
                 : "Solo se cancela una factura timbrada.");
         if (!_gateway.IsConfigured)
             return Result.Failure<OrderInvoiceDto>(InvoicingSettings.NotAvailableMessage);
+        // The SAT does not cancel an invoice whose payments still have complements in force (Fase 28C): they go first.
+        if (invoice.IsPaidInInstallments
+            && await PaymentComplements.LiveNumbersAsync(_context, invoice.Id, cancellationToken) is { Count: > 0 } complements)
+            return Result.Failure<OrderInvoiceDto>(LiveComplementsMessage(complements));
         var profile = await _context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         if (profile is not { HasCertificate: true })
             return Result.Failure<OrderInvoiceDto>(NoCertificateToCancelMessage);
@@ -599,7 +613,8 @@ internal static class InvoiceFiles
 internal static class OrderInvoicing
 {
     public const string NotPaidMessage =
-        "Solo se factura una venta pagada por completo: la factura en parcialidades (PPD) todavía no está disponible.";
+        "La venta no está pagada por completo: cóbrala antes de facturarla, o factúrala en parcialidades (PPD) cuando el cliente "
+        + "se la lleve fiada o ya se le haya entregado.";
     public const string AlreadyInvoicingMessage = "Otra persona está facturando este pedido en este momento: actualiza la página.";
 
     /// <summary>The order, if the business sees it (as its detail does).</summary>
@@ -658,8 +673,9 @@ internal static class OrderInvoicing
         "Reportes › Factura global, factura esta venta y emite otra vez la global del periodo: ya no la incluirá.";
 
     /// <summary>
-    /// Why the order itself cannot be invoiced here (Fase 28A): only a sale paid in full, with nothing given back or
-    /// forgiven, which would need a credit note.
+    /// Why the order itself cannot be invoiced here (Fase 28A): a sale with nothing given back or forgiven, which would need
+    /// a credit note. One not paid in full is invoiced in installments (Fase 28C) only when the customer owes it: sold on
+    /// credit, or delivered or completed (its total no longer changes); a sale still to be charged is charged first.
     /// </summary>
     public static async Task<string?> OrderProblemAsync(IApplicationDbContext context, Order order, CancellationToken cancellationToken)
     {
@@ -671,7 +687,7 @@ internal static class OrderInvoicing
             return "Se condonó parte de esta venta: lo condonado requiere una nota de crédito, que TienditApp todavía no genera.";
         if (order.RefundedAmount > 0)
             return "La venta tiene reembolsos: lo devuelto requiere una nota de crédito, que TienditApp todavía no genera.";
-        if (order.Total - order.PaidAmount > 0 || order.Payments.Count == 0)
+        if ((order.Total - order.PaidAmount > 0 || order.Payments.Count == 0) && !order.IsOwedByCustomer)
             return NotPaidMessage;
         var refundInCourse = await context.OnlinePaymentRefunds.AsNoTracking()
             .AnyAsync(r => r.OrderId == order.Id && r.Status == OnlinePaymentRefundStatus.Requested, cancellationToken);

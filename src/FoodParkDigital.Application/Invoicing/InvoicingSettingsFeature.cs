@@ -15,7 +15,7 @@ namespace FoodParkDigital.Application.Invoicing;
 
 /// <summary>
 /// Configuración › Facturación (Fase 28A, ADR 0045): whether the platform invoices, the business's fiscal data the invoice
-/// needs, its CSD and the serie of its invoices.
+/// needs, its CSD and the series of its invoices and payment complements (Fase 28C).
 /// </summary>
 public class InvoicingSettingsDto
 {
@@ -24,6 +24,8 @@ public class InvoicingSettingsDto
     /// <summary>The PAC's test environment: the invoices have no fiscal effect.</summary>
     public bool Sandbox { get; set; }
     public string Serie { get; set; } = OrderInvoice.DefaultSerie;
+    /// <summary>The serie of its payment complements (Fase 28C).</summary>
+    public string PaymentSerie { get; set; } = PaymentComplement.DefaultSerie;
     /// <summary>The business's RFC, legal name, regime and fiscal postal code, from Mi negocio.</summary>
     public string? Rfc { get; set; }
     public string? LegalName { get; set; }
@@ -285,9 +287,11 @@ public class RemoveInvoicingCertificateCommandHandler
     }
 }
 
-/// <summary>The serie of the business's next invoices (owners and admins).</summary>
+/// <summary>
+/// The serie of the business's next invoices and, when given, of its next payment complements (Fase 28C; owners and admins).
+/// </summary>
 [RequiresTenantManager]
-public record ChangeInvoiceSerieCommand(string Serie) : IRequest<Result<InvoicingSettingsDto>>;
+public record ChangeInvoiceSerieCommand(string Serie, string? PaymentSerie = null) : IRequest<Result<InvoicingSettingsDto>>;
 
 public class ChangeInvoiceSerieCommandHandler : IRequestHandler<ChangeInvoiceSerieCommand, Result<InvoicingSettingsDto>>
 {
@@ -320,13 +324,15 @@ public class ChangeInvoiceSerieCommandHandler : IRequestHandler<ChangeInvoiceSer
         try
         {
             profile.ChangeSerie(request.Serie);
+            if (request.PaymentSerie is not null)
+                profile.ChangePaymentSerie(request.PaymentSerie);
         }
         catch (DomainException ex)
         {
             return Result.Failure<InvoicingSettingsDto>(ex.Message);
         }
 
-        InvoicingSettings.Audit(_context, tenantId, _currentUser, "InvoiceSerieChanged", new { profile.Serie });
+        InvoicingSettings.Audit(_context, tenantId, _currentUser, "InvoiceSerieChanged", new { profile.Serie, profile.PaymentSerie });
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(await InvoicingSettings.ReadAsync(_context, tenantId, _gateway, _clock.UtcNow, cancellationToken));
     }
@@ -418,6 +424,7 @@ internal static class InvoicingSettings
             Available = gateway.IsConfigured,
             Sandbox = gateway.Sandbox,
             Serie = profile?.Serie ?? OrderInvoice.DefaultSerie,
+            PaymentSerie = profile?.PaymentSerie ?? PaymentComplement.DefaultSerie,
             Rfc = rfc,
             LegalName = tenant?.LegalName?.Trim(),
             FiscalRegime = regime,

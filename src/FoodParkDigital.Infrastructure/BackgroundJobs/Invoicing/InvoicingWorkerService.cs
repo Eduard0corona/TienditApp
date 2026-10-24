@@ -83,6 +83,7 @@ public sealed class InvoicingWorkerService : BackgroundService
         var checkCancellations = _cancellationsCheckedAt is null
             || now - _cancellationsCheckedAt >= TimeSpan.FromMinutes(Math.Max(1, _options.CancellationIntervalMinutes));
         List<Guid> stamping;
+        List<Guid> complementing;
         List<Guid> cancelling = [];
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
@@ -93,6 +94,7 @@ public sealed class InvoicingWorkerService : BackgroundService
             // Only to find the businesses with work: each one is handled in its own scope. The longest waiting goes first,
             // whether its invoice is an order's or a global one (Fase 28B).
             stamping = Businesses(
+                max,
                 await context.OrderInvoices
                     .IgnoreQueryFilters()
                     .Where(i => i.Status == OrderInvoiceStatus.Stamping && i.RequestedAt <= settled && i.RequestedAt > oldest)
@@ -105,10 +107,27 @@ public sealed class InvoicingWorkerService : BackgroundService
                     .GroupBy(i => i.TenantId)
                     .Select(g => new Waiting(g.Key, g.Min(i => i.RequestedAt)))
                     .ToListAsync(cancellationToken),
-                max);
+                await context.PaymentComplements
+                    .IgnoreQueryFilters()
+                    .Where(c => c.Status == OrderInvoiceStatus.Stamping && c.RequestedAt <= settled && c.RequestedAt > oldest)
+                    .GroupBy(c => c.TenantId)
+                    .Select(g => new Waiting(g.Key, g.Min(c => c.RequestedAt)))
+                    .ToListAsync(cancellationToken));
+            // The payments of stamped invoices in installments that never had a complement (Fase 28C), each business's own
+            // (the payment, its invoice and its complements are of the same business, joined by its order).
+            complementing = Businesses(
+                max,
+                await PaymentComplements.Pending(
+                        context.OrderPayments.IgnoreQueryFilters(),
+                        context.OrderInvoices.IgnoreQueryFilters(),
+                        context.PaymentComplements.IgnoreQueryFilters())
+                    .GroupBy(p => p.TenantId)
+                    .Select(g => new Waiting(g.Key, g.Min(p => p.PaidAt)))
+                    .ToListAsync(cancellationToken));
             if (checkCancellations)
             {
                 cancelling = Businesses(
+                    max,
                     await context.OrderInvoices
                         .IgnoreQueryFilters()
                         .Where(i => i.Status == OrderInvoiceStatus.Cancelling)
@@ -121,24 +140,31 @@ public sealed class InvoicingWorkerService : BackgroundService
                         .GroupBy(i => i.TenantId)
                         .Select(g => new Waiting(g.Key, g.Min(i => i.CancellationRequestedAt)))
                         .ToListAsync(cancellationToken),
-                    max);
+                    await context.PaymentComplements
+                        .IgnoreQueryFilters()
+                        .Where(c => c.Status == OrderInvoiceStatus.Cancelling)
+                        .GroupBy(c => c.TenantId)
+                        .Select(g => new Waiting(g.Key, g.Min(c => c.CancellationRequestedAt)))
+                        .ToListAsync(cancellationToken));
                 _cancellationsCheckedAt = now;
             }
         }
 
         foreach (var tenantId in stamping)
             await SendAsync(tenantId, new StampPendingInvoicesCommand(), "stamped", cancellationToken);
+        foreach (var tenantId in complementing)
+            await SendAsync(tenantId, new IssuePendingPaymentComplementsCommand(), "payment complements issued", cancellationToken);
         foreach (var tenantId in cancelling)
             await SendAsync(tenantId, new CheckInvoiceCancellationsCommand(), "with their cancellation settled", cancellationToken);
 
-        return stamping.Union(cancelling).Count();
+        return stamping.Union(complementing).Union(cancelling).Count();
     }
 
     private sealed record Waiting(Guid TenantId, DateTimeOffset? Since);
 
-    /// <summary>The businesses with work of either kind, the one that has waited longest first.</summary>
-    private static List<Guid> Businesses(List<Waiting> orders, List<Waiting> globals, int max)
-        => orders.Concat(globals)
+    /// <summary>The businesses with work of any kind, the one that has waited longest first.</summary>
+    private static List<Guid> Businesses(int max, params List<Waiting>[] kinds)
+        => kinds.SelectMany(kind => kind)
             .GroupBy(waiting => waiting.TenantId)
             .OrderBy(group => group.Min(waiting => waiting.Since))
             .Select(group => group.Key)

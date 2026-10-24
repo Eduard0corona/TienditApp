@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -299,19 +300,33 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
     {
         if (balance > 0 || payments.Count == 0)
         {
-            draft.PaymentMethod = "PPD";
+            draft.PaymentMethod = CfdiInvoice.PaidInInstallments;
             draft.PaymentForm = SatCatalog.PaymentFormToBeDefined;
-            draft.Warnings.Add(
-                "La venta no está pagada por completo: se factura en parcialidades (PPD) y cada cobro requiere un complemento de pago.");
+            draft.Warnings.Add(InstallmentsWarning);
+            // «Otro» and the customer's balance have no form of the SAT for a payment (Fase 28C): their complement is not issued here.
+            if (payments.Any(payment => SatCatalog.PaymentComplementForm(payment.Method) is null))
+                draft.Warnings.Add(PaymentWithoutComplementWarning);
             return;
         }
 
-        draft.PaymentMethod = "PUE";
+        draft.PaymentMethod = CfdiInvoice.PaidInOneExhibition;
         draft.PaymentForm = SatCatalog.PaymentForm(MainPaymentMethod(payments));
         // «Otro» is none of the SAT's forms, and "to be defined" (99) is only for a sale paid in installments (PPD).
         if (draft.PaymentForm == SatCatalog.PaymentFormToBeDefined)
             draft.Blockers.Add(OtherPaymentBlocker);
     }
+
+    /// <summary>
+    /// A sale not paid in full is invoiced in installments (PPD, form 99, Fase 28C): TienditApp issues the complement of each of
+    /// its payments, the ones received before the invoice included.
+    /// </summary>
+    public const string InstallmentsWarning =
+        "La venta no está pagada por completo: se factura en parcialidades (PPD) con la forma de pago 99 (por definir), y TienditApp "
+        + "emite el complemento de pago de cada cobro, también de los que ya recibiste. Cada complemento vence el día 5 del mes siguiente al cobro.";
+
+    public const string PaymentWithoutComplementWarning =
+        "Hay cobros registrados como «Otro» o con saldo a favor del cliente: no tienen una forma de pago del SAT para su complemento "
+        + "y TienditApp no lo emite. Consúltalo con tu contador.";
 
     /// <summary>A sale paid in full declares the form that paid the largest amount (and so does a global invoice, Fase 28B).</summary>
     public static OrderPaymentMethod MainPaymentMethod(IEnumerable<(OrderPaymentMethod Method, decimal Amount)> payments)
