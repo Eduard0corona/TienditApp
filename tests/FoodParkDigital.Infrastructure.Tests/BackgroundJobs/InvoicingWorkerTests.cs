@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Invoicing;
 using FoodParkDigital.Infrastructure.Persistence;
 using MediatR;
@@ -124,6 +125,41 @@ public class InvoicingWorkerTests
         Assert.Equal([cancelling], sent.Checks);
     }
 
+    [Fact]
+    public async Task Pass_ShouldPutTheBusinessesWhoseComplementsStampedNothing_AfterTheOthers_AndTurnThemAround()
+    {
+        var sent = new SentCommands();
+        await using var host = Host(sent, maxBusinessesPerPass: 1);
+        var now = host.Clock.UtcNow;
+        // Their oldest payments are never issued here (their invoices were stamped with the RFC Mi negocio had before, say):
+        // their passes stamp nothing.
+        var stuck = await AddInstallmentsAsync(host, "rfc-anterior", paidAt: now.AddDays(-9));
+        var alsoStuck = await AddInstallmentsAsync(host, "otro-rfc-anterior", paidAt: now.AddDays(-8));
+        var owing = await AddInstallmentsAsync(host, "debe-complemento", paidAt: now.AddDays(-3));
+        sent.Stamping.Add(owing);
+        var worker = host.Get<InvoicingWorkerService>();
+
+        async Task PassAsync()
+        {
+            await worker.RunPassAsync(CancellationToken.None);
+            host.Clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        // The longest waiting goes first until a pass of theirs stamps nothing; then the others go before them, with one
+        // place per pass, so the business that can issue its complement is not kept waiting.
+        await PassAsync();
+        await PassAsync();
+        await PassAsync();
+        Assert.Equal([stuck, alsoStuck, owing], sent.Complements);
+
+        // While nothing is stamped, they take turns: the least recently tried first.
+        sent.Stamping.Clear();
+        await PassAsync();
+        await PassAsync();
+        await PassAsync();
+        Assert.Equal([stuck, alsoStuck, owing, owing, stuck, alsoStuck], sent.Complements);
+    }
+
     private enum Csd { Valid, Expired, None }
 
     /// <summary>
@@ -203,9 +239,11 @@ public class InvoicingWorkerTests
             return id;
         });
 
-    private static OutboxTestHost Host(SentCommands sent)
+    private static OutboxTestHost Host(SentCommands sent, int? maxBusinessesPerPass = null)
         => OutboxTestHost.Create(configure: services =>
         {
+            if (maxBusinessesPerPass is { } max)
+                services.Configure<BackgroundJobOptions>(options => options.Invoicing.MaxBusinessesPerPass = max);
             services.AddSingleton<IInvoicingGateway, ConfiguredGateway>();
             services.AddSingleton(sent);
             services.AddScoped<ISender, RecordingSender>();
@@ -240,6 +278,8 @@ public class InvoicingWorkerTests
         public List<Guid> Stamps { get; } = [];
         public List<Guid> Checks { get; } = [];
         public List<Guid> Complements { get; } = [];
+        /// <summary>The businesses whose complements pass stamps one.</summary>
+        public HashSet<Guid> Stamping { get; } = [];
     }
 
     /// <summary>Records each command with the business whose scope sent it.</summary>
@@ -255,7 +295,8 @@ public class InvoicingWorkerTests
                 _ => throw new NotSupportedException(request.GetType().Name)
             };
             list.Add(tenant.TenantId);
-            return Task.FromResult((TResponse)(object)Result.Success(0));
+            var settled = request is IssuePendingPaymentComplementsCommand && sent.Stamping.Contains(tenant.TenantId) ? 1 : 0;
+            return Task.FromResult((TResponse)(object)Result.Success(settled));
         }
 
         public Task Send<TRequest>(TRequest request, CancellationToken cancellationToken = default) where TRequest : IRequest => throw new NotSupportedException();

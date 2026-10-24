@@ -1285,14 +1285,14 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Infrastructure:**
     - `PaymentComplementsMigrationSqlServerTests` (3, nuevo): `PaymentSerie` «P» para cada perfil mientras la versión anterior los guarda; un complemento vivo por cobro y cada parcialidad una vez, y las restricciones rechazan lo que el dominio nunca escribe; el rollback se detiene con 50039 con una factura PPD o un complemento y, sin ellos, quita solo lo suyo.
     - `SwSapienGatewayTests` (+1): el CFDI tipo P en ceros con moneda XXX, sin forma ni método, con su complemento Pagos20 (Totales por tasa, Pago y DoctoRelacionado con sus traslados).
-    - `InvoicingWorkerTests` (+1): encuentra los negocios cuyos cobros deben un complemento (no los de «Otro», PUE o con uno ya emitido, aunque rechazado, ni los que no tienen un CSD vigente) y los complementos timbrando o cancelándose.
+    - `InvoicingWorkerTests` (+2): encuentra los negocios cuyos cobros deben un complemento (no los de «Otro», PUE o con uno ya emitido, aunque rechazado, ni los que no tienen un CSD vigente) y los complementos timbrando o cancelándose; y los negocios cuya pasada no timbró ninguno van después de los demás y se turnan.
   - **WebApi:** `CrossTenantInvoicingSqlServerTests` (+2): el complemento de otro negocio no se ve ni se toca (emitir, reintentar, cancelar, XML y PDF, también con su encabezado) y la factura PPD no se cancela con él vigente; el mismo cobro emitido dos veces a la vez se timbra una vez y el otro regresa su folio (P-3 sigue sin hueco). `TenantFilterBypassAllowlistTests`: el worker de facturación lee también los cobros, complementos y CSD vigentes (10).
   - **Cliente:**
     - `PaymentComplementList.test.tsx` (13, nuevo): nada sin factura PPD; una PPD sin cobros todavía; los complementos de una factura anterior sin decir que la viva es PPD, ni un plazo del SAT cuando ya no se debe ninguno; cada cobro con su parcialidad, saldos, folio fiscal y archivos; «Emitir ahora» y «Emitir otra vez» con su cobro; el rechazado con su motivo y su fecha límite; el cobro sin forma del SAT con su motivo; la fecha límite vencida (no el mismo día) y sin fecha mientras espera al PAC; volver a pedir el timbre; cancelar con 03; el error de la API.
     - `invoicing.test.ts` (+4): el archivo del complemento; se vuelve a leer mientras algo espera al PAC, al SAT o al worker, y deja de hacerlo cuando lo que queda es a mano.
     - `CfdiDraftModal.test.tsx` (+1): los complementos bajo la factura PPD, que dice «en parcialidades (PPD)».
     - `Invoicing.test.tsx` (+1): las dos series se guardan juntas.
-  - **Total:** `dotnet test` con SQL Server 2022, 3,703 pruebas sin fallos ni omitidas (Domain 1,085, Application 1,637, Infrastructure 532, WebApi 449).
+  - **Total:** `dotnet test` con SQL Server 2022, 3,704 pruebas sin fallos ni omitidas (Domain 1,085, Application 1,637, Infrastructure 533, WebApi 449).
   - **Cliente en total:** 164 archivos y 1,122 pruebas.
   - **Primera visita:** 179,797 B de 179,900 B, sin subir el presupuesto: la facturación se carga aparte.
   - **Escenas visuales:** `facturacion.spec.ts` (+4): los complementos de pago de la factura en parcialidades (escritorio, teléfono y oscuro) y el diálogo para cancelar uno.
