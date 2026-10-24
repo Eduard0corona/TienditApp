@@ -9,7 +9,8 @@ using Microsoft.Extensions.Logging;
 namespace FoodParkDigital.Application.Invoicing;
 
 /// <summary>
-/// Asks the PAC for an invoice that is «Timbrando» (Fase 28A, ADR 0045; the global ones too, Fase 28B), always with the CFDI
+/// Asks the PAC for an invoice that is «Timbrando» (Fase 28A, ADR 0045; the global ones too, Fase 28B, and the payment
+/// complements, Fase 28C), always with the CFDI
 /// and the key saved when it was requested, so a repeated attempt (the person, the worker, both at once) gets back the same
 /// stamp: its XML is kept in the business's private files and the invoice becomes «Timbrada»; a refusal for good makes it
 /// «Rechazada»; without an answer it stays «Timbrando». Its PDF is kept when the PAC gives it; if not, it is rendered when
@@ -41,7 +42,7 @@ public sealed class OrderInvoiceStamper
         "Se pidió hace más de 71 horas: antes de facturar otra vez lo que cubría, revisa en el portal del PAC que no se haya timbrado.";
 
     /// <summary>The private file of an invoice: «invoices/{business}/{yyyyMM}/{invoice}.xml».</summary>
-    public static string FileKey(CfdiInvoice invoice, string extension)
+    public static string FileKey(Cfdi invoice, string extension)
         => $"invoices/{invoice.TenantId}/{invoice.RequestedAt:yyyyMM}/{invoice.Id}.{extension}";
 
     /// <returns>The invoice of an order as it ends up (still tracked).</returns>
@@ -50,7 +51,7 @@ public sealed class OrderInvoiceStamper
 
     /// <returns>The invoice as it ends up (still tracked).</returns>
     public async Task<TInvoice> StampAsync<TInvoice>(IQueryable<TInvoice> invoices, Guid invoiceId, CancellationToken cancellationToken)
-        where TInvoice : CfdiInvoice
+        where TInvoice : Cfdi
     {
         var invoice = await invoices.FirstAsync(i => i.Id == invoiceId, cancellationToken);
         if (invoice.Status != OrderInvoiceStatus.Stamping)
@@ -107,7 +108,7 @@ public sealed class OrderInvoiceStamper
 
     private async Task<TInvoice> AttachPdfAsync<TInvoice>(
         IQueryable<TInvoice> invoices, TInvoice invoice, string stampedXml, CancellationToken cancellationToken)
-        where TInvoice : CfdiInvoice
+        where TInvoice : Cfdi
     {
         byte[] pdf;
         try
@@ -151,7 +152,7 @@ public sealed class OrderInvoiceStamper
 
     // Another attempt wrote it first (the same stamp, or the PAC's refusal): that one stands.
     private async Task<TInvoice> SaveAsync<TInvoice>(IQueryable<TInvoice> invoices, TInvoice invoice, CancellationToken cancellationToken)
-        where TInvoice : CfdiInvoice
+        where TInvoice : Cfdi
     {
         try
         {

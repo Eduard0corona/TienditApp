@@ -137,6 +137,20 @@ public class OrderInvoiceTests
         Assert.Contains("forma en que se pagó", error.Message);
     }
 
+    [Fact]
+    public void Request_InInstallments_ShouldTakeOnlyTheFormToBeDefined()
+    {
+        // A sale not paid in full (Fase 28C): PPD with «Por definir», and each payment gets its complement.
+        var invoice = Invoice(paymentForm: "99", paymentMethod: "PPD");
+
+        Assert.Equal(("99", "PPD", true), (invoice.PaymentForm, invoice.PaymentMethod, invoice.IsPaidInInstallments));
+        Assert.False(Invoice().IsPaidInInstallments);
+        var error = Assert.Throws<DomainException>(() => Invoice(paymentForm: "04", paymentMethod: "PPD"));
+        Assert.Contains("Por definir", error.Message);
+        Assert.Throws<DomainException>(() => Invoice(paymentForm: "99", paymentMethod: "PUD"));
+        Assert.Throws<DomainException>(() => Invoice(paymentForm: "04", paymentMethod: ""));
+    }
+
     [Theory]
     [InlineData(100, 16, 117)]
     [InlineData(100, 16, 0)]
@@ -316,14 +330,24 @@ public class OrderInvoiceTests
 
         Assert.Equal(("TA", false, null, null), (profile.Serie, profile.HasCertificate, profile.CertificateRfc, profile.CertificateValidTo));
         Assert.Throws<DomainException>(() => profile.ChangeSerie("T A"));
+
+        // The payment complements' serie (Fase 28C): «P» until the business chooses another one, even the invoices' own.
+        Assert.Equal("P", profile.PaymentSerie);
+        profile.ChangePaymentSerie(" ta ");
+        Assert.Equal("TA", profile.PaymentSerie);
+        Assert.Throws<DomainException>(() => profile.ChangePaymentSerie("P-1"));
+        Assert.Throws<DomainException>(() => profile.ChangePaymentSerie(" "));
+        Assert.Equal("TA", profile.PaymentSerie);
         Assert.Throws<DomainException>(() => InvoicingProfile.Create(Guid.Empty));
     }
 
     private static CfdiReceiver Receiver() => CfdiReceiver.Create("URE180429TM6", "UNIVERSIDAD ROBOTICA ESPAÑOLA", "86991", "601", "G03");
 
     private static OrderInvoice Invoice(
-        string serie = "F", long folio = 7, string paymentForm = "04", decimal subTotal = 100m, decimal tax = 16m, decimal total = 116m)
-        => OrderInvoice.Request(TenantId, OrderId, serie, folio, Receiver(), paymentForm, Document, subTotal, tax, total, CashierId, Now);
+        string serie = "F", long folio = 7, string paymentForm = "04", decimal subTotal = 100m, decimal tax = 16m, decimal total = 116m,
+        string paymentMethod = "PUE")
+        => OrderInvoice.Request(
+            TenantId, OrderId, serie, folio, Receiver(), paymentForm, Document, subTotal, tax, total, CashierId, Now, paymentMethod);
 
     private static OrderInvoice Stamped()
     {

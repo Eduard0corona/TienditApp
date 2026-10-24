@@ -63,7 +63,7 @@ public class StampPendingInvoicesCommandHandler : IRequestHandler<StampPendingIn
 
     private async Task<int> StampAsync<TInvoice>(
         IQueryable<TInvoice> invoices, IQueryable<TInvoice> loaded, CancellationToken cancellationToken)
-        where TInvoice : CfdiInvoice
+        where TInvoice : Cfdi
     {
         var now = _clock.UtcNow;
         var settled = now - SettleTime;
@@ -143,7 +143,7 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
 
     private async Task<int> CheckAsync<TInvoice>(
         IQueryable<TInvoice> invoices, IQueryable<TInvoice> loaded, CancellationToken cancellationToken)
-        where TInvoice : CfdiInvoice
+        where TInvoice : Cfdi
     {
         var waiting = await invoices.AsNoTracking()
             .Where(i => i.Status == OrderInvoiceStatus.Cancelling)
@@ -172,7 +172,7 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
 
     /// <returns>Whether the SAT settled its cancellation and that was saved.</returns>
     private async Task<bool> SettleAsync<TInvoice>(IQueryable<TInvoice> loaded, TInvoice invoice, CancellationToken cancellationToken)
-        where TInvoice : CfdiInvoice
+        where TInvoice : Cfdi
     {
         var status = await StatusAsync(invoice, cancellationToken);
         if (status is null || (status.State != CfdiSatState.Cancelled && !status.CancellationRefused))
@@ -197,7 +197,7 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
         }
     }
 
-    private async Task<CfdiSatStatus?> StatusAsync(CfdiInvoice invoice, CancellationToken cancellationToken)
+    private async Task<CfdiSatStatus?> StatusAsync(Cfdi invoice, CancellationToken cancellationToken)
     {
         var xml = invoice.XmlFileKey is null
             ? null
@@ -209,12 +209,13 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
             return null;
         }
 
-        // The parties the invoice was stamped for: the receiver of a global invoice is the general public.
+        // The parties and the total the CFDI was stamped with: the receiver of a global invoice is the general public, and a
+        // payment complement's total is zero.
         var document = CfdiDocument.FromJson(invoice.Document);
         try
         {
             return await _gateway.GetSatStatusAsync(
-                new CfdiStatusQuery(document.Issuer.Rfc, document.Receiver.Rfc, invoice.Total, invoice.Uuid!, sealTail), cancellationToken);
+                new CfdiStatusQuery(document.Issuer.Rfc, document.Receiver.Rfc, document.Total, invoice.Uuid!, sealTail), cancellationToken);
         }
         catch (InvoicingGatewayUnavailableException)
         {

@@ -210,7 +210,8 @@ public class OrderInvoicingMigrationSqlServerTests
                 return new Seed(tenantId, orderId, userId);
         }
         {
-            await using var context = database.CreateContext(tenantId);
+            // As the versions before the payment complements' serie (Fase 28C) store it.
+            await using var context = BeforePaymentComplements.CreateContext(database, tenantId);
             var profile = InvoicingProfile.Create(tenantId);
             profile.UseCertificate("30001000000400002434", "EKU9003173C9", DateTimeOffset.UtcNow.AddYears(-1),
                 DateTimeOffset.UtcNow.AddYears(3), userId, DateTimeOffset.UtcNow);
