@@ -1264,6 +1264,41 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Lo que cambia y por qué:** 19 escenas de Reportes por la pestaña nueva «Factura global» en su fila de secciones, que ve la dueña de las escenas (3 de Ventas en `caja-config.spec.ts`, 11 de `liquidaciones.spec.ts` y 5 de `retenciones.spec.ts`); en el teléfono la pestaña queda tras la flecha de desplazamiento.
     - **Resultado:** la comparación contra `master` en `3fe7f26` dio 638 pruebas iguales (con la de cobertura), las 19 que cambian y las 11 nuevas (que no existen en `master`; pasaron dos corridas seguidas contra el mismo build, después de las revisiones).
 
+- Fase 28C, la factura en parcialidades y los complementos de pago ([ADR 0047](../adr/0047-payment-complements.md)):
+  - **Domain:**
+    - `PaymentComplementTests` (21, nuevo): la parcialidad y los saldos de un cobro de una factura PPD timbrada, y que el que cubre el resto deja $0; solo una factura PPD timbrada y un cobro de su pedido; la forma de cada método y el rechazo de «Otro» y del saldo a favor; parcialidades fuera de 1 a 999 y saldos en cero, con fracciones o arriba del total; serie, folio, documento y quién lo pide; timbrar, rechazar y cancelar como cualquier CFDI, conservado; cancelar solo con 02 o 03.
+    - `PaymentComplementTaxesTests` (10, nuevo): el prorrateo por tasa, el redondeo que absorbe el último pago para que los complementos sumen la factura, varias tasas con exento y 0 %, la tasa cuya parte redondea a nada, la tasa sobre la última base cuando el IVA que queda sale de los límites, nunca más que lo que queda de una base, un pago que no cabe en el total y una tasa sin campo en los Totales (`Accepts`, que también pregunta la consulta del pedido).
+    - `OrderInvoiceTests` (+1): la factura PPD solo con la forma 99; y en la de la serie, la de los complementos (`InvoicingProfile.PaymentSerie`), cuyo rechazo la nombra.
+  - **Application:** `PaymentComplementFlowTests` (15, nuevo):
+    - la venta que el cliente debe se factura en parcialidades y la que se cobra en el mostrador no; la pagada sigue PUE;
+    - el worker emite el complemento de cada cobro, también el anterior a la factura, con su parcialidad, saldos, fecha local e IVA prorrateado; el que liquida toma lo que queda;
+    - los cobros «Otro» y con saldo a favor no llevan complemento y dicen por qué;
+    - solo con una factura PPD timbrada y un CSD que selle; el rechazado se emite otra vez solo a mano, con otro folio y la misma parcialidad;
+    - cancelado uno que no es el último, el que se emite otra vez recupera su parcialidad y su saldo anterior; y un cobro que llega mientras otro espera volver a emitirse sigue la cadena (su saldo cuenta al que espera) y toma su parte del IVA, y el que se emite al final absorbe lo que queda;
+    - un cobro con un complemento vigente de una factura anterior no recibe otro;
+    - el cobro de una factura timbrada con el RFC que Mi negocio tenía antes dice por qué no se emite, sin esperar al worker ni dejar «Emitir ahora»;
+    - una venta fiada que todavía puede cambiar espera a cerrarse;
+    - la factura PPD no se cancela con complementos vigentes, hasta que el SAT los cancela;
+    - motivos 02 y 03; la serie de los complementos y su contador; acceso por pedido visible y permisos; archivos XML y PDF.
+    - `AuthorizationBehaviorTests`: el worker emite los complementos pendientes sin usuario (`IssuePendingPaymentComplementsCommand` y `RequestAutomaticPaymentComplementCommand`).
+    - `OrderInvoicingFlowTests`: la venta sin pagar dice cómo se factura en parcialidades.
+  - **Infrastructure:**
+    - `PaymentComplementsMigrationSqlServerTests` (3, nuevo): `PaymentSerie` «P» para cada perfil mientras la versión anterior los guarda; un complemento vivo por cobro y cada parcialidad una vez, y las restricciones rechazan lo que el dominio nunca escribe; el rollback se detiene con 50039 con una factura PPD o un complemento y, sin ellos, quita solo lo suyo.
+    - `SwSapienGatewayTests` (+1): el CFDI tipo P en ceros con moneda XXX, sin forma ni método, con su complemento Pagos20 (Totales por tasa, Pago y DoctoRelacionado con sus traslados).
+    - `InvoicingWorkerTests` (+2): encuentra los negocios cuyos cobros deben un complemento (no los de «Otro», PUE o con uno ya emitido, aunque rechazado, ni los que no tienen un CSD vigente) y los complementos timbrando o cancelándose; y los negocios cuya pasada no timbró ninguno van después de los demás y se turnan.
+  - **WebApi:** `CrossTenantInvoicingSqlServerTests` (+2): el complemento de otro negocio no se ve ni se toca (emitir, reintentar, cancelar, XML y PDF, también con su encabezado) y la factura PPD no se cancela con él vigente; el mismo cobro emitido dos veces a la vez se timbra una vez y el otro regresa su folio (P-3 sigue sin hueco). `TenantFilterBypassAllowlistTests`: el worker de facturación lee también los cobros, complementos y CSD vigentes (10).
+  - **Cliente:**
+    - `PaymentComplementList.test.tsx` (13, nuevo): nada sin factura PPD; una PPD sin cobros todavía; los complementos de una factura anterior sin decir que la viva es PPD, ni un plazo del SAT cuando ya no se debe ninguno; cada cobro con su parcialidad, saldos, folio fiscal y archivos; «Emitir ahora» y «Emitir otra vez» con su cobro; el rechazado con su motivo y su fecha límite; el cobro sin forma del SAT con su motivo; la fecha límite vencida (no el mismo día) y sin fecha mientras espera al PAC; volver a pedir el timbre; cancelar con 03; el error de la API.
+    - `invoicing.test.ts` (+4): el archivo del complemento; se vuelve a leer mientras algo espera al PAC, al SAT o al worker, y deja de hacerlo cuando lo que queda es a mano.
+    - `CfdiDraftModal.test.tsx` (+1): los complementos bajo la factura PPD, que dice «en parcialidades (PPD)».
+    - `Invoicing.test.tsx` (+1): las dos series se guardan juntas.
+  - **Total:** `dotnet test` con SQL Server 2022, 3,704 pruebas sin fallos ni omitidas (Domain 1,085, Application 1,637, Infrastructure 533, WebApi 449).
+  - **Cliente en total:** 164 archivos y 1,122 pruebas.
+  - **Primera visita:** 179,797 B de 179,900 B, sin subir el presupuesto: la facturación se carga aparte.
+  - **Escenas visuales:** `facturacion.spec.ts` (+4): los complementos de pago de la factura en parcialidades (escritorio, teléfono y oscuro) y el diálogo para cancelar uno.
+    - **Lo que cambia y por qué:** 7 escenas de `facturacion.spec.ts`: las 5 de Configuración › Facturación (lista en escritorio, teléfono y oscuro, sin certificado y en pruebas por vencer) por la serie de los complementos junto a la de las facturas y «Cómo funciona» al día; y «factura lista para timbrar» y «factura cancelándose», cuya vista previa dice ahora «Pago PUE (una sola exhibición)».
+    - **Resultado:** la comparación contra `master` en `607339e` dio 661 pruebas iguales (con la de cobertura), las 7 que cambian y las 4 nuevas (que no existen en `master`; pasaron dos corridas seguidas contra el mismo build, después de las revisiones).
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

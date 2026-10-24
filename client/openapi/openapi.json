@@ -7691,6 +7691,191 @@
         }
       }
     },
+    "/api/v1/invoicing/payments/{paymentId}/complements": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentComplementDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentComplementDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentComplementDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/payment-complements/{complementId}/retry": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "complementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentComplementDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentComplementDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentComplementDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/payment-complements/{complementId}/cancel": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "complementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderInvoiceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderInvoiceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentComplementDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentComplementDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentComplementDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/payment-complements/{complementId}/xml": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "complementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/payment-complements/{complementId}/pdf": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "complementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/invoicing/global-invoices": {
       "get": {
         "tags": [
@@ -18107,6 +18292,10 @@
         "properties": {
           "serie": {
             "type": "string"
+          },
+          "paymentSerie": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -24557,6 +24746,7 @@
         "required": [
           "available",
           "missingData",
+          "paymentSerie",
           "ready",
           "sandbox",
           "serie"
@@ -24570,6 +24760,9 @@
             "type": "boolean"
           },
           "serie": {
+            "type": "string"
+          },
+          "paymentSerie": {
             "type": "string"
           },
           "rfc": {
@@ -26838,6 +27031,7 @@
           "available",
           "canInvoice",
           "invoices",
+          "payments",
           "sandbox"
         ],
         "type": "object",
@@ -26871,6 +27065,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OrderInvoiceDto"
+            }
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderPaymentComplementsDto"
             }
           }
         },
@@ -27058,6 +27258,57 @@
           "AllOrders",
           "Off"
         ]
+      },
+      "OrderPaymentComplementsDto": {
+        "required": [
+          "amount",
+          "awaitsAutomaticIssue",
+          "canIssue",
+          "complements",
+          "dueBy",
+          "method",
+          "orderPaymentId",
+          "paidAt"
+        ],
+        "type": "object",
+        "properties": {
+          "orderPaymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paidAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OrderPaymentMethod"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "dueBy": {
+            "type": "string",
+            "format": "date"
+          },
+          "canIssue": {
+            "type": "boolean"
+          },
+          "problem": {
+            "type": "string",
+            "nullable": true
+          },
+          "awaitsAutomaticIssue": {
+            "type": "boolean"
+          },
+          "complements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentComplementDto"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "OrderPaymentDto": {
         "required": [
@@ -27727,6 +27978,109 @@
           "expectedBalance": {
             "type": "number",
             "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PaymentComplementDto": {
+        "required": [
+          "amount",
+          "hasPdf",
+          "hasXml",
+          "id",
+          "installment",
+          "issuedAutomatically",
+          "number",
+          "orderInvoiceId",
+          "orderPaymentId",
+          "paymentForm",
+          "previousBalance",
+          "remainingBalance",
+          "requestedAt",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderInvoiceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderPaymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderInvoiceStatus"
+          },
+          "paymentForm": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "installment": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "previousBalance": {
+            "type": "number",
+            "format": "double"
+          },
+          "remainingBalance": {
+            "type": "number",
+            "format": "double"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "issuedAutomatically": {
+            "type": "boolean"
+          },
+          "uuid": {
+            "type": "string",
+            "nullable": true
+          },
+          "stampedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "hasXml": {
+            "type": "boolean"
+          },
+          "hasPdf": {
+            "type": "boolean"
+          },
+          "failureMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "refusedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancellationMotive": {
+            "$ref": "#/components/schemas/CfdiCancellationMotive"
+          },
+          "cancellationRequestedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelledAt": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },

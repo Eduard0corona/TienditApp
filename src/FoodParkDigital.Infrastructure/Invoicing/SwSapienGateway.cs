@@ -232,9 +232,13 @@ public sealed class SwSapienGateway : IInvoicingGateway
         }
     }
 
-    /// <summary>The CFDI in SW's JSON: the SAT's attribute names, amounts as decimal text, the seal left for SW.</summary>
+    /// <summary>
+    /// The CFDI in SW's JSON: the SAT's attribute names, amounts as decimal text, the seal left for SW. A payment complement
+    /// (Fase 28C) is worth zero in no currency, which takes no decimals, and carries its Pagos 2.0 complement.
+    /// </summary>
     internal static JsonObject SwJson(CfdiDocument document)
     {
+        string Amount(decimal value) => document.Currency == CfdiDocument.NoCurrency ? "0" : Money(value);
         var concepts = new JsonArray();
         foreach (var concept in document.Concepts)
         {
@@ -245,7 +249,7 @@ public sealed class SwSapienGateway : IInvoicingGateway
                 ["ClaveUnidad"] = concept.UnitCode,
                 ["Descripcion"] = concept.Description.Length > 1000 ? concept.Description[..1000] : concept.Description,
                 ["ValorUnitario"] = Number(concept.UnitValue),
-                ["Importe"] = Money(concept.Amount),
+                ["Importe"] = Amount(concept.Amount),
                 ["ObjetoImp"] = concept.TaxObject
             };
             // The sale a global invoice's concept stands for (its folio).
@@ -269,16 +273,19 @@ public sealed class SwSapienGateway : IInvoicingGateway
             ["Fecha"] = document.Date,
             ["Sello"] = "",
             ["NoCertificado"] = "",
-            ["Certificado"] = "",
-            ["FormaPago"] = document.PaymentForm,
-            ["MetodoPago"] = document.PaymentMethod,
-            ["SubTotal"] = Money(document.SubTotal),
-            ["Moneda"] = document.Currency,
-            ["Total"] = Money(document.Total),
-            ["TipoDeComprobante"] = document.VoucherType,
-            ["Exportacion"] = document.Exportation,
-            ["LugarExpedicion"] = document.ExpeditionPostalCode
+            ["Certificado"] = ""
         };
+        // A payment complement declares neither: its payment says how it was paid.
+        if (document.PaymentForm is { } paymentForm)
+            json["FormaPago"] = paymentForm;
+        if (document.PaymentMethod is { } paymentMethod)
+            json["MetodoPago"] = paymentMethod;
+        json["SubTotal"] = Amount(document.SubTotal);
+        json["Moneda"] = document.Currency;
+        json["Total"] = Amount(document.Total);
+        json["TipoDeComprobante"] = document.VoucherType;
+        json["Exportacion"] = document.Exportation;
+        json["LugarExpedicion"] = document.ExpeditionPostalCode;
 
         // The period a global invoice covers, where the SAT's schema puts it: before the issuer.
         if (document.GlobalInformation is { } global)
@@ -317,7 +324,89 @@ public sealed class SwSapienGateway : IInvoicingGateway
             taxes["Traslados"] = new JsonArray(document.Transfers.Select(transfer => (JsonNode)Transfer(transfer)).ToArray());
             json["Impuestos"] = taxes;
         }
+
+        if (document.Payment is { } payment)
+            json["Complemento"] = new JsonObject { ["Any"] = new JsonArray(new JsonObject { ["Pago20:Pagos"] = Payments(payment) }) };
         return json;
+    }
+
+    /// <summary>
+    /// Pagos 2.0 with one payment of one invoice, in pesos: its taxes (TrasladosDR and TrasladosP) are the same, and its
+    /// totals add them up per rate.
+    /// </summary>
+    private static JsonObject Payments(CfdiDocumentPayment payment)
+    {
+        var invoice = payment.Invoice;
+        var related = new JsonObject
+        {
+            ["IdDocumento"] = invoice.Uuid,
+            ["Serie"] = invoice.Serie,
+            ["Folio"] = invoice.Folio,
+            ["MonedaDR"] = "MXN",
+            ["EquivalenciaDR"] = "1",
+            ["NumParcialidad"] = invoice.Installment.ToString(CultureInfo.InvariantCulture),
+            ["ImpSaldoAnt"] = Money(invoice.PreviousBalance),
+            ["ImpPagado"] = Money(invoice.Paid),
+            ["ImpSaldoInsoluto"] = Money(invoice.RemainingBalance),
+            ["ObjetoImpDR"] = invoice.TaxObject
+        };
+        var pago = new JsonObject
+        {
+            ["FechaPago"] = payment.Date,
+            ["FormaDePagoP"] = payment.PaymentForm,
+            ["MonedaP"] = "MXN",
+            ["TipoCambioP"] = "1",
+            ["Monto"] = Money(payment.Amount),
+            ["DoctoRelacionado"] = new JsonArray(related)
+        };
+        if (invoice.Transfers.Count > 0)
+        {
+            related["ImpuestosDR"] = new JsonObject
+            {
+                ["TrasladosDR"] = new JsonArray(invoice.Transfers.Select(t => (JsonNode)PaymentTransfer(t, "DR")).ToArray())
+            };
+            pago["ImpuestosP"] = new JsonObject
+            {
+                ["TrasladosP"] = new JsonArray(invoice.Transfers.Select(t => (JsonNode)PaymentTransfer(t, "P")).ToArray())
+            };
+        }
+
+        var totals = new JsonObject();
+        foreach (var transfer in invoice.Transfers)
+        {
+            if (transfer.Rate is not { } rate)
+            {
+                totals["TotalTrasladosBaseIVAExento"] = Money(transfer.Base);
+                continue;
+            }
+            var name = (rate * 100m).ToString("0", CultureInfo.InvariantCulture);
+            totals[$"TotalTrasladosBaseIVA{name}"] = Money(transfer.Base);
+            totals[$"TotalTrasladosImpuestoIVA{name}"] = Money(transfer.Amount ?? 0m);
+        }
+        totals["MontoTotalPagos"] = Money(payment.Amount);
+
+        return new JsonObject
+        {
+            ["Version"] = "2.0",
+            ["Totales"] = totals,
+            ["Pago"] = new JsonArray(pago)
+        };
+    }
+
+    /// <summary>A transfer of a payment's invoice (suffix DR) or of the payment (suffix P).</summary>
+    private static JsonObject PaymentTransfer(CfdiDocumentTransfer transfer, string suffix)
+    {
+        var node = new JsonObject
+        {
+            [$"Base{suffix}"] = Money(transfer.Base),
+            [$"Impuesto{suffix}"] = transfer.Tax,
+            [$"TipoFactor{suffix}"] = transfer.FactorType
+        };
+        if (transfer.Rate is { } rate)
+            node[$"TasaOCuota{suffix}"] = rate.ToString("0.000000", CultureInfo.InvariantCulture);
+        if (transfer.Amount is { } amount)
+            node[$"Importe{suffix}"] = Money(amount);
+        return node;
     }
 
     private static JsonObject Transfer(CfdiDocumentTransfer transfer)

@@ -5,10 +5,11 @@ import { useCfdiDraft, useIssueOrderInvoice, useOrderInvoicing, type CfdiReceive
 import type { Schemas } from '../../api/typedClient';
 import { useToast } from '../../hooks/useToast';
 import { OrderInvoiceStatus } from '../../types';
-import { EMPTY_RECEIVER, normalizeReceiver, PAYMENT_FORMS } from '../../utils/cfdi';
+import { EMPTY_RECEIVER, normalizeReceiver, PAYMENT_FORMS, PAYMENT_METHODS } from '../../utils/cfdi';
 import { formatMoney } from '../../utils/money';
 import CfdiReceiverFields from '../invoicing/CfdiReceiverFields';
 import OrderInvoiceList from '../invoicing/OrderInvoiceList';
+import PaymentComplementList from '../invoicing/PaymentComplementList';
 
 interface CfdiDraftModalProps {
   orderId: string;
@@ -36,7 +37,8 @@ function formatTransfer(transfer: Transfer | null | undefined): string {
 /**
  * The invoice of an order (Fase 28A): its invoices, and the CFDI 4.0 it would stamp (concepts with their SAT codes, IVA per
  * rate and what is still missing) for the customer's fiscal data. With the platform's PAC and the business's CSD, it is
- * stamped from here; without them it is only a preview.
+ * stamped from here; without them it is only a preview. A sale still owed is invoiced in installments (PPD, Fase 28C), and
+ * the complements of its payments show under its invoices.
  */
 export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSaveToCustomer, orderCancelled, onClose }: CfdiDraftModalProps) {
   const titleId = useId();
@@ -141,6 +143,15 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
       <Modal.Body>
         {loadError}
         {invoicing && <OrderInvoiceList orderId={orderId} invoices={invoicing.invoices} canCancel={canCancel} />}
+        {invoicing && (
+          <PaymentComplementList
+            orderId={orderId}
+            payments={invoicing.payments}
+            inInstallments={invoicing.invoices.some((invoice) => invoice.paymentMethod === 'PPD'
+              && invoice.status !== OrderInvoiceStatus.Refused && invoice.status !== OrderInvoiceStatus.Cancelled)}
+            canCancel={canCancel}
+          />
+        )}
 
         {orderCancelled && invoicing && (
           <p className="text-muted small mb-0">
@@ -220,8 +231,8 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
                 </div>
               ) : cfdi.isGeneralPublic ? (
                 <div className="alert alert-secondary py-2 small">
-                  Para timbrarla captura los datos fiscales del cliente: la venta a público en general va en la factura global del periodo,
-                  que TienditApp todavía no genera.
+                  Para timbrarla captura los datos fiscales del cliente: la venta a público en general va en la factura global del periodo
+                  (Reportes › Factura global).
                 </div>
               ) : (
                 <div className="alert alert-success py-2">
@@ -246,7 +257,8 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
                   <div>{cfdi.receiver.name}</div>
                   <div>RFC {cfdi.receiver.rfc} · Régimen {cfdi.receiver.fiscalRegime} · Uso {cfdi.receiver.cfdiUse}</div>
                   <div>
-                    Pago {cfdi.paymentMethod} · Forma {cfdi.paymentForm} {PAYMENT_FORMS[cfdi.paymentForm] ? `(${PAYMENT_FORMS[cfdi.paymentForm]})` : ''}
+                    Pago {cfdi.paymentMethod} {PAYMENT_METHODS[cfdi.paymentMethod] ? `(${PAYMENT_METHODS[cfdi.paymentMethod].toLowerCase()})` : ''}
+                    {' · '}Forma {cfdi.paymentForm} {PAYMENT_FORMS[cfdi.paymentForm] ? `(${PAYMENT_FORMS[cfdi.paymentForm]})` : ''}
                   </div>
                 </div>
               </div>

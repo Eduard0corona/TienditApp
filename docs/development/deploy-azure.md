@@ -825,6 +825,22 @@ La Fase 28B trae una migración, [`database/production/20261023175930_AddGlobalI
 - **Volver a la versión anterior:** funciona sin tocar la base. Las globales se quedan en la base y en el PAC; la 28A no revisa si una venta está en una global, así que mientras tanto se puede facturar sola (se cancela una de las dos).
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50038, sin cambiar nada, en cuanto hay una factura global (aunque sea rechazada). Sin ninguna, quita las dos tablas; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## La factura en parcialidades y los complementos de pago (Fase 28C)
+
+La Fase 28C trae una migración, [`database/production/20261024014559_AddPaymentComplements`](../../database/production/20261024014559_AddPaymentComplements). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente, también la aplica; no sirve para crear una base vacía ([ADR 0047](../adr/0047-payment-complements.md)).
+
+- **La migración:**
+  - crea la tabla vacía `PaymentComplements` (los complementos de pago, con su CFDI, cobro, parcialidad, saldos, folio, estado, timbre y cancelación; un índice único filtrado deja un solo complemento vivo por cobro);
+  - agrega `InvoicingProfiles.PaymentSerie` con `'P'` en los negocios que ya tienen perfil;
+  - cambia `CK_OrderInvoices_PaymentMethod` de «solo PUE» a «PUE con forma real, o PPD con 99»: las facturas existentes ya lo cumplen.
+
+  No cambia pedidos, pagos ni facturas. Después de aplicarla, el `verify.sql` muestra la tabla, la columna, las restricciones e índices, y cuenta los complementos y las facturas PPD: cero hasta desplegar.
+- **Mientras se publica:** la versión de `master` (Fase 28B) no conoce la tabla ni la columna y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** las rutas `POST /api/v1/invoicing/payments/{paymentId}/complements` y `/api/v1/invoicing/payment-complements/{id}/retry|cancel|xml|pdf`, `payments` en la facturación del pedido y `paymentSerie` en la configuración. Nada se quita ni cambia de nombre.
+- **Sin configuración nueva:** usa el PAC, el CSD, los archivos privados y el worker de facturación de la 28A; el worker también emite y timbra los complementos pendientes. Sin SW Sapien, la factura sigue siendo vista previa y no se emiten complementos.
+- **Volver a la versión anterior:** funciona sin tocar la base. Las facturas PPD y sus complementos se quedan en la base y en el PAC; la 28B no emite complementos nuevos y no impide cancelar una PPD con complementos vigentes (el SAT la rechaza).
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50039, sin cambiar nada, en cuanto hay un complemento o una factura PPD (aunque estén rechazados). Sin ninguno, quita la tabla y la columna y regresa la restricción a «solo PUE»; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

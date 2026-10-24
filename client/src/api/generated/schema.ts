@@ -6279,6 +6279,199 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoicing/payments/{paymentId}/complements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    paymentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PaymentComplementDto"];
+                        "application/json": components["schemas"]["PaymentComplementDto"];
+                        "text/json": components["schemas"]["PaymentComplementDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/payment-complements/{complementId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    complementId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PaymentComplementDto"];
+                        "application/json": components["schemas"]["PaymentComplementDto"];
+                        "text/json": components["schemas"]["PaymentComplementDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/payment-complements/{complementId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    complementId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CancelOrderInvoiceRequest"];
+                    "text/json": components["schemas"]["CancelOrderInvoiceRequest"];
+                    "application/*+json": components["schemas"]["CancelOrderInvoiceRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PaymentComplementDto"];
+                        "application/json": components["schemas"]["PaymentComplementDto"];
+                        "text/json": components["schemas"]["PaymentComplementDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/payment-complements/{complementId}/xml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    complementId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/payment-complements/{complementId}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    complementId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoicing/global-invoices": {
         parameters: {
             query?: never;
@@ -13780,6 +13973,7 @@ export interface components {
         };
         ChangeInvoiceSerieRequest: {
             serie: string;
+            paymentSerie?: string | null;
         };
         ChangePasswordCommand: {
             currentPassword: string;
@@ -15719,6 +15913,7 @@ export interface components {
             available: boolean;
             sandbox: boolean;
             serie: string;
+            paymentSerie: string;
             rfc?: string | null;
             legalName?: string | null;
             fiscalRegime?: string | null;
@@ -16388,6 +16583,7 @@ export interface components {
             customerId?: string | null;
             customerName?: string | null;
             invoices: components["schemas"]["OrderInvoiceDto"][];
+            payments: components["schemas"]["OrderPaymentComplementsDto"][];
         };
         OrderItemCancellationDto: {
             /** Format: uuid */
@@ -16449,6 +16645,21 @@ export interface components {
          * @enum {integer}
          */
         OrderNotificationPolicy: 0 | 1 | 2;
+        OrderPaymentComplementsDto: {
+            /** Format: uuid */
+            orderPaymentId: string;
+            /** Format: date-time */
+            paidAt: string;
+            method: components["schemas"]["OrderPaymentMethod"];
+            /** Format: double */
+            amount: number;
+            /** Format: date */
+            dueBy: string;
+            canIssue: boolean;
+            problem?: string | null;
+            awaitsAutomaticIssue: boolean;
+            complements: components["schemas"]["PaymentComplementDto"][];
+        };
         OrderPaymentDto: {
             /** Format: uuid */
             id: string;
@@ -16651,6 +16862,41 @@ export interface components {
             restInFavor: boolean;
             /** Format: double */
             expectedBalance?: number | null;
+        };
+        PaymentComplementDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            orderInvoiceId: string;
+            /** Format: uuid */
+            orderPaymentId: string;
+            number: string;
+            status: components["schemas"]["OrderInvoiceStatus"];
+            paymentForm: string;
+            /** Format: double */
+            amount: number;
+            /** Format: int32 */
+            installment: number;
+            /** Format: double */
+            previousBalance: number;
+            /** Format: double */
+            remainingBalance: number;
+            /** Format: date-time */
+            requestedAt: string;
+            issuedAutomatically: boolean;
+            uuid?: string | null;
+            /** Format: date-time */
+            stampedAt?: string | null;
+            hasXml: boolean;
+            hasPdf: boolean;
+            failureMessage?: string | null;
+            /** Format: date-time */
+            refusedAt?: string | null;
+            cancellationMotive?: components["schemas"]["CfdiCancellationMotive"];
+            /** Format: date-time */
+            cancellationRequestedAt?: string | null;
+            /** Format: date-time */
+            cancelledAt?: string | null;
         };
         PendingCourierOrdersDto: {
             owed: components["schemas"]["CourierOrderDto"][];

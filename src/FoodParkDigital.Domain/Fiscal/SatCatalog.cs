@@ -138,6 +138,28 @@ public static partial class SatCatalog
     /// </summary>
     public const string PaymentFormAdvanceApplied = "30";
 
+    /// <summary>
+    /// The only concept of a payment complement (CFDI tipo P, Fase 28C): «Pago» with ClaveProdServ 84111506 and ClaveUnidad
+    /// ACT, worth zero; the payment itself goes in its Pagos 2.0 complement.
+    /// </summary>
+    public const string PaymentReceivedProductCode = "84111506";
+    public const string ActivityUnitCode = "ACT";
+    public const string PaymentReceivedDescription = "Pago";
+
+    /// <summary>c_UsoCFDI «Pagos»: the use of the receiver of a payment complement.</summary>
+    public const string PaymentUse = "CP01";
+
+    /// <summary>
+    /// c_FormaPago of a payment in its complement (FormaDePagoP, Fase 28C), or null when none fits: «Por definir» (99) is not
+    /// allowed there («Otro» says no form), and what was paid with the customer's balance is an advance applied, whose
+    /// CFDI the accountant handles.
+    /// </summary>
+    public static string? PaymentComplementForm(OrderPaymentMethod method)
+    {
+        var form = PaymentForm(method);
+        return form is PaymentFormToBeDefined or PaymentFormAdvanceApplied ? null : form;
+    }
+
     /// <summary>c_FormaPago of a payment method. Cards are declared as credit cards (04).</summary>
     public static string PaymentForm(OrderPaymentMethod method) => method switch
     {

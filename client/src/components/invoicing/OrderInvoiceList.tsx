@@ -63,6 +63,7 @@ export default function OrderInvoiceList({ orderId, invoices, canCancel }: Order
               <span className={`ta-chip ${invoiceStatusChip(invoice.status)}`}>{invoiceStatusLabel(invoice.status)}</span>
               <span className="small text-muted">
                 {invoice.receiver.rfc} · {invoice.receiver.name} · <span className="ta-money">{formatMoney(invoice.total)}</span>
+                {invoice.paymentMethod === 'PPD' && ' · en parcialidades (PPD)'}
               </span>
             </div>
             {invoice.uuid && (

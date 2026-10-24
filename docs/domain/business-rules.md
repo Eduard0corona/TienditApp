@@ -525,7 +525,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Qué se factura:** un pedido a un cliente con RFC, con un CFDI 4.0 de ingreso timbrado por el PAC de la plataforma (SW Sapien). Los conceptos, el IVA, la forma de pago y el total son los de la vista previa del CFDI (Fase 3); el backend los decide y el PAC solo los valida.
 - **Cuándo se puede:**
   - la vista previa no tiene bloqueos y el receptor no es público en general (esas ventas esperan la factura global);
-  - el pedido está pagado por completo (PUE) y no está cancelado (sus facturas siguen en «Factura» para descargarlas y cancelar la timbrada con el motivo 03); sin reembolsos, condonaciones ni un reembolso en línea en curso;
+  - el pedido está pagado por completo (PUE), o el cliente ya lo debe (se vendió fiado, o se entregó o completó) y se factura en parcialidades (PPD, Fase 28C); no está cancelado (sus facturas siguen en «Factura» para descargarlas y cancelar la timbrada con el motivo 03); sin reembolsos, condonaciones ni un reembolso en línea en curso;
   - el pago principal no es «Otro», que no es una forma de pago del SAT (un PUE no se declara «por definir», 99);
   - no tiene otra factura viva (timbrando, timbrada o cancelándose) ni está en una factura global viva (Fase 28B);
   - el negocio subió su CSD, vigente y del RFC de Mi negocio, y la plataforma tiene su PAC.
@@ -538,7 +538,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cancelar** (dueños y administradores): con motivo 02 (errores sin relación) o 03 (la venta no se llevó a cabo); se pide primero al PAC y, si se niega, nada cambia. Si el SAT pide la aceptación del receptor, queda «Cancelándose» y el worker pregunta cada 30 minutos: cancelada, o «Timbrada» otra vez si el receptor la rechazó. Una cancelada deja facturar el pedido otra vez con factura y folio nuevos. Nunca se borra una factura.
 - **El CSD** (dueños y administradores, Configuración › Facturación): `.cer`, `.key` y la contraseña de la llave. TienditApp revisa que sea de sello, vigente, del RFC de Mi negocio y que la llave corresponda; el PAC lo guarda y TienditApp solo su número, RFC y vigencia. Los archivos y la contraseña nunca se guardan ni se registran. Avisa 30 días antes de vencer; reemplazarlo o quitarlo pide al PAC que olvide el anterior. Un CSD es de un solo negocio de TienditApp: si otro ya lo usa, se rechaza (dos negocios del mismo RFC tramitan uno cada uno).
 - **Acceso:** timbrar, volver a pedir, ver y descargar el XML y el PDF, quien gestiona los pedidos (`ManageOrders`); cancelar, el CSD y la serie, dueños y administradores. Otro negocio recibe 404.
-- **Sin** PPD y complementos de pago, notas de crédito, sustitución (motivo 01), autofactura, envío por correo o WhatsApp, logo en el PDF, otras monedas ni retenciones.
+- **Sin** notas de crédito, sustitución (motivo 01), autofactura, envío por correo o WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C (siguiente sección de facturas).
 
 ## La factura global (Fase 28B)
 
@@ -554,6 +554,24 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cancelar** (dueños y administradores): motivo 04 (un cliente pidió la factura de una de sus ventas) o 02 (errores); no requiere aceptación. Al cancelarse, sus ventas quedan libres. Nunca se borra.
 - **Acceso:** todo, dueños y administradores, en Reportes › Factura global; otro negocio recibe 404.
 - **Sin** global de ventas a crédito (parcialidades), sustitución (01), egreso relacionado (notas de crédito), global por sucursal ni más de 2,000 ventas por solicitud.
+
+## La factura en parcialidades y los complementos de pago (Fase 28C)
+
+[ADR 0047](../adr/0047-payment-complements.md):
+
+- **La factura PPD:** una venta que el cliente ya debe (fiada, o entregada o completada) y no está pagada por completo se factura en parcialidades: método PPD y forma 99 «Por definir». El resto de las reglas son las de la factura del pedido (sin condonación, reembolsos ni reembolso en línea en curso). Una venta que el cliente todavía no se lleva se cobra antes de facturarla, y una fiada que sigue pendiente o es una cuenta abierta se acepta o se cierra antes (todavía puede cambiar su total).
+- **El complemento de pago:** un CFDI tipo P (Pagos 2.0) por cada cobro del pedido, también por los que llegaron antes de la factura. Lleva:
+  - el receptor de la factura con uso CP01, en ceros y en moneda XXX;
+  - el cobro con su fecha, forma y monto;
+  - la factura con su UUID, la parcialidad, el saldo anterior, lo pagado y lo que queda;
+  - el IVA prorrateado por tasa (el último pago toma lo que queda, para que los complementos sumen la factura).
+- **Quién lo emite:** TienditApp, por su cuenta, en cuanto la factura está timbrada y el cobro registrado (el worker, del cobro más viejo al más nuevo, en los negocios cuyo CSD sella); o quien gestiona los pedidos con «Emitir ahora». El SAT lo pide a más tardar el día 5 del mes siguiente al cobro; Pedidos dice la fecha y avisa cuando ya pasó.
+- **Uno por cobro:** un cobro tiene a lo más un complemento vivo (timbrando, timbrado o cancelándose), aunque sea de una factura anterior, y una factura nunca dos con la misma parcialidad. Cada cobro conserva su parcialidad y su monto aunque su complemento se rechace o cancele (el cobro sí se recibió): «Emitir otra vez» lo reemplaza con el siguiente folio y la misma parcialidad, y el saldo anterior de cada uno es el total menos los cobros de las parcialidades anteriores, aunque alguno espere volver a emitirse.
+- **Sin complemento:** los cobros «Otro» (no son una forma del SAT) y con saldo a favor (un anticipo aplicado); el cobro dice por qué y la vista previa de la factura lo avisa. Tampoco se emiten mientras falte el CSD vigente del RFC de la factura, los datos de Mi negocio o el PAC: esperan.
+- **Serie:** «P» por omisión, con sus propios folios; se cambia en Configuración › Facturación junto a la de las facturas.
+- **Timbrar, reintentar y cancelar:** como la factura del pedido (misma llave y mismo CFDI en cada intento; cancelar, dueños y administradores, con motivo 02 o 03). Una factura PPD no se cancela mientras tenga complementos vigentes: primero se cancelan ellos.
+- **Acceso:** ver, emitir, volver a pedir y descargar, quien gestiona los pedidos (`ManageOrders`); cancelar, dueños y administradores. Otro negocio recibe 404.
+- **Sin** sustitución (01), un complemento que cubra varias facturas, otras monedas, la global de ventas a crédito, notas de crédito (28D) ni un reporte de complementos.
 
 ## Cancelación y trazabilidad
 

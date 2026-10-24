@@ -11,8 +11,9 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
 /// Invoicing (Fase 28A, ADR 0045): Configuración › Facturación (the business's CSD and serie, for owners and admins) and
-/// the CFDI 4.0 invoice of an order, stamped through the platform's PAC, downloaded and cancelled; and the global invoice
-/// of a period to the general public (Fase 28B, ADR 0046), for owners and admins.
+/// the CFDI 4.0 invoice of an order, stamped through the platform's PAC, downloaded and cancelled; the global invoice of a
+/// period to the general public (Fase 28B, ADR 0046), for owners and admins; and the payment complements of the payments
+/// of an invoice in installments (Fase 28C, ADR 0047).
 /// </summary>
 [ApiController]
 [Route("api/v1/invoicing")]
@@ -53,7 +54,7 @@ public class InvoicingController : ControllerBase
     public async Task<ActionResult<InvoicingSettingsDto>> ChangeSerie(
         [FromBody] ChangeInvoiceSerieRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new ChangeInvoiceSerieCommand(request.Serie), cancellationToken);
+        var result = await _mediator.Send(new ChangeInvoiceSerieCommand(request.Serie, request.PaymentSerie), cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
@@ -99,6 +100,42 @@ public class InvoicingController : ControllerBase
     [HttpGet("invoices/{invoiceId:guid}/pdf")]
     public Task<IActionResult> DownloadPdf(Guid invoiceId, CancellationToken cancellationToken)
         => DownloadAsync(new GetOrderInvoiceFileQuery(invoiceId, OrderInvoiceFileKind.Pdf), cancellationToken);
+
+    /// <summary>
+    /// Issues the complement of a payment of an order whose invoice is in installments (Fase 28C): before TienditApp does it
+    /// on its own, or again after a refused or cancelled one. It answers the complement as it ended up.
+    /// </summary>
+    [HttpPost("payments/{paymentId:guid}/complements")]
+    public async Task<ActionResult<PaymentComplementDto>> IssuePaymentComplement(Guid paymentId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new IssuePaymentComplementCommand(paymentId), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    /// <summary>Asks the PAC again for a payment complement still stamping, with the same CFDI.</summary>
+    [HttpPost("payment-complements/{complementId:guid}/retry")]
+    public async Task<ActionResult<PaymentComplementDto>> RetryPaymentComplement(Guid complementId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new RetryPaymentComplementCommand(complementId), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    /// <summary>Cancels a stamped payment complement with the SAT (motive 02 or 03), owners and admins.</summary>
+    [HttpPost("payment-complements/{complementId:guid}/cancel")]
+    public async Task<ActionResult<PaymentComplementDto>> CancelPaymentComplement(
+        Guid complementId, [FromBody] CancelOrderInvoiceRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CancelPaymentComplementCommand(complementId, request.Motive), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    [HttpGet("payment-complements/{complementId:guid}/xml")]
+    public Task<IActionResult> DownloadPaymentComplementXml(Guid complementId, CancellationToken cancellationToken)
+        => DownloadAsync(new GetPaymentComplementFileQuery(complementId, OrderInvoiceFileKind.Xml), cancellationToken);
+
+    [HttpGet("payment-complements/{complementId:guid}/pdf")]
+    public Task<IActionResult> DownloadPaymentComplementPdf(Guid complementId, CancellationToken cancellationToken)
+        => DownloadAsync(new GetPaymentComplementFileQuery(complementId, OrderInvoiceFileKind.Pdf), cancellationToken);
 
     /// <summary>
     /// The business's global invoices, the newest period first; the search finds one by its folio, its UUID or the folio of
@@ -193,6 +230,8 @@ public class UploadInvoicingCertificateRequest
 public class ChangeInvoiceSerieRequest
 {
     public string Serie { get; init; } = string.Empty;
+    /// <summary>The serie of the payment complements (Fase 28C); left out, it stays as it is.</summary>
+    public string? PaymentSerie { get; init; }
 }
 
 public class IssueOrderInvoiceRequest

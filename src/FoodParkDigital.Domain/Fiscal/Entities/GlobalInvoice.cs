@@ -80,7 +80,7 @@ public class GlobalInvoice : CfdiInvoice, IAggregateRoot
             Year = period.Year,
             OrderCount = sales.Count
         };
-        invoice.Begin(tenantId, serie, folio, paymentForm, document, subTotal, taxTotal, total, requestedByUserId, now);
+        invoice.Begin(tenantId, serie, folio, paymentForm, PaidInOneExhibition, document, subTotal, taxTotal, total, requestedByUserId, now);
         foreach (var sale in sales)
             invoice._orders.Add(new GlobalInvoiceOrder(tenantId, invoice.Id, sale));
         return invoice;

@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace FoodParkDigital.Infrastructure.Persistence.Configurations;
 
 /// <summary>
-/// The CFDI invoices of the orders (Fase 28A, ADR 0045). An order has at most one live invoice (stamping, stamped or
-/// waiting for its cancellation), a folio is never used twice in a business, and each request to the PAC has its own key.
+/// The CFDI invoices of the orders (Fase 28A, ADR 0045; in installments too, Fase 28C). An order has at most one live
+/// invoice (stamping, stamped or waiting for its cancellation), a folio is never used twice in a business, and each request to the PAC has its own key.
 /// The rest of what the domain guarantees is repeated here, so a row the domain never writes is refused.
 /// </summary>
 public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
@@ -22,7 +22,10 @@ public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
             table.HasCheckConstraint(
                 "CK_OrderInvoices_Amounts",
                 "[Total] > 0 AND [SubTotal] >= 0 AND [TaxTotal] >= 0 AND [SubTotal] + [TaxTotal] = [Total]");
-            table.HasCheckConstraint("CK_OrderInvoices_PaymentMethod", "[PaymentMethod] = 'PUE'");
+            // Paid in one exhibition with the form that paid it, or in installments «por definir» (Fase 28C).
+            table.HasCheckConstraint(
+                "CK_OrderInvoices_PaymentMethod",
+                "([PaymentMethod] = 'PUE' AND [PaymentForm] <> '99') OR ([PaymentMethod] = 'PPD' AND [PaymentForm] = '99')");
             table.HasCheckConstraint(
                 "CK_OrderInvoices_Stamp",
                 "([Status] IN (0, 2) AND [Uuid] IS NULL AND [ProviderInvoiceId] IS NULL AND [StampedAt] IS NULL"

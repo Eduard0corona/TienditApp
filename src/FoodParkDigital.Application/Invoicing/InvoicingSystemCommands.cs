@@ -11,8 +11,8 @@ namespace FoodParkDigital.Application.Invoicing;
 
 /// <summary>
 /// Asks the PAC again for a business's invoices that stayed «Timbrando» (the invoicing worker sends it in the business's
-/// scope, Fase 28A; global invoices too, Fase 28B): each with its own CFDI and key, while the PAC still answers a repeated
-/// key with the stamp it gave.
+/// scope, Fase 28A; global invoices too, Fase 28B, and payment complements, Fase 28C): each with its own CFDI and key, while
+/// the PAC still answers a repeated key with the stamp it gave.
 /// </summary>
 [AllowAnonymousRequest("Lo envía el worker de facturación (sistema), sin usuario, en el alcance del negocio.")]
 public record StampPendingInvoicesCommand : IRequest<Result<int>>;
@@ -57,13 +57,14 @@ public class StampPendingInvoicesCommandHandler : IRequestHandler<StampPendingIn
             return Result.Success(0);
 
         var stamped = await StampAsync(_context.OrderInvoices, _context.OrderInvoices, cancellationToken)
-            + await StampAsync(_context.GlobalInvoices, GlobalInvoicing.WithSales(_context), cancellationToken);
+            + await StampAsync(_context.GlobalInvoices, GlobalInvoicing.WithSales(_context), cancellationToken)
+            + await StampAsync(_context.PaymentComplements, _context.PaymentComplements, cancellationToken);
         return Result.Success(stamped);
     }
 
     private async Task<int> StampAsync<TInvoice>(
         IQueryable<TInvoice> invoices, IQueryable<TInvoice> loaded, CancellationToken cancellationToken)
-        where TInvoice : CfdiInvoice
+        where TInvoice : Cfdi
     {
         var now = _clock.UtcNow;
         var settled = now - SettleTime;
@@ -97,8 +98,8 @@ public class StampPendingInvoicesCommandHandler : IRequestHandler<StampPendingIn
 
 /// <summary>
 /// Asks the SAT about a business's invoices whose cancellation waits for the customer (the invoicing worker sends it in
-/// the business's scope, Fase 28A; global invoices too, Fase 28B): cancelled (accepted, or the customer let the time pass)
-/// or kept, with the reason.
+/// the business's scope, Fase 28A; global invoices too, Fase 28B, and payment complements, Fase 28C): cancelled (accepted,
+/// or the customer let the time pass) or kept, with the reason.
 /// </summary>
 [AllowAnonymousRequest("Lo envía el worker de facturación (sistema), sin usuario, en el alcance del negocio.")]
 public record CheckInvoiceCancellationsCommand : IRequest<Result<int>>;
@@ -137,13 +138,14 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
             return Result.Success(0);
 
         var settled = await CheckAsync(_context.OrderInvoices, _context.OrderInvoices, cancellationToken)
-            + await CheckAsync(_context.GlobalInvoices, GlobalInvoicing.WithSales(_context), cancellationToken);
+            + await CheckAsync(_context.GlobalInvoices, GlobalInvoicing.WithSales(_context), cancellationToken)
+            + await CheckAsync(_context.PaymentComplements, _context.PaymentComplements, cancellationToken);
         return Result.Success(settled);
     }
 
     private async Task<int> CheckAsync<TInvoice>(
         IQueryable<TInvoice> invoices, IQueryable<TInvoice> loaded, CancellationToken cancellationToken)
-        where TInvoice : CfdiInvoice
+        where TInvoice : Cfdi
     {
         var waiting = await invoices.AsNoTracking()
             .Where(i => i.Status == OrderInvoiceStatus.Cancelling)
@@ -172,7 +174,7 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
 
     /// <returns>Whether the SAT settled its cancellation and that was saved.</returns>
     private async Task<bool> SettleAsync<TInvoice>(IQueryable<TInvoice> loaded, TInvoice invoice, CancellationToken cancellationToken)
-        where TInvoice : CfdiInvoice
+        where TInvoice : Cfdi
     {
         var status = await StatusAsync(invoice, cancellationToken);
         if (status is null || (status.State != CfdiSatState.Cancelled && !status.CancellationRefused))
@@ -197,7 +199,7 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
         }
     }
 
-    private async Task<CfdiSatStatus?> StatusAsync(CfdiInvoice invoice, CancellationToken cancellationToken)
+    private async Task<CfdiSatStatus?> StatusAsync(Cfdi invoice, CancellationToken cancellationToken)
     {
         var xml = invoice.XmlFileKey is null
             ? null
@@ -209,12 +211,13 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
             return null;
         }
 
-        // The parties the invoice was stamped for: the receiver of a global invoice is the general public.
+        // The parties and the total the CFDI was stamped with: the receiver of a global invoice is the general public, and a
+        // payment complement's total is zero.
         var document = CfdiDocument.FromJson(invoice.Document);
         try
         {
             return await _gateway.GetSatStatusAsync(
-                new CfdiStatusQuery(document.Issuer.Rfc, document.Receiver.Rfc, invoice.Total, invoice.Uuid!, sealTail), cancellationToken);
+                new CfdiStatusQuery(document.Issuer.Rfc, document.Receiver.Rfc, document.Total, invoice.Uuid!, sealTail), cancellationToken);
         }
         catch (InvoicingGatewayUnavailableException)
         {

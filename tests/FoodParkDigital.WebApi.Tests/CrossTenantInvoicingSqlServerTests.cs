@@ -89,6 +89,126 @@ public sealed class CrossTenantInvoicingSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task PaymentComplements_OfAnotherBusiness_ShouldBeInvisible_AndUntouchable()
+    {
+        var mine = await _api.SignUpAsync("complementos-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("complementos-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        var product = await ProductAsync(mine.Client, "Complemento A");
+        await TwoBusinessesApi.IdAsync(mine.Client, "/api/v1/cash/open", new { openingAmount = 0m });
+        var customer = await TwoBusinessesApi.IdAsync(mine.Client, "/api/v1/customers", new { name = "Karla", phone = "5512345678" });
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"/api/v1/customers/{customer}/credit-limit", new { creditLimit = 5_000m }));
+        // Sold on credit with a down payment: invoiced in installments, and the down payment gets its complement.
+        var sale = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/orders", new
+        {
+            orderType = 0,
+            channel = 0,
+            createdByBusiness = true,
+            customerId = customer,
+            onCredit = true,
+            items = new[] { new { productId = product, quantity = 2m } },
+            payments = new[] { new { amount = 10m, method = 0 } }
+        }));
+        var order = sale.GetProperty("id").GetGuid();
+        var invoice = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }));
+        Assert.Equal("PPD", invoice.GetProperty("paymentMethod").GetString());
+        var payment = (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/orders/{order}")))
+            .GetProperty("payments")[0].GetProperty("orderPaymentId").GetGuid();
+
+        // The other owner, even with the header of my business, cannot issue the complement of my payment.
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"/api/v1/invoicing/payments/{payment}/complements", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
+            mine, HttpMethod.Post, $"/api/v1/invoicing/payments/{payment}/complements"))).StatusCode);
+        var complement = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"/api/v1/invoicing/payments/{payment}/complements", null));
+        var complementId = complement.GetProperty("id").GetGuid();
+        Assert.Equal(((int)OrderInvoiceStatus.Stamped, "P-1", 1), (
+            complement.GetProperty("status").GetInt32(), complement.GetProperty("number").GetString(), complement.GetProperty("installment").GetInt32()));
+
+        // Nor see, retry, cancel or download it.
+        foreach (var url in new[] { $"/api/v1/invoicing/payment-complements/{complementId}/xml", $"/api/v1/invoicing/payment-complements/{complementId}/pdf" })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync(url)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(mine, HttpMethod.Get, url))).StatusCode);
+        }
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"/api/v1/invoicing/payment-complements/{complementId}/retry", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
+            mine, HttpMethod.Post, $"/api/v1/invoicing/payment-complements/{complementId}/cancel", new { motive = (int)CfdiCancellationMotive.NotCarriedOut }))).StatusCode);
+        Assert.Empty(_api.Invoicing.Cancellations.Where(c => c.Uuid == complement.GetProperty("uuid").GetString()));
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.PaymentComplements.ToListAsync()));
+
+        // Mine: its XML downloads, and the invoice is not cancelled while the complement stands.
+        Assert.Equal(HttpStatusCode.OK, (await mine.Client.GetAsync($"/api/v1/invoicing/payment-complements/{complementId}/xml")).StatusCode);
+        var blocked = await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoice.GetProperty("id").GetGuid()}/cancel", new { motive = (int)CfdiCancellationMotive.ErrorsWithoutReplacement });
+        Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
+        Assert.Contains("P-1", await blocked.Content.ReadAsStringAsync());
+    }
+
+    [SqlServerFact]
+    public async Task TheSamePaymentsComplementIssuedAtOnce_ShouldBeStampedOnce_AndGiveTheOtherFolioBack()
+    {
+        var mine = await _api.SignUpAsync("complementos-carrera", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        var product = await ProductAsync(mine.Client, "Complemento carrera");
+        await TwoBusinessesApi.IdAsync(mine.Client, "/api/v1/cash/open", new { openingAmount = 0m });
+        var customer = await TwoBusinessesApi.IdAsync(mine.Client, "/api/v1/customers", new { name = "Karla", phone = "5512345678" });
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"/api/v1/customers/{customer}/credit-limit", new { creditLimit = 5_000m }));
+        var order = (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/orders", new
+        {
+            orderType = 0,
+            channel = 0,
+            createdByBusiness = true,
+            customerId = customer,
+            onCredit = true,
+            items = new[] { new { productId = product, quantity = 3m } },
+            payments = new[] { new { amount = 10m, method = 0 } }
+        }))).GetProperty("id").GetGuid();
+        foreach (var _ in Enumerable.Range(0, 2))
+            await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/orders/{order}/payments", new { amount = 10m, method = 0 }));
+        var total = (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }))).GetProperty("total").GetDecimal();
+        var payments = (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/orders/{order}")))
+            .GetProperty("payments").EnumerateArray().Select(p => p.GetProperty("orderPaymentId").GetGuid()).ToList();
+        Assert.Equal(3, payments.Count);
+        Assert.Equal("P-1", (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync(
+            $"/api/v1/invoicing/payments/{payments[0]}/complements", null))).GetProperty("number").GetString());
+
+        // Two people issue the complement of the same payment at once. While the serie's folio is held, the first waits for
+        // a folio; the second waits for the invoicing lock of the business and, once the first commits, finds its complement.
+        // The index of one live complement per payment stays as the last word.
+        var answers = await _api.QueryAsync(mine.TenantId, async db =>
+        {
+            await using var held = await db.Database.BeginTransactionAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE FolioSequences SET LastNumber = LastNumber WHERE TenantId = {mine.TenantId}");
+            var both = Enumerable.Range(0, 2)
+                .Select(_ => mine.Client.PostAsync($"/api/v1/invoicing/payments/{payments[1]}/complements", null))
+                .ToList();
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await held.CommitAsync();
+            return await Task.WhenAll(both);
+        });
+
+        Assert.Single(answers, answer => answer.StatusCode == HttpStatusCode.OK);
+        var refused = Assert.Single(answers, answer => answer.StatusCode != HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains(
+            JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString(),
+            new[]
+            {
+                "El complemento P-2 de este cobro se está timbrando.",
+                "Este cobro ya tiene el complemento P-2: cancélalo para emitir otro."
+            });
+        var complements = await _api.QueryAsync(mine.TenantId, db => db.PaymentComplements.OrderBy(c => c.Installment).ToListAsync());
+        Assert.Equal([(1, total, 10m), (2, total - 10m, 10m)], complements.Select(c => (c.Installment, c.PreviousBalance, c.Amount)));
+        // The refused one took no folio: the next complement of the serie follows without a hole.
+        Assert.Equal("P-3", (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync(
+            $"/api/v1/invoicing/payments/{payments[2]}/complements", null))).GetProperty("number").GetString());
+    }
+
+    [SqlServerFact]
     public async Task Staff_ShouldStampWhatTheyManage_ButOnlyOwnersCancelAndTouchTheCsd()
     {
         var mine = await _api.SignUpAsync("facturas-equipo", TwoBusinessesApi.FoodBusiness);

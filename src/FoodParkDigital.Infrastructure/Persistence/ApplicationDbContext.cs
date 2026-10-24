@@ -175,6 +175,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<InvoicingProfile> InvoicingProfiles => Set<InvoicingProfile>();
     public DbSet<GlobalInvoice> GlobalInvoices => Set<GlobalInvoice>();
     public DbSet<GlobalInvoiceOrder> GlobalInvoiceOrders => Set<GlobalInvoiceOrder>();
+    public DbSet<PaymentComplement> PaymentComplements => Set<PaymentComplement>();
     public DbSet<TemporaryCustomer> TemporaryCustomers => Set<TemporaryCustomer>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<FolioSequence> FolioSequences => Set<FolioSequence>();

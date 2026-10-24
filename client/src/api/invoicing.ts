@@ -4,12 +4,15 @@ import api from './axios';
 import { apiRequest, type Schemas } from './typedClient';
 import { CfdiCancellationMotive, GlobalInvoicePeriodicity, OrderInvoiceStatus } from '../types';
 
-// Invoicing (Fase 28A, ADR 0045): Configuración › Facturación and the invoice of an order; and the global invoice of a period
-// (Fase 28B, ADR 0046) in Reportes › Factura global. Kept out of queries.ts, which the first visit loads.
+// Invoicing (Fase 28A, ADR 0045): Configuración › Facturación and the invoice of an order; the global invoice of a period
+// (Fase 28B, ADR 0046) in Reportes › Factura global; and the payment complements of an invoice in installments (Fase 28C,
+// ADR 0047). Kept out of queries.ts, which the first visit loads.
 
 export type InvoicingSettings = Schemas['InvoicingSettingsDto'];
 export type OrderInvoicing = Schemas['OrderInvoicingDto'];
 export type OrderInvoice = Schemas['OrderInvoiceDto'];
+export type OrderPaymentComplements = Schemas['OrderPaymentComplementsDto'];
+export type PaymentComplement = Schemas['PaymentComplementDto'];
 export type GlobalInvoice = Schemas['GlobalInvoiceDto'];
 export type GlobalInvoiceDetail = Schemas['GlobalInvoiceDetailDto'];
 export type GlobalInvoiceDraft = Schemas['GlobalInvoiceDraftDto'];
@@ -67,22 +70,33 @@ export function useRemoveInvoicingCertificate() {
   return useSettingsChange(() => apiRequest('delete', '/api/v1/invoicing/settings/certificate'));
 }
 
+/** The serie of the invoices and the one of the payment complements: each one keeps its own folios. */
 export function useChangeInvoiceSerie() {
-  return useSettingsChange((serie: string) => apiRequest('put', '/api/v1/invoicing/settings/serie', { body: { serie } }));
+  return useSettingsChange((body: { serie: string; paymentSerie: string }) =>
+    apiRequest('put', '/api/v1/invoicing/settings/serie', { body }));
 }
 
 /**
- * Whether the order can be invoiced, whom to, and its invoices: read again each time the invoice opens (the order may have
- * been paid, or the customer's fiscal data changed) and while one waits for the PAC or the SAT.
+ * Whether the order can be invoiced, whom to, its invoices and the complements of its payments: read again each time the
+ * invoice opens (the order may have been paid, or the customer's fiscal data changed) and while one of them waits for the
+ * PAC or the SAT, or a payment waits for the complement TienditApp issues on its own.
  */
 export function useOrderInvoicing(orderId: string) {
   return useQuery({
     queryKey: orderInvoicingKey(orderId),
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/orders/{orderId}', { path: { orderId }, signal }),
     refetchOnMount: 'always',
-    refetchInterval: (query) =>
-      query.state.data?.invoices.some((invoice) => isWaiting(invoice)) ? PENDING_REFRESH_MS : false,
+    refetchInterval: (query) => (query.state.data && isOrderInvoicingWaiting(query.state.data) ? PENDING_REFRESH_MS : false),
   });
+}
+
+/**
+ * Whether something of the order's invoicing changes on its own soon: an invoice or a complement waits for the PAC or the
+ * SAT, or a payment waits for the complement TienditApp issues in its next pass.
+ */
+export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments'>): boolean {
+  return data.invoices.some((invoice) => isWaiting(invoice))
+    || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some((complement) => isWaiting(complement)));
 }
 
 /** Preview of the invoice of an order, read again each time it opens; without a receiver it goes to the general public. */
@@ -106,7 +120,7 @@ export function isWaiting(invoice: Pick<OrderInvoice, 'status'>): boolean {
  * Each change answers the invoice as it ended up; the order's invoicing and its draft are read again, and the change stays
  * pending until they are, so what it changed (a live invoice) is on screen before anything else can be pressed.
  */
-function useInvoiceChange<TVariables>(orderId: string, change: (variables: TVariables) => Promise<OrderInvoice>) {
+function useInvoiceChange<TVariables, TResult = OrderInvoice>(orderId: string, change: (variables: TVariables) => Promise<TResult>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: change,
@@ -132,9 +146,33 @@ export function useCancelOrderInvoice(orderId: string) {
     apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/cancel', { path: { invoiceId }, body: { motive } }));
 }
 
+/**
+ * «Emitir ahora» (before TienditApp issues it on its own) or «Emitir otra vez» (after a refused or cancelled one): the
+ * complement of a payment of an order whose invoice is in installments.
+ */
+export function useIssuePaymentComplement(orderId: string) {
+  return useInvoiceChange(orderId, (paymentId: string) =>
+    apiRequest('post', '/api/v1/invoicing/payments/{paymentId}/complements', { path: { paymentId } }));
+}
+
+export function useRetryPaymentComplement(orderId: string) {
+  return useInvoiceChange(orderId, (complementId: string) =>
+    apiRequest('post', '/api/v1/invoicing/payment-complements/{complementId}/retry', { path: { complementId } }));
+}
+
+export function useCancelPaymentComplement(orderId: string) {
+  return useInvoiceChange(orderId, ({ complementId, motive }: { complementId: string; motive: CfdiCancellationMotive }) =>
+    apiRequest('post', '/api/v1/invoicing/payment-complements/{complementId}/cancel', { path: { complementId }, body: { motive } }));
+}
+
 /** The stamped XML or the PDF of an invoice, fetched with the session. */
 export function downloadInvoiceFile(invoiceId: string, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
   return downloadFile(`/invoicing/invoices/${encodeURIComponent(invoiceId)}/${kind}`, kind);
+}
+
+/** The stamped XML or the PDF of a payment complement, fetched with the session. */
+export function downloadPaymentComplementFile(complementId: string, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
+  return downloadFile(`/invoicing/payment-complements/${encodeURIComponent(complementId)}/${kind}`, kind, 'complemento');
 }
 
 /** The stamped XML or the PDF of a global invoice, fetched with the session. */
@@ -142,7 +180,7 @@ export function downloadGlobalInvoiceFile(invoiceId: string, kind: 'xml' | 'pdf'
   return downloadFile(`/invoicing/global-invoices/${encodeURIComponent(invoiceId)}/${kind}`, kind);
 }
 
-async function downloadFile(path: string, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
+async function downloadFile(path: string, kind: 'xml' | 'pdf', fallbackName = 'factura'): Promise<{ blob: Blob; fileName: string }> {
   let response;
   try {
     response = await api.get<Blob>(path, { responseType: 'blob' });
@@ -159,7 +197,7 @@ async function downloadFile(path: string, kind: 'xml' | 'pdf'): Promise<{ blob: 
   }
   const disposition = String(response.headers['content-disposition'] ?? '');
   const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
-  return { blob: response.data, fileName: match ? decodeURIComponent(match[1]) : `factura.${kind}` };
+  return { blob: response.data, fileName: match ? decodeURIComponent(match[1]) : `${fallbackName}.${kind}` };
 }
 
 /** The customer's fiscal data, for their next invoices; null forgets it. */

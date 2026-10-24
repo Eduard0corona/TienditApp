@@ -5,8 +5,8 @@ using FoodParkDigital.Domain.Exceptions;
 namespace FoodParkDigital.Domain.Fiscal.Entities;
 
 /// <summary>
-/// How a business invoices (Fase 28A, ADR 0045): the serie of its invoices and the CSD (certificado de sello digital) its
-/// CFDI are sealed with. TienditApp checks the CSD and hands it to the PAC, which keeps it: here only what identifies it
+/// How a business invoices (Fase 28A, ADR 0045): the serie of its invoices and of its payment complements (Fase 28C), and
+/// the CSD (certificado de sello digital) its CFDI are sealed with. TienditApp checks the CSD and hands it to the PAC, which keeps it: here only what identifies it
 /// is kept (number, RFC, validity, who uploaded it), never its private key or password.
 /// </summary>
 public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenantScoped
@@ -22,6 +22,12 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
 
     /// <summary>The serie of its invoices: «F» unless the business chooses another one.</summary>
     public string Serie { get; private set; } = OrderInvoice.DefaultSerie;
+
+    /// <summary>
+    /// The serie of its payment complements (Fase 28C): «P» unless the business chooses another one. A serie has one counter,
+    /// so the same serie as the invoices never repeats a folio.
+    /// </summary>
+    public string PaymentSerie { get; private set; } = PaymentComplement.DefaultSerie;
 
     /// <summary>The CSD's number (NoCertificado, 20 digits), or null without one.</summary>
     public string? CertificateNumber { get; private set; }
@@ -87,6 +93,12 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
     public void ChangeSerie(string serie)
     {
         Serie = OrderInvoice.NormalizeSerie(serie);
+    }
+
+    /// <summary>The serie of the next payment complements; the ones already stamped keep theirs.</summary>
+    public void ChangePaymentSerie(string serie)
+    {
+        PaymentSerie = Cfdi.NormalizeSerie(serie, "los complementos de pago");
     }
 
     /// <summary>Whether its CSD seals now for the business's RFC.</summary>
