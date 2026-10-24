@@ -78,6 +78,7 @@ Tomé las decisiones de la Fase 28C con la autorización permanente del dueño d
 13. **Se ve en Pedidos › Factura:** debajo de las facturas, «Complementos de pago» lista cada cobro con su fecha, forma y monto. Con él va:
     - su complemento: folio, estado, parcialidad, lo pagado, el saldo anterior y el que queda, folio fiscal y si lo emitió TienditApp;
     - mientras no tenga uno vivo, «El SAT lo pide a más tardar el …» (o «El plazo del SAT … venció el …»), con «TienditApp lo emite en unos minutos» si lo emite por su cuenta, y junto con el motivo si no se emite;
+    - el motivo es el mismo con el que se rechazaría emitirlo, calculado sin el candado con las mismas reglas: la forma, la factura, Mi negocio y su CSD, el RFC con el que se timbró la factura, una tasa sin campo en los Totales, el saldo y las 999 parcialidades. Así la pantalla nunca espera al worker por uno que no va a emitir;
     - las acciones: «Emitir ahora» o «Emitir otra vez», «Volver a pedir el timbre», «Cancelar complemento» y las descargas.
 
     La consulta se vuelve a leer cada 30 segundos mientras algo espera al PAC, al SAT o al worker.
@@ -111,6 +112,7 @@ Tomé las decisiones de la Fase 28C con la autorización permanente del dueño d
   - El receptor del complemento es el de la factura: si el cliente cambió su código postal o su régimen en el SAT, el PAC rechaza el complemento y el camino es cancelar los complementos y la factura y facturar otra vez.
   - Condonar o reembolsar después de timbrar la factura PPD se permite, como después de una PUE: la factura queda con un saldo que pide la nota de crédito de la 28D.
   - Los cobros «Otro» y con saldo a favor no tienen complemento; el contador decide.
+  - Los cobros de una factura timbrada con el RFC que Mi negocio tenía antes no se emiten desde aquí (la pantalla lo dice), pero siguen entre los 100 que revisa el worker en cada pasada. Un negocio que juntara más de 100 así haría esperar a los más nuevos; guardar en la factura el RFC de su emisor los dejaría fuera de la búsqueda.
   - Una venta con condonación o reembolso no se factura en parcialidades hasta que existan las notas de crédito.
   - El candado espera hasta 10 segundos; si otra factura del negocio tarda más, la persona lo intenta otra vez.
 - **Compatibilidad durante el despliegue:**

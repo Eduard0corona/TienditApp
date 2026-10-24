@@ -33,7 +33,7 @@ public static class PaymentComplementTaxes
         ArgumentNullException.ThrowIfNull(coveredBefore);
         if (invoiceTotal <= 0 || paid <= 0 || paid > invoiceTotal)
             throw new DomainException("El cobro no cabe en el total de la factura.");
-        if (invoiceTransfers.Any(transfer => !transfer.IsExempt && !Rates.Contains(transfer.RatePercent)))
+        if (!Accepts(invoiceTransfers))
             throw new DomainException(RateNotAcceptedMessage);
 
         var share = paid / invoiceTotal;
@@ -61,6 +61,10 @@ public static class PaymentComplementTaxes
         }
         return transfers;
     }
+
+    /// <summary>Whether the complement has a field for each of the invoice's rates (<see cref="Rates"/>, or exempt).</summary>
+    public static bool Accepts(IEnumerable<CfdiTransfer> invoiceTransfers)
+        => invoiceTransfers.All(transfer => transfer.IsExempt || Rates.Contains(transfer.RatePercent));
 
     private static bool SameRate(CfdiTransfer a, CfdiTransfer b)
         => a.IsExempt == b.IsExempt && (a.IsExempt || a.RatePercent == b.RatePercent);

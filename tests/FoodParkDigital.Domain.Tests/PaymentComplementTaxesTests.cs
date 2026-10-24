@@ -102,5 +102,8 @@ public class PaymentComplementTaxesTests
             PaymentComplementTaxes.Prorate([Rate(100m, 11m, 11m)], 111m, 50m, settles: false, []));
 
         Assert.Equal(PaymentComplementTaxes.RateNotAcceptedMessage, error.Message);
+        // The order's invoicing asks the same before anyone tries to issue it.
+        Assert.False(PaymentComplementTaxes.Accepts([Rate(100m, 16m, 16m), Rate(100m, 11m, 11m)]));
+        Assert.True(PaymentComplementTaxes.Accepts([Rate(100m, 16m, 16m), Rate(100m, 8m, 8m), Rate(100m, 0m, 0m), Exempt(50m)]));
     }
 }

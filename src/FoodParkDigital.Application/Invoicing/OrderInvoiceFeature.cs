@@ -143,8 +143,7 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
             ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
 
         var last = invoices.FirstOrDefault();
-        var payments = await PaymentComplements.ForOrderAsync(
-            _context, order, invoices, InvoicingSettings.ReadinessProblem(settings), cancellationToken);
+        var payments = await PaymentComplements.ForOrderAsync(_context, order, invoices, settings, cancellationToken);
         return new OrderInvoicingDto
         {
             Available = settings.Available,

@@ -1267,15 +1267,16 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 - Fase 28C, la factura en parcialidades y los complementos de pago ([ADR 0047](../adr/0047-payment-complements.md)):
   - **Domain:**
     - `PaymentComplementTests` (21, nuevo): la parcialidad y los saldos de un cobro de una factura PPD timbrada, y que el que cubre el resto deja $0; solo una factura PPD timbrada y un cobro de su pedido; la forma de cada método y el rechazo de «Otro» y del saldo a favor; parcialidades fuera de 1 a 999 y saldos en cero, con fracciones o arriba del total; serie, folio, documento y quién lo pide; timbrar, rechazar y cancelar como cualquier CFDI, conservado; cancelar solo con 02 o 03.
-    - `PaymentComplementTaxesTests` (10, nuevo): el prorrateo por tasa, el redondeo que absorbe el último pago para que los complementos sumen la factura, varias tasas con exento y 0 %, la tasa cuya parte redondea a nada, la tasa sobre la última base cuando el IVA que queda sale de los límites, nunca más que lo que queda de una base, un pago que no cabe en el total y una tasa sin campo en los Totales.
+    - `PaymentComplementTaxesTests` (10, nuevo): el prorrateo por tasa, el redondeo que absorbe el último pago para que los complementos sumen la factura, varias tasas con exento y 0 %, la tasa cuya parte redondea a nada, la tasa sobre la última base cuando el IVA que queda sale de los límites, nunca más que lo que queda de una base, un pago que no cabe en el total y una tasa sin campo en los Totales (`Accepts`, que también pregunta la consulta del pedido).
     - `OrderInvoiceTests` (+1): la factura PPD solo con la forma 99; y en la de la serie, la de los complementos (`InvoicingProfile.PaymentSerie`), cuyo rechazo la nombra.
-  - **Application:** `PaymentComplementFlowTests` (14, nuevo):
+  - **Application:** `PaymentComplementFlowTests` (15, nuevo):
     - la venta que el cliente debe se factura en parcialidades y la que se cobra en el mostrador no; la pagada sigue PUE;
     - el worker emite el complemento de cada cobro, también el anterior a la factura, con su parcialidad, saldos, fecha local e IVA prorrateado; el que liquida toma lo que queda;
     - los cobros «Otro» y con saldo a favor no llevan complemento y dicen por qué;
     - solo con una factura PPD timbrada y un CSD que selle; el rechazado se emite otra vez solo a mano, con otro folio y la misma parcialidad;
     - cancelado uno que no es el último, el que se emite otra vez recupera su parcialidad y su saldo anterior; y un cobro que llega mientras otro espera volver a emitirse sigue la cadena (su saldo cuenta al que espera) y toma su parte del IVA, y el que se emite al final absorbe lo que queda;
     - un cobro con un complemento vigente de una factura anterior no recibe otro;
+    - el cobro de una factura timbrada con el RFC que Mi negocio tenía antes dice por qué no se emite, sin esperar al worker ni dejar «Emitir ahora»;
     - una venta fiada que todavía puede cambiar espera a cerrarse;
     - la factura PPD no se cancela con complementos vigentes, hasta que el SAT los cancela;
     - motivos 02 y 03; la serie de los complementos y su contador; acceso por pedido visible y permisos; archivos XML y PDF.
@@ -1291,7 +1292,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `invoicing.test.ts` (+4): el archivo del complemento; se vuelve a leer mientras algo espera al PAC, al SAT o al worker, y deja de hacerlo cuando lo que queda es a mano.
     - `CfdiDraftModal.test.tsx` (+1): los complementos bajo la factura PPD, que dice «en parcialidades (PPD)».
     - `Invoicing.test.tsx` (+1): las dos series se guardan juntas.
-  - **Total:** `dotnet test` con SQL Server 2022, 3,702 pruebas sin fallos ni omitidas (Domain 1,085, Application 1,636, Infrastructure 532, WebApi 449).
+  - **Total:** `dotnet test` con SQL Server 2022, 3,703 pruebas sin fallos ni omitidas (Domain 1,085, Application 1,637, Infrastructure 532, WebApi 449).
   - **Cliente en total:** 164 archivos y 1,121 pruebas.
   - **Primera visita:** 179,797 B de 179,900 B, sin subir el presupuesto: la facturación se carga aparte.
   - **Escenas visuales:** `facturacion.spec.ts` (+4): los complementos de pago de la factura en parcialidades (escritorio, teléfono y oscuro) y el diálogo para cancelar uno.

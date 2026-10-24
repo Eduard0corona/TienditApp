@@ -500,7 +500,7 @@ internal sealed class PaymentComplementRequester(
             return Result.Failure<Guid>(InvoicingSettings.NotAvailableMessage);
 
         var tenantId = tenant.TenantId;
-        // One complement at a time per business: its installment and the balance before it count the live ones.
+        // One complement at a time per business: its installment and the balance before it count the ones issued before it.
         await invoicingLock.AcquireAsync(tenantId, cancellationToken);
         var payment = await context.OrderPayments.AsNoTracking().FirstOrDefaultAsync(p => p.Id == orderPaymentId, cancellationToken);
         if (payment is null)
@@ -525,15 +525,6 @@ internal sealed class PaymentComplementRequester(
         var issued = await context.PaymentComplements.AsNoTracking()
             .Where(c => c.OrderInvoiceId == invoice!.Id)
             .ToListAsync(cancellationToken);
-        var live = issued.Where(c => c.IsLive).ToList();
-        // Each payment that ever had a complement of this invoice holds the installment of its latest one, and its amount,
-        // even while that one is refused or cancelled: the payment was received, and its complement is issued again.
-        var held = issued
-            .GroupBy(c => c.OrderPaymentId)
-            .Select(g => g.OrderByDescending(c => c.RequestedAt).First())
-            .ToList();
-        var earlier = held.FirstOrDefault(c => c.OrderPaymentId == payment.Id);
-        var others = held.Where(c => c.OrderPaymentId != payment.Id).ToList();
 
         var now = clock.UtcNow;
         var business = await context.Tenants.AsNoTracking()
@@ -544,28 +535,23 @@ internal sealed class PaymentComplementRequester(
         var postalCode = business.PostalCode?.Trim();
         if (GetOrderCfdiDraftQueryHandler.IssuerBlockers(issuer, postalCode).FirstOrDefault() is { } blocker)
             return Result.Failure<Guid>(blocker);
-        var invoiceDocument = CfdiDocument.FromJson(invoice!.Document);
-        if (!string.Equals(issuer.Rfc, invoiceDocument.Issuer.Rfc, StringComparison.Ordinal))
-            return Result.Failure<Guid>(PaymentComplements.OtherRfcMessage(invoice.Number));
         var profile = await context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         if (InvoicingSettings.CertificateProblem(profile, issuer.Rfc, now) is { } certificateProblem)
             return Result.Failure<Guid>(certificateProblem);
+        // In the order the order's invoicing shows them (ForOrderAsync): Mi negocio and its CSD first, then the invoice.
+        var invoiceDocument = CfdiDocument.FromJson(invoice!.Document);
+        if (PaymentComplements.DocumentProblem(invoice, invoiceDocument, issuer.Rfc) is { } documentProblem)
+            return Result.Failure<Guid>(documentProblem);
 
-        // What the invoice still owes after the other payments that hold an installment: the payment fits in it.
-        var owed = invoice.Total - others.Sum(c => c.Amount);
-        if (payment.Amount > owed)
-            return Result.Failure<Guid>(PaymentComplements.AboveBalanceMessage(invoice.Number));
-        // The installments go in the order the payments got their first complement; one issued again keeps its number, so
-        // the chain stays whole whatever is issued in between. Each starts where the payments before it left the invoice.
-        var installment = earlier is not null && live.All(c => c.Installment != earlier.Installment)
-            ? earlier.Installment
-            : held.Count == 0 ? 1 : held.Max(c => c.Installment) + 1;
-        if (installment > PaymentComplement.MaxInstallment)
-            return Result.Failure<Guid>(PaymentComplements.TooManyInstallmentsMessage(invoice.Number));
-        var previousBalance = invoice.Total - others.Where(c => c.Installment < installment).Sum(c => c.Amount);
+        var position = PaymentComplements.PositionOf(invoice, issued, payment.Id);
+        if (PaymentComplements.PositionProblem(invoice, position, payment.Amount) is { } positionProblem)
+            return Result.Failure<Guid>(positionProblem);
+        var installment = position.Installment;
+        var previousBalance = position.PreviousBalance;
         // It settles the invoice when it pays what is left and every other payment's complement stands: then it takes what
         // is left of each base and its IVA. While another one waits to be issued again, it takes its share like any other.
-        var settles = owed == payment.Amount && others.All(c => c.IsLive);
+        var settles = position.Owed == payment.Amount && position.OthersStand;
+        var live = issued.Where(c => c.IsLive).ToList();
 
         IReadOnlyList<CfdiTransfer> transfers;
         try
@@ -672,7 +658,7 @@ public static class PaymentComplements
         $"El RFC de Mi negocio ya no es el de la factura {invoiceNumber}: su complemento lo emite el mismo RFC que la timbró.";
 
     public static string AboveBalanceMessage(string invoiceNumber) =>
-        $"El cobro es mayor que lo que la factura {invoiceNumber} todavía debe según sus complementos vigentes.";
+        $"El cobro es mayor que lo que la factura {invoiceNumber} todavía debe después de los otros cobros con complemento.";
 
     public static string TooManyInstallmentsMessage(string invoiceNumber) =>
         $"La factura {invoiceNumber} ya tiene {PaymentComplement.MaxInstallment} parcialidades, las que acepta el SAT.";
@@ -691,6 +677,59 @@ public static class PaymentComplements
         { Status: OrderInvoiceStatus.Cancelling } => $"La factura {invoice.Number} espera su cancelación en el SAT: no se le emiten complementos.",
         _ => null
     };
+
+    /// <summary>
+    /// Why no complement of the stamped invoice in installments is issued from TienditApp at all, or null when they are: Mi
+    /// negocio's RFC is no longer the one that stamped it, or it has an IVA rate the complement has no field for.
+    /// </summary>
+    public static string? DocumentProblem(OrderInvoice invoice, CfdiDocument document, string? businessRfc)
+    {
+        if (!string.Equals(businessRfc, document.Issuer.Rfc, StringComparison.Ordinal))
+            return OtherRfcMessage(invoice.Number);
+        return PaymentComplementTaxes.Accepts(document.Transfers.Select(Transfer)) ? null : PaymentComplementTaxes.RateNotAcceptedMessage;
+    }
+
+    /// <summary>
+    /// Where a payment's complement goes among the ones of its invoice (ADR 0047): each payment that ever had a complement of
+    /// it holds the installment of its latest one, and its amount, even while that one is refused or cancelled, because the
+    /// payment was received and its complement is issued again.
+    /// </summary>
+    /// <param name="Owed">What the invoice still owes after the other payments that hold an installment.</param>
+    /// <param name="Installment">
+    /// Its installment: the installments go in the order the payments got their first complement, and one issued again keeps
+    /// its number while no live one took it, so the chain stays whole whatever is issued in between.
+    /// </param>
+    /// <param name="PreviousBalance">Where the payments of the installments before it left the invoice.</param>
+    /// <param name="OthersStand">Whether the complement of every other payment that holds an installment stands.</param>
+    public sealed record Position(decimal Owed, int Installment, decimal PreviousBalance, bool OthersStand);
+
+    /// <param name="issued">Every complement of the invoice, whatever its status.</param>
+    public static Position PositionOf(OrderInvoice invoice, IEnumerable<PaymentComplement> issued, Guid orderPaymentId)
+    {
+        var all = issued.ToList();
+        var held = all
+            .GroupBy(c => c.OrderPaymentId)
+            .Select(g => g.OrderByDescending(c => c.RequestedAt).First())
+            .ToList();
+        var earlier = held.FirstOrDefault(c => c.OrderPaymentId == orderPaymentId);
+        var others = held.Where(c => c.OrderPaymentId != orderPaymentId).ToList();
+        var installment = earlier is not null && all.Where(c => c.IsLive).All(c => c.Installment != earlier.Installment)
+            ? earlier.Installment
+            : held.Count == 0 ? 1 : held.Max(c => c.Installment) + 1;
+        return new Position(
+            invoice.Total - others.Sum(c => c.Amount),
+            installment,
+            invoice.Total - others.Where(c => c.Installment < installment).Sum(c => c.Amount),
+            others.All(c => c.IsLive));
+    }
+
+    /// <summary>Why the payment does not fit where its complement goes, or null when it does.</summary>
+    public static string? PositionProblem(OrderInvoice invoice, Position position, decimal amount)
+    {
+        if (amount > position.Owed)
+            return AboveBalanceMessage(invoice.Number);
+        return position.Installment > PaymentComplement.MaxInstallment ? TooManyInstallmentsMessage(invoice.Number) : null;
+    }
 
     public static string LiveComplementProblem(PaymentComplement live) => live.Status switch
     {
@@ -749,13 +788,14 @@ public static class PaymentComplements
 
     /// <summary>
     /// The payments of an order that has an invoice in installments, with their complements and whether one can be issued
-    /// now; none for an order without one.
+    /// now; none for an order without one. It says what issuing one would refuse (without the lock, which only orders who
+    /// goes first), so the screen never waits for one that TienditApp cannot issue.
     /// </summary>
     public static async Task<List<OrderPaymentComplementsDto>> ForOrderAsync(
         IApplicationDbContext context,
         Order order,
         IReadOnlyList<OrderInvoice> invoices,
-        string? readinessProblem,
+        InvoicingSettingsDto settings,
         CancellationToken cancellationToken)
     {
         if (!invoices.Any(i => i.IsPaidInInstallments))
@@ -771,6 +811,10 @@ public static class PaymentComplements
             .Select(s => s.TimeZone)
             .FirstOrDefaultAsync(cancellationToken);
         var liveInvoice = invoices.FirstOrDefault(i => i.IsLive);
+        var invoiceProblem = InvoiceProblem(liveInvoice) ?? InvoicingSettings.ReadinessProblem(settings);
+        if (invoiceProblem is null)
+            invoiceProblem = DocumentProblem(liveInvoice!, CfdiDocument.FromJson(liveInvoice!.Document), settings.Rfc);
+        var ofLiveInvoice = complements.Where(c => c.OrderInvoiceId == liveInvoice?.Id).ToList();
 
         return order.Payments
             .OrderBy(payment => payment.PaidAt)
@@ -781,7 +825,8 @@ public static class PaymentComplements
                 var live = own.FirstOrDefault(c => c.IsLive);
                 var problem = live is not null
                     ? null
-                    : FormProblem(payment.Method) ?? InvoiceProblem(liveInvoice) ?? readinessProblem;
+                    : FormProblem(payment.Method) ?? invoiceProblem
+                        ?? PositionProblem(liveInvoice!, PositionOf(liveInvoice!, ofLiveInvoice, payment.Id), payment.Amount);
                 return new OrderPaymentComplementsDto
                 {
                     OrderPaymentId = payment.Id,

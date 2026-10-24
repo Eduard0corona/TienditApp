@@ -30,6 +30,7 @@ namespace FoodParkDigital.Application.Tests;
 public class PaymentComplementFlowTests
 {
     private const string Rfc = "EKU9003173C9";
+    private const string OtherRfc = "XIA190128J61";
     private const string CustomerPhone = "+525512345678";
 
     private static readonly CfdiReceiverInput Receiver = new()
@@ -245,6 +246,35 @@ public class PaymentComplementFlowTests
     }
 
     [Fact]
+    public async Task Payment_OfAnInvoiceStampedWithTheRfcMiNegocioHadBefore_ShouldSayWhy_AndNotWaitForTienditApp()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+
+        // Mi negocio now has another RFC and its CSD seals for it: the business can invoice, but the complements of the
+        // invoice stamped with the RFC before are issued by that RFC, never from here.
+        var tenant = await book.Context.Tenants.SingleAsync(t => t.Id == book.Tenant.Id);
+        tenant.SetBusinessInfo(
+            OtherRfc, "ESCUELA KEMPER URGATE", "Comercio", "601 - General de Ley Personas Morales",
+            new Address("Reforma", "1", null, "Centro", "06000", "Cuauhtémoc", "Ciudad de México"));
+        await book.Context.SaveChangesAsync();
+        await book.UploadCsdAsync(OtherRfc);
+        Assert.True((await book.SettingsAsync()).Ready);
+        var payment = await book.PayAsync(sale.Id, 30m, OrderPaymentMethod.Cash);
+
+        // The screen says so instead of waiting for the worker (and asking every 30 s), and no one can issue it.
+        var shown = (await book.InvoicingAsync(sale.Id)).Payments.Single(p => p.OrderPaymentId == payment.Id);
+        Assert.Equal(
+            (false, false, PaymentComplements.OtherRfcMessage("F-1")),
+            (shown.CanIssue, shown.AwaitsAutomaticIssue, shown.Problem));
+        Assert.Equal(PaymentComplements.OtherRfcMessage("F-1"), (await book.IssueComplementAsync(payment.Id)).Error);
+        Assert.Equal(0, (await book.IssuePendingAsync()).Value);
+        Assert.Single(await book.Context.PaymentComplements.ToListAsync());
+    }
+
+    [Fact]
     public async Task Payment_WithALiveComplementOfAnEarlierInvoice_ShouldNotGetAnother_AndSayWhichOne()
     {
         await using var book = await Book.OpenAsync();
@@ -430,9 +460,9 @@ public class PaymentComplementFlowTests
             return book;
         }
 
-        public async Task UploadCsdAsync()
+        public async Task UploadCsdAsync(string rfc = Rfc)
         {
-            var (cer, key) = TestCsd.Make();
+            var (cer, key) = TestCsd.Make(uniqueIdentifier: $"{rfc} / VADA800927HSRSRL05");
             var uploaded = await new UploadInvoicingCertificateCommandHandler(
                     Context, Fixture.TenantService, Fixture.CurrentUser, Gateway, Clock,
                     NullLogger<UploadInvoicingCertificateCommandHandler>.Instance)
