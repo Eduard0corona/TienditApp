@@ -156,6 +156,15 @@ export const DirectoryVisibility = {
 } as const;
 export type DirectoryVisibility = (typeof DirectoryVisibility)[keyof typeof DirectoryVisibility];
 
+export const GlobalInvoicePeriodicity = {
+  Daily: 1,
+  Weekly: 2,
+  Fortnightly: 3,
+  Monthly: 4,
+  Bimonthly: 5,
+} as const;
+export type GlobalInvoicePeriodicity = (typeof GlobalInvoicePeriodicity)[keyof typeof GlobalInvoicePeriodicity];
+
 export const InsufficientStockPolicy = {
   Block: 0,
   Warn: 1,

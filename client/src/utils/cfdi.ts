@@ -1,4 +1,4 @@
-import { CfdiCancellationMotive, OrderInvoiceStatus, type CustomerFiscalData } from '../types';
+import { CfdiCancellationMotive, GlobalInvoicePeriodicity, OrderInvoiceStatus, type CustomerFiscalData } from '../types';
 
 // c_RegimenFiscal and c_UsoCFDI entries a sale usually needs (the API accepts the whole catalog). 616, «Sin obligaciones
 // fiscales», is the general public's: those sales go in the global invoice.
@@ -63,6 +63,28 @@ export const CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
   [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores y no se va a sustituir'],
   [CfdiCancellationMotive.NotCarriedOut, '03 · La venta no se llevó a cabo'],
 ];
+
+/**
+ * The reasons a global invoice is cancelled with: 04 when a customer asked for the invoice of a sale it holds (it is
+ * issued again without that sale), 02 when it has errors. Nobody accepts it: it goes to the general public.
+ */
+export const GLOBAL_CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
+  [CfdiCancellationMotive.NominativeInGlobalInvoice, '04 · Un cliente pidió la factura de una de sus ventas'],
+  [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores y no se va a sustituir'],
+];
+
+/** The periods a global invoice covers (c_Periodicidad); bimonthly only for the Incorporación Fiscal regime (621). */
+export const GLOBAL_PERIODICITIES: Array<[GlobalInvoicePeriodicity, string]> = [
+  [GlobalInvoicePeriodicity.Daily, 'Diaria'],
+  [GlobalInvoicePeriodicity.Weekly, 'Semanal'],
+  [GlobalInvoicePeriodicity.Fortnightly, 'Quincenal'],
+  [GlobalInvoicePeriodicity.Monthly, 'Mensual'],
+  [GlobalInvoicePeriodicity.Bimonthly, 'Bimestral'],
+];
+
+export function periodicityLabel(periodicity: GlobalInvoicePeriodicity): string {
+  return GLOBAL_PERIODICITIES.find(([value]) => value === periodicity)?.[1] ?? 'Periodo';
+}
 
 /** A blob saved with its name, as the browser downloads a file. */
 export function saveBlob(blob: Blob, fileName: string): void {

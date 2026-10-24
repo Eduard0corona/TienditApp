@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 
 namespace FoodParkDigital.Application.Tests.Support;
@@ -10,7 +11,14 @@ internal static class SqliteSqlServerFunctions
 {
     /// <summary>Adds them to <paramref name="connection"/>, the one every context of a test database shares.</summary>
     public static void Register(SqliteConnection connection)
+    {
         // LEN counts UTF-16 code units and leaves out trailing spaces (CK_SpecialDays_Reason). A CHECK may only call a
         // deterministic function.
-        => connection.CreateFunction("LEN", (string? value) => value?.TrimEnd(' ').Length, isDeterministic: true);
+        connection.CreateFunction("LEN", (string? value) => value?.TrimEnd(' ').Length, isDeterministic: true);
+        // YEAR of a date, which SQLite keeps as yyyy-MM-dd text (CK_GlobalInvoices_Period).
+        connection.CreateFunction(
+            "YEAR",
+            (string? value) => value is null ? (int?)null : int.Parse(value[..4], CultureInfo.InvariantCulture),
+            isDeterministic: true);
+    }
 }

@@ -248,8 +248,16 @@ public sealed class SwSapienGateway : IInvoicingGateway
                 ["Importe"] = Money(concept.Amount),
                 ["ObjetoImp"] = concept.TaxObject
             };
-            if (concept.Transfer is { } transfer)
-                node["Impuestos"] = new JsonObject { ["Traslados"] = new JsonArray(Transfer(transfer)) };
+            // The sale a global invoice's concept stands for (its folio).
+            if (concept.Identification is { } identification)
+                node["NoIdentificacion"] = identification;
+            if (concept.AllTransfers.Count > 0)
+            {
+                node["Impuestos"] = new JsonObject
+                {
+                    ["Traslados"] = new JsonArray(concept.AllTransfers.Select(transfer => (JsonNode)Transfer(transfer)).ToArray())
+                };
+            }
             concepts.Add(node);
         }
 
@@ -269,23 +277,35 @@ public sealed class SwSapienGateway : IInvoicingGateway
             ["Total"] = Money(document.Total),
             ["TipoDeComprobante"] = document.VoucherType,
             ["Exportacion"] = document.Exportation,
-            ["LugarExpedicion"] = document.ExpeditionPostalCode,
-            ["Emisor"] = new JsonObject
-            {
-                ["Rfc"] = document.Issuer.Rfc,
-                ["Nombre"] = document.Issuer.Name.ToUpperInvariant(),
-                ["RegimenFiscal"] = document.Issuer.FiscalRegime
-            },
-            ["Receptor"] = new JsonObject
-            {
-                ["Rfc"] = document.Receiver.Rfc,
-                ["Nombre"] = document.Receiver.Name,
-                ["DomicilioFiscalReceptor"] = document.Receiver.PostalCode,
-                ["RegimenFiscalReceptor"] = document.Receiver.FiscalRegime,
-                ["UsoCFDI"] = document.Receiver.CfdiUse
-            },
-            ["Conceptos"] = concepts
+            ["LugarExpedicion"] = document.ExpeditionPostalCode
         };
+
+        // The period a global invoice covers, where the SAT's schema puts it: before the issuer.
+        if (document.GlobalInformation is { } global)
+        {
+            json["InformacionGlobal"] = new JsonObject
+            {
+                ["Periodicidad"] = global.Periodicity,
+                ["Meses"] = global.Months,
+                ["Año"] = global.Year.ToString(CultureInfo.InvariantCulture)
+            };
+        }
+
+        json["Emisor"] = new JsonObject
+        {
+            ["Rfc"] = document.Issuer.Rfc,
+            ["Nombre"] = document.Issuer.Name.ToUpperInvariant(),
+            ["RegimenFiscal"] = document.Issuer.FiscalRegime
+        };
+        json["Receptor"] = new JsonObject
+        {
+            ["Rfc"] = document.Receiver.Rfc,
+            ["Nombre"] = document.Receiver.Name,
+            ["DomicilioFiscalReceptor"] = document.Receiver.PostalCode,
+            ["RegimenFiscalReceptor"] = document.Receiver.FiscalRegime,
+            ["UsoCFDI"] = document.Receiver.CfdiUse
+        };
+        json["Conceptos"] = concepts;
 
         // The invoice's taxes, when a concept has them; the total transferred only when some IVA is charged (exempt
         // transfers carry no amount).

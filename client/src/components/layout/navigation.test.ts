@@ -94,6 +94,18 @@ describe('navigation', () => {
     expect(settlement.pages.filter((page) => isNavItemActive(page, '/reports')).map((page) => page.label)).toEqual(['Ventas']);
   });
 
+  it('adds the global invoice to Reportes for owners and admins only, with each one under its tab', () => {
+    const admin = getAccess(user('TENANT_ADMIN'), RESTAURANT);
+    const tabs = getSectionTabs('/reports/global-invoices/7f1c', admin, RESTAURANT)!;
+
+    expect(tabs.pages.map((page) => page.label)).toEqual(['Ventas', 'Liquidaciones', 'Factura global']);
+    expect(tabs.pages.filter((page) => isNavItemActive(page, '/reports/global-invoices/7f1c')).map((page) => page.label))
+      .toEqual(['Factura global']);
+    // Who reads the reports does not issue invoices: the page is not theirs (the API refuses it too).
+    const reader = getAccess(user('STAFF', ['ViewReports']), RESTAURANT);
+    expect(getAllowedPages(reader, RESTAURANT).map((page) => page.path)).not.toContain('/reports/global-invoices');
+  });
+
   it('lets the global search find the settlements by what people call them', () => {
     const pages = getAllowedPages(getAccess(user('TENANT_ADMIN'), RESTAURANT), RESTAURANT);
     const found = (words: string) => pages
@@ -104,8 +116,9 @@ describe('navigation', () => {
     expect(found('depósitos')).toEqual(['Liquidaciones']);
     // Retenciones hangs from Liquidaciones (Fase 22J).
     expect(found('retenciones')).toEqual(['Liquidaciones']);
-    // The CFDI of withholdings, and since the Fase 28A the business's own invoices.
-    expect(found('cfdi')).toEqual(['Liquidaciones', 'Facturación']);
+    // The CFDI of withholdings, since the Fase 28A the business's own invoices, and since the 28B its global invoice.
+    expect(found('cfdi')).toEqual(['Liquidaciones', 'Factura global', 'Facturación']);
+    expect(found('público en general')).toEqual(['Factura global']);
     expect(found('csd')).toEqual(['Facturación']);
     expect(found('reportes')).toEqual(['Ventas']);
   });

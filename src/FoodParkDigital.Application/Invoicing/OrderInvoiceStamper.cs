@@ -9,10 +9,11 @@ using Microsoft.Extensions.Logging;
 namespace FoodParkDigital.Application.Invoicing;
 
 /// <summary>
-/// Asks the PAC for an invoice that is «Timbrando» (Fase 28A, ADR 0045), always with the CFDI and the key saved when it was
-/// requested, so a repeated attempt (the person, the worker, both at once) gets back the same stamp: its XML is kept in the
-/// business's private files and the invoice becomes «Timbrada»; a refusal for good makes it «Rechazada»; without an answer
-/// it stays «Timbrando». Its PDF is kept when the PAC gives it; if not, it is rendered when downloaded.
+/// Asks the PAC for an invoice that is «Timbrando» (Fase 28A, ADR 0045; the global ones too, Fase 28B), always with the CFDI
+/// and the key saved when it was requested, so a repeated attempt (the person, the worker, both at once) gets back the same
+/// stamp: its XML is kept in the business's private files and the invoice becomes «Timbrada»; a refusal for good makes it
+/// «Rechazada»; without an answer it stays «Timbrando». Its PDF is kept when the PAC gives it; if not, it is rendered when
+/// downloaded.
 /// </summary>
 public sealed class OrderInvoiceStamper
 {
@@ -37,16 +38,21 @@ public sealed class OrderInvoiceStamper
     }
 
     public const string LateRefusalNote =
-        "Se pidió hace más de 71 horas: antes de facturar el pedido otra vez, revisa en el portal del PAC que no se haya timbrado.";
+        "Se pidió hace más de 71 horas: antes de facturar otra vez lo que cubría, revisa en el portal del PAC que no se haya timbrado.";
 
     /// <summary>The private file of an invoice: «invoices/{business}/{yyyyMM}/{invoice}.xml».</summary>
-    public static string FileKey(OrderInvoice invoice, string extension)
+    public static string FileKey(CfdiInvoice invoice, string extension)
         => $"invoices/{invoice.TenantId}/{invoice.RequestedAt:yyyyMM}/{invoice.Id}.{extension}";
 
+    /// <returns>The invoice of an order as it ends up (still tracked).</returns>
+    public Task<OrderInvoice> StampAsync(Guid invoiceId, CancellationToken cancellationToken)
+        => StampAsync(_context.OrderInvoices, invoiceId, cancellationToken);
+
     /// <returns>The invoice as it ends up (still tracked).</returns>
-    public async Task<OrderInvoice> StampAsync(Guid invoiceId, CancellationToken cancellationToken)
+    public async Task<TInvoice> StampAsync<TInvoice>(IQueryable<TInvoice> invoices, Guid invoiceId, CancellationToken cancellationToken)
+        where TInvoice : CfdiInvoice
     {
-        var invoice = await _context.OrderInvoices.FirstAsync(i => i.Id == invoiceId, cancellationToken);
+        var invoice = await invoices.FirstAsync(i => i.Id == invoiceId, cancellationToken);
         if (invoice.Status != OrderInvoiceStatus.Stamping)
             return invoice;
 
@@ -64,7 +70,7 @@ public sealed class OrderInvoiceStamper
             invoice.Refuse(now - invoice.RequestedAt > StampPendingInvoicesCommandHandler.RetryWindow
                 ? $"{LateRefusalNote} {ex.Message}"
                 : ex.Message, now);
-            return await SaveAsync(invoice, cancellationToken);
+            return await SaveAsync(invoices, invoice, cancellationToken);
         }
         catch (InvoicingGatewayUnavailableException)
         {
@@ -76,9 +82,9 @@ public sealed class OrderInvoiceStamper
         var xmlKey = FileKey(invoice, "xml");
         await SaveOnceAsync(xmlKey, Encoding.UTF8.GetBytes(stamped.Xml), "application/xml", cancellationToken);
         invoice.Stamp(stamped.Uuid, stamped.Uuid, stamped.StampedAt, xmlKey);
-        invoice = await SaveAsync(invoice, cancellationToken);
+        invoice = await SaveAsync(invoices, invoice, cancellationToken);
         if (invoice.Status == OrderInvoiceStatus.Stamped && invoice.PdfFileKey is null)
-            invoice = await AttachPdfAsync(invoice, stamped.Xml, cancellationToken);
+            invoice = await AttachPdfAsync(invoices, invoice, stamped.Xml, cancellationToken);
         return invoice;
     }
 
@@ -99,7 +105,9 @@ public sealed class OrderInvoiceStamper
         return seal is { Length: >= 8 } ? seal[^8..] : null;
     }
 
-    private async Task<OrderInvoice> AttachPdfAsync(OrderInvoice invoice, string stampedXml, CancellationToken cancellationToken)
+    private async Task<TInvoice> AttachPdfAsync<TInvoice>(
+        IQueryable<TInvoice> invoices, TInvoice invoice, string stampedXml, CancellationToken cancellationToken)
+        where TInvoice : CfdiInvoice
     {
         byte[] pdf;
         try
@@ -115,7 +123,7 @@ public sealed class OrderInvoiceStamper
         var pdfKey = FileKey(invoice, "pdf");
         await SaveOnceAsync(pdfKey, pdf, "application/pdf", cancellationToken);
         invoice.AttachPdf(pdfKey);
-        return await SaveAsync(invoice, cancellationToken);
+        return await SaveAsync(invoices, invoice, cancellationToken);
     }
 
     // Two attempts at once save the same stamp under the same key: the second finds it there.
@@ -142,7 +150,8 @@ public sealed class OrderInvoiceStamper
     }
 
     // Another attempt wrote it first (the same stamp, or the PAC's refusal): that one stands.
-    private async Task<OrderInvoice> SaveAsync(OrderInvoice invoice, CancellationToken cancellationToken)
+    private async Task<TInvoice> SaveAsync<TInvoice>(IQueryable<TInvoice> invoices, TInvoice invoice, CancellationToken cancellationToken)
+        where TInvoice : CfdiInvoice
     {
         try
         {
@@ -152,7 +161,7 @@ public sealed class OrderInvoiceStamper
         catch (DbUpdateConcurrencyException)
         {
             _context.ChangeTracker.Clear();
-            return await _context.OrderInvoices.FirstAsync(i => i.Id == invoice.Id, cancellationToken);
+            return await invoices.FirstAsync(i => i.Id == invoice.Id, cancellationToken);
         }
     }
 }

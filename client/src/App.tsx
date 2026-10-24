@@ -43,6 +43,9 @@ const OperationalReports = lazy(() => import('./pages/reports/OperationalReports
 const PlatformSettlements = lazy(() => import('./pages/reports/PlatformSettlements'));
 const PlatformSettlementPage = lazy(() => import('./pages/reports/PlatformSettlementPage'));
 const PlatformWithholdings = lazy(() => import('./pages/reports/PlatformWithholdings'));
+const GlobalInvoices = lazy(() => import('./pages/reports/GlobalInvoices'));
+const NewGlobalInvoice = lazy(() => import('./pages/reports/NewGlobalInvoice'));
+const GlobalInvoicePage = lazy(() => import('./pages/reports/GlobalInvoicePage'));
 const KitchenBoard = lazy(() => import('./pages/kitchen/KitchenBoard'));
 const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const PlatformConsole = lazy(() => import('./pages/platform/PlatformConsole'));
@@ -323,6 +326,31 @@ export default function App() {
                 element={(
                   <AccessRoute area="reports">
                     <PlatformSettlementPage />
+                  </AccessRoute>
+                )}
+              />
+              {/* The global invoice is the business's fiscal side: owners and admins, as the API. */}
+              <Route
+                path="/reports/global-invoices"
+                element={(
+                  <AccessRoute area="businessSettings">
+                    <GlobalInvoices />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/reports/global-invoices/new"
+                element={(
+                  <AccessRoute area="businessSettings">
+                    <NewGlobalInvoice />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/reports/global-invoices/:id"
+                element={(
+                  <AccessRoute area="businessSettings">
+                    <GlobalInvoicePage />
                   </AccessRoute>
                 )}
               />

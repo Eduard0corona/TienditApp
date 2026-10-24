@@ -7691,6 +7691,339 @@
         }
       }
     },
+    "/api/v1/invoicing/global-invoices": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDtoPaginatedList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueGlobalInvoiceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueGlobalInvoiceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueGlobalInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/global-invoices/draft": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "periodicity",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/GlobalInvoicePeriodicity"
+            }
+          },
+          {
+            "name": "day",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDraftDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDraftDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDraftDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/global-invoices/{invoiceId}": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/global-invoices/{invoiceId}/retry": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/global-invoices/{invoiceId}/cancel": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderInvoiceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderInvoiceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalInvoiceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/global-invoices/{invoiceId}/xml": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/global-invoices/{invoiceId}/pdf": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/kitchen/orders": {
       "get": {
         "tags": [
@@ -21867,6 +22200,487 @@
         },
         "additionalProperties": false
       },
+      "GlobalInvoiceDetailDto": {
+        "required": [
+          "hasPdf",
+          "hasXml",
+          "id",
+          "months",
+          "number",
+          "orderCount",
+          "orders",
+          "paymentForm",
+          "periodFrom",
+          "periodicity",
+          "periodTo",
+          "requestedAt",
+          "status",
+          "subTotal",
+          "taxTotal",
+          "total",
+          "year"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderInvoiceStatus"
+          },
+          "periodicity": {
+            "$ref": "#/components/schemas/GlobalInvoicePeriodicity"
+          },
+          "periodFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "months": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "orderCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paymentForm": {
+            "type": "string"
+          },
+          "subTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "taxTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uuid": {
+            "type": "string",
+            "nullable": true
+          },
+          "stampedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "hasXml": {
+            "type": "boolean"
+          },
+          "hasPdf": {
+            "type": "boolean"
+          },
+          "failureMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "refusedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancellationMotive": {
+            "$ref": "#/components/schemas/CfdiCancellationMotive"
+          },
+          "cancellationRequestedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlobalInvoiceOrderDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "GlobalInvoiceDraftDto": {
+        "required": [
+          "available",
+          "blockers",
+          "conceptCount",
+          "fingerprint",
+          "isReadyToStamp",
+          "leftOut",
+          "months",
+          "periodFrom",
+          "periodicity",
+          "periodTo",
+          "saleCount",
+          "sales",
+          "sandbox",
+          "subTotal",
+          "total",
+          "totalTransferred",
+          "transfers",
+          "warnings",
+          "year"
+        ],
+        "type": "object",
+        "properties": {
+          "periodicity": {
+            "$ref": "#/components/schemas/GlobalInvoicePeriodicity"
+          },
+          "periodFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "months": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "sandbox": {
+            "type": "boolean"
+          },
+          "problem": {
+            "type": "string",
+            "nullable": true
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isReadyToStamp": {
+            "type": "boolean"
+          },
+          "paymentForm": {
+            "type": "string",
+            "nullable": true
+          },
+          "subTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalTransferred": {
+            "type": "number",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "transfers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiTransferDto"
+            }
+          },
+          "saleCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "conceptCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlobalInvoiceSaleDto"
+            }
+          },
+          "leftOut": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlobalInvoiceLeftOutDto"
+            }
+          },
+          "fingerprint": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GlobalInvoiceDto": {
+        "required": [
+          "hasPdf",
+          "hasXml",
+          "id",
+          "months",
+          "number",
+          "orderCount",
+          "paymentForm",
+          "periodFrom",
+          "periodicity",
+          "periodTo",
+          "requestedAt",
+          "status",
+          "subTotal",
+          "taxTotal",
+          "total",
+          "year"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderInvoiceStatus"
+          },
+          "periodicity": {
+            "$ref": "#/components/schemas/GlobalInvoicePeriodicity"
+          },
+          "periodFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "months": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "orderCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paymentForm": {
+            "type": "string"
+          },
+          "subTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "taxTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uuid": {
+            "type": "string",
+            "nullable": true
+          },
+          "stampedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "hasXml": {
+            "type": "boolean"
+          },
+          "hasPdf": {
+            "type": "boolean"
+          },
+          "failureMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "refusedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancellationMotive": {
+            "$ref": "#/components/schemas/CfdiCancellationMotive"
+          },
+          "cancellationRequestedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GlobalInvoiceDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlobalInvoiceDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GlobalInvoiceLeftOutDto": {
+        "required": [
+          "orderId",
+          "orderNumber",
+          "reason",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GlobalInvoiceOrderDto": {
+        "required": [
+          "orderId",
+          "orderNumber",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GlobalInvoicePeriodicity": {
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Daily",
+          "Weekly",
+          "Fortnightly",
+          "Monthly",
+          "Bimonthly"
+        ]
+      },
+      "GlobalInvoiceSaleDto": {
+        "required": [
+          "orderId",
+          "orderNumber",
+          "paidAt",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "paidAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "HideReviewRequest": {
         "required": [
           "reason"
@@ -23785,6 +24599,37 @@
           },
           "ready": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueGlobalInvoiceRequest": {
+        "required": [
+          "day",
+          "expectedSaleCount",
+          "expectedTotal",
+          "periodicity"
+        ],
+        "type": "object",
+        "properties": {
+          "periodicity": {
+            "$ref": "#/components/schemas/GlobalInvoicePeriodicity"
+          },
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "expectedSaleCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "expectedTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedFingerprint": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

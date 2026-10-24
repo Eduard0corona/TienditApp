@@ -645,7 +645,8 @@ public class OrderInvoicingFlowTests
             if (request is not RequestOrderInvoiceCommand command)
                 throw new NotSupportedException(request.GetType().Name);
             var handler = new RequestOrderInvoiceCommandHandler(
-                Context, Fixture.TenantService, Fixture.CurrentUser, new FolioGenerator(Context), new PhoneNormalizationService(), Clock);
+                Context, Fixture.TenantService, Fixture.CurrentUser, new InvoicingLock(Context), new FolioGenerator(Context),
+                new PhoneNormalizationService(), Clock);
             return (TResponse)(object)await handler.Handle(command, cancellationToken);
         }
 
