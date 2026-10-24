@@ -783,7 +783,8 @@ public static class CreditNotes
     /// What a credit note of the adjustment may credit at most (ADR 0048). Never more than what the invoice still amounts to
     /// after the other credit notes. A write-off forgives what is owed, so neither more than what the invoice still owes
     /// after the payments that hold an installment and the other write-offs; a refund gives back money that was received, so
-    /// the payments do not limit it. It comes after the highest installment issued.
+    /// the payments do not limit it. It comes after the highest installment issued; issued again, where the adjustment's
+    /// earlier credit note of the invoice came, so the complements that counted that one go on counting this one.
     /// </summary>
     public static Room RoomFor(OrderInvoice invoice, Standing standing, CreditNoteAdjustment adjustment, Guid adjustmentId)
     {
@@ -792,7 +793,11 @@ public static class CreditNotes
         var available = invoice.Total - otherRefunds - otherWriteOffs;
         if (adjustment == CreditNoteAdjustment.WriteOff)
             available = Math.Min(available, invoice.Total - standing.Complements.Sum(c => c.Amount) - otherWriteOffs);
-        return new Room(available, standing.Complements.Count == 0 ? 0 : standing.Complements.Max(c => c.Installment));
+        var earlier = adjustment == CreditNoteAdjustment.Refund
+            ? standing.RefundNotes.FirstOrDefault(n => n.OrderRefundId == adjustmentId)
+            : standing.WriteOffNotes.FirstOrDefault(n => n.OrderWriteOffId == adjustmentId);
+        return new Room(available, earlier?.AfterInstallment
+            ?? (standing.Complements.Count == 0 ? 0 : standing.Complements.Max(c => c.Installment)));
     }
 
     /// <summary>

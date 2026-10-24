@@ -296,6 +296,40 @@ public class CreditNoteFlowTests
     }
 
     [Fact]
+    public async Task CreditNote_OfAWriteOff_IssuedAgain_ShouldKeepItsPlaceInTheChain_OfTheComplementsThatCountedIt()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id);
+        Assert.Equal(1, (await book.IssuePendingComplementsAsync()).Value);
+        var writeOff = await book.WriteOffAsync(sale.Id, 50m);
+        await book.IssuePendingAsync();
+        await book.PayAsync(sale.Id, 100m, OrderPaymentMethod.Transfer);
+        Assert.Equal(1, (await book.IssuePendingComplementsAsync()).Value);
+        var second = await book.Context.PaymentComplements.SingleAsync(c => c.Installment == 2);
+
+        // NC-1 had errors: issued again after P-2, NC-2 still comes after the down payment's installment, where the write-off
+        // was, so P-2 goes on counting it.
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        var first = await book.Context.CreditNotes.SingleAsync();
+        Assert.True((await book.CancelCreditNoteAsync(first.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        var reissued = await book.IssueCreditNoteAsync(CreditNoteAdjustment.WriteOff, writeOff.Id);
+        Assert.True(reissued.IsSuccess, reissued.Error);
+        Assert.Equal(1, (await book.Context.CreditNotes.SingleAsync(n => n.Id == reissued.Value.Id)).AfterInstallment);
+
+        // P-2 issued again still goes from what the down payment and the write-off left, and settles the invoice.
+        Assert.True((await book.CancelComplementAsync(second.Id)).IsSuccess);
+        var again = await book.IssueComplementAsync(second.OrderPaymentId);
+        Assert.True(again.IsSuccess, again.Error);
+        Assert.Equal(("P-3", 2, 100m, 100m, 0m), (again.Value.Number, again.Value.Installment, again.Value.PreviousBalance,
+            again.Value.Amount, again.Value.RemainingBalance));
+
+        // And it counts NC-2: the write-off is not undone while it stands.
+        Assert.True((await book.CancelCreditNoteAsync(reissued.Value.Id, CfdiCancellationMotive.NotCarriedOut)).IsSuccess);
+        Assert.Equal(ReverseCustomerWriteOffCommandHandler.ComplementsCountingItMessage(["P-3"]), (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
+    }
+
+    [Fact]
     public async Task CreditNote_OfAWriteOffBeforeAnyComplement_ShouldLowerTheBalanceOfTheFirstOne()
     {
         await using var book = await Book.OpenAsync();
@@ -333,7 +367,7 @@ public class CreditNoteFlowTests
     {
         await using var book = await Book.OpenAsync();
         var sale = await book.CreditSaleAsync(downPayment: 50m);
-        await book.IssueAsync(sale.Id);
+        var invoice = (await book.IssueAsync(sale.Id)).Value;
         var refund = await book.RefundAsync(sale.Id, 50m, OrderPaymentMethod.Cash);
         await book.CancelOrderAsync(sale.Id);
 
@@ -342,6 +376,11 @@ public class CreditNoteFlowTests
         var shown = Assert.Single((await book.InvoicingAsync(sale.Id)).Adjustments);
         Assert.Equal((false, false, CreditNotes.CancelledOrderMessage), (shown.CanIssue, shown.AwaitsAutomaticIssue, shown.Problem));
         Assert.Equal(CreditNotes.CancelledOrderMessage, (await book.IssueCreditNoteAsync(CreditNoteAdjustment.Refund, refund.Id)).Error);
+
+        // Its invoice is cancelled because the sale did not happen, with the refund and no credit note in between.
+        var cancelled = await book.CancelInvoiceAsync(invoice.Id, CfdiCancellationMotive.NotCarriedOut);
+        Assert.True(cancelled.IsSuccess, cancelled.Error);
+        Assert.Equal(CfdiCancellationMotive.NotCarriedOut, book.Gateway.Cancellations[^1].Motive);
     }
 
     [Fact]
@@ -589,9 +628,10 @@ public class CreditNoteFlowTests
             => new IssueOrderInvoiceCommandHandler(this, Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
                 .Handle(new IssueOrderInvoiceCommand(orderId, Receiver, false), CancellationToken.None);
 
-        public Task<Result<OrderInvoiceDto>> CancelInvoiceAsync(Guid invoiceId)
+        public Task<Result<OrderInvoiceDto>> CancelInvoiceAsync(
+            Guid invoiceId, CfdiCancellationMotive motive = CfdiCancellationMotive.ErrorsWithoutReplacement)
             => new CancelOrderInvoiceCommandHandler(Context, Fixture.CurrentUser, Gateway, Clock)
-                .Handle(new CancelOrderInvoiceCommand(invoiceId, CfdiCancellationMotive.ErrorsWithoutReplacement), CancellationToken.None);
+                .Handle(new CancelOrderInvoiceCommand(invoiceId, motive), CancellationToken.None);
 
         public Task<Result<CreditNoteDto>> IssueCreditNoteAsync(CreditNoteAdjustment adjustment, Guid adjustmentId)
             => new IssueCreditNoteCommandHandler(this, Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)

@@ -582,13 +582,13 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - el receptor de la factura con uso G02 (S01 si su régimen no lo admite), método PUE, MXN;
   - forma: la del reembolso (la misma tabla que los complementos) o 15 «Condonación»;
   - un concepto 84111506, ACT, «Devolución» o «Condonación» por cada tasa de IVA de la factura, y otro sin objeto de impuesto para lo que la factura tiene sin traslados.
-- **Importes:** el total es exactamente lo reembolsado o condonado. Se reparte entre las tasas de la factura según su peso en el total (la última toma el resto); en cada una, la base es la parte sin IVA, redondeada, y el IVA lo que queda de la parte.
+- **Importes:** el total es exactamente lo reembolsado o condonado. Se reparte entre las tasas de la factura según su peso en el total (la última toma el resto, y si no le alcanza para devolver un centavo de más, lo devuelven las anteriores); en cada una, la base es la parte sin IVA, redondeada, y el IVA lo que queda de la parte.
 - **Cuánto acredita:**
   - la nota de un reembolso, hasta el total de la factura menos sus otras notas;
   - la de una condonación, además, hasta lo que la factura todavía debe (su total menos los cobros con complemento y las otras notas de condonación).
 
   Cuenta la última nota de cada ajuste aunque esté rechazada o cancelada (se emite otra vez); no cuentan las de una condonación deshecha. Un ajuste mayor que lo que queda dice por qué no se emite.
-- **En una factura PPD** solo las notas de condonación bajan el saldo anterior de las parcialidades que vienen después de ellas, y lo que se debe; un reembolso devuelve dinero que ya declaró su complemento.
+- **En una factura PPD** solo las notas de condonación bajan el saldo anterior de las parcialidades que vienen después de ellas, y lo que se debe; un reembolso devuelve dinero que ya declaró su complemento. La nota que se emite otra vez conserva el lugar de la anterior en esa cadena.
 - **Quién la emite:** TienditApp, por su cuenta (el worker, del ajuste más viejo al más nuevo, en los negocios cuyo CSD sella); o quien gestiona los pedidos con «Emitir ahora». Una rechazada o cancelada se emite otra vez a mano.
 - **Sin nota:** los reembolsos «Otro» o como saldo a favor del cliente, los de un pedido cancelado (su factura se cancela con el motivo 03) y las condonaciones deshechas; el ajuste dice por qué. Tampoco se emiten mientras falte el CSD vigente del RFC de la factura, los datos de Mi negocio o el PAC: esperan.
 - **Serie:** «NC» por omisión, con sus propios folios; se cambia en Configuración › Facturación junto a las de las facturas y los complementos.

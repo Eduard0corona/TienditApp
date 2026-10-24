@@ -31,10 +31,16 @@ public static class CreditNoteTaxes
         var parts = weights.Select(weight => Cents(credited * weight / invoiceTotal)).ToList();
         var notSubject = credited - parts.Sum();
         // Without a part outside the transfers, the last rate takes what the rounding left; with one, that part takes it.
+        // When the rounding gave more than was credited, the rates give the extra cents back from the last one, none below
+        // zero: a last rate that rounded to nothing has none to give.
         if (parts.Count > 0 && (notSubjectWeight <= 0 || notSubject < 0))
         {
-            parts[^1] += notSubject;
-            notSubject = 0m;
+            for (var i = parts.Count - 1; i >= 0 && notSubject != 0; i--)
+            {
+                var taken = Math.Max(notSubject, -parts[i]);
+                parts[i] += taken;
+                notSubject -= taken;
+            }
         }
 
         var transfers = new List<CfdiTransfer>();

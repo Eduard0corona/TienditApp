@@ -78,6 +78,21 @@ public class CreditNoteTaxesTests
     }
 
     [Fact]
+    public void Split_ShouldTakeTheCentTooManyFromTheRateBefore_WhenTheLastOneRoundsToNothing()
+    {
+        // $116 at 16 %, $108 at 8 %, $100 at 0 % and $0.01 exempt: $324.01. Of $0.02 the first three round to a cent each and
+        // the exempt one to nothing, so it has no cent to give back: the 0 % rate before it does.
+        var (transfers, notSubject) = CreditNoteTaxes.Split(
+            [Rate(100m, 16m, 16m), Rate(100m, 8m, 8m), Rate(100m, 0m, 0m), Exempt(0.01m)], 324.01m, 0.02m);
+
+        Assert.Equal([Rate(0.01m, 16m, 0m), Rate(0.01m, 8m, 0m)], transfers);
+        Assert.Equal(0m, notSubject);
+        Assert.All(transfers, transfer => Assert.InRange(transfer.Amount,
+            CfdiAmountCalculator.MinimumTax(transfer.Base, transfer.RatePercent),
+            CfdiAmountCalculator.MaximumTax(transfer.Base, transfer.RatePercent)));
+    }
+
+    [Fact]
     public void Split_ShouldKeepThePartNotSubjectToTax_WithoutTransfers()
     {
         // $116 at 16 % and $84 not subject (objeto de impuesto 01).
@@ -119,7 +134,35 @@ public class CreditNoteTaxesTests
 
         var (transfers, notSubject) = CreditNoteTaxes.Split(invoice, 2164m, credited);
 
+        AssertAddsUp(credited, transfers, notSubject);
+    }
+
+    [Fact]
+    public void Split_ShouldAlwaysAddUp_EvenWhenTheLastRateWeighsAlmostNothing()
+    {
+        // Every cent up to $10 and some larger amounts, of invoices whose last rate is a few cents: the rates before it round
+        // up together more often than it can give back.
+        var invoices = new (CfdiTransfer[] Transfers, decimal Total)[]
+        {
+            ([Rate(100m, 16m, 16m), Rate(100m, 8m, 8m), Rate(100m, 0m, 0m), Exempt(0.01m)], 324.01m),
+            ([Rate(333.33m, 16m, 53.33m), Rate(333.33m, 8m, 26.67m), Rate(0.05m, 16m, 0.01m)], 746.72m),
+        };
+        var amounts = Enumerable.Range(1, 1000).Select(cents => cents / 100m).Concat([123.45m, 299.99m, 324.01m]);
+
+        foreach (var (invoice, total) in invoices)
+        {
+            foreach (var credited in amounts.Where(amount => amount <= total))
+            {
+                var (transfers, notSubject) = CreditNoteTaxes.Split(invoice, total, credited);
+                AssertAddsUp(credited, transfers, notSubject);
+            }
+        }
+    }
+
+    private static void AssertAddsUp(decimal credited, IReadOnlyList<CfdiTransfer> transfers, decimal notSubject)
+    {
         Assert.Equal(credited, transfers.Sum(t => t.Base + t.Amount) + notSubject);
+        Assert.True(notSubject >= 0);
         Assert.All(transfers, transfer => Assert.True(transfer.Base > 0));
         Assert.All(transfers.Where(t => !t.IsExempt), transfer => Assert.InRange(transfer.Amount,
             CfdiAmountCalculator.MinimumTax(transfer.Base, transfer.RatePercent),

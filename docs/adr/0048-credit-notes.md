@@ -25,7 +25,7 @@ Tomé las decisiones de la Fase 28D con la autorización permanente del dueño d
    - Un pedido cancelado no lleva notas: la venta no se llevó a cabo y su factura se cancela con el motivo 03. Sus reembolsos (los de «Anular venta») lo dicen en lugar de emitirse.
    - La global sigue sin ventas con ajustes: la vista previa dice que se facturen en Pedidos si el cliente da sus datos fiscales, o que se consulte al contador (el egreso relacionado con una global queda fuera).
 2. **El agregado `CreditNote`** (`ITenantScoped`, CFDI tipo E) hereda de `Cfdi` (ADR 0047) el estado, el documento, el timbre, los archivos, el rechazo y la cancelación.
-   - Guarda la factura, el pedido, el reembolso o la condonación (exactamente uno), la forma, el subtotal, el IVA, el total, la parcialidad más alta de los complementos al pedirla (`AfterInstallment`) y quién la pidió (sin persona, la emitió TienditApp).
+   - Guarda la factura, el pedido, el reembolso o la condonación (exactamente uno), la forma, el subtotal, el IVA, el total, la parcialidad más alta de los complementos al pedirla (`AfterInstallment`; la que se emite otra vez conserva la de la nota anterior del ajuste en esa factura, para que los complementos que la descontaron la sigan descontando) y quién la pidió (sin persona, la emitió TienditApp).
    - Hay una sola nota viva (timbrando, timbrada o cancelándose) por ajuste, garantizado por dos índices únicos filtrados. Son únicos la serie y el folio por negocio, la llave y el UUID por negocio.
    - El dominio rechaza:
      - una factura que no está timbrada;
@@ -43,7 +43,7 @@ Tomé las decisiones de la Fase 28D con la autorización permanente del dueño d
 
    El JSON de SW Sapien lleva `CfdiRelacionados` antes del emisor, como arreglo de `{TipoRelacion, CfdiRelacionado: [{UUID}]}`, el mismo mapeo que el XML.
 5. **Los importes** (`CreditNoteTaxes.Split`): el total de la nota es **exactamente** lo reembolsado o condonado.
-   - Se reparte entre las tasas de la factura según lo que cada una pesa en su total; la última toma el resto.
+   - Se reparte entre las tasas de la factura según lo que cada una pesa en su total; la última toma el resto. Si el redondeo dio de más y a la última no le alcanza (por ejemplo, redondeó a 0), las anteriores devuelven los centavos, de la última a la primera, sin quedar abajo de 0.
    - En cada tasa, la base es la parte sin IVA, redondeada, y el IVA es lo que queda de la parte, dentro de los límites del SAT.
    - Una tasa cuya parte redondea a 0 no lleva traslado (el SAT no acepta una base de 0).
 6. **Cuánto puede acreditar una nota:**
