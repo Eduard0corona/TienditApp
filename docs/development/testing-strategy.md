@@ -1291,11 +1291,12 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `invoicing.test.ts` (+4): el archivo del complemento; se vuelve a leer mientras algo espera al PAC, al SAT o al worker, y deja de hacerlo cuando lo que queda es a mano.
     - `CfdiDraftModal.test.tsx` (+1): los complementos bajo la factura PPD, que dice «en parcialidades (PPD)».
     - `Invoicing.test.tsx` (+1): las dos series se guardan juntas.
-  - **Total:** `dotnet test` con SQL Server 2022: Domain 1,085 y Application 1,635 sin fallos (Infrastructure y WebApi, en la corrida final).
-  - **Cliente en total:** en la corrida final.
-  - **Primera visita:** sin cambio (la facturación se carga aparte).
+  - **Total:** `dotnet test` con SQL Server 2022, 3,701 pruebas sin fallos ni omitidas (Domain 1,085, Application 1,635, Infrastructure 532, WebApi 449).
+  - **Cliente en total:** 164 archivos y 1,121 pruebas.
+  - **Primera visita:** 179,797 B de 179,900 B, sin subir el presupuesto: la facturación se carga aparte.
   - **Escenas visuales:** `facturacion.spec.ts` (+4): los complementos de pago de la factura en parcialidades (escritorio, teléfono y oscuro) y el diálogo para cancelar uno.
-    - **Lo que cambia y por qué / resultado:** en la corrida final contra `master`.
+    - **Lo que cambia y por qué:** 7 escenas de `facturacion.spec.ts`: las 5 de Configuración › Facturación (lista en escritorio, teléfono y oscuro, sin certificado y en pruebas por vencer) por la serie de los complementos junto a la de las facturas y «Cómo funciona» al día; y «factura lista para timbrar» y «factura cancelándose», cuya vista previa dice ahora «Pago PUE (una sola exhibición)».
+    - **Resultado:** la comparación contra `master` en `607339e` dio 661 pruebas iguales (con la de cobertura), las 7 que cambian y las 4 nuevas (que no existen en `master`; pasaron dos corridas seguidas contra el mismo build, después de las revisiones).
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
