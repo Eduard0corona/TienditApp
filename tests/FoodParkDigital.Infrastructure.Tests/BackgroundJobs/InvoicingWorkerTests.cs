@@ -168,8 +168,10 @@ public class InvoicingWorkerTests
         var now = host.Clock.UtcNow;
         var refunding = await AddAdjustmentAsync(host, "debe-nota-reembolso", now.AddDays(-3), writeOff: false);
         var forgiving = await AddAdjustmentAsync(host, "debe-nota-condonacion", now.AddDays(-2), writeOff: true);
-        // Refunded with «Otro», a write-off undone, or already with a credit note (even refused): nothing owed.
+        // Refunded with «Otro», of a cancelled order (its invoice is cancelled instead), a write-off undone, or already with a
+        // credit note (even refused): nothing owed.
         await AddAdjustmentAsync(host, "reembolso-otro", now.AddDays(-4), writeOff: false, method: Domain.Orders.Enums.OrderPaymentMethod.Other);
+        await AddAdjustmentAsync(host, "pedido-cancelado", now.AddDays(-4), writeOff: false, orderCancelled: true);
         await AddAdjustmentAsync(host, "condonacion-deshecha", now.AddDays(-4), writeOff: true, reversed: true);
         await AddAdjustmentAsync(host, "nota-rechazada", now.AddDays(-4), writeOff: false, note: n => n.Refuse("CFDI40108", now));
         // It owes one, but cannot issue it until its CSD seals again.
@@ -258,7 +260,8 @@ public class InvoicingWorkerTests
         bool reversed = false,
         Action<CreditNote>? note = null,
         DateTimeOffset? requestedAt = null,
-        Csd csd = Csd.Valid)
+        Csd csd = Csd.Valid,
+        bool orderCancelled = false)
         => host.InScopeAsync(async services =>
         {
             var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
@@ -297,6 +300,9 @@ public class InvoicingWorkerTests
             }
             context.Tenants.Add(tenant);
             context.Orders.Add(order);
+            // As «Anular venta» leaves an order it voided before delivering it.
+            if (orderCancelled)
+                context.Entry(order).Property(o => o.Status).CurrentValue = Domain.Orders.Enums.OrderStatus.Cancelled;
             context.OrderInvoices.Add(invoice);
             if (issued is not null)
             {

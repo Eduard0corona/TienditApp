@@ -79,7 +79,11 @@ export default function Invoicing() {
                     El dueño o un administrador cancela una factura con su motivo. Si el SAT pide que el cliente acepte, la factura
                     queda «Cancelándose» hasta su respuesta.
                   </li>
-                  <li>Las ventas a público en general van en la factura global (Reportes › Factura global). Todavía no: notas de crédito.</li>
+                  <li>
+                    Cada reembolso y cada condonación de un pedido facturado lleva su nota de crédito, que TienditApp emite por su
+                    cuenta. El dueño o un administrador la cancela.
+                  </li>
+                  <li>Las ventas a público en general van en la factura global (Reportes › Factura global).</li>
                   <li>Tu llave privada y su contraseña las guarda el PAC; TienditApp solo guarda el número y la vigencia del CSD.</li>
                 </ul>
               </div>
@@ -273,22 +277,22 @@ function SerieCard({ data }: { data: InvoicingSettings }) {
       <div className="card-body">
         <h2 className="h5">Series</h2>
         <form className="row g-2 align-items-end" onSubmit={submit}>
-          <div className="col-sm-6 col-lg-3">
+          <div className="col-sm-4">
             <label className="form-label small mb-1" htmlFor="invoice-serie">Serie de las facturas</label>
             <input id="invoice-serie" className="form-control text-uppercase" maxLength={10} required pattern={SERIE_PATTERN}
               title={SERIE_HINT} value={serie} onChange={(event) => setSerie(event.target.value)} />
           </div>
-          <div className="col-sm-6 col-lg-3">
+          <div className="col-sm-4">
             <label className="form-label small mb-1" htmlFor="payment-serie">Serie de los complementos de pago</label>
             <input id="payment-serie" className="form-control text-uppercase" maxLength={10} required pattern={SERIE_PATTERN}
               title={SERIE_HINT} value={paymentSerie} onChange={(event) => setPaymentSerie(event.target.value)} />
           </div>
-          <div className="col-sm-6 col-lg-3">
+          <div className="col-sm-4">
             <label className="form-label small mb-1" htmlFor="credit-note-serie">Serie de las notas de crédito</label>
             <input id="credit-note-serie" className="form-control text-uppercase" maxLength={10} required pattern={SERIE_PATTERN}
               title={SERIE_HINT} value={creditNoteSerie} onChange={(event) => setCreditNoteSerie(event.target.value)} />
           </div>
-          <div className="col-sm-6 col-lg-3">
+          <div className="col-12">
             <button type="submit" className="btn btn-outline-secondary" disabled={change.isPending || unchanged}>
               Guardar series
             </button>

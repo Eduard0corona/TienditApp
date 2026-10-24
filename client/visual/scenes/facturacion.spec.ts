@@ -220,7 +220,7 @@ test.describe('Pedidos › Notas de crédito', () => {
     const invoice = await openCreditNotes(page);
     await invoice.getByRole('button', { name: 'Cancelar nota de crédito NC-1' }).click();
     const cancelling = await dialog(page, 'Cancelar la nota de crédito NC-1');
-    await cancelling.getByLabel('03 · El reembolso o la condonación no se llevó a cabo').check();
+    await expect(cancelling.getByLabel('02 · Tiene errores (después emites otra para el reembolso)')).toBeChecked();
     await snapScreen(page, 'pedidos-factura-cancelar-nota-de-credito');
   });
 });

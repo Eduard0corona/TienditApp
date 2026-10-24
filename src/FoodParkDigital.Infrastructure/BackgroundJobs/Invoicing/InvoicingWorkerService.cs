@@ -152,6 +152,7 @@ public sealed class InvoicingWorkerService : BackgroundService
             // each business's own, of the businesses whose CSD seals now, by the same turns.
             var refunds = await CreditNotes.PendingRefunds(
                     context.OrderRefunds.IgnoreQueryFilters(),
+                    context.Orders.IgnoreQueryFilters(),
                     context.OrderInvoices.IgnoreQueryFilters(),
                     context.CreditNotes.IgnoreQueryFilters())
                 .Where(r => sealing.Contains(r.TenantId))

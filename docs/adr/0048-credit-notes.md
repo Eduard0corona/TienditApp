@@ -22,7 +22,8 @@ Tomé las decisiones de la Fase 28D con la autorización permanente del dueño d
 1. **Qué lleva nota de crédito:** cada reembolso (`OrderRefund`) y cada condonación que sigue en pie (`OrderWriteOff` sin deshacer) del pedido de una factura timbrada lleva **una** nota de crédito, también los que se hicieron antes de timbrarla.
    - Se levanta el bloqueo de la 28A: una venta con reembolsos o con condonación ya se factura (por la venta completa, PUE o PPD) y cada ajuste lleva su nota. La vista previa lo avisa.
    - Sigue bloqueado el reembolso en línea en curso.
-   - La global sigue sin ventas con ajustes: la vista previa dice que se facturen por su cuenta en Pedidos (el egreso relacionado con una global queda fuera).
+   - Un pedido cancelado no lleva notas: la venta no se llevó a cabo y su factura se cancela con el motivo 03. Sus reembolsos (los de «Anular venta») lo dicen en lugar de emitirse.
+   - La global sigue sin ventas con ajustes: la vista previa dice que se facturen en Pedidos si el cliente da sus datos fiscales, o que se consulte al contador (el egreso relacionado con una global queda fuera).
 2. **El agregado `CreditNote`** (`ITenantScoped`, CFDI tipo E) hereda de `Cfdi` (ADR 0047) el estado, el documento, el timbre, los archivos, el rechazo y la cancelación.
    - Guarda la factura, el pedido, el reembolso o la condonación (exactamente uno), la forma, el subtotal, el IVA, el total, la parcialidad más alta de los complementos al pedirla (`AfterInstallment`) y quién la pidió (sin persona, la emitió TienditApp).
    - Hay una sola nota viva (timbrando, timbrada o cancelándose) por ajuste, garantizado por dos índices únicos filtrados. Son únicos la serie y el folio por negocio, la llave y el UUID por negocio.
@@ -58,17 +59,22 @@ Tomé las decisiones de la Fase 28D con la autorización permanente del dueño d
 8. **Emisión automática:** el worker de facturación busca, en cada pasada, los reembolsos (con forma del SAT) y las condonaciones en pie de pedidos con factura timbrada sin ninguna nota para esa factura, solo en los negocios cuyo CSD sella. Los pide y los timbra, del más viejo al más nuevo: hasta 20 por negocio en cada pasada, de los 100 más viejos que revisa.
    - Un negocio cuya última pasada no timbró ninguna nota va después de los demás, y esos negocios se turnan, como con los complementos.
    - Una nota rechazada o cancelada solo se emite otra vez a mano («Emitir otra vez»); «Emitir ahora» no espera al worker. Los dos usan el mismo comando y las mismas reglas.
+   - Dentro del candado, el worker vuelve a revisar que el ajuste nunca haya tenido nota de esa factura: si una persona la emitió mientras la pasada avanzaba y el PAC la rechazó, o se canceló, el worker no emite otra.
 9. **Timbrar y reintentar** son los de la 28A, dentro del candado de facturación del negocio: se guarda el CFDI con su llave antes de llamar al PAC, el PAC se llama después del commit, y sin respuesta queda «Timbrando».
    - Dos personas (o una persona y el worker) que emiten la nota del mismo ajuste a la vez: la segunda espera el candado y encuentra la primera.
    - Si aun así choca con el índice, la API responde «Otra persona está emitiendo la nota de crédito de este ajuste» y el folio regresa al contador.
-10. **Cancelar** una nota: dueño o administrador, motivo 02 o 03. Se pide primero al PAC y queda «Cancelándose» si el SAT espera al receptor; el worker la resuelve. Nunca se borra.
-    - Una factura con notas vivas no se cancela: la API dice cuáles cancelar primero.
+10. **Cancelar** una nota: dueño o administrador. Se pide primero al PAC y queda «Cancelándose» si el SAT espera al receptor; el worker la resuelve. Nunca se borra.
+    - La de un reembolso solo se cancela con 02 (errores): un reembolso registrado en TienditApp no se deshace, así que «no se llevó a cabo» (03) no le corresponde. La de una condonación, con 02 o con 03 antes de deshacerla.
+    - Una factura con notas vivas no se cancela: la API dice cuáles cancelar primero, y Pedidos lo dice en lugar del botón.
     - Una condonación con nota viva no se deshace: primero se cancela la nota. Deshacerla toma el candado de facturación después del del fiado.
+    - Tampoco se deshace mientras un complemento posterior a su nota (de una parcialidad mayor que la que tenía al pedirla) siga vigente: su saldo anterior ya la descuenta. Esos complementos se cancelan primero y se emiten otra vez sin ella.
 11. **Acceso:** ver, emitir, reintentar y descargar el XML y el PDF de una nota lo hace quien gestiona los pedidos (`ManageOrders`) y ve el pedido. Cancelar lo hacen dueños y administradores (`RequiresTenantManager`). La nota de otro negocio responde 404 (suite entre negocios).
 12. **Se ve en Pedidos › Factura:** debajo de los complementos, «Notas de crédito» lista cada reembolso («Reembolso del …», con su forma) y cada condonación («Condonación del …», con su motivo, «Deshecha» si se deshizo), con su monto y su nota.
     - La nota muestra: folio, estado, «Por $X (base $Y e IVA $Z)», forma, folio fiscal y si la emitió TienditApp.
     - Sin nota viva: «Sin nota de crédito todavía: TienditApp la emite en unos minutos», o el motivo por el que no se emite. El motivo se calcula con las mismas reglas con que se rechazaría emitirla: forma, factura, Mi negocio y su CSD, RFC de la factura, condonación deshecha, lo que queda.
     - Las acciones: «Emitir ahora» o «Emitir otra vez», «Volver a pedir el timbre», «Cancelar nota de crédito» y las descargas.
+    - Una nota de una factura que ya no es la timbrada dice de cuál fue.
+    - Una factura con complementos o notas vigentes dice «Para cancelarla, primero cancela …» en lugar de ofrecer cancelarla.
     - La consulta se vuelve a leer cada 30 segundos mientras algo espera al PAC, al SAT o al worker.
 13. **La API se mantiene compatible:**
     - Rutas nuevas:
@@ -97,6 +103,7 @@ Tomé las decisiones de la Fase 28D con la autorización permanente del dueño d
   - El formato de `CfdiRelacionados` en el JSON de SW Sapien sigue el mapeo del XML y no se ha probado en su ambiente de pruebas: si el PAC lo rechazara, las notas quedarían «Rechazadas» con su motivo (sin efecto en las facturas) hasta corregir el mapeo. Se prueba con el primer negocio en pruebas.
   - La nota sigue a la factura timbrada: un ajuste registrado mientras la factura espera al PAC se emite en cuanto quede timbrada. Si la factura se cancela y se factura otra vez, el ajuste lleva otra nota relacionada con la nueva.
   - Cancelar la factura revisa sus notas vivas antes de pedirlo al PAC, sin el candado: si el worker timbra una nota justo en medio, el SAT rechaza la cancelación o la nota queda de una factura cancelada, y se cancela a mano.
+  - Al desplegar, la primera pasada del worker emite, con la fecha de ese día, las notas de los reembolsos y condonaciones que ya tenían factura timbrada (la consulta 4 del `verify.sql` los cuenta). Si alguno ya tiene su CFDI de egreso hecho a mano, su nota se cancela con 02.
   - El receptor es el de la factura: si el cliente cambió su código postal o su régimen en el SAT, el PAC rechaza la nota.
   - Los reembolsos «Otro» o como saldo a favor no llevan nota desde aquí; el contador decide.
   - Una condonación hecha cuando la factura ya no debe nada (los cobros con complemento la cubrieron) no lleva nota: la pantalla lo dice.
@@ -104,6 +111,7 @@ Tomé las decisiones de la Fase 28D con la autorización permanente del dueño d
 - **Compatibilidad durante el despliegue:**
   - La versión anterior (28C) funciona con la base migrada: no conoce la tabla nueva ni la columna `CreditNoteSerie` y no las escribe.
   - Si se vuelve a ella, las notas se quedan en la base y en el PAC. La 28C vuelve a bloquear la factura de ventas con ajustes, deja cancelar una factura con notas vigentes (el SAT la rechaza) y deja deshacer una condonación con nota vigente (se cancela a mano).
+  - Además, la 28C no conoce las notas de condonación: el saldo anterior de los complementos que emita después de una queda alto y la factura no se liquida. Con notas de condonación timbradas, es mejor corregir hacia adelante.
 - **Reversibilidad:**
   - `rollback.sql` quita la tabla y la columna solo si no hay ninguna nota de crédito.
   - En cuanto existe una (aunque esté rechazada), se detiene con el error 50040 sin cambiar nada. Solo queda corregir hacia adelante.

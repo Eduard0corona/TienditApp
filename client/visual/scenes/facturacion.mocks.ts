@@ -223,15 +223,17 @@ function refund(name: string, at: string, method: number, amount: number, notes:
 }
 
 /**
- * Invoiced (F-3, PUE, by transfer) and then three refunds, each with what happened to its credit note:
+ * Invoiced (F-3, PUE, by transfer) and then four refunds, each with what happened to its credit note:
  * - two conchas that were missing, given back by transfer: NC-1, issued by TienditApp;
  * - one recorded as «Otro», which has no form of the SAT for a credit note;
+ * - a double charge given back to the card: NC-2 refused by the PAC, to issue again;
  * - a cold americano given back in cash a moment ago, still without one: TienditApp issues it soon, or «Emitir ahora».
+ * With NC-1 in force, F-3 says it is cancelled after it.
  */
 export const PEDIDO_CON_NOTAS_DE_CREDITO = asOption(((data) => {
   const order = data.orders.find((o: { orderNumber: string }) => o.orderNumber === ORDER_NUMBER);
   const share = (part: number) => r2(order.total * part);
-  const [transfer, other, cash] = [share(0.12), share(0.05), share(0.06)];
+  const [transfer, other, card, cash] = [share(0.12), share(0.05), share(0.04), share(0.06)];
   orderInvoicing((d) => ({
     canInvoice: false,
     problem: 'Este pedido ya tiene la factura F-3: cancélala para facturarlo otra vez.',
@@ -246,6 +248,13 @@ export const PEDIDO_CON_NOTAS_DE_CREDITO = asOption(((data) => {
       }),
       refund('vale', minutesFromNow(-30), OTHER, other, 'Se compensó con un vale', {
         problem: 'Este reembolso se registró como «Otro», que no es una forma de pago del SAT: su nota de crédito no se emite desde TienditApp. Consúltalo con tu contador.',
+      }),
+      refund('tarjeta', minutesFromNow(-20), CARD, card, 'Se cobró dos veces con tarjeta', {
+        canIssue: true,
+        creditNotes: [creditNote(2, card, {
+          status: REFUSED, paymentForm: '04', requestedAt: minutesFromNow(-14), refusedAt: minutesFromNow(-14),
+          failureMessage: 'El PAC rechazó la nota de crédito: CFDI40102 - El certificado del emisor no estaba vigente en la fecha del comprobante.',
+        })],
       }),
       refund('americano', minutesFromNow(-4), CASH, cash, 'Un americano llegó frío', { canIssue: true, awaitsAutomaticIssue: true }),
     ],

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
@@ -180,7 +181,7 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"/api/v1/invoicing/credit-notes/{noteId}/retry", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
             mine, HttpMethod.Post, $"/api/v1/invoicing/credit-notes/{noteId}/cancel", new { motive = (int)CfdiCancellationMotive.NotCarriedOut }))).StatusCode);
-        Assert.Empty(_api.Invoicing.Cancellations.Where(c => c.Uuid == note.GetProperty("uuid").GetString()));
+        Assert.DoesNotContain(_api.Invoicing.Cancellations, c => c.Uuid == note.GetProperty("uuid").GetString());
         Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.CreditNotes.ToListAsync()));
 
         // Mine: its XML downloads, and the invoice is not cancelled while the credit note stands.
@@ -189,6 +190,56 @@ public sealed class CrossTenantInvoicingSqlServerTests
             $"/api/v1/invoicing/invoices/{invoice.GetProperty("id").GetGuid()}/cancel", new { motive = (int)CfdiCancellationMotive.ErrorsWithoutReplacement });
         Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
         Assert.Contains("NC-1", await blocked.Content.ReadAsStringAsync());
+    }
+
+    [SqlServerFact]
+    public async Task TheSameRefundsCreditNoteIssuedAtOnce_ShouldBeStampedOnce_AndGiveTheOtherFolioBack()
+    {
+        var mine = await _api.SignUpAsync("notas-carrera", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Nota carrera"), phone: "5512345678", name: "Karla");
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }));
+        foreach (var _ in Enumerable.Range(0, 3))
+            await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/orders/{order}/refunds",
+                new { amount = 1m, method = 1, reason = "Faltó uno", restockItems = false }));
+        var refunds = (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/orders/{order}")))
+            .GetProperty("adjustments").EnumerateArray().Select(a => a.GetProperty("adjustmentId").GetGuid()).ToList();
+        Assert.Equal(3, refunds.Count);
+        Assert.Equal("NC-1", (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync(
+            $"/api/v1/invoicing/refunds/{refunds[0]}/credit-notes", null))).GetProperty("number").GetString());
+
+        // Two people issue the credit note of the same refund at once. While the serie's folio is held, the first waits for a
+        // folio; the second waits for the invoicing lock of the business and, once the first commits, finds its credit note.
+        // The index of one live credit note per refund stays as the last word.
+        var answers = await _api.QueryAsync(mine.TenantId, async db =>
+        {
+            await using var held = await db.Database.BeginTransactionAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE FolioSequences SET LastNumber = LastNumber WHERE TenantId = {mine.TenantId}");
+            var both = Enumerable.Range(0, 2)
+                .Select(_ => mine.Client.PostAsync($"/api/v1/invoicing/refunds/{refunds[1]}/credit-notes", null))
+                .ToList();
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await held.CommitAsync();
+            return await Task.WhenAll(both);
+        });
+
+        Assert.Single(answers, answer => answer.StatusCode == HttpStatusCode.OK);
+        var refused = Assert.Single(answers, answer => answer.StatusCode != HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains(
+            JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString(),
+            new[]
+            {
+                "La nota de crédito NC-2 de este reembolso se está timbrando.",
+                "Este reembolso ya tiene la nota de crédito NC-2: cancélala para emitir otra.",
+                CreditNotes.AlreadyIssuingMessage
+            });
+        Assert.Equal(2, await _api.QueryAsync(mine.TenantId, db => db.CreditNotes.CountAsync()));
+        // The refused one took no folio: the next credit note of the serie follows without a hole.
+        Assert.Equal("NC-3", (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync(
+            $"/api/v1/invoicing/refunds/{refunds[2]}/credit-notes", null))).GetProperty("number").GetString());
     }
 
     [SqlServerFact]

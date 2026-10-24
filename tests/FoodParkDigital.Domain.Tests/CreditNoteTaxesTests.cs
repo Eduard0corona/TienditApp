@@ -43,16 +43,38 @@ public class CreditNoteTaxesTests
     [Fact]
     public void Split_ShouldLeaveTheRoundingToTheLastRate_SoTheyAddUpToWhatWasCredited()
     {
-        // A third of each rate rounds down: the last one takes the cent.
-        var (transfers, notSubject) = CreditNoteTaxes.Split([Rate(50m, 16m, 8m), Rate(50m, 8m, 4m)], 112m, 10m);
+        // $116 at 16 %, $108 at 8 % and $76 exempt: $300. Of $0.10, each part rounds up ($0.04, $0.04 and $0.03, a cent too
+        // many): the last one gives it back.
+        var (transfers, notSubject) = CreditNoteTaxes.Split([Rate(100m, 16m, 16m), Rate(100m, 8m, 8m), Exempt(76m)], 300m, 0.10m);
 
-        Assert.Equal(10m, transfers.Sum(t => t.Base + t.Amount) + notSubject);
-        Assert.All(transfers, transfer =>
-        {
-            Assert.InRange(transfer.Amount,
-                CfdiAmountCalculator.MinimumTax(transfer.Base, transfer.RatePercent),
-                CfdiAmountCalculator.MaximumTax(transfer.Base, transfer.RatePercent));
-        });
+        Assert.Equal(0.10m, transfers.Sum(t => t.Base + t.Amount) + notSubject);
+        Assert.Equal(Exempt(0.02m), transfers[^1]);
+        Assert.Equal(0m, notSubject);
+        Assert.All(transfers.Where(t => !t.IsExempt), transfer => Assert.InRange(transfer.Amount,
+            CfdiAmountCalculator.MinimumTax(transfer.Base, transfer.RatePercent),
+            CfdiAmountCalculator.MaximumTax(transfer.Base, transfer.RatePercent)));
+    }
+
+    [Fact]
+    public void Split_ShouldGiveTheLastRateTheCentEveryPartRoundsAway()
+    {
+        // Of $0.01 every part rounds to nothing: the last rate (0 %) takes it.
+        var (transfers, notSubject) = CreditNoteTaxes.Split([Rate(100m, 16m, 16m), Rate(100m, 8m, 8m), Rate(100m, 0m, 0m)], 324m, 0.01m);
+
+        Assert.Equal([Rate(0.01m, 0m, 0m)], transfers);
+        Assert.Equal(0m, notSubject);
+    }
+
+    [Fact]
+    public void Split_ShouldTakeTheCentTooManyFromTheLastRate_EvenWithAPartNotSubjectToTax()
+    {
+        // $1 of the $301 is not subject to tax. Of $0.02 the three rates round to a cent each: the last one gives back the cent
+        // too many and is left with nothing, so it carries no transfer; the part not subject cannot go below zero.
+        var (transfers, notSubject) = CreditNoteTaxes.Split([Rate(100m, 16m, 16m), Rate(100m, 8m, 8m), Exempt(76m)], 301m, 0.02m);
+
+        Assert.Equal(0.02m, transfers.Sum(t => t.Base + t.Amount) + notSubject);
+        Assert.Equal(0m, notSubject);
+        Assert.DoesNotContain(transfers, transfer => transfer.IsExempt);
     }
 
     [Fact]

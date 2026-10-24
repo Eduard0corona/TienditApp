@@ -208,7 +208,7 @@ public class CreditNoteFlowTests
     }
 
     [Fact]
-    public async Task CreditNote_ShouldBeCancelledByAManager_WithMotive02Or03_AndItsFilesDownloaded()
+    public async Task CreditNote_OfARefund_ShouldBeCancelledByAManager_OnlyWith02_AndItsFilesDownloaded()
     {
         await using var book = await Book.OpenAsync();
         var sale = await book.PaidSaleAsync();
@@ -228,11 +228,15 @@ public class CreditNoteFlowTests
         Assert.True(validator.Validate(new CancelCreditNoteCommand(note.Id, CfdiCancellationMotive.NotCarriedOut)).IsValid);
 
         book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
-        var cancelled = await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.NotCarriedOut);
-        Assert.Equal(OrderInvoiceStatus.Cancelled, cancelled.Value.Status);
-        Assert.Equal((Rfc, note.Uuid, CfdiCancellationMotive.NotCarriedOut), book.Gateway.Cancellations[^1]);
-        Assert.Equal("Esta nota de crédito ya está cancelada.",
+        // A refund recorded here is never undone: its credit note is not cancelled as «not carried out», before the PAC is asked.
+        Assert.Equal(CreditNote.RefundCancellationMotivesMessage,
             (await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.NotCarriedOut)).Error);
+        Assert.Empty(book.Gateway.Cancellations);
+        var cancelled = await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.ErrorsWithoutReplacement);
+        Assert.Equal(OrderInvoiceStatus.Cancelled, cancelled.Value.Status);
+        Assert.Equal((Rfc, note.Uuid, CfdiCancellationMotive.ErrorsWithoutReplacement), book.Gateway.Cancellations[^1]);
+        Assert.Equal("Esta nota de crédito ya está cancelada.",
+            (await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).Error);
     }
 
     [Fact]
@@ -258,6 +262,97 @@ public class CreditNoteFlowTests
         var shown = Assert.Single((await book.InvoicingAsync(sale.Id)).Adjustments);
         Assert.Equal((true, false, CreditNote.ReversedWriteOffMessage), (shown.Reversed, shown.CanIssue, shown.Problem));
         Assert.Equal(CreditNote.ReversedWriteOffMessage, (await book.IssueCreditNoteAsync(CreditNoteAdjustment.WriteOff, writeOff.Id)).Error);
+    }
+
+    [Fact]
+    public async Task WriteOff_ShouldNotBeUndone_WhileALaterComplementCountsItsCreditNote()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id);
+        Assert.Equal(1, (await book.IssuePendingComplementsAsync()).Value);
+        var writeOff = await book.WriteOffAsync(sale.Id, 50m);
+        await book.IssuePendingAsync();
+        await book.PayAsync(sale.Id, 100m, OrderPaymentMethod.Transfer);
+        Assert.Equal(1, (await book.IssuePendingComplementsAsync()).Value);
+        var second = await book.Context.PaymentComplements.SingleAsync(c => c.Installment == 2);
+        Assert.Equal(100m, second.PreviousBalance);
+
+        // P-2 went from what the down payment and the write-off left: undoing the write-off would leave that chain wrong.
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        var note = await book.Context.CreditNotes.SingleAsync();
+        Assert.True((await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.NotCarriedOut)).IsSuccess);
+        Assert.Equal(ReverseCustomerWriteOffCommandHandler.ComplementsCountingItMessage(["P-2"]), (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
+
+        // Once P-2 is cancelled the write-off is undone, and the payment's complement is issued again without its credit note.
+        Assert.True((await book.CancelComplementAsync(second.Id)).IsSuccess);
+        var undone = await book.ReverseWriteOffAsync(writeOff.Id);
+        Assert.True(undone.IsSuccess, undone.Error);
+    }
+
+    [Fact]
+    public async Task CreditNote_OfAWriteOffBeforeAnyComplement_ShouldLowerTheBalanceOfTheFirstOne()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync();
+        await book.IssueAsync(sale.Id);
+        await book.WriteOffAsync(sale.Id, 50m);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+        Assert.Equal(0, (await book.Context.CreditNotes.SingleAsync()).AfterInstallment);
+
+        await book.PayAsync(sale.Id, 150m, OrderPaymentMethod.Transfer);
+        Assert.Equal(1, (await book.IssuePendingComplementsAsync()).Value);
+        var first = await book.Context.PaymentComplements.SingleAsync();
+        Assert.Equal((1, 150m, 150m, 0m), (first.Installment, first.PreviousBalance, first.Amount, first.RemainingBalance));
+    }
+
+    [Fact]
+    public async Task CreditNote_OfARefund_ShouldNotLowerTheBalanceOfALaterComplement()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id);
+        Assert.Equal(1, (await book.IssuePendingComplementsAsync()).Value);
+        await book.RefundAsync(sale.Id, 30m, OrderPaymentMethod.Cash);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+
+        // The refund gave back money already received: the order still owes $150, and the complement says so.
+        await book.PayAsync(sale.Id, 150m, OrderPaymentMethod.Transfer);
+        Assert.Equal(1, (await book.IssuePendingComplementsAsync()).Value);
+        var second = await book.Context.PaymentComplements.SingleAsync(c => c.Installment == 2);
+        Assert.Equal((150m, 150m, 0m), (second.PreviousBalance, second.Amount, second.RemainingBalance));
+    }
+
+    [Fact]
+    public async Task CancelledOrder_ShouldTakeNoCreditNotes_ItsInvoiceIsCancelledWith03()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id);
+        var refund = await book.RefundAsync(sale.Id, 50m, OrderPaymentMethod.Cash);
+        await book.CancelOrderAsync(sale.Id);
+
+        Assert.Equal(0, (await book.IssuePendingAsync()).Value);
+        Assert.Empty(await book.Context.CreditNotes.ToListAsync());
+        var shown = Assert.Single((await book.InvoicingAsync(sale.Id)).Adjustments);
+        Assert.Equal((false, false, CreditNotes.CancelledOrderMessage), (shown.CanIssue, shown.AwaitsAutomaticIssue, shown.Problem));
+        Assert.Equal(CreditNotes.CancelledOrderMessage, (await book.IssueCreditNoteAsync(CreditNoteAdjustment.Refund, refund.Id)).Error);
+    }
+
+    [Fact]
+    public async Task Worker_ShouldNotIssueAgain_ACreditNoteAPersonIssuedMeanwhile()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidSaleAsync();
+        await book.IssueAsync(sale.Id);
+        var refund = await book.RefundAsync(sale.Id, 20m, OrderPaymentMethod.Card);
+
+        // The worker listed the refund; meanwhile a person issued its credit note and the PAC refused it.
+        book.Gateway.Refusal = "CFDI40102 - El certificado del emisor no estaba vigente.";
+        Assert.Equal(OrderInvoiceStatus.Refused, (await book.IssueCreditNoteAsync(CreditNoteAdjustment.Refund, refund.Id)).Value.Status);
+        var automatic = await book.Send(new RequestAutomaticCreditNoteCommand(CreditNoteAdjustment.Refund, refund.Id));
+        Assert.Equal(CreditNotes.IssuedByHandMessage, automatic.Error);
+        Assert.Single(await book.Context.CreditNotes.ToListAsync());
     }
 
     [Fact]
@@ -446,6 +541,22 @@ public class CreditNoteFlowTests
             Context.ChangeTracker.Clear();
             return writeOff;
         }
+
+        /// <summary>
+        /// The order ends cancelled, as «Anular venta» leaves one that was not delivered yet. The sales of these tests close
+        /// at the counter (delivered), so the status is written as it would end.
+        /// </summary>
+        public async Task CancelOrderAsync(Guid orderId)
+        {
+            var order = await Context.Orders.SingleAsync(o => o.Id == orderId);
+            Context.Entry(order).Property(o => o.Status).CurrentValue = OrderStatus.Cancelled;
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+        }
+
+        public Task<Result<PaymentComplementDto>> CancelComplementAsync(Guid complementId)
+            => new CancelPaymentComplementCommandHandler(Context, Fixture.CurrentUser, Gateway, Clock)
+                .Handle(new CancelPaymentComplementCommand(complementId, CfdiCancellationMotive.ErrorsWithoutReplacement), CancellationToken.None);
 
         public Task<Result<CustomerAccountDto>> ReverseWriteOffAsync(Guid writeOffId)
             => new ReverseCustomerWriteOffCommandHandler(

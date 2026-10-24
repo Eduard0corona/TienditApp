@@ -202,6 +202,10 @@ public class ReverseCustomerWriteOffCommandHandler : IRequestHandler<ReverseCust
     public static string LiveCreditNoteMessage(string number) =>
         $"Esta condonación tiene la nota de crédito {number} vigente: cancélala en Pedidos › Factura antes de deshacerla.";
 
+    public static string ComplementsCountingItMessage(IReadOnlyList<string> complements) =>
+        $"Los complementos de pago {string.Join(", ", complements)} descuentan la nota de crédito de esta condonación de su " +
+        "saldo: cancélalos en Pedidos › Factura antes de deshacerla, y se emiten otra vez sin ella.";
+
     public ReverseCustomerWriteOffCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenant,
@@ -240,6 +244,8 @@ public class ReverseCustomerWriteOffCommandHandler : IRequestHandler<ReverseCust
         await _invoicingLock.AcquireAsync(_tenant.TenantId, cancellationToken);
         if (await CreditNotes.LiveOfWriteOffAsync(_context, request.WriteOffId, cancellationToken) is { } note)
             return Result.Failure<CustomerAccountDto>(LiveCreditNoteMessage(note.Number));
+        if (await CreditNotes.ComplementsCountingWriteOffAsync(_context, request.WriteOffId, cancellationToken) is { Count: > 0 } complements)
+            return Result.Failure<CustomerAccountDto>(ComplementsCountingItMessage(complements));
         var order = await _context.Orders
             .Include(o => o.WriteOffs)
             .FirstAsync(o => o.Id == target.Id, cancellationToken);

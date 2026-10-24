@@ -65,10 +65,10 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Infrastructure/BackgroundJobs/OnlinePayments/OnlinePaymentsWorkerService.cs"] = 3,
         // Invoicing (Fases 28A to 28D): the worker finds the businesses with invoices (of orders or global), payment
         // complements and credit notes still stamping, cancellations waiting for the SAT, payments of invoices in installments
-        // that never had a complement, or refunds and write-offs of invoiced orders that never had a credit note (each with
-        // its invoice and CFDI, of the same business by their order) of the businesses whose CSD seals now (only which ones);
-        // each one is then handled in its business's scope.
-        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Invoicing/InvoicingWorkerService.cs"] = 18,
+        // that never had a complement, or refunds (of orders not cancelled) and write-offs of invoiced orders that never had
+        // a credit note (each with its invoice and CFDI, of the same business by their order) of the businesses whose CSD
+        // seals now (only which ones); each one is then handled in its business's scope.
+        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Invoicing/InvoicingWorkerService.cs"] = 19,
         // Whether another business holds the CSD's number (the PAC keeps each one once); nothing of it is read.
         ["src/FoodParkDigital.Application/Invoicing/InvoicingSettingsFeature.cs"] = 1,
         // Verification codes by WhatsApp: the platform's account, owned by an active platform admin.

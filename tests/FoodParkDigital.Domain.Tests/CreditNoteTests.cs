@@ -147,14 +147,29 @@ public class CreditNoteTests
     [Theory]
     [InlineData(CfdiCancellationMotive.ErrorsWithReplacement)]
     [InlineData(CfdiCancellationMotive.NominativeInGlobalInvoice)]
-    public void Cancellation_ShouldOfferOnlyErrorsWithoutReplacementOrAnOperationThatDidNotHappen(CfdiCancellationMotive motive)
+    [InlineData(CfdiCancellationMotive.NotCarriedOut)]
+    public void Cancellation_OfARefundsNote_ShouldOfferOnlyErrorsWithoutReplacement(CfdiCancellationMotive motive)
     {
+        // A refund recorded here is never undone: «not carried out» does not fit its credit note.
         var note = Note();
         note.Stamp(Uuid, "pac-1", Now, "nc-1.xml");
 
-        Assert.Throws<DomainException>(() => note.RequestCancellation(motive, CashierId, Now));
-        Assert.True(note.TakesCancellationMotive(CfdiCancellationMotive.NotCarriedOut));
+        var refused = Assert.Throws<DomainException>(() => note.RequestCancellation(motive, CashierId, Now));
+        Assert.Equal(CreditNote.RefundCancellationMotivesMessage, refused.Message);
+        Assert.True(note.TakesCancellationMotive(CfdiCancellationMotive.ErrorsWithoutReplacement));
         Assert.Equal(OrderInvoiceStatus.Stamped, note.Status);
+    }
+
+    [Fact]
+    public void Cancellation_OfAWriteOffsNote_ShouldAlsoTakeAWriteOffThatDidNotHappen()
+    {
+        var note = CreditNote.ForWriteOff(StampedInvoice(), WriteOff(10m), "NC", 1, 8.62m, 1.38m, 0, Document, null, Now);
+        note.Stamp(Uuid, "pac-1", Now, "nc-1.xml");
+
+        Assert.True(note.TakesCancellationMotive(CfdiCancellationMotive.ErrorsWithoutReplacement));
+        Assert.False(note.TakesCancellationMotive(CfdiCancellationMotive.ErrorsWithReplacement));
+        note.RequestCancellation(CfdiCancellationMotive.NotCarriedOut, CashierId, Now);
+        Assert.Equal((OrderInvoiceStatus.Cancelling, CfdiCancellationMotive.NotCarriedOut), (note.Status, note.CancellationMotive));
     }
 
     [Theory]

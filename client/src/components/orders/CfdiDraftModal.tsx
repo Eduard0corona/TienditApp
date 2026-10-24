@@ -35,11 +35,29 @@ function formatTransfer(transfer: Transfer | null | undefined): string {
   return `${formatMoney(transfer.amount ?? 0)} (${((transfer.rateOrQuota ?? 0) * 100).toFixed(0)} %)`;
 }
 
+const LIVE: OrderInvoiceStatus[] = [OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Cancelling];
+
+/**
+ * The payment complements (Fase 28C) and credit notes (Fase 28D) in force of each invoice of the order: the API refuses to
+ * cancel an invoice while they stand, so its screen says which go first.
+ */
+function liveRelated(invoicing: OrderInvoicing): Record<string, string[]> {
+  const related: Record<string, string[]> = {};
+  const add = (invoiceId: string, number: string) => (related[invoiceId] ??= []).push(number);
+  for (const payment of invoicing.payments)
+    for (const complement of payment.complements)
+      if (LIVE.includes(complement.status)) add(complement.orderInvoiceId, complement.number);
+  for (const adjustment of invoicing.adjustments)
+    for (const note of adjustment.creditNotes)
+      if (LIVE.includes(note.status)) add(note.orderInvoiceId, note.number);
+  return related;
+}
+
 /**
  * The invoice of an order (Fase 28A): its invoices, and the CFDI 4.0 it would stamp (concepts with their SAT codes, IVA per
  * rate and what is still missing) for the customer's fiscal data. With the platform's PAC and the business's CSD, it is
  * stamped from here; without them it is only a preview. A sale still owed is invoiced in installments (PPD, Fase 28C), and
- * the complements of its payments show under its invoices.
+ * the complements of its payments show under its invoices, as do the credit notes of its refunds and write-offs (Fase 28D).
  */
 export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSaveToCustomer, orderCancelled, onClose }: CfdiDraftModalProps) {
   const titleId = useId();
@@ -143,7 +161,9 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
     <>
       <Modal.Body>
         {loadError}
-        {invoicing && <OrderInvoiceList orderId={orderId} invoices={invoicing.invoices} canCancel={canCancel} />}
+        {invoicing && (
+          <OrderInvoiceList orderId={orderId} invoices={invoicing.invoices} canCancel={canCancel} liveRelated={liveRelated(invoicing)} />
+        )}
         {invoicing && (
           <PaymentComplementList
             orderId={orderId}
@@ -153,7 +173,9 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             canCancel={canCancel}
           />
         )}
-        {invoicing && <CreditNoteList orderId={orderId} adjustments={invoicing.adjustments} canCancel={canCancel} />}
+        {invoicing && (
+          <CreditNoteList orderId={orderId} adjustments={invoicing.adjustments} invoices={invoicing.invoices} canCancel={canCancel} />
+        )}
 
         {orderCancelled && invoicing && (
           <p className="text-muted small mb-0">

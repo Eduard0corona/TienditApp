@@ -316,6 +316,9 @@ public class CancelCreditNoteCommandHandler : IRequestHandler<CancelCreditNoteCo
             return Result.Failure<CreditNoteDto>(note.Status == OrderInvoiceStatus.Cancelled
                 ? "Esta nota de crédito ya está cancelada."
                 : "Solo se cancela una nota de crédito timbrada.");
+        // Before the PAC is asked: what the SAT cancels is then written here.
+        if (!note.TakesCancellationMotive(request.Motive))
+            return Result.Failure<CreditNoteDto>(CreditNote.RefundCancellationMotivesMessage);
         if (!_gateway.IsConfigured)
             return Result.Failure<CreditNoteDto>(InvoicingSettings.NotAvailableMessage);
         var profile = await _context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
@@ -447,7 +450,7 @@ public class IssuePendingCreditNotesCommandHandler : IRequestHandler<IssuePendin
         if (!_gateway.IsConfigured)
             return Result.Success(0);
 
-        var refunds = await CreditNotes.PendingRefunds(_context.OrderRefunds, _context.OrderInvoices, _context.CreditNotes)
+        var refunds = await CreditNotes.PendingRefunds(_context.OrderRefunds, _context.Orders, _context.OrderInvoices, _context.CreditNotes)
             .OrderBy(r => r.RefundedAt)
             .ThenBy(r => r.Id)
             .Select(r => new { r.Id, At = r.RefundedAt })
@@ -535,6 +538,9 @@ internal sealed class CreditNoteRequester(
             return Result.Failure<Guid>(CreditNote.ReversedWriteOffMessage);
         var orderId = refund?.OrderId ?? writeOff!.OrderId;
         var amount = refund?.Amount ?? writeOff!.Amount;
+        // A cancelled sale did not happen: its invoice is cancelled with 03, without credit notes in between.
+        if (await context.Orders.AsNoTracking().AnyAsync(o => o.Id == orderId && o.Status == OrderStatus.Cancelled, cancellationToken))
+            return Result.Failure<Guid>(CreditNotes.CancelledOrderMessage);
 
         var invoice = await context.OrderInvoices.AsNoTracking()
             .FirstOrDefaultAsync(i => i.OrderId == orderId
@@ -551,6 +557,12 @@ internal sealed class CreditNoteRequester(
             .FirstOrDefaultAsync(cancellationToken);
         if (existing is not null)
             return Result.Failure<Guid>(CreditNotes.LiveCreditNoteProblem(existing));
+        // TienditApp issues one on its own only for an adjustment that never had one for this invoice: one refused or
+        // cancelled meanwhile (by a person, after the worker listed it) is issued again only by a person.
+        if (requestedByUserId is null
+            && await CreditNotes.OfAdjustment(context.CreditNotes.AsNoTracking(), adjustment, adjustmentId)
+                .AnyAsync(n => n.OrderInvoiceId == invoice!.Id, cancellationToken))
+            return Result.Failure<Guid>(CreditNotes.IssuedByHandMessage);
 
         var now = clock.UtcNow;
         var business = await context.Tenants.AsNoTracking()
@@ -665,7 +677,12 @@ public static class CreditNotes
     public const string NoStampedInvoiceMessage =
         "Este pedido no tiene una factura timbrada: la nota de crédito se emite con ella.";
     public const string AlreadyIssuingMessage =
-        "Otra persona está emitiendo la nota de crédito de este ajuste en este momento: actualiza la página.";
+        "Otra persona está emitiendo esta nota de crédito en este momento: actualiza la página.";
+    public const string CancelledOrderMessage =
+        "Este pedido está cancelado: su factura se cancela ante el SAT con el motivo 03 (la venta no se llevó a cabo), sin notas " +
+        "de crédito.";
+    public const string IssuedByHandMessage =
+        "Ya tuvo una nota de crédito de esta factura: la siguiente se emite a mano, con «Emitir otra vez».";
     public const string OtherFormMessage =
         "Este reembolso se registró como «Otro», que no es una forma de pago del SAT: su nota de crédito no se emite desde " +
         "TienditApp. Consúltalo con tu contador.";
@@ -698,12 +715,16 @@ public static class CreditNotes
     public static string? DocumentProblem(OrderInvoice invoice, CfdiDocument document, string? businessRfc)
         => string.Equals(businessRfc, document.Issuer.Rfc, StringComparison.Ordinal) ? null : OtherRfcMessage(invoice.Number);
 
-    public static string LiveCreditNoteProblem(CreditNote live) => live.Status switch
+    public static string LiveCreditNoteProblem(CreditNote live)
     {
-        OrderInvoiceStatus.Stamping => $"La nota de crédito {live.Number} de este ajuste se está timbrando.",
-        OrderInvoiceStatus.Cancelling => $"La nota de crédito {live.Number} de este ajuste espera su cancelación en el SAT.",
-        _ => $"Este ajuste ya tiene la nota de crédito {live.Number}: cancélala para emitir otra."
-    };
+        var ofIt = live.IsForRefund ? "este reembolso" : "esta condonación";
+        return live.Status switch
+        {
+            OrderInvoiceStatus.Stamping => $"La nota de crédito {live.Number} de {ofIt} se está timbrando.",
+            OrderInvoiceStatus.Cancelling => $"La nota de crédito {live.Number} de {ofIt} espera su cancelación en el SAT.",
+            _ => $"{(live.IsForRefund ? "Este reembolso" : "Esta condonación")} ya tiene la nota de crédito {live.Number}: cancélala para emitir otra."
+        };
+    }
 
     /// <summary>The credit notes of a refund or of a write-off.</summary>
     public static IQueryable<CreditNote> OfAdjustment(IQueryable<CreditNote> notes, CreditNoteAdjustment adjustment, Guid adjustmentId)
@@ -776,12 +797,14 @@ public static class CreditNotes
 
     /// <summary>
     /// The refunds of orders whose invoice is stamped that never had a credit note for that invoice and have a form of the
-    /// SAT's: what the worker issues. It takes the sets to read, so the worker can find the businesses with work first.
+    /// SAT's: what the worker issues. Not those of a cancelled order: its invoice is cancelled with 03 instead. It takes the
+    /// sets to read, so the worker can find the businesses with work first.
     /// </summary>
     public static IQueryable<OrderRefund> PendingRefunds(
-        IQueryable<OrderRefund> refunds, IQueryable<OrderInvoice> invoices, IQueryable<CreditNote> notes)
+        IQueryable<OrderRefund> refunds, IQueryable<Order> orders, IQueryable<OrderInvoice> invoices, IQueryable<CreditNote> notes)
         => refunds.Where(refund => refund.Method != OrderPaymentMethod.Other
             && refund.Method != OrderPaymentMethod.CustomerBalance
+            && orders.Any(order => order.TenantId == refund.TenantId && order.Id == refund.OrderId && order.Status != OrderStatus.Cancelled)
             && invoices.Any(invoice => invoice.TenantId == refund.TenantId && invoice.OrderId == refund.OrderId
                 && invoice.Status == OrderInvoiceStatus.Stamped
                 && !notes.Any(n => n.OrderRefundId == refund.Id && n.OrderInvoiceId == invoice.Id)));
@@ -872,6 +895,7 @@ public static class CreditNotes
             var problem = live is not null
                 ? null
                 : reversed ? CreditNote.ReversedWriteOffMessage
+                : order.Status == OrderStatus.Cancelled ? CancelledOrderMessage
                 : formProblem ?? invoiceProblem
                     ?? (amount > RoomFor(liveInvoice!, standing!, kind, id).Available ? AboveRoomMessage(liveInvoice!.Number, kind) : null);
             return new OrderAdjustmentDto
@@ -921,6 +945,35 @@ public static class CreditNotes
                 .ToListAsync(cancellationToken))
             .Select(n => $"{n.Serie}-{n.Folio}")
             .ToList();
+
+    /// <summary>
+    /// The payment complements in force of an invoice in installments whose balance before counts a credit note of the
+    /// write-off (installments after the one it was asked after, Fase 28C): undoing the write-off takes it out of that
+    /// chain, so they are cancelled first and issued again without it.
+    /// </summary>
+    public static async Task<List<string>> ComplementsCountingWriteOffAsync(
+        IApplicationDbContext context, Guid writeOffId, CancellationToken cancellationToken)
+    {
+        var held = (await context.CreditNotes.AsNoTracking()
+                .Where(n => n.OrderWriteOffId == writeOffId)
+                .ToListAsync(cancellationToken))
+            .GroupBy(n => n.OrderInvoiceId)
+            .Select(g => g.OrderByDescending(n => n.RequestedAt).First())
+            .ToList();
+        var numbers = new List<string>();
+        foreach (var note in held)
+        {
+            numbers.AddRange((await context.PaymentComplements.AsNoTracking()
+                    .Where(c => c.OrderInvoiceId == note.OrderInvoiceId && c.Installment > note.AfterInstallment
+                        && (c.Status == OrderInvoiceStatus.Stamping || c.Status == OrderInvoiceStatus.Stamped
+                            || c.Status == OrderInvoiceStatus.Cancelling))
+                    .OrderBy(c => c.Folio)
+                    .Select(c => new { c.Serie, c.Folio })
+                    .ToListAsync(cancellationToken))
+                .Select(c => $"{c.Serie}-{c.Folio}"));
+        }
+        return numbers;
+    }
 
     /// <summary>The live credit note of a write-off, if it has one: while it stands, the write-off is not undone.</summary>
     public static Task<CreditNote?> LiveOfWriteOffAsync(IApplicationDbContext context, Guid writeOffId, CancellationToken cancellationToken)

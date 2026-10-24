@@ -8,10 +8,11 @@ import {
   useRetryCreditNote,
   type CreditNote,
   type OrderAdjustment,
+  type OrderInvoice,
 } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
 import { CfdiCancellationMotive, CreditNoteAdjustment, OrderInvoiceStatus } from '../../types';
-import { CREDIT_NOTE_CANCELLATION_MOTIVES, invoiceStatusChip, invoiceStatusLabel, PAYMENT_FORMS, saveBlob } from '../../utils/cfdi';
+import { creditNoteCancellationMotives, invoiceStatusChip, invoiceStatusLabel, PAYMENT_FORMS, saveBlob } from '../../utils/cfdi';
 import { formatDateTime } from '../../utils/dates';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
@@ -20,6 +21,8 @@ import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 interface CreditNoteListProps {
   orderId: string;
   adjustments: OrderAdjustment[];
+  /** The order's invoices: a note of one that is no longer the stamped one says which it was. */
+  invoices: OrderInvoice[];
   /** Owners and admins cancel; whoever manages the orders issues, retries and downloads. */
   canCancel: boolean;
 }
@@ -34,25 +37,34 @@ function useCreditNoteOutcome() {
   };
 }
 
-/** «Reembolso del 24 oct 2026, 5:00 p.m.» or «Condonación del …», and how an action names it: «del reembolso del …». */
+/**
+ * «Reembolso del 24 oct 2026, 5:00 p.m.» or «Condonación del …», and how an action names it, with its amount: two refunds
+ * of a voided sale share the minute («del reembolso de $20.00 del …»).
+ */
 function adjustmentNames(adjustment: OrderAdjustment): { name: string; ofIt: string } {
   const at = formatDateTime(adjustment.at);
+  const amount = formatMoney(adjustment.amount);
   return adjustment.kind === CreditNoteAdjustment.Refund
-    ? { name: `Reembolso del ${at}`, ofIt: `del reembolso del ${at}` }
-    : { name: `Condonación del ${at}`, ofIt: `de la condonación del ${at}` };
+    ? { name: `Reembolso del ${at}`, ofIt: `del reembolso de ${amount} del ${at}` }
+    : { name: `Condonación del ${at}`, ofIt: `de la condonación de ${amount} del ${at}` };
+}
+
+interface Cancelling {
+  note: CreditNote;
+  kind: CreditNoteAdjustment;
 }
 
 /**
  * The refunds and write-offs of an invoiced order (Fase 28D) with their credit notes (CFDI de egreso): TienditApp issues
- * each one on its own once the invoice is stamped; from here it is issued before that («Emitir ahora»), again after a
- * refused or cancelled one, asked again of the PAC, cancelled or downloaded.
+ * each one on its own a few minutes after it is recorded (or after the invoice is stamped); from here it is issued before
+ * that («Emitir ahora»), again after a refused or cancelled one, asked again of the PAC, cancelled or downloaded.
  */
-export default function CreditNoteList({ orderId, adjustments, canCancel }: CreditNoteListProps) {
+export default function CreditNoteList({ orderId, adjustments, invoices, canCancel }: CreditNoteListProps) {
   const toast = useToast();
   const outcome = useCreditNoteOutcome();
   const issue = useIssueCreditNote(orderId);
   const retry = useRetryCreditNote(orderId);
-  const [cancelling, setCancelling] = useState<CreditNote | null>(null);
+  const [cancelling, setCancelling] = useState<Cancelling | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const issueFor = async (adjustment: OrderAdjustment) => {
@@ -85,12 +97,18 @@ export default function CreditNoteList({ orderId, adjustments, canCancel }: Cred
 
   if (adjustments.length === 0) return null;
 
+  const stamped = invoices.find((invoice) => invoice.status === OrderInvoiceStatus.Stamped);
+  const invoiceNumbers = new Map(invoices.map((invoice) => [invoice.id, invoice.number]));
+
   return (
     <div className="mb-3">
       <h3 className="h6 mb-1">Notas de crédito</h3>
       <p className="small text-muted mb-2">
-        La factura ampara la venta completa: cada reembolso y cada condonación lleva su nota de crédito, que TienditApp emite
-        por su cuenta unos minutos después de que la factura quede timbrada.
+        {stamped
+          ? `La factura ${stamped.number} ampara la venta completa: cada reembolso y cada condonación lleva su nota de crédito, `
+            + 'que TienditApp emite por su cuenta unos minutos después de registrarlo (o de timbrar la factura, si fue antes). '
+            + 'Si uno no la lleva, dice por qué.'
+          : 'Lo que se devolvió o se condonó de este pedido. Sus notas de crédito se emiten con una factura timbrada.'}
       </p>
       <ul className="list-unstyled mb-0">
         {adjustments.map((adjustment) => {
@@ -123,7 +141,7 @@ export default function CreditNoteList({ orderId, adjustments, canCancel }: Cred
                         <span className="fw-semibold">{note.number}</span>
                         <span className={`ta-chip ${invoiceStatusChip(note.status)}`}>{invoiceStatusLabel(note.status)}</span>
                         <span className="small text-muted">
-                          Por <span className="ta-money">{formatMoney(note.total)}</span> (base{' '}
+                          Por <span className="ta-money">{formatMoney(note.total)}</span> (subtotal{' '}
                           <span className="ta-money">{formatMoney(note.subTotal)}</span> e IVA{' '}
                           <span className="ta-money">{formatMoney(note.taxTotal)}</span>)
                         </span>
@@ -132,6 +150,8 @@ export default function CreditNoteList({ orderId, adjustments, canCancel }: Cred
                         Forma {note.paymentForm}
                         {PAYMENT_FORMS[note.paymentForm] ? ` (${PAYMENT_FORMS[note.paymentForm]})` : ''}
                         {note.issuedAutomatically ? ' · la emitió TienditApp' : ''}
+                        {note.orderInvoiceId !== stamped?.id && invoiceNumbers.has(note.orderInvoiceId)
+                          && ` · de la factura ${invoiceNumbers.get(note.orderInvoiceId)}`}
                         {note.uuid && <> · folio fiscal <span className="ta-money">{note.uuid}</span></>}
                         {note.stampedAt && <> · timbrada el {formatDateTime(note.stampedAt)}</>}
                       </div>
@@ -187,7 +207,7 @@ export default function CreditNoteList({ orderId, adjustments, canCancel }: Cred
                             type="button"
                             className="btn btn-sm btn-outline-danger"
                             aria-label={`Cancelar nota de crédito ${note.number}`}
-                            onClick={() => setCancelling(note)}
+                            onClick={() => setCancelling({ note, kind: adjustment.kind })}
                           >
                             Cancelar nota de crédito
                           </button>
@@ -213,7 +233,9 @@ export default function CreditNoteList({ orderId, adjustments, canCancel }: Cred
           );
         })}
       </ul>
-      {cancelling && <CancelCreditNoteModal orderId={orderId} note={cancelling} onClose={() => setCancelling(null)} />}
+      {cancelling && (
+        <CancelCreditNoteModal orderId={orderId} note={cancelling.note} kind={cancelling.kind} onClose={() => setCancelling(null)} />
+      )}
     </div>
   );
 }
@@ -221,11 +243,13 @@ export default function CreditNoteList({ orderId, adjustments, canCancel }: Cred
 interface CancelCreditNoteModalProps {
   orderId: string;
   note: CreditNote;
+  /** What it credits: the reasons and what comes after name it. */
+  kind: CreditNoteAdjustment;
   onClose: () => void;
 }
 
 /** Owners and admins ask the SAT to cancel a stamped credit note, with its reason. */
-function CancelCreditNoteModal({ orderId, note, onClose }: CancelCreditNoteModalProps) {
+function CancelCreditNoteModal({ orderId, note, kind, onClose }: CancelCreditNoteModalProps) {
   const titleId = useId();
   const toast = useToast();
   const cancel = useCancelCreditNote(orderId);
@@ -252,12 +276,14 @@ function CancelCreditNoteModal({ orderId, note, onClose }: CancelCreditNoteModal
         </Modal.Header>
         <Modal.Body>
           <p className="small">
-            TienditApp le pide al SAT que la cancele; si el SAT le pide al cliente que lo acepte, sigue vigente mientras tanto.
-            Con el motivo 02, después emites otra para el mismo ajuste.
+            TienditApp le pide al SAT que la cancele; si el SAT le pide al cliente que lo acepte, sigue vigente mientras tanto.{' '}
+            {kind === CreditNoteAdjustment.Refund
+              ? 'Un reembolso registrado no se deshace: su nota solo se cancela por errores (02), y después emites otra para el mismo reembolso.'
+              : 'Con el motivo 02, después emites otra para la misma condonación; con el 03, la condonación se deshace después.'}
           </p>
           <fieldset>
             <legend className="form-label small mb-1">Motivo</legend>
-            {CREDIT_NOTE_CANCELLATION_MOTIVES.map(([value, label]) => (
+            {creditNoteCancellationMotives(kind).map(([value, label]) => (
               <div className="form-check" key={value}>
                 <input
                   id={`credit-note-cancel-motive-${value}`}

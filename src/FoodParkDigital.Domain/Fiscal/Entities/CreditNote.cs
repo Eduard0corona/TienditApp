@@ -108,12 +108,21 @@ public class CreditNote : Cfdi, IAggregateRoot
 
     public const string ReversedWriteOffMessage = "Esa condonación ya se deshizo: no lleva nota de crédito.";
 
-    /// <summary>Because it has errors and nothing replaces it (02), or because the adjustment did not happen (03).</summary>
-    public override bool TakesCancellationMotive(CfdiCancellationMotive motive)
-        => motive is CfdiCancellationMotive.ErrorsWithoutReplacement or CfdiCancellationMotive.NotCarriedOut;
+    /// <summary>A refund recorded here is never undone: its credit note is cancelled only because it has errors (02).</summary>
+    public const string RefundCancellationMotivesMessage =
+        "La nota de crédito de un reembolso se cancela por errores sin relación (02): el reembolso registrado no se deshace.";
 
-    protected override string CancellationMotivesMessage
-        => "Cancela la nota de crédito por errores sin relación (02) o porque la operación no se llevó a cabo (03).";
+    /// <summary>
+    /// Because it has errors and nothing replaces it (02); a write-off's also because it did not happen (03), before it is
+    /// undone. A refund recorded here is never undone, so its credit note takes only 02.
+    /// </summary>
+    public override bool TakesCancellationMotive(CfdiCancellationMotive motive)
+        => motive == CfdiCancellationMotive.ErrorsWithoutReplacement
+            || (!IsForRefund && motive == CfdiCancellationMotive.NotCarriedOut);
+
+    protected override string CancellationMotivesMessage => IsForRefund
+        ? RefundCancellationMotivesMessage
+        : "Cancela la nota de crédito por errores sin relación (02) o porque la condonación no se llevó a cabo (03).";
 
     private void Begin(
         OrderInvoice invoice,

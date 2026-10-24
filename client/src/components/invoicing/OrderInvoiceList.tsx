@@ -18,10 +18,15 @@ interface OrderInvoiceListProps {
   invoices: OrderInvoice[];
   /** Owners and admins cancel; whoever manages the orders stamps, retries and downloads. */
   canCancel: boolean;
+  /**
+   * The payment complements and credit notes in force of each invoice, by its id: the SAT does not cancel an invoice while
+   * a related CFDI stands, so they are cancelled first.
+   */
+  liveRelated?: Partial<Record<string, string[]>>;
 }
 
 /** The invoices of an order (the newest first): their folio, UUID, files and what can be done with each one. */
-export default function OrderInvoiceList({ orderId, invoices, canCancel }: OrderInvoiceListProps) {
+export default function OrderInvoiceList({ orderId, invoices, canCancel, liveRelated = {} }: OrderInvoiceListProps) {
   const toast = useToast();
   const retry = useRetryOrderInvoice(orderId);
   const [cancelling, setCancelling] = useState<OrderInvoice | null>(null);
@@ -121,7 +126,7 @@ export default function OrderInvoiceList({ orderId, invoices, canCancel }: Order
                   Volver a pedir el timbre
                 </button>
               )}
-              {canCancel && invoice.status === OrderInvoiceStatus.Stamped && (
+              {canCancel && invoice.status === OrderInvoiceStatus.Stamped && !liveRelated[invoice.id]?.length && (
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-danger"
@@ -132,6 +137,9 @@ export default function OrderInvoiceList({ orderId, invoices, canCancel }: Order
                 </button>
               )}
             </div>
+            {canCancel && invoice.status === OrderInvoiceStatus.Stamped && !!liveRelated[invoice.id]?.length && (
+              <p className="small text-muted mb-0 mt-2">Para cancelarla, primero cancela {liveRelated[invoice.id]!.join(', ')}.</p>
+            )}
           </li>
         ))}
       </ul>

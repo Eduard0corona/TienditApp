@@ -56,12 +56,16 @@ IF OBJECT_ID(N'dbo.CreditNotes') IS NOT NULL
         (SELECT COUNT(*) FROM [CreditNotes] WHERE [Status] = 3) AS [Cancelandose],
         (SELECT COUNT(*) FROM [CreditNotes] WHERE [Status] = 4) AS [Canceladas];');
 
--- 4. Antes y después: los reembolsos y las condonaciones vigentes de pedidos con una factura viva, los
---    que tendrán (o ya tienen) su nota de crédito. La migración no los cambia.
+-- 4. Antes y después: los reembolsos (de pedidos no cancelados) y las condonaciones vigentes de pedidos con
+--    una factura viva. Al desplegar, TienditApp emite por su cuenta la nota de crédito de cada uno que no tenga
+--    otra forma (los «Otro» y con saldo a favor no la llevan): si alguno ya tiene su CFDI de egreso hecho a mano,
+--    avísalo antes de desplegar. La migración no los cambia.
 IF OBJECT_ID(N'dbo.OrderInvoices') IS NOT NULL
     EXEC(N'SELECT
         (SELECT COUNT(*) FROM [OrderRefunds] r
-            WHERE EXISTS (SELECT 1 FROM [OrderInvoices] i WHERE i.[OrderId] = r.[OrderId] AND i.[Status] IN (0, 1, 3))) AS [ReembolsosConFactura],
+            WHERE r.[Method] NOT IN (4, 7)
+                AND EXISTS (SELECT 1 FROM [Orders] o WHERE o.[Id] = r.[OrderId] AND o.[Status] <> 99)
+                AND EXISTS (SELECT 1 FROM [OrderInvoices] i WHERE i.[OrderId] = r.[OrderId] AND i.[Status] IN (0, 1, 3))) AS [ReembolsosConFactura],
         (SELECT COUNT(*) FROM [OrderWriteOffs] w
             WHERE w.[ReversedAt] IS NULL
                 AND EXISTS (SELECT 1 FROM [OrderInvoices] i WHERE i.[OrderId] = w.[OrderId] AND i.[Status] IN (0, 1, 3))) AS [CondonacionesConFactura];');
