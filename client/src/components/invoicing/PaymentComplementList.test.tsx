@@ -67,6 +67,18 @@ describe('PaymentComplementList', () => {
     expect(screen.getByRole('button', { name: 'Cancelar complemento P-1' })).toBeInTheDocument();
   });
 
+  it('gives no deadline once the live invoice is no longer in installments: no complement is owed', () => {
+    const cancelled: Complement = { ...P1, status: OrderInvoiceStatus.Cancelled, cancelledAt: '2026-10-06T17:00:00Z' };
+    renderList([{
+      ...FIRST, dueBy: '2020-02-05', problem: 'La factura F-2 se pagó en una exhibición (PUE): sus cobros no llevan complemento.',
+      complements: [cancelled],
+    }], true, false);
+
+    expect(screen.getByText('La factura F-2 se pagó en una exhibición (PUE): sus cobros no llevan complemento.')).toBeInTheDocument();
+    expect(screen.queryByText(/El SAT lo pide a más tardar|venció/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Emitir/ })).not.toBeInTheDocument();
+  });
+
   it('shows each payment with its complement: installment, balances, folio fiscal and files', () => {
     renderList([FIRST]);
 

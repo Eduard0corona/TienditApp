@@ -77,7 +77,7 @@ Tomé las decisiones de la Fase 28C con la autorización permanente del dueño d
 12. **Acceso:** ver, emitir, reintentar y descargar el XML y el PDF de un complemento lo hace quien gestiona los pedidos (`ManageOrders`) y ve el pedido, como sus facturas. Cancelar lo hacen dueños y administradores (`RequiresTenantManager`). El complemento de otro negocio responde 404 (suite entre negocios).
 13. **Se ve en Pedidos › Factura:** debajo de las facturas, «Complementos de pago» lista cada cobro con su fecha, forma y monto. Con él va:
     - su complemento: folio, estado, parcialidad, lo pagado, el saldo anterior y el que queda, folio fiscal y si lo emitió TienditApp;
-    - mientras no tenga uno vivo, «El SAT lo pide a más tardar el …» (o «El plazo del SAT … venció el …»), con «TienditApp lo emite en unos minutos» si lo emite por su cuenta, y junto con el motivo si no se emite;
+    - mientras no tenga uno vivo y la factura viva sea PPD, «El SAT lo pide a más tardar el …» (o «El plazo del SAT … venció el …»), con «TienditApp lo emite en unos minutos» si lo emite por su cuenta, y junto con el motivo si no se emite;
     - el motivo es el mismo con el que se rechazaría emitirlo, calculado sin el candado con las mismas reglas: la forma, la factura, Mi negocio y su CSD, el RFC con el que se timbró la factura, una tasa sin campo en los Totales, el saldo y las 999 parcialidades. Así la pantalla nunca espera al worker por uno que no va a emitir;
     - las acciones: «Emitir ahora» o «Emitir otra vez», «Volver a pedir el timbre», «Cancelar complemento» y las descargas.
 

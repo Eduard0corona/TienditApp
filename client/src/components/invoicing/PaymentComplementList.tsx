@@ -102,7 +102,7 @@ export default function PaymentComplementList({ orderId, payments, inInstallment
           const paidAt = formatDateTime(payment.paidAt);
           const live = payment.complements.find((complement) => complement.status !== OrderInvoiceStatus.Refused
             && complement.status !== OrderInvoiceStatus.Cancelled);
-          const overdue = !live && payment.dueBy < today;
+          const overdue = !live && inInstallments && payment.dueBy < today;
           const dueBy = formatCalendarDate(payment.dueBy);
           const issuing = issue.isPending && issue.variables === payment.orderPaymentId;
           const issueLabel = payment.complements.length === 0 ? 'Emitir ahora' : 'Emitir otra vez';
@@ -115,7 +115,8 @@ export default function PaymentComplementList({ orderId, payments, inInstallment
                 </span>
               </div>
               {payment.problem && <p className="small text-muted mb-0 mt-1">{payment.problem}</p>}
-              {!live && (
+              {/* The SAT's deadline applies only while the live invoice is in installments: after it, no complement is owed. */}
+              {!live && inInstallments && (
                 <p className={`small mb-0 mt-1 ${overdue ? 'text-danger' : 'text-muted'}`}>
                   {payment.awaitsAutomaticIssue && 'Sin complemento todavía: TienditApp lo emite en unos minutos. '}
                   {overdue ? `El plazo del SAT para su complemento venció el ${dueBy}.` : `El SAT lo pide a más tardar el ${dueBy}.`}
