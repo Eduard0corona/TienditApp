@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace FoodParkDigital.Infrastructure.Persistence.Configurations;
 
 /// <summary>
-/// How each business invoices (Fase 28A, ADR 0045): one profile per business, with the series of its invoices and payment
-/// complements (Fase 28C) and what identifies its CSD.
+/// How each business invoices (Fase 28A, ADR 0045): one profile per business, with the series of its invoices, payment
+/// complements (Fase 28C) and credit notes (Fase 28D) and what identifies its CSD.
 /// The CSD itself (key and password) is kept by the PAC, never here.
 /// </summary>
 public class InvoicingProfileConfiguration : IEntityTypeConfiguration<InvoicingProfile>
@@ -31,6 +31,12 @@ public class InvoicingProfileConfiguration : IEntityTypeConfiguration<InvoicingP
             .IsUnicode(false)
             .IsRequired()
             .HasDefaultValue(PaymentComplement.DefaultSerie);
+        // And the ones before the credit notes (Fase 28D) take «NC».
+        builder.Property(x => x.CreditNoteSerie)
+            .HasMaxLength(Cfdi.MaxSerieLength)
+            .IsUnicode(false)
+            .IsRequired()
+            .HasDefaultValue(CreditNote.DefaultSerie);
         builder.Property(x => x.CertificateNumber).HasMaxLength(InvoicingProfile.CertificateNumberLength).IsUnicode(false);
         builder.Property(x => x.CertificateRfc).HasMaxLength(13);
         builder.Property(x => x.Version).IsRowVersion();
