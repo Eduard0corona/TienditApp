@@ -233,11 +233,13 @@ public class PaymentComplementFlowTests
         Assert.Equal(1, (await book.IssuePendingAsync()).Value);
         var third = await book.Context.PaymentComplements.AsNoTracking().SingleAsync(c => c.Installment == 3);
         Assert.Equal((50m, 50m, 0m), (third.PreviousBalance, third.Amount, third.RemainingBalance));
+        Assert.Equal((43.10m, 6.90m), Taxes(third));
 
         // Issued again, the down payment's takes back installment 1 from $200, and as the last one missing it takes what is
         // left of the base and the IVA: the complements that stand add up to the invoice.
         var again = await book.IssueComplementAsync(downPayment);
         Assert.Equal((1, 200m, 150m), (again.Value.Installment, again.Value.PreviousBalance, again.Value.RemainingBalance));
+        Assert.Equal((43.11m, 6.90m), Taxes(await book.Context.PaymentComplements.AsNoTracking().SingleAsync(c => c.Id == again.Value.Id)));
         var stamped = await book.Context.PaymentComplements.AsNoTracking()
             .Where(c => c.Status == OrderInvoiceStatus.Stamped).OrderBy(c => c.Installment).ToListAsync();
         Assert.Equal([(1, 200m, 150m), (2, 150m, 50m), (3, 50m, 0m)], stamped.Select(c => (c.Installment, c.PreviousBalance, c.RemainingBalance)));
@@ -419,6 +421,13 @@ public class PaymentComplementFlowTests
         Assert.Equal(("application/xml", $"P-1_{complement.Uuid}.xml"), (xml.Value.ContentType, xml.Value.FileName));
         Assert.Equal("application/pdf", pdf.Value.ContentType);
         Assert.StartsWith($"invoices/{book.Tenant.Id}/", complement.XmlFileKey);
+    }
+
+    /// <summary>The base and the IVA a complement covers of its invoice.</summary>
+    private static (decimal Base, decimal Iva) Taxes(PaymentComplement complement)
+    {
+        var transfers = CfdiDocument.FromJson(complement.Document).Payment!.Invoice.Transfers;
+        return (transfers.Sum(t => t.Base), transfers.Sum(t => t.Amount ?? 0m));
     }
 
     private static TenantPermission Permission<TRequest>()
