@@ -462,7 +462,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 [ADR 0034](../adr/0034-customer-write-offs-and-credit-term.md):
 
 - **Condonar:** el dueño o un administrador perdona todo o parte de lo que debe un cliente, desde su estado de cuenta: de un pedido o de toda la cuenta (del pedido más viejo al más nuevo), con un motivo (no se va a cobrar, error al registrar, cortesía u otro, que pide una nota). Cada parte queda en su pedido con monto, motivo, nota, fecha y quién lo hizo, y en la actividad del negocio. No mueve la caja ni cambia la venta ni sus pagos; baja lo que se debe.
-- **Deshacer lo condonado:** una condonación equivocada la deshace el dueño o un administrador desde el estado de cuenta, una vez. Queda registrada con cuándo y quién la deshizo, y el pedido vuelve a deber ese monto. Un pedido con algo condonado no se cancela hasta deshacerlo.
+- **Deshacer lo condonado:** una condonación equivocada la deshace el dueño o un administrador desde el estado de cuenta, una vez. Queda registrada con cuándo y quién la deshizo, y el pedido vuelve a deber ese monto. Un pedido con algo condonado no se cancela hasta deshacerlo, y una condonación con su nota de crédito vigente (Fase 28D) no se deshace hasta cancelar la nota.
 - **Qué se condona:** solo lo que el cliente debe (una venta fiada, o un pedido entregado o terminado sin cobrar), nunca lo que cobra un repartidor ni más que el saldo. Si la cuenta cambió desde que se abrió la pantalla (un abono o una venta fiada), se rechaza. Después de condonar, un pago cubre solo lo que queda.
 - **Plazo del fiado:** el dueño o un administrador le pone al negocio un plazo de 1 a 120 días, o lo quita. Un pedido vence al día siguiente de su último día para pagar: el día en que se empezó a deber (el de la venta fiada, o el de la entrega de un pedido que se entregó sin cobrar) más el plazo, en la zona horaria del negocio. Solo dice qué está vencido: no cobra intereses ni impide fiar.
 - **Lo vencido se ve:** en Por cobrar (por cliente, el total y «Solo vencidos»), en el estado de cuenta (lo vencido y el día límite de cada pedido; el resumen para WhatsApp lo dice) y en Vender, que avisa antes de fiar.
@@ -525,7 +525,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Qué se factura:** un pedido a un cliente con RFC, con un CFDI 4.0 de ingreso timbrado por el PAC de la plataforma (SW Sapien). Los conceptos, el IVA, la forma de pago y el total son los de la vista previa del CFDI (Fase 3); el backend los decide y el PAC solo los valida.
 - **Cuándo se puede:**
   - la vista previa no tiene bloqueos y el receptor no es público en general (esas ventas esperan la factura global);
-  - el pedido está pagado por completo (PUE), o el cliente ya lo debe (se vendió fiado, o se entregó o completó) y se factura en parcialidades (PPD, Fase 28C); no está cancelado (sus facturas siguen en «Factura» para descargarlas y cancelar la timbrada con el motivo 03); sin reembolsos, condonaciones ni un reembolso en línea en curso;
+  - el pedido está pagado por completo (PUE), o el cliente ya lo debe (se vendió fiado, o se entregó o completó) y se factura en parcialidades (PPD, Fase 28C); no está cancelado (sus facturas siguen en «Factura» para descargarlas y cancelar la timbrada con el motivo 03); sin un reembolso en línea en curso. Desde la Fase 28D, una venta con reembolsos o condonación se factura por la venta completa y cada ajuste lleva su nota de crédito;
   - el pago principal no es «Otro», que no es una forma de pago del SAT (un PUE no se declara «por definir», 99);
   - no tiene otra factura viva (timbrando, timbrada o cancelándose) ni está en una factura global viva (Fase 28B);
   - el negocio subió su CSD, vigente y del RFC de Mi negocio, y la plataforma tiene su PAC.
@@ -538,7 +538,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cancelar** (dueños y administradores): con motivo 02 (errores sin relación) o 03 (la venta no se llevó a cabo); se pide primero al PAC y, si se niega, nada cambia. Si el SAT pide la aceptación del receptor, queda «Cancelándose» y el worker pregunta cada 30 minutos: cancelada, o «Timbrada» otra vez si el receptor la rechazó. Una cancelada deja facturar el pedido otra vez con factura y folio nuevos. Nunca se borra una factura.
 - **El CSD** (dueños y administradores, Configuración › Facturación): `.cer`, `.key` y la contraseña de la llave. TienditApp revisa que sea de sello, vigente, del RFC de Mi negocio y que la llave corresponda; el PAC lo guarda y TienditApp solo su número, RFC y vigencia. Los archivos y la contraseña nunca se guardan ni se registran. Avisa 30 días antes de vencer; reemplazarlo o quitarlo pide al PAC que olvide el anterior. Un CSD es de un solo negocio de TienditApp: si otro ya lo usa, se rechaza (dos negocios del mismo RFC tramitan uno cada uno).
 - **Acceso:** timbrar, volver a pedir, ver y descargar el XML y el PDF, quien gestiona los pedidos (`ManageOrders`); cancelar, el CSD y la serie, dueños y administradores. Otro negocio recibe 404.
-- **Sin** notas de crédito, sustitución (motivo 01), autofactura, envío por correo o WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C (siguiente sección de facturas).
+- **Sin** sustitución (motivo 01), autofactura, envío por correo o WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, y las notas de crédito en la 28D (siguientes secciones de facturas).
 
 ## La factura global (Fase 28B)
 
@@ -559,7 +559,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 
 [ADR 0047](../adr/0047-payment-complements.md):
 
-- **La factura PPD:** una venta que el cliente ya debe (fiada, o entregada o completada) y no está pagada por completo se factura en parcialidades: método PPD y forma 99 «Por definir». El resto de las reglas son las de la factura del pedido (sin condonación, reembolsos ni reembolso en línea en curso). Una venta que el cliente todavía no se lleva se cobra antes de facturarla, y una fiada que sigue pendiente o es una cuenta abierta se acepta o se cierra antes (todavía puede cambiar su total).
+- **La factura PPD:** una venta que el cliente ya debe (fiada, o entregada o completada) y no está pagada por completo se factura en parcialidades: método PPD y forma 99 «Por definir». El resto de las reglas son las de la factura del pedido (sin un reembolso en línea en curso). Una venta que el cliente todavía no se lleva se cobra antes de facturarla, y una fiada que sigue pendiente o es una cuenta abierta se acepta o se cierra antes (todavía puede cambiar su total).
 - **El complemento de pago:** un CFDI tipo P (Pagos 2.0) por cada cobro del pedido, también por los que llegaron antes de la factura. Lleva:
   - el receptor de la factura con uso CP01, en ceros y en moneda XXX;
   - el cobro con su fecha, forma y monto;
@@ -571,7 +571,31 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Serie:** «P» por omisión, con sus propios folios; se cambia en Configuración › Facturación junto a la de las facturas.
 - **Timbrar, reintentar y cancelar:** como la factura del pedido (misma llave y mismo CFDI en cada intento; cancelar, dueños y administradores, con motivo 02 o 03). Una factura PPD no se cancela mientras tenga complementos vigentes: primero se cancelan ellos.
 - **Acceso:** ver, emitir, volver a pedir y descargar, quien gestiona los pedidos (`ManageOrders`); cancelar, dueños y administradores. Otro negocio recibe 404.
-- **Sin** sustitución (01), un complemento que cubra varias facturas, otras monedas, la global de ventas a crédito, notas de crédito (28D) ni un reporte de complementos.
+- **Sin** sustitución (01), un complemento que cubra varias facturas, otras monedas, la global de ventas a crédito ni un reporte de complementos.
+
+## Las notas de crédito (Fase 28D)
+
+[ADR 0048](../adr/0048-credit-notes.md):
+
+- **Qué es:** un CFDI de egreso (tipo E) relacionado con la factura timbrada del pedido (TipoRelacion 01, su UUID) por lo que se devolvió en un reembolso o se perdonó en una condonación que sigue en pie. Cada ajuste lleva **una** nota, también los que se hicieron antes de timbrar la factura.
+- **El documento:**
+  - el receptor de la factura con uso G02 (S01 si su régimen no lo admite), método PUE, MXN;
+  - forma: la del reembolso (la misma tabla que los complementos) o 15 «Condonación»;
+  - un concepto 84111506, ACT, «Devolución» o «Condonación» por cada tasa de IVA de la factura, y otro sin objeto de impuesto para lo que la factura tiene sin traslados.
+- **Importes:** el total es exactamente lo reembolsado o condonado. Se reparte entre las tasas de la factura según su peso en el total (la última toma el resto); en cada una, la base es la parte sin IVA, redondeada, y el IVA lo que queda de la parte.
+- **Cuánto acredita:**
+  - la nota de un reembolso, hasta el total de la factura menos sus otras notas;
+  - la de una condonación, además, hasta lo que la factura todavía debe (su total menos los cobros con complemento y las otras notas de condonación).
+
+  Cuenta la última nota de cada ajuste aunque esté rechazada o cancelada (se emite otra vez); no cuentan las de una condonación deshecha. Un ajuste mayor que lo que queda dice por qué no se emite.
+- **En una factura PPD** solo las notas de condonación bajan el saldo anterior de las parcialidades que vienen después de ellas, y lo que se debe; un reembolso devuelve dinero que ya declaró su complemento.
+- **Quién la emite:** TienditApp, por su cuenta (el worker, del ajuste más viejo al más nuevo, en los negocios cuyo CSD sella); o quien gestiona los pedidos con «Emitir ahora». Una rechazada o cancelada se emite otra vez a mano.
+- **Sin nota:** los reembolsos «Otro» o como saldo a favor del cliente, y las condonaciones deshechas; el ajuste dice por qué. Tampoco se emiten mientras falte el CSD vigente del RFC de la factura, los datos de Mi negocio o el PAC: esperan.
+- **Serie:** «NC» por omisión, con sus propios folios; se cambia en Configuración › Facturación junto a las de las facturas y los complementos.
+- **Timbrar, reintentar y cancelar:** como la factura del pedido (misma llave y mismo CFDI en cada intento; cancelar, dueños y administradores, con motivo 02 o 03). Una factura no se cancela mientras tenga notas vivas, ni una condonación se deshace con su nota viva: primero se cancela la nota.
+- **La global** sigue sin ventas con reembolsos o condonación: se facturan por su cuenta en Pedidos.
+- **Acceso:** ver, emitir, volver a pedir y descargar, quien gestiona los pedidos (`ManageOrders`); cancelar, dueños y administradores. Otro negocio recibe 404.
+- **Sin** egreso relacionado con una global, notas por descuento o bonificación sin reembolso, una nota de varias facturas o varios ajustes, otras monedas ni sustitución (01).
 
 ## Cancelación y trazabilidad
 
