@@ -86,15 +86,17 @@ export function useOrderInvoicing(orderId: string) {
     queryKey: orderInvoicingKey(orderId),
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/orders/{orderId}', { path: { orderId }, signal }),
     refetchOnMount: 'always',
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return false;
-      const waiting = data.invoices.some((invoice) => isWaiting(invoice))
-        || data.payments.some((payment) => (payment.canIssue && payment.complements.length === 0)
-          || payment.complements.some((complement) => isWaiting(complement)));
-      return waiting ? PENDING_REFRESH_MS : false;
-    },
+    refetchInterval: (query) => (query.state.data && isOrderInvoicingWaiting(query.state.data) ? PENDING_REFRESH_MS : false),
   });
+}
+
+/**
+ * Whether something of the order's invoicing changes on its own soon: an invoice or a complement waits for the PAC or the
+ * SAT, or a payment waits for the complement TienditApp issues in its next pass.
+ */
+export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments'>): boolean {
+  return data.invoices.some((invoice) => isWaiting(invoice))
+    || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some((complement) => isWaiting(complement)));
 }
 
 /** Preview of the invoice of an order, read again each time it opens; without a receiver it goes to the general public. */

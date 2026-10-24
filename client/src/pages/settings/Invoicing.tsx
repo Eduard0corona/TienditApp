@@ -67,8 +67,8 @@ export default function Invoicing() {
                     por completo, o en parcialidades si se lo llevó fiado o ya se le entregó.
                   </li>
                   <li>
-                    Con una factura en parcialidades, TienditApp emite solo el complemento de pago de cada cobro, también de los que ya
-                    recibiste. El SAT lo pide a más tardar el día 5 del mes siguiente al cobro.
+                    Con una factura en parcialidades, TienditApp emite por su cuenta el complemento de pago de cada cobro, también de los
+                    que ya recibiste. El SAT lo pide a más tardar el día 5 del mes siguiente al cobro.
                   </li>
                   <li>
                     TienditApp arma el CFDI 4.0 con los importes de la venta y un PAC autorizado por el SAT lo sella con tu CSD y
@@ -239,6 +239,10 @@ function CertificateCard({ data }: { data: InvoicingSettings }) {
   );
 }
 
+// As the API takes a serie: 1 to 10 letters or digits (spaces around are trimmed).
+const SERIE_PATTERN = '\\s*[A-Za-z0-9]{1,10}\\s*';
+const SERIE_HINT = 'De 1 a 10 letras o números, sin espacios ni guiones.';
+
 function SerieCard({ data }: { data: InvoicingSettings }) {
   const toast = useToast();
   const change = useChangeInvoiceSerie();
@@ -252,7 +256,7 @@ function SerieCard({ data }: { data: InvoicingSettings }) {
       const updated = await change.mutateAsync({ serie: serie.trim(), paymentSerie: paymentSerie.trim() });
       setSerie(updated.serie);
       setPaymentSerie(updated.paymentSerie);
-      toast.success(`Tus próximas facturas llevan la serie ${updated.serie}, y sus complementos de pago la ${updated.paymentSerie}.`);
+      toast.success(`Tus próximas facturas llevan la serie ${updated.serie}, y sus complementos de pago, la ${updated.paymentSerie}.`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo cambiar la serie.'));
     }
@@ -265,13 +269,13 @@ function SerieCard({ data }: { data: InvoicingSettings }) {
         <form className="row g-2 align-items-end" onSubmit={submit}>
           <div className="col-sm-4">
             <label className="form-label small mb-1" htmlFor="invoice-serie">Serie de las facturas</label>
-            <input id="invoice-serie" className="form-control text-uppercase" maxLength={10} required
-              value={serie} onChange={(event) => setSerie(event.target.value)} />
+            <input id="invoice-serie" className="form-control text-uppercase" maxLength={10} required pattern={SERIE_PATTERN}
+              title={SERIE_HINT} value={serie} onChange={(event) => setSerie(event.target.value)} />
           </div>
           <div className="col-sm-4">
             <label className="form-label small mb-1" htmlFor="payment-serie">Serie de los complementos de pago</label>
-            <input id="payment-serie" className="form-control text-uppercase" maxLength={10} required
-              value={paymentSerie} onChange={(event) => setPaymentSerie(event.target.value)} />
+            <input id="payment-serie" className="form-control text-uppercase" maxLength={10} required pattern={SERIE_PATTERN}
+              title={SERIE_HINT} value={paymentSerie} onChange={(event) => setPaymentSerie(event.target.value)} />
           </div>
           <div className="col-sm-4">
             <button type="submit" className="btn btn-outline-secondary" disabled={change.isPending || unchanged}>
@@ -280,7 +284,8 @@ function SerieCard({ data }: { data: InvoicingSettings }) {
           </div>
         </form>
         <p className="small text-muted mb-0 mt-2">
-          Cada serie lleva sus propios folios: F-1, F-2… y P-1, P-2… Cambiarlas no toca lo ya timbrado.
+          Cada serie lleva sus propios folios: F-1, F-2… y P-1, P-2… (con la misma para las dos, comparten folios). Cambiarlas no
+          toca lo ya timbrado.
         </p>
       </div>
     </div>

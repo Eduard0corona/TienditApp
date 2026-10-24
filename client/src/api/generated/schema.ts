@@ -16657,6 +16657,7 @@ export interface components {
             dueBy: string;
             canIssue: boolean;
             problem?: string | null;
+            awaitsAutomaticIssue: boolean;
             complements: components["schemas"]["PaymentComplementDto"][];
         };
         OrderPaymentDto: {

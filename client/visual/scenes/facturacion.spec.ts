@@ -11,6 +11,7 @@ import {
   FACTURACION_SIN_CSD,
   ORDER_NUMBER,
   PEDIDO_CANCELANDOSE,
+  PEDIDO_EN_PARCIALIDADES,
   PEDIDO_FACTURADO,
   PEDIDO_POR_FACTURAR,
 } from './facturacion.mocks';
@@ -18,7 +19,9 @@ import {
 // The invoice of an order (Fase 28A, ADR 0045): Configuración › Facturación (ready, without the CSD, in the PAC's test
 // environment with the CSD about to expire, and not available), the invoice of ORD-000343 in Pedidos (to stamp for the
 // customer's fiscal data, stamped after a refused and a cancelled one, waiting for the customer to accept the cancellation,
-// and the dialog to cancel it) and the fiscal data of a customer in Clientes, from their edit dialog.
+// and the dialog to cancel it) and the fiscal data of a customer in Clientes, from their edit dialog. Since the Fase 28C
+// (ADR 0047), the invoice in installments of the same order with the payment complements of its payments, and the dialog
+// to cancel one.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -144,6 +147,43 @@ test.describe('Pedidos › Factura', () => {
       await expect(invoice.getByText(/El SAT pidió al cliente que acepte la cancelación/)).toBeVisible();
       await snapScreen(page, 'pedidos-factura-cancelandose');
     });
+  });
+});
+
+test.describe('Pedidos › Factura en parcialidades', () => {
+  test.use({ prepareData: PEDIDO_EN_PARCIALIDADES });
+
+  /** The order's invoice, scrolled to the complements of its payments. */
+  async function openComplements(page: Page) {
+    await open(page, '/orders');
+    await page.getByRole('button', { name: ORDER_NUMBER, exact: true }).click();
+    const detail = await dialog(page, `Pedido ${ORDER_NUMBER}`);
+    await detail.getByRole('button', { name: 'Factura' }).click();
+    const invoice = await dialog(page, `Facturar ${ORDER_NUMBER}`);
+    const heading = invoice.getByRole('heading', { name: 'Complementos de pago' });
+    await heading.scrollIntoViewIfNeeded();
+    await expect(invoice.getByText(/Sin complemento todavía: TienditApp lo emite en unos minutos/)).toBeVisible();
+    return invoice;
+  }
+
+  for (const look of LOOKS) {
+    test.describe(look.suffix, () => {
+      test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+      test(`complementos de pago ${look.suffix}`, async ({ page }) => {
+        const invoice = await openComplements(page);
+        await expect(invoice.getByText('P-1', { exact: true })).toBeVisible();
+        await snapScreen(page, `pedidos-factura-complementos-${look.suffix}`);
+      });
+    });
+  }
+
+  test('cancelar un complemento', async ({ page }) => {
+    const invoice = await openComplements(page);
+    await invoice.getByRole('button', { name: 'Cancelar complemento P-1' }).click();
+    const cancelling = await dialog(page, 'Cancelar el complemento P-1');
+    await cancelling.getByLabel('03 · El cobro no se llevó a cabo').check();
+    await snapScreen(page, 'pedidos-factura-cancelar-complemento');
   });
 });
 

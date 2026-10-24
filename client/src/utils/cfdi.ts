@@ -85,7 +85,7 @@ export const CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
 
 /** The reasons a payment complement is cancelled with: 02 when it has errors, 03 when the payment did not happen. */
 export const COMPLEMENT_CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
-  [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores y no se va a sustituir'],
+  [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores (después emites otro para el cobro)'],
   [CfdiCancellationMotive.NotCarriedOut, '03 · El cobro no se llevó a cabo'],
 ];
 

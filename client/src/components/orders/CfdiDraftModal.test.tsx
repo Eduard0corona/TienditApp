@@ -256,12 +256,13 @@ describe('CfdiDraftModal', () => {
       invoices: [{ ...STAMPED, paymentForm: '99', paymentMethod: 'PPD' }],
       payments: [{
         orderPaymentId: 'pay-1', paidAt: '2026-10-04T17:00:00Z', method: 0, amount: 50, dueBy: '2999-11-05', canIssue: true,
-        problem: null, complements: [],
+        problem: null, awaitsAutomaticIssue: true, complements: [],
       }],
     });
     renderModal();
 
     expect(await screen.findByRole('heading', { name: 'Complementos de pago' })).toBeInTheDocument();
+    expect(screen.getByText('F-1', { exact: true }).closest('li')).toHaveTextContent('en parcialidades (PPD)');
     expect(screen.getByRole('button', { name: /^Emitir ahora el complemento del cobro del/ })).toBeInTheDocument();
   });
 

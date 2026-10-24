@@ -114,13 +114,20 @@ public sealed class InvoicingWorkerService : BackgroundService
                     .Select(g => new Waiting(g.Key, g.Min(c => c.RequestedAt)))
                     .ToListAsync(cancellationToken));
             // The payments of stamped invoices in installments that never had a complement (Fase 28C), each business's own
-            // (the payment, its invoice and its complements are of the same business, joined by its order).
+            // (the payment, its invoice and its complements are of the same business, joined by its order). Only of the
+            // businesses whose CSD seals now: one that cannot issue them would take the places of the ones that can, pass
+            // after pass, while it waits for its new CSD.
+            var sealing = context.InvoicingProfiles
+                .IgnoreQueryFilters()
+                .Where(p => p.CertificateNumber != null && p.CertificateValidFrom <= now && p.CertificateValidTo > now)
+                .Select(p => p.TenantId);
             complementing = Businesses(
                 max,
                 await PaymentComplements.Pending(
                         context.OrderPayments.IgnoreQueryFilters(),
                         context.OrderInvoices.IgnoreQueryFilters(),
                         context.PaymentComplements.IgnoreQueryFilters())
+                    .Where(p => sealing.Contains(p.TenantId))
                     .GroupBy(p => p.TenantId)
                     .Select(g => new Waiting(g.Key, g.Min(p => p.PaidAt)))
                     .ToListAsync(cancellationToken));

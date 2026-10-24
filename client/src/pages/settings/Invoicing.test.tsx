@@ -124,7 +124,7 @@ describe('Invoicing settings', () => {
     await userEvent.click(save);
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith(
-      'Tus próximas facturas llevan la serie A, y sus complementos de pago la CP.'));
+      'Tus próximas facturas llevan la serie A, y sus complementos de pago, la CP.'));
     expect(sent).toEqual({ method: 'put', path: '/api/v1/invoicing/settings/serie', body: { serie: 'A', paymentSerie: 'cp' } });
     expect(screen.getByLabelText('Serie de los complementos de pago')).toHaveValue('CP');
   });

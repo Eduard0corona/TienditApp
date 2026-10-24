@@ -94,6 +94,11 @@ public class OrderPaymentComplementsDto
     public bool CanIssue { get; set; }
     /// <summary>Why it has no complement and none can be issued now, when that is the case.</summary>
     public string? Problem { get; set; }
+    /// <summary>
+    /// TienditApp issues its complement on its own in its next pass: it can be issued and has never had one for the live
+    /// invoice (a refused or cancelled one is issued again by hand).
+    /// </summary>
+    public bool AwaitsAutomaticIssue { get; set; }
     /// <summary>Its complements, the newest first.</summary>
     public List<PaymentComplementDto> Complements { get; set; } = [];
 }
@@ -220,6 +225,14 @@ public class RequestAutomaticPaymentComplementCommandHandler : IRequestHandler<R
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 public record RetryPaymentComplementCommand(Guid ComplementId) : IRequest<Result<PaymentComplementDto>>;
+
+public class RetryPaymentComplementCommandValidator : AbstractValidator<RetryPaymentComplementCommand>
+{
+    public RetryPaymentComplementCommandValidator()
+    {
+        RuleFor(x => x.ComplementId).NotEmpty();
+    }
+}
 
 public class RetryPaymentComplementCommandHandler : IRequestHandler<RetryPaymentComplementCommand, Result<PaymentComplementDto>>
 {
@@ -387,7 +400,9 @@ public class GetPaymentComplementFileQueryHandler : IRequestHandler<GetPaymentCo
 /// <summary>
 /// Issues the complements a business owes (the invoicing worker sends it in the business's scope, Fase 28C): each payment of
 /// an invoice in installments that is stamped and that never had a complement for it, the oldest first, as long as the
-/// payment has a form of the SAT's. A refused or cancelled complement is issued again only by a person.
+/// payment has a form of the SAT's. A refused or cancelled complement is issued again only by a person. Up to
+/// <see cref="IssuePendingPaymentComplementsCommandHandler.MaxPerPass"/> are issued in a pass; the ones that cannot be issued
+/// yet (the RFC of Mi negocio changed, say) are passed over, so they never hold up the newer ones behind them.
 /// </summary>
 [AllowAnonymousRequest("Lo envía el worker de facturación (sistema), sin usuario, en el alcance del negocio.")]
 public record IssuePendingPaymentComplementsCommand : IRequest<Result<int>>;
@@ -395,6 +410,8 @@ public record IssuePendingPaymentComplementsCommand : IRequest<Result<int>>;
 public class IssuePendingPaymentComplementsCommandHandler : IRequestHandler<IssuePendingPaymentComplementsCommand, Result<int>>
 {
     public const int MaxPerPass = 20;
+    /// <summary>The payments a pass looks at, the ones that fail included.</summary>
+    public const int MaxCandidatesPerPass = 100;
 
     private readonly ISender _sender;
     private readonly IApplicationDbContext _context;
@@ -427,14 +444,17 @@ public class IssuePendingPaymentComplementsCommandHandler : IRequestHandler<Issu
             .OrderBy(p => p.PaidAt)
             .ThenBy(p => p.Id)
             .Select(p => p.Id)
-            .Take(MaxPerPass)
+            .Take(MaxCandidatesPerPass)
             .ToListAsync(cancellationToken);
 
         var stamped = 0;
+        var issued = 0;
         string? firstProblem = null;
         var problems = 0;
         foreach (var paymentId in pending)
         {
+            if (issued >= MaxPerPass)
+                break;
             try
             {
                 var requested = await _sender.Send(new RequestAutomaticPaymentComplementCommand(paymentId), cancellationToken);
@@ -445,6 +465,7 @@ public class IssuePendingPaymentComplementsCommandHandler : IRequestHandler<Issu
                     firstProblem ??= requested.Error;
                     continue;
                 }
+                issued++;
                 var complement = await _stamper.StampAsync(_context.PaymentComplements, requested.Value, cancellationToken);
                 if (complement.Status == OrderInvoiceStatus.Stamped)
                     stamped++;
@@ -493,13 +514,25 @@ internal sealed class PaymentComplementRequester(
         if (problem is not null)
             return Result.Failure<Guid>(problem);
 
+        // A live complement of the payment, of this invoice or of one cancelled since: never two that stand at once.
+        var existing = await context.PaymentComplements.AsNoTracking()
+            .Where(c => c.OrderPaymentId == payment.Id
+                && (c.Status == OrderInvoiceStatus.Stamping || c.Status == OrderInvoiceStatus.Stamped
+                    || c.Status == OrderInvoiceStatus.Cancelling))
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existing is not null)
+            return Result.Failure<Guid>(PaymentComplements.LiveComplementProblem(existing));
         var live = await context.PaymentComplements.AsNoTracking()
             .Where(c => c.OrderInvoiceId == invoice!.Id
                 && (c.Status == OrderInvoiceStatus.Stamping || c.Status == OrderInvoiceStatus.Stamped
                     || c.Status == OrderInvoiceStatus.Cancelling))
             .ToListAsync(cancellationToken);
-        if (live.FirstOrDefault(c => c.OrderPaymentId == payment.Id) is { } existing)
-            return Result.Failure<Guid>(PaymentComplements.LiveComplementProblem(existing));
+        // The installment the payment had in a refused or cancelled complement of this invoice, to take it back.
+        var earlier = await context.PaymentComplements.AsNoTracking()
+            .Where(c => c.OrderInvoiceId == invoice!.Id && c.OrderPaymentId == payment.Id)
+            .OrderByDescending(c => c.RequestedAt)
+            .Select(c => (int?)c.Installment)
+            .FirstOrDefaultAsync(cancellationToken);
 
         var now = clock.UtcNow;
         var business = await context.Tenants.AsNoTracking()
@@ -517,13 +550,18 @@ internal sealed class PaymentComplementRequester(
         if (InvoicingSettings.CertificateProblem(profile, issuer.Rfc, now) is { } certificateProblem)
             return Result.Failure<Guid>(certificateProblem);
 
-        // The installments go in the order they are issued, and each one starts where the live ones left the invoice.
-        var previousBalance = invoice.Total - live.Sum(c => c.Amount);
-        if (payment.Amount > previousBalance)
+        // What the invoice still owes after its live complements: the payment fits in it, and the one that pays it all settles.
+        var owed = invoice.Total - live.Sum(c => c.Amount);
+        if (payment.Amount > owed)
             return Result.Failure<Guid>(PaymentComplements.AboveBalanceMessage(invoice.Number));
-        var installment = live.Count == 0 ? 1 : live.Max(c => c.Installment) + 1;
+        // The installments go in the order they are issued; one issued again takes back its number if no live one has it,
+        // so the chain stays whole. Each starts where the live installments before it left the invoice.
+        var installment = earlier is { } number && live.All(c => c.Installment != number)
+            ? number
+            : live.Count == 0 ? 1 : live.Max(c => c.Installment) + 1;
         if (installment > PaymentComplement.MaxInstallment)
             return Result.Failure<Guid>(PaymentComplements.TooManyInstallmentsMessage(invoice.Number));
+        var previousBalance = invoice.Total - live.Where(c => c.Installment < installment).Sum(c => c.Amount);
 
         IReadOnlyList<CfdiTransfer> transfers;
         try
@@ -532,7 +570,7 @@ internal sealed class PaymentComplementRequester(
                 invoiceDocument.Transfers.Select(PaymentComplements.Transfer).ToList(),
                 invoice.Total,
                 payment.Amount,
-                settles: previousBalance == payment.Amount,
+                settles: owed == payment.Amount,
                 live.SelectMany(c => CfdiDocument.FromJson(c.Document).Payment!.Invoice.Transfers).Select(PaymentComplements.Transfer).ToList());
         }
         catch (DomainException ex)
@@ -679,7 +717,7 @@ public static class PaymentComplements
         IQueryable<OrderPayment> payments, IQueryable<OrderInvoice> invoices, IQueryable<PaymentComplement> complements)
         => payments.Where(payment => payment.Method != OrderPaymentMethod.Other
             && payment.Method != OrderPaymentMethod.CustomerBalance
-            && invoices.Any(invoice => invoice.OrderId == payment.OrderId
+            && invoices.Any(invoice => invoice.TenantId == payment.TenantId && invoice.OrderId == payment.OrderId
                 && invoice.Status == OrderInvoiceStatus.Stamped
                 && invoice.PaymentMethod == CfdiInvoice.PaidInInstallments
                 && !complements.Any(c => c.OrderPaymentId == payment.Id && c.OrderInvoiceId == invoice.Id)));
@@ -749,6 +787,8 @@ public static class PaymentComplements
                     DueBy = DueBy(payment.PaidAt, timeZone),
                     CanIssue = live is null && problem is null,
                     Problem = problem,
+                    AwaitsAutomaticIssue = live is null && problem is null
+                        && liveInvoice is not null && own.All(c => c.OrderInvoiceId != liveInvoice.Id),
                     Complements = own.Select(PaymentComplementDto.From).ToList()
                 };
             })

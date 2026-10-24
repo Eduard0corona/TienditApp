@@ -143,7 +143,15 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
       <Modal.Body>
         {loadError}
         {invoicing && <OrderInvoiceList orderId={orderId} invoices={invoicing.invoices} canCancel={canCancel} />}
-        {invoicing && <PaymentComplementList orderId={orderId} payments={invoicing.payments} canCancel={canCancel} />}
+        {invoicing && (
+          <PaymentComplementList
+            orderId={orderId}
+            payments={invoicing.payments}
+            inInstallments={invoicing.invoices.some((invoice) => invoice.paymentMethod === 'PPD'
+              && invoice.status !== OrderInvoiceStatus.Refused && invoice.status !== OrderInvoiceStatus.Cancelled)}
+            canCancel={canCancel}
+          />
+        )}
 
         {orderCancelled && invoicing && (
           <p className="text-muted small mb-0">

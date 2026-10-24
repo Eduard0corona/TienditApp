@@ -672,6 +672,10 @@ internal static class OrderInvoicing
         $"Esta venta está en la factura global {number}. Si el cliente pide su factura, cancela esa global con el motivo 04 en " +
         "Reportes › Factura global, factura esta venta y emite otra vez la global del periodo: ya no la incluirá.";
 
+    /// <summary>A sale that is still pending or an open tab can change its total: it is invoiced in installments once closed.</summary>
+    public const string StillChangingMessage =
+        "La venta todavía puede cambiar (sigue pendiente o es una cuenta abierta): acéptala o ciérrala antes de facturarla en parcialidades.";
+
     /// <summary>
     /// Why the order itself cannot be invoiced here (Fase 28A): a sale with nothing given back or forgiven, which would need
     /// a credit note. One not paid in full is invoiced in installments (Fase 28C) only when the customer owes it: sold on
@@ -687,8 +691,13 @@ internal static class OrderInvoicing
             return "Se condonó parte de esta venta: lo condonado requiere una nota de crédito, que TienditApp todavía no genera.";
         if (order.RefundedAmount > 0)
             return "La venta tiene reembolsos: lo devuelto requiere una nota de crédito, que TienditApp todavía no genera.";
-        if ((order.Total - order.PaidAmount > 0 || order.Payments.Count == 0) && !order.IsOwedByCustomer)
+        var owed = order.Total - order.PaidAmount > 0 || order.Payments.Count == 0;
+        if (owed && !order.IsOwedByCustomer)
             return NotPaidMessage;
+        // In installments the invoice stays as it is while the sale is paid: a sale that can still take items, delivery or
+        // rounds would no longer match it (Fase 28C).
+        if (owed && Order.TotalCanChange(order.Status, order.IsTab))
+            return StillChangingMessage;
         var refundInCourse = await context.OnlinePaymentRefunds.AsNoTracking()
             .AnyAsync(r => r.OrderId == order.Id && r.Status == OnlinePaymentRefundStatus.Requested, cancellationToken);
         return refundInCourse

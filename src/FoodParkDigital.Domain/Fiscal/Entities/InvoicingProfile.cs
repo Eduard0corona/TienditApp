@@ -98,7 +98,7 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
     /// <summary>The serie of the next payment complements; the ones already stamped keep theirs.</summary>
     public void ChangePaymentSerie(string serie)
     {
-        PaymentSerie = Cfdi.NormalizeSerie(serie);
+        PaymentSerie = Cfdi.NormalizeSerie(serie, "los complementos de pago");
     }
 
     /// <summary>Whether its CSD seals now for the business's RFC.</summary>

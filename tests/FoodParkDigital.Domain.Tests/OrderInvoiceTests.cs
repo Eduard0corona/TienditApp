@@ -335,7 +335,9 @@ public class OrderInvoiceTests
         Assert.Equal("P", profile.PaymentSerie);
         profile.ChangePaymentSerie(" ta ");
         Assert.Equal("TA", profile.PaymentSerie);
-        Assert.Throws<DomainException>(() => profile.ChangePaymentSerie("P-1"));
+        // Its refusal names the serie of the complements, not the invoices'.
+        Assert.Equal("La serie de los complementos de pago tiene de 1 a 10 letras o números.",
+            Assert.Throws<DomainException>(() => profile.ChangePaymentSerie("P-1")).Message);
         Assert.Throws<DomainException>(() => profile.ChangePaymentSerie(" "));
         Assert.Equal("TA", profile.PaymentSerie);
         Assert.Throws<DomainException>(() => InvoicingProfile.Create(Guid.Empty));

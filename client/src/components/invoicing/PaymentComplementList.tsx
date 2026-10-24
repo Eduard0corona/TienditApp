@@ -25,6 +25,8 @@ import { formatMoney } from '../../utils/money';
 interface PaymentComplementListProps {
   orderId: string;
   payments: OrderPaymentComplements[];
+  /** The order's live invoice is in installments (PPD): its payments get their complements. */
+  inInstallments: boolean;
   /** Owners and admins cancel; whoever manages the orders issues, retries and downloads. */
   canCancel: boolean;
 }
@@ -44,7 +46,7 @@ function useComplementOutcome() {
  * TienditApp issues each one on its own once the invoice is stamped and the payment registered; from here it is issued
  * before that («Emitir ahora»), again after a refused or cancelled one, asked again of the PAC, cancelled or downloaded.
  */
-export default function PaymentComplementList({ orderId, payments, canCancel }: PaymentComplementListProps) {
+export default function PaymentComplementList({ orderId, payments, inInstallments, canCancel }: PaymentComplementListProps) {
   const toast = useToast();
   const outcome = useComplementOutcome();
   const issue = useIssuePaymentComplement(orderId);
@@ -81,21 +83,29 @@ export default function PaymentComplementList({ orderId, payments, canCancel }: 
     }
   };
 
-  if (payments.length === 0) return null;
+  if (payments.length === 0 && !inInstallments) return null;
 
   return (
     <div className="mb-3">
       <h3 className="h6 mb-1">Complementos de pago</h3>
       <p className="small text-muted mb-2">
-        La factura va en parcialidades: cada cobro lleva su complemento de pago, que TienditApp emite solo unos minutos después
-        de registrarlo. El SAT lo pide a más tardar el día 5 del mes siguiente al cobro.
+        {inInstallments
+          ? 'La factura va en parcialidades: cada cobro lleva su complemento de pago, que TienditApp emite por su cuenta unos '
+            + 'minutos después de registrarlo. El SAT lo pide a más tardar el día 5 del mes siguiente al cobro.'
+          : 'Los complementos de los cobros de una factura en parcialidades anterior de este pedido.'}
       </p>
+      {payments.length === 0 && (
+        <p className="small mb-0">Todavía no hay cobros: cada cobro que registres en el pedido lleva su complemento.</p>
+      )}
       <ul className="list-unstyled mb-0">
         {payments.map((payment) => {
           const paidAt = formatDateTime(payment.paidAt);
           const live = payment.complements.find((complement) => complement.status !== OrderInvoiceStatus.Refused
             && complement.status !== OrderInvoiceStatus.Cancelled);
           const overdue = !live && payment.dueBy < today;
+          const dueBy = formatCalendarDate(payment.dueBy);
+          const issuing = issue.isPending && issue.variables === payment.orderPaymentId;
+          const issueLabel = payment.complements.length === 0 ? 'Emitir ahora' : 'Emitir otra vez';
           return (
             <li key={payment.orderPaymentId} className="border rounded p-2 mb-2">
               <div className="d-flex flex-wrap align-items-center gap-2">
@@ -105,11 +115,10 @@ export default function PaymentComplementList({ orderId, payments, canCancel }: 
                 </span>
               </div>
               {payment.problem && <p className="small text-muted mb-0 mt-1">{payment.problem}</p>}
-              {!live && !payment.problem && (
+              {!live && (
                 <p className={`small mb-0 mt-1 ${overdue ? 'text-danger' : 'text-muted'}`}>
-                  {overdue
-                    ? `Su complemento venció el ${formatCalendarDate(payment.dueBy)}: emítelo cuanto antes.`
-                    : `${payment.complements.length === 0 ? 'Sin complemento todavía. ' : ''}Emítelo a más tardar el ${formatCalendarDate(payment.dueBy)}.`}
+                  {payment.awaitsAutomaticIssue && 'Sin complemento todavía: TienditApp lo emite en unos minutos. '}
+                  {overdue ? `El plazo del SAT para su complemento venció el ${dueBy}.` : `El SAT lo pide a más tardar el ${dueBy}.`}
                 </p>
               )}
 
@@ -201,10 +210,10 @@ export default function PaymentComplementList({ orderId, payments, canCancel }: 
                   type="button"
                   className="btn btn-sm btn-outline-secondary mt-2"
                   disabled={issue.isPending}
-                  aria-label={`${payment.complements.length === 0 ? 'Emitir ahora' : 'Emitir otra vez'} el complemento del cobro del ${paidAt}`}
+                  aria-label={`${issuing ? 'Emitiendo' : issueLabel} el complemento del cobro del ${paidAt}`}
                   onClick={() => void issueFor(payment)}
                 >
-                  {payment.complements.length === 0 ? 'Emitir ahora' : 'Emitir otra vez'}
+                  {issuing ? 'Emitiendo…' : issueLabel}
                 </button>
               )}
             </li>
@@ -251,7 +260,7 @@ function CancelComplementModal({ orderId, complement, onClose }: CancelComplemen
         <Modal.Body>
           <p className="small">
             TienditApp le pide al SAT que lo cancele; si el SAT le pide al cliente que lo acepte, sigue vigente mientras tanto.
-            Después puedes emitir otro para el mismo cobro.
+            Con el motivo 02, después emites otro para el mismo cobro.
           </p>
           <fieldset>
             <legend className="form-label small mb-1">Motivo</legend>

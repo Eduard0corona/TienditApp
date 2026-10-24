@@ -183,6 +183,71 @@ public class PaymentComplementFlowTests
     }
 
     [Fact]
+    public async Task CancelledComplement_IssuedAgain_ShouldTakeBackItsInstallmentAndBalance_SoTheChainStaysWhole()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id);
+        var downPayment = (await book.Context.OrderPayments.SingleAsync()).Id;
+        await book.IssuePendingAsync();
+        await book.PayAsync(sale.Id, 150m, OrderPaymentMethod.Transfer);
+        await book.IssuePendingAsync();
+        var first = await book.Context.PaymentComplements.AsNoTracking().SingleAsync(c => c.Installment == 1);
+
+        // The first one had an error: cancelled, the one issued again is installment 1 from $200 again, not a 3 from $0.
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        Assert.True((await book.CancelComplementAsync(first.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        var again = await book.IssueComplementAsync(downPayment);
+
+        Assert.True(again.IsSuccess, again.Error);
+        Assert.Equal(("P-3", 1, 200m, 50m, 150m), (again.Value.Number, again.Value.Installment, again.Value.PreviousBalance, again.Value.Amount,
+            again.Value.RemainingBalance));
+        var paid = book.Gateway.StampRequests[^1].Document.Payment!.Invoice;
+        Assert.Equal((1, 200m, 150m), (paid.Installment, paid.PreviousBalance, paid.RemainingBalance));
+        // It pays the last $50 the invoice owes: it takes what is left of the base and the IVA, so the complements add up to it.
+        var transfer = Assert.Single(paid.Transfers);
+        Assert.Equal((43.10m, 6.90m), (transfer.Base, transfer.Amount));
+        Assert.Equal([(1, 200m, 150m), (2, 150m, 0m)], (await book.Context.PaymentComplements.AsNoTracking()
+                .Where(c => c.Status == OrderInvoiceStatus.Stamped).OrderBy(c => c.Installment).ToListAsync())
+            .Select(c => (c.Installment, c.PreviousBalance, c.RemainingBalance)));
+    }
+
+    [Fact]
+    public async Task Payment_WithALiveComplementOfAnEarlierInvoice_ShouldNotGetAnother_AndSayWhichOne()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        var invoice = (await book.IssueAsync(sale.Id)).Value;
+        var downPayment = (await book.Context.OrderPayments.SingleAsync()).Id;
+        await book.IssuePendingAsync();
+        // The invoice ended up cancelled while its complement was being stamped (the PAC answered both): a new invoice of
+        // the order does not give the payment a second complement that stands.
+        var cancelled = await book.Context.OrderInvoices.SingleAsync(i => i.Id == invoice.Id);
+        book.Context.Entry(cancelled).Property(i => i.Status).CurrentValue = OrderInvoiceStatus.Cancelled;
+        await book.Context.SaveChangesAsync();
+        Assert.True((await book.IssueAsync(sale.Id)).IsSuccess);
+
+        Assert.Equal("Este cobro ya tiene el complemento P-1: cancélalo para emitir otro.", (await book.IssueComplementAsync(downPayment)).Error);
+        Assert.Equal(0, (await book.IssuePendingAsync()).Value);
+        Assert.Single(await book.Context.PaymentComplements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Issue_OfASaleOwedThatCanStillChange_ShouldWaitUntilItCloses()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync();
+        // Still pending, it can take items or a delivery: the invoice in installments would no longer match it.
+        var order = await book.Context.Orders.SingleAsync(o => o.Id == sale.Id);
+        book.Context.Entry(order).Property(o => o.Status).CurrentValue = OrderStatus.Pending;
+        await book.Context.SaveChangesAsync();
+
+        Assert.Equal(OrderInvoicing.StillChangingMessage, (await book.IssueAsync(sale.Id)).Error);
+        Assert.Equal(OrderInvoicing.StillChangingMessage, (await book.InvoicingAsync(sale.Id)).Problem);
+        Assert.Empty(book.Gateway.StampRequests);
+    }
+
+    [Fact]
     public async Task Invoice_ShouldNotBeCancelled_WhileItsPaymentsHaveComplements_UntilTheSatCancelsThem()
     {
         await using var book = await Book.OpenAsync();
@@ -398,9 +463,13 @@ public class PaymentComplementFlowTests
             return created.Value;
         }
 
-        /// <summary>A payment registered later (as an abono does), at the fixture's time.</summary>
+        /// <summary>
+        /// A payment registered later (as an abono does): the clock moves a minute first, so payments never share their time
+        /// and keep their order (two at the same instant would be ordered by their ids).
+        /// </summary>
         public async Task<OrderPayment> PayAsync(Guid orderId, decimal amount, OrderPaymentMethod method)
         {
+            Clock.UtcNow = Clock.UtcNow.AddMinutes(1);
             var order = await Context.Orders.Include(o => o.Payments).SingleAsync(o => o.Id == orderId);
             var payment = order.RegisterPayment(amount, method, Clock.UtcNow, null, null, null, null);
             await Context.SaveChangesAsync();

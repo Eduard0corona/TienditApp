@@ -106,6 +106,9 @@ public class InvoicingWorkerTests
         await AddInstallmentsAsync(host, "cobro-otro", paidAt: now.AddDays(-4), method: Domain.Orders.Enums.OrderPaymentMethod.Other);
         await AddInstallmentsAsync(host, "factura-pue", paidAt: now.AddDays(-4), inInstallments: false);
         await AddInstallmentsAsync(host, "complemento-rechazado", paidAt: now.AddDays(-4), complement: c => c.Refuse("CRP20206", now));
+        // They owe one, but cannot issue it until their CSD seals again: they never take the places of the ones that can.
+        await AddInstallmentsAsync(host, "sin-csd", paidAt: now.AddDays(-9), csd: Csd.None);
+        await AddInstallmentsAsync(host, "csd-vencido", paidAt: now.AddDays(-9), csd: Csd.Expired);
         var stamping = await AddInstallmentsAsync(host, "complemento-timbrando", paidAt: now.AddDays(-2), complement: _ => { }, requestedAt: now.AddMinutes(-5));
         var cancelling = await AddInstallmentsAsync(host, "complemento-cancelandose", paidAt: now.AddDays(-2), complement: c =>
         {
@@ -121,9 +124,12 @@ public class InvoicingWorkerTests
         Assert.Equal([cancelling], sent.Checks);
     }
 
+    private enum Csd { Valid, Expired, None }
+
     /// <summary>
-    /// A business with a $100 sale, a payment of $40 and its stamped invoice (in installments unless said otherwise), and
-    /// the complement of that payment when <paramref name="complement"/> says what happened to it.
+    /// A business with a $100 sale, a payment of $40 and its stamped invoice (in installments unless said otherwise), its CSD
+    /// (valid unless said otherwise), and the complement of that payment when <paramref name="complement"/> says what
+    /// happened to it.
     /// </summary>
     private static Task<Guid> AddInstallmentsAsync(
         OutboxTestHost host,
@@ -132,12 +138,23 @@ public class InvoicingWorkerTests
         Domain.Orders.Enums.OrderPaymentMethod method = Domain.Orders.Enums.OrderPaymentMethod.Cash,
         bool inInstallments = true,
         Action<PaymentComplement>? complement = null,
-        DateTimeOffset? requestedAt = null)
+        DateTimeOffset? requestedAt = null,
+        Csd csd = Csd.Valid)
         => host.InScopeAsync(async services =>
         {
             var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
             services.GetRequiredService<ICurrentTenantService>().SetTenant(tenant.Id);
             var context = services.GetRequiredService<ApplicationDbContext>();
+            if (csd != Csd.None)
+            {
+                var profile = InvoicingProfile.Create(tenant.Id);
+                var now = host.Clock.UtcNow;
+                var uploadedAt = csd == Csd.Valid ? now.AddDays(-30) : now.AddYears(-4);
+                profile.UseCertificate(
+                    "30001000000500003416", "EKU9003173C9", uploadedAt.AddDays(-1), uploadedAt.AddYears(4).AddDays(csd == Csd.Valid ? 0 : -60),
+                    Guid.NewGuid(), uploadedAt);
+                context.InvoicingProfiles.Add(profile);
+            }
             var order = new Domain.Orders.Entities.Order(tenant.Id, null, null, true, "ORD-000001", BusinessType.Retail,
                 Domain.Orders.Enums.OrderType.Retail, "Karla", null, null, null, pricesIncludeTax: true);
             order.AddItem(Guid.NewGuid(), "Café", 1, 100m);

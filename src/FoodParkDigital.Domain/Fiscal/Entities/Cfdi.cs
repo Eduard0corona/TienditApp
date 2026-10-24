@@ -190,11 +190,13 @@ public abstract class Cfdi : AuditableEntity, ITenantScoped
     protected virtual void Released() { }
 
     /// <summary>A serie as the SAT takes it: letters and numbers, in capitals.</summary>
-    internal static string NormalizeSerie(string? serie)
+    /// <param name="serie">The serie as typed.</param>
+    /// <param name="of">What it numbers, as its refusal names it: «las facturas» or «los complementos de pago».</param>
+    internal static string NormalizeSerie(string? serie, string of = "las facturas")
     {
         var normalized = serie?.Trim().ToUpperInvariant();
         if (string.IsNullOrEmpty(normalized) || normalized.Length > MaxSerieLength || !normalized.All(char.IsAsciiLetterOrDigit))
-            throw new DomainException($"La serie de las facturas tiene de 1 a {MaxSerieLength} letras o números.");
+            throw new DomainException($"La serie de {of} tiene de 1 a {MaxSerieLength} letras o números.");
         return normalized;
     }
 

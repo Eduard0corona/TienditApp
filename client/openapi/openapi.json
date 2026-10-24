@@ -27262,6 +27262,7 @@
       "OrderPaymentComplementsDto": {
         "required": [
           "amount",
+          "awaitsAutomaticIssue",
           "canIssue",
           "complements",
           "dueBy",
@@ -27296,6 +27297,9 @@
           "problem": {
             "type": "string",
             "nullable": true
+          },
+          "awaitsAutomaticIssue": {
+            "type": "boolean"
           },
           "complements": {
             "type": "array",

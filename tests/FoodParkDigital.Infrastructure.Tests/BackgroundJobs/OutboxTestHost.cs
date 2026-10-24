@@ -129,6 +129,7 @@ internal sealed class OutboxTestHost : IAsyncDisposable
             modelBuilder.Entity<OrderInvoice>().Property(i => i.Version).IsRequired(false).ValueGeneratedNever();
             modelBuilder.Entity<GlobalInvoice>().Property(i => i.Version).IsRequired(false).ValueGeneratedNever();
             modelBuilder.Entity<PaymentComplement>().Property(c => c.Version).IsRequired(false).ValueGeneratedNever();
+            modelBuilder.Entity<InvoicingProfile>().Property(p => p.Version).IsRequired(false).ValueGeneratedNever();
         }
     }
 

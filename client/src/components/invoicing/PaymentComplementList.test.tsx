@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest, type Schemas } from '../../api/typedClient';
 import { CfdiCancellationMotive, OrderInvoiceStatus, OrderPaymentMethod } from '../../types';
+import { getBusinessToday } from '../../utils/dates';
 import PaymentComplementList from './PaymentComplementList';
 
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
@@ -22,19 +23,19 @@ const P1: Complement = {
 
 const FIRST: Payment = {
   orderPaymentId: 'pay-1', paidAt: '2026-10-04T17:00:00Z', method: OrderPaymentMethod.Cash, amount: 50, dueBy: '2026-11-05',
-  canIssue: false, problem: null, complements: [P1],
+  canIssue: false, problem: null, awaitsAutomaticIssue: false, complements: [P1],
 };
 
 const SECOND: Payment = {
   orderPaymentId: 'pay-2', paidAt: '2026-10-20T18:00:00Z', method: OrderPaymentMethod.Transfer, amount: 150, dueBy: '2999-11-05',
-  canIssue: true, problem: null, complements: [],
+  canIssue: true, problem: null, awaitsAutomaticIssue: true, complements: [],
 };
 
-function renderList(payments: Payment[], canCancel = false) {
+function renderList(payments: Payment[], canCancel = false, inInstallments = true) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <PaymentComplementList orderId="o-1" payments={payments} canCancel={canCancel} />
+      <PaymentComplementList orderId="o-1" payments={payments} inInstallments={inInstallments} canCancel={canCancel} />
     </QueryClientProvider>,
   );
 }
@@ -47,8 +48,23 @@ describe('PaymentComplementList', () => {
   beforeEach(() => vi.resetAllMocks());
 
   it('shows nothing for an order without an invoice in installments', () => {
-    const { container } = renderList([]);
+    const { container } = renderList([], false, false);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('says an invoice in installments without payments yet gets a complement for each one', () => {
+    renderList([]);
+
+    expect(screen.getByRole('heading', { name: 'Complementos de pago' })).toBeInTheDocument();
+    expect(screen.getByText('Todavía no hay cobros: cada cobro que registres en el pedido lleva su complemento.')).toBeInTheDocument();
+  });
+
+  it('keeps the complements of an earlier invoice in installments without saying the live one is', () => {
+    renderList([FIRST], true, false);
+
+    expect(screen.getByText('Los complementos de los cobros de una factura en parcialidades anterior de este pedido.')).toBeInTheDocument();
+    expect(screen.queryByText(/La factura va en parcialidades/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar complemento P-1' })).toBeInTheDocument();
   });
 
   it('shows each payment with its complement: installment, balances, folio fiscal and files', () => {
@@ -75,7 +91,8 @@ describe('PaymentComplementList', () => {
     });
     renderList([FIRST, SECOND]);
 
-    expect(screen.getByText('Sin complemento todavía. Emítelo a más tardar el 5 de noviembre de 2999.')).toBeInTheDocument();
+    expect(screen.getByText('Sin complemento todavía: TienditApp lo emite en unos minutos. El SAT lo pide a más tardar el 5 de noviembre de 2999.'))
+      .toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /^Emitir ahora el complemento del cobro del/ }));
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Complemento P-2 timbrado.'));
@@ -87,32 +104,53 @@ describe('PaymentComplementList', () => {
       ...P1, status: OrderInvoiceStatus.Refused, uuid: null, stampedAt: null, hasXml: false, hasPdf: false,
       failureMessage: 'CFDI40102 - El resultado de la digestión debe ser igual al resultado de la desencripción del sello.',
     };
-    answer(() => Promise.resolve({ ...refused, status: OrderInvoiceStatus.Stamping, failureMessage: null, number: 'P-2' }));
+    let sent: unknown;
+    answer((method, path, options) => {
+      sent = { method, path, params: options?.path };
+      return Promise.resolve({ ...refused, status: OrderInvoiceStatus.Stamping, failureMessage: null, number: 'P-2' });
+    });
     renderList([{ ...FIRST, canIssue: true, dueBy: '2999-11-05', complements: [refused] }]);
 
     expect(screen.getByText('Rechazado')).toBeInTheDocument();
     expect(screen.getByText(/CFDI40102/)).toBeInTheDocument();
+    // A refused one is not live: the deadline shows, and TienditApp does not issue it again on its own.
+    expect(screen.getByText('El SAT lo pide a más tardar el 5 de noviembre de 2999.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Descargar/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /^Emitir otra vez el complemento del cobro del/ }));
 
     await waitFor(() => expect(toast.info).toHaveBeenCalledWith('El PAC no respondió: TienditApp sigue pidiendo el timbre de P-2.'));
+    expect(sent).toEqual({ method: 'post', path: '/api/v1/invoicing/payments/{paymentId}/complements', params: { paymentId: 'pay-1' } });
   });
 
   it('says why a payment has no complement, without offering to issue it', () => {
     renderList([{
-      ...SECOND, canIssue: false, method: OrderPaymentMethod.Other,
+      ...SECOND, canIssue: false, awaitsAutomaticIssue: false, method: OrderPaymentMethod.Other,
       problem: 'Este cobro se registró como «Otro»: no tiene una forma de pago del SAT para su complemento.',
     }]);
 
     expect(screen.getByText('Este cobro se registró como «Otro»: no tiene una forma de pago del SAT para su complemento.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Emitir/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Emítelo a más tardar/)).not.toBeInTheDocument();
+    // The SAT's deadline still stands: whoever issues it elsewhere needs it.
+    expect(screen.getByText('El SAT lo pide a más tardar el 5 de noviembre de 2999.')).toBeInTheDocument();
+    expect(screen.queryByText(/TienditApp lo emite/)).not.toBeInTheDocument();
   });
 
-  it('warns when the day to issue it went by', () => {
-    renderList([{ ...SECOND, dueBy: '2020-02-05' }]);
+  it('warns when the day to issue it went by, but not on that very day', () => {
+    const { unmount } = renderList([{ ...SECOND, dueBy: '2020-02-05' }]);
+    expect(screen.getByText(/El plazo del SAT para su complemento venció el 5 de febrero de 2020\./)).toBeInTheDocument();
+    unmount();
 
-    expect(screen.getByText('Su complemento venció el 5 de febrero de 2020: emítelo cuanto antes.')).toBeInTheDocument();
+    renderList([{ ...SECOND, dueBy: getBusinessToday() }]);
+    expect(screen.getByText(/El SAT lo pide a más tardar el \d/)).toBeInTheDocument();
+    expect(screen.queryByText(/venció/)).not.toBeInTheDocument();
+  });
+
+  it('shows no deadline while its complement waits for the PAC', () => {
+    const stamping: Complement = { ...P1, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, hasXml: false, hasPdf: false };
+    renderList([{ ...FIRST, dueBy: '2020-02-05', complements: [stamping] }]);
+
+    expect(screen.getByText('Timbrando')).toBeInTheDocument();
+    expect(screen.queryByText(/El SAT lo pide a más tardar el \d|venció/)).not.toBeInTheDocument();
   });
 
   it('asks the PAC again for one that waits', async () => {
