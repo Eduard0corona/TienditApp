@@ -26,7 +26,8 @@ async function toBase64(file: File): Promise<string> {
 
 /**
  * Configuración › Facturación (Fase 28A, ADR 0045), for owners and admins: what the invoice of an order needs from the
- * business (its fiscal data in Mi negocio and its CSD, which the platform's PAC keeps) and the serie of its invoices.
+ * business (its fiscal data in Mi negocio and its CSD, which the platform's PAC keeps), the serie of its invoices and the
+ * one of its payment complements (Fase 28C, ADR 0047).
  */
 export default function Invoicing() {
   const settings = useInvoicingSettings();
@@ -61,7 +62,14 @@ export default function Invoicing() {
               <div className="card-body small">
                 <h2 className="h6">Cómo funciona</h2>
                 <ul className="mb-0 ps-3">
-                  <li>Facturas desde el detalle de un pedido pagado por completo, con los datos fiscales de tu cliente.</li>
+                  <li>
+                    Facturas desde el detalle de un pedido, con los datos fiscales de tu cliente: en una sola exhibición si está pagado
+                    por completo, o en parcialidades si se lo llevó fiado o ya se le entregó.
+                  </li>
+                  <li>
+                    Con una factura en parcialidades, TienditApp emite solo el complemento de pago de cada cobro, también de los que ya
+                    recibiste. El SAT lo pide a más tardar el día 5 del mes siguiente al cobro.
+                  </li>
                   <li>
                     TienditApp arma el CFDI 4.0 con los importes de la venta y un PAC autorizado por el SAT lo sella con tu CSD y
                     lo timbra. Descargas el XML (la factura) y el PDF.
@@ -71,7 +79,7 @@ export default function Invoicing() {
                     El dueño o un administrador cancela una factura con su motivo. Si el SAT pide que el cliente acepte, la factura
                     queda «Cancelándose» hasta su respuesta.
                   </li>
-                  <li>Todavía no: factura global de público en general, pagos en parcialidades ni notas de crédito.</li>
+                  <li>Las ventas a público en general van en la factura global (Reportes › Factura global). Todavía no: notas de crédito.</li>
                   <li>Tu llave privada y su contraseña las guarda el PAC; TienditApp solo guarda el número y la vigencia del CSD.</li>
                 </ul>
               </div>
@@ -235,13 +243,16 @@ function SerieCard({ data }: { data: InvoicingSettings }) {
   const toast = useToast();
   const change = useChangeInvoiceSerie();
   const [serie, setSerie] = useState(data.serie);
+  const [paymentSerie, setPaymentSerie] = useState(data.paymentSerie);
+  const unchanged = serie.trim().toUpperCase() === data.serie && paymentSerie.trim().toUpperCase() === data.paymentSerie;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      const updated = await change.mutateAsync(serie.trim());
+      const updated = await change.mutateAsync({ serie: serie.trim(), paymentSerie: paymentSerie.trim() });
       setSerie(updated.serie);
-      toast.success(`Tus próximas facturas llevan la serie ${updated.serie}.`);
+      setPaymentSerie(updated.paymentSerie);
+      toast.success(`Tus próximas facturas llevan la serie ${updated.serie}, y sus complementos de pago la ${updated.paymentSerie}.`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo cambiar la serie.'));
     }
@@ -250,20 +261,27 @@ function SerieCard({ data }: { data: InvoicingSettings }) {
   return (
     <div className="card mb-0">
       <div className="card-body">
-        <h2 className="h5">Serie</h2>
+        <h2 className="h5">Series</h2>
         <form className="row g-2 align-items-end" onSubmit={submit}>
           <div className="col-sm-4">
             <label className="form-label small mb-1" htmlFor="invoice-serie">Serie de las facturas</label>
             <input id="invoice-serie" className="form-control text-uppercase" maxLength={10} required
               value={serie} onChange={(event) => setSerie(event.target.value)} />
           </div>
-          <div className="col-sm-8">
-            <button type="submit" className="btn btn-outline-secondary" disabled={change.isPending || serie.trim().toUpperCase() === data.serie}>
-              Guardar serie
+          <div className="col-sm-4">
+            <label className="form-label small mb-1" htmlFor="payment-serie">Serie de los complementos de pago</label>
+            <input id="payment-serie" className="form-control text-uppercase" maxLength={10} required
+              value={paymentSerie} onChange={(event) => setPaymentSerie(event.target.value)} />
+          </div>
+          <div className="col-sm-4">
+            <button type="submit" className="btn btn-outline-secondary" disabled={change.isPending || unchanged}>
+              Guardar series
             </button>
           </div>
         </form>
-        <p className="small text-muted mb-0 mt-2">Cada serie lleva sus propios folios: F-1, F-2… Cambiarla no toca las facturas ya timbradas.</p>
+        <p className="small text-muted mb-0 mt-2">
+          Cada serie lleva sus propios folios: F-1, F-2… y P-1, P-2… Cambiarlas no toca lo ya timbrado.
+        </p>
       </div>
     </div>
   );

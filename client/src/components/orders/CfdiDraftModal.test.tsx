@@ -18,7 +18,7 @@ const KARLA = { rfc: 'XIQB891116QE4', name: 'KARLA FUENTE NOLASCO', postalCode: 
 
 const INVOICING: Invoicing = {
   available: true, sandbox: false, canInvoice: true, problem: null, proposedReceiver: KARLA,
-  customerId: 'c-1', customerName: 'Karla', invoices: [],
+  customerId: 'c-1', customerName: 'Karla', invoices: [], payments: [],
 };
 
 const STAMPED: Invoice = {
@@ -246,6 +246,23 @@ describe('CfdiDraftModal', () => {
     // Whoever manages the orders downloads it, but only owners and admins cancel it.
     expect(screen.getByRole('button', { name: 'Descargar XML de la factura F-1' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancelar factura F-1' })).not.toBeInTheDocument();
+  });
+
+  it('shows the payment complements of an invoice in installments under it', async () => {
+    serve({
+      ...INVOICING,
+      canInvoice: false,
+      problem: 'Este pedido ya tiene la factura F-1.',
+      invoices: [{ ...STAMPED, paymentForm: '99', paymentMethod: 'PPD' }],
+      payments: [{
+        orderPaymentId: 'pay-1', paidAt: '2026-10-04T17:00:00Z', method: 0, amount: 50, dueBy: '2999-11-05', canIssue: true,
+        problem: null, complements: [],
+      }],
+    });
+    renderModal();
+
+    expect(await screen.findByRole('heading', { name: 'Complementos de pago' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Emitir ahora el complemento del cobro del/ })).toBeInTheDocument();
   });
 
   it('lets owners and admins cancel a stamped invoice with its reason', async () => {

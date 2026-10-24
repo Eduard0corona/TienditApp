@@ -16,7 +16,7 @@ vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm }) }));
 type Settings = Schemas['InvoicingSettingsDto'];
 
 const READY_TO_UPLOAD: Settings = {
-  available: true, sandbox: false, serie: 'F', rfc: 'EKU9003173C9', legalName: 'ESCUELA KEMPER URGATE', fiscalRegime: '601',
+  available: true, sandbox: false, serie: 'F', paymentSerie: 'P', rfc: 'EKU9003173C9', legalName: 'ESCUELA KEMPER URGATE', fiscalRegime: '601',
   postalCode: '06000', missingData: [], certificate: undefined, ready: false,
 };
 
@@ -105,6 +105,28 @@ describe('Invoicing settings', () => {
 
     expect(toast.error).toHaveBeenCalled();
     expect(vi.mocked(apiRequest).mock.calls.filter(([method]) => method !== 'get')).toEqual([]);
+  });
+
+  it('changes the serie of the invoices and the one of the payment complements together', async () => {
+    let sent: unknown;
+    serve(WITH_CERTIFICATE, (method, path, body) => {
+      sent = { method, path, body };
+      return Promise.resolve({ ...WITH_CERTIFICATE, serie: 'A', paymentSerie: 'CP' });
+    });
+    renderPage();
+
+    const save = await screen.findByRole('button', { name: 'Guardar series' });
+    expect(save).toBeDisabled();
+    await userEvent.clear(screen.getByLabelText('Serie de los complementos de pago'));
+    await userEvent.type(screen.getByLabelText('Serie de los complementos de pago'), 'cp ');
+    await userEvent.clear(screen.getByLabelText('Serie de las facturas'));
+    await userEvent.type(screen.getByLabelText('Serie de las facturas'), 'A');
+    await userEvent.click(save);
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(
+      'Tus próximas facturas llevan la serie A, y sus complementos de pago la CP.'));
+    expect(sent).toEqual({ method: 'put', path: '/api/v1/invoicing/settings/serie', body: { serie: 'A', paymentSerie: 'cp' } });
+    expect(screen.getByLabelText('Serie de los complementos de pago')).toHaveValue('CP');
   });
 
   it('warns that the certificate expires soon', async () => {

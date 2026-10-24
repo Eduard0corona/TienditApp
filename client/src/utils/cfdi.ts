@@ -42,6 +42,12 @@ export const PAYMENT_FORMS: Record<string, string> = {
   '99': 'Por definir',
 };
 
+/** c_MetodoPago: a sale paid in full is invoiced in one exhibition; one still owed, in installments (Fase 28C). */
+export const PAYMENT_METHODS: Record<string, string> = {
+  PUE: 'Una sola exhibición',
+  PPD: 'En parcialidades',
+};
+
 const STATUS: Record<number, { label: string; chip: string }> = {
   [OrderInvoiceStatus.Stamping]: { label: 'Timbrando', chip: 'ta-chip-preparing' },
   [OrderInvoiceStatus.Stamped]: { label: 'Timbrada', chip: 'ta-chip-ready' },
@@ -58,10 +64,29 @@ export function invoiceStatusChip(status: OrderInvoiceStatus): string {
   return STATUS[status]?.chip ?? 'ta-chip-done';
 }
 
+// A payment complement goes through the same states as an invoice; «complemento» asks for them in masculine.
+const COMPLEMENT_STATUS_LABELS: Record<number, string> = {
+  [OrderInvoiceStatus.Stamping]: 'Timbrando',
+  [OrderInvoiceStatus.Stamped]: 'Timbrado',
+  [OrderInvoiceStatus.Refused]: 'Rechazado',
+  [OrderInvoiceStatus.Cancelling]: 'Cancelándose',
+  [OrderInvoiceStatus.Cancelled]: 'Cancelado',
+};
+
+export function complementStatusLabel(status: OrderInvoiceStatus): string {
+  return COMPLEMENT_STATUS_LABELS[status] ?? 'Desconocido';
+}
+
 /** The two reasons TienditApp cancels with (01 needs the invoice that replaces it; 04 is for the global invoice). */
 export const CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
   [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores y no se va a sustituir'],
   [CfdiCancellationMotive.NotCarriedOut, '03 · La venta no se llevó a cabo'],
+];
+
+/** The reasons a payment complement is cancelled with: 02 when it has errors, 03 when the payment did not happen. */
+export const COMPLEMENT_CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
+  [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores y no se va a sustituir'],
+  [CfdiCancellationMotive.NotCarriedOut, '03 · El cobro no se llevó a cabo'],
 ];
 
 /**
