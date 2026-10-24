@@ -70,7 +70,7 @@ Tomé las decisiones de la Fase 28D con la autorización permanente del dueño d
     - Tampoco se deshace mientras un complemento posterior a su nota (de una parcialidad mayor que la que tenía al pedirla) siga vigente: su saldo anterior ya la descuenta. Esos complementos se cancelan primero y se emiten otra vez sin ella.
 11. **Acceso:** ver, emitir, reintentar y descargar el XML y el PDF de una nota lo hace quien gestiona los pedidos (`ManageOrders`) y ve el pedido. Cancelar lo hacen dueños y administradores (`RequiresTenantManager`). La nota de otro negocio responde 404 (suite entre negocios).
 12. **Se ve en Pedidos › Factura:** debajo de los complementos, «Notas de crédito» lista cada reembolso («Reembolso del …», con su forma) y cada condonación («Condonación del …», con su motivo, «Deshecha» si se deshizo), con su monto y su nota.
-    - La nota muestra: folio, estado, «Por $X (base $Y e IVA $Z)», forma, folio fiscal y si la emitió TienditApp.
+    - La nota muestra: folio, estado, «Por $X (subtotal $Y e IVA $Z)», forma, folio fiscal y si la emitió TienditApp.
     - Sin nota viva: «Sin nota de crédito todavía: TienditApp la emite en unos minutos», o el motivo por el que no se emite. El motivo se calcula con las mismas reglas con que se rechazaría emitirla: forma, factura, Mi negocio y su CSD, RFC de la factura, condonación deshecha, lo que queda.
     - Las acciones: «Emitir ahora» o «Emitir otra vez», «Volver a pedir el timbre», «Cancelar nota de crédito» y las descargas.
     - Una nota de una factura que ya no es la timbrada dice de cuál fue.

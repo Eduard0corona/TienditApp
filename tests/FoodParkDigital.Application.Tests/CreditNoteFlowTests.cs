@@ -284,10 +284,15 @@ public class CreditNoteFlowTests
         Assert.True((await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.NotCarriedOut)).IsSuccess);
         Assert.Equal(ReverseCustomerWriteOffCommandHandler.ComplementsCountingItMessage(["P-2"]), (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
 
-        // Once P-2 is cancelled the write-off is undone, and the payment's complement is issued again without its credit note.
+        // Once P-2 is cancelled the write-off is undone, and the payment's complement is issued again without its credit note:
+        // from $150 (the sale less the down payment), not $100.
         Assert.True((await book.CancelComplementAsync(second.Id)).IsSuccess);
         var undone = await book.ReverseWriteOffAsync(writeOff.Id);
         Assert.True(undone.IsSuccess, undone.Error);
+        var again = await book.IssueComplementAsync(second.OrderPaymentId);
+        Assert.True(again.IsSuccess, again.Error);
+        Assert.Equal(("P-3", 2, 150m, 100m, 50m), (again.Value.Number, again.Value.Installment, again.Value.PreviousBalance,
+            again.Value.Amount, again.Value.RemainingBalance));
     }
 
     [Fact]
@@ -554,6 +559,10 @@ public class CreditNoteFlowTests
             Context.ChangeTracker.Clear();
         }
 
+        public Task<Result<PaymentComplementDto>> IssueComplementAsync(Guid orderPaymentId)
+            => new IssuePaymentComplementCommandHandler(this, Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
+                .Handle(new IssuePaymentComplementCommand(orderPaymentId), CancellationToken.None);
+
         public Task<Result<PaymentComplementDto>> CancelComplementAsync(Guid complementId)
             => new CancelPaymentComplementCommandHandler(Context, Fixture.CurrentUser, Gateway, Clock)
                 .Handle(new CancelPaymentComplementCommand(complementId, CfdiCancellationMotive.ErrorsWithoutReplacement), CancellationToken.None);
@@ -618,6 +627,9 @@ public class CreditNoteFlowTests
                 RequestOrderInvoiceCommand command => await new RequestOrderInvoiceCommandHandler(
                         Context, Fixture.TenantService, Fixture.CurrentUser, new InvoicingLock(Context), new FolioGenerator(Context),
                         new PhoneNormalizationService(), Clock)
+                    .Handle(command, cancellationToken),
+                RequestPaymentComplementCommand command => await new RequestPaymentComplementCommandHandler(
+                        Context, Fixture.TenantService, Fixture.CurrentUser, Gateway, new InvoicingLock(Context), new FolioGenerator(Context), Clock)
                     .Handle(command, cancellationToken),
                 RequestAutomaticPaymentComplementCommand command => await new RequestAutomaticPaymentComplementCommandHandler(
                         Context, Fixture.TenantService, Fixture.CurrentUser, Gateway, new InvoicingLock(Context), new FolioGenerator(Context), Clock)
