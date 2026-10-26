@@ -133,6 +133,51 @@ public sealed class CrossTenantInvoicingSqlServerTests
             .GetProperty("invoices")[0].GetProperty("emails");
         Assert.Equal(2, emails.GetArrayLength());
         Assert.All(emails.EnumerateArray(), e => Assert.True(e.GetProperty("sentAt").ValueKind == JsonValueKind.String));
+
+        // With 4 today, two people send it at once: the invoicing lock of the business counts them one after the other.
+        for (var i = 0; i < 2; i++)
+            await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+                $"/api/v1/invoicing/invoices/{invoiceId}/email", new { email = accounting, useForInvoice = false }));
+        var answers = await _api.QueryAsync(mine.TenantId, async db =>
+        {
+            await using var held = await db.Database.BeginTransactionAsync();
+            var resource = $"invoicing:{mine.TenantId:N}";
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"EXEC sp_getapplock @Resource = {resource}, @LockMode = 'Exclusive', @LockOwner = 'Transaction'");
+            var both = Enumerable.Range(0, 2)
+                .Select(_ => mine.Client.PostAsJsonAsync($"/api/v1/invoicing/invoices/{invoiceId}/email", new { email = accounting, useForInvoice = false }))
+                .ToList();
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await held.CommitAsync();
+            return await Task.WhenAll(both);
+        });
+        Assert.Single(answers, answer => answer.StatusCode == HttpStatusCode.OK);
+        var refused = Assert.Single(answers, answer => answer.StatusCode != HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(CfdiEmails.TooManyForCfdiMessage(invoice.GetProperty("number").GetString()!),
+            JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+        Assert.Equal(CfdiEmails.MaxPerCfdiPerDay,
+            await _api.QueryAsync(mine.TenantId, db => db.CfdiEmails.CountAsync(e => e.CfdiId == invoiceId)));
+
+        // A credit note of the invoice goes by its own route, which the other business does not reach either.
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/orders/{order}/refunds",
+            new { amount = 5m, method = 1, reason = "Faltó uno", restockItems = false }));
+        var refund = (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/orders/{order}")))
+            .GetProperty("adjustments")[0].GetProperty("adjustmentId").GetGuid();
+        var noteId = (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"/api/v1/invoicing/refunds/{refund}/credit-notes", null)))
+            .GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/credit-notes/{noteId}/email", new { email = other, useForInvoice = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
+            mine, HttpMethod.Post, $"/api/v1/invoicing/credit-notes/{noteId}/email", new { email = other, useForInvoice = false }))).StatusCode);
+        var noteEmail = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/credit-notes/{noteId}/email", new { email = accounting, useForInvoice = false }));
+        Assert.Equal(((int)CfdiEmailDocument.CreditNote, noteId, accounting), (
+            noteEmail.GetProperty("document").GetInt32(), noteEmail.GetProperty("cfdiId").GetGuid(), noteEmail.GetProperty("to").GetString()));
+        await _api.DispatchOutboxAsync();
+        Assert.Empty(_api.DocumentsTo(other));
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.CfdiEmails.ToListAsync()));
+        Assert.Contains(_api.DocumentsTo(accounting), d => d.Subject.StartsWith("Nota de crédito NC-1", StringComparison.Ordinal));
     }
 
     [SqlServerFact]

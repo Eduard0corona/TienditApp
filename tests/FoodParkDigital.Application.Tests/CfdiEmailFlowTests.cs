@@ -141,6 +141,22 @@ public class CfdiEmailFlowTests
         Assert.Equal(complement.Id, Assert.Single(Assert.Single(invoicing.Payments.SelectMany(p => p.Complements)).Emails).CfdiId);
         Assert.Equal(note.Id, Assert.Single(Assert.Single(invoicing.Adjustments.SelectMany(a => a.CreditNotes)).Emails).CfdiId);
         Assert.Equal(invoice.Id, Assert.Single(Assert.Single(invoicing.Invoices).Emails).CfdiId);
+
+        // Each one is sent again by hand as what it is, with its own file.
+        book.Clock.UtcNow = book.Clock.UtcNow.AddMinutes(1);
+        var again = new[]
+        {
+            (await book.SendAsync(CfdiEmailDocument.PaymentComplement, complement.Id, "contabilidad@ejemplo.mx")).Value,
+            (await book.SendAsync(CfdiEmailDocument.CreditNote, note.Id, "contabilidad@ejemplo.mx")).Value,
+        };
+        Assert.Equal(
+            [(CfdiEmailDocument.PaymentComplement, complement.Id), (CfdiEmailDocument.CreditNote, note.Id)],
+            again.Select(e => (e.Document, e.CfdiId)));
+        foreach (var email in again)
+            await book.DeliverAsync(email.Id);
+        Assert.Equal(
+            [$"P-1_{complement.Uuid}.xml", $"NC-1_{note.Uuid}.xml"],
+            book.Email.Documents.TakeLast(2).Select(d => d.Attachments[0].FileName));
     }
 
     [Fact]
