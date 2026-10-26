@@ -7,7 +7,8 @@ type PrepareData = NonNullable<SceneOptions['prepareData']>;
 // Invoicing (Fase 28A, ADR 0045): Configuración › Facturación (`data.invoicing`, the InvoicingSettingsDto), the invoice of
 // an order in Pedidos (`data.orderInvoicing`, the OrderInvoicingDto of each order by its id) and the fiscal data of a
 // customer in Clientes. The order is ORD-000343, the office of Grupo Altavista: delivered and paid by transfer, or (Fase
-// 28C, ADR 0047) invoiced in installments, with the payment complements of its payments.
+// 28C, ADR 0047) invoiced in installments, with the payment complements of its payments, or (Fase 28D, ADR 0048) with
+// what was given back and the credit notes of each refund.
 
 // OrderInvoiceStatus and CfdiCancellationMotive as the contract numbers them.
 const STAMPED = 1;
@@ -33,7 +34,7 @@ const CERTIFICATE = {
 
 /** The business's fiscal data in Mi negocio, its CSD and its serie: ready to invoice. */
 const READY = {
-  available: true, sandbox: false, serie: 'F', paymentSerie: 'P', rfc: 'CLU201005AB1', legalName: 'CAFE LUNA', fiscalRegime: '626',
+  available: true, sandbox: false, serie: 'F', paymentSerie: 'P', creditNoteSerie: 'NC', rfc: 'CLU201005AB1', legalName: 'CAFE LUNA', fiscalRegime: '626',
   postalCode: '06700', missingData: [] as string[], certificate: CERTIFICATE, ready: true,
 };
 
@@ -74,7 +75,7 @@ const orderInvoicing = (build: (data: DemoData) => Record<string, unknown>): Pre
   data.orderInvoicing = {
     [order.id]: {
       available: true, sandbox: false, canInvoice: true, problem: null, proposedReceiver: ALTAVISTA,
-      customerId: uuid('cust:altavista'), customerName: CUSTOMER_NAME, invoices: [], payments: [],
+      customerId: uuid('cust:altavista'), customerName: CUSTOMER_NAME, invoices: [], payments: [], adjustments: [],
       ...build(data),
     },
   };
@@ -193,6 +194,69 @@ export const PEDIDO_EN_PARCIALIDADES = asOption(((data) => {
         orderPaymentId: ids[3], paidAt: minutesFromNow(-25), method: CARD, amount: card, dueBy: '2026-11-05',
         canIssue: true, problem: null, awaitsAutomaticIssue: true, complements: [],
       },
+    ],
+  }))(data);
+}) as PrepareData);
+
+// CreditNoteAdjustment as the contract numbers it.
+const REFUND = 0;
+
+/** A credit note of F-3 (CFDI tipo E) for what a refund gave back, with its IVA; stamped by TienditApp unless the fields say otherwise. */
+function creditNote(folio: number, amount: number, fields: Record<string, unknown>) {
+  const subTotal = r2(amount / 1.16);
+  return {
+    id: uuid(`credit-note-${folio}`), orderInvoiceId: uuid('invoice-3'), number: `NC-${folio}`, status: STAMPED, paymentForm: '03',
+    subTotal, taxTotal: r2(amount - subTotal), total: amount, requestedAt: minutesFromNow(-34), issuedAutomatically: true,
+    uuid: null, stampedAt: null, hasXml: false, hasPdf: false, failureMessage: null, refusedAt: null,
+    cancellationRequestedAt: null, cancelledAt: null,
+    ...fields,
+  };
+}
+
+/** A refund of the order, as the invoicing of the order describes it. */
+function refund(name: string, at: string, method: number, amount: number, notes: string, fields: Record<string, unknown>) {
+  return {
+    kind: REFUND, adjustmentId: uuid(`refund-${name}`), at, amount, method, writeOffReason: null, notes, reversed: false,
+    canIssue: false, problem: null, awaitsAutomaticIssue: false, creditNotes: [],
+    ...fields,
+  };
+}
+
+/**
+ * Invoiced (F-3, PUE, by transfer) and then four refunds, each with what happened to its credit note:
+ * - two conchas that were missing, given back by transfer: NC-1, issued by TienditApp;
+ * - one recorded as «Otro», which has no form of the SAT for a credit note;
+ * - a double charge given back to the card: NC-2 refused by the PAC, to issue again;
+ * - a cold americano given back in cash a moment ago, still without one: TienditApp issues it soon, or «Emitir ahora».
+ * With NC-1 in force, F-3 says it is cancelled after it.
+ */
+export const PEDIDO_CON_NOTAS_DE_CREDITO = asOption(((data) => {
+  const order = data.orders.find((o: { orderNumber: string }) => o.orderNumber === ORDER_NUMBER);
+  const share = (part: number) => r2(order.total * part);
+  const [transfer, other, card, cash] = [share(0.12), share(0.05), share(0.04), share(0.06)];
+  orderInvoicing((d) => ({
+    canInvoice: false,
+    problem: 'Este pedido ya tiene la factura F-3: cancélala para facturarlo otra vez.',
+    invoices: [
+      invoice(d, 3, { uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-50), hasXml: true, hasPdf: true }),
+    ],
+    adjustments: [
+      refund('conchas', minutesFromNow(-40), TRANSFER, transfer, 'Faltaron dos conchas', {
+        creditNotes: [creditNote(1, transfer, {
+          uuid: '7A1C2E3F-4B5D-4C6E-8F9A-0B1C2D3E4F5A', stampedAt: minutesFromNow(-34), hasXml: true, hasPdf: true,
+        })],
+      }),
+      refund('vale', minutesFromNow(-30), OTHER, other, 'Se compensó con un vale', {
+        problem: 'Este reembolso se registró como «Otro», que no es una forma de pago del SAT: su nota de crédito no se emite desde TienditApp. Consúltalo con tu contador.',
+      }),
+      refund('tarjeta', minutesFromNow(-20), CARD, card, 'Se cobró dos veces con tarjeta', {
+        canIssue: true,
+        creditNotes: [creditNote(2, card, {
+          status: REFUSED, paymentForm: '04', requestedAt: minutesFromNow(-14), refusedAt: minutesFromNow(-14),
+          failureMessage: 'El PAC rechazó la nota de crédito: CFDI40102 - El certificado del emisor no estaba vigente en la fecha del comprobante.',
+        })],
+      }),
+      refund('americano', minutesFromNow(-4), CASH, cash, 'Un americano llegó frío', { canIssue: true, awaitsAutomaticIssue: true }),
     ],
   }))(data);
 }) as PrepareData);

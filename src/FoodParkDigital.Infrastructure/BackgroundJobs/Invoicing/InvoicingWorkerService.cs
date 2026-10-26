@@ -15,9 +15,9 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs.Invoicing;
 
 /// <summary>
 /// What invoicing leaves pending (Fase 28A, ADR 0045): every few minutes it asks the PAC again for the invoices that stayed
-/// «Timbrando» (<see cref="StampPendingInvoicesCommand"/>), and every half hour it asks the SAT about the cancellations that
-/// wait for the customer (<see cref="CheckInvoiceCancellationsCommand"/>), each in its business's scope. Without the PAC
-/// configured it does nothing.
+/// «Timbrando» (<see cref="StampPendingInvoicesCommand"/>), issues the payment complements (Fase 28C) and the credit notes
+/// (Fase 28D) the businesses owe, and every half hour it asks the SAT about the cancellations that wait for the customer
+/// (<see cref="CheckInvoiceCancellationsCommand"/>), each in its business's scope. Without the PAC configured it does nothing.
 /// </summary>
 public sealed class InvoicingWorkerService : BackgroundService
 {
@@ -37,6 +37,9 @@ public sealed class InvoicingWorkerService : BackgroundService
     /// themselves. It lives in memory: after a restart they go by their oldest payment again until a pass marks them.
     /// </summary>
     private readonly Dictionary<Guid, DateTimeOffset> _complementsWithoutProgress = [];
+
+    /// <summary>The same for the credit notes (Fase 28D): the businesses whose last pass stamped none go after the others.</summary>
+    private readonly Dictionary<Guid, DateTimeOffset> _creditNotesWithoutProgress = [];
 
     public InvoicingWorkerService(
         IServiceScopeFactory scopeFactory,
@@ -92,6 +95,7 @@ public sealed class InvoicingWorkerService : BackgroundService
             || now - _cancellationsCheckedAt >= TimeSpan.FromMinutes(Math.Max(1, _options.CancellationIntervalMinutes));
         List<Guid> stamping;
         List<Guid> complementing;
+        List<Guid> crediting;
         List<Guid> cancelling = [];
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
@@ -120,6 +124,12 @@ public sealed class InvoicingWorkerService : BackgroundService
                     .Where(c => c.Status == OrderInvoiceStatus.Stamping && c.RequestedAt <= settled && c.RequestedAt > oldest)
                     .GroupBy(c => c.TenantId)
                     .Select(g => new Waiting(g.Key, g.Min(c => c.RequestedAt)))
+                    .ToListAsync(cancellationToken),
+                await context.CreditNotes
+                    .IgnoreQueryFilters()
+                    .Where(n => n.Status == OrderInvoiceStatus.Stamping && n.RequestedAt <= settled && n.RequestedAt > oldest)
+                    .GroupBy(n => n.TenantId)
+                    .Select(g => new Waiting(g.Key, g.Min(n => n.RequestedAt)))
                     .ToListAsync(cancellationToken));
             // The payments of stamped invoices in installments that never had a complement (Fase 28C), each business's own
             // (the payment, its invoice and its complements are of the same business, joined by its order). Only of the
@@ -137,15 +147,33 @@ public sealed class InvoicingWorkerService : BackgroundService
                 .GroupBy(p => p.TenantId)
                 .Select(g => new Waiting(g.Key, g.Min(p => p.PaidAt)))
                 .ToListAsync(cancellationToken);
-            // The longest waiting goes first, except that the ones whose last pass stamped nothing go after the others.
-            foreach (var tenantId in _complementsWithoutProgress.Keys.Except(owing.Select(w => w.TenantId)).ToList())
-                _complementsWithoutProgress.Remove(tenantId);
-            complementing = owing
-                .OrderBy(w => _complementsWithoutProgress.ContainsKey(w.TenantId))
-                .ThenBy(w => _complementsWithoutProgress.TryGetValue(w.TenantId, out var tried) ? tried : w.Since)
-                .Select(w => w.TenantId)
-                .Take(max)
-                .ToList();
+            complementing = Fairly(owing, _complementsWithoutProgress, max);
+            // The refunds and write-offs of orders with a stamped invoice that never had a credit note for it (Fase 28D),
+            // each business's own, of the businesses whose CSD seals now, by the same turns.
+            var refunds = await CreditNotes.PendingRefunds(
+                    context.OrderRefunds.IgnoreQueryFilters(),
+                    context.Orders.IgnoreQueryFilters(),
+                    context.OrderInvoices.IgnoreQueryFilters(),
+                    context.CreditNotes.IgnoreQueryFilters())
+                .Where(r => sealing.Contains(r.TenantId))
+                .GroupBy(r => r.TenantId)
+                .Select(g => new Waiting(g.Key, g.Min(r => r.RefundedAt)))
+                .ToListAsync(cancellationToken);
+            var writeOffs = await CreditNotes.PendingWriteOffs(
+                    context.OrderWriteOffs.IgnoreQueryFilters(),
+                    context.OrderInvoices.IgnoreQueryFilters(),
+                    context.CreditNotes.IgnoreQueryFilters())
+                .Where(w => sealing.Contains(w.TenantId))
+                .GroupBy(w => w.TenantId)
+                .Select(g => new Waiting(g.Key, g.Min(w => w.WrittenOffAt)))
+                .ToListAsync(cancellationToken);
+            crediting = Fairly(
+                refunds.Concat(writeOffs)
+                    .GroupBy(w => w.TenantId)
+                    .Select(g => new Waiting(g.Key, g.Min(w => w.Since)))
+                    .ToList(),
+                _creditNotesWithoutProgress,
+                max);
             if (checkCancellations)
             {
                 cancelling = Businesses(
@@ -167,6 +195,12 @@ public sealed class InvoicingWorkerService : BackgroundService
                         .Where(c => c.Status == OrderInvoiceStatus.Cancelling)
                         .GroupBy(c => c.TenantId)
                         .Select(g => new Waiting(g.Key, g.Min(c => c.CancellationRequestedAt)))
+                        .ToListAsync(cancellationToken),
+                    await context.CreditNotes
+                        .IgnoreQueryFilters()
+                        .Where(n => n.Status == OrderInvoiceStatus.Cancelling)
+                        .GroupBy(n => n.TenantId)
+                        .Select(g => new Waiting(g.Key, g.Min(n => n.CancellationRequestedAt)))
                         .ToListAsync(cancellationToken));
                 _cancellationsCheckedAt = now;
             }
@@ -181,13 +215,36 @@ public sealed class InvoicingWorkerService : BackgroundService
             else
                 _complementsWithoutProgress[tenantId] = now;
         }
+        foreach (var tenantId in crediting)
+        {
+            if (await SendAsync(tenantId, new IssuePendingCreditNotesCommand(), "credit notes issued", cancellationToken) > 0)
+                _creditNotesWithoutProgress.Remove(tenantId);
+            else
+                _creditNotesWithoutProgress[tenantId] = now;
+        }
         foreach (var tenantId in cancelling)
             await SendAsync(tenantId, new CheckInvoiceCancellationsCommand(), "with their cancellation settled", cancellationToken);
 
-        return stamping.Union(complementing).Union(cancelling).Count();
+        return stamping.Union(complementing).Union(crediting).Union(cancelling).Count();
     }
 
     private sealed record Waiting(Guid TenantId, DateTimeOffset? Since);
+
+    /// <summary>
+    /// The businesses that owe CFDI, the longest waiting first, except that the ones whose last pass stamped nothing go after
+    /// the others, the least recently tried first. The ones that no longer owe any are forgotten.
+    /// </summary>
+    private static List<Guid> Fairly(List<Waiting> owing, Dictionary<Guid, DateTimeOffset> withoutProgress, int max)
+    {
+        foreach (var tenantId in withoutProgress.Keys.Except(owing.Select(w => w.TenantId)).ToList())
+            withoutProgress.Remove(tenantId);
+        return owing
+            .OrderBy(w => withoutProgress.ContainsKey(w.TenantId))
+            .ThenBy(w => withoutProgress.TryGetValue(w.TenantId, out var tried) ? tried : w.Since)
+            .Select(w => w.TenantId)
+            .Take(max)
+            .ToList();
+    }
 
     /// <summary>The businesses with work of any kind, the one that has waited longest first.</summary>
     private static List<Guid> Businesses(int max, params List<Waiting>[] kinds)

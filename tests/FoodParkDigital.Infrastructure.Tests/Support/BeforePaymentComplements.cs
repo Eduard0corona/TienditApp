@@ -21,6 +21,7 @@ internal static class BeforePaymentComplements
     {
         modelBuilder.Ignore<PaymentComplement>();
         modelBuilder.Entity<InvoicingProfile>().Ignore(p => p.PaymentSerie);
+        BeforeCreditNotes.Ignore(modelBuilder);
     }
 
     private sealed class Context(

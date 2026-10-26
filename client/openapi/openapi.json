@@ -7876,6 +7876,231 @@
         }
       }
     },
+    "/api/v1/invoicing/refunds/{refundId}/credit-notes": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "refundId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/write-offs/{writeOffId}/credit-notes": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "writeOffId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/retry": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "creditNoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/cancel": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "creditNoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderInvoiceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderInvoiceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/xml": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "creditNoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/pdf": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "creditNoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/invoicing/global-invoices": {
       "get": {
         "tags": [
@@ -18296,6 +18521,10 @@
           "paymentSerie": {
             "type": "string",
             "nullable": true
+          },
+          "creditNoteSerie": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -20389,6 +20618,111 @@
           "maxDaysBefore": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreditNoteAdjustment": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Refund",
+          "WriteOff"
+        ]
+      },
+      "CreditNoteDto": {
+        "required": [
+          "hasPdf",
+          "hasXml",
+          "id",
+          "issuedAutomatically",
+          "number",
+          "orderInvoiceId",
+          "paymentForm",
+          "requestedAt",
+          "status",
+          "subTotal",
+          "taxTotal",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderInvoiceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderInvoiceStatus"
+          },
+          "paymentForm": {
+            "type": "string"
+          },
+          "subTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "taxTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "issuedAutomatically": {
+            "type": "boolean"
+          },
+          "uuid": {
+            "type": "string",
+            "nullable": true
+          },
+          "stampedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "hasXml": {
+            "type": "boolean"
+          },
+          "hasPdf": {
+            "type": "boolean"
+          },
+          "failureMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "refusedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancellationMotive": {
+            "$ref": "#/components/schemas/CfdiCancellationMotive"
+          },
+          "cancellationRequestedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -24745,6 +25079,7 @@
       "InvoicingSettingsDto": {
         "required": [
           "available",
+          "creditNoteSerie",
           "missingData",
           "paymentSerie",
           "ready",
@@ -24763,6 +25098,9 @@
             "type": "string"
           },
           "paymentSerie": {
+            "type": "string"
+          },
+          "creditNoteSerie": {
             "type": "string"
           },
           "rfc": {
@@ -26493,6 +26831,66 @@
           "Staff"
         ]
       },
+      "OrderAdjustmentDto": {
+        "required": [
+          "adjustmentId",
+          "amount",
+          "at",
+          "awaitsAutomaticIssue",
+          "canIssue",
+          "creditNotes",
+          "kind",
+          "reversed"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/CreditNoteAdjustment"
+          },
+          "adjustmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OrderPaymentMethod"
+          },
+          "writeOffReason": {
+            "$ref": "#/components/schemas/OrderWriteOffReason"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "reversed": {
+            "type": "boolean"
+          },
+          "canIssue": {
+            "type": "boolean"
+          },
+          "problem": {
+            "type": "string",
+            "nullable": true
+          },
+          "awaitsAutomaticIssue": {
+            "type": "boolean"
+          },
+          "creditNotes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreditNoteDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "OrderChannel": {
         "enum": [
           0,
@@ -27028,6 +27426,7 @@
       },
       "OrderInvoicingDto": {
         "required": [
+          "adjustments",
           "available",
           "canInvoice",
           "invoices",
@@ -27071,6 +27470,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OrderPaymentComplementsDto"
+            }
+          },
+          "adjustments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderAdjustmentDto"
             }
           }
         },

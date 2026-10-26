@@ -1,4 +1,4 @@
-import { CfdiCancellationMotive, GlobalInvoicePeriodicity, OrderInvoiceStatus, type CustomerFiscalData } from '../types';
+import { CfdiCancellationMotive, CreditNoteAdjustment, GlobalInvoicePeriodicity, OrderInvoiceStatus, type CustomerFiscalData } from '../types';
 
 // c_RegimenFiscal and c_UsoCFDI entries a sale usually needs (the API accepts the whole catalog). 616, «Sin obligaciones
 // fiscales», is the general public's: those sales go in the global invoice.
@@ -35,6 +35,8 @@ export const PAYMENT_FORMS: Record<string, string> = {
   '03': 'Transferencia',
   '04': 'Tarjeta',
   '06': 'Dinero electrónico',
+  // What a write-off's credit note is settled by (Fase 28D).
+  '15': 'Condonación',
   // Paid with the balance in the customer's favor (Fase 26D): an advance applied.
   '30': 'Aplicación de anticipos',
   // Paid online or by a delivery platform: an intermediary of payments.
@@ -88,6 +90,19 @@ export const COMPLEMENT_CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, str
   [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores (después emites otro para el cobro)'],
   [CfdiCancellationMotive.NotCarriedOut, '03 · El cobro no se llevó a cabo'],
 ];
+
+/**
+ * The reasons a credit note is cancelled with: 02 when it has errors; a write-off's also 03, when it did not happen (before
+ * it is undone). A refund recorded in TienditApp is never undone, so its credit note takes only 02, as the API says.
+ */
+export function creditNoteCancellationMotives(kind: CreditNoteAdjustment): Array<[CfdiCancellationMotive, string]> {
+  if (kind === CreditNoteAdjustment.Refund)
+    return [[CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores (después emites otra para el reembolso)']];
+  return [
+    [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores (después emites otra para la condonación)'],
+    [CfdiCancellationMotive.NotCarriedOut, '03 · La condonación no se llevó a cabo'],
+  ];
+}
 
 /**
  * The reasons a global invoice is cancelled with: 04 when a customer asked for the invoice of a sale it holds (it is

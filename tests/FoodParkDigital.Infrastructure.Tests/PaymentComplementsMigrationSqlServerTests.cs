@@ -50,7 +50,7 @@ public class PaymentComplementsMigrationSqlServerTests
 
         foreach (var tenantId in new[] { seed.TenantId, seed.OtherTenantId })
         {
-            await using var context = database.CreateContext(tenantId);
+            await using var context = BeforeCreditNotes.CreateContext(database, tenantId);
             Assert.Equal("P", (await context.InvoicingProfiles.SingleAsync()).PaymentSerie);
         }
         await using var check = database.CreateContext(seed.TenantId);

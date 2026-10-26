@@ -98,6 +98,10 @@ public class OrderInvoicingDto
     /// Its payments with their complements, when it has an invoice in installments (Fase 28C); none otherwise.
     /// </summary>
     public List<OrderPaymentComplementsDto> Payments { get; set; } = [];
+    /// <summary>
+    /// Its refunds and write-offs with their credit notes, when it has had an invoice (Fase 28D); none otherwise.
+    /// </summary>
+    public List<OrderAdjustmentDto> Adjustments { get; set; } = [];
 }
 
 /// <summary>The invoicing of an order: whether it can be invoiced, whom to, and its invoices.</summary>
@@ -144,6 +148,7 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
 
         var last = invoices.FirstOrDefault();
         var payments = await PaymentComplements.ForOrderAsync(_context, order, invoices, settings, cancellationToken);
+        var adjustments = await CreditNotes.ForOrderAsync(_context, order, invoices, settings, cancellationToken);
         return new OrderInvoicingDto
         {
             Available = settings.Available,
@@ -156,7 +161,8 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
             CustomerId = customer?.Id,
             CustomerName = customer?.Name,
             Invoices = invoices.Select(OrderInvoiceDto.From).ToList(),
-            Payments = payments
+            Payments = payments,
+            Adjustments = adjustments
         };
     }
 }
@@ -432,6 +438,10 @@ public class CancelOrderInvoiceCommandHandler : IRequestHandler<CancelOrderInvoi
         $"Cancela primero los complementos de pago de esta factura ({string.Join(", ", complements)}): el SAT no cancela una " +
         "factura en parcialidades mientras sus pagos tengan complementos vigentes.";
 
+    public static string LiveCreditNotesMessage(IReadOnlyList<string> notes) =>
+        $"Cancela primero las notas de crédito de esta factura ({string.Join(", ", notes)}): el SAT no cancela una factura " +
+        "mientras tenga notas de crédito vigentes relacionadas.";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUser;
     private readonly IInvoicingGateway _gateway;
@@ -465,6 +475,9 @@ public class CancelOrderInvoiceCommandHandler : IRequestHandler<CancelOrderInvoi
         if (invoice.IsPaidInInstallments
             && await PaymentComplements.LiveNumbersAsync(_context, invoice.Id, cancellationToken) is { Count: > 0 } complements)
             return Result.Failure<OrderInvoiceDto>(LiveComplementsMessage(complements));
+        // Nor one related to credit notes in force (Fase 28D).
+        if (await CreditNotes.LiveNumbersAsync(_context, invoice.Id, cancellationToken) is { Count: > 0 } notes)
+            return Result.Failure<OrderInvoiceDto>(LiveCreditNotesMessage(notes));
         var profile = await _context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         if (profile is not { HasCertificate: true })
             return Result.Failure<OrderInvoiceDto>(NoCertificateToCancelMessage);
@@ -676,9 +689,10 @@ internal static class OrderInvoicing
         "La venta todavía puede cambiar (sigue pendiente o es una cuenta abierta): acéptala o ciérrala antes de facturarla en parcialidades.";
 
     /// <summary>
-    /// Why the order itself cannot be invoiced here (Fase 28A): a sale with nothing given back or forgiven, which would need
-    /// a credit note. One not paid in full is invoiced in installments (Fase 28C) only when the customer owes it: sold on
-    /// credit, or delivered or completed (its total no longer changes); a sale still to be charged is charged first.
+    /// Why the order itself cannot be invoiced here (Fase 28A). The invoice covers the whole sale: what was given back or
+    /// forgiven gets its own credit note (Fase 28D). One not paid in full is invoiced in installments (Fase 28C) only when the
+    /// customer owes it: sold on credit, or delivered or completed (its total no longer changes); a sale still to be charged
+    /// is charged first.
     /// </summary>
     public static async Task<string?> OrderProblemAsync(IApplicationDbContext context, Order order, CancellationToken cancellationToken)
     {
@@ -686,10 +700,6 @@ internal static class OrderInvoicing
             return "Una orden cancelada no se factura.";
         if (order.Total <= 0)
             return "Una venta sin importe no se factura.";
-        if (order.WrittenOffAmount > 0)
-            return "Se condonó parte de esta venta: lo condonado requiere una nota de crédito, que TienditApp todavía no genera.";
-        if (order.RefundedAmount > 0)
-            return "La venta tiene reembolsos: lo devuelto requiere una nota de crédito, que TienditApp todavía no genera.";
         var owed = order.Total - order.PaidAmount > 0 || order.Payments.Count == 0;
         if (owed && !order.IsOwedByCustomer)
             return NotPaidMessage;

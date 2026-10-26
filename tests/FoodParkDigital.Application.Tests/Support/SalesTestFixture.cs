@@ -242,6 +242,10 @@ internal sealed class SalesDbContext : ApplicationDbContext
             .Property(c => c.Version)
             .IsRequired(false)
             .ValueGeneratedNever();
+        modelBuilder.Entity<CreditNote>()
+            .Property(n => n.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
     }
 }
 
