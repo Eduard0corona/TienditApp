@@ -39,6 +39,7 @@ export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
       <p className="small text-danger mb-0 mt-1">
         <i className="ri-mail-close-line me-1" aria-hidden="true"></i>
         No se envió a {latest.to}: {latest.failure != null ? FAILURES[latest.failure] : 'no se pudo enviar.'}
+        {latest.byCustomer && ' Lo pidió el cliente en línea.'}
       </p>
     );
   }
@@ -47,6 +48,7 @@ export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
       <i className="ri-mail-send-line me-1" aria-hidden="true"></i>
       Enviándose por correo a {latest.to}…
       {latest.failedAttempts > 0 && ' El servidor de correo no lo ha tomado; TienditApp lo vuelve a intentar.'}
+      {latest.byCustomer && ' Lo pidió el cliente en línea.'}
     </p>
   );
 }

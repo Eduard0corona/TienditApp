@@ -1,4 +1,6 @@
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
@@ -77,7 +79,7 @@ public class SelfInvoicingFlowTests
 
         await book.SetSelfInvoicingAsync(true);
         var printed = (await book.TicketCodeAsync(sale.Id))!;
-        Assert.Equal(("/m/demo/facturar", "ORD-000001"), (printed.Path, printed.OrderNumber));
+        Assert.Equal(("/m/demo/facturar", "ORD-000001", new DateOnly(2026, 10, 31)), (printed.Path, printed.OrderNumber, printed.InvoiceBy));
         Assert.Matches("^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$", printed.Code);
 
         foreach (var (folio, code) in new[] { ("ORD-000001", printed.Code), ("ord-000001", printed.Code.ToLowerInvariant()), ("1", printed.Code.Replace("-", " ")) })
@@ -168,12 +170,19 @@ public class SelfInvoicingFlowTests
         var credit = await book.CreditSaleAsync(downPayment: 50m);
         await book.SetSelfInvoicingAsync(true);
         var paidCode = (await book.TicketCodeAsync(paid.Id))!.Code;
-        var creditCode = (await book.TicketCodeAsync(credit.Id))!.Code;
+        // What is owed does not print the code; typed anyway (the code is the order's), the page says why it is not online.
+        Assert.Null(await book.TicketCodeAsync(credit.Id));
+        var creditCode = await book.CodeOfAsync(credit.Id);
 
         var unpaid = (await book.LookUpAsync(credit.OrderNumber, creditCode)).Value!;
         Assert.Equal(SelfInvoiceTicketStatus.NotOnline, unpaid.Status);
         Assert.Contains("todavía no está pagada por completo", unpaid.Message);
         Assert.Contains("todavía no está pagada por completo", (await book.InvoiceAsync(credit.OrderNumber, creditCode)).Error);
+
+        // Written off, its balance is zero but it was not paid in full: neither printed nor invoiced online.
+        await book.WriteOffAsync(credit.Id, 150m);
+        Assert.Null(await book.TicketCodeAsync(credit.Id));
+        Assert.Contains("todavía no está pagada por completo", (await book.LookUpAsync(credit.OrderNumber, creditCode)).Value!.Message);
 
         // The month it was paid ends in the business's calendar: on November 1st it is asked of the business.
         book.Clock.UtcNow = new DateTimeOffset(2026, 11, 1, 5, 59, 0, TimeSpan.Zero);
@@ -202,6 +211,94 @@ public class SelfInvoicingFlowTests
     }
 
     [Fact]
+    public async Task OpenTab_ShouldBeInvoicedOnline_OnlyOnceClosed_SinceItCanStillTakeRounds()
+    {
+        await using var book = await Book.OpenAsync(food: true);
+        await book.SetSelfInvoicingAsync(true);
+        var tab = await book.OpenTabAsync();
+        // Paid round by round: its ticket does not print the code, and typed anyway the page says to wait.
+        await book.PayAsync(tab.Id, 100m);
+        Assert.Null(await book.TicketCodeAsync(tab.Id));
+        var code = await book.CodeOfAsync(tab.Id);
+        var open = (await book.LookUpAsync(tab.OrderNumber, code)).Value!;
+        Assert.Equal((SelfInvoiceTicketStatus.NotOnline, SelfInvoicing.StillChangingMessage), (open.Status, open.Message));
+        Assert.Equal(SelfInvoicing.StillChangingMessage, (await book.InvoiceAsync(tab.OrderNumber, code)).Error);
+        Assert.Empty(await book.Context.OrderInvoices.ToListAsync());
+
+        await book.CloseTabAsync(tab.Id);
+        Assert.Equal(code, (await book.TicketCodeAsync(tab.Id))!.Code);
+        Assert.Equal(SelfInvoiceOutcome.Stamped, (await book.InvoiceAsync(tab.OrderNumber, code)).Value!.Outcome);
+    }
+
+    [Fact]
+    public async Task RefundedSale_ShouldBeInvoicedByTheBusiness_NotOnline()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidSaleAsync();
+        await book.SetSelfInvoicingAsync(true);
+        var code = await book.CodeOfAsync(sale.Id);
+        await book.RefundAsync(sale.Id, 20m);
+
+        Assert.Null(await book.TicketCodeAsync(sale.Id));
+        var refunded = (await book.LookUpAsync(sale.OrderNumber, code)).Value!;
+        Assert.Equal((SelfInvoiceTicketStatus.NotOnline, SelfInvoicing.RefundedMessage), (refunded.Status, refunded.Message));
+        Assert.Equal(SelfInvoicing.RefundedMessage, (await book.InvoiceAsync(sale.OrderNumber, code)).Error);
+        Assert.Empty(await book.Context.OrderInvoices.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SecondRequest_ShouldBeToldWhatTheFirstMade()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidSaleAsync();
+        await book.SetSelfInvoicingAsync(true);
+        var code = (await book.TicketCodeAsync(sale.Id))!.Code;
+
+        // While the PAC does not answer, asking again says it is being invoiced (not to have it sent again).
+        book.Gateway.Unavailable = true;
+        Assert.Equal(SelfInvoiceOutcome.Stamping, (await book.InvoiceAsync(sale.OrderNumber, code)).Value!.Outcome);
+        Assert.Equal(SelfInvoicing.BeingInvoicedMessage, (await book.InvoiceAsync(sale.OrderNumber, code)).Error);
+
+        // One that passed the first look while another saved its invoice waits on the lock, then is told the same.
+        var other = await book.PaidSaleAsync();
+        var otherCode = (await book.TicketCodeAsync(other.Id))!.Code;
+        book.WhileWaitingForTheLock = async () =>
+            Assert.Equal(SelfInvoiceOutcome.Stamping, (await book.InvoiceAsync(other.OrderNumber, otherCode)).Value!.Outcome);
+        Assert.Equal(SelfInvoicing.BeingInvoicedMessage, (await book.InvoiceAsync(other.OrderNumber, otherCode)).Error);
+        Assert.Equal(2, await book.Context.OrderInvoices.CountAsync());
+    }
+
+    [Fact]
+    public async Task SuspendedBusiness_ShouldNotBeFound_NorItsTickets()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidSaleAsync();
+        await book.SetSelfInvoicingAsync(true);
+        var code = (await book.TicketCodeAsync(sale.Id))!.Code;
+
+        var tenant = await book.Context.Tenants.SingleAsync();
+        tenant.SetStatus(TenantStatus.Suspended);
+        await book.Context.SaveChangesAsync();
+        book.Context.ChangeTracker.Clear();
+
+        Assert.Null(await book.PageAsync());
+        Assert.Null((await book.LookUpAsync(sale.OrderNumber, code)).Value);
+        Assert.Null((await book.InvoiceAsync(sale.OrderNumber, code)).Value);
+        Assert.Empty(await book.Context.OrderInvoices.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("America/Mexico_City", 2026, 10, 31)]
+    [InlineData("America/Tijuana", 2026, 10, 31)]
+    [InlineData("America/Cancun", 2026, 11, 30)]
+    public void InvoiceBy_ShouldBeTheLastDayOfTheMonthItWasPaid_InTheBusinessCalendar(string timeZone, int year, int month, int day)
+    {
+        // 05:30 UTC on November 1st: still October 31 in Mexico City and Tijuana, already November 1st in Cancún.
+        var paidAt = new DateTimeOffset(2026, 11, 1, 5, 30, 0, TimeSpan.Zero);
+        Assert.Equal(new DateOnly(year, month, day), SelfInvoicing.InvoiceBy(paidAt, timeZone));
+    }
+
+    [Fact]
     public async Task Resend_ShouldNeedTheInvoicesRfc_AndKeepTheLimitsOfTheEmails()
     {
         await using var book = await Book.OpenAsync();
@@ -226,6 +323,22 @@ public class SelfInvoicingFlowTests
             Assert.True((await book.ResendAsync(code, Receiver.Rfc!, Karla)).IsSuccess);
         Assert.Equal(SelfInvoicing.TooManyForInvoiceMessage, (await book.ResendAsync(code, Receiver.Rfc!, Karla)).Error);
         Assert.Equal(CfdiEmails.MaxPerCfdiPerDay, await book.Context.CfdiEmails.CountAsync());
+    }
+
+    [Fact]
+    public async Task Resend_ShouldWork_WhileTheBusinessCannotStamp_ButNotOnceItTurnedSelfInvoicingOff()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidSaleAsync();
+        await book.SetSelfInvoicingAsync(true);
+        var code = (await book.TicketCodeAsync(sale.Id))!.Code;
+        await book.InvoiceAsync("ORD-000001", code);
+
+        await book.RemoveCertificateAsync();
+        Assert.Equal("otro@ejemplo.mx", (await book.ResendAsync(code, Receiver.Rfc!, "otro@ejemplo.mx")).Value!.Email);
+
+        await book.SetSelfInvoicingAsync(false);
+        Assert.Equal(SelfInvoicing.NotOfferedMessage, (await book.ResendAsync(code, Receiver.Rfc!, "otro@ejemplo.mx")).Error);
     }
 
     [Theory]
@@ -264,10 +377,12 @@ public class SelfInvoicingFlowTests
         public SalesDbContext Context => Fixture.Context;
         public SalesClock Clock => Fixture.Clock;
 
-        public static async Task<Book> OpenAsync(bool withCertificate = true)
+        public static async Task<Book> OpenAsync(bool withCertificate = true, bool food = false)
         {
             var fixture = SalesTestFixture.Create();
-            var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+            var tenant = food
+                ? await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true)
+                : await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
             await fixture.OpenCashSessionAsync(tenant);
             var customer = new Domain.Customers.Entities.Customer(tenant.Id, "Karla", "+525512345678", null);
             customer.SetCreditLimit(1_000m);
@@ -338,6 +453,59 @@ public class SelfInvoicingFlowTests
             return set;
         }
 
+        /// <summary>The order's code, as the business's key makes it, whether its ticket prints it or not.</summary>
+        public async Task<string> CodeOfAsync(Guid orderId)
+        {
+            var profile = await Context.InvoicingProfiles.AsNoTracking().SingleAsync();
+            return SelfInvoiceCode.Format(profile.SelfInvoiceCodeFor(orderId)!);
+        }
+
+        /// <summary>A tab of one café at the bar, still open.</summary>
+        public async Task<OrderDto> OpenTabAsync()
+        {
+            var tab = await Fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+            {
+                OpenTab = true,
+                CustomerName = "Barra",
+                Items = [new CreateOrderItemDto { ProductId = Product.Id, Quantity = 1 }]
+            }, CancellationToken.None);
+            Assert.True(tab.IsSuccess, tab.Error);
+            return tab.Value;
+        }
+
+        public async Task PayAsync(Guid orderId, decimal amount)
+        {
+            var paid = await Fixture.AddPaymentHandler().Handle(
+                new AddOrderPaymentCommand { OrderId = orderId, Amount = amount, Method = OrderPaymentMethod.Cash }, CancellationToken.None);
+            Assert.True(paid.IsSuccess, paid.Error);
+            Context.ChangeTracker.Clear();
+        }
+
+        public async Task CloseTabAsync(Guid orderId)
+        {
+            var closed = await new CloseTabCommandHandler(Context, Fixture.CurrentUser,
+                    new OrderInventoryService(Context, Clock, new FolioGenerator(Context), NullLogger<OrderInventoryService>.Instance))
+                .Handle(new CloseTabCommand(orderId), CancellationToken.None);
+            Assert.True(closed.IsSuccess, closed.Error);
+            Context.ChangeTracker.Clear();
+        }
+
+        public async Task RefundAsync(Guid orderId, decimal amount)
+        {
+            var order = await Context.Orders.Include(o => o.Payments).SingleAsync(o => o.Id == orderId);
+            order.RegisterRefund(amount, OrderPaymentMethod.Cash, "Faltó un café", Clock.UtcNow, "cajero", null, null, false, []);
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+        }
+
+        public async Task WriteOffAsync(Guid orderId, decimal amount)
+        {
+            var order = await Context.Orders.Include(o => o.Payments).Include(o => o.WriteOffs).SingleAsync(o => o.Id == orderId);
+            order.WriteOff(amount, OrderWriteOffReason.WontBeCollected, null, Clock.UtcNow, "dueña");
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+        }
+
         /// <summary>What the ticket of the order prints, asked by the business (its own business in context).</summary>
         public async Task<OrderSelfInvoiceDto?> TicketCodeAsync(Guid orderId)
         {
@@ -381,7 +549,7 @@ public class SelfInvoicingFlowTests
         public async Task<Result<SelfInvoiceResendDto?>> ResendAsync(string code, string rfc, string email)
         {
             Fixture.TenantService.SetTenant(Guid.Empty);
-            var resent = await new ResendSelfInvoiceCommandHandler(Context, Fixture.TenantService, Gateway, new InvoicingLock(Context), Clock)
+            var resent = await new ResendSelfInvoiceCommandHandler(Context, Fixture.TenantService, new InvoicingLock(Context), Clock)
                 .Handle(new ResendSelfInvoiceCommand("demo", "ORD-000001", code, rfc, email), CancellationToken.None);
             Context.ChangeTracker.Clear();
             return resent;
@@ -395,7 +563,7 @@ public class SelfInvoicingFlowTests
             object response = request switch
             {
                 RequestSelfInvoiceCommand command => await new RequestSelfInvoiceCommandHandler(
-                        Context, Fixture.TenantService, Gateway, new InvoicingLock(Context), new FolioGenerator(Context), Clock)
+                        Context, Fixture.TenantService, Gateway, new WaitingLock(this, new InvoicingLock(Context)), new FolioGenerator(Context), Clock)
                     .Handle(command, cancellationToken),
                 _ => throw new NotSupportedException(request.GetType().Name)
             };
@@ -404,6 +572,22 @@ public class SelfInvoicingFlowTests
 
         public Task Send<TRequest>(TRequest request, CancellationToken cancellationToken = default) where TRequest : IRequest
             => throw new NotSupportedException();
+
+        /// <summary>What another request does, once, while the next one waits for the invoicing lock.</summary>
+        public Func<Task>? WhileWaitingForTheLock { get; set; }
+
+        private sealed class WaitingLock(Book book, IInvoicingLock inner) : IInvoicingLock
+        {
+            public async Task AcquireAsync(Guid tenantId, CancellationToken cancellationToken)
+            {
+                if (book.WhileWaitingForTheLock is { } other)
+                {
+                    book.WhileWaitingForTheLock = null;
+                    await other();
+                }
+                await inner.AcquireAsync(tenantId, cancellationToken);
+            }
+        }
 
         public Task<object?> Send(object request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 

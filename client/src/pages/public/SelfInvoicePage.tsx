@@ -40,18 +40,29 @@ export default function SelfInvoicePage() {
     onMutate: () => setTicket(null),
   });
 
-  // A ticket read with its QR is looked up as soon as the page knows the business invoices online.
+  // A ticket read with its QR is looked up as soon as the page knows the business invoices online, once.
   const lookedUpFromQr = useRef(false);
+  const { mutate: lookUpTicket, reset: resetLookUp } = lookUp;
+  const { folio: qrFolio, code: qrCode } = fromQr;
   useEffect(() => {
-    if (page?.available && fromQr.folio && fromQr.code && !lookedUpFromQr.current) {
+    if (page?.available && qrFolio && qrCode && !lookedUpFromQr.current) {
       lookedUpFromQr.current = true;
-      lookUp.mutate(fromQr);
+      lookUpTicket({ folio: qrFolio, code: qrCode });
     }
-  }, [page?.available, fromQr, lookUp]);
+  }, [page?.available, qrFolio, qrCode, lookUpTicket]);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    lookUp.mutate({ folio: key.folio.trim(), code: key.code.trim() });
+    lookUpTicket({ folio: key.folio.trim(), code: key.code.trim() });
+  };
+
+  // Another folio or code is another ticket: the one shown goes away until it is looked up.
+  const type = (changed: TicketKey) => {
+    setKey(changed);
+    if (ticket || lookUp.error) {
+      setTicket(null);
+      resetLookUp();
+    }
   };
 
   return (
@@ -62,7 +73,7 @@ export default function SelfInvoicePage() {
       {pageQuery.isLoading && (
         <div className="text-center py-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Cargando</span></div></div>
       )}
-      {pageQuery.error && (
+      {pageQuery.error && !page && (
         <div className="alert alert-warning">
           {isAxiosError(pageQuery.error) && pageQuery.error.response?.status === 404
             ? 'No encontramos ese negocio: revisa la dirección impresa en tu ticket.'
@@ -79,7 +90,7 @@ export default function SelfInvoicePage() {
             <div className="card mb-0">
               <div className="card-body">
                 <h2 className="h6 mb-1">Tu ticket</h2>
-                <p className="text-muted small">Escribe el folio y el código impresos en tu ticket, o escanea su código QR.</p>
+                <p className="text-muted small">Escribe el folio y el código impresos en tu ticket, o abre esta página con su código QR.</p>
                 {page.sandbox && (
                   <div className="alert alert-warning small py-2">Modo de prueba: las facturas de esta página no tienen validez fiscal.</div>
                 )}
@@ -87,12 +98,12 @@ export default function SelfInvoicePage() {
                   <div className="mb-2">
                     <label className="form-label small mb-1" htmlFor="si-folio">Folio</label>
                     <input id="si-folio" className="form-control text-uppercase" placeholder="ORD-000123" maxLength={40} required
-                      autoComplete="off" value={key.folio} onChange={(e) => setKey({ ...key, folio: e.target.value })} />
+                      autoComplete="off" value={key.folio} onChange={(e) => type({ ...key, folio: e.target.value })} />
                   </div>
                   <div className="mb-3">
                     <label className="form-label small mb-1" htmlFor="si-code">Código</label>
                     <input id="si-code" className="form-control text-uppercase" placeholder="ABCDE-12345" maxLength={40} required
-                      autoComplete="off" value={key.code} onChange={(e) => setKey({ ...key, code: e.target.value })} />
+                      autoComplete="off" value={key.code} onChange={(e) => type({ ...key, code: e.target.value })} />
                   </div>
                   {lookUp.error && (
                     <div className="alert alert-warning small py-2" role="alert">
@@ -118,13 +129,23 @@ export default function SelfInvoicePage() {
   );
 }
 
+/** Takes the focus when it appears (and scrolls to it, below the form on a phone): what was asked for is there. */
+function useFocusOnMount<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+  return ref;
+}
+
 function TicketCard({ slug, ticketKey, ticket }: { slug: string; ticketKey: TicketKey; ticket: SelfInvoiceTicket }) {
+  const heading = useFocusOnMount<HTMLHeadingElement>();
   return (
     <div className="card mb-0">
       <div className="card-body">
         <div className="d-flex justify-content-between align-items-start gap-2 mb-3">
           <div>
-            <h2 className="h6 mb-0">Ticket {ticket.orderNumber}</h2>
+            <h2 className="h6 mb-0" tabIndex={-1} ref={heading}>Ticket {ticket.orderNumber}</h2>
             <div className="text-muted small">{formatDate(ticket.date)}</div>
           </div>
           <div className="fw-semibold">{formatMoney(ticket.total)}</div>
@@ -138,7 +159,7 @@ function TicketCard({ slug, ticketKey, ticket }: { slug: string; ticketKey: Tick
         )}
         {ticket.status === SelfInvoiceTicketStatus.Stamping && (
           <div className="alert alert-info mb-0">
-            La factura {ticket.invoiceNumber} de este ticket se está timbrando: llegará al correo que escribiste.
+            La factura {ticket.invoiceNumber} de este ticket se está timbrando. Vuelve a buscar tu ticket en unos minutos.
           </div>
         )}
         {ticket.status === SelfInvoiceTicketStatus.NotOnline && (
@@ -197,13 +218,24 @@ function InvoiceForm({ slug, ticketKey, invoiceBy }: { slug: string; ticketKey: 
 }
 
 function InvoiceResult({ result }: { result: SelfInvoiceResult }) {
+  const shown = useFocusOnMount<HTMLDivElement>();
   return result.outcome === SelfInvoiceOutcome.Stamped ? (
-    <div className="alert alert-success mb-0" role="status">
+    <div className="alert alert-success mb-0" role="status" tabIndex={-1} ref={shown}>
       <strong>Listo: tu factura {result.invoiceNumber} está timbrada.</strong> Te llegará a {result.email} con el XML y el PDF.
     </div>
   ) : (
-    <div className="alert alert-info mb-0" role="status">
-      Tu factura {result.invoiceNumber} se está timbrando: te llegará a {result.email} en cuanto quede.
+    <div className="alert alert-info mb-0" role="status" tabIndex={-1} ref={shown}>
+      Tu factura {result.invoiceNumber} se está timbrando: te llegará a {result.email} en cuanto quede. Si no te llega en unos
+      minutos, vuelve a buscar tu ticket.
+    </div>
+  );
+}
+
+function ResendResult({ resent }: { resent: { invoiceNumber: string; email: string } }) {
+  const shown = useFocusOnMount<HTMLDivElement>();
+  return (
+    <div className="alert alert-success mb-0" role="status" tabIndex={-1} ref={shown}>
+      Enviamos la factura {resent.invoiceNumber} a {resent.email}.
     </div>
   );
 }
@@ -214,13 +246,7 @@ function ResendForm({ slug, ticketKey, invoiceNumber }: { slug: string; ticketKe
   const resend = useMutation({ mutationFn: () => selfInvoiceApi.resend(slug, ticketKey, rfc.trim(), email.trim()) });
   const emailInvalid = email.trim().length > 0 && !isPlainEmail(email.trim());
 
-  if (resend.data) {
-    return (
-      <div className="alert alert-success mb-0" role="status">
-        Enviamos la factura {resend.data.invoiceNumber} a {resend.data.email}.
-      </div>
-    );
-  }
+  if (resend.data) return <ResendResult resent={resend.data} />;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -230,8 +256,8 @@ function ResendForm({ slug, ticketKey, invoiceNumber }: { slug: string; ticketKe
   return (
     <form onSubmit={submit} noValidate>
       <p className="small mb-3">
-        Este ticket ya tiene la factura {invoiceNumber}. Si no te llegó, escribe el RFC de la factura y el correo al que la
-        enviamos.
+        Este ticket ya tiene la factura {invoiceNumber}. Si no te llegó, escribe el RFC de la factura y el correo al que quieres
+        que la enviemos.
       </p>
       <div className="row g-2 mb-3">
         <div className="col-md-5">

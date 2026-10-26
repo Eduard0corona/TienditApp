@@ -28515,6 +28515,7 @@
       "OrderSelfInvoiceDto": {
         "required": [
           "code",
+          "invoiceBy",
           "orderNumber",
           "path"
         ],
@@ -28528,6 +28529,10 @@
           },
           "code": {
             "type": "string"
+          },
+          "invoiceBy": {
+            "type": "string",
+            "format": "date"
           }
         },
         "additionalProperties": false

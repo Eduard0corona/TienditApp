@@ -17437,6 +17437,8 @@ export interface components {
             path: string;
             orderNumber: string;
             code: string;
+            /** Format: date */
+            invoiceBy: string;
         };
         /**
          * Format: int32

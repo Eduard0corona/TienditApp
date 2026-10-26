@@ -10,7 +10,8 @@ export function phase28fRoutes(data, { ok }) {
     ['GET', /^\/invoicing\/orders\/([^/]+)\/self-invoice$/, (match) => {
       const order = data.orders.find((o) => o.id === match[1]);
       if (!data.selfInvoicing || !order) return { status: 204, json: null };
-      return ok({ path: `/m/${data.tenant.slug}/facturar`, orderNumber: order.orderNumber, code: CODE });
+      // Sold the scenes' day (October 4): it can be invoiced online until the end of the month.
+      return ok({ path: `/m/${data.tenant.slug}/facturar`, orderNumber: order.orderNumber, code: CODE, invoiceBy: '2026-10-31' });
     }],
   ];
 }

@@ -347,7 +347,7 @@ public class RequestSelfInvoiceCommandHandler : IRequestHandler<RequestSelfInvoi
         var live = await SelfInvoicing.LiveInvoiceAsync(_context, order.Id, cancellationToken);
         var orderProblem = live is null
             ? await SelfInvoicing.OrderProblemAsync(_context, order, cancellationToken)
-            : live.Status == OrderInvoiceStatus.Cancelling ? SelfInvoicing.CancellingMessage(live.Number) : SelfInvoicing.AlreadyInvoicedMessage(live.Number);
+            : SelfInvoicing.LiveInvoiceMessage(live);
         if (orderProblem is not null)
             return Result.Failure<Guid?>(orderProblem);
         try
@@ -369,10 +369,14 @@ public class RequestSelfInvoiceCommandHandler : IRequestHandler<RequestSelfInvoi
             cancellationToken);
         if (requested.IsSuccess)
             return Result.Success<Guid?>(requested.Value.Id);
+        if (saleProblem is not null)
+            return Result.Failure<Guid?>(saleProblem);
+        // Another request for the ticket got there first (it waited on the lock, or lost the race): what it made is told.
+        var won = await SelfInvoicing.LiveInvoiceAsync(_context, order.Id, cancellationToken);
+        if (won is not null || requested.Error == OrderInvoicing.AlreadyInvoicingMessage)
+            return Result.Failure<Guid?>(won is null ? SelfInvoicing.BeingInvoicedMessage : SelfInvoicing.LiveInvoiceMessage(won));
         // The rest of what Pedidos checks speaks to the business: the customer is told to ask it.
-        return Result.Failure<Guid?>(
-            saleProblem
-            ?? (requested.Error == OrderInvoicing.AlreadyInvoicingMessage ? SelfInvoicing.BeingInvoicedMessage : SelfInvoicing.AskTheBusinessMessage));
+        return Result.Failure<Guid?>(SelfInvoicing.AskTheBusinessMessage);
     }
 }
 
@@ -403,20 +407,17 @@ public class ResendSelfInvoiceCommandHandler : IRequestHandler<ResendSelfInvoice
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IInvoicingGateway _gateway;
     private readonly IInvoicingLock _lock;
     private readonly IDateTimeProvider _clock;
 
     public ResendSelfInvoiceCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
-        IInvoicingGateway gateway,
         IInvoicingLock invoicingLock,
         IDateTimeProvider clock)
     {
         _context = context;
         _tenantService = tenantService;
-        _gateway = gateway;
         _lock = invoicingLock;
         _clock = clock;
     }
@@ -427,8 +428,9 @@ public class ResendSelfInvoiceCommandHandler : IRequestHandler<ResendSelfInvoice
         if (business is null)
             return Result.Success<SelfInvoiceResendDto?>(null);
         var now = _clock.UtcNow;
-        if (await SelfInvoicing.ProblemAsync(_context, business, _gateway, now, cancellationToken) is { } problem)
-            return Result.Failure<SelfInvoiceResendDto?>(problem);
+        // An invoice already stamped is sent again while the business offers self-invoicing, even if it cannot stamp now.
+        if (business.Profile is not { SelfInvoicing: true })
+            return Result.Failure<SelfInvoiceResendDto?>(SelfInvoicing.NotOfferedMessage);
         var order = await SelfInvoicing.FindOrderAsync(_context, business, request.Folio, request.Code, cancellationToken);
         if (order is null)
             return Result.Success<SelfInvoiceResendDto?>(null);
@@ -470,11 +472,13 @@ public class OrderSelfInvoiceDto
     public string OrderNumber { get; set; } = null!;
     /// <summary>As the ticket shows it, «ABCDE-12345».</summary>
     public string Code { get; set; } = null!;
+    /// <summary>The last day it can be invoiced online: the last of the month it was paid in full, in the business's calendar.</summary>
+    public DateOnly InvoiceBy { get; set; }
 }
 
 /// <summary>
 /// The folio and code the ticket of an order prints (whoever manages the orders); null while self-invoicing is off, or for a
-/// sale that is not invoiced online (cancelled, without amount, or of a delivery app).
+/// sale that is not invoiced online (cancelled, without amount, not paid in full, still changing, refunded, or of a delivery app).
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 public record GetOrderSelfInvoiceQuery(Guid OrderId) : IRequest<OrderSelfInvoiceDto?>;
@@ -495,17 +499,21 @@ public class GetOrderSelfInvoiceQueryHandler : IRequestHandler<GetOrderSelfInvoi
         var order = await OrderInvoicing.LoadOrderAsync(_context, request.OrderId, cancellationToken);
         var profile = await _context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         var code = profile?.SelfInvoiceCodeFor(order.Id);
-        if (code is null || order.Status == OrderStatus.Cancelled || order.Total <= 0 || order.IsDeliveryPlatformOrder)
+        // What the page refuses is not printed: a sale with a balance or written off in part (not paid in full) included.
+        if (code is null || order.Status == OrderStatus.Cancelled || order.Total <= 0 || order.IsDeliveryPlatformOrder
+            || order.Total - order.PaidAmount > 0 || SelfInvoicing.StillChangingOrRefunded(order) is not null
+            || SelfInvoicing.PaidAt(order) is not { } paidAt)
             return null;
-        var slug = await _context.Tenants.AsNoTracking()
+        var business = await _context.Tenants.AsNoTracking()
             .Where(t => t.Id == _tenant.TenantId)
-            .Select(t => t.Slug)
+            .Select(t => new { t.Slug, t.Settings!.TimeZone })
             .FirstAsync(cancellationToken);
         return new OrderSelfInvoiceDto
         {
-            Path = SelfInvoicing.PagePath(slug),
+            Path = SelfInvoicing.PagePath(business.Slug),
             OrderNumber = order.OrderNumber,
-            Code = SelfInvoiceCode.Format(code)
+            Code = SelfInvoiceCode.Format(code),
+            InvoiceBy = SelfInvoicing.InvoiceBy(paidAt, business.TimeZone)
         };
     }
 }
@@ -534,6 +542,9 @@ internal static class SelfInvoicing
     public const string BeingInvoicedMessage =
         "Este ticket se está facturando en este momento: revisa tu correo en unos minutos.";
     public const string EmailRequiredMessage = "Escribe el correo al que te llegará la factura.";
+    public const string StillChangingMessage =
+        "Esta compra todavía puede cambiar: factúrala cuando el negocio cierre la cuenta.";
+    public const string RefundedMessage = "Esta compra tiene un reembolso: pídele tu factura al negocio.";
     public const string NoInvoiceToResendMessage = "Este ticket todavía no tiene una factura timbrada que reenviar.";
     public const string OtherRfcMessage = "Ese RFC no es el de la factura de este ticket.";
     public const string TooManyForInvoiceMessage =
@@ -546,6 +557,14 @@ internal static class SelfInvoicing
 
     public static string CancellingMessage(string number) =>
         $"La factura {number} de este ticket se está cancelando: pídele tu factura al negocio.";
+
+    /// <summary>What the customer is told of the ticket's live invoice: stamping, stamped (to have it sent again) or cancelling.</summary>
+    public static string LiveInvoiceMessage(OrderInvoice live) => live.Status switch
+    {
+        OrderInvoiceStatus.Stamping => BeingInvoicedMessage,
+        OrderInvoiceStatus.Cancelling => CancellingMessage(live.Number),
+        _ => AlreadyInvoicedMessage(live.Number)
+    };
 
     public static string PagePath(string slug) => $"/m/{slug}/facturar";
 
@@ -584,19 +603,20 @@ internal static class SelfInvoicing
         IApplicationDbContext context, SelfInvoiceBusiness business, string folio, string code, CancellationToken cancellationToken)
     {
         var orderNumber = NormalizeFolio(folio);
-        var order = orderNumber is null
-            ? null
+        // As much work for a folio that is not there as for a code that is not its own: one read and one code each.
+        var orderId = orderNumber is null
+            ? Guid.Empty
             : await context.Orders.AsNoTracking()
-                .Include(o => o.Payments)
-                .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber, cancellationToken);
-        if (order is null || !business.Profile!.TakesSelfInvoiceCode(order.Id, code))
-        {
-            // As much work for a folio that is not there as for a code that is not its own.
-            if (order is null)
-                business.Profile!.TakesSelfInvoiceCode(Guid.Empty, code);
+                .Where(o => o.OrderNumber == orderNumber)
+                .Select(o => o.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        if (!business.Profile!.TakesSelfInvoiceCode(orderId, code) || orderId == Guid.Empty)
             return null;
-        }
-        return await OrderInvoicing.SeesOrderAsync(context, order.Id, cancellationToken) ? order : null;
+        if (!await OrderInvoicing.SeesOrderAsync(context, orderId, cancellationToken))
+            return null;
+        return await context.Orders.AsNoTracking()
+            .Include(o => o.Payments)
+            .FirstAsync(o => o.Id == orderId, cancellationToken);
     }
 
     /// <summary>
@@ -630,6 +650,8 @@ internal static class SelfInvoicing
             return "Esta compra no tiene importe que facturar.";
         if (order.Total - order.PaidAmount > 0 || order.Payments.Count == 0)
             return "Esta compra todavía no está pagada por completo: pídele tu factura al negocio.";
+        if (StillChangingOrRefunded(order) is { } changing)
+            return changing;
         if (await OrderInvoicing.GlobalInvoiceProblemAsync(context, order.Id, cancellationToken) is not null)
             return "Esta compra ya está en la factura global del negocio: pídele tu factura directamente.";
         return await OrderInvoicing.OrderProblemAsync(context, order, cancellationToken) is null ? null : AskTheBusinessMessage;
@@ -645,6 +667,8 @@ internal static class SelfInvoicing
             return "Los pedidos de apps de entrega no se facturan en línea: pídele tu factura al negocio.";
         if (draft.PaymentMethod != CfdiInvoice.PaidInOneExhibition)
             return "Esta compra todavía no está pagada por completo: pídele tu factura al negocio.";
+        if (StillChangingOrRefunded(order) is { } changing)
+            return changing;
         if (!draft.IsReadyToStamp || PaidAt(order) is not { } paidAt)
             return AskTheBusinessMessage;
         var invoiceBy = InvoiceBy(paidAt, timeZone);
@@ -652,6 +676,15 @@ internal static class SelfInvoicing
             ? $"Esta compra se podía facturar en línea hasta el {SpanishCalendar.LongDate(invoiceBy, withYear: true)}: pídele tu factura al negocio."
             : null;
     }
+
+    /// <summary>
+    /// A sale whose total can still change (a tab still open, an order still pending) is invoiced when it closes: an invoice
+    /// now would not match it, and the global leaves it out. One with a refund is invoiced by the business, which sees it.
+    /// </summary>
+    public static string? StillChangingOrRefunded(Order order)
+        => Order.TotalCanChange(order.Status, order.IsTab) ? StillChangingMessage
+            : order.RefundedAmount > 0 ? RefundedMessage
+            : null;
 
     /// <summary>When the sale was paid in full: its last payment.</summary>
     public static DateTimeOffset? PaidAt(Order order) => order.Payments.Count == 0 ? null : order.Payments.Max(p => p.PaidAt);

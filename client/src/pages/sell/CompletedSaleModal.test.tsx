@@ -83,25 +83,34 @@ function renderModal(sale: CompletedSale, canCharge = true) {
 describe('CompletedSaleModal', () => {
   beforeEach(() => {
     vi.mocked(useToast).mockReturnValue({ success: vi.fn(), error: vi.fn() } as unknown as ReturnType<typeof useToast>);
-    vi.mocked(useOrderSelfInvoice).mockReturnValue({ data: null } as ReturnType<typeof useOrderSelfInvoice>);
+    vi.mocked(useOrderSelfInvoice).mockReturnValue({ selfInvoice: null, preparing: false });
   });
 
   it('prints «Factura en línea» while the business has self-invoicing on, never on a sale recorded without connection', () => {
     vi.mocked(useOrderSelfInvoice).mockReturnValue({
-      data: { path: '/m/cocina-lupita/facturar', orderNumber: 'ORD-000123', code: 'ABCDE-12345' },
-    } as ReturnType<typeof useOrderSelfInvoice>);
+      selfInvoice: { path: '/m/cocina-lupita/facturar', orderNumber: 'ORD-000123', code: 'ABCDE-12345', invoiceBy: '2026-10-31' },
+      preparing: false,
+    });
     const { unmount } = renderModal({ order: counterSale });
 
     const ticket = screen.getByLabelText('Ticket ORD-000123');
     expect(within(ticket).getByText('Factura en línea')).toBeInTheDocument();
     expect(within(ticket).getByText('ABCDE-12345')).toBeInTheDocument();
     expect(within(ticket).getByText(/\/m\/cocina-lupita\/facturar$/)).toBeInTheDocument();
-    expect(vi.mocked(useOrderSelfInvoice)).toHaveBeenLastCalledWith('o1', true);
+    expect(within(ticket).getByText('Hasta el 31 de octubre de 2026')).toBeInTheDocument();
+    expect(vi.mocked(useOrderSelfInvoice)).toHaveBeenLastCalledWith(counterSale, true);
     unmount();
 
     renderModal({ order: counterSale, offline: true });
-    expect(vi.mocked(useOrderSelfInvoice)).toHaveBeenLastCalledWith('o1', false);
+    expect(vi.mocked(useOrderSelfInvoice)).toHaveBeenLastCalledWith(counterSale, false);
     expect(screen.queryByText('Factura en línea')).not.toBeInTheDocument();
+  });
+
+  it('waits for «Factura en línea» before printing, so the paper does not go without it', () => {
+    vi.mocked(useOrderSelfInvoice).mockReturnValue({ selfInvoice: null, preparing: true });
+    renderModal({ order: counterSale });
+
+    expect(screen.getByRole('button', { name: 'Preparando el ticket…' })).toBeDisabled();
   });
 
   it('ends a counter sale as always: charged, printed or sent by WhatsApp', () => {

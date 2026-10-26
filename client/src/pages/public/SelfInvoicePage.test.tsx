@@ -78,6 +78,8 @@ describe('SelfInvoicePage', () => {
     expect(request).toHaveBeenCalledWith('post', '/api/v1/public/self-invoice/{slug}/ticket', {
       path: { slug: 'cafe-luna' }, body: { folio: 'ORD-000012', code: 'ABCDE-12345' },
     });
+    // The ticket takes the focus (below the form on a phone), and the QR is looked up once whatever renders after.
+    expect(screen.getByRole('heading', { name: 'Ticket ORD-000012' })).toHaveFocus();
     expect(screen.getByLabelText('Folio')).toHaveValue('ORD-000012');
     expect(screen.getByText(/Puedes facturar esta compra hasta el 31 de octubre de 2026/)).toBeInTheDocument();
 
@@ -88,6 +90,8 @@ describe('SelfInvoicePage', () => {
 
     expect(await screen.findByText('Listo: tu factura F-7 está timbrada.')).toBeInTheDocument();
     expect(screen.getByText(/Te llegará a karla@ejemplo.mx con el XML y el PDF/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveFocus();
+    expect(request.mock.calls.filter((call) => String(call[1]).endsWith('/ticket'))).toHaveLength(1);
     expect(request).toHaveBeenCalledWith('post', '/api/v1/public/self-invoice/{slug}/invoice', {
       path: { slug: 'cafe-luna' },
       body: {
@@ -110,6 +114,50 @@ describe('SelfInvoicePage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'El SAT no aceptó la factura F-7: El nombre no coincide con el RFC. Corrige tus datos y vuelve a intentarlo.');
     expect(screen.getByRole('button', { name: 'Facturar' })).toBeEnabled();
+  });
+
+  it('tells a ticket whose invoice is stamping to look it up again in a few minutes', async () => {
+    api({ ticket: ticket({ status: SelfInvoiceTicketStatus.Stamping, invoiceNumber: 'F-7', invoiceBy: null }) });
+    renderPage('/m/cafe-luna/facturar#ORD-000012.ABCDE-12345');
+
+    expect(await screen.findByText(/La factura F-7 de este ticket se está timbrando\. Vuelve a buscar tu ticket/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Facturar' })).not.toBeInTheDocument();
+  });
+
+  it('says the invoice follows by email while the PAC does not answer', async () => {
+    api({
+      ticket: ticket(),
+      invoice: { outcome: SelfInvoiceOutcome.Stamping, invoiceNumber: 'F-8', email: 'karla@ejemplo.mx', message: null },
+    });
+    renderPage('/m/cafe-luna/facturar#ORD-000012.ABCDE-12345');
+    await screen.findByText('Ticket ORD-000012');
+    await fillReceiver();
+    await userEvent.click(screen.getByRole('button', { name: 'Facturar' }));
+
+    expect(await screen.findByText(/Tu factura F-8 se está timbrando: te llegará a karla@ejemplo.mx en cuanto quede/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Si no te llega en unos minutos, vuelve a buscar tu ticket.');
+  });
+
+  it('shows the API\'s reason when the invoice cannot be made, keeping the form', async () => {
+    api({ ticket: ticket(), invoice: apiError(400, 'Este ticket se está facturando en este momento: revisa tu correo en unos minutos.') });
+    renderPage('/m/cafe-luna/facturar#ORD-000012.ABCDE-12345');
+    await screen.findByText('Ticket ORD-000012');
+    await fillReceiver();
+    await userEvent.click(screen.getByRole('button', { name: 'Facturar' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Este ticket se está facturando en este momento');
+    expect(screen.getByRole('button', { name: 'Facturar' })).toBeEnabled();
+  });
+
+  it('puts the ticket shown away when another folio or code is typed', async () => {
+    api({ ticket: ticket(), page: { ...PAGE, sandbox: true } });
+    renderPage('/m/cafe-luna/facturar#ORD-000012.ABCDE-12345');
+    await screen.findByText('Ticket ORD-000012');
+    expect(screen.getByText('Modo de prueba: las facturas de esta página no tienen validez fiscal.')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Folio'), '3');
+    expect(screen.queryByText('Ticket ORD-000012')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Facturar' })).not.toBeInTheDocument();
   });
 
   it('says the same for a folio that is not there and a code typed wrong', async () => {

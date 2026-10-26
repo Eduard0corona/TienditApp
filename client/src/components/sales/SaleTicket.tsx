@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { OrderSelfInvoice } from '../../api/invoicing';
 import { selfInvoiceUrl } from '../../api/selfInvoiceApi';
 import type { OrderDto } from '../../types';
+import { formatCalendarDate } from '../../utils/dates';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
@@ -22,7 +23,10 @@ import { createQrSvgDataUrl } from '../../utils/qr';
 
 interface SaleTicketProps extends TicketExtras {
   order: OrderDto;
-  /** The folio and code for the customer to invoice it online (Fase 28F), while the business has self-invoicing on. */
+  /**
+   * The folio and code for the customer to invoice it online (Fase 28F): the API gives them only for a sale paid in full of
+   * a business with self-invoicing on.
+   */
   selfInvoice?: OrderSelfInvoice | null;
 }
 
@@ -183,14 +187,17 @@ export default function SaleTicket({ order, businessName, logoUrl, provisional, 
         </>
       )}
 
-      {selfInvoice && !provisional && order.balance <= 0 && <SelfInvoiceBlock selfInvoice={selfInvoice} />}
+      {selfInvoice && !provisional && <SelfInvoiceBlock selfInvoice={selfInvoice} />}
 
       <div className="text-center small mt-2">¡Gracias por tu compra!</div>
     </div>
   );
 }
 
-/** Where and with what the customer invoices the ticket: the address, the folio and the code, and a QR that brings them. */
+/**
+ * Where, with what and until when the customer invoices the ticket: the address, the folio, the code, a QR that brings them
+ * and the last day of the month it was paid.
+ */
 function SelfInvoiceBlock({ selfInvoice }: { selfInvoice: OrderSelfInvoice }) {
   const page = new URL(selfInvoiceUrl(selfInvoice.path));
   const withTicket = selfInvoiceUrl(selfInvoice.path, { folio: selfInvoice.orderNumber, code: selfInvoice.code });
@@ -198,10 +205,10 @@ function SelfInvoiceBlock({ selfInvoice }: { selfInvoice: OrderSelfInvoice }) {
     <div className="ta-ticket-self-invoice text-center mt-2">
       <div className="fw-bold">Factura en línea</div>
       <img src={createQrSvgDataUrl(withTicket)} alt="QR para facturar esta compra en línea" className="ta-ticket-qr" />
-      <div className="small">{page.host}{page.pathname}</div>
+      <div className="small ta-ticket-wrap">{page.host}{page.pathname}</div>
       <div className="small">Folio: {selfInvoice.orderNumber}</div>
       <div className="small">Código: <span className="fw-bold">{selfInvoice.code}</span></div>
-      <div className="small">Hasta el último día del mes de tu compra</div>
+      <div className="small">Hasta el {formatCalendarDate(selfInvoice.invoiceBy)}</div>
     </div>
   );
 }

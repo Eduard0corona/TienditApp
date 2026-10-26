@@ -63,6 +63,14 @@ describe('CfdiEmailStatus', () => {
     // The customer asked for it on the page of the ticket (Fase 28F).
     rerender(<CfdiEmailStatus emails={[email({ sentAt: '2026-10-26T17:56:00Z', byTienditApp: false, byCustomer: true })]} />);
     expect(screen.getByText(/Lo pidió el cliente en línea\.$/)).toBeInTheDocument();
+    // Also while it goes, and when it did not (an address the customer typed wrong).
+    rerender(<CfdiEmailStatus emails={[email({ byTienditApp: false, byCustomer: true })]} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/Enviándose por correo a karla@ejemplo\.mx… Lo pidió el cliente en línea\.$/);
+    rerender(<CfdiEmailStatus emails={[email({
+      byTienditApp: false, byCustomer: true, failedAt: '2026-10-26T17:56:00Z', failure: CfdiEmailFailure.Rejected,
+    })]} />);
+    expect(screen.getByText(/el servidor de correo lo rechazó\. Revisa la dirección con el cliente\. Lo pidió el cliente en línea\.$/))
+      .toBeInTheDocument();
   });
 
   it('says why it was not sent', () => {

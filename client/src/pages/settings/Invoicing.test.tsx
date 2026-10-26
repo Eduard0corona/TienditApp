@@ -173,4 +173,18 @@ describe('Autofactura', () => {
     expect(await screen.findByRole('switch', { name: 'Autofactura activa' })).toBeDisabled();
     expect(screen.getByText('Para activarla, tu negocio debe poder facturar: completa Mi negocio y sube tu CSD.')).toBeInTheDocument();
   });
+
+  it('warns while it is on and the business cannot invoice, and can still be turned off', async () => {
+    const write = vi.fn(() => Promise.resolve({ ...READY_TO_UPLOAD, selfInvoicing: false }));
+    serve({ ...READY_TO_UPLOAD, selfInvoicing: true }, write);
+    renderPage();
+
+    const toggle = await screen.findByRole('switch', { name: 'Autofactura activa' });
+    expect(toggle).toBeEnabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('tus clientes tampoco pueden hacerlo en línea hasta que lo resuelvas');
+    await userEvent.click(toggle);
+
+    await waitFor(() => expect(write).toHaveBeenCalledWith('put', '/api/v1/invoicing/settings/self-invoicing', { on: false }));
+    expect(await screen.findByRole('switch', { name: 'Autofactura activa' })).not.toBeChecked();
+  });
 });

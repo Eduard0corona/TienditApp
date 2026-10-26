@@ -286,6 +286,12 @@ function SelfInvoicingCard({ data }: { data: InvoicingSettings }) {
         {!data.selfInvoicing && !data.ready && (
           <p className="small text-muted mb-0">Para activarla, tu negocio debe poder facturar: completa Mi negocio y sube tu CSD.</p>
         )}
+        {data.selfInvoicing && !data.ready && (
+          <div className="alert alert-warning small py-2 mb-2" role="alert">
+            Tu negocio no puede facturar ahora, así que tus clientes tampoco pueden hacerlo en línea hasta que lo resuelvas. Los
+            tickets siguen imprimiendo el código.
+          </div>
+        )}
         {data.selfInvoicing && (
           <p className="small mb-0">Dirección para facturar: <a href={url} target="_blank" rel="noreferrer">{url}</a></p>
         )}

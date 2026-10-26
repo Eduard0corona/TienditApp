@@ -182,7 +182,7 @@ export default function OrdersList() {
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [paidReceipt, setPaidReceipt] = useState<{ order: OrderDto; change: number } | null>(null);
   // Its ticket carries the folio and code to invoice it online while self-invoicing is on (Fase 28F).
-  const receiptSelfInvoice = useOrderSelfInvoice(paidReceipt?.order.id ?? '', !!paidReceipt).data;
+  const { selfInvoice: receiptSelfInvoice, preparing: preparingReceipt } = useOrderSelfInvoice(paidReceipt?.order);
   const [realtimeMessage, setRealtimeMessage] = useState('');
   const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [statusError, setStatusError] = useState('');
@@ -1317,8 +1317,8 @@ export default function OrdersList() {
           )}
         </Modal.Body>
         <Modal.Footer className="flex-wrap">
-          <button type="button" className="btn btn-light btn-touch" onClick={printTicket}>
-            <i className="ri-printer-line me-1" aria-hidden="true"></i>Imprimir
+          <button type="button" className="btn btn-light btn-touch" onClick={printTicket} disabled={preparingReceipt}>
+            <i className="ri-printer-line me-1" aria-hidden="true"></i>{preparingReceipt ? 'Preparando el ticket…' : 'Imprimir'}
           </button>
           {/* An order of a platform has no phone to send its ticket to. */}
           {paidReceipt && !isDeliveryPlatform(paidReceipt.order.channel) && (

@@ -2,7 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import api from './axios';
 import { apiRequest, type Schemas } from './typedClient';
-import { CfdiCancellationMotive, CfdiEmailDocument, CreditNoteAdjustment, GlobalInvoicePeriodicity, OrderInvoiceStatus } from '../types';
+import {
+  CfdiCancellationMotive,
+  CfdiEmailDocument,
+  CreditNoteAdjustment,
+  GlobalInvoicePeriodicity,
+  OrderInvoiceStatus,
+  OrderStatus,
+  type OrderDto,
+} from '../types';
+import { isDeliveryPlatform } from '../utils/deliveryPlatforms';
 
 // Invoicing (Fase 28A, ADR 0045): Configuración › Facturación and the invoice of an order; the global invoice of a period
 // (Fase 28B, ADR 0046) in Reportes › Factura global; the payment complements of an invoice in installments (Fase 28C,
@@ -88,18 +97,31 @@ export function useSetSelfInvoicing() {
 }
 
 /**
- * What the order's ticket prints for self-invoicing (its folio and code), or null while it is off or for a sale that is not
- * invoiced online (the API answers nothing, 204). A ticket printed without it is still a ticket: an error is null too.
+ * Whether the order's ticket may carry «Factura en línea»: paid in full (nothing owed or written off), with an amount, not
+ * cancelled and not of a delivery app. The API decides the same (and whether self-invoicing is on); this spares asking it
+ * for every other ticket.
  */
-export function useOrderSelfInvoice(orderId: string, enabled = true) {
-  return useQuery({
+export function mayPrintSelfInvoice(order: OrderDto): boolean {
+  return order.status !== OrderStatus.Cancelled && order.total > 0 && order.total - order.paidAmount <= 0
+    && order.payments.length > 0 && !isDeliveryPlatform(order.channel);
+}
+
+/**
+ * What the order's ticket prints for self-invoicing (its folio, code and until when), or null while it is off or for a sale
+ * that is not invoiced online (the API answers nothing, 204). A ticket printed without it is still a ticket: an error is
+ * null too. `preparing` while it is asked the first time: printing then would leave it out of the paper.
+ */
+export function useOrderSelfInvoice(order: OrderDto | null | undefined, enabled = true) {
+  const orderId = order?.id ?? '';
+  const query = useQuery({
     queryKey: ['invoicing', 'orders', orderId, 'self-invoice'] as const,
     queryFn: async ({ signal }): Promise<OrderSelfInvoice | null> =>
       (await apiRequest('get', '/api/v1/invoicing/orders/{orderId}/self-invoice', { path: { orderId }, signal })) || null,
-    enabled,
+    enabled: enabled && !!order && mayPrintSelfInvoice(order),
     retry: false,
     staleTime: 5 * 60_000,
   });
+  return { selfInvoice: query.data ?? null, preparing: query.isLoading };
 }
 
 /**

@@ -46,12 +46,12 @@ export function ticketKeyFromHash(hash: string): TicketKey {
     // A fragment mangled on the way (a lone %) is read as typed: the lookup says whether it is a ticket.
   }
   const dot = value.lastIndexOf('.');
-  return dot < 0 ? { folio: value, code: '' } : { folio: value.slice(0, dot), code: value.slice(dot + 1) };
+  return dot < 0 ? { folio: value.trim(), code: '' } : { folio: value.slice(0, dot).trim(), code: value.slice(dot + 1).trim() };
 }
 
 /** The page's address with the ticket in its fragment, for the QR printed on it. */
 export function selfInvoiceUrl(path: string, ticket?: TicketKey): string {
   const url = new URL(path, window.location.origin);
-  if (ticket) url.hash = `${ticket.folio}.${ticket.code}`;
+  if (ticket) url.hash = `${encodeURIComponent(ticket.folio)}.${encodeURIComponent(ticket.code)}`;
   return url.toString();
 }
