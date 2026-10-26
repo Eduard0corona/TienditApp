@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -63,6 +64,7 @@ public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
         builder.Property(x => x.PdfFileKey).HasMaxLength(OrderInvoice.MaxFileKeyLength);
         builder.Property(x => x.FailureMessage).HasMaxLength(OrderInvoice.MaxFailureMessageLength);
         builder.Property(x => x.CancellationMotive).HasConversion<int?>();
+        builder.Property(x => x.ReceiverEmail).HasMaxLength(InvoiceEmailAddress.MaxLength);
         builder.Property(x => x.Version).IsRowVersion();
         builder.Ignore(x => x.IsLive);
         builder.Ignore(x => x.Number);

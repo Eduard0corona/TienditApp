@@ -21,7 +21,9 @@ internal static class BeforeOrderInvoicing
     public static void Ignore(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Customer>().Ignore(c => c.FiscalData);
-        // What came later (Fases 28C and 28D) points to the invoices: it goes first.
+        modelBuilder.Entity<Customer>().Ignore(c => c.InvoiceEmail);
+        // What came later (Fases 28C to 28E) points to the invoices: it goes first.
+        modelBuilder.Ignore<CfdiEmail>();
         modelBuilder.Ignore<CreditNote>();
         modelBuilder.Ignore<PaymentComplement>();
         modelBuilder.Ignore<OrderInvoice>();

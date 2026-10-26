@@ -55,7 +55,7 @@ public class UpdateCustomerFiscalDataCommandHandler : IRequestHandler<UpdateCust
             var data = request.FiscalData;
             customer.SetFiscalData(data is null
                 ? null
-                : CfdiReceiver.Create(data.Rfc, data.Name, data.PostalCode, data.FiscalRegime, data.CfdiUse));
+                : CfdiReceiver.Create(data.Rfc, data.Name, data.PostalCode, data.FiscalRegime, data.CfdiUse), customer.InvoiceEmail);
         }
         catch (DomainException ex)
         {

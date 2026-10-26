@@ -90,15 +90,15 @@ public class OrderInvoiceTests
     public void Customer_ShouldKeepItsFiscalData_ButNotTheGeneralPublic()
     {
         var customer = new Customer(TenantId, "Universidad", "5512345678", null);
-        customer.SetFiscalData(Receiver());
+        customer.SetFiscalData(Receiver(), null);
         Assert.Equal(Receiver(), customer.FiscalData);
-        customer.SetFiscalData(null);
+        customer.SetFiscalData(null, null);
         Assert.Null(customer.FiscalData);
 
         var publicGeneral = new Customer(TenantId, "Público en general", null, null, isPublicGeneral: true);
-        var error = Assert.Throws<DomainException>(() => publicGeneral.SetFiscalData(Receiver()));
+        var error = Assert.Throws<DomainException>(() => publicGeneral.SetFiscalData(Receiver(), null));
         Assert.Equal(Customer.PublicGeneralFiscalDataMessage, error.Message);
-        publicGeneral.SetFiscalData(null);
+        publicGeneral.SetFiscalData(null, null);
     }
 
     [Fact]

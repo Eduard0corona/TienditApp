@@ -49,7 +49,7 @@ public class CreditNotesMigrationSqlServerTests
 
         foreach (var tenantId in new[] { seed.TenantId, seed.OtherTenantId })
         {
-            await using var context = database.CreateContext(tenantId);
+            await using var context = BeforeCfdiEmails.CreateContext(database, tenantId);
             var profile = await context.InvoicingProfiles.SingleAsync();
             Assert.Equal((CreditNote.DefaultSerie, "P"), (profile.CreditNoteSerie, profile.PaymentSerie));
         }
@@ -75,7 +75,7 @@ public class CreditNotesMigrationSqlServerTests
         Assert.Contains("IX_CreditNotes_OrderWriteOffId_Live", forgivenAgain.InnerException!.Message);
 
         // …until the first one is refused: it stays, and the refund gets another one, with a folio of its own.
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
         {
             var refused = await context.CreditNotes.SingleAsync(n => n.Id == refundNote.Id);
             refused.Refuse("CFDI40108 - La FormaPago no es válida.", DateTimeOffset.UtcNow);
@@ -85,7 +85,7 @@ public class CreditNotesMigrationSqlServerTests
         Assert.Contains("IX_CreditNotes_TenantId_Serie_Folio", sameFolio.InnerException!.Message);
         var second = ForRefund(invoice, seed, 5);
         await AddAsync(database, seed, second);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
             Assert.Equal(2, await context.CreditNotes.CountAsync(n => n.OrderRefundId == seed.Refund.Id));
 
         FormattableString[] never =
@@ -150,7 +150,7 @@ public class CreditNotesMigrationSqlServerTests
         // Rolling back again does nothing, and forward again it is there, empty.
         await MigrateAsync(database, BeforeNotes);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         Assert.Empty(await forward.CreditNotes.ToListAsync());
     }
 
@@ -189,7 +189,7 @@ public class CreditNotesMigrationSqlServerTests
             CfdiReceiver.Create("XIQB891116QE4", "Karla Fuente Nolasco", "26015", "612", "G03"), "99", "{\"serie\":\"F\"}",
             172.41m, 27.59m, 200m, seed.UserId, DateTimeOffset.UtcNow.AddDays(-3), "PPD");
         invoice.Stamp(InvoiceUuid, "pac-1", DateTimeOffset.UtcNow.AddDays(-3), "f-1.xml");
-        await using var context = database.CreateContext(seed.TenantId);
+        await using var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         context.OrderInvoices.Add(invoice);
         await context.SaveChangesAsync();
         return invoice;
@@ -203,7 +203,7 @@ public class CreditNotesMigrationSqlServerTests
 
     private static async Task AddAsync(SqlServerTestDatabase database, Seed seed, CreditNote note)
     {
-        await using var context = database.CreateContext(seed.TenantId);
+        await using var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         context.CreditNotes.Add(note);
         await context.SaveChangesAsync();
     }

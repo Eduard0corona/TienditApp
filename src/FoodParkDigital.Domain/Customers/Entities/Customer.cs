@@ -66,6 +66,12 @@ public class Customer : AuditableEntity, ITenantScoped
     /// </summary>
     public CfdiReceiver? FiscalData { get; private set; }
 
+    /// <summary>
+    /// Where the customer wants their invoices (Fase 28E, ADR 0049), kept with their fiscal data: the invoice of their next
+    /// order proposes it before their <see cref="Email"/>. Null when the business does not have it.
+    /// </summary>
+    public string? InvoiceEmail { get; private set; }
+
     /// <summary>The business sells to them on credit now: active, with a limit and a phone to gather their orders by.</summary>
     public bool SellsOnCredit => IsActive && !IsPublicGeneral && CreditLimit is not null && !string.IsNullOrWhiteSpace(Phone);
 
@@ -106,12 +112,17 @@ public class Customer : AuditableEntity, ITenantScoped
         CreditTermDays = days;
     }
 
-    /// <summary>Keeps the customer's fiscal data for their next invoices, or forgets it (null).</summary>
-    public void SetFiscalData(CfdiReceiver? fiscalData)
+    /// <summary>
+    /// Keeps the customer's fiscal data and the email for their invoices, for their next invoices, or forgets both (null
+    /// fiscal data: the email goes with it).
+    /// </summary>
+    public void SetFiscalData(CfdiReceiver? fiscalData, string? invoiceEmail)
     {
         if (fiscalData is not null && IsPublicGeneral)
             throw new DomainException(PublicGeneralFiscalDataMessage);
+        var email = fiscalData is null ? null : InvoiceEmailAddress.Normalize(invoiceEmail);
         FiscalData = fiscalData;
+        InvoiceEmail = email;
     }
 
     public void Update(string name, string? phone, string? email)

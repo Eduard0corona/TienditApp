@@ -44,15 +44,15 @@ public class OrderInvoicingMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
 
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
         {
             Assert.All(await context.Customers.ToListAsync(), customer => Assert.Null(customer.FiscalData));
             var karla = await context.Customers.SingleAsync(c => c.Name == "Karla");
-            karla.SetFiscalData(Receiver());
+            karla.SetFiscalData(Receiver(), null);
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(seed.TenantId);
+        await using var check = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         Assert.Equal("XIQB891116QE4", (await check.Customers.SingleAsync(c => c.Name == "Karla")).FiscalData!.Rfc);
         Assert.Null((await check.Customers.SingleAsync(c => c.Name == "Luis")).FiscalData);
         // Clientes lists it, projected in SQL.
@@ -70,7 +70,7 @@ public class OrderInvoicingMigrationSqlServerTests
         var seed = await SeedAsync(database);
 
         long first, second, otherSerie;
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
         {
             var folios = new FolioGenerator(context);
             first = await folios.NextInvoiceFolioAsync(seed.TenantId, "F", CancellationToken.None);
@@ -95,7 +95,7 @@ public class OrderInvoicingMigrationSqlServerTests
         Assert.Contains("IX_InvoicingProfiles_CertificateNumber", sameCsd.InnerException!.Message);
 
         Guid invoiceId;
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
             invoiceId = await context.OrderInvoices.Where(i => i.Status == OrderInvoiceStatus.Stamping).Select(i => i.Id).SingleAsync();
         FormattableString[] never =
         [
@@ -115,7 +115,7 @@ public class OrderInvoicingMigrationSqlServerTests
 
         // A folio counter created after invoices exist starts after the highest folio of its serie.
         await ExecuteAsync(database, $"DELETE FROM [FolioSequences] WHERE [TenantId] = {seed.TenantId} AND [Scope] = N'CFDI-F'");
-        await using var again = database.CreateContext(seed.TenantId);
+        await using var again = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         Assert.Equal(3L, await new FolioGenerator(again).NextInvoiceFolioAsync(seed.TenantId, "F", CancellationToken.None));
     }
 
@@ -139,15 +139,15 @@ public class OrderInvoicingMigrationSqlServerTests
         await AssertRollbackStopsAsync(database);
         await ExecuteAsync(database, $"DELETE FROM [OrderInvoices]");
 
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
         {
-            (await context.Customers.SingleAsync()).SetFiscalData(Receiver());
+            (await context.Customers.SingleAsync()).SetFiscalData(Receiver(), null);
             await context.SaveChangesAsync();
         }
         await AssertRollbackStopsAsync(database);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
         {
-            (await context.Customers.SingleAsync()).SetFiscalData(null);
+            (await context.Customers.SingleAsync()).SetFiscalData(null, null);
             await context.SaveChangesAsync();
         }
 
@@ -171,7 +171,7 @@ public class OrderInvoicingMigrationSqlServerTests
         // Rolling back again does nothing, and forward again every customer has no fiscal data.
         await MigrateAsync(database, BeforeInvoicing);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         Assert.All(await forward.Customers.ToListAsync(), customer => Assert.Null(customer.FiscalData));
     }
 
@@ -229,7 +229,7 @@ public class OrderInvoicingMigrationSqlServerTests
 
     private static async Task AddAsync(SqlServerTestDatabase database, Seed seed, OrderInvoice invoice)
     {
-        await using var context = database.CreateContext(seed.TenantId);
+        await using var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         context.OrderInvoices.Add(invoice);
         await context.SaveChangesAsync();
     }

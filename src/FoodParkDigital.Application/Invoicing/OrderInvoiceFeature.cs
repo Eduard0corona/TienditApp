@@ -334,7 +334,7 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         {
             var previous = customer.FiscalData;
             // A value of its own: an owned value is never shared between two records.
-            customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver));
+            customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver), customer.InvoiceEmail);
             if (CustomerFiscalDataAudit.Entry(customer, previous, _currentUser.UserName, $"Factura {invoice.Number}") is { } changed)
                 _context.AuditLogs.Add(changed);
         }
