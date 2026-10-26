@@ -1411,7 +1411,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `CfdiDraftModal.test.tsx` (+7, 24): «Sustituir factura» abre el formulario con los datos y el correo de la factura, timbra la nueva en su lugar, deja lo que se mandó y lleva el foco a las facturas; si el PAC la rechaza, el formulario sigue; «No sustituir» regresa el foco; solo para dueños y administradores; por qué no se puede; si la factura deja de ser la del pedido mientras se sustituye; y las tarjetas con «Cancelar con relación» y la nueva que se cancela después de la anterior.
     - `OrderInvoiceList.test.tsx` (+3, 4): la sustituida que espera a la nueva, sin cancelar ni mandar por correo; con la nueva timbrada, la siguiente revisión y «Cancelar con relación»; y la cancelación sin relación (02) que manda el motivo.
     - `invoicing.test.ts` (+1, 10): el detalle se vuelve a leer mientras la sustituida espera su cancelación con relación, y deja de hacerlo cuando guarda por qué no pasó.
-  - **Total:** `dotnet test` con SQL Server 2022, TOTAL_NET pruebas sin fallos ni omitidas (Domain D_NET, Application A_NET, Infrastructure I_NET, WebApi W_NET).
+  - **Total:** `dotnet test` con SQL Server 2022, 3,914 pruebas sin fallos ni omitidas (Domain 1,174, Application 1,724, Infrastructure 557, WebApi 459).
   - **Cliente en total:** 169 archivos y 1,187 pruebas.
   - **Primera visita:** 180,032 B de 180,100 B (`master`: 180,031 B): la sustitución vive en el módulo de facturación, que se carga aparte. El presupuesto no cambia.
   - **Escenas visuales:** `facturacion.spec.ts` (+7): el formulario para sustituir (escritorio y teléfono), la factura sustituida que espera su cancelación con relación (escritorio, teléfono y oscuro), cancelarla sin relación y la sustituida ya cancelada.
