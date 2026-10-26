@@ -65,13 +65,8 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
     public async Task<Result<Guid>> Handle(RegisterCustomerCommand request, CancellationToken cancellationToken)
     {
         // What was typed is checked before looking for the email: its rules never depend on whether it has an account.
-        if (!_phoneNormalizationService.TryNormalizeToE164(
-                request.PhoneNumber,
-                CustomerPhoneOwnershipRules.DefaultCountry,
-                out var phoneNormalized))
-        {
+        if (!PhoneNumberRules.TryNormalizeSignUpPhone(_phoneNormalizationService, request.PhoneNumber, out var phoneNormalized))
             return Result.Failure<Guid>(PhoneNumberRules.InvalidPhoneMessage);
-        }
 
         var user = new ApplicationUser
         {
@@ -80,7 +75,8 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
             Email = request.Email,
             FirstName = request.FirstName,
             LastName = request.LastName,
-            PhoneNumber = request.PhoneNumber,
+            // The number as its profile and its SMS codes use it, not as it was typed.
+            PhoneNumber = phoneNormalized,
             Role = UserRole.Customer,
             EmailConfirmed = false,
             IsActive = true

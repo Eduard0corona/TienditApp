@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -71,6 +72,51 @@ public class RegisterBusinessCommandTests
         await AssertSingleRegistrationAsync(host, result.Value);
     }
 
+    [Fact]
+    public void Validator_ShouldAcceptThePhoneWithoutTheInternationalPrefix()
+    {
+        var result = new RegisterBusinessCommandValidator().Validate(ValidCommand() with { PhoneNumber = "5511112222" });
+
+        Assert.True(result.IsValid, string.Join(" ", result.Errors));
+    }
+
+    [Theory]
+    [InlineData("55 1234")]
+    // Without the +, a number that is not the ten digits is mistyped: 551234567 must not become +551234567, in Brazil.
+    [InlineData("551234567")]
+    [InlineData("12345678")]
+    [InlineData("55 1111 22223")]
+    // A digit that is not ASCII counts as one for the normalization service: it must never reach the account.
+    [InlineData("5512345678\u0660")]
+    [InlineData("+52 55 1234 567\u0660")]
+    public async Task RegisterBusiness_ShouldNotPersistAnything_WhenThePhoneIsNotTenDigitsOrInternational(string phone)
+    {
+        await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
+
+        var result = await RegisterAsync(host, ValidCommand() with { PhoneNumber = phone });
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(PhoneNumberRules.InvalidPhoneMessage, result.Error);
+        await AssertNothingPersistedAsync(host);
+        await host.DispatchAccountEmailsAsync();
+        Assert.Empty(host.Email.ConfirmationRecipients);
+    }
+
+    [Theory]
+    [InlineData("525511112222")]
+    [InlineData("+52 55 1111 2222")]
+    [InlineData("0052 55 1111 2222")]
+    public async Task RegisterBusiness_ShouldKeepThePhoneInE164_WhenItComesWithTheCountryCode(string phone)
+    {
+        await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
+
+        var result = await RegisterAsync(host, ValidCommand() with { PhoneNumber = phone });
+
+        Assert.True(result.IsSuccess, result.Error);
+        var owner = await host.QueryAsync(db => db.Users.SingleAsync());
+        Assert.Equal("+525511112222", owner.PhoneNumber);
+    }
+
     private static Task<Result<Guid>> RegisterAsync(SqliteTestHost host, RegisterBusinessCommand command)
         => host.HandleAsync<RegisterBusinessCommandHandler, Result<Guid>>(
             handler => handler.Handle(command, CancellationToken.None));
@@ -81,7 +127,7 @@ public class RegisterBusinessCommandTests
         Password = "Secreto1",
         FirstName = "Ana",
         LastName = "Dueña",
-        PhoneNumber = "+525511112222",
+        PhoneNumber = "55 1111 2222",
         BusinessName = "Taquería Demo",
         BusinessType = BusinessType.Food
     };
@@ -142,6 +188,8 @@ public class RegisterBusinessCommandTests
         // The account is activated from the emailed link; until then it cannot sign in.
         Assert.False(owner.EmailConfirmed);
         Assert.False(owner.PhoneNumberConfirmed);
+        // Typed as ten digits, kept in E.164: its SMS codes go to this number.
+        Assert.Equal("+525511112222", owner.PhoneNumber);
         Assert.Equal(new { UserId = owner.Id, Name = (string?)"TENANT_ADMIN" }, Assert.Single(stored.Roles));
 
         var membership = Assert.Single(stored.Memberships);

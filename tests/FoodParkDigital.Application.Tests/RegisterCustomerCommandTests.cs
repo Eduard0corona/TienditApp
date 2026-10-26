@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Customers.Enums;
@@ -28,6 +29,25 @@ public class RegisterCustomerCommandTests
         await host.DispatchAccountEmailsAsync();
         Assert.Empty(host.Email.ConfirmationRecipients);
         Assert.Empty(host.Sms.VerificationRecipients);
+    }
+
+    [Theory]
+    // Without the +, a number that is not the ten digits is mistyped: 551234567 must not become +551234567, in Brazil.
+    [InlineData("551234567")]
+    [InlineData("12345678")]
+    // A digit that is not ASCII counts as one for the normalization service: it must never reach the account.
+    [InlineData("5512345678\u0660")]
+    public async Task RegisterCustomer_ShouldNotPersistAnything_WhenThePhoneIsNotTenDigitsOrInternational(string phone)
+    {
+        await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
+
+        var result = await RegisterAsync(host, ValidCommand() with { PhoneNumber = phone });
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(PhoneNumberRules.InvalidPhoneMessage, result.Error);
+        await AssertNoAccountPersistedAsync(host);
+        await host.DispatchAccountEmailsAsync();
+        Assert.Empty(host.Email.ConfirmationRecipients);
     }
 
     [Fact]
@@ -75,6 +95,8 @@ public class RegisterCustomerCommandTests
         Assert.Equal(result.Value, user.Id);
         Assert.False(user.EmailConfirmed);
         Assert.False(user.PhoneNumberConfirmed);
+        // Typed as "55 1234 5678", kept as its profile and its SMS codes use it.
+        Assert.Equal(PhoneNormalized, user.PhoneNumber);
         Assert.Equal("CUSTOMER", Assert.Single(stored.Roles));
         var profile = Assert.Single(stored.Profiles);
         Assert.Equal(user.Id, profile.UserId);

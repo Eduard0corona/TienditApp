@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Common.ValueObjects;
@@ -60,10 +61,7 @@ public class RegisterBusinessCommandValidator : AbstractValidator<RegisterBusine
         RuleFor(x => x.Password).NewPassword();
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.PhoneNumber)
-            .NotEmpty()
-            .Matches(@"^\+[1-9]\d{6,14}$")
-            .WithMessage("El número de teléfono debe estar en formato E.164 (ej: +5215512345678).");
+        RuleFor(x => x.PhoneNumber).NotEmpty();
 
         RuleFor(x => x.BusinessName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.BusinessType).IsInEnum();
@@ -81,30 +79,38 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IApplicationDbContext _context;
+    private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly IOutbox _outbox;
     private readonly IDateTimeProvider _clock;
 
     public RegisterBusinessCommandHandler(
         UserManager<ApplicationUser> userManager,
         IApplicationDbContext context,
+        IPhoneNormalizationService phoneNormalizationService,
         IOutbox outbox,
         IDateTimeProvider clock)
     {
         _userManager = userManager;
         _context = context;
+        _phoneNormalizationService = phoneNormalizationService;
         _outbox = outbox;
         _clock = clock;
     }
 
     public async Task<Result<Guid>> Handle(RegisterBusinessCommand request, CancellationToken cancellationToken)
     {
+        // The owner types the ten digits; the account keeps the number in E.164 because its SMS codes go to it. What
+        // was typed is checked before looking for the email: its rules never depend on whether it has an account.
+        if (!PhoneNumberRules.TryNormalizeSignUpPhone(_phoneNormalizationService, request.PhoneNumber, out var phoneNormalized))
+            return Result.Failure<Guid>(PhoneNumberRules.InvalidPhoneMessage);
+
         var user = new ApplicationUser
         {
             UserName = request.Email,
             Email = request.Email,
             FirstName = request.FirstName,
             LastName = request.LastName,
-            PhoneNumber = request.PhoneNumber,
+            PhoneNumber = phoneNormalized,
             Role = UserRole.TenantAdmin,
             EmailConfirmed = false,
             IsActive = true

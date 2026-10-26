@@ -137,6 +137,25 @@ public class AccountEmailTests
     }
 
     [Fact]
+    public async Task APhoneThatIsNotANumber_ShouldGetTheSameAnswer_WhetherTheEmailHasAnAccountOrNot()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN", "CUSTOMER");
+        await SeedAccountAsync(host, emailConfirmed: true);
+
+        var taken = await RegisterBusinessAsync(host, Email, phone: "55 1234");
+        var free = await RegisterBusinessAsync(host, "nuevo@demo.com", phone: "55 1234");
+        var takenCustomer = await RegisterCustomerAsync(host, Email, phone: "55 1234");
+        var freeCustomer = await RegisterCustomerAsync(host, "nuevo@demo.com", phone: "55 1234");
+
+        Assert.True(taken.IsFailure);
+        Assert.Equal(free.Error, taken.Error);
+        Assert.True(takenCustomer.IsFailure);
+        Assert.Equal(freeCustomer.Error, takenCustomer.Error);
+        await host.DispatchAccountEmailsAsync();
+        Assert.Equal(0, host.Email.Sent);
+    }
+
+    [Fact]
     public async Task PasswordResetByEmail_ShouldGoOutAfterTheAnswer_OnlyToAConfirmedAccount()
     {
         await using var host = await SqliteTestHost.CreateAsync();
@@ -220,7 +239,8 @@ public class AccountEmailTests
             return user.Id;
         });
 
-    private static Task<Result<Guid>> RegisterBusinessAsync(SqliteTestHost host, string email, string password = "Secreto12")
+    private static Task<Result<Guid>> RegisterBusinessAsync(
+        SqliteTestHost host, string email, string password = "Secreto12", string phone = "+525599998888")
         => host.HandleAsync<RegisterBusinessCommandHandler, Result<Guid>>(handler => handler.Handle(
             new RegisterBusinessCommand
             {
@@ -228,7 +248,7 @@ public class AccountEmailTests
                 Password = password,
                 FirstName = "Beto",
                 LastName = "Otro",
-                PhoneNumber = "+525599998888",
+                PhoneNumber = phone,
                 BusinessName = "Otro negocio",
                 BusinessType = BusinessType.Food
             },

@@ -82,6 +82,7 @@ public class CreateBusinessCommandTests
             Password = "Secreto1",
             FirstName = "Ana",
             LastName = "Dueña",
+            PhoneNumber = "5511112222",
             BusinessName = "Cocina de Ana",
             BusinessType = BusinessType.Food,
             Industry = industry
