@@ -91,6 +91,126 @@ public sealed class CrossTenantInvoicingSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task Substitution_ShouldReplaceOnlyMyInvoice_AndCancelTheOldOneWithRelation()
+    {
+        var mine = await _api.SignUpAsync("sustituir-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("sustituir-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Sustituir A"), phone: "5512345678", name: "Karla");
+        var invoice = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }));
+        var invoiceId = invoice.GetProperty("id").GetGuid();
+        var uuid = invoice.GetProperty("uuid").GetString()!;
+        var corrected = new { rfc = "XIQB891116QE4", name = "Karla Fuente Nolasco", postalCode = "26015", fiscalRegime = "612", cfdiUse = "S01" };
+
+        // The other owner, even with the header of my business, can neither replace it nor ask for its cancellation.
+        foreach (var (url, body) in new (string, object?)[]
+        {
+            ($"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }),
+            ($"/api/v1/invoicing/invoices/{invoiceId}/cancel-replaced", null)
+        })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsJsonAsync(url, body)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(mine, HttpMethod.Post, url, body))).StatusCode);
+        }
+        Assert.Single(await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.ToListAsync()));
+
+        // I replace it on SQL Server: the old one stops counting as the order's live invoice before the new one is saved, and
+        // once the new one is stamped the old one is cancelled with motive 01.
+        var replacement = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }));
+        Assert.Equal(("F-2", (int)OrderInvoiceStatus.Stamped, invoiceId), (
+            replacement.GetProperty("number").GetString(), replacement.GetProperty("status").GetInt32(),
+            replacement.GetProperty("replacesInvoiceId").GetGuid()));
+        Assert.Contains(_api.Invoicing.Cancellations, c => c.Uuid == uuid);
+        var invoicing = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/orders/{order}"));
+        var old = invoicing.GetProperty("invoices")[1];
+        Assert.Equal(((int)OrderInvoiceStatus.Cancelling, (int)CfdiCancellationMotive.ErrorsWithReplacement, "F-2", false), (
+            old.GetProperty("status").GetInt32(), old.GetProperty("cancellationMotive").GetInt32(), old.GetProperty("replacedByNumber").GetString(),
+            old.GetProperty("awaitsReplacedCancellation").GetBoolean()));
+        // Asking again changes nothing; the other business has no invoices.
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"/api/v1/invoicing/invoices/{invoiceId}/cancel-replaced", null));
+        Assert.Single(_api.Invoicing.Cancellations, c => c.Uuid == uuid);
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.OrderInvoices.ToListAsync()));
+    }
+
+    [SqlServerFact]
+    public async Task RefusedReplacement_ShouldGiveTheOrderItsInvoiceBack_WhicheverKeyGoesFirst()
+    {
+        var mine = await _api.SignUpAsync("sustituir-rechazo", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Sustituir rechazo"), phone: null, name: "Mostrador");
+        var invoiceId = (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }))).GetProperty("id").GetGuid();
+        var corrected = new { rfc = "XIQB891116QE4", name = "Karla Fuente Nolasco", postalCode = "26015", fiscalRegime = "612", cfdiUse = "S01" };
+
+        // The refused replacement leaves the order's live invoices and the original comes back. SQL Server checks the index of
+        // one live invoice per order statement by statement, and one save orders its updates by key: it has to work with the
+        // replacement's key before and after the original's.
+        var orders = new HashSet<int>();
+        for (var attempt = 0; attempt < 40 && orders.Count < 2; attempt++)
+        {
+            _api.Invoicing.RefuseNextStamp = "CFDI40147 - El código postal del receptor no corresponde al RFC.";
+            var refused = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+                $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }));
+            // It replaces nothing: the answer says so, as the order's invoices do.
+            Assert.Equal(((int)OrderInvoiceStatus.Refused, JsonValueKind.Null), (
+                refused.GetProperty("status").GetInt32(), refused.GetProperty("replacesInvoiceId").ValueKind));
+            orders.Add(Math.Sign(refused.GetProperty("id").GetGuid().CompareTo(invoiceId)));
+        }
+        Assert.Equal(2, orders.Count);
+        var original = await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.AsNoTracking().SingleAsync(i => i.Id == invoiceId));
+        Assert.Equal((OrderInvoiceStatus.Stamped, (Guid?)null), (original.Status, original.ReplacedByInvoiceId));
+
+        // It is the order's invoice again, and it is replaced.
+        var replacement = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }));
+        Assert.Equal((int)OrderInvoiceStatus.Stamped, replacement.GetProperty("status").GetInt32());
+    }
+
+    [SqlServerFact]
+    public async Task Substitution_ThatTheDatabaseRefuses_ShouldFail_NotBeTakenForSomeoneElseInvoicingTheOrder()
+    {
+        var mine = await _api.SignUpAsync("sustituir-falla", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Sustituir falla"), phone: null, name: "Mostrador");
+        var invoiceId = (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }))).GetProperty("id").GetGuid();
+        var corrected = new { rfc = "XIQB891116QE4", name = "Karla Fuente Nolasco", postalCode = "26015", fiscalRegime = "612", cfdiUse = "S01" };
+
+        // A rule of the database the domain does not know refuses the replacement, as a deadlock or a timeout would fail its
+        // save. A substitution holds the invoicing lock, so no one else invoiced the order meanwhile: the error is thrown on
+        // (for the execution strategy to retry what it can) and nothing is kept, folio included.
+        const string refusedEmail = "rechazada-por-la-base@example.com";
+        await _api.QueryAsync(mine.TenantId, db => db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE [OrderInvoices] WITH NOCHECK ADD CONSTRAINT [CK_Test_RefusedByTheDatabase] "
+            + $"CHECK ([ReceiverEmail] IS NULL OR [ReceiverEmail] <> N'{refusedEmail}')"));
+        HttpResponseMessage refused;
+        try
+        {
+            refused = await mine.Client.PostAsJsonAsync($"/api/v1/invoicing/invoices/{invoiceId}/substitute",
+                new { receiver = corrected, saveToCustomer = false, receiverEmail = refusedEmail });
+        }
+        finally
+        {
+            await _api.QueryAsync(mine.TenantId, db => db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE [OrderInvoices] DROP CONSTRAINT [CK_Test_RefusedByTheDatabase]"));
+        }
+        Assert.Equal(HttpStatusCode.InternalServerError, refused.StatusCode);
+        Assert.DoesNotContain("Otra persona está facturando", await refused.Content.ReadAsStringAsync());
+        var original = await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.AsNoTracking().SingleAsync());
+        Assert.Equal((invoiceId, OrderInvoiceStatus.Stamped, (Guid?)null), (original.Id, original.Status, original.ReplacedByInvoiceId));
+
+        // Replaced again, the new one takes the folio that was not kept.
+        var replacement = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }));
+        Assert.Equal(("F-2", (int)OrderInvoiceStatus.Stamped, invoiceId), (
+            replacement.GetProperty("number").GetString(), replacement.GetProperty("status").GetInt32(),
+            replacement.GetProperty("replacesInvoiceId").GetGuid()));
+    }
+
+    [SqlServerFact]
     public async Task CfdiEmails_OfAnotherBusiness_ShouldBeInvisible_AndUnsendable()
     {
         var mine = await _api.SignUpAsync("correo-cfdi-a", TwoBusinessesApi.FoodBusiness);
@@ -478,6 +598,11 @@ public sealed class CrossTenantInvoicingSqlServerTests
 
         Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync(
             $"/api/v1/invoicing/invoices/{invoiceId}/cancel", new { motive = (int)CfdiCancellationMotive.NotCarriedOut })).StatusCode);
+        // Replacing it cancels it too (Fase 28G): only owners.
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = Receiver, saveToCustomer = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/cancel-replaced", null)).StatusCode);
         // Sending it by email is managing the orders (Fase 28E).
         Assert.Equal(HttpStatusCode.Forbidden, (await stock.PostAsJsonAsync(
             $"/api/v1/invoicing/invoices/{invoiceId}/email", new { email = "karla@ejemplo.mx", useForInvoice = false })).StatusCode);

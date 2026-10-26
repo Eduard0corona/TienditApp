@@ -53,12 +53,12 @@ public class SelfInvoicingMigrationSqlServerTests
 
         foreach (var tenantId in new[] { seed.TenantId, seed.OtherTenantId })
         {
-            await using var context = database.CreateContext(tenantId);
+            await using var context = BeforeInvoiceSubstitution.CreateContext(database, tenantId);
             var profile = await context.InvoicingProfiles.SingleAsync();
             Assert.False(profile.SelfInvoicing);
             Assert.Null(profile.SelfInvoiceKey);
         }
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeInvoiceSubstitution.CreateContext(database, seed.TenantId))
             Assert.Equal("A", (await context.InvoicingProfiles.SingleAsync()).Serie);
     }
 
@@ -71,13 +71,13 @@ public class SelfInvoicingMigrationSqlServerTests
         var profile = InvoicingProfile.Create(seed.TenantId);
         profile.TurnOnSelfInvoicing();
         var code = profile.SelfInvoiceCodeFor(seed.OrderId);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeInvoiceSubstitution.CreateContext(database, seed.TenantId))
         {
             context.InvoicingProfiles.Add(profile);
             await context.SaveChangesAsync();
         }
 
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeInvoiceSubstitution.CreateContext(database, seed.TenantId))
         {
             var kept = await context.InvoicingProfiles.SingleAsync();
             Assert.True(kept.SelfInvoicing);
@@ -88,7 +88,7 @@ public class SelfInvoicingMigrationSqlServerTests
             kept.TurnOffSelfInvoicing();
             await context.SaveChangesAsync();
         }
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeInvoiceSubstitution.CreateContext(database, seed.TenantId))
         {
             var off = await context.InvoicingProfiles.SingleAsync();
             Assert.False(off.SelfInvoicing);
@@ -96,7 +96,7 @@ public class SelfInvoicingMigrationSqlServerTests
         }
 
         // Another business does not see it.
-        await using (var other = database.CreateContext(seed.OtherTenantId))
+        await using (var other = BeforeInvoiceSubstitution.CreateContext(database, seed.OtherTenantId))
             Assert.Empty(await other.InvoicingProfiles.ToListAsync());
 
         FormattableString[] never =
@@ -122,14 +122,14 @@ public class SelfInvoicingMigrationSqlServerTests
         var seed = await SeedAsync(database);
         var on = InvoicingProfile.Create(seed.TenantId);
         on.TurnOnSelfInvoicing();
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeInvoiceSubstitution.CreateContext(database, seed.TenantId))
         {
             context.InvoicingProfiles.Add(on);
             context.OrderInvoices.Add(OrderInvoice.Request(seed.TenantId, seed.OrderId, "F", 1, Receiver(), "01", "{}",
                 172.41m, 27.59m, 200m, OrderInvoice.SelfInvoiceRequester, DateTimeOffset.UtcNow));
             await context.SaveChangesAsync();
         }
-        await using (var context = database.CreateContext(seed.OtherTenantId))
+        await using (var context = BeforeInvoiceSubstitution.CreateContext(database, seed.OtherTenantId))
         {
             context.InvoicingProfiles.Add(InvoicingProfile.Create(seed.OtherTenantId));
             await context.SaveChangesAsync();
@@ -145,12 +145,12 @@ public class SelfInvoicingMigrationSqlServerTests
         await StopsAsync("Self-invoicing on");
         await ExecuteAsync(database, $"UPDATE [InvoicingProfiles] SET [SelfInvoicing] = 0");
         await StopsAsync("Self-invoicing off, keeping its key");
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeInvoiceSubstitution.CreateContext(database))
             Assert.Equal(Migration, await LatestMigrationAsync(context));
 
         await ExecuteAsync(database, $"UPDATE [InvoicingProfiles] SET [SelfInvoiceKey] = NULL");
         await MigrateAsync(database, BeforeSelfInvoicingMigration);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeInvoiceSubstitution.CreateContext(database))
         {
             Assert.Equal(BeforeSelfInvoicingMigration, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 2, 1), (
@@ -171,7 +171,7 @@ public class SelfInvoicingMigrationSqlServerTests
         // Rolling back again does nothing, and forward again every business has it off and without a key.
         await MigrateAsync(database, BeforeSelfInvoicingMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeInvoiceSubstitution.CreateContext(database, seed.TenantId);
         var profile = await forward.InvoicingProfiles.SingleAsync();
         Assert.False(profile.SelfInvoicing);
         Assert.Null(profile.SelfInvoiceKey);

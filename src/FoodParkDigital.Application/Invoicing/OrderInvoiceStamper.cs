@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml.Linq;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -68,9 +69,14 @@ public sealed class OrderInvoiceStamper
             var now = _clock.UtcNow;
             // Past the PAC's window it no longer gives back a stamp it made with this key, and the date it refuses may
             // belong to an invoice it did stamp: the person checks before invoicing the order again.
-            invoice.Refuse(now - invoice.RequestedAt > StampPendingInvoicesCommandHandler.RetryWindow
+            var reason = now - invoice.RequestedAt > StampPendingInvoicesCommandHandler.RetryWindow
                 ? $"{LateRefusalNote} {ex.Message}"
-                : ex.Message, now);
+                : ex.Message;
+            // A refused replacement never stood: the invoice it was to replace is the order's invoice again (Fase 28G).
+            if (invoice is OrderInvoice
+                && await _context.OrderInvoices.AsNoTracking().AnyAsync(i => i.ReplacedByInvoiceId == invoice.Id, cancellationToken))
+                return await RefuseReplacementAsync(invoices, invoice.Id, reason, now, cancellationToken);
+            invoice.Refuse(reason, now);
             return await SaveAsync(invoices, invoice, cancellationToken);
         }
         catch (InvoicingGatewayUnavailableException)
@@ -150,6 +156,46 @@ public sealed class OrderInvoiceStamper
     {
         await using var existing = await _storage.OpenReadAsync(key, cancellationToken);
         return existing is not null;
+    }
+
+    /// <summary>
+    /// The refusal of an invoice that was to replace another (Fase 28G), in one transaction: the replacement leaves the
+    /// order's live invoices before the one it was to replace comes back, since SQL Server checks the index of one live
+    /// invoice per order statement by statement (in one save, the two updates go in the order of their keys).
+    /// </summary>
+    private async Task<TInvoice> RefuseReplacementAsync<TInvoice>(
+        IQueryable<TInvoice> invoices, Guid invoiceId, string reason, DateTimeOffset now, CancellationToken cancellationToken)
+        where TInvoice : Cfdi
+    {
+        async Task<Result> RefuseInOrderAsync(CancellationToken ct)
+        {
+            var refused = await _context.OrderInvoices.FirstAsync(i => i.Id == invoiceId, ct);
+            if (refused.Status != OrderInvoiceStatus.Stamping)
+                return Result.Success();
+            refused.Refuse(reason, now);
+            await _context.SaveChangesAsync(ct);
+            if (await _context.OrderInvoices.FirstOrDefaultAsync(i => i.ReplacedByInvoiceId == invoiceId, ct) is { } replaced)
+            {
+                replaced.KeepAfterRefusedReplacement(invoiceId);
+                await _context.SaveChangesAsync(ct);
+            }
+            return Result.Success();
+        }
+
+        try
+        {
+            // Inside a caller's transaction, as part of it.
+            if (_context.Database.CurrentTransaction is not null)
+                await RefuseInOrderAsync(cancellationToken);
+            else
+                await _context.ExecuteInResilientTransactionAsync(RefuseInOrderAsync, cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another attempt wrote it first (the same stamp, or the PAC's refusal): that one stands.
+            _context.ChangeTracker.Clear();
+        }
+        return await invoices.FirstAsync(i => i.Id == invoiceId, cancellationToken);
     }
 
     // Another attempt wrote it first (the same stamp, or the PAC's refusal): that one stands.

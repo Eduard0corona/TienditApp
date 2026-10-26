@@ -7733,6 +7733,105 @@
         }
       }
     },
+    "/api/v1/invoicing/invoices/{invoiceId}/substitute": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueOrderInvoiceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueOrderInvoiceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueOrderInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderInvoiceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderInvoiceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderInvoiceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/invoices/{invoiceId}/cancel-replaced": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderInvoiceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderInvoiceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderInvoiceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/invoicing/invoices/{invoiceId}/xml": {
       "get": {
         "tags": [
@@ -27908,6 +28007,8 @@
       },
       "OrderInvoiceDto": {
         "required": [
+          "awaitsReplacedCancellation",
+          "canSubstitute",
           "emails",
           "hasPdf",
           "hasXml",
@@ -28014,6 +28115,34 @@
           },
           "requestedByCustomer": {
             "type": "boolean"
+          },
+          "replacedByInvoiceId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "replacedByNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "replacesInvoiceId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "replacesNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "awaitsReplacedCancellation": {
+            "type": "boolean"
+          },
+          "canSubstitute": {
+            "type": "boolean"
+          },
+          "substitutionProblem": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

@@ -31,6 +31,8 @@ internal sealed class FakeInvoicingGateway : IInvoicingGateway
     public List<(byte[] Certificate, byte[] Key, string Password)> SavedCertificates { get; } = [];
     public List<string> RemovedCertificates { get; } = [];
     public List<(string IssuerRfc, string Uuid, CfdiCancellationMotive Motive)> Cancellations { get; } = [];
+    /// <summary>The UUID each CFDI cancelled with motive 01 was told it is replaced by (Fase 28G).</summary>
+    public Dictionary<string, string> Replacements { get; } = [];
     public List<CfdiStatusQuery> StatusQueries { get; } = [];
     public int PdfRenders { get; private set; }
     /// <summary>Every time a PDF was asked for, given or not.</summary>
@@ -85,12 +87,14 @@ internal sealed class FakeInvoicingGateway : IInvoicingGateway
     }
 
     public Task<CfdiCancellationOutcome> CancelAsync(
-        string issuerRfc, string uuid, CfdiCancellationMotive motive, CancellationToken cancellationToken)
+        string issuerRfc, string uuid, CfdiCancellationMotive motive, string? replacementUuid, CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
         if (CancelRefusal is not null)
             throw new InvoicingGatewayRefusedException(CancelRefusal);
         Cancellations.Add((issuerRfc, uuid, motive));
+        if (replacementUuid is not null)
+            Replacements[uuid] = replacementUuid;
         return Task.FromResult(CancelOutcome);
     }
 

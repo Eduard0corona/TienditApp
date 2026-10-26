@@ -1,7 +1,15 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
-import { useCfdiDraft, useIssueOrderInvoice, useOrderInvoicing, type CfdiReceiver, type OrderInvoicing } from '../../api/invoicing';
+import {
+  useCfdiDraft,
+  useIssueOrderInvoice,
+  useOrderInvoicing,
+  useSubstituteOrderInvoice,
+  type CfdiReceiver,
+  type OrderInvoice,
+  type OrderInvoicing,
+} from '../../api/invoicing';
 import type { Schemas } from '../../api/typedClient';
 import { useToast } from '../../hooks/useToast';
 import { OrderInvoiceStatus } from '../../types';
@@ -38,8 +46,9 @@ function formatTransfer(transfer: Transfer | null | undefined): string {
 const LIVE: OrderInvoiceStatus[] = [OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Cancelling];
 
 /**
- * The payment complements (Fase 28C) and credit notes (Fase 28D) in force of each invoice of the order: the API refuses to
- * cancel an invoice while they stand, so its screen says which go first.
+ * The payment complements (Fase 28C) and credit notes (Fase 28D) in force of each invoice of the order, and the invoice an
+ * invoice replaces while it stands (Fase 28G): the API refuses to cancel an invoice while they stand, so its screen says
+ * which go first.
  */
 function liveRelated(invoicing: OrderInvoicing): Record<string, string[]> {
   const related: Record<string, string[]> = {};
@@ -50,6 +59,8 @@ function liveRelated(invoicing: OrderInvoicing): Record<string, string[]> {
   for (const adjustment of invoicing.adjustments)
     for (const note of adjustment.creditNotes)
       if (LIVE.includes(note.status)) add(note.orderInvoiceId, note.number);
+  for (const invoice of invoicing.invoices)
+    if (invoice.replacedByInvoiceId && LIVE.includes(invoice.status)) add(invoice.replacedByInvoiceId, invoice.number);
   return related;
 }
 
@@ -58,6 +69,7 @@ function liveRelated(invoicing: OrderInvoicing): Record<string, string[]> {
  * rate and what is still missing) for the customer's fiscal data. With the platform's PAC and the business's CSD, it is
  * stamped from here; without them it is only a preview. A sale still owed is invoiced in installments (PPD, Fase 28C), and
  * the complements of its payments show under its invoices, as do the credit notes of its refunds and write-offs (Fase 28D).
+ * Its stamped invoice is replaced from here too (Fase 28G): the same form, with that invoice's data to correct.
  */
 export default function CfdiDraftModal({ orderId, orderNumber, canCancel, canSaveToCustomer, orderCancelled, onClose }: CfdiDraftModalProps) {
   const titleId = useId();
@@ -137,14 +149,61 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
   const offerSaveToCustomer = canSaveToCustomer && !!invoicing?.customerId;
   const draft = useCfdiDraft(orderId, receiver, !orderCancelled);
   const cfdi = draft.data;
+  // The stamped invoice being replaced (Fase 28G), as the order's invoicing reads it now.
+  const substitute = useSubstituteOrderInvoice(orderId);
+  const [substituting, setSubstituting] = useState<OrderInvoice | null>(null);
+  const target = substituting ? invoicing?.invoices.find((invoice) => invoice.id === substituting.id) : undefined;
+  const substitutingId = substituting?.id ?? null;
+  // Gone from the order's current invoice meanwhile (cancelled, or replaced from elsewhere): it is not replaced from here.
+  const targetGone = !!substituting && !substitute.isPending
+    && (!target || (!target.canSubstitute && !target.substitutionProblem));
+  // The focus goes to what the mode says, and when it ends back to what opened it, or to the invoices once replaced (the
+  // invoice it opened from is no longer offered to be replaced).
+  const notice = useRef<HTMLDivElement>(null);
+  const invoicesHeading = useRef<HTMLHeadingElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const focusAfter = useRef<'opener' | 'invoices' | null>(null);
+  useEffect(() => {
+    if (substitutingId) {
+      notice.current?.focus();
+      return;
+    }
+    const back = focusAfter.current === 'opener' ? opener.current : null;
+    if (focusAfter.current === null) return;
+    focusAfter.current = null;
+    if (back?.isConnected && !back.hasAttribute('disabled')) back.focus();
+    else invoicesHeading.current?.focus();
+  }, [substitutingId]);
 
   const available = invoicing?.available ?? false;
   // The email goes with an invoice that can be stamped now, to a customer with RFC.
-  const showEmail = available && !!invoicing?.canInvoice && !!receiver;
+  const showEmail = available && (!!invoicing?.canInvoice || !!substituting) && !!receiver;
   const edited = receiver === undefined || JSON.stringify(normalizeReceiver(form)) !== JSON.stringify(receiver);
   // Only on this opening's preview: while it is read again, what is on screen may be old.
-  const canStamp = available && !!invoicing?.canInvoice && !!receiver && !edited && !!cfdi?.isReadyToStamp
-    && !cfdi.isGeneralPublic && !draft.isFetching && !issue.isPending && emailValid;
+  const readyToStamp = available && !!receiver && !edited && !!cfdi?.isReadyToStamp && !cfdi.isGeneralPublic && !draft.isFetching
+    && !issue.isPending && !substitute.isPending && emailValid;
+  const canStamp = readyToStamp && !substituting && !!invoicing?.canInvoice;
+  const canReplace = readyToStamp && !!target?.canSubstitute;
+
+  /** The form takes the invoice's data and email, to correct them. */
+  const startSubstituting = (invoice: OrderInvoice) => {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSubstituting(invoice);
+    setForm(invoice.receiver);
+    setReceiver(normalizeReceiver(invoice.receiver));
+    setShowReceiver(true);
+    setEmail(invoice.receiverEmail ?? invoicing?.proposedEmail ?? '');
+  };
+
+  /** Back to what the order proposes, or, once replaced, to the data the new one went with. */
+  const stopSubstituting = (kept?: { receiver: CfdiReceiver; email: string }) => {
+    focusAfter.current = kept ? 'invoices' : 'opener';
+    setSubstituting(null);
+    const next = kept?.receiver ?? proposed;
+    setForm(next ?? EMPTY_RECEIVER);
+    setReceiver(next ? normalizeReceiver(next) : undefined);
+    setEmail(kept ? kept.email : invoicing?.proposedEmail ?? '');
+  };
 
   const applyReceiver = (event: React.FormEvent) => {
     event.preventDefault();
@@ -170,6 +229,34 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
     }
   };
 
+  const replace = async () => {
+    if (!receiver || !substituting) return;
+    const replaced = substituting.number;
+    try {
+      const invoice = await substitute.mutateAsync({
+        invoiceId: substituting.id,
+        receiver,
+        saveToCustomer: offerSaveToCustomer && showReceiver && saveToCustomer,
+        receiverEmail: typedEmail || null,
+      });
+      // Refused, the old one is still the order's invoice: the form stays, to correct it again.
+      if (invoice.status === OrderInvoiceStatus.Refused) {
+        toast.error(`${invoice.failureMessage ?? 'El PAC rechazó la factura.'} La ${replaced} sigue vigente.`);
+        return;
+      }
+      if (invoice.status === OrderInvoiceStatus.Stamped) {
+        toast.success(typedEmail
+          ? `Factura ${invoice.number} timbrada en lugar de la ${replaced}: se está enviando a ${typedEmail}.`
+          : `Factura ${invoice.number} timbrada en lugar de la ${replaced}.`);
+      } else {
+        toast.info(`El PAC no respondió: TienditApp sigue pidiendo el timbre de ${invoice.number} y después cancela la ${replaced}.`);
+      }
+      stopSubstituting({ receiver, email: typedEmail });
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo sustituir la factura.'));
+    }
+  };
+
   return (
     <>
       <Modal.Body>
@@ -181,6 +268,9 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             canCancel={canCancel}
             liveRelated={liveRelated(invoicing)}
             proposedEmail={invoicing.proposedEmail}
+            onSubstitute={!orderCancelled && available ? startSubstituting : undefined}
+            substitutingId={substitutingId}
+            headingRef={invoicesHeading}
           />
         )}
         {invoicing && (
@@ -222,10 +312,30 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
               {invoicing?.sandbox && (
                 <div className="alert alert-warning py-2 small">Modo de pruebas: las facturas que timbres no tienen validez fiscal.</div>
               )}
-              {invoicing?.problem && !invoicing.canInvoice && (
+              {invoicing?.problem && !invoicing.canInvoice && !substituting && (
                 <div className="alert alert-info py-2 small" role="status">{invoicing.problem}</div>
               )}
             </>
+          )}
+
+          {substituting && (
+            <div ref={notice} tabIndex={-1} role="group" className="alert alert-info py-2 small" aria-labelledby="cfdi-substituting-title">
+              <div id="cfdi-substituting-title" className="fw-semibold">Sustituir la factura {substituting.number}</div>
+              <p className="mb-1">
+                Corrige los datos y timbra la nueva: relaciona la {substituting.number} como «Sustitución de los CFDI previos» (04).
+                En cuanto quede timbrada, TienditApp le pide al SAT cancelar la {substituting.number} con relación (motivo 01); si el
+                SAT todavía no recibe la nueva, lo vuelve a intentar durante 3 días.
+              </p>
+              {target && !target.canSubstitute && target.substitutionProblem && (
+                <p className="mb-1 text-danger">{target.substitutionProblem}</p>
+              )}
+              {targetGone && (
+                <p className="mb-1 text-danger">La {substituting.number} ya no es la factura vigente del pedido: no se sustituye.</p>
+              )}
+              <button type="button" className="btn btn-link btn-sm p-0" disabled={substitute.isPending} onClick={() => stopSubstituting()}>
+                No sustituir
+              </button>
+            </div>
           )}
 
           <button
@@ -256,7 +366,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
               )}
               <div className="d-flex gap-2 mt-2">
                 <button type="submit" className="btn btn-sm btn-outline-secondary">Ver con estos datos</button>
-                {receiver && (
+                {receiver && !substituting && (
                   <button type="button" className="btn btn-sm btn-light" onClick={() => setReceiver(undefined)}>
                     Público en general
                   </button>
@@ -278,7 +388,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
                 maxLength={254}
                 autoComplete="off"
                 value={email}
-                disabled={issue.isPending}
+                disabled={issue.isPending || substitute.isPending}
                 onChange={(event) => setEmail(event.target.value)}
                 aria-invalid={emailValid ? undefined : true}
                 aria-describedby="cfdi-email-help"
@@ -387,7 +497,11 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
       </Modal.Body>
       <Modal.Footer>
         <button type="button" className="btn btn-light" onClick={onClose}>Cerrar</button>
-        {!orderCancelled && available && invoicing?.canInvoice && (
+        {substituting ? (
+          <button type="button" className="btn btn-primary" disabled={!canReplace} onClick={() => void replace()}>
+            {substitute.isPending ? 'Timbrando…' : `Timbrar y sustituir la ${substituting.number}`}
+          </button>
+        ) : !orderCancelled && available && invoicing?.canInvoice && (
           <button type="button" className="btn btn-primary" disabled={!canStamp} onClick={() => void stamp()}>
             {issue.isPending ? 'Timbrando…' : 'Timbrar factura'}
           </button>

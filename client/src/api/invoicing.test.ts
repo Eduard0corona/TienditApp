@@ -122,6 +122,16 @@ describe('isOrderInvoicingWaiting', () => {
     expect(isOrderInvoicingWaiting({ invoices: stamped, payments: [], adjustments: [adjustment({ creditNotes: [note(OrderInvoiceStatus.Cancelling)] })] }))
       .toBe(true);
   });
+
+  it('reads again while the API says TienditApp still asks to cancel a replaced invoice with relation, not once it no longer does (Fase 28G)', () => {
+    // It no longer does once the invoice says why it did not go, or 72 hours after its replacement was stamped.
+    const replaced = (awaitsReplacedCancellation: boolean) =>
+      ({ status: OrderInvoiceStatus.Stamped, emails: [], replacedByInvoiceId: 'inv-2', failureMessage: null, awaitsReplacedCancellation }) as unknown as OrderInvoicing['invoices'][number];
+    const replacement = invoice(OrderInvoiceStatus.Stamped);
+
+    expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(true)], payments: [], adjustments: [] })).toBe(true);
+    expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(false)], payments: [], adjustments: [] })).toBe(false);
+  });
 });
 
 describe('mayPrintSelfInvoice', () => {

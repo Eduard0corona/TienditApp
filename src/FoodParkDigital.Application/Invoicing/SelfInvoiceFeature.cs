@@ -635,9 +635,10 @@ internal static class SelfInvoicing
             : null;
     }
 
+    /// <summary>The order's invoice now (one another replaces waits for its cancellation, Fase 28G).</summary>
     public static Task<OrderInvoice?> LiveInvoiceAsync(IApplicationDbContext context, Guid orderId, CancellationToken cancellationToken)
         => context.OrderInvoices.AsNoTracking()
-            .FirstOrDefaultAsync(i => i.OrderId == orderId
+            .FirstOrDefaultAsync(i => i.OrderId == orderId && i.ReplacedByInvoiceId == null
                 && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
                     || i.Status == OrderInvoiceStatus.Cancelling), cancellationToken);
 

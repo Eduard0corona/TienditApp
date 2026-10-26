@@ -30,13 +30,19 @@ internal sealed record OrderInvoiceRequest(
 
     /// <summary>What else is saved with the invoice (Pedidos keeps the fiscal data in the customer).</summary>
     public Func<Order, OrderInvoice, Task>? BeforeSave { get; init; }
+
+    /// <summary>
+    /// The order's stamped invoice this one replaces because it has errors (Fase 28G, ADR 0051): the new one carries its
+    /// UUID with the relation 04, and it is cancelled with motive 01 once the new one is stamped.
+    /// </summary>
+    public Guid? Replaces { get; init; }
 }
 
 /// <summary>
 /// The invoice of an order fixed before the PAC is asked: its folio, its date, its key and the CFDI built from the order's
-/// draft, in the caller's transaction, so a refused request gives the folio back. The same for Pedidos and for the
-/// customer who invoices the ticket: under the business's invoicing lock, one live invoice per order, never one of a sale in
-/// a live global invoice.
+/// draft, in the caller's transaction, so a refused request gives the folio back. The same for Pedidos, for the customer who
+/// invoices the ticket and for the one that replaces an invoice with errors (Fase 28G): under the business's invoicing lock,
+/// one live invoice per order that no other replaces, never one of a sale in a live global invoice.
 /// </summary>
 internal sealed class OrderInvoiceRequester
 {
@@ -66,10 +72,24 @@ internal sealed class OrderInvoiceRequester
             return Result.Failure<OrderInvoice>(draft.Blockers[0]);
 
         var live = await _context.OrderInvoices.AsNoTracking()
-            .FirstOrDefaultAsync(i => i.OrderId == order.Id
+            .FirstOrDefaultAsync(i => i.OrderId == order.Id && i.ReplacedByInvoiceId == null
                 && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
                     || i.Status == OrderInvoiceStatus.Cancelling), cancellationToken);
-        var orderProblem = OrderInvoicing.LiveInvoiceProblem(live)
+        // The one it replaces is the order's live invoice: the replacement takes its place.
+        OrderInvoice? replaced = null;
+        string? replaceProblem = null;
+        if (request.Replaces is { } replacesId)
+        {
+            replaced = live?.Id == replacesId ? await _context.OrderInvoices.FirstAsync(i => i.Id == replacesId, cancellationToken) : null;
+            replaceProblem = await OrderInvoiceSubstitutions.ProblemAsync(
+                    _context,
+                    replaced ?? await _context.OrderInvoices.AsNoTracking()
+                        .FirstOrDefaultAsync(i => i.Id == replacesId && i.OrderId == order.Id, cancellationToken),
+                    draft.Issuer.Rfc,
+                    cancellationToken)
+                ?? (replaced is null ? OrderInvoiceSubstitutions.NotCurrentMessage : null);
+        }
+        var orderProblem = (request.Replaces is null ? OrderInvoicing.LiveInvoiceProblem(live) : replaceProblem)
             ?? await OrderInvoicing.GlobalInvoiceProblemAsync(_context, order.Id, cancellationToken)
             ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken)
             ?? request.Check?.Invoke(draft, order);
@@ -98,36 +118,54 @@ internal sealed class OrderInvoiceRequester
             .FirstOrDefaultAsync(cancellationToken);
         var serie = profile!.Serie;
         var folio = await _folios.NextInvoiceFolioAsync(tenantId, serie, cancellationToken);
-        var document = CfdiDocument.From(draft, receiver, serie, folio, TenantDateTimeResolver.LocalNow(now, timeZone));
+        var document = CfdiDocument.From(draft, receiver, serie, folio, TenantDateTimeResolver.LocalNow(now, timeZone), replaced?.Uuid);
         // Paid in full, in one exhibition with what paid it; otherwise in installments, «por definir» (Fase 28C).
         var invoice = OrderInvoice.Request(
             tenantId, order.Id, serie, folio, receiver, draft.PaymentForm, document.ToJson(),
             draft.SubTotal, draft.TotalTransferred, draft.Total, request.RequestedByUserId, now, draft.PaymentMethod);
         invoice.SendTo(request.ReceiverEmail);
-        _context.OrderInvoices.Add(invoice);
-
-        if (request.BeforeSave is not null)
-            await request.BeforeSave(order, invoice);
-
-        _context.AuditLogs.Add(new AuditLog(
-            tenantId: tenantId,
-            entityName: nameof(OrderInvoice),
-            entityId: invoice.Id.ToString(),
-            action: "OrderInvoiceRequested",
-            performedBy: request.PerformedBy,
-            metadata: JsonSerializer.Serialize(new { invoice.OrderId, order.OrderNumber, Number = invoice.Number, receiver.Rfc, invoice.Total, invoice.PaymentMethod })));
 
         try
         {
+            if (replaced is not null)
+            {
+                // The replaced one stops counting as the order's live invoice before its replacement is saved: SQL Server
+                // checks the index of one live invoice per order statement by statement.
+                replaced.ReplaceWith(invoice);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            _context.OrderInvoices.Add(invoice);
+            if (request.BeforeSave is not null)
+                await request.BeforeSave(order, invoice);
+            _context.AuditLogs.Add(new AuditLog(
+                tenantId: tenantId,
+                entityName: nameof(OrderInvoice),
+                entityId: invoice.Id.ToString(),
+                action: "OrderInvoiceRequested",
+                performedBy: request.PerformedBy,
+                metadata: JsonSerializer.Serialize(new
+                {
+                    invoice.OrderId, order.OrderNumber, Number = invoice.Number, receiver.Rfc, invoice.Total, invoice.PaymentMethod,
+                    Replaces = replaced?.Number
+                })));
             await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException) when (replaced is not null)
+        {
+            // Its PDF, its cancellation check or a person changed the replaced one meanwhile: nothing is kept, folio included.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
+            return Result.Failure<OrderInvoice>(OrderInvoiceSubstitutions.ChangedMessage(replaced.Number));
         }
         catch (DbUpdateException)
         {
             // Someone invoiced the same order at the same time (the index of one live invoice per order kept theirs): this
-            // one is undone whole, folio included. Anything else is thrown on, for the execution strategy to retry.
+            // one is undone whole, folio included. Anything else is thrown on, for the execution strategy to retry. A
+            // replacement is requested with the order's live invoice in hand, under the invoicing lock: no one else invoiced
+            // the order meanwhile, and the replaced one is live again once this is undone, so its failure is always thrown on.
             await _context.DiscardUnitOfWorkAsync(cancellationToken);
-            if (await _context.OrderInvoices.AsNoTracking().AnyAsync(
-                    i => i.OrderId == request.OrderId
+            if (replaced is null && await _context.OrderInvoices.AsNoTracking().AnyAsync(
+                    i => i.OrderId == request.OrderId && i.ReplacedByInvoiceId == null
                         && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
                             || i.Status == OrderInvoiceStatus.Cancelling),
                     cancellationToken))

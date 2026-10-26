@@ -19,6 +19,9 @@ import {
   PEDIDO_FACTURA_POR_CORREO,
   PEDIDO_FACTURADO,
   PEDIDO_POR_FACTURAR,
+  PEDIDO_SUSTITUIBLE,
+  PEDIDO_SUSTITUIDO,
+  PEDIDO_SUSTITUIDO_CANCELADO,
 } from './facturacion.mocks';
 
 // The invoice of an order (Fase 28A, ADR 0045): Configuración › Facturación (ready, without the CSD, in the PAC's test
@@ -28,7 +31,9 @@ import {
 // (ADR 0047), the invoice in installments of the same order with the payment complements of its payments, and the dialog
 // to cancel one; since the Fase 28D (ADR 0048), its refunds with their credit notes, and the dialog to cancel one; since
 // the Fase 28E (ADR 0049), the invoice sent by email or refused by the customer's mail server, and «Enviar por correo»;
-// since the Fase 28F (ADR 0050), self-invoicing turned on, and the invoice the customer asked for online.
+// since the Fase 28F (ADR 0050), self-invoicing turned on, and the invoice the customer asked for online; since the Fase
+// 28G (ADR 0051), the form to replace an invoice with errors, the replaced invoice waiting for its cancellation with
+// relation, the dialog to cancel it without relation, and the replaced one once cancelled.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -229,6 +234,71 @@ test.describe('Pedidos › Factura por correo', () => {
       const invoice = await openInvoice(page);
       await expect(invoice.getByText(/No se envió a facturas@altavsita\.mx: el servidor de correo lo rechazó/)).toBeVisible();
       await snapScreen(page, 'pedidos-factura-correo-rechazado');
+    });
+  });
+});
+
+test.describe('Pedidos › Sustituir factura', () => {
+  /** The order's invoice, from its detail. */
+  async function openInvoice(page: Page) {
+    await open(page, '/orders');
+    await page.getByRole('button', { name: ORDER_NUMBER, exact: true }).click();
+    const detail = await dialog(page, `Pedido ${ORDER_NUMBER}`);
+    await detail.getByRole('button', { name: 'Factura' }).click();
+    return dialog(page, `Facturar ${ORDER_NUMBER}`);
+  }
+
+  test.describe('sustituible', () => {
+    test.use({ prepareData: PEDIDO_SUSTITUIBLE });
+
+    for (const look of LOOKS.slice(0, 2)) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`sustituir la factura ${look.suffix}`, async ({ page }) => {
+          const invoice = await openInvoice(page);
+          await invoice.getByRole('button', { name: 'Sustituir factura F-3' }).click();
+          await expect(invoice.getByRole('group', { name: 'Sustituir la factura F-3' })).toBeFocused();
+          await expect(invoice.getByRole('button', { name: 'Timbrar y sustituir la F-3' })).toBeEnabled();
+          await snapScreen(page, `pedidos-factura-sustituir-${look.suffix}`);
+        });
+      });
+    }
+  });
+
+  test.describe('sustituida', () => {
+    test.use({ prepareData: PEDIDO_SUSTITUIDO });
+
+    for (const look of LOOKS) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`factura sustituida ${look.suffix}`, async ({ page }) => {
+          const invoice = await openInvoice(page);
+          await expect(invoice.getByText('Sustituida por la factura F-4.')).toBeVisible();
+          await expect(invoice.getByRole('button', { name: 'Cancelar con relación la factura F-3' })).toBeVisible();
+          await snapScreen(page, `pedidos-factura-sustituida-${look.suffix}`);
+        });
+      });
+    }
+
+    test('cancelar la factura sustituida', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await invoice.getByRole('button', { name: 'Cancelar factura F-3' }).click();
+      const cancelling = await dialog(page, 'Cancelar la factura F-3');
+      await expect(cancelling.getByLabel('02 · Tiene errores, sin relacionarla con la F-4')).toBeChecked();
+      await snapScreen(page, 'pedidos-factura-cancelar-sustituida');
+    });
+  });
+
+  test.describe('sustituida y cancelada', () => {
+    test.use({ prepareData: PEDIDO_SUSTITUIDO_CANCELADO });
+
+    test('factura sustituida y cancelada', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await expect(invoice.getByText('Sustituye a la factura F-3.')).toBeVisible();
+      await expect(invoice.getByRole('button', { name: 'Sustituir factura F-4' })).toBeVisible();
+      await snapScreen(page, 'pedidos-factura-sustituida-cancelada');
     });
   });
 });

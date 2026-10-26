@@ -100,7 +100,8 @@ public class StampPendingInvoicesCommandHandler : IRequestHandler<StampPendingIn
 /// <summary>
 /// Asks the SAT about a business's invoices whose cancellation waits for the customer (the invoicing worker sends it in
 /// the business's scope, Fase 28A; global invoices too, Fase 28B, payment complements, Fase 28C, and credit notes, Fase 28D):
-/// cancelled (accepted, or the customer let the time pass) or kept, with the reason.
+/// cancelled (accepted, or the customer let the time pass) or kept, with the reason. And asks it to cancel with motive 01 the
+/// invoices whose replacement is stamped (Fase 28G).
 /// </summary>
 [AllowAnonymousRequest("Lo envía el worker de facturación (sistema), sin usuario, en el alcance del negocio.")]
 public record CheckInvoiceCancellationsCommand : IRequest<Result<int>>;
@@ -132,13 +133,14 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
         _logger = logger;
     }
 
-    /// <returns>Invoices whose cancellation the SAT settled.</returns>
+    /// <returns>Invoices whose cancellation the SAT settled or took.</returns>
     public async Task<Result<int>> Handle(CheckInvoiceCancellationsCommand request, CancellationToken cancellationToken)
     {
         if (!_gateway.IsConfigured)
             return Result.Success(0);
 
-        var settled = await CheckAsync(_context.OrderInvoices, _context.OrderInvoices, cancellationToken)
+        var settled = await new ReplacedInvoiceCanceller(_context, _gateway, _clock).CancelPendingAsync(MaxPerPass, cancellationToken)
+            + await CheckAsync(_context.OrderInvoices, _context.OrderInvoices, cancellationToken)
             + await CheckAsync(_context.GlobalInvoices, GlobalInvoicing.WithSales(_context), cancellationToken)
             + await CheckAsync(_context.PaymentComplements, _context.PaymentComplements, cancellationToken)
             + await CheckAsync(_context.CreditNotes, _context.CreditNotes, cancellationToken);

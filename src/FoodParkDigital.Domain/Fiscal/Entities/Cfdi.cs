@@ -210,7 +210,8 @@ public abstract class Cfdi : AuditableEntity, ITenantScoped
         return key;
     }
 
-    private static string Trim(string? message, string fallback)
+    /// <summary>A reason as it is kept: trimmed, the fallback when there is none, and never longer than the column.</summary>
+    protected static string Trim(string? message, string fallback)
     {
         var text = string.IsNullOrWhiteSpace(message) ? fallback : message.Trim();
         return text.Length > MaxFailureMessageLength ? text[..MaxFailureMessageLength] : text;

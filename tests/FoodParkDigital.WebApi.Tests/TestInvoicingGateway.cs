@@ -7,11 +7,19 @@ namespace FoodParkDigital.WebApi.Tests;
 
 /// <summary>
 /// The PAC for the API in process (Fase 28A): it keeps each CSD, stamps each key once (the same stamp for a repeated key),
-/// renders a PDF and takes every cancellation.
+/// renders a PDF and takes every cancellation. It can refuse the next stamp (Fase 28G).
 /// </summary>
 public sealed class TestInvoicingGateway : IInvoicingGateway
 {
     private readonly ConcurrentDictionary<Guid, StampedCfdi> _stamped = new();
+    private string? _refuseNextStamp;
+
+    /// <summary>The next stamp asked for is refused with this message.</summary>
+    public string? RefuseNextStamp
+    {
+        get => Volatile.Read(ref _refuseNextStamp);
+        set => Volatile.Write(ref _refuseNextStamp, value);
+    }
 
     public bool IsConfigured => true;
     public bool Sandbox => false;
@@ -24,7 +32,9 @@ public sealed class TestInvoicingGateway : IInvoicingGateway
     public Task RemoveCertificateAsync(string certificateNumber, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public Task<StampedCfdi> StampAsync(CfdiDocument document, Guid idempotencyKey, CancellationToken cancellationToken)
-        => Task.FromResult(_stamped.GetOrAdd(idempotencyKey, _ =>
+        => Interlocked.Exchange(ref _refuseNextStamp, null) is { } refusal
+            ? Task.FromException<StampedCfdi>(new InvoicingGatewayRefusedException(refusal))
+            : Task.FromResult(_stamped.GetOrAdd(idempotencyKey, _ =>
         {
             var uuid = Guid.NewGuid().ToString().ToUpperInvariant();
             return new StampedCfdi(
@@ -38,7 +48,7 @@ public sealed class TestInvoicingGateway : IInvoicingGateway
         => Task.FromResult(Encoding.ASCII.GetBytes("%PDF-1.7"));
 
     public Task<CfdiCancellationOutcome> CancelAsync(
-        string issuerRfc, string uuid, CfdiCancellationMotive motive, CancellationToken cancellationToken)
+        string issuerRfc, string uuid, CfdiCancellationMotive motive, string? replacementUuid, CancellationToken cancellationToken)
     {
         Cancellations.Enqueue((issuerRfc, uuid));
         return Task.FromResult(CfdiCancellationOutcome.Requested);

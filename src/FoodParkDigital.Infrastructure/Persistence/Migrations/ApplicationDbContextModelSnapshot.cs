@@ -2335,6 +2335,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("RefusedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<Guid?>("ReplacedByInvoiceId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("RequestedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -2396,6 +2399,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrderId");
 
+                    b.HasIndex("ReplacedByInvoiceId")
+                        .IsUnique()
+                        .HasFilter("[ReplacedByInvoiceId] IS NOT NULL");
+
                     b.HasIndex("Status", "RequestedAt")
                         .HasFilter("[Status] IN (0, 3)");
 
@@ -2408,7 +2415,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "TenantId", "OrderId" }, "IX_OrderInvoices_TenantId_OrderId_Live")
                         .IsUnique()
-                        .HasFilter("[Status] IN (0, 1, 3)");
+                        .HasFilter("[Status] IN (0, 1, 3) AND [ReplacedByInvoiceId] IS NULL");
 
                     b.ToTable("OrderInvoices", null, t =>
                         {
@@ -2416,13 +2423,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_OrderInvoices_Cancellation", "([Status] IN (0, 2) AND [CancellationMotive] IS NULL AND [CancellationRequestedAt] IS NULL AND [CancellationRequestedByUserId] IS NULL AND [CancelledAt] IS NULL) OR ([Status] = 1 AND [CancelledAt] IS NULL) OR ([Status] IN (3, 4) AND [CancellationMotive] IS NOT NULL AND [CancellationRequestedAt] IS NOT NULL AND [CancellationRequestedByUserId] IS NOT NULL AND (([Status] = 3 AND [CancelledAt] IS NULL) OR ([Status] = 4 AND [CancelledAt] IS NOT NULL)))");
 
-                            t.HasCheckConstraint("CK_OrderInvoices_CancellationMotive", "[CancellationMotive] IS NULL OR [CancellationMotive] IN (2, 3)");
+                            t.HasCheckConstraint("CK_OrderInvoices_CancellationMotive", "[CancellationMotive] IS NULL OR [CancellationMotive] IN (2, 3) OR ([CancellationMotive] = 1 AND [ReplacedByInvoiceId] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_OrderInvoices_Folio", "[Folio] > 0");
 
                             t.HasCheckConstraint("CK_OrderInvoices_PaymentMethod", "([PaymentMethod] = 'PUE' AND [PaymentForm] <> '99') OR ([PaymentMethod] = 'PPD' AND [PaymentForm] = '99')");
 
                             t.HasCheckConstraint("CK_OrderInvoices_Refused", "([Status] = 2 AND [RefusedAt] IS NOT NULL AND [FailureMessage] IS NOT NULL) OR ([Status] <> 2 AND [RefusedAt] IS NULL)");
+
+                            t.HasCheckConstraint("CK_OrderInvoices_Replacement", "[ReplacedByInvoiceId] IS NULL OR ([ReplacedByInvoiceId] <> [Id] AND [Status] IN (1, 3, 4))");
 
                             t.HasCheckConstraint("CK_OrderInvoices_Stamp", "([Status] IN (0, 2) AND [Uuid] IS NULL AND [ProviderInvoiceId] IS NULL AND [StampedAt] IS NULL AND [XmlFileKey] IS NULL AND [PdfFileKey] IS NULL) OR ([Status] IN (1, 3, 4) AND [Uuid] IS NOT NULL AND [ProviderInvoiceId] IS NOT NULL AND [StampedAt] IS NOT NULL AND [XmlFileKey] IS NOT NULL)");
 

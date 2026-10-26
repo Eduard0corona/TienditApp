@@ -21,6 +21,7 @@ internal static class BeforeSelfInvoicing
     {
         modelBuilder.Entity<InvoicingProfile>().Ignore(p => p.SelfInvoicing);
         modelBuilder.Entity<InvoicingProfile>().Ignore(p => p.SelfInvoiceKey);
+        BeforeInvoiceSubstitution.Ignore(modelBuilder);
     }
 
     private sealed class Context(

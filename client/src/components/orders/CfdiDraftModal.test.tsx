@@ -26,6 +26,8 @@ const STAMPED: Invoice = {
   paymentMethod: 'PUE', subTotal: 172.41, taxTotal: 27.59, total: 200, requestedAt: '2026-10-23T17:00:00Z',
   uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: '2026-10-23T17:00:05Z', hasXml: true, hasPdf: true,
   failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [], requestedByCustomer: false,
+  canSubstitute: false,
+  awaitsReplacedCancellation: false,
 };
 
 function draft(receiver: typeof KARLA | null): Draft {
@@ -361,5 +363,155 @@ describe('CfdiDraftModal', () => {
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Cancelación de F-1 pedida: el SAT espera la respuesta del cliente.'));
     expect(cancelled).toEqual({ method: 'post', path: '/api/v1/invoicing/invoices/{invoiceId}/cancel', body: { motive: CfdiCancellationMotive.NotCarriedOut } });
+  });
+
+  describe('replacing an invoice with errors (Fase 28G)', () => {
+    const LIVE_PROBLEM = 'Este pedido ya tiene la factura F-1: cancélala para facturarlo otra vez.';
+
+    it('opens the form with the invoice\'s data and email to correct them, and stamps the new one in its place', async () => {
+      let substituted: unknown;
+      const wrong: Invoice = { ...STAMPED, receiver: { ...KARLA, postalCode: '26016' }, receiverEmail: 'karla.f@ejemplo.mx', canSubstitute: true };
+      // The customer's fiscal data still has the wrong postal code: the order proposes it until someone changes it.
+      const before: Invoicing = {
+        ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, proposedEmail: 'karla@ejemplo.mx',
+        proposedReceiver: wrong.receiver, invoices: [wrong],
+      };
+      const replacement: Invoice = { ...STAMPED, id: 'inv-2', number: 'F-2', replacesInvoiceId: 'inv-1', replacesNumber: 'F-1' };
+      let current = before;
+      serve(
+        () => Promise.resolve(current),
+        (method, path, body) => {
+          substituted = { method, path, body };
+          current = {
+            ...before, problem: 'Este pedido ya tiene la factura F-2.',
+            invoices: [replacement, { ...wrong, canSubstitute: false, replacedByInvoiceId: 'inv-2', replacedByNumber: 'F-2', status: OrderInvoiceStatus.Cancelling }],
+          };
+          return Promise.resolve(replacement);
+        },
+      );
+      renderModal(true);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Sustituir factura F-1' }));
+
+      expect(screen.getByRole('group', { name: 'Sustituir la factura F-1' })).toHaveFocus();
+      expect(screen.queryByText(LIVE_PROBLEM)).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Correo del cliente (opcional)')).toHaveValue('karla.f@ejemplo.mx');
+      expect(screen.queryByRole('button', { name: 'Público en general' })).not.toBeInTheDocument();
+      const zip = screen.getByLabelText('Código postal fiscal');
+      expect(zip).toHaveValue('26016');
+      await userEvent.clear(zip);
+      await userEvent.type(zip, '26015');
+      const replace = screen.getByRole('button', { name: 'Timbrar y sustituir la F-1' });
+      expect(replace).toBeDisabled();
+      await userEvent.click(screen.getByRole('button', { name: 'Ver con estos datos' }));
+      await waitFor(() => expect(replace).toBeEnabled());
+      await userEvent.click(replace);
+
+      await waitFor(() => expect(toast.success)
+        .toHaveBeenCalledWith('Factura F-2 timbrada en lugar de la F-1: se está enviando a karla.f@ejemplo.mx.'));
+      expect(substituted).toEqual({
+        method: 'post', path: '/api/v1/invoicing/invoices/{invoiceId}/substitute',
+        body: { receiver: KARLA, saveToCustomer: true, receiverEmail: 'karla.f@ejemplo.mx' },
+      });
+      expect(screen.queryByRole('group', { name: 'Sustituir la factura F-1' })).not.toBeInTheDocument();
+      // The form keeps what the new one went with, and the focus goes to the order's invoices.
+      expect(screen.getByLabelText('Código postal fiscal')).toHaveValue('26015');
+      expect(screen.getByRole('heading', { name: 'Facturas de este pedido' })).toHaveFocus();
+    });
+
+    it('gives the focus back to «Sustituir factura» when it is left', async () => {
+      serve({ ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, invoices: [{ ...STAMPED, canSubstitute: true }] });
+      renderModal(true);
+      const open = await screen.findByRole('button', { name: 'Sustituir factura F-1' });
+      await userEvent.click(open);
+      expect(screen.getByRole('button', { name: 'Cancelar factura F-1' })).toBeDisabled();
+
+      await userEvent.click(screen.getByRole('button', { name: 'No sustituir' }));
+
+      expect(open).toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Cancelar factura F-1' })).toBeEnabled();
+    });
+
+    it('says the invoice is no longer replaced from here once it stops being the order\'s invoice', async () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      let current: Invoicing = { ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, invoices: [{ ...STAMPED, canSubstitute: true }] };
+      serve(() => Promise.resolve(current));
+      renderModal(true, queryClient);
+      await userEvent.click(await screen.findByRole('button', { name: 'Sustituir factura F-1' }));
+
+      // Someone cancelled it meanwhile.
+      current = {
+        ...current, problem: 'Este pedido ya tiene la factura F-1.',
+        invoices: [{ ...STAMPED, status: OrderInvoiceStatus.Cancelling, cancellationMotive: CfdiCancellationMotive.NotCarriedOut }],
+      };
+      await queryClient.invalidateQueries({ queryKey: ['invoicing', 'orders', 'o-1'] });
+
+      expect(await screen.findByText('La F-1 ya no es la factura vigente del pedido: no se sustituye.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Timbrar y sustituir la F-1' })).toBeDisabled();
+    });
+
+    it('keeps the form when the PAC refuses the new one, since the old one still stands, until it is left', async () => {
+      const refusal = 'CFDI40147 - El código postal del receptor no corresponde al RFC.';
+      serve(
+        { ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, invoices: [{ ...STAMPED, canSubstitute: true }] },
+        () => Promise.resolve({ ...STAMPED, id: 'inv-2', number: 'F-2', status: OrderInvoiceStatus.Refused, failureMessage: refusal }),
+      );
+      renderModal(true);
+      await userEvent.click(await screen.findByRole('button', { name: 'Sustituir factura F-1' }));
+      const replace = screen.getByRole('button', { name: 'Timbrar y sustituir la F-1' });
+      await waitFor(() => expect(replace).toBeEnabled());
+
+      await userEvent.click(replace);
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith(`${refusal} La F-1 sigue vigente.`));
+      expect(screen.getByRole('group', { name: 'Sustituir la factura F-1' })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'No sustituir' }));
+      expect(screen.queryByRole('group', { name: 'Sustituir la factura F-1' })).not.toBeInTheDocument();
+      expect(screen.getByText(LIVE_PROBLEM)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Timbr/ })).not.toBeInTheDocument();
+    });
+
+    it('is offered to owners and admins only', async () => {
+      serve({ ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, invoices: [{ ...STAMPED, canSubstitute: true }] });
+      renderModal(false);
+
+      expect(await screen.findByRole('button', { name: 'Descargar XML de la factura F-1' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Sustituir factura F-1' })).not.toBeInTheDocument();
+    });
+
+    it('says why the invoice cannot be replaced now', async () => {
+      const otherRfc = 'La factura F-1 se timbró con otro RFC del negocio: cancélala (02) y factura otra vez.';
+      serve({ ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, invoices: [{ ...STAMPED, substitutionProblem: otherRfc }] });
+      renderModal(true);
+
+      expect(await screen.findByText(`No se puede sustituir. ${otherRfc}`)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Sustituir factura F-1' })).not.toBeInTheDocument();
+    });
+
+    it('shows which invoice replaces which, cancels the old one with relation, and the new one only after it', async () => {
+      const failure = 'El SAT todavía no relaciona esta factura con la que la sustituye: puede que aún no reciba la nueva (tarda hasta dos días).';
+      const replacement: Invoice = { ...STAMPED, id: 'inv-2', number: 'F-2', replacesInvoiceId: 'inv-1', replacesNumber: 'F-1' };
+      const replaced: Invoice = { ...STAMPED, replacedByInvoiceId: 'inv-2', replacedByNumber: 'F-2', failureMessage: failure };
+      let asked: unknown;
+      serve({ ...INVOICING, canInvoice: false, problem: 'Este pedido ya tiene la factura F-2.', invoices: [replacement, replaced] }, (method, path) => {
+        asked = { method, path };
+        return Promise.resolve({
+          ...replaced, status: OrderInvoiceStatus.Cancelling, cancellationMotive: CfdiCancellationMotive.ErrorsWithReplacement, failureMessage: null,
+        });
+      });
+      renderModal(true);
+
+      expect(await screen.findByText('Sustituye a la factura F-1.')).toBeInTheDocument();
+      expect(screen.getByText('Sustituida por la factura F-2.')).toBeInTheDocument();
+      expect(screen.getByText(failure)).toBeInTheDocument();
+      // The SAT cancels F-2 only once F-1, whose cancellation names it, is cancelled.
+      expect(screen.queryByRole('button', { name: 'Cancelar factura F-2' })).not.toBeInTheDocument();
+      expect(screen.getByText('Para cancelarla, primero cancela F-1.')).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancelar con relación la factura F-1' }));
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Cancelación de F-1 pedida: el SAT espera la respuesta del cliente.'));
+      expect(asked).toEqual({ method: 'post', path: '/api/v1/invoicing/invoices/{invoiceId}/cancel-replaced' });
+    });
   });
 });

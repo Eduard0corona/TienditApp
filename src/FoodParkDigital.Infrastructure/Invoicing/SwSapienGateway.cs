@@ -145,13 +145,19 @@ public sealed class SwSapienGateway : IInvoicingGateway
         return Convert.FromBase64String(pdf);
     }
 
-    public async Task<CfdiCancellationOutcome> CancelAsync(
-        string issuerRfc, string uuid, CfdiCancellationMotive motive, CancellationToken cancellationToken)
-    {
-        if (motive == CfdiCancellationMotive.ErrorsWithReplacement)
-            throw new InvalidOperationException("Motive 01 needs the invoice that replaces it.");
+    public const string ReplacementNotRelatedMessage =
+        "El SAT todavía no relaciona esta factura con la que la sustituye: puede que aún no reciba la nueva (tarda hasta dos días).";
 
-        var url = $"{ServicesUrl}/cfdi33/cancel/{Uri.EscapeDataString(issuerRfc)}/{Uri.EscapeDataString(uuid)}/{(int)motive:00}";
+    public async Task<CfdiCancellationOutcome> CancelAsync(
+        string issuerRfc, string uuid, CfdiCancellationMotive motive, string? replacementUuid, CancellationToken cancellationToken)
+    {
+        var replaced = motive == CfdiCancellationMotive.ErrorsWithReplacement;
+        if (replaced != replacementUuid is not null)
+            throw new InvalidOperationException("Motive 01, and only it, goes with the UUID of the invoice that replaces it.");
+
+        // With motive 01 the folio de sustitución goes last (Fase 28G); SW refuses it with any other motive (209).
+        var url = $"{ServicesUrl}/cfdi33/cancel/{Uri.EscapeDataString(issuerRfc)}/{Uri.EscapeDataString(uuid)}/{(int)motive:00}"
+            + (replacementUuid is null ? string.Empty : $"/{Uri.EscapeDataString(replacementUuid)}");
         using var response = await SendAsync(HttpMethod.Post, url, "cancellation", cancellationToken: cancellationToken);
         var error = response.IsSuccessStatusCode ? default : await ReadErrorAsync(response, cancellationToken);
         var data = response.IsSuccessStatusCode ? await ReadDataAsync(response, cancellationToken) : error.Data;
@@ -170,6 +176,10 @@ public sealed class SwSapienGateway : IInvoicingGateway
                 throw new InvoicingGatewayRefusedException("El SAT no encuentra esta factura entre las del negocio.");
             case "204":
                 throw new InvoicingGatewayRefusedException("El SAT dice que esta factura no se puede cancelar.");
+            case "207" or "208" or "212" or "312" when replaced:
+                // The replacement it names does not exist for the SAT yet (it takes up to two days), was cancelled, or is not
+                // related to this one.
+                throw new InvoicingGatewayRefusedException(ReplacementNotRelatedMessage);
         }
 
         if (response.StatusCode == HttpStatusCode.BadRequest)

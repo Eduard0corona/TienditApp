@@ -116,6 +116,30 @@ public class InvoicingController : ControllerBase
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
+    /// <summary>
+    /// Replaces a stamped invoice with errors with a new one (Fase 28G), owners and admins: the new one carries its UUID with
+    /// the relation 04 and, once stamped, the old one is cancelled with motive 01. It answers the new invoice as it ended up.
+    /// </summary>
+    [HttpPost("invoices/{invoiceId:guid}/substitute")]
+    public async Task<ActionResult<OrderInvoiceDto>> SubstituteInvoice(
+        Guid invoiceId, [FromBody] IssueOrderInvoiceRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SubstituteOrderInvoiceCommand(invoiceId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Asks the SAT again to cancel with motive 01 an invoice whose replacement is stamped (Fase 28G), owners and admins. It
+    /// answers the replaced invoice as it ended up.
+    /// </summary>
+    [HttpPost("invoices/{invoiceId:guid}/cancel-replaced")]
+    public async Task<ActionResult<OrderInvoiceDto>> CancelReplacedInvoice(Guid invoiceId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CancelReplacedOrderInvoiceCommand(invoiceId), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
     [HttpGet("invoices/{invoiceId:guid}/xml")]
     public Task<IActionResult> DownloadXml(Guid invoiceId, CancellationToken cancellationToken)
         => DownloadAsync(new GetOrderInvoiceFileQuery(invoiceId, OrderInvoiceFileKind.Xml), cancellationToken);
