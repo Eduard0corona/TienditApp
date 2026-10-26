@@ -218,7 +218,7 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Equal(((int)OrderInvoiceStatus.Stamped, "P-1", 1), (
             complement.GetProperty("status").GetInt32(), complement.GetProperty("number").GetString(), complement.GetProperty("installment").GetInt32()));
 
-        // Nor see, retry, cancel or download it.
+        // Nor see, retry, cancel, download or send it.
         foreach (var url in new[] { $"/api/v1/invoicing/payment-complements/{complementId}/xml", $"/api/v1/invoicing/payment-complements/{complementId}/pdf" })
         {
             Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync(url)).StatusCode);
@@ -227,11 +227,26 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"/api/v1/invoicing/payment-complements/{complementId}/retry", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
             mine, HttpMethod.Post, $"/api/v1/invoicing/payment-complements/{complementId}/cancel", new { motive = (int)CfdiCancellationMotive.NotCarriedOut }))).StatusCode);
+        var other = $"otro.{Guid.NewGuid():N}@ejemplo.mx";
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/payment-complements/{complementId}/email", new { email = other, useForInvoice = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
+            mine, HttpMethod.Post, $"/api/v1/invoicing/payment-complements/{complementId}/email", new { email = other, useForInvoice = false }))).StatusCode);
         Assert.Empty(_api.Invoicing.Cancellations.Where(c => c.Uuid == complement.GetProperty("uuid").GetString()));
         Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.PaymentComplements.ToListAsync()));
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.CfdiEmails.ToListAsync()));
+        Assert.Empty(await _api.QueryAsync(mine.TenantId, db => db.CfdiEmails.ToListAsync()));
 
-        // Mine: its XML downloads, and the invoice is not cancelled while the complement stands.
+        // Mine: its XML downloads, it goes by email as a complement, and the invoice is not cancelled while it stands.
         Assert.Equal(HttpStatusCode.OK, (await mine.Client.GetAsync($"/api/v1/invoicing/payment-complements/{complementId}/xml")).StatusCode);
+        var accounting = $"contabilidad.{Guid.NewGuid():N}@ejemplo.mx";
+        var sent = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/payment-complements/{complementId}/email", new { email = accounting, useForInvoice = false }));
+        Assert.Equal(((int)CfdiEmailDocument.PaymentComplement, complementId, accounting), (
+            sent.GetProperty("document").GetInt32(), sent.GetProperty("cfdiId").GetGuid(), sent.GetProperty("to").GetString()));
+        await _api.DispatchOutboxAsync();
+        Assert.Empty(_api.DocumentsTo(other));
+        Assert.StartsWith("Complemento de pago P-1", Assert.Single(_api.DocumentsTo(accounting)).Subject, StringComparison.Ordinal);
         var blocked = await mine.Client.PostAsJsonAsync(
             $"/api/v1/invoicing/invoices/{invoice.GetProperty("id").GetGuid()}/cancel", new { motive = (int)CfdiCancellationMotive.ErrorsWithoutReplacement });
         Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
