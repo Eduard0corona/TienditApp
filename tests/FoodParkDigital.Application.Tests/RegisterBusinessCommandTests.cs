@@ -80,18 +80,38 @@ public class RegisterBusinessCommandTests
         Assert.True(result.IsValid, string.Join(" ", result.Errors));
     }
 
-    [Fact]
-    public async Task RegisterBusiness_ShouldNotPersistAnything_WhenThePhoneIsNotANumber()
+    [Theory]
+    [InlineData("55 1234")]
+    // Without the +, a number that is not the ten digits is mistyped: 551234567 must not become +551234567, in Brazil.
+    [InlineData("551234567")]
+    [InlineData("12345678")]
+    [InlineData("55 1111 22223")]
+    public async Task RegisterBusiness_ShouldNotPersistAnything_WhenThePhoneIsNotTenDigitsOrInternational(string phone)
     {
         await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
 
-        var result = await RegisterAsync(host, ValidCommand() with { PhoneNumber = "55 1234" });
+        var result = await RegisterAsync(host, ValidCommand() with { PhoneNumber = phone });
 
         Assert.True(result.IsFailure);
         Assert.Equal(PhoneNumberRules.InvalidPhoneMessage, result.Error);
         await AssertNothingPersistedAsync(host);
         await host.DispatchAccountEmailsAsync();
         Assert.Empty(host.Email.ConfirmationRecipients);
+    }
+
+    [Theory]
+    [InlineData("525511112222")]
+    [InlineData("+52 55 1111 2222")]
+    [InlineData("0052 55 1111 2222")]
+    public async Task RegisterBusiness_ShouldKeepThePhoneInE164_WhenItComesWithTheCountryCode(string phone)
+    {
+        await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
+
+        var result = await RegisterAsync(host, ValidCommand() with { PhoneNumber = phone });
+
+        Assert.True(result.IsSuccess, result.Error);
+        var owner = await host.QueryAsync(db => db.Users.SingleAsync());
+        Assert.Equal("+525511112222", owner.PhoneNumber);
     }
 
     private static Task<Result<Guid>> RegisterAsync(SqliteTestHost host, RegisterBusinessCommand command)

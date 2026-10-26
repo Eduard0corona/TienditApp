@@ -101,7 +101,7 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
     {
         // The owner types the ten digits; the account keeps the number in E.164 because its SMS codes go to it. What
         // was typed is checked before looking for the email: its rules never depend on whether it has an account.
-        if (!_phoneNormalizationService.TryNormalizeToE164(request.PhoneNumber, "MX", out var phoneNormalized))
+        if (!PhoneNumberRules.TryNormalizeSignUpPhone(_phoneNormalizationService, request.PhoneNumber, out var phoneNormalized))
             return Result.Failure<Guid>(PhoneNumberRules.InvalidPhoneMessage);
 
         var user = new ApplicationUser

@@ -48,20 +48,14 @@ describe('Register', () => {
     expect(api.registerCustomer).toHaveBeenCalledWith(expect.objectContaining({ phoneNumber: '5512345678' }));
   });
 
-  it('asks for the ten digits when the phone has the international prefix or is short', async () => {
+  it.each(['+5215512345678', '551234567'])('asks for the ten digits instead of %s', async (phone) => {
     const user = userEvent.setup();
     renderPage();
 
-    await fillCustomer(user, '+5215512345678');
+    await fillCustomer(user, phone);
     await user.click(screen.getByRole('button', { name: 'Crear cuenta' }));
 
     expect(await screen.findByText('Escribe los 10 dígitos de tu teléfono')).toBeInTheDocument();
-
-    await user.clear(screen.getByLabelText('Teléfono *'));
-    await user.type(screen.getByLabelText('Teléfono *'), '551234567');
-    await user.click(screen.getByRole('button', { name: 'Crear cuenta' }));
-
-    expect(screen.getByText('Escribe los 10 dígitos de tu teléfono')).toBeInTheDocument();
     expect(api.registerCustomer).not.toHaveBeenCalled();
   });
 

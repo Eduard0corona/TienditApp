@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Customers.Enums;
@@ -28,6 +29,23 @@ public class RegisterCustomerCommandTests
         await host.DispatchAccountEmailsAsync();
         Assert.Empty(host.Email.ConfirmationRecipients);
         Assert.Empty(host.Sms.VerificationRecipients);
+    }
+
+    [Theory]
+    // Without the +, a number that is not the ten digits is mistyped: 551234567 must not become +551234567, in Brazil.
+    [InlineData("551234567")]
+    [InlineData("12345678")]
+    public async Task RegisterCustomer_ShouldNotPersistAnything_WhenThePhoneIsNotTenDigitsOrInternational(string phone)
+    {
+        await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
+
+        var result = await RegisterAsync(host, ValidCommand() with { PhoneNumber = phone });
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(PhoneNumberRules.InvalidPhoneMessage, result.Error);
+        await AssertNoAccountPersistedAsync(host);
+        await host.DispatchAccountEmailsAsync();
+        Assert.Empty(host.Email.ConfirmationRecipients);
     }
 
     [Fact]
