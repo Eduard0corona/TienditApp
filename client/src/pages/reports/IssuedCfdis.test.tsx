@@ -50,6 +50,8 @@ interface Answers {
   totalCount?: number;
   summary?: (query: Query) => Promise<IssuedCfdiSummary>;
   route?: string;
+  /** The app's cache, to come back to the page with what it read before. */
+  client?: QueryClient;
 }
 
 function renderPage(list: (query: Query) => IssuedCfdi[], answers: Answers = {}) {
@@ -67,7 +69,7 @@ function renderPage(list: (query: Query) => IssuedCfdi[], answers: Answers = {})
     }
     return Promise.reject(new Error(`Sin respuesta para ${method} ${path}`));
   }) as unknown as typeof apiRequest);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = answers.client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[answers.route ?? '/reports/issued-cfdis']}>
@@ -281,6 +283,28 @@ describe('IssuedCfdis', () => {
     expect(await screen.findByText('No hay CFDI en este mes.')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Descargar XML' })).toBeDisabled());
     expect(screen.getByRole('button', { name: 'Descargar lista' })).toBeDisabled();
+  });
+
+  it('reads the month again when it comes back to it, after a CFDI changed in its order', async () => {
+    // Fresh for 30 seconds, as the app keeps what it reads.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    let status: OrderInvoiceStatus = OrderInvoiceStatus.Stamped;
+    let inForce = 2;
+    const summary = () => Promise.resolve({
+      ...SUMMARY, kinds: SUMMARY.kinds.map((kind) => (kind.kind === IssuedCfdiKind.OrderInvoice ? { ...kind, inForce } : kind)),
+    });
+    const first = renderPage(() => [cfdi({ status })], { client, summary });
+    expect(await screen.findByText('Timbrada')).toBeInTheDocument();
+    first.unmount();
+
+    // F-12 was cancelled from its order.
+    status = OrderInvoiceStatus.Cancelled;
+    inForce = 1;
+    renderPage(() => [cfdi({ status })], { client, summary });
+
+    expect(await screen.findByText('Cancelada')).toBeInTheDocument();
+    const summaryTable = screen.getByRole('table', { name: 'Vigentes del mes' });
+    await waitFor(() => expect(within(summaryTable).getByRole('row', { name: /^Facturas 1/ })).toBeInTheDocument());
   });
 
   it('says why the summary did not load, and tries again', async () => {

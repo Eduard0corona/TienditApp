@@ -1434,16 +1434,17 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `IssuedCfdiDateIndexesMigrationSqlServerTests` (1, nuevo): la migración agrega el índice `(TenantId, IssuedAt)` a las cuatro tablas, no único y sin filtro, sin tocar la factura que ya estaba; revertirla solo quita los índices, y otra vez no hace nada.
   - **WebApi:** `CrossTenantInvoicingSqlServerTests` (+1, 14): otro negocio, también con el encabezado de mi negocio, ve una lista vacía, un resumen en ceros, un ZIP solo con su lista vacía y una lista sola sin mi factura; el mío trae mi factura, su XML y su lista; y el cajero, aunque lea reportes, recibe 403 en las tres rutas.
   - **Cliente:**
-    - `IssuedCfdis.test.tsx` (11, nuevo):
+    - `IssuedCfdis.test.tsx` (12, nuevo):
       - abre en el mes del negocio (no en el de UTC al cambiar de mes) con el resumen y lo que se canceló, espera o se rechazó; o en el mes de la dirección, de enero de 2022 al actual, y en el actual si la dirección nombra otro;
       - cada fila con su tipo, estado, receptor y relación (pedido, global, sustitución);
       - los filtros, la búsqueda y el mes anterior; el primer tipo y el primer estado también se mandan, y filtrar regresa a la primera página; en los extremos del rango el foco pasa al título del mes;
       - descargar el ZIP y el mensaje si no se puede; un mes sin CFDI no ofrece descargas, y los filtros que no dejan nada lo dicen;
-      - el XML o PDF de una fila por su tipo; y el resumen que no cargó dice por qué y se vuelve a pedir.
+      - el XML o PDF de una fila por su tipo; y el resumen que no cargó dice por qué y se vuelve a pedir;
+      - al volver a la pantalla dentro de los 30 segundos en que la app da por frescos los datos, lee otra vez la lista y el resumen: la factura cancelada desde su pedido ya no sale timbrada ni se suma (la prueba falla sin el cambio).
     - `navigation.test.ts` (10): CFDI emitidos en Reportes solo para dueños y administradores, y la búsqueda la encuentra por «contador» y «xml».
   - **Total:** `dotnet test` con SQL Server 2022, 3,934 pruebas sin fallos ni omitidas (Domain 1,174, Application 1,736, Infrastructure 563, WebApi 461).
-  - **Cliente en total:** 171 archivos y 1,200 pruebas.
-  - **Primera visita:** 180,323 B de 180,400 B (`master`: 180,037 B): +286 B por la entrada de Reportes › CFDI emitidos en el menú y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube de 180,100 B a 180,400 B.
+  - **Cliente en total:** 171 archivos y 1,201 pruebas.
+  - **Primera visita:** 180,324 B de 180,400 B (`master`: 180,037 B): +287 B por la entrada de Reportes › CFDI emitidos en el menú y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube de 180,100 B a 180,400 B.
   - **Escenas visuales:** `cfdiEmitidos.spec.ts` (4, nuevo): Reportes › CFDI emitidos en escritorio, teléfono y oscuro, y un mes sin CFDI.
     - **Resultado:** la comparación contra `master` en `1e52cf7` dio 681 pruebas iguales (con la de cobertura), 26 que cambian solo por la pestaña nueva «CFDI emitidos» de Reportes (Ventas, Factura global, Liquidaciones y Retenciones) y las 4 nuevas (que no existen en `master`); las 4 nuevas pasaron dos corridas seguidas contra el mismo build.
 

@@ -326,6 +326,8 @@ export function useIssuedCfdis(year: number, month: number, filters: IssuedCfdiF
     }),
     placeholderData: (previous, previousQuery) =>
       previousQuery && listing.every((part, index) => previousQuery.queryKey[index] === part) ? previous : undefined,
+    // A CFDI is stamped, cancelled or replaced from its order or its global invoice: coming back reads the month again.
+    refetchOnMount: 'always',
     refetchInterval: (query) => query.state.data?.items.some((cfdi) => cfdi.status === OrderInvoiceStatus.Stamping)
       ? PENDING_REFRESH_MS
       : false,
@@ -337,6 +339,7 @@ export function useIssuedCfdiSummary(year: number, month: number) {
   return useQuery({
     queryKey: [...issuedCfdisKey, 'summary', year, month],
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/issued-cfdis/summary', { query: { year, month }, signal }),
+    refetchOnMount: 'always',
     refetchInterval: (query) => query.state.data?.kinds.some((kind) => kind.stamping > 0) ? PENDING_REFRESH_MS : false,
   });
 }
