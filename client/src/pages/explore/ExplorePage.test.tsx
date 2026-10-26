@@ -62,7 +62,13 @@ function business(overrides: Partial<DirectoryBusiness>): DirectoryBusiness {
 
 function directory(
   items: DirectoryBusiness[],
-  options: { total?: number; hasNextPage?: boolean; counts?: Partial<Record<BusinessCategory, number>>; products?: PublicDirectory['products'] } = {},
+  options: {
+    total?: number;
+    hasNextPage?: boolean;
+    totalPages?: number;
+    counts?: Partial<Record<BusinessCategory, number>>;
+    products?: PublicDirectory['products'];
+  } = {},
 ): PublicDirectory {
   const counts = options.counts ?? { [BusinessCategory.Food]: 2, [BusinessCategory.Hardware]: 1 };
   return {
@@ -70,7 +76,7 @@ function directory(
     businesses: {
       items,
       pageNumber: 1,
-      totalPages: options.hasNextPage ? 2 : 1,
+      totalPages: options.totalPages ?? (options.hasNextPage ? 2 : 1),
       totalCount: options.total ?? items.length,
       hasPreviousPage: false,
       hasNextPage: options.hasNextPage ?? false,
@@ -343,7 +349,7 @@ describe('ExplorePage', () => {
     expect(account.getFavorites).not.toHaveBeenCalled();
   });
 
-  it('shows the favorites of a customer first, and keeps or takes out a business with its heart at once', async () => {
+  it('shows the favorites of a customer first and not again in the list, and keeps or takes out a business with its heart at once', async () => {
     signInAsCustomer();
     account.getFavorites.mockResolvedValue([
       { slug: 'el-guero', name: 'Taquería El Güero', savedAt: '2026-10-18T08:00:00Z', card: business({}) },
@@ -364,9 +370,13 @@ describe('ExplorePage', () => {
     // One out of Explorar keeps its name and opens its menu.
     expect(favorites.getByRole('link', { name: /Café Oculto/ })).toHaveAttribute('href', '/m/oculto');
     expect(favorites.getByText('No aparece en Explorar ahora')).toBeInTheDocument();
+    // A favorite is not in the list below again, nor in its count.
+    const list = within(screen.getByRole('region', { name: 'Negocios' }));
+    expect(await list.findByText('1 negocio')).toBeInTheDocument();
+    expect(list.queryByRole('link', { name: /^Taquería El Güero/ })).not.toBeInTheDocument();
 
     // Kept at once, while the server answers; the heart keeps its name and says it is pressed.
-    const luna = await screen.findByRole('button', { name: 'Guardar Café Luna en tus favoritos', pressed: false });
+    const luna = list.getByRole('button', { name: 'Guardar Café Luna en tus favoritos', pressed: false });
     await user.click(luna);
     expect(account.saveFavorite).toHaveBeenCalledWith('cafe-luna');
     expect(luna).toHaveAttribute('aria-pressed', 'true');
@@ -376,9 +386,14 @@ describe('ExplorePage', () => {
       { slug: 'el-guero', name: 'Taquería El Güero', savedAt: '2026-10-18T08:00:00Z', card: business({}) },
     ]);
     await act(async () => saving.resolve());
+    // Once the server has it, it goes from the list to «Tus favoritos». Every business is there now: the list leaves (it
+    // does not say there are none) and the focus goes to the title of «Tus favoritos».
     await waitFor(() => expect(favorites.getByRole('link', { name: /^Café Luna/ })).toBeInTheDocument());
+    expect(screen.queryByRole('region', { name: 'Negocios' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Pronto verás aquí/)).not.toBeInTheDocument();
+    expect(favorites.getByRole('heading', { name: 'Tus favoritos' })).toHaveFocus();
 
-    // Taken out from «Tus favoritos»: it leaves the row and the focus goes to its title.
+    // Taken out from «Tus favoritos»: it leaves the row, the focus goes to its title, and it is back in the list.
     const guero = favorites.getByRole('button', { name: 'Guardar Taquería El Güero en tus favoritos', pressed: true });
     account.getFavorites.mockResolvedValue([
       { slug: 'cafe-luna', name: 'Café Luna', savedAt: '2026-10-18T09:00:00Z', card: business({ name: 'Café Luna', slug: 'cafe-luna' }) },
@@ -387,9 +402,83 @@ describe('ExplorePage', () => {
     expect(account.removeFavorite).toHaveBeenCalledWith('el-guero');
     await waitFor(() => expect(favorites.queryByRole('link', { name: /^Taquería El Güero/ })).not.toBeInTheDocument());
     expect(favorites.getByRole('heading', { name: 'Tus favoritos' })).toHaveFocus();
-    // Its heart in «Tus favoritos» and in the list say the same.
-    expect(screen.getAllByRole('button', { name: 'Guardar Café Luna en tus favoritos' }).map((heart) => heart.getAttribute('aria-pressed')))
-      .toEqual(['true', 'true']);
+    const back = within(await screen.findByRole('region', { name: 'Negocios' }));
+    expect(back.getByRole('link', { name: /^Taquería El Güero/ })).toBeInTheDocument();
+    expect(back.getByText('1 negocio')).toBeInTheDocument();
+    expect(back.queryByRole('link', { name: /^Café Luna/ })).not.toBeInTheDocument();
+    // Its heart in the list says it is not kept any more, once the server answered.
+    await waitFor(() => expect(back.getByRole('button', { name: 'Guardar Taquería El Güero en tus favoritos' })).not.toHaveAttribute('aria-disabled'));
+    expect(back.getByRole('button', { name: 'Guardar Taquería El Güero en tus favoritos' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('keeps the focus in the list on the business that takes the place of one kept', async () => {
+    signInAsCustomer();
+    account.getFavorites.mockResolvedValue([]);
+    const saving = later<void>();
+    account.saveFavorite.mockReturnValue(saving.promise as never);
+    api.getDirectory.mockResolvedValue(directory([
+      business({}),
+      business({ name: 'Café Luna', slug: 'cafe-luna' }),
+      business({ name: 'Ferretería Don Pepe', slug: 'don-pepe', category: BusinessCategory.Hardware }),
+    ]));
+    const user = userEvent.setup();
+
+    renderPage();
+
+    const list = within(await screen.findByRole('region', { name: 'Negocios' }));
+    const luna = await list.findByRole('button', { name: 'Guardar Café Luna en tus favoritos', pressed: false });
+    // The hearts wait until the favorites arrive.
+    await waitFor(() => expect(luna).not.toHaveAttribute('aria-disabled'));
+    await user.click(luna);
+    account.getFavorites.mockResolvedValue([
+      { slug: 'cafe-luna', name: 'Café Luna', savedAt: '2026-10-18T09:00:00Z', card: business({ name: 'Café Luna', slug: 'cafe-luna' }) },
+    ]);
+    await act(async () => saving.resolve());
+
+    await waitFor(() => expect(list.queryByRole('link', { name: /^Café Luna/ })).not.toBeInTheDocument());
+    expect(list.getByRole('button', { name: 'Guardar Ferretería Don Pepe en tus favoritos' })).toHaveFocus();
+    expect(list.getByText('2 negocios')).toBeInTheDocument();
+  });
+
+  it('counts the list and «Ver más» without the favorites, on whichever page they are', async () => {
+    signInAsCustomer();
+    const kept = (slug: string, name: string) => ({ slug, name, savedAt: '2026-10-18T09:00:00Z', card: business({ slug, name }) });
+    account.getFavorites.mockResolvedValue([kept('el-guero', 'Taquería El Güero'), kept('cafe-luna', 'Café Luna'), kept('oaxaca', 'Tlayudas Oaxaca')]);
+    // 50 businesses in three pages (only two of each here), a favorite on each. The second arrives when the test says.
+    const pages = { total: 50, totalPages: 3 };
+    const second = later<PublicDirectory>();
+    api.getDirectory.mockImplementation((search) => {
+      if (search.pageNumber === 2) return second.promise;
+      return Promise.resolve(search.pageNumber === 3
+        ? directory([business({ name: 'Tlayudas Oaxaca', slug: 'oaxaca' }), business({ name: 'Papelería Sol', slug: 'sol' })], pages)
+        : directory([business({}), business({ name: 'Tienda Lupita', slug: 'lupita' })], pages));
+    });
+    const user = userEvent.setup();
+
+    renderPage();
+
+    const list = within(await screen.findByRole('region', { name: 'Negocios' }));
+    // 50 without the 3 favorites; past the first page, 26 businesses with 2 of the favorites.
+    expect(await list.findByText('47 negocios')).toBeInTheDocument();
+    await user.click(await list.findByRole('button', { name: 'Ver más negocios (24)' }));
+    // While the second page is on its way, the favorites not found yet may be there: the button stays, with its focus.
+    expect(list.getByRole('button', { name: 'Ver más negocios (2)' })).toHaveFocus();
+    await act(async () => second.resolve(directory(
+      [business({ name: 'Café Luna', slug: 'cafe-luna' }), business({ name: 'Ferretería Don Pepe', slug: 'don-pepe' })],
+      pages,
+    )));
+    // The favorite of the second page is not one of those to come.
+    const more = await list.findByRole('button', { name: 'Ver más negocios (1)' });
+    expect(more).toHaveFocus();
+    await user.click(more);
+
+    expect(await list.findByRole('link', { name: /^Papelería Sol/ })).toBeInTheDocument();
+    expect(list.getByRole('link', { name: /^Tienda Lupita/ })).toBeInTheDocument();
+    expect(list.getByRole('link', { name: /^Ferretería Don Pepe/ })).toBeInTheDocument();
+    for (const name of [/^Taquería El Güero/, /^Café Luna/, /^Tlayudas Oaxaca/]) {
+      expect(list.queryByRole('link', { name })).not.toBeInTheDocument();
+    }
+    expect(list.queryByRole('button', { name: /Ver más/ })).not.toBeInTheDocument();
   });
 
   it('changes two hearts at once, and one the server refuses goes back with its reason', async () => {
@@ -423,7 +512,7 @@ describe('ExplorePage', () => {
     expect(screen.queryByRole('button', { name: /favoritos/ })).not.toBeInTheDocument();
   });
 
-  it('shows no favorites while searching or in a category', async () => {
+  it('shows no favorites while searching or in a category: there they are in the list', async () => {
     signInAsCustomer();
     account.getFavorites.mockResolvedValue([{ slug: 'el-guero', name: 'Taquería El Güero', savedAt: '2026-10-18T08:00:00Z', card: business({}) }]);
     api.getDirectory.mockResolvedValue(directory([business({})]));
@@ -431,6 +520,8 @@ describe('ExplorePage', () => {
     renderPage('/explorar/comida');
 
     await screen.findByRole('link', { name: /^Taquería El Güero/ });
+    expect(await screen.findByRole('button', { name: 'Guardar Taquería El Güero en tus favoritos', pressed: true })).toBeInTheDocument();
+    expect(screen.getByText('1 negocio')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Tus favoritos' })).not.toBeInTheDocument();
   });
 

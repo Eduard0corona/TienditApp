@@ -376,6 +376,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
     - Cada uno lleva su tarjeta mientras aparece en Explorar.
     - Si su dueño lo sacó de Explorar o su menú no tiene qué pedir, queda con su nombre y «No aparece en Explorar ahora».
     - Un negocio suspendido o con el menú apagado no aparece hasta que vuelve.
+    - Sus negocios no se repiten en la lista de abajo, ni en su cuenta («N negocios») ni en «Ver más negocios (N)». Uno vuelve a la lista cuando se quita de favoritos. Al buscar o en una categoría no hay «Tus favoritos», así que ahí van en la lista, con su corazón lleno.
   - **Privacidad:** ningún negocio sabe quién lo guardó.
 - **La portada en Explorar:** cada tarjeta lleva arriba la portada de su tienda (o sus colores), con el logo encima del borde. La vista previa de Configuración la muestra igual.
 
