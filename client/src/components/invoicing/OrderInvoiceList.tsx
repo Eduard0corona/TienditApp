@@ -2,7 +2,6 @@ import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
 import {
-  awaitsReplacedCancellation,
   downloadInvoiceFile,
   useCancelOrderInvoice,
   useCancelReplacedOrderInvoice,
@@ -115,11 +114,18 @@ export default function OrderInvoiceList({
                 El PAC no respondió todavía. TienditApp lo vuelve a intentar con la misma solicitud: nunca timbra dos veces.
               </p>
             )}
-            {awaitsReplacedCancellation(invoice) && (
+            {invoice.awaitsReplacedCancellation && (
               <p className="small text-muted mb-0 mt-1">
                 {replacementStamped(invoice, invoices)
                   ? `La ${invoice.replacedByNumber ?? 'nueva'} ya está timbrada: TienditApp le pide al SAT cancelar esta con relación (motivo 01) en su siguiente revisión, cada 30 minutos.`
                   : `En cuanto la ${invoice.replacedByNumber ?? 'nueva'} quede timbrada, TienditApp le pide al SAT cancelar esta con relación (motivo 01).`}
+              </p>
+            )}
+            {/* The worker asks for 72 hours after the replacement was stamped; then a person does. */}
+            {!invoice.awaitsReplacedCancellation && !invoice.failureMessage && invoice.status === OrderInvoiceStatus.Stamped
+              && replacementStamped(invoice, invoices) && (
+              <p className="small text-muted mb-0 mt-1">
+                Pasaron 72 horas desde que se timbró la {invoice.replacedByNumber ?? 'nueva'} y TienditApp ya no lo pide solo: usa «Cancelar con relación» o cancélala sin relación (02).
               </p>
             )}
             {invoice.status === OrderInvoiceStatus.Cancelling && (
@@ -201,9 +207,9 @@ export default function OrderInvoiceList({
                   Cancelar con relación
                 </button>
               )}
-              {/* Without relation (02) only once the SAT did not take it with relation, or the customer refused it. */}
+              {/* Without relation (02) only once the SAT did not take it with relation, the customer refused it, or TienditApp no longer asks (72 hours). */}
               {canCancel && invoice.status === OrderInvoiceStatus.Stamped && !liveRelated[invoice.id]?.length
-                && !awaitsReplacedCancellation(invoice) && (
+                && !invoice.awaitsReplacedCancellation && (
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-danger"

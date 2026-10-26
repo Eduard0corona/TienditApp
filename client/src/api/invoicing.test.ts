@@ -123,14 +123,14 @@ describe('isOrderInvoicingWaiting', () => {
       .toBe(true);
   });
 
-  it('reads again while a replaced invoice waits for its cancellation with relation, not once it says why it did not go (Fase 28G)', () => {
-    const replaced = (failureMessage: string | null) =>
-      ({ status: OrderInvoiceStatus.Stamped, emails: [], replacedByInvoiceId: 'inv-2', failureMessage }) as unknown as OrderInvoicing['invoices'][number];
+  it('reads again while the API says TienditApp still asks to cancel a replaced invoice with relation, not once it no longer does (Fase 28G)', () => {
+    // It no longer does once the invoice says why it did not go, or 72 hours after its replacement was stamped.
+    const replaced = (awaitsReplacedCancellation: boolean) =>
+      ({ status: OrderInvoiceStatus.Stamped, emails: [], replacedByInvoiceId: 'inv-2', failureMessage: null, awaitsReplacedCancellation }) as unknown as OrderInvoicing['invoices'][number];
     const replacement = invoice(OrderInvoiceStatus.Stamped);
 
-    expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(null)], payments: [], adjustments: [] })).toBe(true);
-    expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced('El SAT todavía no relaciona esta factura.')], payments: [], adjustments: [] }))
-      .toBe(false);
+    expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(true)], payments: [], adjustments: [] })).toBe(true);
+    expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(false)], payments: [], adjustments: [] })).toBe(false);
   });
 });
 

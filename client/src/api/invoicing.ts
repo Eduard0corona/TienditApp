@@ -140,12 +140,13 @@ export function useOrderInvoicing(orderId: string) {
 
 /**
  * Whether something of the order's invoicing changes on its own soon: an invoice, a complement or a credit note waits for
- * the PAC or the SAT, or for its email to go out, or a payment, a refund or a write-off waits for what TienditApp issues in
- * its next pass.
+ * the PAC or the SAT, or for its email to go out, a replaced invoice waits for TienditApp to ask the SAT to cancel it with
+ * motive 01 (Fase 28G, as the API says it), or a payment, a refund or a write-off waits for what TienditApp issues in its next
+ * pass.
  */
 export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments' | 'adjustments'>): boolean {
   const waits = (cfdi: Pick<OrderInvoice, 'status' | 'emails'>) => isWaiting(cfdi) || isEmailOnItsWay(cfdi.emails[0]);
-  return data.invoices.some((invoice) => waits(invoice) || awaitsReplacedCancellation(invoice))
+  return data.invoices.some((invoice) => waits(invoice) || invoice.awaitsReplacedCancellation)
     || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some(waits))
     || data.adjustments.some((adjustment) => adjustment.awaitsAutomaticIssue || adjustment.creditNotes.some(waits));
 }
@@ -168,16 +169,6 @@ export function useCfdiDraft(orderId: string, receiver?: CfdiReceiver, enabled =
     retry: false,
     enabled,
   });
-}
-
-/**
- * Another invoice replaces this one and nothing went wrong yet: TienditApp asks the SAT to cancel it with motive 01 as soon
- * as the replacement is stamped (Fase 28G). With a reason, it waits for the worker's next tries or for a person.
- */
-export function awaitsReplacedCancellation(
-  invoice: Pick<OrderInvoice, 'status' | 'replacedByInvoiceId' | 'failureMessage'>,
-): boolean {
-  return !!invoice.replacedByInvoiceId && invoice.status === OrderInvoiceStatus.Stamped && !invoice.failureMessage;
 }
 
 /** «Timbrando» waits for the PAC; «Cancelándose», for the SAT. */

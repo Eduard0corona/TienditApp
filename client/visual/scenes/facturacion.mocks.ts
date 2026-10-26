@@ -73,6 +73,7 @@ function invoice(data: DemoData, folio: number, fields: Record<string, unknown>)
     requestedAt: minutesFromNow(-50), uuid: null, stampedAt: null, hasXml: false, hasPdf: false, failureMessage: null,
     refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, receiverEmail: null, emails: [], requestedByCustomer: false,
     canSubstitute: false,
+    awaitsReplacedCancellation: false,
     ...fields,
   };
 }

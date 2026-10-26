@@ -17375,6 +17375,7 @@ export interface components {
             /** Format: uuid */
             replacesInvoiceId?: string | null;
             replacesNumber?: string | null;
+            awaitsReplacedCancellation: boolean;
             canSubstitute: boolean;
             substitutionProblem?: string | null;
         };

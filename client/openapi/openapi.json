@@ -28007,6 +28007,7 @@
       },
       "OrderInvoiceDto": {
         "required": [
+          "awaitsReplacedCancellation",
           "canSubstitute",
           "emails",
           "hasPdf",
@@ -28132,6 +28133,9 @@
           "replacesNumber": {
             "type": "string",
             "nullable": true
+          },
+          "awaitsReplacedCancellation": {
+            "type": "boolean"
           },
           "canSubstitute": {
             "type": "boolean"

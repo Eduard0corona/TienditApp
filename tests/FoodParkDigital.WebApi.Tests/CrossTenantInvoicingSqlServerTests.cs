@@ -126,8 +126,9 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Contains(_api.Invoicing.Cancellations, c => c.Uuid == uuid);
         var invoicing = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/orders/{order}"));
         var old = invoicing.GetProperty("invoices")[1];
-        Assert.Equal(((int)OrderInvoiceStatus.Cancelling, (int)CfdiCancellationMotive.ErrorsWithReplacement, "F-2"), (
-            old.GetProperty("status").GetInt32(), old.GetProperty("cancellationMotive").GetInt32(), old.GetProperty("replacedByNumber").GetString()));
+        Assert.Equal(((int)OrderInvoiceStatus.Cancelling, (int)CfdiCancellationMotive.ErrorsWithReplacement, "F-2", false), (
+            old.GetProperty("status").GetInt32(), old.GetProperty("cancellationMotive").GetInt32(), old.GetProperty("replacedByNumber").GetString(),
+            old.GetProperty("awaitsReplacedCancellation").GetBoolean()));
         // Asking again changes nothing; the other business has no invoices.
         await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"/api/v1/invoicing/invoices/{invoiceId}/cancel-replaced", null));
         Assert.Single(_api.Invoicing.Cancellations, c => c.Uuid == uuid);

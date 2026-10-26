@@ -129,6 +129,57 @@ public class InvoiceSubstitutionFlowTests
     }
 
     [Fact]
+    public async Task ReplacedInvoice_ShouldSayWhileTheWorkerStillAsksTheSat_AndWhyItStopped()
+    {
+        await using var book = await Book.OpenAsync();
+        async Task<OrderInvoiceDto> ReplacedAsync(Guid orderId, Guid invoiceId)
+            => (await book.InvoicingAsync(orderId)).Invoices.Single(i => i.Id == invoiceId);
+
+        // While its replacement is stamping, and once the worker stamps it, TienditApp asks the SAT on its own.
+        var sale = await book.PaidOrderAsync();
+        var original = (await book.IssueAsync(sale.Id, Wrong)).Value;
+        book.Gateway.LoseNextAnswer = true;
+        await book.SubstituteAsync(original.Id, Right);
+        Assert.True((await ReplacedAsync(sale.Id, original.Id)).AwaitsReplacedCancellation);
+        book.Clock.UtcNow = book.Clock.UtcNow.AddMinutes(2);
+        Assert.Equal(1, (await book.StampPendingAsync()).Value);
+        var replacement = (await book.InvoicingAsync(sale.Id)).Invoices.Single(i => i.ReplacesInvoiceId == original.Id);
+        Assert.True((await ReplacedAsync(sale.Id, original.Id)).AwaitsReplacedCancellation);
+
+        // 72 hours after its replacement was stamped the worker no longer asks, though nothing said why: a person does.
+        book.Clock.UtcNow = replacement.StampedAt!.Value + OrderInvoiceSubstitutions.CancellationRetryWindow + TimeSpan.FromMinutes(1);
+        var late = await ReplacedAsync(sale.Id, original.Id);
+        Assert.Equal((OrderInvoiceStatus.Stamped, (string?)null, false), (late.Status, late.FailureMessage, late.AwaitsReplacedCancellation));
+        Assert.Equal(0, (await book.CheckCancellationsAsync()).Value);
+        Assert.Empty(book.Gateway.Cancellations);
+    }
+
+    [Fact]
+    public async Task ReplacedInvoice_WhoseBusinessHasNoCsd_ShouldKeepWhyTheWorkerCannotAsk()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync();
+        var original = (await book.IssueAsync(sale.Id, Wrong)).Value;
+        book.Gateway.LoseNextAnswer = true;
+        await book.SubstituteAsync(original.Id, Right);
+        book.Clock.UtcNow = book.Clock.UtcNow.AddMinutes(2);
+        Assert.Equal(1, (await book.StampPendingAsync()).Value);
+        Assert.True((await book.InvoicingAsync(sale.Id)).Invoices.Single(i => i.Id == original.Id).AwaitsReplacedCancellation);
+
+        // The owner removes the CSD before the worker's next pass: it cannot ask the SAT, the invoice keeps why, and TienditApp
+        // no longer says it asks.
+        (await book.Context.InvoicingProfiles.SingleAsync()).RemoveCertificate();
+        await book.Context.SaveChangesAsync();
+        book.Context.ChangeTracker.Clear();
+
+        Assert.Equal(0, (await book.CheckCancellationsAsync()).Value);
+        var withoutCsd = (await book.InvoicingAsync(sale.Id)).Invoices.Single(i => i.Id == original.Id);
+        Assert.Equal((OrderInvoiceStatus.Stamped, CancelOrderInvoiceCommandHandler.NoCertificateToCancelMessage, false),
+            (withoutCsd.Status, withoutCsd.FailureMessage, withoutCsd.AwaitsReplacedCancellation));
+        Assert.Empty(book.Gateway.Cancellations);
+    }
+
+    [Fact]
     public async Task RefusedReplacement_ShouldGiveTheOrderItsInvoiceBack_ToBeReplacedAgain()
     {
         await using var book = await Book.OpenAsync();

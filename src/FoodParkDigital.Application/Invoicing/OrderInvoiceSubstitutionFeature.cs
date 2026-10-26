@@ -245,7 +245,11 @@ internal sealed class ReplacedInvoiceCanceller
             return Result.Failure<OrderInvoice>(InvoicingSettings.NotAvailableMessage);
         var profile = await _context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         if (profile is not { HasCertificate: true })
+        {
+            // Kept with the invoice: the worker cannot ask for it either, and Pedidos says why.
+            await KeepFailureAsync(invoiceId, CancelOrderInvoiceCommandHandler.NoCertificateToCancelMessage, cancellationToken);
             return Result.Failure<OrderInvoice>(CancelOrderInvoiceCommandHandler.NoCertificateToCancelMessage);
+        }
 
         // The issuer the invoice was stamped for: the PAC cancels it with the CSD it keeps for that RFC.
         var issuerRfc = CfdiDocument.FromJson(replaced.Document).Issuer.Rfc;

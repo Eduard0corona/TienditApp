@@ -62,6 +62,11 @@ public class OrderInvoiceDto
     /// <summary>The invoice with errors this one replaces, and its number.</summary>
     public Guid? ReplacesInvoiceId { get; set; }
     public string? ReplacesNumber { get; set; }
+    /// <summary>
+    /// Replaced and nothing went wrong yet: TienditApp asks the SAT on its own to cancel it with motive 01, once its replacement
+    /// is stamped and while the worker still does (72 hours). Otherwise a person asks, or it waits for nothing.
+    /// </summary>
+    public bool AwaitsReplacedCancellation { get; set; }
     /// <summary>The order's stamped invoice can be replaced now by an owner or an administrator.</summary>
     public bool CanSubstitute { get; set; }
     /// <summary>Why the order's stamped invoice cannot be replaced now; null when it can, or for any other invoice.</summary>
@@ -198,6 +203,20 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
                 ?? await OrderInvoiceSubstitutions.ProblemAsync(_context, current, settings.Rfc, cancellationToken)
                 ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
             dto.CanSubstitute = dto.SubstitutionProblem is null;
+        }
+        // The replaced ones TienditApp still asks the SAT to cancel with motive 01 (Fase 28G): their replacement is stamping,
+        // or the worker asks for it in its next pass, as the worker decides it.
+        if (invoices.Any(i => i.ReplacedByInvoiceId is not null))
+        {
+            var waiting = await OrderInvoiceSubstitutions.WaitingForCancellation(
+                    _context.OrderInvoices.AsNoTracking(), _clock.UtcNow - OrderInvoiceSubstitutions.CancellationRetryWindow)
+                .Where(i => i.OrderId == order.Id)
+                .Select(i => i.Id)
+                .ToListAsync(cancellationToken);
+            foreach (var replaced in invoices.Where(i => i is { Status: OrderInvoiceStatus.Stamped, FailureMessage: null }
+                && i.ReplacedByInvoiceId is not null))
+                invoiceDtos.First(i => i.Id == replaced.Id).AwaitsReplacedCancellation = waiting.Contains(replaced.Id)
+                    || invoices.Any(r => r.Id == replaced.ReplacedByInvoiceId && r.Status == OrderInvoiceStatus.Stamping);
         }
         var emails = await CfdiEmails.LatestAsync(_context, invoices.Select(i => i.Id).ToList(), cancellationToken);
         foreach (var invoice in invoiceDtos)

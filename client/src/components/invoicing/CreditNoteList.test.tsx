@@ -21,6 +21,7 @@ const F3: Invoice = {
   uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: '2026-10-24T16:00:05Z', hasXml: true, hasPdf: true,
   failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [], requestedByCustomer: false,
   canSubstitute: false,
+  awaitsReplacedCancellation: false,
 };
 
 const NC1: Note = {
