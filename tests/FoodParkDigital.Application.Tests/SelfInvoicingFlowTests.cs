@@ -94,12 +94,8 @@ public class SelfInvoicingFlowTests
         var otherCode = (await book.TicketCodeAsync(other.Id))!.Code;
         Assert.NotEqual(printed.Code, otherCode);
         foreach (var (folio, code) in new[] { ("ORD-000001", otherCode), ("ORD-000001", "AAAAA-AAAAA"), ("ORD-000009", printed.Code), ("X-1", printed.Code) })
-        {
-            var lookedUp = await book.LookUpAsync(folio, code);
-            Assert.True(lookedUp.IsSuccess);
-            Assert.Null(lookedUp.Value);
-        }
-        Assert.Null((await book.InvoiceAsync("ORD-000001", otherCode)).Value);
+            NotThere(await book.LookUpAsync(folio, code));
+        NotThere(await book.InvoiceAsync("ORD-000001", otherCode));
         Assert.Empty(await book.Context.OrderInvoices.ToListAsync());
     }
 
@@ -282,8 +278,8 @@ public class SelfInvoicingFlowTests
         book.Context.ChangeTracker.Clear();
 
         Assert.Null(await book.PageAsync());
-        Assert.Null((await book.LookUpAsync(sale.OrderNumber, code)).Value);
-        Assert.Null((await book.InvoiceAsync(sale.OrderNumber, code)).Value);
+        NotThere(await book.LookUpAsync(sale.OrderNumber, code));
+        NotThere(await book.InvoiceAsync(sale.OrderNumber, code));
         Assert.Empty(await book.Context.OrderInvoices.ToListAsync());
     }
 
@@ -309,7 +305,7 @@ public class SelfInvoicingFlowTests
         await book.InvoiceAsync("ORD-000001", code);
 
         Assert.Equal(SelfInvoicing.OtherRfcMessage, (await book.ResendAsync(code, Rfc, "otro@ejemplo.mx")).Error);
-        Assert.Null((await book.ResendAsync("AAAAA-AAAAA", Receiver.Rfc!, "otro@ejemplo.mx")).Value);
+        NotThere(await book.ResendAsync("AAAAA-AAAAA", Receiver.Rfc!, "otro@ejemplo.mx"));
 
         var resent = (await book.ResendAsync(code, " xiqb891116qe4 ", "otro@ejemplo.mx")).Value!;
         Assert.Equal(("F-1", "otro@ejemplo.mx"), (resent.InvoiceNumber, resent.Email));
@@ -358,6 +354,16 @@ public class SelfInvoicingFlowTests
     public void Folio_ShouldBeReadAsTheTicketPrintsIt(string typed, string? expected)
     {
         Assert.Equal(expected, SelfInvoicing.NormalizeFolio(typed));
+    }
+
+    /// <summary>
+    /// A ticket that is not there: answered with nothing (the API's 404), never refused with a reason, which would tell a
+    /// folio that exists from one that does not.
+    /// </summary>
+    private static void NotThere<T>(Result<T?> result) where T : class
+    {
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Null(result.Value);
     }
 
     private sealed class Book : IAsyncDisposable, ISender
