@@ -160,9 +160,11 @@ internal sealed class OrderInvoiceRequester
         catch (DbUpdateException)
         {
             // Someone invoiced the same order at the same time (the index of one live invoice per order kept theirs): this
-            // one is undone whole, folio included. Anything else is thrown on, for the execution strategy to retry.
+            // one is undone whole, folio included. Anything else is thrown on, for the execution strategy to retry. A
+            // replacement is requested with the order's live invoice in hand, under the invoicing lock: no one else invoiced
+            // the order meanwhile, and the replaced one is live again once this is undone, so its failure is always thrown on.
             await _context.DiscardUnitOfWorkAsync(cancellationToken);
-            if (await _context.OrderInvoices.AsNoTracking().AnyAsync(
+            if (replaced is null && await _context.OrderInvoices.AsNoTracking().AnyAsync(
                     i => i.OrderId == request.OrderId && i.ReplacedByInvoiceId == null
                         && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
                             || i.Status == OrderInvoiceStatus.Cancelling),

@@ -153,7 +153,9 @@ public sealed class CrossTenantInvoicingSqlServerTests
             _api.Invoicing.RefuseNextStamp = "CFDI40147 - El código postal del receptor no corresponde al RFC.";
             var refused = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
                 $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }));
-            Assert.Equal((int)OrderInvoiceStatus.Refused, refused.GetProperty("status").GetInt32());
+            // It replaces nothing: the answer says so, as the order's invoices do.
+            Assert.Equal(((int)OrderInvoiceStatus.Refused, JsonValueKind.Null), (
+                refused.GetProperty("status").GetInt32(), refused.GetProperty("replacesInvoiceId").ValueKind));
             orders.Add(Math.Sign(refused.GetProperty("id").GetGuid().CompareTo(invoiceId)));
         }
         Assert.Equal(2, orders.Count);
@@ -164,6 +166,47 @@ public sealed class CrossTenantInvoicingSqlServerTests
         var replacement = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
             $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }));
         Assert.Equal((int)OrderInvoiceStatus.Stamped, replacement.GetProperty("status").GetInt32());
+    }
+
+    [SqlServerFact]
+    public async Task Substitution_ThatTheDatabaseRefuses_ShouldFail_NotBeTakenForSomeoneElseInvoicingTheOrder()
+    {
+        var mine = await _api.SignUpAsync("sustituir-falla", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Sustituir falla"), phone: null, name: "Mostrador");
+        var invoiceId = (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }))).GetProperty("id").GetGuid();
+        var corrected = new { rfc = "XIQB891116QE4", name = "Karla Fuente Nolasco", postalCode = "26015", fiscalRegime = "612", cfdiUse = "S01" };
+
+        // A rule of the database the domain does not know refuses the replacement, as a deadlock or a timeout would fail its
+        // save. A substitution holds the invoicing lock, so no one else invoiced the order meanwhile: the error is thrown on
+        // (for the execution strategy to retry what it can) and nothing is kept, folio included.
+        const string refusedEmail = "rechazada-por-la-base@example.com";
+        await _api.QueryAsync(mine.TenantId, db => db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE [OrderInvoices] WITH NOCHECK ADD CONSTRAINT [CK_Test_RefusedByTheDatabase] "
+            + $"CHECK ([ReceiverEmail] IS NULL OR [ReceiverEmail] <> N'{refusedEmail}')"));
+        HttpResponseMessage refused;
+        try
+        {
+            refused = await mine.Client.PostAsJsonAsync($"/api/v1/invoicing/invoices/{invoiceId}/substitute",
+                new { receiver = corrected, saveToCustomer = false, receiverEmail = refusedEmail });
+        }
+        finally
+        {
+            await _api.QueryAsync(mine.TenantId, db => db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE [OrderInvoices] DROP CONSTRAINT [CK_Test_RefusedByTheDatabase]"));
+        }
+        Assert.Equal(HttpStatusCode.InternalServerError, refused.StatusCode);
+        Assert.DoesNotContain("Otra persona está facturando", await refused.Content.ReadAsStringAsync());
+        var original = await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.AsNoTracking().SingleAsync());
+        Assert.Equal((invoiceId, OrderInvoiceStatus.Stamped, (Guid?)null), (original.Id, original.Status, original.ReplacedByInvoiceId));
+
+        // Replaced again, the new one takes the folio that was not kept.
+        var replacement = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }));
+        Assert.Equal(("F-2", (int)OrderInvoiceStatus.Stamped, invoiceId), (
+            replacement.GetProperty("number").GetString(), replacement.GetProperty("status").GetInt32(),
+            replacement.GetProperty("replacesInvoiceId").GetGuid()));
     }
 
     [SqlServerFact]

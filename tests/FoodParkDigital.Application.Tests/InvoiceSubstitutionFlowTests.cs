@@ -50,8 +50,8 @@ public class InvoiceSubstitutionFlowTests
 
         Assert.True(replaced.IsSuccess, replaced.Error);
         var replacement = replaced.Value;
-        Assert.Equal(("F-2", OrderInvoiceStatus.Stamped, "26015", original.Id),
-            (replacement.Number, replacement.Status, replacement.Receiver.PostalCode, replacement.ReplacesInvoiceId));
+        Assert.Equal(("F-2", OrderInvoiceStatus.Stamped, "26015", original.Id, "F-1"),
+            (replacement.Number, replacement.Status, replacement.Receiver.PostalCode, replacement.ReplacesInvoiceId, replacement.ReplacesNumber));
         // The new CFDI names the old one with the relation 04, and the old one is cancelled with 01 naming the new one.
         var stamped = book.Gateway.StampRequests[^1].Document;
         Assert.Equal((SatCatalog.SubstitutionRelation, original.Uuid), (stamped.Related!.RelationType, Assert.Single(stamped.Related.Uuids)));
@@ -139,7 +139,9 @@ public class InvoiceSubstitutionFlowTests
         var refused = await book.SubstituteAsync(original.Id, Right);
 
         Assert.True(refused.IsSuccess, refused.Error);
-        Assert.Equal(OrderInvoiceStatus.Refused, refused.Value.Status);
+        // It replaces nothing, and the answer says so as the order's invoices do.
+        Assert.Equal((OrderInvoiceStatus.Refused, (Guid?)null, (string?)null),
+            (refused.Value.Status, refused.Value.ReplacesInvoiceId, refused.Value.ReplacesNumber));
         var kept = await book.InvoiceAsync(original.Id);
         Assert.Equal((OrderInvoiceStatus.Stamped, (Guid?)null, true), (kept.Status, kept.ReplacedByInvoiceId, kept.IsCurrent));
         Assert.Empty(book.Gateway.Cancellations);

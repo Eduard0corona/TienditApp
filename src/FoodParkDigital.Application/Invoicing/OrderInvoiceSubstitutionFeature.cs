@@ -45,6 +45,7 @@ public class SubstituteOrderInvoiceCommandValidator : AbstractValidator<Substitu
 public class SubstituteOrderInvoiceCommandHandler : IRequestHandler<SubstituteOrderInvoiceCommand, Result<OrderInvoiceDto>>
 {
     private readonly ISender _sender;
+    private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUser;
     private readonly IInvoicingGateway _gateway;
     private readonly OrderInvoiceStamper _stamper;
@@ -60,6 +61,7 @@ public class SubstituteOrderInvoiceCommandHandler : IRequestHandler<SubstituteOr
         ILogger<OrderInvoiceStamper> logger)
     {
         _sender = sender;
+        _context = context;
         _currentUser = currentUser;
         _gateway = gateway;
         _stamper = new OrderInvoiceStamper(context, gateway, storage, clock, logger);
@@ -85,7 +87,11 @@ public class SubstituteOrderInvoiceCommandHandler : IRequestHandler<SubstituteOr
         if (replacement.Status == OrderInvoiceStatus.Stamped)
             await _canceller.CancelAsync(request.InvoiceId, userId, _currentUser.UserName ?? "system", cancellationToken);
         var dto = OrderInvoiceDto.From(replacement);
-        dto.ReplacesInvoiceId = request.InvoiceId;
+        // As the order's invoices say it: one the PAC refused replaces nothing (the old one is the order's invoice again).
+        var replaced = await _context.OrderInvoices.AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == request.InvoiceId && i.ReplacedByInvoiceId == replacement.Id, cancellationToken);
+        dto.ReplacesInvoiceId = replaced?.Id;
+        dto.ReplacesNumber = replaced?.Number;
         return Result.Success(dto);
     }
 }
