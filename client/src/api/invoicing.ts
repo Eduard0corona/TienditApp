@@ -303,10 +303,15 @@ export interface IssuedCfdiFilters {
   search: string;
 }
 
-/** The CFDI the business issued in a month, the newest first; while one is being stamped, it is asked again. */
+/**
+ * The CFDI the business issued in a month, the newest first; while one is being stamped, it is asked again. Another page of
+ * the same list keeps the one on screen while it arrives; another month, kind, state or search does not (it would show
+ * under the new title what the old one had).
+ */
 export function useIssuedCfdis(year: number, month: number, filters: IssuedCfdiFilters, page: number, pageSize: number) {
+  const listing = [...issuedCfdisKey, 'list', year, month, filters.kind ?? null, filters.status ?? null, filters.search] as const;
   return useQuery({
-    queryKey: [...issuedCfdisKey, 'list', year, month, filters.kind ?? null, filters.status ?? null, filters.search, page, pageSize],
+    queryKey: [...listing, page, pageSize],
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/issued-cfdis', {
       query: {
         year,
@@ -319,19 +324,20 @@ export function useIssuedCfdis(year: number, month: number, filters: IssuedCfdiF
       },
       signal,
     }),
-    placeholderData: (previous) => previous,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery && listing.every((part, index) => previousQuery.queryKey[index] === part) ? previous : undefined,
     refetchInterval: (query) => query.state.data?.items.some((cfdi) => cfdi.status === OrderInvoiceStatus.Stamping)
       ? PENDING_REFRESH_MS
       : false,
   });
 }
 
-/** What the CFDI of a month add up to, by kind. */
+/** What the CFDI of a month add up to, by kind; while one is being stamped, it is asked again, as the list. */
 export function useIssuedCfdiSummary(year: number, month: number) {
   return useQuery({
     queryKey: [...issuedCfdisKey, 'summary', year, month],
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/issued-cfdis/summary', { query: { year, month }, signal }),
-    placeholderData: (previous) => previous,
+    refetchInterval: (query) => query.state.data?.kinds.some((kind) => kind.stamping > 0) ? PENDING_REFRESH_MS : false,
   });
 }
 

@@ -45,19 +45,32 @@ const SUMMARY: IssuedCfdiSummary = {
   ],
 };
 
-function renderPage(list: (query: Query) => IssuedCfdi[]) {
+interface Answers {
+  /** The total the list says it has (more than a page lets the test go to the second one). */
+  totalCount?: number;
+  summary?: (query: Query) => Promise<IssuedCfdiSummary>;
+  route?: string;
+}
+
+function renderPage(list: (query: Query) => IssuedCfdi[], answers: Answers = {}) {
   request.mockImplementation(((method: string, path: string, options?: { query: Query }) => {
     if (path === '/api/v1/invoicing/issued-cfdis') {
       const items = list(options!.query);
-      return Promise.resolve({ items, pageNumber: 1, totalPages: 1, totalCount: items.length, hasPreviousPage: false, hasNextPage: false });
+      const totalCount = answers.totalCount ?? items.length;
+      return Promise.resolve({
+        items, pageNumber: options!.query.pageNumber ?? 1, totalPages: Math.ceil(totalCount / 20), totalCount,
+        hasPreviousPage: false, hasNextPage: totalCount > 20,
+      });
     }
-    if (path === '/api/v1/invoicing/issued-cfdis/summary') return Promise.resolve({ ...SUMMARY, ...options!.query });
+    if (path === '/api/v1/invoicing/issued-cfdis/summary') {
+      return answers.summary ? answers.summary(options!.query) : Promise.resolve({ ...SUMMARY, ...options!.query });
+    }
     return Promise.reject(new Error(`Sin respuesta para ${method} ${path}`));
   }) as unknown as typeof apiRequest);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/reports/issued-cfdis']}>
+      <MemoryRouter initialEntries={[answers.route ?? '/reports/issued-cfdis']}>
         <IssuedCfdis />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -87,9 +100,12 @@ describe('IssuedCfdis', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-26T18:00:00Z'));
     setBusinessTimeZone('America/Mexico_City');
+    // saveBlob clicks a link: jsdom does not download.
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
   });
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -99,13 +115,13 @@ describe('IssuedCfdis', () => {
     expect(await screen.findByRole('heading', { name: 'Octubre de 2026' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'CFDI emitidos' })).toHaveAttribute('aria-current', 'page');
     expect(lastQuery('/api/v1/invoicing/issued-cfdis')).toMatchObject({ year: 2026, month: 10, pageNumber: 1 });
-    const summary = await screen.findByRole('region', { name: 'Resumen del mes' });
+    const summary = await screen.findByRole('region', { name: 'Resumen de octubre de 2026' });
     const invoices = within(summary).getByRole('row', { name: /Facturas 2/ });
     expect(invoices).toHaveTextContent('$344.82');
     expect(invoices).toHaveTextContent('$400.00');
     expect(within(summary).getByRole('row', { name: /Complementos de pago/ })).toHaveTextContent('Pagado $120.00');
     expect(summary).toHaveTextContent(
-      'Además: 1 cancelado; 1 espera que el cliente acepte su cancelación en el SAT; 1 rechazado por el PAC: no son CFDI y explican los folios que faltan.',
+      'Además: 1 cancelado; 1 espera que el cliente acepte su cancelación en el SAT; 1 rechazado por el PAC: no es un CFDI y explica el folio que falta.',
     );
     // A month that has not come yet has nothing to show.
     expect(screen.getByRole('button', { name: 'Mes siguiente (noviembre de 2026)' })).toBeDisabled();
@@ -126,10 +142,10 @@ describe('IssuedCfdis', () => {
     const complement = (await screen.findByText('P-1')).closest('tr')!;
     expect(complement).toHaveTextContent('Complemento de pago');
     expect(complement).toHaveTextContent('Timbrado');
-    expect(complement).toHaveTextContent('Pago de la F-11');
+    expect(complement).toHaveTextContent('Pago de la factura F-11');
     expect(complement).toHaveTextContent('Pagado $120.00');
     expect(within(complement).getByRole('link', { name: 'ORD-000123' })).toHaveAttribute('href', '/orders?search=ORD-000123');
-    expect(within(complement).getByRole('button', { name: 'XML del complemento de pago P-1' })).toBeInTheDocument();
+    expect(within(complement).getByRole('button', { name: 'Descargar XML del complemento de pago P-1' })).toBeInTheDocument();
 
     const global = screen.getByText('F-10').closest('tr')!;
     expect(within(global).getByRole('link', { name: 'Diaria · 8 oct. 2026: ver la factura global F-10' }))
@@ -137,14 +153,14 @@ describe('IssuedCfdis', () => {
     expect(global).toHaveTextContent('3 ventas');
     expect(global).toHaveTextContent('PUBLICO EN GENERAL');
 
-    expect(screen.getByText('F-9').closest('tr')).toHaveTextContent('Sustituye a la F-8');
+    expect(screen.getByText('F-9').closest('tr')).toHaveTextContent('Sustituye a la factura F-8');
     const replaced = screen.getByText('F-8', { selector: '.fw-semibold' }).closest('tr')!;
     expect(replaced).toHaveTextContent('Cancelada');
-    expect(replaced).toHaveTextContent('Sustituida por la F-9');
+    expect(replaced).toHaveTextContent('Sustituida por la factura F-9');
     // A refused one says why, and has no files.
     const refused = screen.getByText('F-7').closest('tr')!;
     expect(refused).toHaveTextContent('El RFC del receptor no existe.');
-    expect(within(refused).queryByRole('button', { name: /XML/ })).not.toBeInTheDocument();
+    expect(within(refused).queryByRole('button', { name: /Descargar/ })).not.toBeInTheDocument();
   });
 
   it('narrows the month by kind, state and search, and goes back a month', async () => {
@@ -154,7 +170,7 @@ describe('IssuedCfdis', () => {
 
     await user.selectOptions(screen.getByLabelText('Tipo'), 'Notas de crédito');
     await waitFor(() => expect(lastQuery('/api/v1/invoicing/issued-cfdis')).toMatchObject({ kind: IssuedCfdiKind.CreditNote }));
-    await user.selectOptions(screen.getByLabelText('Estado'), 'Canceladas');
+    await user.selectOptions(screen.getByLabelText('Estado'), 'Cancelados');
     await waitFor(() => expect(lastQuery('/api/v1/invoicing/issued-cfdis'))
       .toMatchObject({ kind: IssuedCfdiKind.CreditNote, status: OrderInvoiceStatus.Cancelled }));
     await user.type(screen.getByPlaceholderText('Buscar folio, UUID, RFC, nombre o pedido'), 'xiqb');
@@ -198,9 +214,85 @@ describe('IssuedCfdis', () => {
     vi.mocked(api.get).mockResolvedValue({ data: new Blob(['<cfdi/>']), headers: {} });
     renderPage(() => [cfdi({ id: 'n-1', kind: IssuedCfdiKind.CreditNote, number: 'NC-1', relatedNumber: 'F-12' })]);
 
-    await user.click(await screen.findByRole('button', { name: 'PDF de la nota de crédito NC-1' }));
+    await user.click(await screen.findByRole('button', { name: 'Descargar PDF de la nota de crédito NC-1' }));
 
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/invoicing/credit-notes/n-1/pdf', { responseType: 'blob' }));
     created.mockRestore();
+  });
+
+  it('opens on the month of the business, not of UTC, at the turn of the month', async () => {
+    // 1 November at 03:00 UTC is still 31 October at 21:00 in Mexico City.
+    vi.setSystemTime(new Date('2026-11-01T03:00:00Z'));
+    renderPage(() => []);
+
+    expect(await screen.findByRole('heading', { name: 'Octubre de 2026' })).toBeInTheDocument();
+    expect(lastQuery('/api/v1/invoicing/issued-cfdis')).toMatchObject({ year: 2026, month: 10 });
+  });
+
+  it('opens the month the address names, from January 2022 to the current one, and takes the focus at either end', async () => {
+    const user = userEvent.setup();
+    renderPage(() => [], { route: '/reports/issued-cfdis?year=2022&month=2' });
+
+    expect(await screen.findByRole('heading', { name: 'Febrero de 2022' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Mes anterior (enero de 2022)' }));
+    const heading = await screen.findByRole('heading', { name: 'Enero de 2022' });
+    // Before January 2022 nothing was issued: the button is off, and the focus is on the month, not lost.
+    expect(screen.getByRole('button', { name: 'Mes anterior (diciembre de 2021)' })).toBeDisabled();
+    expect(heading).toHaveFocus();
+  });
+
+  it('opens the current month when the address names one out of range', async () => {
+    renderPage(() => [], { route: '/reports/issued-cfdis?year=2027&month=1' });
+
+    expect(await screen.findByRole('heading', { name: 'Octubre de 2026' })).toBeInTheDocument();
+  });
+
+  it('sends the first kind and the first state, and goes back to the first page when the list is narrowed', async () => {
+    const user = userEvent.setup();
+    renderPage(() => [cfdi()], { totalCount: 45 });
+    await screen.findByText('F-12');
+
+    await user.click(screen.getByRole('button', { name: 'Página siguiente' }));
+    await waitFor(() => expect(lastQuery('/api/v1/invoicing/issued-cfdis')).toMatchObject({ pageNumber: 2 }));
+    await user.selectOptions(screen.getByLabelText('Tipo'), 'Facturas');
+    await waitFor(() => expect(lastQuery('/api/v1/invoicing/issued-cfdis'))
+      .toMatchObject({ kind: IssuedCfdiKind.OrderInvoice, pageNumber: 1 }));
+    await user.selectOptions(screen.getByLabelText('Estado'), 'Timbrando');
+    await waitFor(() => expect(lastQuery('/api/v1/invoicing/issued-cfdis')).toMatchObject({ status: OrderInvoiceStatus.Stamping }));
+  });
+
+  it('says when the filters leave nothing, and offers no download of a month without CFDI', async () => {
+    const user = userEvent.setup();
+    const none: IssuedCfdiSummary = {
+      ...SUMMARY, month: 9, from: '2026-09-01', to: '2026-09-30',
+      kinds: SUMMARY.kinds.map((k) => ({ ...k, inForce: 0, subTotal: 0, taxTotal: 0, total: 0, cancelling: 0, cancelled: 0, stamping: 0, refused: 0 })),
+    };
+    renderPage((query) => (query.month === 9 || query.kind === IssuedCfdiKind.CreditNote ? [] : [cfdi()]), {
+      summary: (query) => Promise.resolve(query.month === 9 ? none : { ...SUMMARY, ...query }),
+    });
+    await screen.findByText('F-12');
+
+    await user.selectOptions(screen.getByLabelText('Tipo'), 'Notas de crédito');
+    expect(await screen.findByText('Ningún CFDI del mes coincide con los filtros.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Descargar XML' })).toBeEnabled();
+
+    await user.selectOptions(screen.getByLabelText('Tipo'), 'Todos');
+    await user.click(screen.getByRole('button', { name: 'Mes anterior (septiembre de 2026)' }));
+    expect(await screen.findByText('No hay CFDI en este mes.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Descargar XML' })).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Descargar lista' })).toBeDisabled();
+  });
+
+  it('says why the summary did not load, and tries again', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    renderPage(() => [cfdi()], {
+      summary: (query) => (fail ? Promise.reject(new Error('caído')) : Promise.resolve({ ...SUMMARY, ...query })),
+    });
+
+    expect(await screen.findByText('No se pudo cargar el resumen del mes.')).toBeInTheDocument();
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('region', { name: 'Resumen de octubre de 2026' })).toBeInTheDocument();
   });
 });

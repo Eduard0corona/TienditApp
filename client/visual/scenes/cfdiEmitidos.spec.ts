@@ -21,7 +21,7 @@ test.describe('Reportes › CFDI emitidos', () => {
       test(`cfdi emitidos ${look.suffix}`, async ({ page }) => {
         await open(page, '/reports/issued-cfdis');
         await expect(page.getByRole('heading', { name: 'Octubre de 2026' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'XML de la factura F-60' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Descargar XML de la factura F-60' })).toBeVisible();
         await snap(page, `cfdi-emitidos-${look.suffix}`);
       });
     });

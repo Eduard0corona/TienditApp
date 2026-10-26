@@ -50,11 +50,11 @@ Tomé las decisiones de la Fase 28H con la autorización permanente del dueño d
    - Hasta 5,000 CFDI por descarga, leídos a memoria; los XML se leen de ocho en ocho. Con más, responde 400 y dice que se pidan con la descarga masiva del SAT.
    - Sin PDF: el PAC tendría que dibujar cada uno que no se guardó. Se descargan uno por uno desde la fila.
 6. **La pantalla:**
-   - Se abre en el mes actual del negocio, con «Mes anterior» y «Mes siguiente» (hasta el actual y desde enero de 2022, cuando empezó CFDI 4.0).
-   - «Descargar XML» y «Descargar lista».
-   - El resumen en una tabla, y la lista con filtros de tipo y estado, búsqueda y paginación.
-   - Cada fila lleva un enlace a su pedido o a su global, y su XML y PDF con las rutas de cada tipo.
-   - Mientras un CFDI se timbra, la lista se lee otra vez cada 30 segundos.
+   - Se abre en el mes actual del negocio, o en el de la dirección (`?year=&month=`, para volver al mismo mes desde un pedido), con flechas al mes anterior y al siguiente (desde enero de 2022, cuando empezó CFDI 4.0, hasta el actual).
+   - «Descargar XML» y «Descargar lista» llevan todo el mes, sin los filtros de la lista, y se apagan en un mes sin CFDI.
+   - El resumen en una tabla, y la lista con filtros de tipo y estado, búsqueda y paginación. Otro mes, tipo, estado o búsqueda no deja a la vista lo anterior mientras llega lo nuevo; otra página de la misma lista sí, atenuada.
+   - Cada fila lleva un enlace a su pedido o a su global, y «Descargar XML» y «Descargar PDF» con las rutas de cada tipo.
+   - Mientras un CFDI se timbra, la lista y el resumen se leen otra vez cada 30 segundos.
 7. **La API se mantiene compatible:** solo agrega las tres rutas, `IssuedCfdiDto`, `IssuedCfdiSummaryDto`, `IssuedCfdiKindSummaryDto` y los enums `IssuedCfdiKind` e `IssuedCfdiExportFormat`. Nada se quita ni cambia de nombre.
 8. **Sin migración:** los índices `(TenantId, Serie, Folio)` de cada tabla ya acotan por negocio, y un negocio timbra pocos CFDI al mes.
 9. **Fuera de esta fase:**

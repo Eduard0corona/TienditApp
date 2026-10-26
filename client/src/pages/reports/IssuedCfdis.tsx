@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { getApiErrorMessage } from '../../api/errors';
 import {
   downloadIssuedCfdiFile,
@@ -27,7 +27,7 @@ const COLUMNS: DataTableColumn[] = [
   { header: 'Acciones', className: 'text-end' },
 ];
 
-// The API takes up to 100 a page and answers 20 by default, and a search of up to 100 characters.
+// The API answers 20 by default and takes a search of up to 100 characters.
 const PAGE_SIZES = [20, 50, 100];
 const MAX_SEARCH_LENGTH = 100;
 
@@ -48,13 +48,13 @@ const KIND_PLURALS: Record<IssuedCfdiKind, string> = {
   [IssuedCfdiKind.CreditNote]: 'Notas de crédito',
 };
 
-// The states as the chips say them, in the order a CFDI goes through them.
+// The states in the order a CFDI goes through them, said of «los CFDI» (the filter takes every kind).
 const STATUS_FILTERS: Array<[OrderInvoiceStatus, string]> = [
   [OrderInvoiceStatus.Stamping, 'Timbrando'],
-  [OrderInvoiceStatus.Stamped, 'Timbradas'],
+  [OrderInvoiceStatus.Stamped, 'Timbrados'],
   [OrderInvoiceStatus.Cancelling, 'Cancelándose'],
-  [OrderInvoiceStatus.Cancelled, 'Canceladas'],
-  [OrderInvoiceStatus.Refused, 'Rechazadas'],
+  [OrderInvoiceStatus.Cancelled, 'Cancelados'],
+  [OrderInvoiceStatus.Refused, 'Rechazados'],
 ];
 
 interface Month {
@@ -76,6 +76,15 @@ function isBefore(a: Month, b: Month): boolean {
   return a.year * 12 + a.month < b.year * 12 + b.month;
 }
 
+/** The month in the address (`?year=2026&month=9`), if it is one the API takes; otherwise the current one. */
+function monthFromQuery(params: URLSearchParams, today: Month): Month {
+  const year = Number(params.get('year'));
+  const month = Number(params.get('month'));
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return today;
+  const asked = { year, month };
+  return isBefore(asked, FIRST_MONTH) || isBefore(today, asked) ? today : asked;
+}
+
 /** «Octubre de 2026». */
 function monthLabel({ year, month }: Month): string {
   const label = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -83,10 +92,16 @@ function monthLabel({ year, month }: Month): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+/** «Factura», or «CFDI» for a kind this version does not know yet. */
+function kindLabel(kind: IssuedCfdiKind): string {
+  return KIND_LABELS[kind] ?? 'CFDI';
+}
+
 /** «de la factura F-1», «del complemento de pago P-1»: what a button of the row acts on. */
 function ofDocument(cfdi: IssuedCfdi): string {
+  if (!(cfdi.kind in KIND_LABELS)) return `del CFDI ${cfdi.number}`;
   const article = cfdi.kind === IssuedCfdiKind.PaymentComplement ? 'del' : 'de la';
-  return `${article} ${KIND_LABELS[cfdi.kind].toLowerCase()} ${cfdi.number}`;
+  return `${article} ${kindLabel(cfdi.kind).toLowerCase()} ${cfdi.number}`;
 }
 
 function statusLabel(cfdi: IssuedCfdi): string {
@@ -106,7 +121,10 @@ function count(n: number, one: string, many: string): string {
 export default function IssuedCfdis() {
   const toast = useToast();
   const today = currentMonth();
-  const [period, setPeriod] = useState<Month>(today);
+  const [params, setParams] = useSearchParams();
+  // The month goes in the address: coming back from an order shows the same one.
+  const period = monthFromQuery(params, today);
+  const heading = useRef<HTMLHeadingElement>(null);
   const [kind, setKind] = useState<IssuedCfdiKind | undefined>();
   const [status, setStatus] = useState<OrderInvoiceStatus | undefined>();
   const [search, setSearch] = useState('');
@@ -119,9 +137,19 @@ export default function IssuedCfdis() {
 
   const previous = shift(period, -1);
   const next = shift(period, 1);
+  const filtered = kind !== undefined || status !== undefined;
+  // Nothing to download from a month without CFDI (the downloads take the whole month, whatever the filters).
+  const monthCount = summary.data
+    ? summary.data.kinds.reduce((sum, k) => sum + k.inForce + k.cancelled + k.stamping + k.refused, 0)
+    : null;
   const goTo = (month: Month) => {
-    setPeriod(month);
+    const nextParams = new URLSearchParams(params);
+    nextParams.set('year', String(month.year));
+    nextParams.set('month', String(month.month));
+    setParams(nextParams, { replace: true });
     setPage(1);
+    // The button pressed is disabled at the first or the current month: the focus goes to the month instead of the page.
+    if (isBefore(shift(month, -1), FIRST_MONTH) || !isBefore(month, today)) heading.current?.focus();
   };
 
   const exportMonth = async (format: IssuedCfdiExportFormat) => {
@@ -157,30 +185,34 @@ export default function IssuedCfdis() {
       </p>
 
       <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
-        <button
-          type="button"
-          className="btn btn-light btn-sm"
-          disabled={isBefore(previous, FIRST_MONTH)}
-          aria-label={`Mes anterior (${monthLabel(previous).toLowerCase()})`}
-          onClick={() => goTo(previous)}
-        >
-          <i className="ri-arrow-left-s-line" aria-hidden="true"></i>Mes anterior
-        </button>
-        <h2 className="h5 mb-0 px-1" aria-live="polite">{monthLabel(period)}</h2>
-        <button
-          type="button"
-          className="btn btn-light btn-sm"
-          disabled={!isBefore(period, today)}
-          aria-label={`Mes siguiente (${monthLabel(next).toLowerCase()})`}
-          onClick={() => goTo(next)}
-        >
-          Mes siguiente<i className="ri-arrow-right-s-line" aria-hidden="true"></i>
-        </button>
+        <div className="d-flex align-items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-light btn-sm"
+            disabled={isBefore(previous, FIRST_MONTH)}
+            aria-label={`Mes anterior (${monthLabel(previous).toLowerCase()})`}
+            title="Mes anterior"
+            onClick={() => goTo(previous)}
+          >
+            <i className="ri-arrow-left-s-line" aria-hidden="true"></i>
+          </button>
+          <h2 ref={heading} tabIndex={-1} className="h5 mb-0 px-1 text-nowrap" aria-live="polite">{monthLabel(period)}</h2>
+          <button
+            type="button"
+            className="btn btn-light btn-sm"
+            disabled={!isBefore(period, today)}
+            aria-label={`Mes siguiente (${monthLabel(next).toLowerCase()})`}
+            title="Mes siguiente"
+            onClick={() => goTo(next)}
+          >
+            <i className="ri-arrow-right-s-line" aria-hidden="true"></i>
+          </button>
+        </div>
         <div className="d-flex flex-wrap gap-2 ms-md-auto">
           <button
             type="button"
             className="btn btn-primary btn-sm"
-            disabled={exporting !== null}
+            disabled={exporting !== null || monthCount === 0}
             onClick={() => void exportMonth(IssuedCfdiExportFormat.Zip)}
           >
             <i className="ri-file-zip-line me-1" aria-hidden="true"></i>
@@ -189,7 +221,7 @@ export default function IssuedCfdis() {
           <button
             type="button"
             className="btn btn-light btn-sm"
-            disabled={exporting !== null}
+            disabled={exporting !== null || monthCount === 0}
             onClick={() => void exportMonth(IssuedCfdiExportFormat.Csv)}
           >
             <i className="ri-file-list-3-line me-1" aria-hidden="true"></i>
@@ -198,14 +230,25 @@ export default function IssuedCfdis() {
         </div>
       </div>
       <p className="small text-muted">
-        El ZIP lleva el XML de cada CFDI timbrado del mes, también los cancelados, y la lista de todos en CSV. Los PDF se
-        descargan uno por uno.
+        Las descargas llevan todo el mes, sin los filtros de la lista: el ZIP, el XML de cada CFDI timbrado (también los
+        cancelados) y la lista de todos en CSV. Los PDF se descargan uno por uno.
       </p>
 
-      <MonthSummary summary={summary.data} loading={summary.isPending} error={summary.isError ? summary.error : null}
-        onRetry={() => void summary.refetch()} />
+      <MonthSummary
+        label={monthLabel(period).toLowerCase()}
+        summary={summary.data}
+        loading={summary.isPending}
+        error={summary.isError ? summary.error : null}
+        onRetry={() => void summary.refetch()}
+      />
 
-      <section className="card" aria-label={`CFDI de ${monthLabel(period).toLowerCase()}`}>
+      {/* Another page of the same list keeps the one on screen while it arrives, dimmed. */}
+      <section
+        className="card"
+        aria-label={`CFDI de ${monthLabel(period).toLowerCase()}`}
+        aria-busy={cfdis.isPlaceholderData}
+        style={cfdis.isPlaceholderData ? { opacity: 0.6 } : undefined}
+      >
         <div className="card-body">
           {cfdis.isError && (
             <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
@@ -218,7 +261,9 @@ export default function IssuedCfdis() {
             columns={COLUMNS}
             keyExtractor={(cfdi) => cfdi.id}
             loading={cfdis.isPending}
-            emptyMessage={cfdis.isError ? 'Sin CFDI que mostrar.' : 'No hay CFDI en este mes.'}
+            emptyMessage={cfdis.isError
+              ? 'Sin CFDI que mostrar.'
+              : filtered ? 'Ningún CFDI del mes coincide con los filtros.' : 'No hay CFDI en este mes.'}
             searchPlaceholder="Buscar folio, UUID, RFC, nombre o pedido"
             searchMaxLength={MAX_SEARCH_LENGTH}
             pageSizeOptions={PAGE_SIZES}
@@ -276,7 +321,7 @@ export default function IssuedCfdis() {
                 <>
                   <td>
                     <div className="fw-semibold">{cfdi.number}</div>
-                    <div className="small text-muted">{KIND_LABELS[cfdi.kind]}</div>
+                    <div className="small text-muted">{kindLabel(cfdi.kind)}</div>
                     <span className={`ta-chip ${invoiceStatusChip(cfdi.status)}`}>{statusLabel(cfdi)}</span>
                     {cfdi.status === OrderInvoiceStatus.Refused && cfdi.failureMessage && (
                       <div className="small text-muted">{cfdi.failureMessage}</div>
@@ -300,19 +345,19 @@ export default function IssuedCfdis() {
                           type="button"
                           className="btn btn-light btn-sm me-1"
                           disabled={downloading !== null}
-                          aria-label={`XML ${document}`}
+                          aria-label={`Descargar XML ${document}`}
                           onClick={() => void download(cfdi, 'xml')}
                         >
-                          XML
+                          Descargar XML
                         </button>
                         <button
                           type="button"
                           className="btn btn-light btn-sm"
                           disabled={downloading !== null}
-                          aria-label={`PDF ${document}`}
+                          aria-label={`Descargar PDF ${document}`}
                           onClick={() => void download(cfdi, 'pdf')}
                         >
-                          PDF
+                          Descargar PDF
                         </button>
                       </>
                     )}
@@ -342,22 +387,24 @@ function Relation({ cfdi }: { cfdi: IssuedCfdi }) {
   }
 
   let relation: string | null = null;
-  if (cfdi.kind === IssuedCfdiKind.PaymentComplement && cfdi.relatedNumber) relation = `Pago de la ${cfdi.relatedNumber}`;
-  else if (cfdi.kind === IssuedCfdiKind.CreditNote && cfdi.relatedNumber) relation = `De la ${cfdi.relatedNumber}`;
-  else if (cfdi.relatedNumber) relation = `Sustituye a la ${cfdi.relatedNumber}`;
+  if (cfdi.kind === IssuedCfdiKind.PaymentComplement && cfdi.relatedNumber) relation = `Pago de la factura ${cfdi.relatedNumber}`;
+  else if (cfdi.kind === IssuedCfdiKind.CreditNote && cfdi.relatedNumber) relation = `Nota de la factura ${cfdi.relatedNumber}`;
+  else if (cfdi.relatedNumber) relation = `Sustituye a la factura ${cfdi.relatedNumber}`;
   return (
     <>
       {cfdi.orderNumber && (
         <Link to={`/orders?search=${encodeURIComponent(cfdi.orderNumber)}`}>{cfdi.orderNumber}</Link>
       )}
       {relation && <div className="small text-muted">{relation}</div>}
-      {cfdi.replacedByNumber && <div className="small text-muted">Sustituida por la {cfdi.replacedByNumber}</div>}
+      {cfdi.replacedByNumber && <div className="small text-muted">Sustituida por la factura {cfdi.replacedByNumber}</div>}
     </>
   );
 }
 
 /** What the month's CFDI in force add up to by kind, and how many were cancelled, wait for something or were refused. */
-function MonthSummary({ summary, loading, error, onRetry }: {
+function MonthSummary({ label, summary, loading, error, onRetry }: {
+  /** «octubre de 2026». */
+  label: string;
   summary: IssuedCfdiSummary | undefined;
   loading: boolean;
   error: unknown;
@@ -379,15 +426,17 @@ function MonthSummary({ summary, loading, error, onRetry }: {
     total('cancelled') > 0 && count(total('cancelled'), 'cancelado', 'cancelados'),
     total('cancelling') > 0 && `${count(total('cancelling'), 'espera', 'esperan')} que el cliente acepte su cancelación en el SAT`,
     total('stamping') > 0 && `${count(total('stamping'), 'se está', 'se están')} timbrando`,
-    total('refused') > 0 && `${count(total('refused'), 'rechazado', 'rechazados')} por el PAC: no son CFDI y explican los folios que faltan`,
+    total('refused') > 0 && (total('refused') === 1
+      ? '1 rechazado por el PAC: no es un CFDI y explica el folio que falta'
+      : `${total('refused')} rechazados por el PAC: no son CFDI y explican los folios que faltan`),
   ].filter(Boolean);
 
   return (
-    <section className="card mb-3" aria-label="Resumen del mes">
+    <section className="card mb-3" aria-label={`Resumen de ${label}`}>
       <div className="card-body">
-        <h2 className="h6">Vigentes del mes</h2>
+        <h3 className="h6" id="issued-cfdis-in-force">Vigentes del mes</h3>
         <div className="table-responsive">
-          <table className="table table-sm align-middle mb-2">
+          <table className="table table-sm align-middle mb-2" aria-labelledby="issued-cfdis-in-force">
             <thead>
               <tr>
                 <th scope="col">Documento</th>
@@ -400,7 +449,7 @@ function MonthSummary({ summary, loading, error, onRetry }: {
             <tbody>
               {kinds.map((k) => (
                 <tr key={k.kind}>
-                  <th scope="row" className="fw-normal">{KIND_PLURALS[k.kind]}</th>
+                  <th scope="row" className="fw-normal">{KIND_PLURALS[k.kind] ?? 'CFDI'}</th>
                   <td className="text-end">{k.inForce}</td>
                   {k.kind === IssuedCfdiKind.PaymentComplement ? (
                     <>
