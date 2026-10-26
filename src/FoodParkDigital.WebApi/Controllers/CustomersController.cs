@@ -254,6 +254,6 @@ public class UpdateCustomerFiscalDataRequest
     /// <summary>RFC, name, fiscal postal code, regime and use of the CFDI; null forgets them.</summary>
     public CfdiReceiverInput? FiscalData { get; init; }
 
-    /// <summary>The email the customer gets their invoices at, kept with the fiscal data; optional.</summary>
+    /// <summary>The email the customer gets their invoices at, kept with the fiscal data: left out, it stays; empty, it is forgotten.</summary>
     public string? InvoiceEmail { get; init; }
 }

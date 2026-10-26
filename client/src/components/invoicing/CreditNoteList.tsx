@@ -203,7 +203,8 @@ export default function CreditNoteList({ orderId, adjustments, invoices, canCanc
                             cfdiId={note.id}
                             number={note.number}
                             invoiceEmail={invoiceEmails.get(note.orderInvoiceId)}
-                            suggestedEmail={note.emails[0]?.to ?? proposedEmail}
+                            latestEmail={note.emails[0]}
+                            proposedEmail={proposedEmail}
                           />
                         )}
                         {note.status === OrderInvoiceStatus.Stamping && (

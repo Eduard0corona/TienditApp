@@ -18,8 +18,9 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// <summary>
 /// AddCfdiEmails (Fase 28E, ADR 0049): the emails of the CFDI of the orders' invoices to their customers, and the addresses
 /// the invoice and the customer keep for them. The version deployed before keeps storing invoices and customers (without an
-/// address); the checks refuse what the domain never writes; and rolling back stops with error 50041 once there is an email
-/// or an address, and otherwise drops only what it added.
+/// address), and forgetting a customer's fiscal data, also one with an address; the checks refuse what the domain never
+/// writes; and rolling back stops with error 50041 once there is an email or an address, and otherwise drops only what it
+/// added.
 /// </summary>
 public class CfdiEmailsMigrationSqlServerTests
 {
@@ -53,6 +54,17 @@ public class CfdiEmailsMigrationSqlServerTests
         });
         Assert.Null((await context.OrderInvoices.SingleAsync()).ReceiverEmail);
         Assert.Empty(await context.CfdiEmails.ToListAsync());
+
+        // It forgets the fiscal data of a customer this version gave an address to: it does not know the address, and no
+        // check of the database refuses it (the domain of this version forgets both).
+        var withAddress = await AddCustomerAsync(database.CreateContext(seed.TenantId), seed.TenantId, "Lupita", "facturas@ejemplo.mx");
+        await using (var previous = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
+        {
+            (await previous.Customers.SingleAsync(c => c.Id == withAddress)).SetFiscalData(null, null);
+            await previous.SaveChangesAsync();
+        }
+        await using var after = database.CreateContext(seed.TenantId);
+        Assert.Null((await after.Customers.AsNoTracking().SingleAsync(c => c.Id == withAddress)).FiscalData);
     }
 
     [SqlServerFact]
@@ -97,13 +109,11 @@ public class CfdiEmailsMigrationSqlServerTests
             $"UPDATE [CfdiEmails] SET [FailedAt] = SYSDATETIMEOFFSET(), [Failure] = 0 WHERE [Id] = {email.Id}",
             $"UPDATE [CfdiEmails] SET [SentAt] = NULL, [SentWithoutPdf] = 0, [FailedAt] = SYSDATETIMEOFFSET() WHERE [Id] = {email.Id}",
             $"UPDATE [CfdiEmails] SET [Failure] = 1 WHERE [Id] = {email.Id}",
-            $"UPDATE [CfdiEmails] SET [SentAt] = NULL, [SentWithoutPdf] = 0, [FailedAt] = SYSDATETIMEOFFSET(), [Failure] = 3 WHERE [Id] = {email.Id}",
+            $"UPDATE [CfdiEmails] SET [SentAt] = NULL, [SentWithoutPdf] = 0, [FailedAt] = SYSDATETIMEOFFSET(), [Failure] = 4 WHERE [Id] = {email.Id}",
             // Without the PDF only once it went out.
             $"UPDATE [CfdiEmails] SET [SentAt] = NULL WHERE [Id] = {email.Id}",
             $"UPDATE [CfdiEmails] SET [FailedAttempts] = 0 WHERE [Id] = {email.Id}",
-            $"UPDATE [CfdiEmails] SET [LastFailedAttemptAt] = NULL WHERE [Id] = {email.Id}",
-            // The email for the invoices goes with the fiscal data.
-            $"UPDATE [Customers] SET [FiscalData_Rfc] = NULL, [FiscalData_Name] = NULL, [FiscalData_PostalCode] = NULL, [FiscalData_FiscalRegime] = NULL, [FiscalData_CfdiUse] = NULL WHERE [Id] = {customerId}"
+            $"UPDATE [CfdiEmails] SET [LastFailedAttemptAt] = NULL WHERE [Id] = {email.Id}"
         ];
         foreach (var sql in never)
         {
@@ -148,7 +158,7 @@ public class CfdiEmailsMigrationSqlServerTests
         await using (var context = database.CreateContext())
         {
             Assert.Equal(BeforeEmails, await LatestMigrationAsync(context));
-            Assert.Equal((0, 0, 0, 0, 1, 1), (
+            Assert.Equal((0, 0, 0, 1, 1), (
                 await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM sys.tables WHERE [name] = N'CfdiEmails'"),
                 await CountAsync(context, $"""
                     SELECT COUNT(*) AS [Value] FROM sys.columns
@@ -158,7 +168,6 @@ public class CfdiEmailsMigrationSqlServerTests
                     SELECT COUNT(*) AS [Value] FROM sys.columns
                     WHERE [object_id] = OBJECT_ID(N'dbo.Customers') AND [name] = N'InvoiceEmail'
                     """),
-                await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM sys.check_constraints WHERE [name] = N'CK_Customers_InvoiceEmail'"),
                 await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [OrderInvoices]"),
                 await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [Customers] WHERE [FiscalData_Rfc] IS NOT NULL")));
         }

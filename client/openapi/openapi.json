@@ -18643,14 +18643,16 @@
         "enum": [
           0,
           1,
-          2
+          2,
+          3
         ],
         "type": "integer",
         "format": "int32",
         "x-enum-varnames": [
           "Rejected",
           "NotConfigured",
-          "NoLongerStamped"
+          "NoLongerStamped",
+          "NotDelivered"
         ]
       },
       "CfdiPartyDto": {

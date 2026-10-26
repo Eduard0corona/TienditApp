@@ -50,7 +50,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     table.CheckConstraint("CK_CfdiEmails_Attempts", "([FailedAttempts] = 0 AND [LastFailedAttemptAt] IS NULL) OR ([FailedAttempts] > 0 AND [LastFailedAttemptAt] IS NOT NULL)");
                     table.CheckConstraint("CK_CfdiEmails_Document", "[Document] IN (0, 1, 2)");
                     table.CheckConstraint("CK_CfdiEmails_Invoice", "[Document] <> 0 OR [CfdiId] = [OrderInvoiceId]");
-                    table.CheckConstraint("CK_CfdiEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2))) AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)");
+                    table.CheckConstraint("CK_CfdiEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3))) AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)");
                     table.ForeignKey(
                         name: "FK_CfdiEmails_OrderInvoices_OrderInvoiceId",
                         column: x => x.OrderInvoiceId,
@@ -63,11 +63,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
-
-            migrationBuilder.AddCheckConstraint(
-                name: "CK_Customers_InvoiceEmail",
-                table: "Customers",
-                sql: "[InvoiceEmail] IS NULL OR [FiscalData_Rfc] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_CfdiEmails_OrderInvoiceId",
@@ -98,10 +93,6 @@ EXEC(N'IF EXISTS (SELECT 1 FROM [CfdiEmails])
 
             migrationBuilder.DropTable(
                 name: "CfdiEmails");
-
-            migrationBuilder.DropCheckConstraint(
-                name: "CK_Customers_InvoiceEmail",
-                table: "Customers");
 
             migrationBuilder.DropColumn(
                 name: "ReceiverEmail",

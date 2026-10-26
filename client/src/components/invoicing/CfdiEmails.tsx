@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
-import { isEmailOnItsWay, useSendCfdiByEmail, type CfdiEmail } from '../../api/invoicing';
+import { useSendCfdiByEmail, type CfdiEmail } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
 import { CfdiEmailDocument, CfdiEmailFailure } from '../../types';
 import { cfdiEmailLabel, isPlainEmail } from '../../utils/cfdi';
@@ -11,6 +11,7 @@ const FAILURES: Record<CfdiEmailFailure, string> = {
   [CfdiEmailFailure.Rejected]: 'el servidor de correo lo rechazó. Revisa la dirección con el cliente.',
   [CfdiEmailFailure.NotConfigured]: 'TienditApp no tiene el envío de correos configurado. Descarga el XML y el PDF y compártelos.',
   [CfdiEmailFailure.NoLongerStamped]: 'ya no está vigente.',
+  [CfdiEmailFailure.NotDelivered]: 'el servidor de correo no lo tomó después de varios intentos. Envíalo otra vez.',
 };
 
 interface CfdiEmailStatusProps {
@@ -43,10 +44,8 @@ export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
   return (
     <p className="small text-muted mb-0 mt-1" role="status">
       <i className="ri-mail-send-line me-1" aria-hidden="true"></i>
-      {isEmailOnItsWay(latest)
-        ? `Enviándose por correo a ${latest.to}…`
-        : `El correo a ${latest.to} todavía no sale: TienditApp lo sigue intentando.`}
-      {latest.failedAttempts > 0 && isEmailOnItsWay(latest) && ' El servidor de correo no respondió; se vuelve a intentar.'}
+      Enviándose por correo a {latest.to}…
+      {latest.failedAttempts > 0 && ' El servidor de correo no lo ha tomado; TienditApp lo vuelve a intentar.'}
     </p>
   );
 }
@@ -58,12 +57,14 @@ interface SendCfdiEmailButtonProps {
   number: string;
   /** Where its invoice's CFDI go now; empty when nowhere. */
   invoiceEmail?: string | null;
-  /** The address to start from: the invoice's, or the one the order's invoicing proposes. */
-  suggestedEmail?: string | null;
+  /** The CFDI's latest email, if any. */
+  latestEmail?: CfdiEmail;
+  /** The address the order's invoicing proposes. */
+  proposedEmail?: string | null;
 }
 
 /** «Enviar por correo» a stamped CFDI of the order's invoice: to the address typed, out from the queue. */
-export function SendCfdiEmailButton({ orderId, document, cfdiId, number, invoiceEmail, suggestedEmail }: SendCfdiEmailButtonProps) {
+export function SendCfdiEmailButton({ orderId, document, cfdiId, number, invoiceEmail, latestEmail, proposedEmail }: SendCfdiEmailButtonProps) {
   const [open, setOpen] = useState(false);
   const label = cfdiEmailLabel(document, number);
   return (
@@ -83,7 +84,9 @@ export function SendCfdiEmailButton({ orderId, document, cfdiId, number, invoice
           cfdiId={cfdiId}
           label={label}
           invoiceEmail={invoiceEmail ?? null}
-          initialEmail={invoiceEmail || suggestedEmail || ''}
+          invoiceEmailRefused={!!invoiceEmail && latestEmail?.failure === CfdiEmailFailure.Rejected
+            && latestEmail.to.toLowerCase() === invoiceEmail.toLowerCase()}
+          initialEmail={invoiceEmail || latestEmail?.to || proposedEmail || ''}
           onClose={() => setOpen(false)}
         />
       )}
@@ -97,17 +100,20 @@ interface SendCfdiEmailModalProps {
   cfdiId: string;
   label: string;
   invoiceEmail: string | null;
+  /** The mail server refused the invoice's address for good: what follows should go to the corrected one. */
+  invoiceEmailRefused: boolean;
   initialEmail: string;
   onClose: () => void;
 }
 
-function SendCfdiEmailModal({ orderId, document, cfdiId, label, invoiceEmail, initialEmail, onClose }: SendCfdiEmailModalProps) {
+function SendCfdiEmailModal({ orderId, document, cfdiId, label, invoiceEmail, invoiceEmailRefused, initialEmail, onClose }: SendCfdiEmailModalProps) {
   const titleId = useId();
   const toast = useToast();
   const send = useSendCfdiByEmail(orderId);
   const [email, setEmail] = useState(initialEmail);
-  // Without an email in the invoice, what comes next of it goes to this one unless the person says otherwise.
-  const [useForInvoice, setUseForInvoice] = useState(!invoiceEmail);
+  // Without an email in the invoice, or with one that was refused, what comes next of it goes to this one unless the
+  // person says otherwise.
+  const [useForInvoice, setUseForInvoice] = useState(!invoiceEmail || invoiceEmailRefused);
   const typed = email.trim();
   const valid = isPlainEmail(typed);
   const offerForInvoice = typed.toLowerCase() !== (invoiceEmail ?? '').toLowerCase();
@@ -143,6 +149,7 @@ function SendCfdiEmailModal({ orderId, document, cfdiId, label, invoiceEmail, in
             disabled={send.isPending}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            aria-invalid={typed && !valid ? true : undefined}
             aria-describedby={typed && !valid ? `${titleId}-invalid` : undefined}
           />
           {typed && !valid && (

@@ -8,9 +8,9 @@
 -- Se detiene sin cambiar nada (error 50041; con -b, sqlcmd termina ahí) si ya hay correos de CFDI
 -- registrados, o correos escritos en una factura o en un cliente: borrarlos perdería ese historial y
 -- lo que el negocio escribió. Entonces solo queda corregir hacia adelante (la consulta 3 de
--- verify.sql los cuenta). Sin ellos, borra [CfdiEmails], [OrderInvoices].[ReceiverEmail],
--- [Customers].[InvoiceEmail] y [CK_Customers_InvoiceEmail]. Volver al código anterior (master con la
--- Fase 28D) funciona también sin este script.
+-- verify.sql los cuenta). Sin ellos, borra [CfdiEmails], [OrderInvoices].[ReceiverEmail] y
+-- [Customers].[InvoiceEmail]. Volver al código anterior (master con la Fase 28D) funciona también
+-- sin este script.
 -- Idempotente: no hace nada si la migración no está aplicada.
 --     sqlcmd -S <servidor> -d <base> <autenticación> -b -i rollback.sql
 -- =====================================================================================
@@ -44,14 +44,6 @@ IF EXISTS (
 )
 BEGIN
     DROP TABLE [CfdiEmails];
-END;
-
-IF EXISTS (
-    SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261026032721_AddCfdiEmails'
-)
-BEGIN
-    ALTER TABLE [Customers] DROP CONSTRAINT [CK_Customers_InvoiceEmail];
 END;
 
 IF EXISTS (

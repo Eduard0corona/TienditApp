@@ -104,7 +104,6 @@ public class CfdiEmailTests
     [Theory]
     [InlineData("karla@ejemplo.mx")]
     [InlineData("karla.fuente+facturas@sub.ejemplo.com.mx")]
-    [InlineData("ñandú@ejemplo.mx")]
     public void Address_ShouldTakeOnePlainAddress(string email)
     {
         Assert.True(InvoiceEmailAddress.IsValid(email));
@@ -121,6 +120,10 @@ public class CfdiEmailTests
     [InlineData("karla fuente@ejemplo.mx")]
     [InlineData("Karla <karla@ejemplo.mx>")]
     [InlineData("karla@ejemplo.mx, pepe@ejemplo.mx")]
+    [InlineData("karla\t@ejemplo.mx")]
+    // The platform's SMTP sends seven-bit addresses: these would never go out.
+    [InlineData("ñandú@ejemplo.mx")]
+    [InlineData("karla@peña.mx")]
     public void Address_ShouldRefuseWhatIsNotOnePlainAddress(string email)
     {
         Assert.False(InvoiceEmailAddress.IsValid(email));

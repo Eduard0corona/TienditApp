@@ -203,6 +203,10 @@ public class CfdiEmailFlowTests
         Assert.Equal("Escribe el correo al que se envía.",
             Assert.Single(validator.Validate(new SendCfdiByEmailCommand(CfdiEmailDocument.Invoice, stamping.Id, " ", false)).Errors).ErrorMessage);
         Assert.False(validator.Validate(new SendCfdiByEmailCommand((CfdiEmailDocument)7, stamping.Id, Karla, false)).IsValid);
+        // The platform's SMTP sends seven-bit addresses: «peña@…» would never go out.
+        Assert.Equal(InvoiceEmailAddress.InvalidMessage,
+            Assert.Single(validator.Validate(new SendCfdiByEmailCommand(CfdiEmailDocument.Invoice, stamping.Id, "peña@ejemplo.mx", false)).Errors)
+                .ErrorMessage);
     }
 
     [Fact]
@@ -234,7 +238,7 @@ public class CfdiEmailFlowTests
     }
 
     [Fact]
-    public async Task Queue_WithoutThePdf_ShouldWaitForItTwice_ThenSendTheXmlAlone_AndSaySo()
+    public async Task Queue_WithoutThePdf_ShouldWaitForIt_ThenSendTheXmlAlone_AndSaySo()
     {
         await using var book = await Book.OpenAsync();
         book.Gateway.PdfUnavailable = true;
@@ -242,10 +246,12 @@ public class CfdiEmailFlowTests
         Assert.False(invoice.HasPdf);
         var email = await book.Context.CfdiEmails.SingleAsync();
 
+        // The first waits for the PDF the stamp keeps; the next one asks the PAC for it.
         for (var attempt = 1; attempt <= CfdiEmailRequestedHandler.AttemptsWaitingForPdf; attempt++)
             await Assert.ThrowsAsync<InvalidOperationException>(() => book.DeliverAsync(email.Id, attempt));
+        // Waiting is not a try the mail server refused.
         var waiting = await book.Context.CfdiEmails.AsNoTracking().SingleAsync();
-        Assert.Equal((2, true), (waiting.FailedAttempts, waiting.IsPending));
+        Assert.Equal((0, true), (waiting.FailedAttempts, waiting.IsPending));
         Assert.Empty(book.Email.Documents);
 
         await book.DeliverAsync(email.Id, CfdiEmailRequestedHandler.AttemptsWaitingForPdf + 1);
@@ -301,6 +307,30 @@ public class CfdiEmailFlowTests
     }
 
     [Fact]
+    public async Task Queue_OnTheOutboxesLastAttempt_ShouldNotWaitForThePdf_AndEndTheEmailTheServerDidNotTake()
+    {
+        await using var book = await Book.OpenAsync();
+        book.Gateway.PdfUnavailable = true;
+        var invoice = (await book.IssueAsync((await book.PaidSaleAsync()).Id, Karla)).Value;
+
+        // The only attempt is the last one: the XML goes alone rather than never.
+        await book.DeliverAsync((await book.Context.CfdiEmails.SingleAsync()).Id, attempt: 1, maxAttempts: 1);
+        Assert.True((await book.Context.CfdiEmails.AsNoTracking().SingleAsync()).SentWithoutPdf);
+
+        book.Email.DocumentsFailure = new IOException("The SMTP server could not be reached.");
+        book.Clock.UtcNow = book.Clock.UtcNow.AddMinutes(1);
+        var again = (await book.SendAsync(CfdiEmailDocument.Invoice, invoice.Id, Karla)).Value;
+        await Assert.ThrowsAsync<IOException>(() => book.DeliverAsync(again.Id, attempt: 7, maxAttempts: 8));
+        // The outbox sets the message aside after this one: the email ends instead of saying it is on its way forever.
+        await book.DeliverAsync(again.Id, attempt: 8, maxAttempts: 8);
+
+        var ended = await book.Context.CfdiEmails.AsNoTracking().SingleAsync(e => e.Id == again.Id);
+        Assert.Equal(((CfdiEmailFailure?)CfdiEmailFailure.NotDelivered, (DateTimeOffset?)book.Clock.UtcNow, 2, (DateTimeOffset?)null, false),
+            (ended.Failure, ended.FailedAt, ended.FailedAttempts, ended.SentAt, ended.IsPending));
+        Assert.Single(book.Email.Documents);
+    }
+
+    [Fact]
     public async Task Queue_ShouldNotSendACfdi_ThatIsNoLongerStamped()
     {
         await using var book = await Book.OpenAsync();
@@ -343,7 +373,12 @@ public class CfdiEmailFlowTests
         book.Gateway.Refusal = null;
         Assert.True((await book.IssueAsync(sale.Id, "facturas@ejemplo.mx", saveToCustomer: true)).IsSuccess);
         Assert.Equal("facturas@ejemplo.mx", (await book.Context.Customers.AsNoTracking().SingleAsync()).InvoiceEmail);
-        Assert.Equal("facturas@ejemplo.mx", (await book.InvoicingAsync((await book.PaidSaleAsync()).Id)).ProposedEmail);
+        var next = await book.PaidSaleAsync();
+        Assert.Equal("facturas@ejemplo.mx", (await book.InvoicingAsync(next.Id)).ProposedEmail);
+
+        // Invoiced without one, keeping the data in the customer keeps theirs.
+        Assert.True((await book.IssueAsync(next.Id, saveToCustomer: true)).IsSuccess);
+        Assert.Equal("facturas@ejemplo.mx", (await book.Context.Customers.AsNoTracking().SingleAsync()).InvoiceEmail);
     }
 
     [Fact]
@@ -357,6 +392,10 @@ public class CfdiEmailFlowTests
         // The same again records nothing; the email alone, a change.
         await handler.Handle(new UpdateCustomerFiscalDataCommand(book.Customer.Id, Receiver, "facturas@ejemplo.mx"), CancellationToken.None);
         await handler.Handle(new UpdateCustomerFiscalDataCommand(book.Customer.Id, Receiver, "pagos@ejemplo.mx"), CancellationToken.None);
+        // Left out (a client from before the Fase 28E), it stays; empty, it is forgotten.
+        Assert.Equal("pagos@ejemplo.mx",
+            (await handler.Handle(new UpdateCustomerFiscalDataCommand(book.Customer.Id, Receiver), CancellationToken.None)).Value.InvoiceEmail);
+        Assert.Null((await handler.Handle(new UpdateCustomerFiscalDataCommand(book.Customer.Id, Receiver, ""), CancellationToken.None)).Value.InvoiceEmail);
 
         var changes = await book.Context.AuditLogs
             .Where(a => a.Action == CustomerFiscalDataAudit.Action)
@@ -366,6 +405,7 @@ public class CfdiEmailFlowTests
         Assert.Equal(
             [
                 """{"From":"Clientes","PreviousRfc":null,"Rfc":"XIQB891116QE4","InvoiceEmailChanged":true}""",
+                """{"From":"Clientes","PreviousRfc":"XIQB891116QE4","Rfc":"XIQB891116QE4","InvoiceEmailChanged":true}""",
                 """{"From":"Clientes","PreviousRfc":"XIQB891116QE4","Rfc":"XIQB891116QE4","InvoiceEmailChanged":true}""",
             ],
             changes);
@@ -525,14 +565,14 @@ public class CfdiEmailFlowTests
 
         public async Task<Result<CfdiEmailDto>> SendAsync(CfdiEmailDocument document, Guid cfdiId, string email, bool useForInvoice = false)
         {
-            var sent = await new SendCfdiByEmailCommandHandler(Context, Fixture.CurrentUser, Clock)
+            var sent = await new SendCfdiByEmailCommandHandler(Context, Fixture.CurrentUser, new InvoicingLock(Context), Clock)
                 .Handle(new SendCfdiByEmailCommand(document, cfdiId, email, useForInvoice), CancellationToken.None);
             Context.ChangeTracker.Clear();
             return sent;
         }
 
         /// <summary>The outbox runs the email's handler in its own scope, and saves what it changed when it ends well.</summary>
-        public async Task DeliverAsync(Guid emailId, int attempt = 1)
+        public async Task DeliverAsync(Guid emailId, int attempt = 1, int maxAttempts = 8)
         {
             Context.ChangeTracker.Clear();
             var handler = new CfdiEmailRequestedHandler(Context, Storage, Gateway, Email, Clock, NullLogger<CfdiEmailRequestedHandler>.Instance);
@@ -540,7 +580,7 @@ public class CfdiEmailFlowTests
             {
                 await handler.HandleAsync(
                     new CfdiEmailRequestedEvent(emailId),
-                    new OutboxEventContext(Guid.NewGuid(), Tenant.Id, null, null, Clock.UtcNow, attempt),
+                    new OutboxEventContext(Guid.NewGuid(), Tenant.Id, null, null, Clock.UtcNow, attempt, maxAttempts),
                     CancellationToken.None);
                 await Context.SaveChangesAsync();
             }

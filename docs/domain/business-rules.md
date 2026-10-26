@@ -538,7 +538,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cancelar** (dueños y administradores): con motivo 02 (errores sin relación) o 03 (la venta no se llevó a cabo); se pide primero al PAC y, si se niega, nada cambia. Si el SAT pide la aceptación del receptor, queda «Cancelándose» y el worker pregunta cada 30 minutos: cancelada, o «Timbrada» otra vez si el receptor la rechazó. Una cancelada deja facturar el pedido otra vez con factura y folio nuevos. Nunca se borra una factura.
 - **El CSD** (dueños y administradores, Configuración › Facturación): `.cer`, `.key` y la contraseña de la llave. TienditApp revisa que sea de sello, vigente, del RFC de Mi negocio y que la llave corresponda; el PAC lo guarda y TienditApp solo su número, RFC y vigencia. Los archivos y la contraseña nunca se guardan ni se registran. Avisa 30 días antes de vencer; reemplazarlo o quitarlo pide al PAC que olvide el anterior. Un CSD es de un solo negocio de TienditApp: si otro ya lo usa, se rechaza (dos negocios del mismo RFC tramitan uno cada uno).
 - **Acceso:** timbrar, volver a pedir, ver y descargar el XML y el PDF, quien gestiona los pedidos (`ManageOrders`); cancelar, el CSD y la serie, dueños y administradores. Otro negocio recibe 404.
-- **Sin** sustitución (motivo 01), autofactura, envío por correo o WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, y las notas de crédito en la 28D (siguientes secciones de facturas).
+- **Sin** sustitución (motivo 01), autofactura, envío por WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D y el envío por correo en la 28E (siguientes secciones de facturas).
 
 ## La factura global (Fase 28B)
 
@@ -597,6 +597,20 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **La global** sigue sin ventas con reembolsos o condonación: se facturan por su cuenta en Pedidos.
 - **Acceso:** ver, emitir, volver a pedir y descargar, quien gestiona los pedidos (`ManageOrders`); cancelar, dueños y administradores. Otro negocio recibe 404.
 - **Sin** egreso relacionado con una global, notas por descuento o bonificación sin reembolso, una nota de varias facturas o varios ajustes, otras monedas ni sustitución (01).
+
+## La factura por correo (Fase 28E)
+
+[ADR 0049](../adr/0049-cfdi-email.md):
+
+- **Qué se manda:** el XML y el PDF de cada CFDI timbrado de la factura de un pedido (la factura, sus complementos de pago y sus notas de crédito). La global no; las cancelaciones no se avisan (el SAT las avisa en su buzón).
+- **A dónde:** al correo de la factura (`ReceiverEmail`, opcional, una sola dirección en ASCII: el SMTP de la plataforma no manda «peña@…»). Sus complementos y notas van al correo que la factura tenga cuando se timbran.
+- **Qué se propone al facturar:** el «Correo para facturas» del cliente (se guarda con sus datos fiscales, `ManageCustomers`, y se audita sin guardar la dirección), el de la última factura del pedido o el correo del cliente. «Guardar estos datos en el cliente» guarda también el correo escrito; sin correo, el cliente conserva el suyo. En Clientes, el correo vacío lo quita. Quitar los datos fiscales quita el correo.
+- **Cuándo:** en cuanto el CFDI queda timbrado, una vez por timbre (se pide en el mismo guardado; un intento que perdió el timbre no lo pide). Sale del outbox: sin PDF espera dos intentos (sin contarlos como fallidos) y después manda solo el XML y lo dice; un servidor que no lo toma o no contesta en 60 segundos se reintenta, hasta el último intento del outbox (unas 4.7 horas).
+- **Cómo termina:** enviado (quizá sin el PDF), o no se envió porque el servidor rechazó la dirección, porque la plataforma no tiene proveedor, porque el CFDI ya no estaba vigente o porque el servidor no lo tomó en ningún intento. Pedidos sigue leyendo la facturación mientras un correo no termina.
+- **Cómo sale:** de la dirección de la plataforma, con el nombre «{Negocio} vía TienditApp» y las respuestas al correo de contacto del negocio; asunto con el tipo, el folio y el negocio; adjuntos `{Serie}-{Folio}_{UUID}`.
+- **«Enviar por correo»:** quien gestiona los pedidos (`ManageOrders`) manda otra vez un CFDI timbrado a la dirección que escriba; con «Usar este correo para lo que siga de esta factura», cambia el de la factura. Hasta 5 por CFDI y 300 por negocio en 24 horas, contando los automáticos y bajo el candado de facturación del negocio. Otro negocio recibe 404.
+- **El historial** de cada correo (a quién, quién lo pidió, cuándo y cómo terminó) no se borra; Pedidos muestra el último de cada CFDI.
+- **Sin** WhatsApp, aviso de cancelación, envío desde el dominio del negocio ni saber si el correo rebotó después de que el servidor lo tomó.
 
 ## Cancelación y trazabilidad
 

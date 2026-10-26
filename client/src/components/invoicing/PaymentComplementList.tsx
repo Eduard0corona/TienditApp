@@ -194,7 +194,8 @@ export default function PaymentComplementList({
                             cfdiId={complement.id}
                             number={complement.number}
                             invoiceEmail={invoiceEmails[complement.orderInvoiceId]}
-                            suggestedEmail={complement.emails[0]?.to ?? proposedEmail}
+                            latestEmail={complement.emails[0]}
+                            proposedEmail={proposedEmail}
                           />
                         )}
                         {complement.status === OrderInvoiceStatus.Stamping && (

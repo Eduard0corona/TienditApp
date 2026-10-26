@@ -18,7 +18,8 @@ namespace FoodParkDigital.Application.Customers.Commands;
 
 /// <summary>
 /// The customer's fiscal data (Fase 28A) and the email for their invoices (Fase 28E): the next invoice of their orders
-/// proposes them. Without data both are forgotten.
+/// proposes them. Without data both are forgotten. Without <see cref="InvoiceEmail"/> (a client from before the Fase
+/// 28E) the email stays as it is; empty, it is forgotten.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageCustomers)]
 public record UpdateCustomerFiscalDataCommand(Guid CustomerId, CfdiReceiverInput? FiscalData, string? InvoiceEmail = null)
@@ -58,7 +59,8 @@ public class UpdateCustomerFiscalDataCommandHandler : IRequestHandler<UpdateCust
             var data = request.FiscalData;
             customer.SetFiscalData(data is null
                 ? null
-                : CfdiReceiver.Create(data.Rfc, data.Name, data.PostalCode, data.FiscalRegime, data.CfdiUse), request.InvoiceEmail);
+                : CfdiReceiver.Create(data.Rfc, data.Name, data.PostalCode, data.FiscalRegime, data.CfdiUse),
+                request.InvoiceEmail ?? customer.InvoiceEmail);
         }
         catch (DomainException ex)
         {

@@ -165,7 +165,8 @@ public class EmailService : IEmailService
         if (settings.Username is not null)
             smtp.Credentials = new NetworkCredential(settings.Username, settings.Password);
 
-        if (!MailAddress.TryCreate(to, out var recipient))
+        // An address SMTP cannot carry seven-bit («peña@…») would fail every retry as well.
+        if (!MailAddress.TryCreate(to, out var recipient) || !IsSevenBit(recipient))
         {
             // Retrying cannot fix the address.
             _logger.LogWarning("Email not sent to {Email}: the address is not valid.", LoggableEmail(to));
@@ -181,7 +182,8 @@ public class EmailService : IEmailService
             IsBodyHtml = true
         };
         mail.To.Add(recipient);
-        if (replyTo is not null && MailAddress.TryCreate(replyTo, out var answerTo))
+        // An answer address that cannot go seven-bit is left out rather than stopping the email.
+        if (replyTo is not null && MailAddress.TryCreate(replyTo, out var answerTo) && IsSevenBit(answerTo))
             mail.ReplyToList.Add(answerTo);
         foreach (var file in attachments)
         {
@@ -191,11 +193,19 @@ public class EmailService : IEmailService
             mail.Attachments.Add(attachment);
         }
 
+        // A server that hangs would hold the queue: the attempt ends and is retried.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(SendTimeout);
         try
         {
-            await smtp.SendMailAsync(mail, cancellationToken);
+            await smtp.SendMailAsync(mail, timeout.Token);
             _logger.LogInformation("Email sent successfully to {Email}", LoggableEmail(to));
             return EmailSendOutcome.Sent;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError("SMTP send to {Email} did not finish in {Seconds} s. It will be retried.", LoggableEmail(to), SendTimeout.TotalSeconds);
+            throw new EmailDeliveryException(null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -214,6 +224,11 @@ public class EmailService : IEmailService
             return EmailSendOutcome.Rejected;
         }
     }
+
+    /// <summary>How long one email may take to reach the SMTP server, attachments included.</summary>
+    public static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(60);
+
+    private static bool IsSevenBit(MailAddress address) => address.User.All(c => c < 128);
 
     // A name typed by the business: one line, without what would break the header.
     private static string? SenderName(string? name)

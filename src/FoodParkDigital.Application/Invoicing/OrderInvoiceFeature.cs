@@ -358,8 +358,9 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
             && await OrderInvoicing.CustomerAsync(_context, _phones, order.CustomerPhone, tracked: true, cancellationToken) is { } customer)
         {
             var (previous, previousEmail) = (customer.FiscalData, customer.InvoiceEmail);
-            // A value of its own: an owned value is never shared between two records.
-            customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver), invoice.ReceiverEmail);
+            // A value of its own: an owned value is never shared between two records. An invoice without an email (not
+            // sent this time) leaves the customer's as it is.
+            customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver), invoice.ReceiverEmail ?? customer.InvoiceEmail);
             if (CustomerFiscalDataAudit.Entry(customer, previous, previousEmail, _currentUser.UserName, $"Factura {invoice.Number}") is { } changed)
                 _context.AuditLogs.Add(changed);
         }

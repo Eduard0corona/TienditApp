@@ -139,6 +139,8 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
   const cfdi = draft.data;
 
   const available = invoicing?.available ?? false;
+  // The email goes with an invoice that can be stamped now, to a customer with RFC.
+  const showEmail = available && !!invoicing?.canInvoice && !!receiver;
   const edited = receiver === undefined || JSON.stringify(normalizeReceiver(form)) !== JSON.stringify(receiver);
   // Only on this opening's preview: while it is read again, what is on screen may be old.
   const canStamp = available && !!invoicing?.canInvoice && !!receiver && !edited && !!cfdi?.isReadyToStamp
@@ -154,7 +156,8 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
     try {
       const invoice = await issue.mutateAsync({
         receiver,
-        saveToCustomer: offerSaveToCustomer && saveToCustomer,
+        // Only what the person saw: the box shows with the receiver's data.
+        saveToCustomer: offerSaveToCustomer && showReceiver && saveToCustomer,
         receiverEmail: typedEmail || null,
       });
       if (invoice.status === OrderInvoiceStatus.Stamped) {
@@ -247,7 +250,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
                     onChange={(event) => setSaveToCustomer(event.target.checked)}
                   />
                   <label className="form-check-label small" htmlFor="cfdi-save-to-customer">
-                    Guardar estos datos{typedEmail ? ' y el correo' : ''} en {invoicing.customerName ?? 'el cliente'} para sus próximas facturas
+                    Guardar estos datos{showEmail && typedEmail ? ' y el correo' : ''} en {invoicing.customerName ?? 'el cliente'} para sus próximas facturas
                   </label>
                 </div>
               )}
@@ -265,7 +268,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             </form>
           )}
 
-          {available && invoicing?.canInvoice && receiver && (
+          {showEmail && (
             <div className="mb-3">
               <label className="form-label small mb-1" htmlFor="cfdi-email">Correo del cliente (opcional)</label>
               <input
@@ -277,6 +280,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
                 value={email}
                 disabled={issue.isPending}
                 onChange={(event) => setEmail(event.target.value)}
+                aria-invalid={emailValid ? undefined : true}
                 aria-describedby="cfdi-email-help"
               />
               <div id="cfdi-email-help" className={emailValid ? 'form-text' : 'invalid-feedback'}>

@@ -120,6 +120,7 @@ export const CfdiEmailFailure = {
   Rejected: 0,
   NotConfigured: 1,
   NoLongerStamped: 2,
+  NotDelivered: 3,
 } as const;
 export type CfdiEmailFailure = (typeof CfdiEmailFailure)[keyof typeof CfdiEmailFailure];
 

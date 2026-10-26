@@ -43,7 +43,7 @@ describe('CustomerFiscalDataModal', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
     expect(apiRequest).toHaveBeenCalledWith('put', '/api/v1/customers/{id}/fiscal-data', {
       path: { id: 'c-1' },
-      body: { fiscalData: { ...KARLA, fiscalRegime: '605', cfdiUse: 'D01' }, invoiceEmail: null },
+      body: { fiscalData: { ...KARLA, fiscalRegime: '605', cfdiUse: 'D01' }, invoiceEmail: '' },
     });
     expect(toast.success).toHaveBeenCalledWith('Datos fiscales de Karla guardados.');
   });
@@ -56,6 +56,7 @@ describe('CustomerFiscalDataModal', () => {
     await userEvent.clear(email);
     await userEvent.type(email, 'pagos');
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+    expect(email).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('Escribe un correo válido, como nombre@ejemplo.com, o déjalo vacío.')).toBeInTheDocument();
 
     await userEvent.type(email, '@ejemplo.mx ');
@@ -65,6 +66,20 @@ describe('CustomerFiscalDataModal', () => {
     expect(apiRequest).toHaveBeenCalledWith('put', '/api/v1/customers/{id}/fiscal-data', {
       path: { id: 'c-1' },
       body: { fiscalData: KARLA, invoiceEmail: 'pagos@ejemplo.mx' },
+    });
+  });
+
+  it('forgets the email alone when it is left empty', async () => {
+    const onClose = renderModal(KARLA, vi.fn(), 'facturas@ejemplo.mx');
+
+    await userEvent.clear(screen.getByLabelText('Correo para facturas (opcional)'));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
+    // Empty, not left out: left out, the API keeps the one it has.
+    expect(apiRequest).toHaveBeenCalledWith('put', '/api/v1/customers/{id}/fiscal-data', {
+      path: { id: 'c-1' },
+      body: { fiscalData: KARLA, invoiceEmail: '' },
     });
   });
 

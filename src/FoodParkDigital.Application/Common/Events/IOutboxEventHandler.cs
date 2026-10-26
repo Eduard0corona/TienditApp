@@ -28,10 +28,16 @@ public interface IOutboxEventHandler<in TEvent>
 
 /// <summary>Where and by whom the event was raised, as recorded when it was committed.</summary>
 /// <param name="Attempt">1 the first time the handler runs.</param>
+/// <param name="MaxAttempts">The attempt after which a failing message is set aside and never run again.</param>
 public sealed record OutboxEventContext(
     Guid MessageId,
     Guid? TenantId,
     string? ActorUserId,
     string? ActorName,
     DateTimeOffset OccurredAt,
-    int Attempt);
+    int Attempt,
+    int MaxAttempts = int.MaxValue)
+{
+    /// <summary>A failure now sets the message aside: what the handler leaves pending stays so.</summary>
+    public bool IsLastAttempt => Attempt >= MaxAttempts;
+}

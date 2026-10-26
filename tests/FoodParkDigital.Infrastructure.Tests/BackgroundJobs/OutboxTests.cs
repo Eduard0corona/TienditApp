@@ -131,6 +131,8 @@ public class OutboxTests
 
         var message = Assert.Single(await host.MessagesAsync());
         Assert.Equal(2, message.Attempts);
+        // The handler knows which attempt is the last one (a CFDI email ends there instead of staying on its way).
+        Assert.Equal([false, true], host.Log.FlakyLastAttempts);
         Assert.NotNull(message.DeadLetteredAt);
         Assert.Null(message.ProcessedAt);
         host.Clock.Advance(TimeSpan.FromDays(1));

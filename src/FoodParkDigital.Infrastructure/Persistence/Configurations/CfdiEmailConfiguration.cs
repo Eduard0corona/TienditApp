@@ -23,7 +23,7 @@ public class CfdiEmailConfiguration : IEntityTypeConfiguration<CfdiEmail>
             table.HasCheckConstraint(
                 "CK_CfdiEmails_Outcome",
                 "([SentAt] IS NULL OR [FailedAt] IS NULL)"
-                + " AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2)))"
+                + " AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3)))"
                 + " AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)");
             table.HasCheckConstraint(
                 "CK_CfdiEmails_Attempts",

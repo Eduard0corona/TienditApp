@@ -495,6 +495,10 @@ public sealed class CrossTenantInvoicingSqlServerTests
             $"/api/v1/customers/{customer}/fiscal-data", new { fiscalData = Receiver, invoiceEmail = "facturas@ejemplo.mx" }));
         Assert.Equal("KARLA FUENTE NOLASCO", saved.GetProperty("fiscalData").GetProperty("name").GetString());
         Assert.Equal("facturas@ejemplo.mx", saved.GetProperty("invoiceEmail").GetString());
+        // The list in Clientes carries it too: the fiscal data opens from there with it.
+        var listed = await mine.Client.GetFromJsonAsync<JsonElement>("/api/v1/customers?search=Karla");
+        Assert.Equal("facturas@ejemplo.mx", listed.GetProperty("items").EnumerateArray().Single().GetProperty("invoiceEmail").GetString());
+        Assert.Empty((await theirs.Client.GetFromJsonAsync<JsonElement>("/api/v1/customers?search=Karla")).GetProperty("items").EnumerateArray());
     }
 
     /// <summary>The business's fiscal data in Mi negocio and a CSD of its RFC in force, as if uploaded.</summary>

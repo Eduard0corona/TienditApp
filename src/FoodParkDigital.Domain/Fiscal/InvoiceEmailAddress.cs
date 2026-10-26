@@ -5,7 +5,7 @@ namespace FoodParkDigital.Domain.Fiscal;
 
 /// <summary>
 /// The address a customer gets their CFDI at (Fase 28E, ADR 0049): one plain address, no name or list, as long as an SMTP
-/// server takes it.
+/// server takes it, in ASCII (the platform's SMTP sends seven-bit addresses: «peña@…» would never go out).
 /// </summary>
 public static class InvoiceEmailAddress
 {
@@ -26,7 +26,7 @@ public static class InvoiceEmailAddress
     /// <summary>Whether it is one plain address that fits: «nombre@ejemplo.com», not «Nombre &lt;nombre@ejemplo.com&gt;».</summary>
     public static bool IsValid(string email)
     {
-        if (email.Length > MaxLength || email.Any(char.IsWhiteSpace))
+        if (email.Length > MaxLength || !email.All(IsPrintableAscii))
             return false;
         var at = email.IndexOf('@');
         // Something before the @, and a domain with a dot after it.
@@ -34,4 +34,7 @@ public static class InvoiceEmailAddress
             return false;
         return MailAddress.TryCreate(email, out var address) && address.Address == email && string.IsNullOrEmpty(address.DisplayName);
     }
+
+    /// <summary>A character an address can carry: printable ASCII, no space.</summary>
+    private static bool IsPrintableAscii(char c) => c is > ' ' and <= '~';
 }

@@ -22,8 +22,6 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
                 + " AND [FiscalData_FiscalRegime] IS NULL AND [FiscalData_CfdiUse] IS NULL)"
                 + " OR ([IsPublicGeneral] = 0 AND [FiscalData_Rfc] IS NOT NULL AND [FiscalData_Name] IS NOT NULL"
                 + " AND [FiscalData_PostalCode] IS NOT NULL AND [FiscalData_FiscalRegime] IS NOT NULL AND [FiscalData_CfdiUse] IS NOT NULL)");
-            // The email for the invoices goes with the fiscal data (Fase 28E).
-            table.HasCheckConstraint("CK_Customers_InvoiceEmail", "[InvoiceEmail] IS NULL OR [FiscalData_Rfc] IS NOT NULL");
         });
         builder.HasKey(c => c.Id);
 

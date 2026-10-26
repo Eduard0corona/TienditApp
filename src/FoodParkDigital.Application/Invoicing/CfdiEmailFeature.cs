@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Text;
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -77,7 +78,8 @@ public static class CfdiEmails
 
     /// <summary>
     /// The email of a CFDI of an order's invoice that was just stamped, when its invoice has an email: added to be saved with
-    /// the stamp, so another attempt that stamped it first (and asked for its own) leaves this one unsaved.
+    /// the stamp, so another attempt that stamped it first (and asked for its own) leaves this one unsaved. It never throws:
+    /// an address that no longer passes (a rule tightened later) skips the email, never the stamp.
     /// </summary>
     public static async Task QueueOnStampAsync(IApplicationDbContext context, Cfdi cfdi, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -88,7 +90,7 @@ public static class CfdiEmails
             CreditNote note => await EmailOfAsync(context, note.OrderInvoiceId, cancellationToken),
             _ => null
         };
-        if (address is not null && cfdi.Status == OrderInvoiceStatus.Stamped)
+        if (address is not null && cfdi.Status == OrderInvoiceStatus.Stamped && InvoiceEmailAddress.IsValid(address))
             context.CfdiEmails.Add(CfdiEmail.Request(cfdi, address, null, now));
     }
 
@@ -138,7 +140,8 @@ public static class CfdiEmails
 /// <summary>
 /// Sends a stamped CFDI of an order's invoice by email again, to its email or another one (whoever manages the orders):
 /// «Enviar por correo». With <see cref="UseForInvoice"/>, what comes next of the invoice (its complements and credit notes)
-/// goes to that email too. It goes out from the queue, like the one TienditApp sends when it is stamped.
+/// goes to that email too. It goes out from the queue, like the one TienditApp sends when it is stamped. The limits are
+/// counted under the business's invoicing lock, so two requests at once do not both pass the last one.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 public record SendCfdiByEmailCommand(CfdiEmailDocument Document, Guid CfdiId, string Email, bool UseForInvoice)
@@ -160,12 +163,15 @@ public class SendCfdiByEmailCommandHandler : IRequestHandler<SendCfdiByEmailComm
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUser;
+    private readonly IInvoicingLock _lock;
     private readonly IDateTimeProvider _clock;
 
-    public SendCfdiByEmailCommandHandler(IApplicationDbContext context, ICurrentUserService currentUser, IDateTimeProvider clock)
+    public SendCfdiByEmailCommandHandler(
+        IApplicationDbContext context, ICurrentUserService currentUser, IInvoicingLock invoicingLock, IDateTimeProvider clock)
     {
         _context = context;
         _currentUser = currentUser;
+        _lock = invoicingLock;
         _clock = clock;
     }
 
@@ -181,6 +187,7 @@ public class SendCfdiByEmailCommandHandler : IRequestHandler<SendCfdiByEmailComm
         if (cfdi.Status != OrderInvoiceStatus.Stamped)
             return Result.Failure<CfdiEmailDto>(CfdiEmail.NotStampedMessage);
 
+        await _lock.AcquireAsync(cfdi.TenantId, cancellationToken);
         var now = _clock.UtcNow;
         var since = now - CfdiEmails.Day;
         if (await _context.CfdiEmails.CountAsync(e => e.CfdiId == cfdi.Id && e.RequestedAt > since, cancellationToken)
@@ -211,11 +218,16 @@ public class SendCfdiByEmailCommandHandler : IRequestHandler<SendCfdiByEmailComm
 }
 
 /// <summary>
-/// Sends an email of a CFDI from the outbox, after the change that asked for it: reads its XML and PDF (asking the PAC for
-/// the PDF when it was not kept) and sends them with what the customer needs to recognize it. A CFDI no longer stamped is
-/// not sent. Without the PDF it tries again a couple of times and then sends the XML alone, which is the CFDI. A mail
-/// server that does not take it now throws, for the outbox to retry; one that refuses the address for good, or no
-/// provider, ends it.
+/// Sends an email of a CFDI from the outbox, after the change that asked for it: reads its XML and PDF and sends them with
+/// what the customer needs to recognize it. A CFDI no longer stamped is not sent.
+/// <list type="bullet">
+/// <item>The PDF is the one kept when it was stamped. The email TienditApp asks for with the stamp waits one attempt for
+/// it (the stamp keeps it right after); otherwise the PAC renders it from the stamped XML, as downloading it does. Without
+/// it, it waits a couple of attempts and then sends the XML alone, which is the CFDI.</item>
+/// <item>A mail server that does not take it now counts the try and throws, for the outbox to retry; one that refuses the
+/// address for good, or no provider, ends it. On the outbox's last attempt any failure ends it as not delivered, so it
+/// never stays pending.</item>
+/// </list>
 /// </summary>
 public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailRequestedEvent>
 {
@@ -253,6 +265,21 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
         if (email is null || !email.IsPending)
             return;
 
+        try
+        {
+            await SendAsync(email, context, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && context.IsLastAttempt)
+        {
+            // The outbox sets the message aside after this attempt: the email ends, and a person can send it again.
+            _logger.LogWarning("The email {CfdiEmailId} was not delivered after {Attempts} attempts: {Error}",
+                email.Id, context.Attempt, ex.GetType().Name);
+            email.Fail(CfdiEmailFailure.NotDelivered, _clock.UtcNow);
+        }
+    }
+
+    private async Task SendAsync(CfdiEmail email, OutboxEventContext context, CancellationToken cancellationToken)
+    {
         var cfdi = await CfdiEmails.FindAsync(_context, email.Document, email.CfdiId, cancellationToken);
         if (cfdi is null || cfdi.Status != OrderInvoiceStatus.Stamped || cfdi.XmlFileKey is null || cfdi.Uuid is null)
         {
@@ -263,13 +290,14 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
 
         var xml = await ReadAsync(cfdi.XmlFileKey, cancellationToken)
             ?? throw new InvalidOperationException($"The XML of CFDI {cfdi.Id} is not in the private files.");
-        var pdf = await PdfAsync(cfdi, cancellationToken);
-        if (pdf is null && context.Attempt <= AttemptsWaitingForPdf)
-        {
-            email.AttemptFailed(_clock.UtcNow);
-            await _context.SaveChangesAsync(cancellationToken);
+        var pdf = cfdi.PdfFileKey is null ? null : await ReadAsync(cfdi.PdfFileKey, cancellationToken);
+        if (pdf is null && email.RequestedByUserId is null && context.Attempt == 1 && !context.IsLastAttempt)
+            // Stamped a moment ago: the stamp keeps its PDF right after, and the next attempt takes it instead of asking the
+            // PAC for it twice.
+            throw new InvalidOperationException($"The PDF of CFDI {cfdi.Id} is being kept: the email waits for it.");
+        pdf ??= await RenderPdfAsync(cfdi, xml, cancellationToken);
+        if (pdf is null && context.Attempt <= AttemptsWaitingForPdf && !context.IsLastAttempt)
             throw new InvalidOperationException($"The PAC did not give the PDF of CFDI {cfdi.Id}: the email waits for it.");
-        }
 
         var business = await _context.Tenants.AsNoTracking()
             .Where(t => t.Id == cfdi.TenantId)
@@ -373,19 +401,14 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
         return buffer.ToArray();
     }
 
-    // The one kept when it was stamped, or the PAC renders it now from the stamped XML, as downloading it does.
-    private async Task<byte[]?> PdfAsync(Cfdi cfdi, CancellationToken cancellationToken)
+    // The PAC renders it now from the stamped XML, as downloading it does; it is not kept.
+    private async Task<byte[]?> RenderPdfAsync(Cfdi cfdi, byte[] stampedXml, CancellationToken cancellationToken)
     {
-        if (cfdi.PdfFileKey is not null && await ReadAsync(cfdi.PdfFileKey, cancellationToken) is { } kept)
-            return kept;
         if (!_gateway.IsConfigured)
-            return null;
-        var stampedXml = await OrderInvoiceStamper.ReadTextAsync(_storage, cfdi.XmlFileKey!, cancellationToken);
-        if (stampedXml is null)
             return null;
         try
         {
-            return await _gateway.RenderPdfAsync(stampedXml, cancellationToken);
+            return await _gateway.RenderPdfAsync(Encoding.UTF8.GetString(stampedXml), cancellationToken);
         }
         catch (Exception ex) when (ex is InvoicingGatewayUnavailableException or InvoicingGatewayRefusedException)
         {

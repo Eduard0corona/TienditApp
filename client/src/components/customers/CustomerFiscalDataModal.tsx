@@ -27,7 +27,7 @@ export default function CustomerFiscalDataModal({ customer, onClose }: CustomerF
 
   const save = async (fiscalData: CustomerFiscalData | null) => {
     try {
-      await update.mutateAsync({ fiscalData, invoiceEmail: typedEmail || null });
+      await update.mutateAsync({ fiscalData, invoiceEmail: typedEmail });
       toast.success(fiscalData ? `Datos fiscales de ${customer.name} guardados.` : `Datos fiscales de ${customer.name} quitados.`);
       onClose(true);
     } catch (err: unknown) {
@@ -63,6 +63,7 @@ export default function CustomerFiscalDataModal({ customer, onClose }: CustomerF
               disabled={update.isPending}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              aria-invalid={emailValid ? undefined : true}
               aria-describedby="customer-fiscal-email-help"
             />
             <div id="customer-fiscal-email-help" className={emailValid ? 'form-text' : 'invalid-feedback'}>

@@ -1145,8 +1145,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Customers_CreditTermDays", "[CreditTermDays] IS NULL OR ([CreditTermDays] >= 1 AND [CreditTermDays] <= 120)");
 
                             t.HasCheckConstraint("CK_Customers_FiscalData", "([FiscalData_Rfc] IS NULL AND [FiscalData_Name] IS NULL AND [FiscalData_PostalCode] IS NULL AND [FiscalData_FiscalRegime] IS NULL AND [FiscalData_CfdiUse] IS NULL) OR ([IsPublicGeneral] = 0 AND [FiscalData_Rfc] IS NOT NULL AND [FiscalData_Name] IS NOT NULL AND [FiscalData_PostalCode] IS NOT NULL AND [FiscalData_FiscalRegime] IS NOT NULL AND [FiscalData_CfdiUse] IS NOT NULL)");
-
-                            t.HasCheckConstraint("CK_Customers_InvoiceEmail", "[InvoiceEmail] IS NULL OR [FiscalData_Rfc] IS NOT NULL");
                         });
                 });
 
@@ -1772,7 +1770,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_CfdiEmails_Invoice", "[Document] <> 0 OR [CfdiId] = [OrderInvoiceId]");
 
-                            t.HasCheckConstraint("CK_CfdiEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2))) AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)");
+                            t.HasCheckConstraint("CK_CfdiEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3))) AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)");
                         });
                 });
 

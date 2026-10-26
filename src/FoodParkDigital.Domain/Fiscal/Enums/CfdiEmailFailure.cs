@@ -10,5 +10,8 @@ public enum CfdiEmailFailure
     NotConfigured = 1,
 
     /// <summary>The CFDI stopped standing (its cancellation was asked) before the email went out: it was not sent.</summary>
-    NoLongerStamped = 2
+    NoLongerStamped = 2,
+
+    /// <summary>The mail server did not take it through the outbox's last attempt (hours of retries): it can be sent again.</summary>
+    NotDelivered = 3
 }

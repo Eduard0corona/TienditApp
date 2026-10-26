@@ -47,13 +47,16 @@ public partial class EmailServiceDocumentsTests
         Assert.NotNull(logger.FirstMentioning("a***@e***.com"));
     }
 
-    [Fact]
-    public async Task SendDocumentsAsync_WithoutAValidReplyTo_ShouldStillSendIt_AsThePlatform()
+    [Theory]
+    [InlineData("no es un correo")]
+    // The SMTP client sends seven-bit addresses: this one would make the whole email fail.
+    [InlineData("peña@cafeluna.mx")]
+    public async Task SendDocumentsAsync_WithoutAValidReplyTo_ShouldStillSendIt_AsThePlatform(string replyTo)
     {
         await using var smtpServer = new AcceptingSmtpServer();
         var service = CreateService(Environments.Production, SmtpSettings(smtpServer.Port), new CapturingLogger<EmailService>());
 
-        var outcome = await service.SendDocumentsAsync(Message(senderName: " ", replyTo: "no es un correo"), CancellationToken.None);
+        var outcome = await service.SendDocumentsAsync(Message(senderName: " ", replyTo: replyTo), CancellationToken.None);
 
         Assert.Equal(EmailSendOutcome.Sent, outcome);
         var headers = Headers(smtpServer.Message);
@@ -73,9 +76,10 @@ public partial class EmailServiceDocumentsTests
             Assert.Equal(EmailSendOutcome.Rejected, await service.SendDocumentsAsync(Message(), CancellationToken.None));
         }
 
-        // Not an address: nothing to connect for.
+        // Not an address, or one the SMTP client cannot send (not seven-bit): nothing to connect for, and no use retrying.
         var notAnAddress = CreateService(Environments.Production, SmtpSettings(1), new CapturingLogger<EmailService>());
         Assert.Equal(EmailSendOutcome.Rejected, await notAnAddress.SendDocumentsAsync(Message(to: "ana@"), CancellationToken.None));
+        Assert.Equal(EmailSendOutcome.Rejected, await notAnAddress.SendDocumentsAsync(Message(to: "peña@example.com"), CancellationToken.None));
     }
 
     [Fact]

@@ -129,7 +129,8 @@ export default function OrderInvoiceList({ orderId, invoices, canCancel, liveRel
                   cfdiId={invoice.id}
                   number={invoice.number}
                   invoiceEmail={invoice.receiverEmail}
-                  suggestedEmail={invoice.emails[0]?.to ?? proposedEmail}
+                  latestEmail={invoice.emails[0]}
+                  proposedEmail={proposedEmail}
                 />
               )}
               {invoice.status === OrderInvoiceStatus.Stamping && (

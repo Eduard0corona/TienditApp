@@ -14332,7 +14332,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        CfdiEmailFailure: 0 | 1 | 2;
+        CfdiEmailFailure: 0 | 1 | 2 | 3;
         CfdiPartyDto: {
             rfc?: string | null;
             name?: string | null;

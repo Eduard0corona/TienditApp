@@ -128,6 +128,7 @@ describe('CfdiDraftModal', () => {
     await userEvent.clear(email);
     await userEvent.type(email, 'karla@ejemplo');
     expect(stamp).toBeDisabled();
+    expect(email).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('Escribe un correo válido, como nombre@ejemplo.com, o déjalo vacío.')).toBeInTheDocument();
 
     await userEvent.type(email, '.mx ');
@@ -136,6 +137,24 @@ describe('CfdiDraftModal', () => {
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada: se está enviando a karla@ejemplo.mx.'));
     expect(issued).toEqual({ receiver: KARLA, saveToCustomer: true, receiverEmail: 'karla@ejemplo.mx' });
+  });
+
+  it('keeps nothing in the customer once the data are hidden, with the box to keep them', async () => {
+    let issued: unknown;
+    serve({ ...INVOICING, proposedEmail: 'karla@ejemplo.mx' }, (_method, _path, body) => {
+      issued = body;
+      return Promise.resolve(STAMPED);
+    });
+    renderModal();
+
+    const stamp = await screen.findByRole('button', { name: 'Timbrar factura' });
+    await userEvent.click(screen.getByRole('button', { name: 'Factura para XIQB891116QE4' }));
+    expect(screen.queryByLabelText(/Guardar estos datos/)).not.toBeInTheDocument();
+    await waitFor(() => expect(stamp).toBeEnabled());
+    await userEvent.click(stamp);
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada: se está enviando a karla@ejemplo.mx.'));
+    expect(issued).toEqual({ receiver: KARLA, saveToCustomer: false, receiverEmail: 'karla@ejemplo.mx' });
   });
 
   it('asks to review the invoice again after the data changes, before stamping it', async () => {
@@ -267,11 +286,17 @@ describe('CfdiDraftModal', () => {
   });
 
   it('says why the order cannot be invoiced', async () => {
-    serve({ ...INVOICING, canInvoice: false, problem: 'Este pedido ya tiene la factura F-1: cancélala para facturarlo otra vez.', invoices: [STAMPED] });
+    serve({
+      ...INVOICING, canInvoice: false, problem: 'Este pedido ya tiene la factura F-1: cancélala para facturarlo otra vez.', invoices: [STAMPED],
+      proposedEmail: 'karla@ejemplo.mx',
+    });
     renderModal();
 
     expect(await screen.findByText('Este pedido ya tiene la factura F-1: cancélala para facturarlo otra vez.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Timbrar factura' })).not.toBeInTheDocument();
+    // Without a stamp to go with, there is no email to write nor to keep.
+    expect(screen.queryByLabelText('Correo del cliente (opcional)')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Guardar estos datos en Karla para sus próximas facturas')).toBeInTheDocument();
     // Whoever manages the orders downloads it, but only owners and admins cancel it.
     expect(screen.getByRole('button', { name: 'Descargar XML de la factura F-1' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancelar factura F-1' })).not.toBeInTheDocument();

@@ -11,8 +11,9 @@
 --     XML y el PDF de la factura y de sus complementos y notas de crédito. Las facturas existentes
 --     quedan sin correo.
 --   - [Customers].[InvoiceEmail] (columna nueva, nvarchar(254), nula): el «Correo para facturas» del
---     cliente, junto a sus datos fiscales; [CK_Customers_InvoiceEmail] solo lo deja con datos
---     fiscales. Los clientes existentes quedan sin él.
+--     cliente, junto a sus datos fiscales (el dominio lo quita con ellos; sin restricción en la base,
+--     para que la versión anterior pueda seguir quitando datos fiscales). Los clientes existentes
+--     quedan sin él.
 --   - [CfdiEmails] (tabla nueva): cada correo de un CFDI (la factura de un pedido, un complemento o
 --     una nota de crédito): la factura a la que pertenece, el CFDI, el destinatario, quién lo pidió
 --     (o TienditApp), cuándo, los intentos que el servidor de correo no tomó y cómo terminó. Sus
@@ -8685,18 +8686,10 @@ BEGIN
         CONSTRAINT [CK_CfdiEmails_Attempts] CHECK (([FailedAttempts] = 0 AND [LastFailedAttemptAt] IS NULL) OR ([FailedAttempts] > 0 AND [LastFailedAttemptAt] IS NOT NULL)),
         CONSTRAINT [CK_CfdiEmails_Document] CHECK ([Document] IN (0, 1, 2)),
         CONSTRAINT [CK_CfdiEmails_Invoice] CHECK ([Document] <> 0 OR [CfdiId] = [OrderInvoiceId]),
-        CONSTRAINT [CK_CfdiEmails_Outcome] CHECK (([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2))) AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)),
+        CONSTRAINT [CK_CfdiEmails_Outcome] CHECK (([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3))) AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)),
         CONSTRAINT [FK_CfdiEmails_OrderInvoices_OrderInvoiceId] FOREIGN KEY ([OrderInvoiceId]) REFERENCES [OrderInvoices] ([Id]),
         CONSTRAINT [FK_CfdiEmails_Tenants_TenantId] FOREIGN KEY ([TenantId]) REFERENCES [Tenants] ([Id]) ON DELETE NO ACTION
     );
-END;
-
-IF NOT EXISTS (
-    SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261026032721_AddCfdiEmails'
-)
-BEGIN
-    EXEC(N'ALTER TABLE [Customers] ADD CONSTRAINT [CK_Customers_InvoiceEmail] CHECK ([InvoiceEmail] IS NULL OR [FiscalData_Rfc] IS NOT NULL)');
 END;
 
 IF NOT EXISTS (

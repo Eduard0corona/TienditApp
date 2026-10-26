@@ -12,9 +12,9 @@ SELECT TOP (5) [MigrationId], [ProductVersion]
 FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;
 
--- 2. Después: la tabla nueva [CfdiEmails], sus restricciones y sus índices, las columnas
---    [OrderInvoices].[ReceiverEmail] y [Customers].[InvoiceEmail], y [CK_Customers_InvoiceEmail].
---    Antes de aplicar y después de rollback.sql no hay nada.
+-- 2. Después: la tabla nueva [CfdiEmails], sus restricciones y sus índices, y las columnas
+--    [OrderInvoices].[ReceiverEmail] y [Customers].[InvoiceEmail]. Antes de aplicar y después de
+--    rollback.sql no hay nada.
 SELECT [name] AS [Tabla]
 FROM sys.tables
 WHERE [name] = N'CfdiEmails';
@@ -24,7 +24,7 @@ SELECT
     cc.[name] AS [Restriccion],
     cc.[definition] AS [Definicion]
 FROM sys.check_constraints cc
-WHERE cc.[name] LIKE N'CK[_]CfdiEmails[_]%' OR cc.[name] = N'CK_Customers_InvoiceEmail'
+WHERE cc.[name] LIKE N'CK[_]CfdiEmails[_]%'
 ORDER BY [Tabla], [Restriccion];
 
 SELECT

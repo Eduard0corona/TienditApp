@@ -160,6 +160,9 @@ internal sealed class HandlerLog
 
     /// <summary>How many more times <see cref="FlakyHandler"/> fails before succeeding.</summary>
     public int FlakyFailuresLeft { get; set; }
+
+    /// <summary>Whether each run of <see cref="FlakyHandler"/> was the outbox's last attempt for its message.</summary>
+    public List<bool> FlakyLastAttempts { get; } = [];
 }
 
 /// <summary>Audits the order through the scoped context without saving, as real outbox handlers do.</summary>
@@ -200,6 +203,7 @@ internal sealed class FlakyHandler : IOutboxEventHandler<OrderCreatedEvent>
     public Task HandleAsync(OrderCreatedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
     {
         _log.Runs.Add((nameof(FlakyHandler), _tenant.TenantId, null, context.Attempt));
+        _log.FlakyLastAttempts.Add(context.IsLastAttempt);
         if (_log.FlakyFailuresLeft > 0)
         {
             _log.FlakyFailuresLeft--;

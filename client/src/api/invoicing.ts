@@ -96,24 +96,22 @@ export function useOrderInvoicing(orderId: string) {
 
 /**
  * Whether something of the order's invoicing changes on its own soon: an invoice, a complement or a credit note waits for
- * the PAC or the SAT, or a payment, a refund or a write-off waits for what TienditApp issues in its next pass.
+ * the PAC or the SAT, or for its email to go out, or a payment, a refund or a write-off waits for what TienditApp issues in
+ * its next pass.
  */
-export function isOrderInvoicingWaiting(
-  data: Pick<OrderInvoicing, 'invoices' | 'payments' | 'adjustments'>,
-  now: number = Date.now(),
-): boolean {
-  const waits = (cfdi: Pick<OrderInvoice, 'status' | 'emails'>) => isWaiting(cfdi) || isEmailOnItsWay(cfdi.emails[0], now);
+export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments' | 'adjustments'>): boolean {
+  const waits = (cfdi: Pick<OrderInvoice, 'status' | 'emails'>) => isWaiting(cfdi) || isEmailOnItsWay(cfdi.emails[0]);
   return data.invoices.some(waits)
     || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some(waits))
     || data.adjustments.some((adjustment) => adjustment.awaitsAutomaticIssue || adjustment.creditNotes.some(waits));
 }
 
-/** How long a CFDI's email is waited for on screen: the queue tries it again for longer, and «Enviar por correo» stays. */
-export const EMAIL_WAIT_MS = 15 * 60_000;
-
-/** The CFDI's latest email is neither sent nor refused yet, and was asked for a moment ago. */
-export function isEmailOnItsWay(email: Pick<CfdiEmail, 'sentAt' | 'failedAt' | 'requestedAt'> | undefined, now: number = Date.now()): boolean {
-  return !!email && !email.sentAt && !email.failedAt && now - new Date(email.requestedAt).getTime() < EMAIL_WAIT_MS;
+/**
+ * The CFDI's latest email is neither sent nor ended yet: the queue keeps trying it, and ends it as not delivered after its
+ * last attempt.
+ */
+export function isEmailOnItsWay(email: Pick<CfdiEmail, 'sentAt' | 'failedAt'> | undefined): boolean {
+  return !!email && !email.sentAt && !email.failedAt;
 }
 
 /** Preview of the invoice of an order, read again each time it opens; without a receiver it goes to the general public. */
@@ -272,11 +270,11 @@ async function downloadFile(path: string, kind: 'xml' | 'pdf', fallbackName = 'f
 export function useUpdateCustomerFiscalData(customerId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ fiscalData, invoiceEmail }: { fiscalData: CfdiReceiver | null; invoiceEmail?: string | null }) =>
-      // Without fiscalData the API forgets it, with its email.
+    mutationFn: ({ fiscalData, invoiceEmail }: { fiscalData: CfdiReceiver | null; invoiceEmail: string }) =>
+      // Without fiscalData the API forgets it, with its email; an empty email forgets the email alone.
       apiRequest('put', '/api/v1/customers/{id}/fiscal-data', {
         path: { id: customerId },
-        body: fiscalData ? { fiscalData, invoiceEmail: invoiceEmail || null } : {},
+        body: fiscalData ? { fiscalData, invoiceEmail } : {},
       }),
     // The invoice of their orders proposes it.
     onSuccess: () => Promise.all([

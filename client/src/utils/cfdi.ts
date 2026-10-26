@@ -164,7 +164,11 @@ export function cfdiEmailLabel(document: CfdiEmailDocument, number: string): str
   }
 }
 
-/** One plain address, as the API takes it for the CFDI: no spaces, one @ and a domain with a dot (the API decides). */
+/**
+ * One plain address, as the API takes it for the CFDI: printable ASCII without spaces (the platform's SMTP sends
+ * seven-bit addresses), one @ and a domain with a dot (the API decides).
+ */
 export function isPlainEmail(email: string): boolean {
-  return /^[^\s@,;<>"]+@[^\s@,;<>"]+\.[^\s@,;<>".]+$/.test(email.trim());
+  const trimmed = email.trim();
+  return /^[!-~]+$/.test(trimmed) && /^[^@,;<>"]+@[^@,;<>"]+\.[^@,;<>".]+$/.test(trimmed);
 }
