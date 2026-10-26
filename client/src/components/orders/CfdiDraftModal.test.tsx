@@ -25,7 +25,7 @@ const STAMPED: Invoice = {
   id: 'inv-1', orderId: 'o-1', number: 'F-1', status: OrderInvoiceStatus.Stamped, receiver: KARLA, paymentForm: '04',
   paymentMethod: 'PUE', subTotal: 172.41, taxTotal: 27.59, total: 200, requestedAt: '2026-10-23T17:00:00Z',
   uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: '2026-10-23T17:00:05Z', hasXml: true, hasPdf: true,
-  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null,
+  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [],
 };
 
 function draft(receiver: typeof KARLA | null): Draft {
@@ -271,7 +271,7 @@ describe('CfdiDraftModal', () => {
       id: 'nc-1', orderInvoiceId: 'inv-1', number: 'NC-1', status: OrderInvoiceStatus.Stamped, paymentForm: '04', subTotal: 17.24,
       taxTotal: 2.76, total: 20, requestedAt: '2026-10-24T17:05:00Z', issuedAutomatically: true, uuid: null, stampedAt: null,
       hasXml: false, hasPdf: false, failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null,
-      cancelledAt: null,
+      cancelledAt: null, emails: [],
     };
     serve({
       ...INVOICING,

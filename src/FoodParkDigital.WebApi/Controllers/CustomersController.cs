@@ -190,10 +190,10 @@ public class CustomersController : ControllerBase
     public async Task<ActionResult<CustomerDto>> SetCreditTerm(Guid id, [FromBody] SetCustomerCreditTermRequest request, CancellationToken cancellationToken)
         => ToResult(await _mediator.Send(new SetCustomerCreditTermCommand { CustomerId = id, CreditTermDays = request.CreditTermDays }, cancellationToken));
 
-    /// <summary>What the customer's invoices go to (Fase 28A); without data it is forgotten.</summary>
+    /// <summary>What the customer's invoices go to (Fase 28A) and where they get them (Fase 28E); without data both are forgotten.</summary>
     [HttpPut("{id:guid}/fiscal-data")]
     public async Task<ActionResult<CustomerDto>> UpdateFiscalData(Guid id, [FromBody] UpdateCustomerFiscalDataRequest request, CancellationToken cancellationToken)
-        => ToResult(await _mediator.Send(new UpdateCustomerFiscalDataCommand(id, request.FiscalData), cancellationToken));
+        => ToResult(await _mediator.Send(new UpdateCustomerFiscalDataCommand(id, request.FiscalData, request.InvoiceEmail), cancellationToken));
 
     [HttpPut("{id:guid}/notes")]
     public async Task<ActionResult<CustomerDto>> UpdateNotes(Guid id, [FromBody] UpdateCustomerNotesRequest request, CancellationToken cancellationToken)
@@ -253,4 +253,7 @@ public class UpdateCustomerFiscalDataRequest
 {
     /// <summary>RFC, name, fiscal postal code, regime and use of the CFDI; null forgets them.</summary>
     public CfdiReceiverInput? FiscalData { get; init; }
+
+    /// <summary>The email the customer gets their invoices at, kept with the fiscal data; optional.</summary>
+    public string? InvoiceEmail { get; init; }
 }

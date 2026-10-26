@@ -18,7 +18,7 @@ const P1: Complement = {
   id: 'pc-1', orderInvoiceId: 'inv-1', orderPaymentId: 'pay-1', number: 'P-1', status: OrderInvoiceStatus.Stamped, paymentForm: '01',
   amount: 50, installment: 1, previousBalance: 200, remainingBalance: 150, requestedAt: '2026-10-04T17:05:00Z',
   issuedAutomatically: true, uuid: '9F3C1E2A-0B1D-4C5E-8F70-1A2B3C4D5E6F', stampedAt: '2026-10-04T17:05:03Z', hasXml: true, hasPdf: true,
-  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null,
+  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [],
 };
 
 const FIRST: Payment = {

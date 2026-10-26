@@ -109,6 +109,20 @@ export const CfdiCancellationMotive = {
 } as const;
 export type CfdiCancellationMotive = (typeof CfdiCancellationMotive)[keyof typeof CfdiCancellationMotive];
 
+export const CfdiEmailDocument = {
+  Invoice: 0,
+  PaymentComplement: 1,
+  CreditNote: 2,
+} as const;
+export type CfdiEmailDocument = (typeof CfdiEmailDocument)[keyof typeof CfdiEmailDocument];
+
+export const CfdiEmailFailure = {
+  Rejected: 0,
+  NotConfigured: 1,
+  NoLongerStamped: 2,
+} as const;
+export type CfdiEmailFailure = (typeof CfdiEmailFailure)[keyof typeof CfdiEmailFailure];
+
 export const CfdiTaxObject = {
   NotSubject: 1,
   Subject: 2,

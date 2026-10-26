@@ -24,4 +24,34 @@ public interface IEmailService
     /// not saved, and the link activates the account started then, with the password chosen then.
     /// </summary>
     Task SendUnfinishedAccountAsync(string email, string userId, string token);
+
+    /// <summary>
+    /// An email of a business with files attached (the XML and PDF of a CFDI, Fase 28E). Unlike the others, it tells how it
+    /// ended: sent, not sent because no provider is configured, or refused for good by the recipient's server. Anything
+    /// that may work later throws, for the outbox to retry.
+    /// </summary>
+    Task<EmailSendOutcome> SendDocumentsAsync(DocumentEmail email, CancellationToken cancellationToken);
+}
+
+/// <param name="SenderName">The name the recipient sees as sender, such as «Café Luna vía TienditApp».</param>
+/// <param name="ReplyTo">Where the recipient's answer goes: the business, not the platform; null when it has none.</param>
+public sealed record DocumentEmail(
+    string To,
+    string Subject,
+    string HtmlBody,
+    string SenderName,
+    string? ReplyTo,
+    IReadOnlyList<EmailAttachment> Attachments);
+
+public sealed record EmailAttachment(string FileName, string ContentType, byte[] Content);
+
+public enum EmailSendOutcome
+{
+    Sent,
+
+    /// <summary>The platform has no provider configured: logged as not sent.</summary>
+    NotConfigured,
+
+    /// <summary>The recipient's server refused the address for good (5xx), or it is not an address: retrying cannot fix it.</summary>
+    Rejected
 }

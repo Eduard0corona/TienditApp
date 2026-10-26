@@ -18,6 +18,8 @@ public class CustomerDto
     public int? CreditTermDays { get; set; }
     /// <summary>What their invoices go to (Fase 28A); null when the business has not captured it.</summary>
     public CfdiReceiverDto? FiscalData { get; set; }
+    /// <summary>Where the customer gets their invoices (Fase 28E), kept with the fiscal data.</summary>
+    public string? InvoiceEmail { get; set; }
     /// <summary>Only in the detail of one customer (the list leaves it empty).</summary>
     public List<CustomerAddressDto> Addresses { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
@@ -36,6 +38,7 @@ public class CustomerDto
         CreditLimit = customer.CreditLimit,
         CreditTermDays = customer.CreditTermDays,
         FiscalData = customer.FiscalData is null ? null : CfdiReceiverDto.From(customer.FiscalData),
+        InvoiceEmail = customer.InvoiceEmail,
         Addresses = customer.Addresses
             .OrderByDescending(a => a.IsDefault)
             .ThenBy(a => a.CreatedAt)

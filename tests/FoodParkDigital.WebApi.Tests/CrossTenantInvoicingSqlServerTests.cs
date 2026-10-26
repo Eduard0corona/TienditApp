@@ -15,8 +15,9 @@ namespace FoodParkDigital.WebApi.Tests;
 /// <summary>
 /// Invoicing (Fase 28A, ADR 0045) through the API: a business sees, stamps, downloads and cancels only the invoices of its
 /// own orders, with its own CSD and folios (the business header of an owner changes nothing); staff who manage the orders
-/// stamp, but only owners and admins cancel and touch the CSD, and only who manages customers keeps their fiscal data; and
-/// the same order invoiced by two people at once is stamped once, on the invoicing lock of the business (Fase 28B).
+/// stamp and send them by email (Fase 28E), but only owners and admins cancel and touch the CSD, and only who manages
+/// customers keeps their fiscal data; and the same order invoiced by two people at once is stamped once, on the invoicing
+/// lock of the business (Fase 28B).
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantInvoicingSqlServerTests
@@ -87,6 +88,51 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Equal(HttpStatusCode.OK, (await mine.Client.GetAsync($"/api/v1/invoicing/invoices/{invoiceId}/pdf")).StatusCode);
         Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.OrderInvoices.ToListAsync()));
         Assert.Single(await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.ToListAsync()));
+    }
+
+    [SqlServerFact]
+    public async Task CfdiEmails_OfAnotherBusiness_ShouldBeInvisible_AndUnsendable()
+    {
+        var mine = await _api.SignUpAsync("correo-cfdi-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("correo-cfdi-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Correo A"), phone: "5512345678", name: "Karla");
+        var karla = $"karla.{Guid.NewGuid():N}@ejemplo.mx";
+
+        // Stamped with an email, its XML and PDF go out from the outbox.
+        var invoice = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false, receiverEmail = karla }));
+        var invoiceId = invoice.GetProperty("id").GetGuid();
+        Assert.Equal(karla, invoice.GetProperty("receiverEmail").GetString());
+        await _api.DispatchOutboxAsync();
+        var sent = Assert.Single(_api.DocumentsTo(karla));
+        Assert.Equal([".xml", ".pdf"], sent.Attachments.Select(a => Path.GetExtension(a.FileName)));
+
+        // The other owner, even with the header of my business, cannot send it anywhere.
+        var other = $"otro.{Guid.NewGuid():N}@ejemplo.mx";
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/email", new { email = other, useForInvoice = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
+            mine, HttpMethod.Post, $"/api/v1/invoicing/invoices/{invoiceId}/email", new { email = other, useForInvoice = true }))).StatusCode);
+        await _api.DispatchOutboxAsync();
+        Assert.Empty(_api.DocumentsTo(other));
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.CfdiEmails.ToListAsync()));
+        Assert.Equal(karla, await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.Select(i => i.ReceiverEmail).SingleAsync()));
+
+        // Whoever manages the orders sends it again, to the address they type.
+        var accounting = $"contabilidad.{Guid.NewGuid():N}@ejemplo.mx";
+        var again = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/email", new { email = accounting, useForInvoice = false }));
+        Assert.Equal((accounting, false), (again.GetProperty("to").GetString(), again.GetProperty("byTienditApp").GetBoolean()));
+        Assert.Equal(HttpStatusCode.BadRequest, (await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/email", new { email = "contabilidad", useForInvoice = false })).StatusCode);
+        await _api.DispatchOutboxAsync();
+        Assert.Single(_api.DocumentsTo(accounting));
+        var emails = (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/orders/{order}")))
+            .GetProperty("invoices")[0].GetProperty("emails");
+        Assert.Equal(2, emails.GetArrayLength());
+        Assert.All(emails.EnumerateArray(), e => Assert.True(e.GetProperty("sentAt").ValueKind == JsonValueKind.String));
     }
 
     [SqlServerFact]
@@ -372,6 +418,11 @@ public sealed class CrossTenantInvoicingSqlServerTests
 
         Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync(
             $"/api/v1/invoicing/invoices/{invoiceId}/cancel", new { motive = (int)CfdiCancellationMotive.NotCarriedOut })).StatusCode);
+        // Sending it by email is managing the orders (Fase 28E).
+        Assert.Equal(HttpStatusCode.Forbidden, (await stock.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/email", new { email = "karla@ejemplo.mx", useForInvoice = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await cashier.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/email", new { email = "karla@ejemplo.mx", useForInvoice = false })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync($"/api/v1/invoicing/settings")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await cashier.DeleteAsync($"/api/v1/invoicing/settings/certificate")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PutAsJsonAsync($"/api/v1/invoicing/settings/serie", new { serie = "X" })).StatusCode);
@@ -441,8 +492,9 @@ public sealed class CrossTenantInvoicingSqlServerTests
             mine, HttpMethod.Put, $"/api/v1/customers/{customer}/fiscal-data", new { fiscalData = Receiver }))).StatusCode);
 
         var saved = await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync(
-            $"/api/v1/customers/{customer}/fiscal-data", new { fiscalData = Receiver }));
+            $"/api/v1/customers/{customer}/fiscal-data", new { fiscalData = Receiver, invoiceEmail = "facturas@ejemplo.mx" }));
         Assert.Equal("KARLA FUENTE NOLASCO", saved.GetProperty("fiscalData").GetProperty("name").GetString());
+        Assert.Equal("facturas@ejemplo.mx", saved.GetProperty("invoiceEmail").GetString());
     }
 
     /// <summary>The business's fiscal data in Mi negocio and a CSD of its RFC in force, as if uploaded.</summary>

@@ -6279,6 +6279,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoicing/invoices/{invoiceId}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    invoiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SendCfdiByEmailRequest"];
+                    "text/json": components["schemas"]["SendCfdiByEmailRequest"];
+                    "application/*+json": components["schemas"]["SendCfdiByEmailRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CfdiEmailDto"];
+                        "application/json": components["schemas"]["CfdiEmailDto"];
+                        "text/json": components["schemas"]["CfdiEmailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoicing/payments/{paymentId}/complements": {
         parameters: {
             query?: never;
@@ -6466,6 +6511,51 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/payment-complements/{complementId}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    complementId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SendCfdiByEmailRequest"];
+                    "text/json": components["schemas"]["SendCfdiByEmailRequest"];
+                    "application/*+json": components["schemas"]["SendCfdiByEmailRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CfdiEmailDto"];
+                        "application/json": components["schemas"]["CfdiEmailDto"];
+                        "text/json": components["schemas"]["CfdiEmailDto"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -6698,6 +6788,51 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    creditNoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SendCfdiByEmailRequest"];
+                    "text/json": components["schemas"]["SendCfdiByEmailRequest"];
+                    "application/*+json": components["schemas"]["SendCfdiByEmailRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CfdiEmailDto"];
+                        "application/json": components["schemas"]["CfdiEmailDto"];
+                        "text/json": components["schemas"]["CfdiEmailDto"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -14167,6 +14302,37 @@ export interface components {
             blockers: string[];
             warnings: string[];
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        CfdiEmailDocument: 0 | 1 | 2;
+        CfdiEmailDto: {
+            /** Format: uuid */
+            id: string;
+            document: components["schemas"]["CfdiEmailDocument"];
+            /** Format: uuid */
+            cfdiId: string;
+            to: string;
+            /** Format: date-time */
+            requestedAt: string;
+            byTienditApp: boolean;
+            /** Format: date-time */
+            sentAt?: string | null;
+            sentWithoutPdf: boolean;
+            /** Format: date-time */
+            failedAt?: string | null;
+            failure?: components["schemas"]["CfdiEmailFailure"];
+            /** Format: int32 */
+            failedAttempts: number;
+            /** Format: date-time */
+            lastFailedAttemptAt?: string | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        CfdiEmailFailure: 0 | 1 | 2;
         CfdiPartyDto: {
             rfc?: string | null;
             name?: string | null;
@@ -14852,6 +15018,7 @@ export interface components {
             cancellationRequestedAt?: string | null;
             /** Format: date-time */
             cancelledAt?: string | null;
+            emails: components["schemas"]["CfdiEmailDto"][];
         };
         CreditReminderTemplateDto: {
             /** Format: uuid */
@@ -15101,6 +15268,7 @@ export interface components {
             /** Format: int32 */
             creditTermDays?: number | null;
             fiscalData?: components["schemas"]["CfdiReceiverDto"];
+            invoiceEmail?: string | null;
             addresses: components["schemas"]["CustomerAddressDto"][];
             /** Format: date-time */
             createdAt: string;
@@ -16205,6 +16373,7 @@ export interface components {
         IssueOrderInvoiceRequest: {
             receiver: components["schemas"]["CfdiReceiverInput"];
             saveToCustomer: boolean;
+            receiverEmail?: string | null;
         };
         KitchenOrderDto: {
             /** Format: uuid */
@@ -16854,6 +17023,8 @@ export interface components {
             cancellationRequestedAt?: string | null;
             /** Format: date-time */
             cancelledAt?: string | null;
+            receiverEmail?: string | null;
+            emails: components["schemas"]["CfdiEmailDto"][];
         };
         /**
          * Format: int32
@@ -16866,6 +17037,7 @@ export interface components {
             canInvoice: boolean;
             problem?: string | null;
             proposedReceiver?: components["schemas"]["CfdiReceiverDto"];
+            proposedEmail?: string | null;
             /** Format: uuid */
             customerId?: string | null;
             customerName?: string | null;
@@ -17185,6 +17357,7 @@ export interface components {
             cancellationRequestedAt?: string | null;
             /** Format: date-time */
             cancelledAt?: string | null;
+            emails: components["schemas"]["CfdiEmailDto"][];
         };
         PendingCourierOrdersDto: {
             owed: components["schemas"]["CourierOrderDto"][];
@@ -18521,6 +18694,10 @@ export interface components {
             openings?: components["schemas"]["SpecialOpeningDto"][] | null;
             reason?: string | null;
         };
+        SendCfdiByEmailRequest: {
+            email: string;
+            useForInvoice: boolean;
+        };
         SendChatMessageCommand: {
             phoneNumber: string;
             message: string;
@@ -19158,6 +19335,7 @@ export interface components {
         };
         UpdateCustomerFiscalDataRequest: {
             fiscalData?: components["schemas"]["CfdiReceiverInput"];
+            invoiceEmail?: string | null;
         };
         UpdateCustomerNotesRequest: {
             notes?: string | null;

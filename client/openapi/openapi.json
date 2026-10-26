@@ -7691,6 +7691,65 @@
         }
       }
     },
+    "/api/v1/invoicing/invoices/{invoiceId}/email": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByEmailRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByEmailRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByEmailRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/invoicing/payments/{paymentId}/complements": {
       "post": {
         "tags": [
@@ -7872,6 +7931,65 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/payment-complements/{complementId}/email": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "complementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByEmailRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByEmailRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByEmailRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              }
+            }
           }
         }
       }
@@ -8097,6 +8215,65 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/email": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "creditNoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByEmailRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByEmailRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByEmailRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              }
+            }
           }
         }
       }
@@ -18386,6 +18563,96 @@
         },
         "additionalProperties": false
       },
+      "CfdiEmailDocument": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Invoice",
+          "PaymentComplement",
+          "CreditNote"
+        ]
+      },
+      "CfdiEmailDto": {
+        "required": [
+          "byTienditApp",
+          "cfdiId",
+          "document",
+          "failedAttempts",
+          "id",
+          "requestedAt",
+          "sentWithoutPdf",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "document": {
+            "$ref": "#/components/schemas/CfdiEmailDocument"
+          },
+          "cfdiId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "byTienditApp": {
+            "type": "boolean"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sentWithoutPdf": {
+            "type": "boolean"
+          },
+          "failedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "failure": {
+            "$ref": "#/components/schemas/CfdiEmailFailure"
+          },
+          "failedAttempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastFailedAttemptAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CfdiEmailFailure": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Rejected",
+          "NotConfigured",
+          "NoLongerStamped"
+        ]
+      },
       "CfdiPartyDto": {
         "type": "object",
         "properties": {
@@ -20636,6 +20903,7 @@
       },
       "CreditNoteDto": {
         "required": [
+          "emails",
           "hasPdf",
           "hasXml",
           "id",
@@ -20723,6 +20991,12 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "emails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiEmailDto"
+            }
           }
         },
         "additionalProperties": false
@@ -21552,6 +21826,10 @@
           },
           "fiscalData": {
             "$ref": "#/components/schemas/CfdiReceiverDto"
+          },
+          "invoiceEmail": {
+            "type": "string",
+            "nullable": true
           },
           "addresses": {
             "type": "array",
@@ -25177,6 +25455,10 @@
           },
           "saveToCustomer": {
             "type": "boolean"
+          },
+          "receiverEmail": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -27311,6 +27593,7 @@
       },
       "OrderInvoiceDto": {
         "required": [
+          "emails",
           "hasPdf",
           "hasXml",
           "id",
@@ -27402,6 +27685,16 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "receiverEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "emails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiEmailDto"
+            }
           }
         },
         "additionalProperties": false
@@ -27450,6 +27743,10 @@
           },
           "proposedReceiver": {
             "$ref": "#/components/schemas/CfdiReceiverDto"
+          },
+          "proposedEmail": {
+            "type": "string",
+            "nullable": true
           },
           "customerId": {
             "type": "string",
@@ -28391,6 +28688,7 @@
       "PaymentComplementDto": {
         "required": [
           "amount",
+          "emails",
           "hasPdf",
           "hasXml",
           "id",
@@ -28487,6 +28785,12 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "emails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiEmailDto"
+            }
           }
         },
         "additionalProperties": false
@@ -32972,6 +33276,22 @@
         },
         "additionalProperties": false
       },
+      "SendCfdiByEmailRequest": {
+        "required": [
+          "email",
+          "useForInvoice"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "useForInvoice": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "SendChatMessageCommand": {
         "required": [
           "message",
@@ -35200,6 +35520,10 @@
         "properties": {
           "fiscalData": {
             "$ref": "#/components/schemas/CfdiReceiverInput"
+          },
+          "invoiceEmail": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

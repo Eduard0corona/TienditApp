@@ -507,6 +507,9 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     /// <summary>How many "you already have an account" emails went to <paramref name="email"/>.</summary>
     public int AlreadyExistsEmailsTo(string email) => _emails.AlreadyExistsTo(email);
 
+    /// <summary>The emails with the CFDI of an invoice (Fase 28E) that went to <paramref name="email"/>.</summary>
+    public IReadOnlyList<DocumentEmail> DocumentsTo(string email) => _emails.DocumentsTo(email);
+
     /// <summary>The emails the API sends, kept to open their links as the person would.</summary>
     private sealed class RecordedEmails : IEmailService
     {
@@ -545,5 +548,16 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
         }
 
         public Task SendUnfinishedAccountAsync(string email, string userId, string token) => Task.CompletedTask;
+
+        private readonly ConcurrentQueue<DocumentEmail> _documents = new();
+
+        /// <summary>The emails with the CFDI of an invoice (Fase 28E) the server took, to <paramref name="email"/>.</summary>
+        public IReadOnlyList<DocumentEmail> DocumentsTo(string email) => _documents.Where(d => d.To == email).ToList();
+
+        public Task<EmailSendOutcome> SendDocumentsAsync(DocumentEmail email, CancellationToken cancellationToken)
+        {
+            _documents.Enqueue(email);
+            return Task.FromResult(EmailSendOutcome.Sent);
+        }
     }
 }
