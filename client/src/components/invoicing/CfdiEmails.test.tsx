@@ -71,6 +71,9 @@ describe('CfdiEmailStatus', () => {
     rerender(<CfdiEmailStatus emails={[email({ failedAt: '2026-10-26T17:56:00Z', failure: CfdiEmailFailure.NotConfigured })]} />);
     expect(screen.getByText(/TienditApp no tiene el envío de correos configurado/)).toBeInTheDocument();
 
+    rerender(<CfdiEmailStatus emails={[email({ failedAt: '2026-10-26T17:56:00Z', failure: CfdiEmailFailure.NoLongerStamped })]} />);
+    expect(screen.getByText('No se envió a karla@ejemplo.mx: ya no está vigente.')).toBeInTheDocument();
+
     rerender(<CfdiEmailStatus emails={[email({ failedAt: '2026-10-26T22:40:00Z', failure: CfdiEmailFailure.NotDelivered, failedAttempts: 8 })]} />);
     expect(screen.getByText(
       'No se envió a karla@ejemplo.mx: el servidor de correo no lo tomó después de varios intentos. Envíalo otra vez.')).toBeInTheDocument();
