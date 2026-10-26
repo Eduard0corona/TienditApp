@@ -79,6 +79,6 @@ Tomé las decisiones de la Fase 28H con la autorización permanente del dueño d
   - Un mes con más de 5,000 CFDI no se descarga desde aquí.
   - La búsqueda por nombre en SQL Server distingue acentos: «PUBLICO EN GENERAL» no se encuentra con «público».
   - Excel, al abrir la lista con doble clic, lee como número lo que parece número: la forma de pago `01` se ve como `1`. Importarla con esas columnas como texto conserva los ceros: el archivo los lleva.
-  - La primera visita sube 296 B (de 180,037 a 180,333 B, contra `master` en `1e52cf7`) por la entrada del menú, con sus palabras de búsqueda, y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube a 180,400 B.
+  - La primera visita sube 286 B (de 180,037 a 180,323 B, contra `master` en `1e52cf7`) por la entrada del menú, con sus palabras de búsqueda, y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube a 180,400 B.
 - **Compatibilidad durante el despliegue:** el `apply.sql` de la migración se aplica antes del merge, como siempre. La versión anterior (28G) no usa los índices ni conoce las rutas nuevas; volver a ella solo quita la pantalla, y los índices se quedan sin estorbar.
 - **Reversibilidad:** total. Es de solo lectura y no guarda nada; el `rollback.sql` quita los índices sin tocar datos.

@@ -1443,8 +1443,9 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `navigation.test.ts` (10): CFDI emitidos en Reportes solo para dueños y administradores, y la búsqueda la encuentra por «contador» y «xml».
   - **Total:** `dotnet test` con SQL Server 2022, 3,934 pruebas sin fallos ni omitidas (Domain 1,174, Application 1,736, Infrastructure 563, WebApi 461).
   - **Cliente en total:** 171 archivos y 1,200 pruebas.
-  - **Primera visita:** 180,333 B de 180,400 B (`master`: 180,037 B): +296 B por la entrada de Reportes › CFDI emitidos en el menú y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube de 180,100 B a 180,400 B.
+  - **Primera visita:** 180,323 B de 180,400 B (`master`: 180,037 B): +286 B por la entrada de Reportes › CFDI emitidos en el menú y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube de 180,100 B a 180,400 B.
   - **Escenas visuales:** `cfdiEmitidos.spec.ts` (4, nuevo): Reportes › CFDI emitidos en escritorio, teléfono y oscuro, y un mes sin CFDI.
+    - **Resultado:** la comparación contra `master` en `1e52cf7` dio 681 pruebas iguales (con la de cobertura), 26 que cambian solo por la pestaña nueva «CFDI emitidos» de Reportes (Ventas, Factura global, Liquidaciones y Retenciones) y las 4 nuevas (que no existen en `master`); las 4 nuevas pasaron dos corridas seguidas contra el mismo build.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
