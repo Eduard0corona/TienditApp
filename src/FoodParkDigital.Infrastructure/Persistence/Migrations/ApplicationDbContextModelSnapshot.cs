@@ -2218,6 +2218,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(10)")
                         .HasDefaultValue("P");
 
+                    b.Property<byte[]>("SelfInvoiceKey")
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
+
+                    b.Property<bool>("SelfInvoicing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Serie")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -2251,6 +2260,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("InvoicingProfiles", null, t =>
                         {
                             t.HasCheckConstraint("CK_InvoicingProfiles_Certificate", "([CertificateNumber] IS NULL AND [CertificateRfc] IS NULL AND [CertificateValidFrom] IS NULL AND [CertificateValidTo] IS NULL AND [CertificateUploadedAt] IS NULL AND [CertificateUploadedByUserId] IS NULL) OR ([CertificateNumber] IS NOT NULL AND [CertificateRfc] IS NOT NULL AND [CertificateValidFrom] IS NOT NULL AND [CertificateValidTo] > [CertificateValidFrom] AND [CertificateUploadedAt] IS NOT NULL AND [CertificateUploadedByUserId] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_InvoicingProfiles_SelfInvoicing", "([SelfInvoicing] = 0 OR [SelfInvoiceKey] IS NOT NULL) AND ([SelfInvoiceKey] IS NULL OR DATALENGTH([SelfInvoiceKey]) = 32)");
                         });
                 });
 

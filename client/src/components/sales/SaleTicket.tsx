@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import type { OrderSelfInvoice } from '../../api/invoicing';
+import { selfInvoiceUrl } from '../../api/selfInvoiceApi';
 import type { OrderDto } from '../../types';
+import { formatCalendarDate } from '../../utils/dates';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
@@ -16,18 +19,25 @@ import {
   getTicketPlatform,
   type TicketExtras,
 } from '../../utils/ticket';
+import { createQrSvgDataUrl } from '../../utils/qr';
 
 interface SaleTicketProps extends TicketExtras {
   order: OrderDto;
+  /**
+   * The folio and code for the customer to invoice it online (Fase 28F): the API gives them only for a sale paid in full of
+   * a business with self-invoicing on.
+   */
+  selfInvoice?: OrderSelfInvoice | null;
 }
 
 /**
  * Customer ticket: what was bought, the IVA breakdown computed by the server and how it was paid. An order of a
  * delivery platform carries its folio and the name for the bag; when the platform charged it, the ticket packs the bag
  * with the products and no prices. Never its commission, withholdings or net. An order sent to the customer's address
- * carries where it goes, the courier's folio and its delivery as one more line, already in the total.
+ * carries where it goes, the courier's folio and its delivery as one more line, already in the total. A sale paid in full of a
+ * business with self-invoicing on carries «Factura en línea»: the page, the folio, the code and a QR to them (Fase 28F).
  */
-export default function SaleTicket({ order, businessName, logoUrl, provisional }: SaleTicketProps) {
+export default function SaleTicket({ order, businessName, logoUrl, provisional, selfInvoice }: SaleTicketProps) {
   const taxLines = order.taxBreakdown.filter((line) => line.taxAmount > 0);
   const { tip, cashReceived, change } = getTicketPaymentTotals(order);
   const customerName = getTicketCustomerName(order);
@@ -177,7 +187,28 @@ export default function SaleTicket({ order, businessName, logoUrl, provisional }
         </>
       )}
 
+      {selfInvoice && !provisional && <SelfInvoiceBlock selfInvoice={selfInvoice} />}
+
       <div className="text-center small mt-2">¡Gracias por tu compra!</div>
+    </div>
+  );
+}
+
+/**
+ * Where, with what and until when the customer invoices the ticket: the address, the folio, the code, a QR that brings them
+ * and the last day of the month it was paid.
+ */
+function SelfInvoiceBlock({ selfInvoice }: { selfInvoice: OrderSelfInvoice }) {
+  const page = new URL(selfInvoiceUrl(selfInvoice.path));
+  const withTicket = selfInvoiceUrl(selfInvoice.path, { folio: selfInvoice.orderNumber, code: selfInvoice.code });
+  return (
+    <div className="ta-ticket-self-invoice text-center mt-2">
+      <div className="fw-bold">Factura en línea</div>
+      <img src={createQrSvgDataUrl(withTicket)} alt="QR para facturar esta compra en línea" className="ta-ticket-qr" />
+      <div className="small ta-ticket-wrap">{page.host}{page.pathname}</div>
+      <div className="small">Folio: {selfInvoice.orderNumber}</div>
+      <div className="small">Código: <span className="fw-bold">{selfInvoice.code}</span></div>
+      <div className="small">Hasta el {formatCalendarDate(selfInvoice.invoiceBy)}</div>
     </div>
   );
 }

@@ -491,6 +491,21 @@ export const ReviewStatus = {
 } as const;
 export type ReviewStatus = (typeof ReviewStatus)[keyof typeof ReviewStatus];
 
+export const SelfInvoiceOutcome = {
+  Stamped: 0,
+  Stamping: 1,
+  Refused: 2,
+} as const;
+export type SelfInvoiceOutcome = (typeof SelfInvoiceOutcome)[keyof typeof SelfInvoiceOutcome];
+
+export const SelfInvoiceTicketStatus = {
+  CanInvoice: 0,
+  Invoiced: 1,
+  Stamping: 2,
+  NotOnline: 3,
+} as const;
+export type SelfInvoiceTicketStatus = (typeof SelfInvoiceTicketStatus)[keyof typeof SelfInvoiceTicketStatus];
+
 export const ServiceOrderPieceStatus = {
   Accepted: 0,
   InProgress: 1,

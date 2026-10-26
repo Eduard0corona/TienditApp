@@ -2,8 +2,14 @@ import { AxiosError, AxiosHeaders } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from './axios';
 import { getApiErrorMessage } from './errors';
-import { downloadInvoiceFile, downloadPaymentComplementFile, isOrderInvoicingWaiting, type OrderInvoicing } from './invoicing';
-import { CreditNoteAdjustment, OrderInvoiceStatus } from '../types';
+import {
+  downloadInvoiceFile,
+  downloadPaymentComplementFile,
+  isOrderInvoicingWaiting,
+  mayPrintSelfInvoice,
+  type OrderInvoicing,
+} from './invoicing';
+import { CreditNoteAdjustment, OrderChannel, OrderInvoiceStatus, OrderStatus, type OrderDto } from '../types';
 
 vi.mock('./axios', () => ({ default: { get: vi.fn() } }));
 
@@ -115,5 +121,23 @@ describe('isOrderInvoicingWaiting', () => {
       .toBe(true);
     expect(isOrderInvoicingWaiting({ invoices: stamped, payments: [], adjustments: [adjustment({ creditNotes: [note(OrderInvoiceStatus.Cancelling)] })] }))
       .toBe(true);
+  });
+});
+
+describe('mayPrintSelfInvoice', () => {
+  const paid = {
+    status: OrderStatus.Delivered, total: 116, paidAmount: 116, channel: OrderChannel.Counter, payments: [{ amount: 116 }],
+  } as unknown as OrderDto;
+
+  it('asks for «Factura en línea» only for a sale paid in full, as the API decides it', () => {
+    expect(mayPrintSelfInvoice(paid)).toBe(true);
+    // Owed, written off in part (its balance is zero but it was not paid), without payments or without amount.
+    expect(mayPrintSelfInvoice({ ...paid, paidAmount: 50 })).toBe(false);
+    expect(mayPrintSelfInvoice({ ...paid, paidAmount: 50, balance: 0 } as OrderDto)).toBe(false);
+    expect(mayPrintSelfInvoice({ ...paid, payments: [] })).toBe(false);
+    expect(mayPrintSelfInvoice({ ...paid, total: 0, paidAmount: 0 })).toBe(false);
+    // Cancelled, or of a delivery app.
+    expect(mayPrintSelfInvoice({ ...paid, status: OrderStatus.Cancelled })).toBe(false);
+    expect(mayPrintSelfInvoice({ ...paid, channel: OrderChannel.Rappi })).toBe(false);
   });
 });

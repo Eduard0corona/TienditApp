@@ -7447,6 +7447,94 @@
         }
       }
     },
+    "/api/v1/invoicing/settings/self-invoicing": {
+      "put": {
+        "tags": [
+          "Invoicing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSelfInvoicingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSelfInvoicingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSelfInvoicingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicingSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicingSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicingSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/orders/{orderId}/self-invoice": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderSelfInvoiceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderSelfInvoiceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderSelfInvoiceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/invoicing/orders/{orderId}": {
       "get": {
         "tags": [
@@ -13973,6 +14061,219 @@
         }
       }
     },
+    "/api/v1/public/self-invoice/{slug}": {
+      "get": {
+        "tags": [
+          "PublicSelfInvoice"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoicePageDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoicePageDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoicePageDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/self-invoice/{slug}/ticket": {
+      "post": {
+        "tags": [
+          "PublicSelfInvoice"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfInvoiceTicketRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfInvoiceTicketRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfInvoiceTicketRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoiceTicketDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoiceTicketDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoiceTicketDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/self-invoice/{slug}/invoice": {
+      "post": {
+        "tags": [
+          "PublicSelfInvoice"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfInvoiceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfInvoiceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoiceResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoiceResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoiceResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/self-invoice/{slug}/resend": {
+      "post": {
+        "tags": [
+          "PublicSelfInvoice"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendSelfInvoiceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendSelfInvoiceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendSelfInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoiceResendDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoiceResendDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfInvoiceResendDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/purchaseorders": {
       "get": {
         "tags": [
@@ -18579,6 +18880,7 @@
       },
       "CfdiEmailDto": {
         "required": [
+          "byCustomer",
           "byTienditApp",
           "cfdiId",
           "document",
@@ -18609,6 +18911,9 @@
             "format": "date-time"
           },
           "byTienditApp": {
+            "type": "boolean"
+          },
+          "byCustomer": {
             "type": "boolean"
           },
           "sentAt": {
@@ -25364,6 +25669,8 @@
           "paymentSerie",
           "ready",
           "sandbox",
+          "selfInvoicePath",
+          "selfInvoicing",
           "serie"
         ],
         "type": "object",
@@ -25410,6 +25717,12 @@
           },
           "ready": {
             "type": "boolean"
+          },
+          "selfInvoicing": {
+            "type": "boolean"
+          },
+          "selfInvoicePath": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -27605,6 +27918,7 @@
           "paymentMethod",
           "receiver",
           "requestedAt",
+          "requestedByCustomer",
           "status",
           "subTotal",
           "taxTotal",
@@ -27697,6 +28011,9 @@
             "items": {
               "$ref": "#/components/schemas/CfdiEmailDto"
             }
+          },
+          "requestedByCustomer": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -28191,6 +28508,31 @@
           "quantity": {
             "type": "number",
             "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrderSelfInvoiceDto": {
+        "required": [
+          "code",
+          "invoiceBy",
+          "orderNumber",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "invoiceBy": {
+            "type": "string",
+            "format": "date"
           }
         },
         "additionalProperties": false
@@ -32857,6 +33199,30 @@
         },
         "additionalProperties": false
       },
+      "ResendSelfInvoiceRequest": {
+        "required": [
+          "code",
+          "email",
+          "folio",
+          "rfc"
+        ],
+        "type": "object",
+        "properties": {
+          "folio": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "rfc": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ResetPasswordCommand": {
         "required": [
           "newPassword",
@@ -33277,6 +33643,175 @@
           }
         },
         "additionalProperties": false
+      },
+      "SelfInvoiceOutcome": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Stamped",
+          "Stamping",
+          "Refused"
+        ]
+      },
+      "SelfInvoicePageDto": {
+        "required": [
+          "available",
+          "businessName",
+          "sandbox"
+        ],
+        "type": "object",
+        "properties": {
+          "businessName": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "sandbox": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SelfInvoiceRequest": {
+        "required": [
+          "code",
+          "email",
+          "folio",
+          "receiver"
+        ],
+        "type": "object",
+        "properties": {
+          "folio": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "receiver": {
+            "$ref": "#/components/schemas/CfdiReceiverInput"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SelfInvoiceResendDto": {
+        "required": [
+          "email",
+          "invoiceNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "invoiceNumber": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SelfInvoiceResultDto": {
+        "required": [
+          "email",
+          "invoiceNumber",
+          "outcome"
+        ],
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/SelfInvoiceOutcome"
+          },
+          "invoiceNumber": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SelfInvoiceTicketDto": {
+        "required": [
+          "date",
+          "orderNumber",
+          "status",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "orderNumber": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SelfInvoiceTicketStatus"
+          },
+          "invoiceNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "invoiceBy": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SelfInvoiceTicketRequest": {
+        "required": [
+          "code",
+          "folio"
+        ],
+        "type": "object",
+        "properties": {
+          "folio": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SelfInvoiceTicketStatus": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "CanInvoice",
+          "Invoiced",
+          "Stamping",
+          "NotOnline"
+        ]
       },
       "SendCfdiByEmailRequest": {
         "required": [
@@ -33961,6 +34496,18 @@
             "items": {
               "$ref": "#/components/schemas/ProductOptionGroupInput"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetSelfInvoicingRequest": {
+        "required": [
+          "on"
+        ],
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

@@ -539,7 +539,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cancelar** (dueños y administradores): con motivo 02 (errores sin relación) o 03 (la venta no se llevó a cabo); se pide primero al PAC y, si se niega, nada cambia. Si el SAT pide la aceptación del receptor, queda «Cancelándose» y el worker pregunta cada 30 minutos: cancelada, o «Timbrada» otra vez si el receptor la rechazó. Una cancelada deja facturar el pedido otra vez con factura y folio nuevos. Nunca se borra una factura.
 - **El CSD** (dueños y administradores, Configuración › Facturación): `.cer`, `.key` y la contraseña de la llave. TienditApp revisa que sea de sello, vigente, del RFC de Mi negocio y que la llave corresponda; el PAC lo guarda y TienditApp solo su número, RFC y vigencia. Los archivos y la contraseña nunca se guardan ni se registran. Avisa 30 días antes de vencer; reemplazarlo o quitarlo pide al PAC que olvide el anterior. Un CSD es de un solo negocio de TienditApp: si otro ya lo usa, se rechaza (dos negocios del mismo RFC tramitan uno cada uno).
 - **Acceso:** timbrar, volver a pedir, ver y descargar el XML y el PDF, quien gestiona los pedidos (`ManageOrders`); cancelar, el CSD y la serie, dueños y administradores. Otro negocio recibe 404.
-- **Sin** sustitución (motivo 01), autofactura, envío por WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D y el envío por correo en la 28E (siguientes secciones de facturas).
+- **Sin** sustitución (motivo 01), envío por WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D, el envío por correo en la 28E y la autofactura del cliente en la 28F (siguientes secciones de facturas).
 
 ## La factura global (Fase 28B)
 
@@ -612,6 +612,18 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **«Enviar por correo»:** quien gestiona los pedidos (`ManageOrders`) manda otra vez un CFDI timbrado a la dirección que escriba; con «Usar este correo para lo que siga de esta factura», cambia el de la factura. Hasta 5 por CFDI y 300 por negocio en 24 horas, contando los automáticos y bajo el candado de facturación del negocio. Otro negocio recibe 404.
 - **El historial** de cada correo (a quién, quién lo pidió, cuándo y cómo terminó) no se borra; Pedidos muestra el último de cada CFDI.
 - **Sin** WhatsApp, aviso de cancelación, envío desde el dominio del negocio ni saber si el correo rebotó después de que el servidor lo tomó.
+
+## La autofactura (Fase 28F)
+
+[ADR 0050](../adr/0050-self-invoicing.md):
+
+- **Quién la activa:** dueños y administradores, en Configuración › Facturación, solo mientras el negocio puede facturar. Apagarla siempre se puede; se audita cuando cambia.
+- **El ticket:** una venta pagada por completo de un negocio con autofactura activa imprime «Factura en línea» con la dirección `/m/{slug}/facturar`, el folio, un código de 10 caracteres (`ABCDE-12345`) y un QR que trae los dos en el fragmento de la dirección. El código es un HMAC del pedido con la llave del negocio: no se guarda, y la llave se conserva al apagarla (los tickets impresos vuelven a servir). Lo imprime también hasta cuándo se puede (el último día del mes en que se pagó). La API decide si lo lleva: no lo lleva un ticket provisional, con saldo o condonado en parte, cancelado, sin importe, con un reembolso, de una cuenta abierta o un pedido pendiente (su total todavía puede cambiar) o de una app de entrega.
+- **La página**, sin cuenta: con el folio y el código el cliente ve el ticket y escribe sus datos fiscales y un correo. Un folio que no existe y un código equivocado responden lo mismo; el folio y el código de un negocio no sirven en la dirección de otro. Buscar, facturar y reenviar comparten un límite de 30 solicitudes por IP cada 10 minutos.
+- **Qué se factura en línea:** lo que Pedidos facturaría, pagado en una exhibición (PUE), cerrado (una cuenta abierta o un pedido pendiente todavía puede cambiar su total), sin reembolsos, que no sea de una app de entrega, hasta el último día del mes en que se terminó de pagar (en el calendario del negocio). Fuera de eso, la página dice por qué y que la pida al negocio. Todo se revisa otra vez al facturar, bajo el candado de facturación del negocio; si otra solicitud del mismo ticket llegó primero, se dice lo que hizo (timbrándose, timbrada o cancelándose).
+- **La factura** es la de Pedidos, pedida por un valor fijo que ninguna cuenta tiene (`OrderInvoice.SelfInvoiceRequester`) y auditada como «Autofactura». Se timbra en la misma solicitud y el XML y el PDF salen al correo escrito (28E). Los datos fiscales escritos no se guardan en el cliente del negocio. Si el PAC la rechaza, la página dice por qué y el cliente corrige.
+- **Ya facturado:** la página lo dice; con el RFC de esa factura y un correo se reenvía (límites de la 28E), también mientras el negocio no pueda timbrar. Sin el RFC correcto no se manda nada.
+- **Pedidos** marca la factura y el correo que pidió el cliente en línea.
 
 ## Cancelación y trazabilidad
 

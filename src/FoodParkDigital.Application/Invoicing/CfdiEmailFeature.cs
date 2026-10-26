@@ -29,6 +29,8 @@ public class CfdiEmailDto
     public DateTimeOffset RequestedAt { get; set; }
     /// <summary>TienditApp sent it on its own when the CFDI was stamped; otherwise a person asked for it.</summary>
     public bool ByTienditApp { get; set; }
+    /// <summary>The customer asked for it on the page of the ticket (Fase 28F), not a person of the business.</summary>
+    public bool ByCustomer { get; set; }
     public DateTimeOffset? SentAt { get; set; }
     /// <summary>It went with the XML only: the PAC did not give its PDF.</summary>
     public bool SentWithoutPdf { get; set; }
@@ -46,6 +48,7 @@ public class CfdiEmailDto
         To = email.To,
         RequestedAt = email.RequestedAt,
         ByTienditApp = email.RequestedByUserId is null,
+        ByCustomer = email.RequestedByUserId == OrderInvoice.SelfInvoiceRequester,
         SentAt = email.SentAt,
         SentWithoutPdf = email.SentWithoutPdf,
         FailedAt = email.FailedAt,

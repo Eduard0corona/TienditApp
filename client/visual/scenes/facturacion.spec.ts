@@ -4,12 +4,14 @@ import { SIZES, dialog, open, snap } from '../helpers';
 import {
   CLIENTE_CON_DATOS_FISCALES,
   CUSTOMER_NAME,
+  FACTURACION_AUTOFACTURA,
   FACTURACION_LISTA,
   FACTURACION_NO_DISPONIBLE,
   FACTURACION_PRUEBAS_POR_VENCER,
   FACTURACION_ROUTES,
   FACTURACION_SIN_CSD,
   ORDER_NUMBER,
+  PEDIDO_AUTOFACTURADO,
   PEDIDO_CANCELANDOSE,
   PEDIDO_CON_NOTAS_DE_CREDITO,
   PEDIDO_CORREO_RECHAZADO,
@@ -25,7 +27,8 @@ import {
 // and the dialog to cancel it) and the fiscal data of a customer in Clientes, from their edit dialog. Since the Fase 28C
 // (ADR 0047), the invoice in installments of the same order with the payment complements of its payments, and the dialog
 // to cancel one; since the Fase 28D (ADR 0048), its refunds with their credit notes, and the dialog to cancel one; since
-// the Fase 28E (ADR 0049), the invoice sent by email or refused by the customer's mail server, and «Enviar por correo».
+// the Fase 28E (ADR 0049), the invoice sent by email or refused by the customer's mail server, and «Enviar por correo»;
+// since the Fase 28F (ADR 0050), self-invoicing turned on, and the invoice the customer asked for online.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -76,6 +79,25 @@ test.describe('Configuración › Facturación', () => {
       await expect(page.getByText('Vence pronto: tramita uno nuevo en el SAT y súbelo antes de que venza.')).toBeVisible();
       await snap(page, 'facturacion-pruebas-por-vencer');
     });
+  });
+
+  test.describe('autofactura', () => {
+    test.use({ prepareData: FACTURACION_AUTOFACTURA });
+
+    for (const look of LOOKS) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`facturación con autofactura ${look.suffix}`, async ({ page }) => {
+          await open(page, '/settings/invoicing');
+          await expect(page.getByRole('switch', { name: 'Autofactura activa' })).toBeChecked();
+          // The page's address carries the one the scenes are served from (its port changes with VISUAL_PORT).
+          await snap(page, `facturacion-autofactura-${look.suffix}`, {
+            mask: [page.getByRole('link', { name: /\/m\/cafe-la-esquina\/facturar$/ })],
+          });
+        });
+      });
+    }
   });
 
   test.describe('no disponible', () => {
@@ -186,6 +208,17 @@ test.describe('Pedidos › Factura por correo', () => {
       await sending.getByLabel('Correo').fill('contabilidad@altavista.mx');
       await expect(sending.getByRole('checkbox', { name: /Usar este correo para lo que siga de esta factura/ })).not.toBeChecked();
       await snapScreen(page, 'pedidos-factura-enviar-por-correo');
+    });
+  });
+
+  test.describe('pedida por el cliente', () => {
+    test.use({ prepareData: PEDIDO_AUTOFACTURADO });
+
+    test('factura que pidió el cliente en línea', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await expect(invoice.getByText('La pidió el cliente en línea con su ticket.')).toBeVisible();
+      await expect(invoice.getByText(/Lo pidió el cliente en línea\./)).toBeVisible();
+      await snapScreen(page, 'pedidos-factura-pedida-por-el-cliente');
     });
   });
 

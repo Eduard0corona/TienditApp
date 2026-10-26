@@ -20,5 +20,7 @@ internal static class SqliteSqlServerFunctions
             "YEAR",
             (string? value) => value is null ? (int?)null : int.Parse(value[..4], CultureInfo.InvariantCulture),
             isDeterministic: true);
+        // DATALENGTH of a varbinary: its bytes (CK_InvoicingProfiles_SelfInvoicing).
+        connection.CreateFunction("DATALENGTH", (byte[]? value) => value?.Length, isDeterministic: true);
     }
 }

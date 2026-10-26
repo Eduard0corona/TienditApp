@@ -23,6 +23,7 @@ internal static class BeforeCfdiEmails
         modelBuilder.Ignore<CfdiEmail>();
         modelBuilder.Entity<OrderInvoice>().Ignore(i => i.ReceiverEmail);
         modelBuilder.Entity<Customer>().Ignore(c => c.InvoiceEmail);
+        BeforeSelfInvoicing.Ignore(modelBuilder);
     }
 
     private sealed class Context(

@@ -21,6 +21,7 @@ const MyOrderPage = lazy(() => import('./pages/account/MyOrderPage'));
 const OrderTrackingPage = lazy(() => import('./pages/public/OrderTrackingPage'));
 const MyAppointments = lazy(() => import('./pages/account/MyAppointments'));
 const AppointmentTrackingPage = lazy(() => import('./pages/public/AppointmentTrackingPage'));
+const SelfInvoicePage = lazy(() => import('./pages/public/SelfInvoicePage'));
 const AccountPage = lazy(() => import('./pages/account/AccountPage'));
 const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
 const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
@@ -110,6 +111,8 @@ export default function App() {
               <Route path="/seguimiento" element={<OrderTrackingPage />} />
               {/* The link of an appointment booked online (/cita#link, Fase 24D), the same way. */}
               <Route path="/cita" element={<AppointmentTrackingPage />} />
+              {/* A business's page to invoice its tickets (Fase 28F): the ticket's QR brings its folio and code in the fragment. */}
+              <Route path="/m/:slug/facturar" element={<SelfInvoicePage />} />
               <Route
                 path="/mis-citas"
                 element={(

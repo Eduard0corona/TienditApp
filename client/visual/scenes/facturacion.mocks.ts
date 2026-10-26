@@ -9,7 +9,7 @@ type PrepareData = NonNullable<SceneOptions['prepareData']>;
 // customer in Clientes. The order is ORD-000343, the office of Grupo Altavista: delivered and paid by transfer, or (Fase
 // 28C, ADR 0047) invoiced in installments, with the payment complements of its payments, or (Fase 28D, ADR 0048) with
 // what was given back and the credit notes of each refund. Since the Fase 28E (ADR 0049), each CFDI says how its latest
-// email to the customer went.
+// email to the customer went; since the Fase 28F (ADR 0050), whether the customer asked for it online.
 
 // OrderInvoiceStatus and CfdiCancellationMotive as the contract numbers them.
 const STAMPED = 1;
@@ -35,10 +35,11 @@ const CERTIFICATE = {
   uploadedAt: '2026-10-01T16:12:00Z', usable: true, expiresSoon: false, expired: false, otherRfc: false,
 };
 
-/** The business's fiscal data in Mi negocio, its CSD and its serie: ready to invoice. */
+/** The business's fiscal data in Mi negocio, its CSD and its serie: ready to invoice, with self-invoicing off (Fase 28F). */
 const READY = {
   available: true, sandbox: false, serie: 'F', paymentSerie: 'P', creditNoteSerie: 'NC', rfc: 'CLU201005AB1', legalName: 'CAFE LUNA', fiscalRegime: '626',
-  postalCode: '06700', missingData: [] as string[], certificate: CERTIFICATE, ready: true,
+  postalCode: '06700', missingData: [] as string[], certificate: CERTIFICATE, ready: true, selfInvoicing: false,
+  selfInvoicePath: '/m/cafe-la-esquina/facturar',
 };
 
 const settings = (value: Record<string, unknown>): PrepareData => (data) => {
@@ -54,6 +55,8 @@ export const FACTURACION_SIN_CSD = asOption(settings({
 export const FACTURACION_PRUEBAS_POR_VENCER = asOption(settings({
   ...READY, sandbox: true, certificate: { ...CERTIFICATE, validTo: minutesFromNow(21 * 24 * 60), expiresSoon: true },
 }));
+/** Its customers invoice their tickets online (Fase 28F): the page's address shows under the switch. */
+export const FACTURACION_AUTOFACTURA = asOption(settings({ ...READY, selfInvoicing: true }));
 /** The platform has not set its PAC up. */
 export const FACTURACION_NO_DISPONIBLE = asOption(settings({ ...READY, available: false, certificate: undefined, ready: false }));
 
@@ -67,7 +70,7 @@ function invoice(data: DemoData, folio: number, fields: Record<string, unknown>)
     id: uuid(`invoice-${folio}`), orderId: order.id, number: `F-${folio}`, status: STAMPED, receiver: ALTAVISTA,
     paymentForm: '03', paymentMethod: 'PUE', subTotal, taxTotal: r2(order.total - subTotal), total: order.total,
     requestedAt: minutesFromNow(-50), uuid: null, stampedAt: null, hasXml: false, hasPdf: false, failureMessage: null,
-    refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, receiverEmail: null, emails: [],
+    refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, receiverEmail: null, emails: [], requestedByCustomer: false,
     ...fields,
   };
 }
@@ -279,7 +282,7 @@ const REJECTED = 0;
 function email(name: string, fields: Record<string, unknown>) {
   return {
     id: uuid(`email-${name}`), document: INVOICE_DOCUMENT, cfdiId: uuid('invoice-3'), to: INVOICE_EMAIL, requestedAt: minutesFromNow(-12),
-    byTienditApp: true, sentAt: null, sentWithoutPdf: false, failedAt: null, failure: null, failedAttempts: 0, lastFailedAttemptAt: null,
+    byTienditApp: true, byCustomer: false, sentAt: null, sentWithoutPdf: false, failedAt: null, failure: null, failedAttempts: 0, lastFailedAttemptAt: null,
     ...fields,
   };
 }
@@ -306,6 +309,25 @@ export const PEDIDO_CORREO_RECHAZADO = asOption(orderInvoicing((data) => ({
       requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
       hasXml: true, hasPdf: true, receiverEmail: 'facturas@altavsita.mx',
       emails: [email('timbre', { to: 'facturas@altavsita.mx', failedAt: minutesFromNow(-11), failure: REJECTED })],
+    }),
+  ],
+})));
+
+/**
+ * Grupo Altavista invoiced its ticket on the page of the business (Fase 28F): F-3 says the customer asked for it online, and
+ * its latest email is the one they asked for again from there, after the one TienditApp sent when it was stamped.
+ */
+export const PEDIDO_AUTOFACTURADO = asOption(orderInvoicing((data) => ({
+  canInvoice: false,
+  problem: 'Este pedido ya tiene la factura F-3: cancélala para facturarlo otra vez.',
+  invoices: [
+    invoice(data, 3, {
+      requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
+      hasXml: true, hasPdf: true, receiverEmail: INVOICE_EMAIL, requestedByCustomer: true,
+      emails: [
+        email('reenvio', { requestedAt: minutesFromNow(-3), byTienditApp: false, byCustomer: true, sentAt: minutesFromNow(-2) }),
+        email('timbre', { sentAt: minutesFromNow(-11) }),
+      ],
     }),
   ],
 })));

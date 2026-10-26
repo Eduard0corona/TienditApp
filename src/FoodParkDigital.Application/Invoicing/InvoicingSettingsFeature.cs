@@ -15,7 +15,8 @@ namespace FoodParkDigital.Application.Invoicing;
 
 /// <summary>
 /// Configuración › Facturación (Fase 28A, ADR 0045): whether the platform invoices, the business's fiscal data the invoice
-/// needs, its CSD and the series of its invoices and payment complements (Fase 28C).
+/// needs, its CSD, the series of its invoices and payment complements (Fase 28C), and whether its customers invoice their
+/// tickets online (Fase 28F).
 /// </summary>
 public class InvoicingSettingsDto
 {
@@ -38,6 +39,10 @@ public class InvoicingSettingsDto
     public InvoicingCertificateDto? Certificate { get; set; }
     /// <summary>Whether the business can stamp now: PAC, fiscal data and a CSD of its RFC in force.</summary>
     public bool Ready { get; set; }
+    /// <summary>Whether its customers invoice their tickets online (Fase 28F, ADR 0050).</summary>
+    public bool SelfInvoicing { get; set; }
+    /// <summary>The address of the page where they do, «/m/{slug}/facturar».</summary>
+    public string SelfInvoicePath { get; set; } = null!;
 }
 
 public class InvoicingCertificateDto
@@ -345,6 +350,60 @@ public class ChangeInvoiceSerieCommandHandler : IRequestHandler<ChangeInvoiceSer
     }
 }
 
+/// <summary>
+/// Turns self-invoicing on or off (Fase 28F, ADR 0050; owners and admins). On needs the business able to invoice now; the
+/// first time it creates the key of the tickets' codes. Off keeps it, so the tickets already printed work again when it is
+/// turned back on; the invoices customers already have stay.
+/// </summary>
+[RequiresTenantManager]
+public record SetSelfInvoicingCommand(bool On) : IRequest<Result<InvoicingSettingsDto>>;
+
+public class SetSelfInvoicingCommandHandler : IRequestHandler<SetSelfInvoicingCommand, Result<InvoicingSettingsDto>>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenant;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IInvoicingGateway _gateway;
+    private readonly IDateTimeProvider _clock;
+
+    public SetSelfInvoicingCommandHandler(
+        IApplicationDbContext context, ICurrentTenantService tenant, ICurrentUserService currentUser, IInvoicingGateway gateway,
+        IDateTimeProvider clock)
+    {
+        _context = context;
+        _tenant = tenant;
+        _currentUser = currentUser;
+        _gateway = gateway;
+        _clock = clock;
+    }
+
+    public async Task<Result<InvoicingSettingsDto>> Handle(SetSelfInvoicingCommand request, CancellationToken cancellationToken)
+    {
+        var tenantId = _tenant.TenantId;
+        var now = _clock.UtcNow;
+        var profile = await _context.InvoicingProfiles.FirstOrDefaultAsync(cancellationToken);
+        var wasOn = profile?.SelfInvoicing ?? false;
+        if (request.On)
+        {
+            var settings = await InvoicingSettings.ReadAsync(_context, tenantId, _gateway, now, cancellationToken);
+            if (InvoicingSettings.ReadinessProblem(settings) is { } problem)
+                return Result.Failure<InvoicingSettingsDto>(InvoicingSettings.SelfInvoicingNeedsInvoicing(problem));
+            // Ready means it has its CSD, so its profile is there.
+            profile!.TurnOnSelfInvoicing();
+        }
+        else
+            profile?.TurnOffSelfInvoicing();
+
+        if (profile is not null && profile.SelfInvoicing != wasOn)
+        {
+            InvoicingSettings.Audit(
+                _context, tenantId, _currentUser, request.On ? "SelfInvoicingTurnedOn" : "SelfInvoicingTurnedOff", new { request.On });
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        return Result.Success(await InvoicingSettings.ReadAsync(_context, tenantId, _gateway, now, cancellationToken));
+    }
+}
+
 internal static class InvoicingSettings
 {
     public const string NotAvailableMessage = "La facturación no está disponible en TienditApp por ahora.";
@@ -378,6 +437,9 @@ internal static class InvoicingSettings
             performedBy: currentUser.UserName ?? "system",
             metadata: JsonSerializer.Serialize(metadata)));
 
+    /// <summary>Self-invoicing is turned on only while the business can invoice.</summary>
+    public static string SelfInvoicingNeedsInvoicing(string problem) => $"Para activar la autofactura, el negocio debe poder facturar. {problem}";
+
     /// <summary>Why the business cannot invoice now (the platform, Mi negocio or its CSD), or null when it can.</summary>
     public static string? ReadinessProblem(InvoicingSettingsDto settings)
     {
@@ -410,7 +472,7 @@ internal static class InvoicingSettings
     {
         var tenant = await context.Tenants.AsNoTracking()
             .Where(t => t.Id == tenantId)
-            .Select(t => new { t.Rfc, t.LegalName, t.TaxRegime, PostalCode = t.Address == null ? null : t.Address.ZipCode })
+            .Select(t => new { t.Slug, t.Rfc, t.LegalName, t.TaxRegime, PostalCode = t.Address == null ? null : t.Address.ZipCode })
             .FirstOrDefaultAsync(cancellationToken);
         var profile = await context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
 
@@ -437,7 +499,9 @@ internal static class InvoicingSettings
             LegalName = tenant?.LegalName?.Trim(),
             FiscalRegime = regime,
             PostalCode = tenant?.PostalCode?.Trim(),
-            MissingData = missing
+            MissingData = missing,
+            SelfInvoicing = profile?.SelfInvoicing ?? false,
+            SelfInvoicePath = Invoicing.SelfInvoicing.PagePath(tenant?.Slug ?? string.Empty)
         };
         if (profile is { HasCertificate: true })
         {

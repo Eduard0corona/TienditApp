@@ -16,6 +16,7 @@ import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
 import { useRefreshCustomerCredit } from '../../api/customerCredit';
+import { useOrderSelfInvoice } from '../../api/invoicing';
 import { queryKeys, useDeliveryPlatformChannels } from '../../api/queries';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { getServicePriorityLabel, parseChecklist } from '../../utils/serviceDetail';
@@ -180,6 +181,8 @@ export default function OrdersList() {
   const [paymentError, setPaymentError] = useState('');
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [paidReceipt, setPaidReceipt] = useState<{ order: OrderDto; change: number } | null>(null);
+  // Its ticket carries the folio and code to invoice it online while self-invoicing is on (Fase 28F).
+  const { selfInvoice: receiptSelfInvoice, preparing: preparingReceipt } = useOrderSelfInvoice(paidReceipt?.order);
   const [realtimeMessage, setRealtimeMessage] = useState('');
   const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [statusError, setStatusError] = useState('');
@@ -1308,13 +1311,14 @@ export default function OrdersList() {
                 order={paidReceipt.order}
                 businessName={tenant?.name ?? 'TienditApp'}
                 logoUrl={tenant?.logoImages?.small ?? tenant?.logoUrl}
+                selfInvoice={receiptSelfInvoice}
               />
             </>
           )}
         </Modal.Body>
         <Modal.Footer className="flex-wrap">
-          <button type="button" className="btn btn-light btn-touch" onClick={printTicket}>
-            <i className="ri-printer-line me-1" aria-hidden="true"></i>Imprimir
+          <button type="button" className="btn btn-light btn-touch" onClick={printTicket} disabled={preparingReceipt}>
+            <i className="ri-printer-line me-1" aria-hidden="true"></i>{preparingReceipt ? 'Preparando el ticket…' : 'Imprimir'}
           </button>
           {/* An order of a platform has no phone to send its ticket to. */}
           {paidReceipt && !isDeliveryPlatform(paidReceipt.order.channel) && (

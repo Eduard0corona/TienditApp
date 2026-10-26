@@ -8,7 +8,7 @@ namespace FoodParkDigital.Domain.Fiscal.Entities;
 /// How a business invoices (Fase 28A, ADR 0045): the serie of its invoices, of its payment complements (Fase 28C) and of its
 /// credit notes (Fase 28D), and the CSD (certificado de sello digital) its CFDI are sealed with. TienditApp checks the CSD and
 /// hands it to the PAC, which keeps it: here only what identifies it is kept (number, RFC, validity, who uploaded it), never
-/// its private key or password.
+/// its private key or password. And whether its customers invoice their tickets online (Fase 28F, ADR 0050).
 /// </summary>
 public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenantScoped
 {
@@ -43,6 +43,15 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
     public DateTimeOffset? CertificateValidTo { get; private set; }
     public DateTimeOffset? CertificateUploadedAt { get; private set; }
     public Guid? CertificateUploadedByUserId { get; private set; }
+
+    /// <summary>Whether its customers invoice their tickets online, with the folio and code the ticket prints (Fase 28F).</summary>
+    public bool SelfInvoicing { get; private set; }
+
+    /// <summary>
+    /// The key of its tickets' codes (<see cref="SelfInvoiceCode"/>): created the first time self-invoicing is turned on and
+    /// kept when it is turned off, so the tickets already printed work again when it is turned back on. Never shown.
+    /// </summary>
+    public byte[]? SelfInvoiceKey { get; private set; }
 
     public byte[] Version { get; private set; } = null!;
 
@@ -110,6 +119,24 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
     {
         CreditNoteSerie = Cfdi.NormalizeSerie(serie, "las notas de crédito");
     }
+
+    /// <summary>Its customers invoice their tickets online from now on; the first time, with a new key.</summary>
+    public void TurnOnSelfInvoicing()
+    {
+        SelfInvoiceKey ??= SelfInvoiceCode.NewKey();
+        SelfInvoicing = true;
+    }
+
+    /// <summary>Only the business invoices again; the key stays, and so do the invoices its customers already have.</summary>
+    public void TurnOffSelfInvoicing() => SelfInvoicing = false;
+
+    /// <summary>The code the ticket of an order prints while self-invoicing is on; null when it is off.</summary>
+    public string? SelfInvoiceCodeFor(Guid orderId)
+        => SelfInvoicing && SelfInvoiceKey is not null ? SelfInvoiceCode.For(SelfInvoiceKey, orderId) : null;
+
+    /// <summary>Whether a customer can invoice the order with what they typed: self-invoicing is on and it is its code.</summary>
+    public bool TakesSelfInvoiceCode(Guid orderId, string? typed)
+        => SelfInvoicing && SelfInvoiceKey is not null && SelfInvoiceCode.Matches(SelfInvoiceKey, orderId, typed);
 
     /// <summary>Whether its CSD seals now for the business's RFC.</summary>
     public bool CanSealFor(string? rfc, DateTimeOffset now)

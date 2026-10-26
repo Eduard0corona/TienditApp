@@ -77,6 +77,8 @@ export default function OrderInvoiceList({ orderId, invoices, canCancel, liveRel
                 {invoice.paymentMethod === 'PPD' && ' · en parcialidades (PPD)'}
               </span>
             </div>
+            {/* Fase 28F: the customer invoiced the ticket on the business's page. */}
+            {invoice.requestedByCustomer && <div className="small text-muted mt-1">La pidió el cliente en línea con su ticket.</div>}
             {invoice.uuid && (
               <div className="small text-muted mt-1">
                 Folio fiscal <span className="ta-money">{invoice.uuid}</span>

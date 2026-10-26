@@ -19,7 +19,7 @@ const TOO_MANY = 'F-1 ya se envió 5 veces hoy: revisa el correo con el cliente 
 function email(overrides: Partial<CfdiEmail> = {}): CfdiEmail {
   return {
     id: 'e-1', document: CfdiEmailDocument.Invoice, cfdiId: 'inv-1', to: 'karla@ejemplo.mx', requestedAt: '2026-10-26T17:55:00Z',
-    byTienditApp: true, sentAt: null, sentWithoutPdf: false, failedAt: null, failure: undefined, failedAttempts: 0,
+    byTienditApp: true, byCustomer: false, sentAt: null, sentWithoutPdf: false, failedAt: null, failure: undefined, failedAttempts: 0,
     lastFailedAttemptAt: null, ...overrides,
   };
 }
@@ -59,6 +59,18 @@ describe('CfdiEmailStatus', () => {
 
     rerender(<CfdiEmailStatus emails={[email({ sentAt: '2026-10-26T17:56:00Z', sentWithoutPdf: true })]} />);
     expect(screen.getByText(/solo con el XML: el PDF no estuvo disponible\./)).toBeInTheDocument();
+
+    // The customer asked for it on the page of the ticket (Fase 28F).
+    rerender(<CfdiEmailStatus emails={[email({ sentAt: '2026-10-26T17:56:00Z', byTienditApp: false, byCustomer: true })]} />);
+    expect(screen.getByText(/Lo pidió el cliente en línea\.$/)).toBeInTheDocument();
+    // Also while it goes, and when it did not (an address the customer typed wrong).
+    rerender(<CfdiEmailStatus emails={[email({ byTienditApp: false, byCustomer: true })]} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/Enviándose por correo a karla@ejemplo\.mx… Lo pidió el cliente en línea\.$/);
+    rerender(<CfdiEmailStatus emails={[email({
+      byTienditApp: false, byCustomer: true, failedAt: '2026-10-26T17:56:00Z', failure: CfdiEmailFailure.Rejected,
+    })]} />);
+    expect(screen.getByText(/el servidor de correo lo rechazó\. Revisa la dirección con el cliente\. Lo pidió el cliente en línea\.$/))
+      .toBeInTheDocument();
   });
 
   it('says why it was not sent', () => {
