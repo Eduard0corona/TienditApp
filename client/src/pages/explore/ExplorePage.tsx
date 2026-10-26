@@ -1,8 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
-import { publicDirectoryApi, type DirectoryBusiness, type DirectorySearch } from '../../api/publicDirectoryApi';
+import { publicDirectoryApi, type DirectoryBusiness, type DirectorySearch, type PublicDirectory } from '../../api/publicDirectoryApi';
 import DirectoryBusinessCard from '../../components/explore/DirectoryBusinessCard';
 import DirectoryProducts from '../../components/explore/DirectoryProducts';
 import FavoriteBusinesses from '../../components/explore/FavoriteBusinesses';
@@ -46,8 +46,13 @@ function BusinessList({ businesses, favorites }: { businesses: DirectoryBusiness
   );
 }
 
-/** A page after the first, asked when the customer wants more. */
-function MoreBusinesses({ search, pageNumber, favorites }: { search: DirectorySearch; pageNumber: number; favorites: Favorites }) {
+/** A page after the first, asked when the customer wants more; without the businesses «Tus favoritos» shows. */
+function MoreBusinesses({ search, pageNumber, inFavorites, favorites }: {
+  search: DirectorySearch;
+  pageNumber: number;
+  inFavorites: Set<string>;
+  favorites: Favorites;
+}) {
   const page = useQuery({
     queryKey: ['directory', search, pageNumber],
     queryFn: ({ signal }) => publicDirectoryApi.getDirectory({ ...search, pageNumber }, signal),
@@ -61,8 +66,25 @@ function MoreBusinesses({ search, pageNumber, favorites }: { search: DirectorySe
       </div>
     );
   }
-  const businesses = page.data?.businesses.items ?? [];
+  const businesses = (page.data?.businesses.items ?? []).filter((business) => !inFavorites.has(business.slug));
   return businesses.length > 0 ? <div className="mt-3"><BusinessList businesses={businesses} favorites={favorites} /></div> : null;
+}
+
+/**
+ * The pages «Ver más» added that arrived (each page asks for itself), and how many of these businesses they have: what
+ * `useQueries` would tell, over the query client the first visit already loads, so its code stays out of that visit.
+ */
+function useMorePagesArrived(search: DirectorySearch, pagesShown: number, slugs: Set<string>): { pages: number; found: number } {
+  const client = useQueryClient();
+  const subscribe = (notify: () => void) => client.getQueryCache().subscribe(notify);
+  const arrived = () => Array.from({ length: pagesShown - 1 }, (_, index) => index + 2)
+    .map((pageNumber) => client.getQueryData<PublicDirectory>(['directory', search, pageNumber]))
+    .filter((page) => page !== undefined);
+  const pages = useSyncExternalStore(subscribe, () => arrived().length);
+  const found = useSyncExternalStore(subscribe, () => arrived()
+    .flatMap((page) => page.businesses.items)
+    .filter((business) => slugs.has(business.slug)).length);
+  return { pages, found };
 }
 
 /**
@@ -168,7 +190,8 @@ function NearMeChip({ near, onToggle, onRetry }: { near: NearMe; onToggle: () =>
  * it orders as it always did. The search lives in the address (?q=), so a search can be shared. With the customer's
  * postal code each card says whether it delivers there, and a cart left without sending is a tap away (Fase 24B). A
  * search also finds the products of the menus, and a customer keeps the businesses they like, first on the page
- * (Fase 24F). «Cerca de mí» (?cerca=1) shows the nearest first, each card saying how far it is (Fase 24G).
+ * (Fase 24F) and not again in the list below. «Cerca de mí» (?cerca=1) shows the nearest first, each card saying how far
+ * it is (Fase 24G).
  */
 export default function ExplorePage() {
   const searchId = useId();
@@ -243,14 +266,52 @@ export default function ExplorePage() {
   const searchKey = JSON.stringify(search);
   const [more, setMore] = useState({ searchKey, pages: 1 });
   const pagesShown = more.searchKey === searchKey ? more.pages : 1;
+  // «Tus favoritos» goes first while there is no search or category, and its businesses leave the list below: one comes
+  // back to it when taken out.
+  const favoritesFirst = !query.trim() && !category;
+  const inFavorites = new Set(favoritesFirst ? favorites.favorites.map((favorite) => favorite.slug) : []);
+  const morePages = useMorePagesArrived(search, pagesShown, inFavorites);
+
+  // A business kept from the list leaves it for «Tus favoritos»: the focus its heart took with it goes to the heart of the
+  // card that takes its place (or of the one before, or to «Tus favoritos» when none is left), not to the top of the page.
+  const pageRef = useRef<HTMLDivElement>(null);
+  const leaving = useRef<{ slug: string; hearts: (HTMLElement | undefined)[] } | null>(null);
+  useEffect(() => {
+    const left = leaving.current;
+    if (!left || !inFavorites.has(left.slug)) return;
+    leaving.current = null;
+    if (document.activeElement !== document.body) return;
+    const next = left.hearts.find((heart) => heart?.isConnected);
+    (next ?? pageRef.current?.querySelector<HTMLElement>('.ex-favorites .ex-section-title'))?.focus();
+  });
 
   // An address with a category that does not exist goes to all of them.
   if (categoria && !category) return <Navigate to="/explorar" replace />;
 
+  const listHearts: Favorites = {
+    ...favorites,
+    toggle: (slug) => {
+      const hearts = [...(pageRef.current?.querySelectorAll<HTMLElement>('.ex-results .dc-favorite') ?? [])];
+      const at = hearts.findIndex((heart) => heart === document.activeElement);
+      // Only a heart with the focus takes it away with its card (a click on Safari does not give it the focus).
+      if (favoritesFirst && at >= 0 && !favorites.isSaved(slug) && !favorites.isBusy(slug)) {
+        leaving.current = { slug, hearts: [hearts[at + 1], hearts[at - 1]] };
+      }
+      favorites.toggle(slug);
+    },
+  };
   const first = directory.data;
-  const firstItems = first?.businesses.items ?? [];
+  const firstItems = (first?.businesses.items ?? []).filter((business) => !inFavorites.has(business.slug));
   const products = first?.products ?? [];
   const total = first?.businesses.totalCount ?? 0;
+  // The favorites that show in Explorar are among its businesses: the list counts without them, and «Ver más» without
+  // those past the pages shown. One not found yet may be in a page on its way: until it arrives, it counts there (the
+  // button does not leave while the customer waits on it).
+  const favoritesListed = favoritesFirst ? favorites.favorites.filter((favorite) => favorite.card).length : 0;
+  const listed = Math.max(0, total - favoritesListed);
+  const favoritesFound = (first?.businesses.items.length ?? 0) - firstItems.length + morePages.found;
+  const pagesOnTheirWay = pagesShown - 1 - morePages.pages;
+  const favoritesAhead = Math.max(0, favoritesListed - favoritesFound - pagesOnTheirWay * PAGE_SIZE);
   const counts = new Map((first?.categories ?? []).map((item) => [item.category, item.count]));
   const anyListed = [...counts.values()].some((count) => count > 0);
   const chips = BUSINESS_CATEGORIES.filter((item) => (counts.get(item.value) ?? 0) > 0 || item.value === category?.value);
@@ -259,11 +320,11 @@ export default function ExplorePage() {
   if (query.trim()) kept.set('q', query.trim());
   if (nearOn) kept.set('cerca', '1');
   const searchSuffix = kept.toString() ? `?${kept.toString()}` : '';
-  const hasMore = pagesShown < (first?.businesses.totalPages ?? 0);
-  const remaining = Math.max(0, total - pagesShown * PAGE_SIZE);
+  const remaining = Math.max(0, total - pagesShown * PAGE_SIZE - favoritesAhead);
+  const hasMore = pagesShown < (first?.businesses.totalPages ?? 0) && remaining > 0;
 
   return (
-    <div className="ex-page">
+    <div ref={pageRef} className="ex-page">
       <section className="ex-hero" aria-labelledby="explore-title">
         <h1 id="explore-title" className="ex-title">{category ? category.label : 'Compra en los negocios de tu ciudad'}</h1>
         <p className="ex-lead">Pide en línea a los que reciben pedidos ahora, o mira el menú de los demás.</p>
@@ -323,19 +384,19 @@ export default function ExplorePage() {
         </nav>
       )}
 
-      {!query.trim() && !category && <FavoriteBusinesses favorites={favorites} />}
+      {favoritesFirst && <FavoriteBusinesses favorites={favorites} />}
 
       {products.length > 0 && <DirectoryProducts products={products} />}
 
-      {/* Products found and no business: the products are the results. */}
-      {!(directory.isSuccess && total === 0 && products.length > 0) && (
+      {/* Products found and no business: the products are the results. Every business among the favorites: those are. */}
+      {!(directory.isSuccess && ((total === 0 && products.length > 0) || (total > 0 && listed === 0))) && (
         <section
           className="ex-results"
           aria-labelledby="explore-results"
           aria-busy={directory.isLoading || (directory.isPlaceholderData && directory.isFetching)}
         >
           <h2 id="explore-results" className={products.length > 0 ? 'ex-section-title' : 'visually-hidden'}>Negocios</h2>
-          <p className="ex-count" aria-live="polite">{directory.isSuccess && total > 0 ? countLabel(total) : ''}</p>
+          <p className="ex-count" aria-live="polite">{directory.isSuccess && listed > 0 ? countLabel(listed) : ''}</p>
 
           {directory.isLoading && (
             <ul className="ex-grid" aria-hidden="true">
@@ -379,9 +440,9 @@ export default function ExplorePage() {
             </div>
           )}
 
-          {firstItems.length > 0 && <BusinessList businesses={firstItems} favorites={favorites} />}
+          {firstItems.length > 0 && <BusinessList businesses={firstItems} favorites={listHearts} />}
           {Array.from({ length: pagesShown - 1 }, (_, index) => (
-            <MoreBusinesses key={index + 2} search={search} pageNumber={index + 2} favorites={favorites} />
+            <MoreBusinesses key={index + 2} search={search} pageNumber={index + 2} inFavorites={inFavorites} favorites={listHearts} />
           ))}
 
           {hasMore && (

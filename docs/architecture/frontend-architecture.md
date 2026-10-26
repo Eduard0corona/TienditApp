@@ -537,7 +537,12 @@ Productos y favoritos en Explorar (Fase 24F, [ADR 0028](../adr/0028-product-sear
   - se muestra arriba de Explorar sin búsqueda ni categoría;
   - en un teléfono es una fila que se desliza (`useScrollFade`); desde 768 px, una cuadrícula con las primeras 6 y «Ver todos tus favoritos (N)»;
   - un negocio que ya no aparece en Explorar queda como una ficha con su nombre y «No aparece en Explorar ahora»;
-  - quitar uno desde aquí lleva el foco al título.
+  - quitar uno desde aquí lleva el foco al título;
+  - **sus negocios no se repiten abajo** (`ExplorePage`):
+    - la lista deja fuera los slugs de la lista de favoritos que ya llegó del servidor, no los del corazón que va en camino: un negocio pasa de la lista a la fila en el mismo momento, y al quitarlo vuelve en el mismo momento (`setQueriesData`);
+    - «N negocios» resta los favoritos con tarjeta, y «Ver más negocios (N)» los que no salieron en las páginas pedidas. Cada página de «Ver más» se sigue pidiendo sola; la página lee del caché las que llegaron (`useMorePagesArrived`, con `useSyncExternalStore` sobre el query client, como `useSavingInventoryCount`), porque `useQueries` sumaba 979 B a la primera visita. Mientras una página va en camino, un favorito que no ha salido cuenta como si estuviera en ella, así el botón no se va (con su foco) mientras se espera;
+    - con todos los negocios entre los favoritos no se muestra la región «Negocios» (tampoco la página que dice que no hay negocios);
+    - guardar uno desde la lista lleva el foco al corazón del negocio que toma su lugar, o al título de «Tus favoritos» si no queda ninguno, solo cuando el foco se fue con la tarjeta.
 - **La tienda** (`pages/public/PublicMenuPage`, `components/store/StoreHero`):
   - el corazón va sobre la portada (`pm-round`), salvo en una mesa, donde tampoco se piden los favoritos;
   - `?producto=` abre la hoja del producto una vez, con el menú ya al día (`!isFetching`);
