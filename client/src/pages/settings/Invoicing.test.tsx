@@ -143,3 +143,34 @@ describe('Invoicing settings', () => {
     expect(screen.getByText('Listo para facturar')).toBeInTheDocument();
   });
 });
+
+describe('Autofactura', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('turns on only while the business can invoice, and then shows the page for its customers', async () => {
+    const write = vi.fn((_method: string, _path: string, body: unknown) =>
+      Promise.resolve({ ...WITH_CERTIFICATE, selfInvoicing: (body as { on: boolean }).on }));
+    serve(WITH_CERTIFICATE, write);
+    renderPage();
+
+    const toggle = await screen.findByRole('switch', { name: 'Autofactura activa' });
+    expect(toggle).toBeEnabled();
+    expect(screen.queryByText(/Dirección para facturar/)).not.toBeInTheDocument();
+    await userEvent.click(toggle);
+
+    await waitFor(() => expect(write).toHaveBeenCalledWith('put', '/api/v1/invoicing/settings/self-invoicing', { on: true }));
+    expect(toast.success).toHaveBeenCalledWith('Autofactura activa: tus tickets traen el folio y el código para facturar en línea.');
+    expect(await screen.findByRole('link', { name: `${window.location.origin}/m/demo/facturar` })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Autofactura activa' })).toBeChecked();
+  });
+
+  it('cannot be turned on while the business cannot invoice', async () => {
+    serve(READY_TO_UPLOAD);
+    renderPage();
+
+    expect(await screen.findByRole('switch', { name: 'Autofactura activa' })).toBeDisabled();
+    expect(screen.getByText('Para activarla, tu negocio debe poder facturar: completa Mi negocio y sube tu CSD.')).toBeInTheDocument();
+  });
+});

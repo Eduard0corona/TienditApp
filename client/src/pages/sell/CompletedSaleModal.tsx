@@ -3,6 +3,7 @@ import { Modal } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { chatApi } from '../../api/chatApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useOrderSelfInvoice } from '../../api/invoicing';
 import SaleTicket from '../../components/sales/SaleTicket';
 import { useToast } from '../../hooks/useToast';
 import { PlatformCollectedBy } from '../../types';
@@ -34,6 +35,9 @@ export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOr
   const titleId = useId();
   const toast = useToast();
   const [sendingToChat, setSendingToChat] = useState(false);
+  // The folio and code to invoice it online, while the business has self-invoicing on (Fase 28F); a sale recorded without
+  // connection has no folio of the server yet.
+  const selfInvoice = useOrderSelfInvoice(sale?.order.id ?? '', !!sale && !sale.offline).data;
   const ticketText = sale ? buildTicketText(sale.order, { businessName, provisional: sale.offline }) : '';
   const change = sale ? getTicketPaymentTotals(sale.order).change : 0;
   const platform = sale && isDeliveryPlatform(sale.order.channel) ? sale.order.channel : null;
@@ -97,7 +101,7 @@ export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOr
                 <strong className="ta-money">{formatMoney(change)}</strong>
               </div>
             )}
-            <SaleTicket order={sale.order} businessName={businessName} logoUrl={logoUrl} provisional={sale.offline} />
+            <SaleTicket order={sale.order} businessName={businessName} logoUrl={logoUrl} provisional={sale.offline} selfInvoice={selfInvoice} />
           </>
         )}
       </Modal.Body>

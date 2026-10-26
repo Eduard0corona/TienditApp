@@ -7,7 +7,8 @@ import { CfdiCancellationMotive, CfdiEmailDocument, CreditNoteAdjustment, Global
 // Invoicing (Fase 28A, ADR 0045): Configuración › Facturación and the invoice of an order; the global invoice of a period
 // (Fase 28B, ADR 0046) in Reportes › Factura global; the payment complements of an invoice in installments (Fase 28C,
 // ADR 0047); the credit notes of an invoiced order's refunds and write-offs (Fase 28D, ADR 0048); and the emails of those
-// CFDI to the customer (Fase 28E, ADR 0049). Kept out of queries.ts, which the first visit loads.
+// CFDI to the customer (Fase 28E, ADR 0049); and self-invoicing, turned on here and printed on each ticket (Fase 28F,
+// ADR 0050). Kept out of queries.ts, which the first visit loads.
 
 export type InvoicingSettings = Schemas['InvoicingSettingsDto'];
 export type OrderInvoicing = Schemas['OrderInvoicingDto'];
@@ -20,6 +21,7 @@ export type CfdiEmail = Schemas['CfdiEmailDto'];
 export type GlobalInvoice = Schemas['GlobalInvoiceDto'];
 export type GlobalInvoiceDetail = Schemas['GlobalInvoiceDetailDto'];
 export type GlobalInvoiceDraft = Schemas['GlobalInvoiceDraftDto'];
+export type OrderSelfInvoice = Schemas['OrderSelfInvoiceDto'];
 
 export const invoicingSettingsKey = ['invoicing', 'settings'] as const;
 export const orderInvoicingKey = (orderId: string) => ['invoicing', 'orders', orderId] as const;
@@ -78,6 +80,26 @@ export function useRemoveInvoicingCertificate() {
 export function useChangeInvoiceSerie() {
   return useSettingsChange((body: { serie: string; paymentSerie: string; creditNoteSerie: string }) =>
     apiRequest('put', '/api/v1/invoicing/settings/serie', { body }));
+}
+
+/** Self-invoicing on (only while the business can invoice) or off; off keeps the codes the tickets already printed. */
+export function useSetSelfInvoicing() {
+  return useSettingsChange((on: boolean) => apiRequest('put', '/api/v1/invoicing/settings/self-invoicing', { body: { on } }));
+}
+
+/**
+ * What the order's ticket prints for self-invoicing (its folio and code), or null while it is off or for a sale that is not
+ * invoiced online (the API answers nothing, 204). A ticket printed without it is still a ticket: an error is null too.
+ */
+export function useOrderSelfInvoice(orderId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['invoicing', 'orders', orderId, 'self-invoice'] as const,
+    queryFn: async ({ signal }): Promise<OrderSelfInvoice | null> =>
+      (await apiRequest('get', '/api/v1/invoicing/orders/{orderId}/self-invoice', { path: { orderId }, signal })) || null,
+    enabled,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
 }
 
 /**

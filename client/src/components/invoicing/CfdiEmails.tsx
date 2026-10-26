@@ -30,6 +30,7 @@ export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
         <i className="ri-mail-check-line me-1" aria-hidden="true"></i>
         Se envió por correo a {latest.to} el {formatDateTime(latest.sentAt)}
         {latest.sentWithoutPdf ? ', solo con el XML: el PDF no estuvo disponible.' : '.'}
+        {latest.byCustomer && ' Lo pidió el cliente en línea.'}
       </p>
     );
   }

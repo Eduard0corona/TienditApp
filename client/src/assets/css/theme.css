@@ -748,6 +748,19 @@
   object-fit: contain;
 }
 
+/* «Factura en línea» (Fase 28F): its QR, readable from a 58 mm roll. */
+.ta-ticket-self-invoice {
+  border-top: 1px dashed currentColor;
+  padding-top: 0.5rem;
+}
+
+.ta-ticket-qr {
+  display: block;
+  width: 7rem;
+  height: 7rem;
+  margin: 0.25rem auto;
+}
+
 .ta-ticket-lines {
   width: 100%;
   margin-bottom: 0.5rem;

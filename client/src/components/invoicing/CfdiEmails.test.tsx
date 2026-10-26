@@ -59,6 +59,10 @@ describe('CfdiEmailStatus', () => {
 
     rerender(<CfdiEmailStatus emails={[email({ sentAt: '2026-10-26T17:56:00Z', sentWithoutPdf: true })]} />);
     expect(screen.getByText(/solo con el XML: el PDF no estuvo disponible\./)).toBeInTheDocument();
+
+    // The customer asked for it on the page of the ticket (Fase 28F).
+    rerender(<CfdiEmailStatus emails={[email({ sentAt: '2026-10-26T17:56:00Z', byTienditApp: false, byCustomer: true })]} />);
+    expect(screen.getByText(/Lo pidió el cliente en línea\.$/)).toBeInTheDocument();
   });
 
   it('says why it was not sent', () => {

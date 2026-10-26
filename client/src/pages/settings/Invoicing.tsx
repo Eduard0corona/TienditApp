@@ -6,9 +6,11 @@ import {
   useChangeInvoiceSerie,
   useInvoicingSettings,
   useRemoveInvoicingCertificate,
+  useSetSelfInvoicing,
   useUploadInvoicingCertificate,
   type InvoicingSettings,
 } from '../../api/invoicing';
+import { selfInvoiceUrl } from '../../api/selfInvoiceApi';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import { formatDate } from '../../utils/dates';
@@ -26,8 +28,8 @@ async function toBase64(file: File): Promise<string> {
 
 /**
  * Configuración › Facturación (Fase 28A, ADR 0045), for owners and admins: what the invoice of an order needs from the
- * business (its fiscal data in Mi negocio and its CSD, which the platform's PAC keeps), the serie of its invoices and the
- * one of its payment complements (Fase 28C, ADR 0047).
+ * business (its fiscal data in Mi negocio and its CSD, which the platform's PAC keeps), whether its customers invoice their
+ * tickets online (Fase 28F, ADR 0050), the serie of its invoices and the one of its payment complements (Fase 28C, ADR 0047).
  */
 export default function Invoicing() {
   const settings = useInvoicingSettings();
@@ -55,6 +57,7 @@ export default function Invoicing() {
           <div className="col-lg-7">
             <StatusCard data={data} />
             <CertificateCard data={data} />
+            <SelfInvoicingCard data={data} />
             <SerieCard data={data} />
           </div>
           <div className="col-lg-5">
@@ -82,6 +85,10 @@ export default function Invoicing() {
                   <li>
                     Cada reembolso y cada condonación de un pedido facturado lleva su nota de crédito, que TienditApp emite por su
                     cuenta. El dueño o un administrador la cancela.
+                  </li>
+                  <li>
+                    Con la autofactura activa, tus clientes facturan su compra en línea con el folio y el código de su ticket, hasta
+                    el último día del mes en que la pagaron.
                   </li>
                   <li>Las ventas a público en general van en la factura global (Reportes › Factura global).</li>
                   <li>Tu llave privada y su contraseña las guarda el PAC; TienditApp solo guarda el número y la vigencia del CSD.</li>
@@ -246,6 +253,46 @@ function CertificateCard({ data }: { data: InvoicingSettings }) {
 // As the API takes a serie: 1 to 10 letters or digits (spaces around are trimmed).
 const SERIE_PATTERN = '\\s*[A-Za-z0-9]{1,10}\\s*';
 const SERIE_HINT = 'De 1 a 10 letras o números, sin espacios ni guiones.';
+
+function SelfInvoicingCard({ data }: { data: InvoicingSettings }) {
+  const toast = useToast();
+  const change = useSetSelfInvoicing();
+  const url = selfInvoiceUrl(data.selfInvoicePath);
+
+  const toggle = async (on: boolean) => {
+    try {
+      await change.mutateAsync(on);
+      toast.success(on
+        ? 'Autofactura activa: tus tickets traen el folio y el código para facturar en línea.'
+        : 'Apagaste la autofactura: solo tu negocio factura. Los tickets impresos vuelven a servir si la activas otra vez.');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo cambiar la autofactura.'));
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-body">
+        <h2 className="h5">Autofactura</h2>
+        <div className="form-check form-switch">
+          <input id="self-invoicing" className="form-check-input" type="checkbox" role="switch" checked={data.selfInvoicing}
+            disabled={change.isPending || (!data.selfInvoicing && !data.ready)} onChange={(event) => toggle(event.target.checked)} />
+          <label className="form-check-label" htmlFor="self-invoicing">Autofactura activa</label>
+        </div>
+        <p className="small mt-2 mb-2">
+          Tus clientes facturan su compra en línea con el folio y el código que imprime cada ticket, y les llegan el XML y el PDF
+          por correo. Pueden hacerlo hasta el último día del mes en que pagaron; después, te la piden a ti.
+        </p>
+        {!data.selfInvoicing && !data.ready && (
+          <p className="small text-muted mb-0">Para activarla, tu negocio debe poder facturar: completa Mi negocio y sube tu CSD.</p>
+        )}
+        {data.selfInvoicing && (
+          <p className="small mb-0">Dirección para facturar: <a href={url} target="_blank" rel="noreferrer">{url}</a></p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SerieCard({ data }: { data: InvoicingSettings }) {
   const toast = useToast();
