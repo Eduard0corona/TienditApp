@@ -262,9 +262,12 @@ public class CfdiEmailFlowTests
         Assert.False(invoice.HasPdf);
         var email = await book.Context.CfdiEmails.SingleAsync();
 
-        // The first waits for the PDF the stamp keeps; the next one asks the PAC for it.
-        for (var attempt = 1; attempt <= CfdiEmailRequestedHandler.AttemptsWaitingForPdf; attempt++)
-            await Assert.ThrowsAsync<InvalidOperationException>(() => book.DeliverAsync(email.Id, attempt));
+        // The first waits for the PDF the stamp keeps, without asking the PAC; the next one asks it.
+        var asked = book.Gateway.PdfRequests;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => book.DeliverAsync(email.Id, attempt: 1));
+        Assert.Equal(asked, book.Gateway.PdfRequests);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => book.DeliverAsync(email.Id, attempt: CfdiEmailRequestedHandler.AttemptsWaitingForPdf));
+        Assert.Equal(asked + 1, book.Gateway.PdfRequests);
         // Waiting is not a try the mail server refused.
         var waiting = await book.Context.CfdiEmails.AsNoTracking().SingleAsync();
         Assert.Equal((0, true), (waiting.FailedAttempts, waiting.IsPending));

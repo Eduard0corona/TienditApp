@@ -33,6 +33,8 @@ internal sealed class FakeInvoicingGateway : IInvoicingGateway
     public List<(string IssuerRfc, string Uuid, CfdiCancellationMotive Motive)> Cancellations { get; } = [];
     public List<CfdiStatusQuery> StatusQueries { get; } = [];
     public int PdfRenders { get; private set; }
+    /// <summary>Every time a PDF was asked for, given or not.</summary>
+    public int PdfRequests { get; private set; }
 
     public Task SaveCertificateAsync(byte[] certificate, byte[] privateKey, string password, CancellationToken cancellationToken)
     {
@@ -74,6 +76,7 @@ internal sealed class FakeInvoicingGateway : IInvoicingGateway
 
     public Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken)
     {
+        PdfRequests++;
         ThrowIfUnavailable();
         if (PdfUnavailable)
             throw new InvoicingGatewayUnavailableException("El PDF no está listo.");
