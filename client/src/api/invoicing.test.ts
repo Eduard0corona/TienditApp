@@ -122,6 +122,16 @@ describe('isOrderInvoicingWaiting', () => {
     expect(isOrderInvoicingWaiting({ invoices: stamped, payments: [], adjustments: [adjustment({ creditNotes: [note(OrderInvoiceStatus.Cancelling)] })] }))
       .toBe(true);
   });
+
+  it('reads again while a replaced invoice waits for its cancellation with relation, not once it says why it did not go (Fase 28G)', () => {
+    const replaced = (failureMessage: string | null) =>
+      ({ status: OrderInvoiceStatus.Stamped, emails: [], replacedByInvoiceId: 'inv-2', failureMessage }) as unknown as OrderInvoicing['invoices'][number];
+    const replacement = invoice(OrderInvoiceStatus.Stamped);
+
+    expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(null)], payments: [], adjustments: [] })).toBe(true);
+    expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced('El SAT todavía no relaciona esta factura.')], payments: [], adjustments: [] }))
+      .toBe(false);
+  });
 });
 
 describe('mayPrintSelfInvoice', () => {

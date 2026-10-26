@@ -20,6 +20,7 @@ const F3: Invoice = {
   paymentForm: '03', paymentMethod: 'PUE', subTotal: 172.41, taxTotal: 27.59, total: 200, requestedAt: '2026-10-24T16:00:00Z',
   uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: '2026-10-24T16:00:05Z', hasXml: true, hasPdf: true,
   failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [], requestedByCustomer: false,
+  canSubstitute: false,
 };
 
 const NC1: Note = {

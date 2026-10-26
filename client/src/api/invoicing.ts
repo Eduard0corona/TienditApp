@@ -145,7 +145,7 @@ export function useOrderInvoicing(orderId: string) {
  */
 export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments' | 'adjustments'>): boolean {
   const waits = (cfdi: Pick<OrderInvoice, 'status' | 'emails'>) => isWaiting(cfdi) || isEmailOnItsWay(cfdi.emails[0]);
-  return data.invoices.some(waits)
+  return data.invoices.some((invoice) => waits(invoice) || awaitsReplacedCancellation(invoice))
     || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some(waits))
     || data.adjustments.some((adjustment) => adjustment.awaitsAutomaticIssue || adjustment.creditNotes.some(waits));
 }
@@ -168,6 +168,16 @@ export function useCfdiDraft(orderId: string, receiver?: CfdiReceiver, enabled =
     retry: false,
     enabled,
   });
+}
+
+/**
+ * Another invoice replaces this one and nothing went wrong yet: TienditApp asks the SAT to cancel it with motive 01 as soon
+ * as the replacement is stamped (Fase 28G). With a reason, it waits for the worker's next tries or for a person.
+ */
+export function awaitsReplacedCancellation(
+  invoice: Pick<OrderInvoice, 'status' | 'replacedByInvoiceId' | 'failureMessage'>,
+): boolean {
+  return !!invoice.replacedByInvoiceId && invoice.status === OrderInvoiceStatus.Stamped && !invoice.failureMessage;
 }
 
 /** «Timbrando» waits for the PAC; «Cancelándose», for the SAT. */
@@ -204,6 +214,25 @@ export function useRetryOrderInvoice(orderId: string) {
 export function useCancelOrderInvoice(orderId: string) {
   return useInvoiceChange(orderId, ({ invoiceId, motive }: { invoiceId: string; motive: CfdiCancellationMotive }) =>
     apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/cancel', { path: { invoiceId }, body: { motive } }));
+}
+
+/**
+ * «Sustituir factura» (Fase 28G, ADR 0051): a new invoice of the order with the data written now, related to the stamped
+ * one with errors (04). Answers the new one; once it is stamped, the old one is cancelled with motive 01.
+ */
+export function useSubstituteOrderInvoice(orderId: string) {
+  return useInvoiceChange(orderId, ({ invoiceId, ...body }: {
+    invoiceId: string;
+    receiver: CfdiReceiver;
+    saveToCustomer: boolean;
+    receiverEmail?: string | null;
+  }) => apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/substitute', { path: { invoiceId }, body }));
+}
+
+/** «Cancelar con relación»: asks the SAT again to cancel with motive 01 an invoice whose replacement is stamped. */
+export function useCancelReplacedOrderInvoice(orderId: string) {
+  return useInvoiceChange(orderId, (invoiceId: string) =>
+    apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/cancel-replaced', { path: { invoiceId } }));
 }
 
 /**

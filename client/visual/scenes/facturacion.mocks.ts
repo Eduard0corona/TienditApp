@@ -71,6 +71,7 @@ function invoice(data: DemoData, folio: number, fields: Record<string, unknown>)
     paymentForm: '03', paymentMethod: 'PUE', subTotal, taxTotal: r2(order.total - subTotal), total: order.total,
     requestedAt: minutesFromNow(-50), uuid: null, stampedAt: null, hasXml: false, hasPdf: false, failureMessage: null,
     refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, receiverEmail: null, emails: [], requestedByCustomer: false,
+    canSubstitute: false,
     ...fields,
   };
 }
