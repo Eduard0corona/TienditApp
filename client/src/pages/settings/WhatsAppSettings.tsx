@@ -397,77 +397,92 @@ export default function WhatsAppSettings() {
             </div>
           </div>
 
-          {/* Webhook Configuration Card */}
-          {config?.verifyToken && (
-            <div className="card border-success">
-              <div className="card-body">
-                <h4 className="header-title mt-0 mb-3">
-                  <i className="ri-webhook-line me-1"></i>
-                  Webhook para recibir mensajes
-                </h4>
-                <p className="text-muted mb-3">
-                  Configura estos datos en <strong>Meta for Developers &gt; WhatsApp &gt; Configuration &gt; Webhook</strong> para recibir mensajes de tus clientes.
-                </p>
+          {/* Webhook Configuration Card: always shown, since step 6 points here; the verify token exists after the first save */}
+          <div className={`card ${config?.verifyToken ? 'border-success' : ''}`}>
+            <div className="card-body">
+              <h4 className="header-title mt-0 mb-3">
+                <i className="ri-webhook-line me-1"></i>
+                Webhook para recibir mensajes
+              </h4>
+              <p className="text-muted mb-3">
+                Copia estos datos y pégalos en <strong>Meta for Developers &gt; WhatsApp &gt; Configuration &gt; Webhook</strong> para recibir mensajes de tus clientes.
+              </p>
 
-                <div className="mb-3">
-                  <label htmlFor="whatsappsettings-callback-url" className="form-label fw-semibold">URL de devolución de llamada (Callback URL)</label>
-                  <div className="input-group">
-                    <input id="whatsappsettings-callback-url"
-                      type="text"
-                      className="form-control font-monospace"
-                      value={`${window.location.origin}/api/v1/whatsapp/webhook`}
-                      readOnly
-                    />
-                    <button
-                      className="btn btn-outline-secondary"
-                      type="button"
-                      aria-label="Copiar la URL de devolución de llamada"
-                      onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/v1/whatsapp/webhook`)}
-                    >
-                      <i className="ri-clipboard-line" aria-hidden="true"></i>
-                    </button>
-                  </div>
-                  <small className="text-muted">
-                    URL pública donde Meta enviará los mensajes entrantes
-                  </small>
+              <div className="mb-3">
+                <label htmlFor="whatsappsettings-callback-url" className="form-label fw-semibold">URL de devolución de llamada (Callback URL)</label>
+                <div className="input-group">
+                  <input id="whatsappsettings-callback-url"
+                    type="text"
+                    className="form-control font-monospace"
+                    value={`${window.location.origin}/api/v1/whatsapp/webhook`}
+                    readOnly
+                  />
+                  <button
+                    className="btn btn-outline-secondary"
+                    type="button"
+                    aria-label="Copiar la URL de devolución de llamada"
+                    onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/v1/whatsapp/webhook`)}
+                  >
+                    <i className="ri-clipboard-line" aria-hidden="true"></i>
+                  </button>
                 </div>
+                <small className="text-muted">
+                  URL pública donde Meta enviará los mensajes entrantes
+                </small>
+              </div>
 
-                <div className="mb-3">
-                  <label htmlFor="whatsappsettings-verify-token" className="form-label fw-semibold">Token de verificación (Verify Token)</label>
-                  <div className="input-group">
+              <div className="mb-3">
+                <label htmlFor="whatsappsettings-verify-token" className="form-label fw-semibold">Token de verificación (Verify Token)</label>
+                {config?.verifyToken ? (
+                  <>
+                    <div className="input-group">
+                      <input id="whatsappsettings-verify-token"
+                        type="text"
+                        className="form-control font-monospace"
+                        value={config.verifyToken}
+                        readOnly
+                      />
+                      <button
+                        className="btn btn-outline-secondary"
+                        type="button"
+                        aria-label="Copiar el token de verificación"
+                        onClick={() => navigator.clipboard.writeText(config.verifyToken!)}
+                      >
+                        <i className="ri-clipboard-line" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                    <small className="text-muted">Token de verificación para el webhook de Meta</small>
+                  </>
+                ) : (
+                  <>
                     <input id="whatsappsettings-verify-token"
                       type="text"
-                      className="form-control font-monospace"
-                      value={config.verifyToken}
+                      className="form-control"
+                      value=""
+                      placeholder="Se crea al guardar la configuración"
                       readOnly
                     />
-                    <button
-                      className="btn btn-outline-secondary"
-                      type="button"
-                      aria-label="Copiar el token de verificación"
-                      onClick={() => navigator.clipboard.writeText(config.verifyToken!)}
-                    >
-                      <i className="ri-clipboard-line" aria-hidden="true"></i>
-                    </button>
-                  </div>
-                  <small className="text-muted">Token de verificación para el webhook de Meta</small>
-                </div>
+                    <small className="text-muted">
+                      Guarda la configuración (aunque todavía no habilites el envío) para crear tu token.
+                    </small>
+                  </>
+                )}
+              </div>
 
-                <div className="mb-0">
-                  <div className="form-label fw-semibold">Campos del webhook</div>
-                  <p className="text-muted mb-1">
-                    Suscribe el webhook al campo <code>messages</code> en Meta for Developers.
-                  </p>
-                </div>
+              <div className="mb-0">
+                <div className="form-label fw-semibold">Campos del webhook</div>
+                <p className="text-muted mb-1">
+                  Suscribe el webhook al campo <code>messages</code> en Meta for Developers.
+                </p>
+              </div>
 
-                <div className="alert alert-info mt-3 mb-0">
-                  <i className="ri-information-line me-1"></i>
-                  <strong>Importante:</strong> Tu servidor debe ser accesible desde internet (URL pública con HTTPS).
-                  En desarrollo puedes usar <code>ngrok</code> para exponer tu servidor local.
-                </div>
+              <div className="alert alert-info mt-3 mb-0">
+                <i className="ri-information-line me-1"></i>
+                <strong>Importante:</strong> Tu servidor debe ser accesible desde internet (URL pública con HTTPS).
+                En desarrollo puedes usar <code>ngrok</code> para exponer tu servidor local.
               </div>
             </div>
-          )}
+          </div>
 
           {/* Getting Started Card */}
           <div className="card">
@@ -500,7 +515,7 @@ export default function WhatsAppSettings() {
                   Genera un <strong>Access Token permanente</strong> en Configuración del Sistema &gt; Usuarios
                 </li>
                 <li className="mb-2">
-                  Guarda la configuración aquí, luego copia la <strong>Callback URL</strong> y el <strong>Verify Token</strong> de la sección &quot;Webhook&quot; a Meta &gt; WhatsApp &gt; Configuration
+                  Guarda la configuración aquí. Luego copia la <strong>Callback URL</strong> y el <strong>Verify Token</strong> de la sección &quot;Webhook para recibir mensajes&quot; y pégalos en Meta for Developers &gt; WhatsApp &gt; Configuration &gt; Webhook
                 </li>
                 <li className="mb-2">
                   Suscribe el webhook al campo <strong>messages</strong>
