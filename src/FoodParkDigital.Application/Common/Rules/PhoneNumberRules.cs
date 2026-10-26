@@ -12,13 +12,17 @@ public static class PhoneNumberRules
     /// <summary>
     /// The phone of a new account, in E.164. Without its international prefix (+ or 00) only a Mexican number is taken:
     /// the ten digits, or 52 and the ten. Any other length is a mistyped number, never one of another country that would
-    /// get the account's SMS codes (551234567 is not +551234567).
+    /// get the account's SMS codes (551234567 is not +551234567). Its digits are ASCII: the service keeps any Unicode
+    /// digit (٠, U+0660, counts as one for it).
     /// </summary>
     public static bool TryNormalizeSignUpPhone(
         IPhoneNormalizationService phones, string? rawPhone, [NotNullWhen(true)] out string? phoneNormalized)
     {
         phoneNormalized = null;
         var typed = rawPhone?.Trim() ?? string.Empty;
+        if (typed.Any(c => char.IsDigit(c) && !char.IsAsciiDigit(c)))
+            return false;
+
         if (!typed.StartsWith('+') && !typed.StartsWith("00", StringComparison.Ordinal))
         {
             var digits = new string(typed.Where(char.IsAsciiDigit).ToArray());

@@ -35,6 +35,8 @@ public class RegisterCustomerCommandTests
     // Without the +, a number that is not the ten digits is mistyped: 551234567 must not become +551234567, in Brazil.
     [InlineData("551234567")]
     [InlineData("12345678")]
+    // A digit that is not ASCII counts as one for the normalization service: it must never reach the account.
+    [InlineData("5512345678\u0660")]
     public async Task RegisterCustomer_ShouldNotPersistAnything_WhenThePhoneIsNotTenDigitsOrInternational(string phone)
     {
         await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");

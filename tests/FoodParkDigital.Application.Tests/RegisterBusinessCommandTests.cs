@@ -86,6 +86,9 @@ public class RegisterBusinessCommandTests
     [InlineData("551234567")]
     [InlineData("12345678")]
     [InlineData("55 1111 22223")]
+    // A digit that is not ASCII counts as one for the normalization service: it must never reach the account.
+    [InlineData("5512345678\u0660")]
+    [InlineData("+52 55 1234 567\u0660")]
     public async Task RegisterBusiness_ShouldNotPersistAnything_WhenThePhoneIsNotTenDigitsOrInternational(string phone)
     {
         await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
