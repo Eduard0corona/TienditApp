@@ -12,11 +12,11 @@ vi.mock('../../hooks/useToast', () => ({ useToast: () => toast }));
 
 const KARLA = { rfc: 'XIQB891116QE4', name: 'KARLA FUENTE NOLASCO', postalCode: '26015', fiscalRegime: '612', cfdiUse: 'G03' };
 
-function renderModal(fiscalData: typeof KARLA | null, onClose = vi.fn()) {
+function renderModal(fiscalData: typeof KARLA | null, onClose = vi.fn(), invoiceEmail: string | null = null) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <CustomerFiscalDataModal customer={{ id: 'c-1', name: 'Karla', fiscalData }} onClose={onClose} />
+      <CustomerFiscalDataModal customer={{ id: 'c-1', name: 'Karla', fiscalData, invoiceEmail }} onClose={onClose} />
     </QueryClientProvider>,
   );
   return onClose;
@@ -43,9 +43,29 @@ describe('CustomerFiscalDataModal', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
     expect(apiRequest).toHaveBeenCalledWith('put', '/api/v1/customers/{id}/fiscal-data', {
       path: { id: 'c-1' },
-      body: { fiscalData: { ...KARLA, fiscalRegime: '605', cfdiUse: 'D01' } },
+      body: { fiscalData: { ...KARLA, fiscalRegime: '605', cfdiUse: 'D01' }, invoiceEmail: null },
     });
     expect(toast.success).toHaveBeenCalledWith('Datos fiscales de Karla guardados.');
+  });
+
+  it('keeps the email for their invoices with the fiscal data, and takes only a plain address', async () => {
+    const onClose = renderModal(KARLA, vi.fn(), 'facturas@ejemplo.mx');
+    const email = screen.getByLabelText('Correo para facturas (opcional)');
+    expect(email).toHaveValue('facturas@ejemplo.mx');
+
+    await userEvent.clear(email);
+    await userEvent.type(email, 'pagos');
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+    expect(screen.getByText('Escribe un correo válido, como nombre@ejemplo.com, o déjalo vacío.')).toBeInTheDocument();
+
+    await userEvent.type(email, '@ejemplo.mx ');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
+    expect(apiRequest).toHaveBeenCalledWith('put', '/api/v1/customers/{id}/fiscal-data', {
+      path: { id: 'c-1' },
+      body: { fiscalData: KARLA, invoiceEmail: 'pagos@ejemplo.mx' },
+    });
   });
 
   it('forgets them without fiscal data in the body', async () => {

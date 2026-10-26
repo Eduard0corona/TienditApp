@@ -398,6 +398,9 @@ export default function CustomersList() {
                       ? `RFC ${editingCustomer.fiscalData.rfc} · ${editingCustomer.fiscalData.name}`
                       : 'Sin datos fiscales: la factura de sus pedidos los pide.'}
                   </div>
+                  {editingCustomer.invoiceEmail && (
+                    <div className="text-muted">Sus facturas le llegan a {editingCustomer.invoiceEmail}</div>
+                  )}
                 </div>
                 <button
                   type="button"

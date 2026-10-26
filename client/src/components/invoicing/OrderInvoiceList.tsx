@@ -8,10 +8,11 @@ import {
   type OrderInvoice,
 } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
-import { CfdiCancellationMotive, OrderInvoiceStatus } from '../../types';
+import { CfdiCancellationMotive, CfdiEmailDocument, OrderInvoiceStatus } from '../../types';
 import { CANCELLATION_MOTIVES, invoiceStatusChip, invoiceStatusLabel, saveBlob } from '../../utils/cfdi';
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
+import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
 
 interface OrderInvoiceListProps {
   orderId: string;
@@ -23,10 +24,15 @@ interface OrderInvoiceListProps {
    * a related CFDI stands, so they are cancelled first.
    */
   liveRelated?: Partial<Record<string, string[]>>;
+  /** The email the order's invoicing proposes, to send an invoice that has none (Fase 28E). */
+  proposedEmail?: string | null;
 }
 
-/** The invoices of an order (the newest first): their folio, UUID, files and what can be done with each one. */
-export default function OrderInvoiceList({ orderId, invoices, canCancel, liveRelated = {} }: OrderInvoiceListProps) {
+/**
+ * The invoices of an order (the newest first): their folio, UUID, files, how their latest email to the customer went and
+ * what can be done with each one.
+ */
+export default function OrderInvoiceList({ orderId, invoices, canCancel, liveRelated = {}, proposedEmail }: OrderInvoiceListProps) {
   const toast = useToast();
   const retry = useRetryOrderInvoice(orderId);
   const [cancelling, setCancelling] = useState<OrderInvoice | null>(null);
@@ -92,6 +98,7 @@ export default function OrderInvoiceList({ orderId, invoices, canCancel, liveRel
                 {invoice.failureMessage}
               </p>
             )}
+            <CfdiEmailStatus emails={invoice.emails} />
             <div className="d-flex flex-wrap gap-2 mt-2">
               {invoice.hasXml && (
                 <>
@@ -114,6 +121,16 @@ export default function OrderInvoiceList({ orderId, invoices, canCancel, liveRel
                     Descargar PDF
                   </button>
                 </>
+              )}
+              {invoice.status === OrderInvoiceStatus.Stamped && (
+                <SendCfdiEmailButton
+                  orderId={orderId}
+                  document={CfdiEmailDocument.Invoice}
+                  cfdiId={invoice.id}
+                  number={invoice.number}
+                  invoiceEmail={invoice.receiverEmail}
+                  suggestedEmail={invoice.emails[0]?.to ?? proposedEmail}
+                />
               )}
               {invoice.status === OrderInvoiceStatus.Stamping && (
                 <button

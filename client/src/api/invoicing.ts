@@ -2,12 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import api from './axios';
 import { apiRequest, type Schemas } from './typedClient';
-import { CfdiCancellationMotive, CreditNoteAdjustment, GlobalInvoicePeriodicity, OrderInvoiceStatus } from '../types';
+import { CfdiCancellationMotive, CfdiEmailDocument, CreditNoteAdjustment, GlobalInvoicePeriodicity, OrderInvoiceStatus } from '../types';
 
 // Invoicing (Fase 28A, ADR 0045): Configuración › Facturación and the invoice of an order; the global invoice of a period
 // (Fase 28B, ADR 0046) in Reportes › Factura global; the payment complements of an invoice in installments (Fase 28C,
-// ADR 0047); and the credit notes of an invoiced order's refunds and write-offs (Fase 28D, ADR 0048). Kept out of
-// queries.ts, which the first visit loads.
+// ADR 0047); the credit notes of an invoiced order's refunds and write-offs (Fase 28D, ADR 0048); and the emails of those
+// CFDI to the customer (Fase 28E, ADR 0049). Kept out of queries.ts, which the first visit loads.
 
 export type InvoicingSettings = Schemas['InvoicingSettingsDto'];
 export type OrderInvoicing = Schemas['OrderInvoicingDto'];
@@ -16,6 +16,7 @@ export type OrderPaymentComplements = Schemas['OrderPaymentComplementsDto'];
 export type PaymentComplement = Schemas['PaymentComplementDto'];
 export type OrderAdjustment = Schemas['OrderAdjustmentDto'];
 export type CreditNote = Schemas['CreditNoteDto'];
+export type CfdiEmail = Schemas['CfdiEmailDto'];
 export type GlobalInvoice = Schemas['GlobalInvoiceDto'];
 export type GlobalInvoiceDetail = Schemas['GlobalInvoiceDetailDto'];
 export type GlobalInvoiceDraft = Schemas['GlobalInvoiceDraftDto'];
@@ -97,10 +98,22 @@ export function useOrderInvoicing(orderId: string) {
  * Whether something of the order's invoicing changes on its own soon: an invoice, a complement or a credit note waits for
  * the PAC or the SAT, or a payment, a refund or a write-off waits for what TienditApp issues in its next pass.
  */
-export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments' | 'adjustments'>): boolean {
-  return data.invoices.some((invoice) => isWaiting(invoice))
-    || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some((complement) => isWaiting(complement)))
-    || data.adjustments.some((adjustment) => adjustment.awaitsAutomaticIssue || adjustment.creditNotes.some((note) => isWaiting(note)));
+export function isOrderInvoicingWaiting(
+  data: Pick<OrderInvoicing, 'invoices' | 'payments' | 'adjustments'>,
+  now: number = Date.now(),
+): boolean {
+  const waits = (cfdi: Pick<OrderInvoice, 'status' | 'emails'>) => isWaiting(cfdi) || isEmailOnItsWay(cfdi.emails[0], now);
+  return data.invoices.some(waits)
+    || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some(waits))
+    || data.adjustments.some((adjustment) => adjustment.awaitsAutomaticIssue || adjustment.creditNotes.some(waits));
+}
+
+/** How long a CFDI's email is waited for on screen: the queue tries it again for longer, and «Enviar por correo» stays. */
+export const EMAIL_WAIT_MS = 15 * 60_000;
+
+/** The CFDI's latest email is neither sent nor refused yet, and was asked for a moment ago. */
+export function isEmailOnItsWay(email: Pick<CfdiEmail, 'sentAt' | 'failedAt' | 'requestedAt'> | undefined, now: number = Date.now()): boolean {
+  return !!email && !email.sentAt && !email.failedAt && now - new Date(email.requestedAt).getTime() < EMAIL_WAIT_MS;
 }
 
 /** Preview of the invoice of an order, read again each time it opens; without a receiver it goes to the general public. */
@@ -135,8 +148,9 @@ function useInvoiceChange<TVariables, TResult = OrderInvoice>(orderId: string, c
   });
 }
 
+/** With an email, the customer gets its XML and PDF once it is stamped, and those of its complements and credit notes. */
 export function useIssueOrderInvoice(orderId: string) {
-  return useInvoiceChange(orderId, (body: { receiver: CfdiReceiver; saveToCustomer: boolean }) =>
+  return useInvoiceChange(orderId, (body: { receiver: CfdiReceiver; saveToCustomer: boolean; receiverEmail?: string | null }) =>
     apiRequest('post', '/api/v1/invoicing/orders/{orderId}/invoices', { path: { orderId }, body }));
 }
 
@@ -190,6 +204,30 @@ export function useCancelCreditNote(orderId: string) {
     apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/cancel', { path: { creditNoteId }, body: { motive } }));
 }
 
+/**
+ * «Enviar por correo»: the XML and PDF of a stamped invoice, payment complement or credit note go to the customer again,
+ * to its email or another one; with `useForInvoice`, what comes next of its invoice goes there too. It goes out from the
+ * queue: the order's invoicing shows how it ended.
+ */
+export function useSendCfdiByEmail(orderId: string) {
+  return useInvoiceChange(orderId, ({ document, cfdiId, email, useForInvoice }: {
+    document: CfdiEmailDocument;
+    cfdiId: string;
+    email: string;
+    useForInvoice: boolean;
+  }) => {
+    const body = { email, useForInvoice };
+    switch (document) {
+      case CfdiEmailDocument.PaymentComplement:
+        return apiRequest('post', '/api/v1/invoicing/payment-complements/{complementId}/email', { path: { complementId: cfdiId }, body });
+      case CfdiEmailDocument.CreditNote:
+        return apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/email', { path: { creditNoteId: cfdiId }, body });
+      default:
+        return apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/email', { path: { invoiceId: cfdiId }, body });
+    }
+  });
+}
+
 /** The stamped XML or the PDF of an invoice, fetched with the session. */
 export function downloadInvoiceFile(invoiceId: string, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
   return downloadFile(`/invoicing/invoices/${encodeURIComponent(invoiceId)}/${kind}`, kind);
@@ -230,13 +268,16 @@ async function downloadFile(path: string, kind: 'xml' | 'pdf', fallbackName = 'f
   return { blob: response.data, fileName: match ? decodeURIComponent(match[1]) : `${fallbackName}.${kind}` };
 }
 
-/** The customer's fiscal data, for their next invoices; null forgets it. */
+/** The customer's fiscal data and the email for their invoices, for their next invoices; null forgets both. */
 export function useUpdateCustomerFiscalData(customerId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (fiscalData: CfdiReceiver | null) =>
-      // Without fiscalData the API forgets it.
-      apiRequest('put', '/api/v1/customers/{id}/fiscal-data', { path: { id: customerId }, body: fiscalData ? { fiscalData } : {} }),
+    mutationFn: ({ fiscalData, invoiceEmail }: { fiscalData: CfdiReceiver | null; invoiceEmail?: string | null }) =>
+      // Without fiscalData the API forgets it, with its email.
+      apiRequest('put', '/api/v1/customers/{id}/fiscal-data', {
+        path: { id: customerId },
+        body: fiscalData ? { fiscalData, invoiceEmail: invoiceEmail || null } : {},
+      }),
     // The invoice of their orders proposes it.
     onSuccess: () => Promise.all([
       client.invalidateQueries({ queryKey: ['customers'] }),

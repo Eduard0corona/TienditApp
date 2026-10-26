@@ -11,12 +11,13 @@ import {
   type OrderInvoice,
 } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
-import { CfdiCancellationMotive, CreditNoteAdjustment, OrderInvoiceStatus } from '../../types';
+import { CfdiCancellationMotive, CfdiEmailDocument, CreditNoteAdjustment, OrderInvoiceStatus } from '../../types';
 import { creditNoteCancellationMotives, invoiceStatusChip, invoiceStatusLabel, PAYMENT_FORMS, saveBlob } from '../../utils/cfdi';
 import { formatDateTime } from '../../utils/dates';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
+import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
 
 interface CreditNoteListProps {
   orderId: string;
@@ -25,6 +26,8 @@ interface CreditNoteListProps {
   invoices: OrderInvoice[];
   /** Owners and admins cancel; whoever manages the orders issues, retries and downloads. */
   canCancel: boolean;
+  /** The email the order's invoicing proposes, to send a note whose invoice has none (Fase 28E). */
+  proposedEmail?: string | null;
 }
 
 /** The toast that says how issuing or asking again for a credit note ended. */
@@ -59,7 +62,7 @@ interface Cancelling {
  * each one on its own a few minutes after it is recorded (or after the invoice is stamped); from here it is issued before
  * that («Emitir ahora»), again after a refused or cancelled one, asked again of the PAC, cancelled or downloaded.
  */
-export default function CreditNoteList({ orderId, adjustments, invoices, canCancel }: CreditNoteListProps) {
+export default function CreditNoteList({ orderId, adjustments, invoices, canCancel, proposedEmail }: CreditNoteListProps) {
   const toast = useToast();
   const outcome = useCreditNoteOutcome();
   const issue = useIssueCreditNote(orderId);
@@ -99,6 +102,7 @@ export default function CreditNoteList({ orderId, adjustments, invoices, canCanc
 
   const stamped = invoices.find((invoice) => invoice.status === OrderInvoiceStatus.Stamped);
   const invoiceNumbers = new Map(invoices.map((invoice) => [invoice.id, invoice.number]));
+  const invoiceEmails = new Map(invoices.map((invoice) => [invoice.id, invoice.receiverEmail]));
 
   return (
     <div className="mb-3">
@@ -168,6 +172,7 @@ export default function CreditNoteList({ orderId, adjustments, invoices, canCanc
                           {note.failureMessage}
                         </p>
                       )}
+                      <CfdiEmailStatus emails={note.emails} />
                       <div className="d-flex flex-wrap gap-2 mt-2">
                         {note.hasXml && (
                           <>
@@ -190,6 +195,16 @@ export default function CreditNoteList({ orderId, adjustments, invoices, canCanc
                               Descargar PDF
                             </button>
                           </>
+                        )}
+                        {note.status === OrderInvoiceStatus.Stamped && (
+                          <SendCfdiEmailButton
+                            orderId={orderId}
+                            document={CfdiEmailDocument.CreditNote}
+                            cfdiId={note.id}
+                            number={note.number}
+                            invoiceEmail={invoiceEmails.get(note.orderInvoiceId)}
+                            suggestedEmail={note.emails[0]?.to ?? proposedEmail}
+                          />
                         )}
                         {note.status === OrderInvoiceStatus.Stamping && (
                           <button

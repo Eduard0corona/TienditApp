@@ -89,7 +89,9 @@ describe('CfdiDraftModal', () => {
     await userEvent.click(stamp);
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada.'));
-    expect(issued).toEqual({ method: 'post', path: '/api/v1/invoicing/orders/{orderId}/invoices', body: { receiver: KARLA, saveToCustomer: true } });
+    expect(issued).toEqual({
+      method: 'post', path: '/api/v1/invoicing/orders/{orderId}/invoices', body: { receiver: KARLA, saveToCustomer: true, receiverEmail: null },
+    });
   });
 
   it('stamps without keeping the fiscal data for whoever does not manage customers', async () => {
@@ -106,7 +108,34 @@ describe('CfdiDraftModal', () => {
     await userEvent.click(stamp);
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada.'));
-    expect(issued).toEqual({ receiver: KARLA, saveToCustomer: false });
+    expect(issued).toEqual({ receiver: KARLA, saveToCustomer: false, receiverEmail: null });
+  });
+
+  it('sends the stamped invoice to the email it proposes, and takes no stamp with one that is not an address', async () => {
+    let issued: unknown;
+    serve({ ...INVOICING, proposedEmail: 'karla@ejemplo.mx' }, (_method, _path, body) => {
+      issued = body;
+      return Promise.resolve(STAMPED);
+    });
+    renderModal();
+
+    const stamp = await screen.findByRole('button', { name: 'Timbrar factura' });
+    const email = screen.getByLabelText('Correo del cliente (opcional)');
+    expect(email).toHaveValue('karla@ejemplo.mx');
+    expect(screen.getByLabelText('Guardar estos datos y el correo en Karla para sus próximas facturas')).toBeChecked();
+    await waitFor(() => expect(stamp).toBeEnabled());
+
+    await userEvent.clear(email);
+    await userEvent.type(email, 'karla@ejemplo');
+    expect(stamp).toBeDisabled();
+    expect(screen.getByText('Escribe un correo válido, como nombre@ejemplo.com, o déjalo vacío.')).toBeInTheDocument();
+
+    await userEvent.type(email, '.mx ');
+    await waitFor(() => expect(stamp).toBeEnabled());
+    await userEvent.click(stamp);
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada: se está enviando a karla@ejemplo.mx.'));
+    expect(issued).toEqual({ receiver: KARLA, saveToCustomer: true, receiverEmail: 'karla@ejemplo.mx' });
   });
 
   it('asks to review the invoice again after the data changes, before stamping it', async () => {
