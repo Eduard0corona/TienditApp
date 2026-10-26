@@ -50,6 +50,10 @@ public class OrderInvoiceDto
     public CfdiCancellationMotive? CancellationMotive { get; set; }
     public DateTimeOffset? CancellationRequestedAt { get; set; }
     public DateTimeOffset? CancelledAt { get; set; }
+    /// <summary>Where its CFDI go by email (Fase 28E): it, its complements and its credit notes; none, nowhere.</summary>
+    public string? ReceiverEmail { get; set; }
+    /// <summary>Its latest emails to the customer, the newest first.</summary>
+    public List<CfdiEmailDto> Emails { get; set; } = [];
 
     public static OrderInvoiceDto From(OrderInvoice invoice) => new()
     {
@@ -72,7 +76,8 @@ public class OrderInvoiceDto
         RefusedAt = invoice.RefusedAt,
         CancellationMotive = invoice.CancellationMotive,
         CancellationRequestedAt = invoice.CancellationRequestedAt,
-        CancelledAt = invoice.CancelledAt
+        CancelledAt = invoice.CancelledAt,
+        ReceiverEmail = invoice.ReceiverEmail
     };
 }
 
@@ -89,6 +94,11 @@ public class OrderInvoicingDto
     public string? Problem { get; set; }
     /// <summary>The receiver to propose: the customer's fiscal data, or the one of the order's last invoice.</summary>
     public CfdiReceiverDto? ProposedReceiver { get; set; }
+    /// <summary>
+    /// The email to propose for its CFDI (Fase 28E), as the receiver is: the customer's «Correo para facturas», the one of the
+    /// order's last invoice, or the customer's email.
+    /// </summary>
+    public string? ProposedEmail { get; set; }
     /// <summary>The customer with the order's phone, whose fiscal data the invoice can keep.</summary>
     public Guid? CustomerId { get; set; }
     public string? CustomerName { get; set; }
@@ -149,6 +159,14 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
         var last = invoices.FirstOrDefault();
         var payments = await PaymentComplements.ForOrderAsync(_context, order, invoices, settings, cancellationToken);
         var adjustments = await CreditNotes.ForOrderAsync(_context, order, invoices, settings, cancellationToken);
+        var invoiceDtos = invoices.Select(OrderInvoiceDto.From).ToList();
+        var emails = await CfdiEmails.LatestAsync(_context, invoices.Select(i => i.Id).ToList(), cancellationToken);
+        foreach (var invoice in invoiceDtos)
+            invoice.Emails = emails.GetValueOrDefault(invoice.Id) ?? [];
+        foreach (var complement in payments.SelectMany(p => p.Complements))
+            complement.Emails = emails.GetValueOrDefault(complement.Id) ?? [];
+        foreach (var note in adjustments.SelectMany(a => a.CreditNotes))
+            note.Emails = emails.GetValueOrDefault(note.Id) ?? [];
         return new OrderInvoicingDto
         {
             Available = settings.Available,
@@ -158,9 +176,12 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
             ProposedReceiver = customer?.FiscalData is { } fiscalData
                 ? CfdiReceiverDto.From(fiscalData)
                 : last is null ? null : CfdiReceiverDto.From(last.Receiver),
+            ProposedEmail = customer?.InvoiceEmail
+                ?? last?.ReceiverEmail
+                ?? (InvoiceEmailAddress.IsValid(customer?.Email?.Trim() ?? string.Empty) ? customer!.Email!.Trim() : null),
             CustomerId = customer?.Id,
             CustomerName = customer?.Name,
-            Invoices = invoices.Select(OrderInvoiceDto.From).ToList(),
+            Invoices = invoiceDtos,
             Payments = payments,
             Adjustments = adjustments
         };
@@ -171,10 +192,11 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
 /// Stamps the invoice of an order to a customer with an RFC (whoever manages the orders): paid in full in one exhibition, or
 /// in installments (PPD, Fase 28C) when it is not, and then each payment gets its complement. Its folio and CFDI are saved
 /// first (<see cref="RequestOrderInvoiceCommand"/>), and the PAC is asked after the commit, never inside the transaction.
-/// When the PAC does not answer, the invoice stays «Timbrando» and is asked again with the same key.
+/// When the PAC does not answer, the invoice stays «Timbrando» and is asked again with the same key. With an email, the
+/// customer gets its XML and PDF once it is stamped, and those of its complements and credit notes (Fase 28E).
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record IssueOrderInvoiceCommand(Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer)
+public record IssueOrderInvoiceCommand(Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null)
     : IRequest<Result<OrderInvoiceDto>>, IRequiresContentPermissions
 {
     /// <summary>Keeping the fiscal data in the customer changes the customer: it needs ManageCustomers, as Clientes does.</summary>
@@ -188,6 +210,7 @@ public class IssueOrderInvoiceCommandValidator : AbstractValidator<IssueOrderInv
         RuleFor(x => x.OrderId).NotEmpty();
         RuleFor(x => x.Receiver).NotNull().WithMessage("Captura los datos fiscales del cliente.")
             .SetValidator(new CfdiReceiverInputValidator());
+        RuleFor(x => x.ReceiverEmail).Must(OrderInvoicing.IsValidEmail).WithMessage(InvoiceEmailAddress.InvalidMessage);
     }
 }
 
@@ -216,7 +239,7 @@ public class IssueOrderInvoiceCommandHandler : IRequestHandler<IssueOrderInvoice
             return Result.Failure<OrderInvoiceDto>(InvoicingSettings.NotAvailableMessage);
 
         var requested = await _sender.Send(
-            new RequestOrderInvoiceCommand(request.OrderId, request.Receiver, request.SaveToCustomer), cancellationToken);
+            new RequestOrderInvoiceCommand(request.OrderId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail), cancellationToken);
         if (requested.IsFailure)
             return Result.Failure<OrderInvoiceDto>(requested.Error!);
 
@@ -231,7 +254,7 @@ public class IssueOrderInvoiceCommandHandler : IRequestHandler<IssueOrderInvoice
 /// the new invoice's id.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record RequestOrderInvoiceCommand(Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer)
+public record RequestOrderInvoiceCommand(Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null)
     : IRequest<Result<Guid>>, ITransactionalRequest, IRequiresContentPermissions
 {
     public IEnumerable<TenantPermission> RequiredPermissions() => OrderInvoicing.SavingToCustomer(SaveToCustomer);
@@ -243,6 +266,7 @@ public class RequestOrderInvoiceCommandValidator : AbstractValidator<RequestOrde
     {
         RuleFor(x => x.OrderId).NotEmpty();
         RuleFor(x => x.Receiver).NotNull().SetValidator(new CfdiReceiverInputValidator());
+        RuleFor(x => x.ReceiverEmail).Must(OrderInvoicing.IsValidEmail).WithMessage(InvoiceEmailAddress.InvalidMessage);
     }
 }
 
@@ -327,15 +351,17 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         var invoice = OrderInvoice.Request(
             tenantId, order.Id, serie, folio, receiver, draft.PaymentForm, document.ToJson(),
             draft.SubTotal, draft.TotalTransferred, draft.Total, userId, now, draft.PaymentMethod);
+        invoice.SendTo(request.ReceiverEmail);
         _context.OrderInvoices.Add(invoice);
 
         if (request.SaveToCustomer
             && await OrderInvoicing.CustomerAsync(_context, _phones, order.CustomerPhone, tracked: true, cancellationToken) is { } customer)
         {
-            var previous = customer.FiscalData;
-            // A value of its own: an owned value is never shared between two records.
-            customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver));
-            if (CustomerFiscalDataAudit.Entry(customer, previous, _currentUser.UserName, $"Factura {invoice.Number}") is { } changed)
+            var (previous, previousEmail) = (customer.FiscalData, customer.InvoiceEmail);
+            // A value of its own: an owned value is never shared between two records. An invoice without an email (not
+            // sent this time) leaves the customer's as it is.
+            customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver), invoice.ReceiverEmail ?? customer.InvoiceEmail);
+            if (CustomerFiscalDataAudit.Entry(customer, previous, previousEmail, _currentUser.UserName, $"Factura {invoice.Number}") is { } changed)
                 _context.AuditLogs.Add(changed);
         }
 
@@ -723,6 +749,9 @@ internal static class OrderInvoicing
 
     public static CfdiReceiver Receiver(CfdiReceiverInput input)
         => CfdiReceiver.Create(input.Rfc, input.Name, input.PostalCode, input.FiscalRegime, input.CfdiUse);
+
+    /// <summary>No email, or one plain address (Fase 28E).</summary>
+    public static bool IsValidEmail(string? email) => string.IsNullOrWhiteSpace(email) || InvoiceEmailAddress.IsValid(email.Trim());
 
     /// <summary>What keeping the fiscal data in the customer also asks for, besides ManageOrders.</summary>
     public static IEnumerable<TenantPermission> SavingToCustomer(bool saveToCustomer)

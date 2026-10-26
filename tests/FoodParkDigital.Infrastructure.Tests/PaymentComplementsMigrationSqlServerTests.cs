@@ -53,7 +53,7 @@ public class PaymentComplementsMigrationSqlServerTests
             await using var context = BeforeCreditNotes.CreateContext(database, tenantId);
             Assert.Equal("P", (await context.InvoicingProfiles.SingleAsync()).PaymentSerie);
         }
-        await using var check = database.CreateContext(seed.TenantId);
+        await using var check = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         Assert.Equal(CfdiInvoice.PaidInOneExhibition, (await check.OrderInvoices.SingleAsync()).PaymentMethod);
     }
 
@@ -79,7 +79,7 @@ public class PaymentComplementsMigrationSqlServerTests
         Assert.Contains("IX_PaymentComplements_OrderInvoiceId_Installment_Live", sameInstallment.InnerException!.Message);
 
         // …until the first one is refused: it stays, and the payment gets another one.
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
         {
             var refused = await context.PaymentComplements.SingleAsync(c => c.Id == first.Id);
             refused.Refuse("CRP20206 - La suma de ImpPagado no es igual a Monto.", DateTimeOffset.UtcNow);
@@ -87,7 +87,7 @@ public class PaymentComplementsMigrationSqlServerTests
         }
         var second = Complement(invoice, seed.FirstPayment, 4, 1, 200m);
         await AddAsync(database, seed, second);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
             Assert.Equal(2, await context.PaymentComplements.CountAsync(c => c.OrderPaymentId == seed.FirstPayment.Id));
 
         FormattableString[] never =
@@ -148,7 +148,7 @@ public class PaymentComplementsMigrationSqlServerTests
         // Rolling back again does nothing, and forward again it is there, empty.
         await MigrateAsync(database, BeforeComplements);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         Assert.Empty(await forward.PaymentComplements.ToListAsync());
     }
 
@@ -186,14 +186,14 @@ public class PaymentComplementsMigrationSqlServerTests
 
     private static async Task AddAsync(SqlServerTestDatabase database, Seed seed, OrderInvoice invoice)
     {
-        await using var context = database.CreateContext(seed.TenantId);
+        await using var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         context.OrderInvoices.Add(invoice);
         await context.SaveChangesAsync();
     }
 
     private static async Task AddAsync(SqlServerTestDatabase database, Seed seed, PaymentComplement complement)
     {
-        await using var context = database.CreateContext(seed.TenantId);
+        await using var context = BeforeCfdiEmails.CreateContext(database, seed.TenantId);
         context.PaymentComplements.Add(complement);
         await context.SaveChangesAsync();
     }

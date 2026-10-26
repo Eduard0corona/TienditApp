@@ -21,6 +21,7 @@ internal static class BeforeCreditNotes
     {
         modelBuilder.Ignore<CreditNote>();
         modelBuilder.Entity<InvoicingProfile>().Ignore(p => p.CreditNoteSerie);
+        BeforeCfdiEmails.Ignore(modelBuilder);
     }
 
     private sealed class Context(

@@ -13,8 +13,8 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// Invoicing (Fase 28A, ADR 0045): Configuración › Facturación (the business's CSD and serie, for owners and admins) and
 /// the CFDI 4.0 invoice of an order, stamped through the platform's PAC, downloaded and cancelled; the global invoice of a
 /// period to the general public (Fase 28B, ADR 0046), for owners and admins; the payment complements of the payments of an
-/// invoice in installments (Fase 28C, ADR 0047); and the credit notes of the refunds and write-offs of an invoiced order
-/// (Fase 28D, ADR 0048).
+/// invoice in installments (Fase 28C, ADR 0047); the credit notes of the refunds and write-offs of an invoiced order
+/// (Fase 28D, ADR 0048); and the emails of those CFDI to the customer (Fase 28E, ADR 0049).
 /// </summary>
 [ApiController]
 [Route("api/v1/invoicing")]
@@ -74,7 +74,7 @@ public class InvoicingController : ControllerBase
         Guid orderId, [FromBody] IssueOrderInvoiceRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new IssueOrderInvoiceCommand(orderId, request.Receiver, request.SaveToCustomer), cancellationToken);
+            new IssueOrderInvoiceCommand(orderId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail), cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
@@ -102,6 +102,15 @@ public class InvoicingController : ControllerBase
     [HttpGet("invoices/{invoiceId:guid}/pdf")]
     public Task<IActionResult> DownloadPdf(Guid invoiceId, CancellationToken cancellationToken)
         => DownloadAsync(new GetOrderInvoiceFileQuery(invoiceId, OrderInvoiceFileKind.Pdf), cancellationToken);
+
+    /// <summary>
+    /// Sends a stamped invoice's XML and PDF to the customer again, to its email or another one (Fase 28E): it goes out from
+    /// the queue. It answers the email as it was asked for.
+    /// </summary>
+    [HttpPost("invoices/{invoiceId:guid}/email")]
+    public Task<ActionResult<CfdiEmailDto>> EmailInvoice(
+        Guid invoiceId, [FromBody] SendCfdiByEmailRequest request, CancellationToken cancellationToken)
+        => SendByEmailAsync(CfdiEmailDocument.Invoice, invoiceId, request, cancellationToken);
 
     /// <summary>
     /// Issues the complement of a payment of an order whose invoice is in installments (Fase 28C): before TienditApp does it
@@ -138,6 +147,12 @@ public class InvoicingController : ControllerBase
     [HttpGet("payment-complements/{complementId:guid}/pdf")]
     public Task<IActionResult> DownloadPaymentComplementPdf(Guid complementId, CancellationToken cancellationToken)
         => DownloadAsync(new GetPaymentComplementFileQuery(complementId, OrderInvoiceFileKind.Pdf), cancellationToken);
+
+    /// <summary>The same for a stamped payment complement.</summary>
+    [HttpPost("payment-complements/{complementId:guid}/email")]
+    public Task<ActionResult<CfdiEmailDto>> EmailPaymentComplement(
+        Guid complementId, [FromBody] SendCfdiByEmailRequest request, CancellationToken cancellationToken)
+        => SendByEmailAsync(CfdiEmailDocument.PaymentComplement, complementId, request, cancellationToken);
 
     /// <summary>
     /// Issues the credit note of a refund of an order whose invoice is stamped (Fase 28D): before TienditApp does it on its
@@ -176,6 +191,12 @@ public class InvoicingController : ControllerBase
     [HttpGet("credit-notes/{creditNoteId:guid}/pdf")]
     public Task<IActionResult> DownloadCreditNotePdf(Guid creditNoteId, CancellationToken cancellationToken)
         => DownloadAsync(new GetCreditNoteFileQuery(creditNoteId, OrderInvoiceFileKind.Pdf), cancellationToken);
+
+    /// <summary>The same for a stamped credit note.</summary>
+    [HttpPost("credit-notes/{creditNoteId:guid}/email")]
+    public Task<ActionResult<CfdiEmailDto>> EmailCreditNote(
+        Guid creditNoteId, [FromBody] SendCfdiByEmailRequest request, CancellationToken cancellationToken)
+        => SendByEmailAsync(CfdiEmailDocument.CreditNote, creditNoteId, request, cancellationToken);
 
     /// <summary>
     /// The business's global invoices, the newest period first; the search finds one by its folio, its UUID or the folio of
@@ -250,6 +271,14 @@ public class InvoicingController : ControllerBase
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
+    private async Task<ActionResult<CfdiEmailDto>> SendByEmailAsync(
+        CfdiEmailDocument document, Guid cfdiId, SendCfdiByEmailRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SendCfdiByEmailCommand(document, cfdiId, request.Email, request.UseForInvoice), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
     private async Task<IActionResult> DownloadAsync(IRequest<Result<PrivateFileDownload>> query, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(query, cancellationToken);
@@ -288,6 +317,11 @@ public class IssueOrderInvoiceRequest
     public CfdiReceiverInput Receiver { get; init; } = new();
     /// <summary>Keep these fiscal data in the customer with the order's phone, for their next invoices.</summary>
     public bool SaveToCustomer { get; init; }
+    /// <summary>
+    /// Where the customer gets the XML and PDF once it is stamped, and those of its complements and credit notes (Fase 28E);
+    /// optional.
+    /// </summary>
+    public string? ReceiverEmail { get; init; }
 }
 
 public class IssueGlobalInvoiceRequest
@@ -306,4 +340,11 @@ public class IssueGlobalInvoiceRequest
 public class CancelOrderInvoiceRequest
 {
     public CfdiCancellationMotive Motive { get; init; }
+}
+
+public class SendCfdiByEmailRequest
+{
+    public string Email { get; init; } = string.Empty;
+    /// <summary>What comes next of its invoice (its complements and credit notes) goes to this email too.</summary>
+    public bool UseForInvoice { get; init; }
 }

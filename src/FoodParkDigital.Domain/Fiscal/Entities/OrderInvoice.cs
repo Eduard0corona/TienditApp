@@ -19,6 +19,12 @@ public class OrderInvoice : CfdiInvoice, IAggregateRoot
     public CfdiReceiver Receiver { get; private set; } = null!;
 
     /// <summary>
+    /// Where the customer gets its XML and PDF, and those of its payment complements and credit notes, once each is stamped
+    /// (Fase 28E, ADR 0049); null when nobody gets them by email. It is not part of the CFDI.
+    /// </summary>
+    public string? ReceiverEmail { get; private set; }
+
+    /// <summary>
     /// The invoice of an order, with its folio and the amounts of its CFDI draft, before the PAC is asked: what is saved here
     /// is what every attempt sends. Paid in full, in one exhibition (PUE) with the form that paid it; otherwise in
     /// installments (PPD) with «Por definir» (99).
@@ -46,6 +52,9 @@ public class OrderInvoice : CfdiInvoice, IAggregateRoot
         invoice.Begin(tenantId, serie, folio, paymentForm, paymentMethod, document, subTotal, taxTotal, total, requestedByUserId, now);
         return invoice;
     }
+
+    /// <summary>Where its CFDI go by email from now on, or nowhere (null).</summary>
+    public void SendTo(string? email) => ReceiverEmail = InvoiceEmailAddress.Normalize(email);
 
     /// <summary>Because it has errors and nothing replaces it (02), or because the sale did not happen (03).</summary>
     public override bool TakesCancellationMotive(CfdiCancellationMotive motive)

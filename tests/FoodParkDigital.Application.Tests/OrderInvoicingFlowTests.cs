@@ -388,8 +388,8 @@ public class OrderInvoicingFlowTests
             .ToListAsync();
         Assert.Equal(
             [
-                $$"""{"From":"Factura {{stamped.Value.Number}}","PreviousRfc":null,"Rfc":"XIQB891116QE4"}""",
-                """{"From":"Clientes","PreviousRfc":"XIQB891116QE4","Rfc":null}""",
+                $$"""{"From":"Factura {{stamped.Value.Number}}","PreviousRfc":null,"Rfc":"XIQB891116QE4","InvoiceEmailChanged":false}""",
+                """{"From":"Clientes","PreviousRfc":"XIQB891116QE4","Rfc":null,"InvoiceEmailChanged":false}""",
             ],
             changes);
     }

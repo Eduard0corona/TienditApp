@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using FoodParkDigital.Application.Common.Events;
+using FoodParkDigital.Domain.Fiscal.Events;
 using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.OnlinePayments.Events;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -130,6 +131,8 @@ public class OutboxTests
 
         var message = Assert.Single(await host.MessagesAsync());
         Assert.Equal(2, message.Attempts);
+        // The handler knows which attempt is the last one (a CFDI email ends there instead of staying on its way).
+        Assert.Equal([false, true], host.Log.FlakyLastAttempts);
         Assert.NotNull(message.DeadLetteredAt);
         Assert.Null(message.ProcessedAt);
         host.Clock.Advance(TimeSpan.FromDays(1));
@@ -272,7 +275,8 @@ public class OutboxTests
             new AccountEmailRequestedEvent(AccountEmailPurpose.PasswordReset, Email: "ana@demo.com"),
             new AccountEmailRequestedEvent(AccountEmailPurpose.SignUpWithExistingEmail, Email: "ana@demo.com"),
             new AccountEmailRequestedEvent(AccountEmailPurpose.TeamInvitation, UserId: Guid.NewGuid()),
-            new OnlinePaymentRefundRequestedEvent(Guid.NewGuid(), TenantA)
+            new OnlinePaymentRefundRequestedEvent(Guid.NewGuid(), TenantA),
+            new CfdiEmailRequestedEvent(Guid.NewGuid())
         };
 
         foreach (var domainEvent in events)

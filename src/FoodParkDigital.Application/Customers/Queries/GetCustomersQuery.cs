@@ -67,6 +67,7 @@ public class GetCustomersQueryHandler : IRequestHandler<GetCustomersQuery, Pagin
                 FiscalRegime = c.FiscalData.FiscalRegime,
                 CfdiUse = c.FiscalData.CfdiUse
             },
+            InvoiceEmail = c.InvoiceEmail,
             CreatedAt = c.CreatedAt,
             UpdatedAt = c.UpdatedAt
         });

@@ -29,6 +29,7 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(c => c.Name).HasMaxLength(200).IsRequired();
         builder.Property(c => c.Phone).HasMaxLength(20);
         builder.Property(c => c.Email).HasMaxLength(200);
+        builder.Property(c => c.InvoiceEmail).HasMaxLength(InvoiceEmailAddress.MaxLength);
         builder.Property(c => c.IsPublicGeneral).IsRequired();
         builder.Property(c => c.IsActive).IsRequired();
         builder.Property(c => c.Notes).HasMaxLength(Customer.NotesMaxLength);

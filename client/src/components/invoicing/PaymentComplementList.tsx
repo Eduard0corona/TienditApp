@@ -10,7 +10,7 @@ import {
   type PaymentComplement,
 } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
-import { CfdiCancellationMotive, OrderInvoiceStatus } from '../../types';
+import { CfdiCancellationMotive, CfdiEmailDocument, OrderInvoiceStatus } from '../../types';
 import {
   COMPLEMENT_CANCELLATION_MOTIVES,
   complementStatusLabel,
@@ -21,6 +21,7 @@ import {
 import { formatCalendarDate, formatDateTime, getBusinessToday } from '../../utils/dates';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
+import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
 
 interface PaymentComplementListProps {
   orderId: string;
@@ -29,6 +30,10 @@ interface PaymentComplementListProps {
   inInstallments: boolean;
   /** Owners and admins cancel; whoever manages the orders issues, retries and downloads. */
   canCancel: boolean;
+  /** Where the CFDI of each invoice go by email, by its id (Fase 28E). */
+  invoiceEmails?: Partial<Record<string, string | null>>;
+  /** The email the order's invoicing proposes, to send a complement whose invoice has none. */
+  proposedEmail?: string | null;
 }
 
 /** The toast that says how issuing or asking again for a complement ended. */
@@ -46,7 +51,9 @@ function useComplementOutcome() {
  * TienditApp issues each one on its own once the invoice is stamped and the payment registered; from here it is issued
  * before that («Emitir ahora»), again after a refused or cancelled one, asked again of the PAC, cancelled or downloaded.
  */
-export default function PaymentComplementList({ orderId, payments, inInstallments, canCancel }: PaymentComplementListProps) {
+export default function PaymentComplementList({
+  orderId, payments, inInstallments, canCancel, invoiceEmails = {}, proposedEmail,
+}: PaymentComplementListProps) {
   const toast = useToast();
   const outcome = useComplementOutcome();
   const issue = useIssuePaymentComplement(orderId);
@@ -156,6 +163,7 @@ export default function PaymentComplementList({ orderId, payments, inInstallment
                           {complement.failureMessage}
                         </p>
                       )}
+                      <CfdiEmailStatus emails={complement.emails} />
                       <div className="d-flex flex-wrap gap-2 mt-2">
                         {complement.hasXml && (
                           <>
@@ -178,6 +186,17 @@ export default function PaymentComplementList({ orderId, payments, inInstallment
                               Descargar PDF
                             </button>
                           </>
+                        )}
+                        {complement.status === OrderInvoiceStatus.Stamped && (
+                          <SendCfdiEmailButton
+                            orderId={orderId}
+                            document={CfdiEmailDocument.PaymentComplement}
+                            cfdiId={complement.id}
+                            number={complement.number}
+                            invoiceEmail={invoiceEmails[complement.orderInvoiceId]}
+                            latestEmail={complement.emails[0]}
+                            proposedEmail={proposedEmail}
+                          />
                         )}
                         {complement.status === OrderInvoiceStatus.Stamping && (
                           <button

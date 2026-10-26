@@ -405,7 +405,9 @@ export { InsufficientStockPolicy } from '../api/generated/enums';
 export { CfdiTaxObject } from '../api/generated/enums';
 // The invoice of an order stamped through the PAC (Fase 28A), the global invoice of a period (Fase 28B) and what a credit
 // note credits (Fase 28D).
-export { CfdiCancellationMotive, CreditNoteAdjustment, GlobalInvoicePeriodicity, OrderInvoiceStatus } from '../api/generated/enums';
+export {
+  CfdiCancellationMotive, CfdiEmailDocument, CfdiEmailFailure, CreditNoteAdjustment, GlobalInvoicePeriodicity, OrderInvoiceStatus,
+} from '../api/generated/enums';
 
 /** RFC, name, fiscal postal code, regime and CFDI use, as the customer's constancia says (Fase 28A). */
 export interface CustomerFiscalData {
@@ -1397,6 +1399,8 @@ export interface CustomerDto {
   creditTermDays?: number | null;
   /** What their invoices go to (Fase 28A); null when the business has not captured it. */
   fiscalData?: CustomerFiscalData | null;
+  /** Where their CFDI go by email (Fase 28E), kept with their fiscal data; null when none. */
+  invoiceEmail?: string | null;
   /** Only in the detail of one customer. */
   addresses?: CustomerAddressDto[];
   createdAt: string;

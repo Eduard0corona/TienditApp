@@ -1098,6 +1098,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("InvoiceEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -1704,6 +1708,72 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("CashTransactions", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.CfdiEmail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CfdiId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Document")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Failure")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("LastFailedAttemptAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("OrderInvoiceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("RequestedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("SentWithoutPdf")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("To")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderInvoiceId");
+
+                    b.HasIndex("TenantId", "RequestedAt");
+
+                    b.HasIndex("TenantId", "CfdiId", "RequestedAt");
+
+                    b.ToTable("CfdiEmails", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CfdiEmails_Attempts", "([FailedAttempts] = 0 AND [LastFailedAttemptAt] IS NULL) OR ([FailedAttempts] > 0 AND [LastFailedAttemptAt] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_CfdiEmails_Document", "[Document] IN (0, 1, 2)");
+
+                            t.HasCheckConstraint("CK_CfdiEmails_Invoice", "[Document] <> 0 OR [CfdiId] = [OrderInvoiceId]");
+
+                            t.HasCheckConstraint("CK_CfdiEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3))) AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.CreditNote", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2246,6 +2316,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("ProviderInvoiceId")
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ReceiverEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
 
                     b.Property<DateTimeOffset?>("RefusedAt")
                         .HasColumnType("datetimeoffset");
@@ -7110,6 +7184,21 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("CashSession");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.CfdiEmail", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Fiscal.Entities.OrderInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("OrderInvoiceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.CreditNote", b =>

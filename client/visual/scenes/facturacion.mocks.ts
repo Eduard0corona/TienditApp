@@ -8,7 +8,8 @@ type PrepareData = NonNullable<SceneOptions['prepareData']>;
 // an order in Pedidos (`data.orderInvoicing`, the OrderInvoicingDto of each order by its id) and the fiscal data of a
 // customer in Clientes. The order is ORD-000343, the office of Grupo Altavista: delivered and paid by transfer, or (Fase
 // 28C, ADR 0047) invoiced in installments, with the payment complements of its payments, or (Fase 28D, ADR 0048) with
-// what was given back and the credit notes of each refund.
+// what was given back and the credit notes of each refund. Since the Fase 28E (ADR 0049), each CFDI says how its latest
+// email to the customer went.
 
 // OrderInvoiceStatus and CfdiCancellationMotive as the contract numbers them.
 const STAMPED = 1;
@@ -23,6 +24,8 @@ export const CUSTOMER_NAME = 'Oficinas Grupo Altavista';
 
 /** As its constancia says it: the SAT checks it when the invoice is stamped. */
 const ALTAVISTA = { rfc: 'GAL1806043P5', name: 'GRUPO ALTAVISTA', postalCode: '11560', fiscalRegime: '601', cfdiUse: 'G03' };
+/** Where Grupo Altavista gets its invoices (Fase 28E). */
+const INVOICE_EMAIL = 'facturas@altavista.mx';
 
 const minutesFromNow = (minutes: number) => new Date(Date.parse(NOW_ISO) + minutes * 60_000).toISOString();
 
@@ -64,7 +67,7 @@ function invoice(data: DemoData, folio: number, fields: Record<string, unknown>)
     id: uuid(`invoice-${folio}`), orderId: order.id, number: `F-${folio}`, status: STAMPED, receiver: ALTAVISTA,
     paymentForm: '03', paymentMethod: 'PUE', subTotal, taxTotal: r2(order.total - subTotal), total: order.total,
     requestedAt: minutesFromNow(-50), uuid: null, stampedAt: null, hasXml: false, hasPdf: false, failureMessage: null,
-    refusedAt: null, cancellationRequestedAt: null, cancelledAt: null,
+    refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, receiverEmail: null, emails: [],
     ...fields,
   };
 }
@@ -74,7 +77,7 @@ const orderInvoicing = (build: (data: DemoData) => Record<string, unknown>): Pre
   const order = data.orders.find((o: { orderNumber: string }) => o.orderNumber === ORDER_NUMBER);
   data.orderInvoicing = {
     [order.id]: {
-      available: true, sandbox: false, canInvoice: true, problem: null, proposedReceiver: ALTAVISTA,
+      available: true, sandbox: false, canInvoice: true, problem: null, proposedReceiver: ALTAVISTA, proposedEmail: INVOICE_EMAIL,
       customerId: uuid('cust:altavista'), customerName: CUSTOMER_NAME, invoices: [], payments: [], adjustments: [],
       ...build(data),
     },
@@ -130,7 +133,7 @@ function complement(folio: number, paymentId: string, fields: Record<string, unk
     id: uuid(`complement-${folio}`), orderInvoiceId: uuid('invoice-3'), orderPaymentId: paymentId, number: `P-${folio}`,
     status: STAMPED, paymentForm: '01', amount: 0, installment: 1, previousBalance: 0, remainingBalance: 0,
     requestedAt: '2026-09-12T17:06:00.000Z', issuedAutomatically: true, uuid: null, stampedAt: null, hasXml: false, hasPdf: false,
-    failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null,
+    failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, emails: [],
     ...fields,
   };
 }
@@ -208,7 +211,7 @@ function creditNote(folio: number, amount: number, fields: Record<string, unknow
     id: uuid(`credit-note-${folio}`), orderInvoiceId: uuid('invoice-3'), number: `NC-${folio}`, status: STAMPED, paymentForm: '03',
     subTotal, taxTotal: r2(amount - subTotal), total: amount, requestedAt: minutesFromNow(-34), issuedAutomatically: true,
     uuid: null, stampedAt: null, hasXml: false, hasPdf: false, failureMessage: null, refusedAt: null,
-    cancellationRequestedAt: null, cancelledAt: null,
+    cancellationRequestedAt: null, cancelledAt: null, emails: [],
     ...fields,
   };
 }
@@ -261,11 +264,51 @@ export const PEDIDO_CON_NOTAS_DE_CREDITO = asOption(((data) => {
   }))(data);
 }) as PrepareData);
 
-/** Grupo Altavista keeps its fiscal data; the list shows its RFC. */
+/** Grupo Altavista keeps its fiscal data and the email for its invoices; the list shows its RFC. */
 export const CLIENTE_CON_DATOS_FISCALES = asOption(((data) => {
   const customer = data.customers.find((c: { name: string }) => c.name === CUSTOMER_NAME);
   customer.fiscalData = ALTAVISTA;
+  customer.invoiceEmail = INVOICE_EMAIL;
 }) as PrepareData);
+
+// CfdiEmailDocument and CfdiEmailFailure as the contract numbers them.
+const INVOICE_DOCUMENT = 0;
+const REJECTED = 0;
+
+/** An email of F-3 to Grupo Altavista, sent by TienditApp when it was stamped unless the fields say otherwise. */
+function email(name: string, fields: Record<string, unknown>) {
+  return {
+    id: uuid(`email-${name}`), document: INVOICE_DOCUMENT, cfdiId: uuid('invoice-3'), to: INVOICE_EMAIL, requestedAt: minutesFromNow(-12),
+    byTienditApp: true, sentAt: null, sentWithoutPdf: false, failedAt: null, failure: null, failedAttempts: 0, lastFailedAttemptAt: null,
+    ...fields,
+  };
+}
+
+/** F-3, stamped for Grupo Altavista with the email for its invoices: TienditApp sent its XML and PDF a minute later. */
+export const PEDIDO_FACTURA_POR_CORREO = asOption(orderInvoicing((data) => ({
+  canInvoice: false,
+  problem: 'Este pedido ya tiene la factura F-3: cancélala para facturarlo otra vez.',
+  invoices: [
+    invoice(data, 3, {
+      requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
+      hasXml: true, hasPdf: true, receiverEmail: INVOICE_EMAIL,
+      emails: [email('timbre', { sentAt: minutesFromNow(-11) })],
+    }),
+  ],
+})));
+
+/** The email was typed wrong when invoicing: the customer's mail server refused it. */
+export const PEDIDO_CORREO_RECHAZADO = asOption(orderInvoicing((data) => ({
+  canInvoice: false,
+  problem: 'Este pedido ya tiene la factura F-3: cancélala para facturarlo otra vez.',
+  invoices: [
+    invoice(data, 3, {
+      requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
+      hasXml: true, hasPdf: true, receiverEmail: 'facturas@altavsita.mx',
+      emails: [email('timbre', { to: 'facturas@altavsita.mx', failedAt: minutesFromNow(-11), failure: REJECTED })],
+    }),
+  ],
+})));
 
 const invoicingRoutes: ExtraRoutes = (data, helpers) => [
   ['GET', /^\/invoicing\/settings$/, () => helpers.ok(data.invoicing)],

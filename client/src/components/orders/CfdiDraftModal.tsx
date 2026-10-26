@@ -5,7 +5,7 @@ import { useCfdiDraft, useIssueOrderInvoice, useOrderInvoicing, type CfdiReceive
 import type { Schemas } from '../../api/typedClient';
 import { useToast } from '../../hooks/useToast';
 import { OrderInvoiceStatus } from '../../types';
-import { EMPTY_RECEIVER, normalizeReceiver, PAYMENT_FORMS, PAYMENT_METHODS } from '../../utils/cfdi';
+import { EMPTY_RECEIVER, isPlainEmail, normalizeReceiver, PAYMENT_FORMS, PAYMENT_METHODS } from '../../utils/cfdi';
 import { formatMoney } from '../../utils/money';
 import CfdiReceiverFields from '../invoicing/CfdiReceiverFields';
 import OrderInvoiceList from '../invoicing/OrderInvoiceList';
@@ -129,16 +129,22 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
   const [receiver, setReceiver] = useState<CfdiReceiver | undefined>(proposed ? normalizeReceiver(proposed) : undefined);
   const [showReceiver, setShowReceiver] = useState(invoicing?.available ?? false);
   const [saveToCustomer, setSaveToCustomer] = useState(true);
+  // Where its XML and PDF go once stamped, and those of its complements and credit notes (Fase 28E): optional.
+  const [email, setEmail] = useState(invoicing?.proposedEmail ?? '');
+  const typedEmail = email.trim();
+  const emailValid = !typedEmail || isPlainEmail(typedEmail);
   // Offered to who manages customers only: the API asks for ManageCustomers to keep it.
   const offerSaveToCustomer = canSaveToCustomer && !!invoicing?.customerId;
   const draft = useCfdiDraft(orderId, receiver, !orderCancelled);
   const cfdi = draft.data;
 
   const available = invoicing?.available ?? false;
+  // The email goes with an invoice that can be stamped now, to a customer with RFC.
+  const showEmail = available && !!invoicing?.canInvoice && !!receiver;
   const edited = receiver === undefined || JSON.stringify(normalizeReceiver(form)) !== JSON.stringify(receiver);
   // Only on this opening's preview: while it is read again, what is on screen may be old.
   const canStamp = available && !!invoicing?.canInvoice && !!receiver && !edited && !!cfdi?.isReadyToStamp
-    && !cfdi.isGeneralPublic && !draft.isFetching && !issue.isPending;
+    && !cfdi.isGeneralPublic && !draft.isFetching && !issue.isPending && emailValid;
 
   const applyReceiver = (event: React.FormEvent) => {
     event.preventDefault();
@@ -148,8 +154,15 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
   const stamp = async () => {
     if (!receiver) return;
     try {
-      const invoice = await issue.mutateAsync({ receiver, saveToCustomer: offerSaveToCustomer && saveToCustomer });
-      if (invoice.status === OrderInvoiceStatus.Stamped) toast.success(`Factura ${invoice.number} timbrada.`);
+      const invoice = await issue.mutateAsync({
+        receiver,
+        // Only what the person saw: the box shows with the receiver's data.
+        saveToCustomer: offerSaveToCustomer && showReceiver && saveToCustomer,
+        receiverEmail: typedEmail || null,
+      });
+      if (invoice.status === OrderInvoiceStatus.Stamped) {
+        toast.success(typedEmail ? `Factura ${invoice.number} timbrada: se está enviando a ${typedEmail}.` : `Factura ${invoice.number} timbrada.`);
+      }
       else if (invoice.status === OrderInvoiceStatus.Refused) toast.error(invoice.failureMessage ?? 'El PAC rechazó la factura.');
       else toast.info(`El PAC no respondió: TienditApp sigue pidiendo el timbre de ${invoice.number}.`);
     } catch (err: unknown) {
@@ -162,7 +175,13 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
       <Modal.Body>
         {loadError}
         {invoicing && (
-          <OrderInvoiceList orderId={orderId} invoices={invoicing.invoices} canCancel={canCancel} liveRelated={liveRelated(invoicing)} />
+          <OrderInvoiceList
+            orderId={orderId}
+            invoices={invoicing.invoices}
+            canCancel={canCancel}
+            liveRelated={liveRelated(invoicing)}
+            proposedEmail={invoicing.proposedEmail}
+          />
         )}
         {invoicing && (
           <PaymentComplementList
@@ -171,10 +190,18 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             inInstallments={invoicing.invoices.some((invoice) => invoice.paymentMethod === 'PPD'
               && invoice.status !== OrderInvoiceStatus.Refused && invoice.status !== OrderInvoiceStatus.Cancelled)}
             canCancel={canCancel}
+            invoiceEmails={Object.fromEntries(invoicing.invoices.map((invoice) => [invoice.id, invoice.receiverEmail]))}
+            proposedEmail={invoicing.proposedEmail}
           />
         )}
         {invoicing && (
-          <CreditNoteList orderId={orderId} adjustments={invoicing.adjustments} invoices={invoicing.invoices} canCancel={canCancel} />
+          <CreditNoteList
+            orderId={orderId}
+            adjustments={invoicing.adjustments}
+            invoices={invoicing.invoices}
+            canCancel={canCancel}
+            proposedEmail={invoicing.proposedEmail}
+          />
         )}
 
         {orderCancelled && invoicing && (
@@ -223,7 +250,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
                     onChange={(event) => setSaveToCustomer(event.target.checked)}
                   />
                   <label className="form-check-label small" htmlFor="cfdi-save-to-customer">
-                    Guardar estos datos en {invoicing.customerName ?? 'el cliente'} para sus próximas facturas
+                    Guardar estos datos{showEmail && typedEmail ? ' y el correo' : ''} en {invoicing.customerName ?? 'el cliente'} para sus próximas facturas
                   </label>
                 </div>
               )}
@@ -239,6 +266,29 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
                 <p className="small text-muted mb-0 mt-2">Cambiaste los datos: revisa la factura con ellos antes de timbrarla.</p>
               )}
             </form>
+          )}
+
+          {showEmail && (
+            <div className="mb-3">
+              <label className="form-label small mb-1" htmlFor="cfdi-email">Correo del cliente (opcional)</label>
+              <input
+                id="cfdi-email"
+                type="email"
+                className={`form-control${emailValid ? '' : ' is-invalid'}`}
+                maxLength={254}
+                autoComplete="off"
+                value={email}
+                disabled={issue.isPending}
+                onChange={(event) => setEmail(event.target.value)}
+                aria-invalid={emailValid ? undefined : true}
+                aria-describedby="cfdi-email-help"
+              />
+              <div id="cfdi-email-help" className={emailValid ? 'form-text' : 'invalid-feedback'}>
+                {emailValid
+                  ? 'Al timbrarse le llegan el XML y el PDF, y después los de sus complementos de pago y notas de crédito.'
+                  : 'Escribe un correo válido, como nombre@ejemplo.com, o déjalo vacío.'}
+              </div>
+            </div>
           )}
 
           {draft.isPending && <p className="text-muted" aria-busy="true">Calculando…</p>}

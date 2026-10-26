@@ -1,4 +1,6 @@
-import { CfdiCancellationMotive, CreditNoteAdjustment, GlobalInvoicePeriodicity, OrderInvoiceStatus, type CustomerFiscalData } from '../types';
+import {
+  CfdiCancellationMotive, CfdiEmailDocument, CreditNoteAdjustment, GlobalInvoicePeriodicity, OrderInvoiceStatus, type CustomerFiscalData,
+} from '../types';
 
 // c_RegimenFiscal and c_UsoCFDI entries a sale usually needs (the API accepts the whole catalog). 616, «Sin obligaciones
 // fiscales», is the general public's: those sales go in the global invoice.
@@ -149,3 +151,24 @@ export function normalizeReceiver(value: CustomerFiscalData): CustomerFiscalData
 }
 
 export const EMPTY_RECEIVER: CustomerFiscalData = { rfc: '', name: '', postalCode: '', fiscalRegime: '612', cfdiUse: 'G03' };
+
+/** «la factura F-1», «el complemento de pago P-1», «la nota de crédito NC-1»: what an email of a CFDI carries (Fase 28E). */
+export function cfdiEmailLabel(document: CfdiEmailDocument, number: string): string {
+  switch (document) {
+    case CfdiEmailDocument.PaymentComplement:
+      return `el complemento de pago ${number}`;
+    case CfdiEmailDocument.CreditNote:
+      return `la nota de crédito ${number}`;
+    default:
+      return `la factura ${number}`;
+  }
+}
+
+/**
+ * One plain address, as the API takes it for the CFDI: printable ASCII without spaces (the platform's SMTP sends
+ * seven-bit addresses), one @ and a domain with a dot (the API decides).
+ */
+export function isPlainEmail(email: string): boolean {
+  const trimmed = email.trim();
+  return /^[!-~]+$/.test(trimmed) && /^[^@,;<>"]+@[^@,;<>"]+\.[^@,;<>".]+$/.test(trimmed);
+}

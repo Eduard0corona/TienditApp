@@ -8,8 +8,9 @@ using System.Net.Mail;
 namespace FoodParkDigital.Infrastructure.Services;
 
 /// <summary>
-/// Sends the emails of the accounts by SMTP (<see cref="EmailDeliverySettings"/>). Full addresses and the answers of the
-/// SMTP server, which can echo them, are only logged in Development.
+/// Sends the emails of the accounts, and those with the CFDI of a business (Fase 28E), by SMTP
+/// (<see cref="EmailDeliverySettings"/>). Full addresses and the answers of the SMTP server, which can echo them, are only
+/// logged in Development.
 /// </summary>
 public class EmailService : IEmailService
 {
@@ -126,7 +127,24 @@ public class EmailService : IEmailService
     /// credentials, a refused sender or relay), which are fixed for every email at once. Those that keep failing are set
     /// aside after the last attempt and the background queues show Degraded.
     /// </summary>
-    public async Task SendEmailAsync(string to, string subject, string body)
+    public Task SendEmailAsync(string to, string subject, string body)
+        => DeliverAsync(to, subject, body, senderName: null, replyTo: null, attachments: [], CancellationToken.None);
+
+    /// <inheritdoc />
+    public Task<EmailSendOutcome> SendDocumentsAsync(DocumentEmail email, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(email);
+        return DeliverAsync(email.To, email.Subject, email.HtmlBody, email.SenderName, email.ReplyTo, email.Attachments, cancellationToken);
+    }
+
+    private async Task<EmailSendOutcome> DeliverAsync(
+        string to,
+        string subject,
+        string body,
+        string? senderName,
+        string? replyTo,
+        IReadOnlyList<EmailAttachment> attachments,
+        CancellationToken cancellationToken)
     {
         var (settings, problem) = EmailDeliverySettings.Read(_configuration);
         if (settings is null)
@@ -136,7 +154,7 @@ public class EmailService : IEmailService
             // Its link is the only way to test sign-ups locally without a provider.
             if (_logSensitiveData)
                 _logger.LogInformation("Email body (Development only): {Body}", body);
-            return;
+            return EmailSendOutcome.NotConfigured;
         }
 
         using var smtp = new SmtpClient(settings.Host, settings.Port)
@@ -147,26 +165,47 @@ public class EmailService : IEmailService
         if (settings.Username is not null)
             smtp.Credentials = new NetworkCredential(settings.Username, settings.Password);
 
-        if (!MailAddress.TryCreate(to, out var recipient))
+        // An address SMTP cannot carry seven-bit («peña@…») would fail every retry as well.
+        if (!MailAddress.TryCreate(to, out var recipient) || !IsSevenBit(recipient))
         {
             // Retrying cannot fix the address.
             _logger.LogWarning("Email not sent to {Email}: the address is not valid.", LoggableEmail(to));
-            return;
+            return EmailSendOutcome.Rejected;
         }
 
         using var mail = new MailMessage
         {
-            From = new MailAddress(settings.FromEmail, settings.FromName),
+            // The platform always sends (its domain is the one the provider trusts); a business only names itself.
+            From = new MailAddress(settings.FromEmail, SenderName(senderName) ?? settings.FromName),
             Subject = subject,
             Body = body,
             IsBodyHtml = true
         };
         mail.To.Add(recipient);
+        // An answer address that cannot go seven-bit is left out rather than stopping the email.
+        if (replyTo is not null && MailAddress.TryCreate(replyTo, out var answerTo) && IsSevenBit(answerTo))
+            mail.ReplyToList.Add(answerTo);
+        foreach (var file in attachments)
+        {
+            var attachment = new Attachment(new MemoryStream(file.Content), file.FileName, file.ContentType);
+            // Some mail apps only read the name from here.
+            attachment.ContentDisposition!.FileName = file.FileName;
+            mail.Attachments.Add(attachment);
+        }
 
+        // A server that hangs would hold the queue: the attempt ends and is retried.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(SendTimeout);
         try
         {
-            await smtp.SendMailAsync(mail);
+            await smtp.SendMailAsync(mail, timeout.Token);
             _logger.LogInformation("Email sent successfully to {Email}", LoggableEmail(to));
+            return EmailSendOutcome.Sent;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError("SMTP send to {Email} did not finish in {Seconds} s. It will be retried.", LoggableEmail(to), SendTimeout.TotalSeconds);
+            throw new EmailDeliveryException(null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -182,7 +221,20 @@ public class EmailService : IEmailService
                 permanent ? "Rejected for good: not retried." : "It will be retried.");
             if (!permanent)
                 throw new EmailDeliveryException(status);
+            return EmailSendOutcome.Rejected;
         }
+    }
+
+    /// <summary>How long one email may take to reach the SMTP server, attachments included.</summary>
+    public static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(60);
+
+    private static bool IsSevenBit(MailAddress address) => address.User.All(c => c < 128);
+
+    // A name typed by the business: one line, without what would break the header.
+    private static string? SenderName(string? name)
+    {
+        var line = name?.ReplaceLineEndings(" ").Replace("\"", string.Empty).Trim();
+        return string.IsNullOrEmpty(line) ? null : line;
     }
 
     private string LoggableEmail(string email)

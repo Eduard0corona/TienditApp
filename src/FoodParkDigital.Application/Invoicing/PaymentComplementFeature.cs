@@ -50,6 +50,8 @@ public class PaymentComplementDto
     public CfdiCancellationMotive? CancellationMotive { get; set; }
     public DateTimeOffset? CancellationRequestedAt { get; set; }
     public DateTimeOffset? CancelledAt { get; set; }
+    /// <summary>Its latest emails to the customer, the newest first (Fase 28E).</summary>
+    public List<CfdiEmailDto> Emails { get; set; } = [];
 
     public static PaymentComplementDto From(PaymentComplement complement) => new()
     {

@@ -12,7 +12,9 @@ import {
   ORDER_NUMBER,
   PEDIDO_CANCELANDOSE,
   PEDIDO_CON_NOTAS_DE_CREDITO,
+  PEDIDO_CORREO_RECHAZADO,
   PEDIDO_EN_PARCIALIDADES,
+  PEDIDO_FACTURA_POR_CORREO,
   PEDIDO_FACTURADO,
   PEDIDO_POR_FACTURAR,
 } from './facturacion.mocks';
@@ -22,7 +24,8 @@ import {
 // customer's fiscal data, stamped after a refused and a cancelled one, waiting for the customer to accept the cancellation,
 // and the dialog to cancel it) and the fiscal data of a customer in Clientes, from their edit dialog. Since the Fase 28C
 // (ADR 0047), the invoice in installments of the same order with the payment complements of its payments, and the dialog
-// to cancel one; since the Fase 28D (ADR 0048), its refunds with their credit notes, and the dialog to cancel one.
+// to cancel one; since the Fase 28D (ADR 0048), its refunds with their credit notes, and the dialog to cancel one; since
+// the Fase 28E (ADR 0049), the invoice sent by email or refused by the customer's mail server, and «Enviar por correo».
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -151,6 +154,52 @@ test.describe('Pedidos › Factura', () => {
   });
 });
 
+test.describe('Pedidos › Factura por correo', () => {
+  /** The order's invoice, with how its latest email went. */
+  async function openInvoice(page: Page) {
+    await open(page, '/orders');
+    await page.getByRole('button', { name: ORDER_NUMBER, exact: true }).click();
+    const detail = await dialog(page, `Pedido ${ORDER_NUMBER}`);
+    await detail.getByRole('button', { name: 'Factura' }).click();
+    return dialog(page, `Facturar ${ORDER_NUMBER}`);
+  }
+
+  test.describe('enviada', () => {
+    test.use({ prepareData: PEDIDO_FACTURA_POR_CORREO });
+
+    for (const look of LOOKS) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`factura enviada por correo ${look.suffix}`, async ({ page }) => {
+          const invoice = await openInvoice(page);
+          await expect(invoice.getByText(/Se envió por correo a facturas@altavista\.mx/)).toBeVisible();
+          await snapScreen(page, `pedidos-factura-enviada-por-correo-${look.suffix}`);
+        });
+      });
+    }
+
+    test('enviar la factura por correo', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await invoice.getByRole('button', { name: 'Enviar por correo la factura F-3' }).click();
+      const sending = await dialog(page, 'Enviar por correo la factura F-3');
+      await sending.getByLabel('Correo').fill('contabilidad@altavista.mx');
+      await expect(sending.getByRole('checkbox', { name: /Usar este correo para lo que siga de esta factura/ })).not.toBeChecked();
+      await snapScreen(page, 'pedidos-factura-enviar-por-correo');
+    });
+  });
+
+  test.describe('rechazada', () => {
+    test.use({ prepareData: PEDIDO_CORREO_RECHAZADO });
+
+    test('correo de la factura rechazado', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await expect(invoice.getByText(/No se envió a facturas@altavsita\.mx: el servidor de correo lo rechazó/)).toBeVisible();
+      await snapScreen(page, 'pedidos-factura-correo-rechazado');
+    });
+  });
+});
+
 test.describe('Pedidos › Factura en parcialidades', () => {
   test.use({ prepareData: PEDIDO_EN_PARCIALIDADES });
 
@@ -247,6 +296,7 @@ test.describe('Clientes › Datos fiscales', () => {
     await editing.getByRole('button', { name: 'Cambiar datos fiscales' }).click();
     const fiscal = await dialog(page, `Datos fiscales de ${CUSTOMER_NAME}`);
     await expect(fiscal.getByLabel('RFC')).toHaveValue('GAL1806043P5');
+    await expect(fiscal.getByLabel('Correo para facturas (opcional)')).toHaveValue('facturas@altavista.mx');
     await snapScreen(page, 'clientes-datos-fiscales');
   });
 });

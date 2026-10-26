@@ -186,7 +186,8 @@ public sealed class OutboxDispatcher
                 message.ActorUserId,
                 message.ActorName,
                 message.OccurredAt,
-                message.Attempts + 1);
+                message.Attempts + 1,
+                Math.Max(1, _options.MaxAttempts));
 
             try
             {

@@ -157,6 +157,21 @@ internal sealed class RecordingEmailService : IEmailService
 
     public Task SendEmailAsync(string to, string subject, string body) => Task.CompletedTask;
 
+    /// <summary>The emails with documents (the CFDI of an invoice, Fase 28E) the server took.</summary>
+    public List<DocumentEmail> Documents { get; } = [];
+    /// <summary>How the next emails with documents end; set a failure to make them throw, as a server that does not answer.</summary>
+    public EmailSendOutcome DocumentsOutcome { get; set; } = EmailSendOutcome.Sent;
+    public Exception? DocumentsFailure { get; set; }
+
+    public Task<EmailSendOutcome> SendDocumentsAsync(DocumentEmail email, CancellationToken cancellationToken)
+    {
+        if (DocumentsFailure is not null)
+            throw DocumentsFailure;
+        if (DocumentsOutcome == EmailSendOutcome.Sent)
+            Documents.Add(email);
+        return Task.FromResult(DocumentsOutcome);
+    }
+
     public List<(string Email, string Business, string Path)> Invitations { get; } = [];
 
     public Task SendTeamInvitationAsync(string email, string businessName, string invitationPath)
