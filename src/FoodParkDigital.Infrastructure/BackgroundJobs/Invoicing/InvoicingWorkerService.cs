@@ -16,8 +16,9 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs.Invoicing;
 /// <summary>
 /// What invoicing leaves pending (Fase 28A, ADR 0045): every few minutes it asks the PAC again for the invoices that stayed
 /// «Timbrando» (<see cref="StampPendingInvoicesCommand"/>), issues the payment complements (Fase 28C) and the credit notes
-/// (Fase 28D) the businesses owe, and every half hour it asks the SAT about the cancellations that wait for the customer
-/// (<see cref="CheckInvoiceCancellationsCommand"/>), each in its business's scope. Without the PAC configured it does nothing.
+/// (Fase 28D) the businesses owe, and every half hour it asks the SAT about the cancellations that wait for the customer and
+/// to cancel the invoices whose replacement is stamped (<see cref="CheckInvoiceCancellationsCommand"/>, Fase 28G), each in
+/// its business's scope. Without the PAC configured it does nothing.
 /// </summary>
 public sealed class InvoicingWorkerService : BackgroundService
 {
@@ -201,6 +202,12 @@ public sealed class InvoicingWorkerService : BackgroundService
                         .Where(n => n.Status == OrderInvoiceStatus.Cancelling)
                         .GroupBy(n => n.TenantId)
                         .Select(g => new Waiting(g.Key, g.Min(n => n.CancellationRequestedAt)))
+                        .ToListAsync(cancellationToken),
+                    // The invoices whose replacement is stamped, to be cancelled with motive 01 (Fase 28G).
+                    await OrderInvoiceSubstitutions.WaitingForCancellation(
+                            context.OrderInvoices.IgnoreQueryFilters(), now - OrderInvoiceSubstitutions.CancellationRetryWindow)
+                        .GroupBy(i => i.TenantId)
+                        .Select(g => new Waiting(g.Key, g.Min(i => i.StampedAt)))
                         .ToListAsync(cancellationToken));
                 _cancellationsCheckedAt = now;
             }

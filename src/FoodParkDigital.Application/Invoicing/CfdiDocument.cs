@@ -47,7 +47,10 @@ public sealed record CfdiDocument
     /// <summary>The payment a payment complement declares (Pagos 2.0, Fase 28C); an invoice has none.</summary>
     public CfdiDocumentPayment? Payment { get; init; }
 
-    /// <summary>The CFDI it is related to (CfdiRelacionados): a credit note's invoice (Fase 28D); an invoice has none.</summary>
+    /// <summary>
+    /// The CFDI it is related to (CfdiRelacionados): a credit note's invoice (Fase 28D), or the invoice with errors one
+    /// replaces (Fase 28G); otherwise none.
+    /// </summary>
     public CfdiDocumentRelated? Related { get; init; }
 
     /// <summary>c_TipoDeComprobante of a payment complement, and c_Moneda «no currency» it carries.</summary>
@@ -147,9 +150,11 @@ public sealed record CfdiDocument
     }
 
     /// <summary>
-    /// The CFDI of a draft ready to stamp, for a named receiver, with its serie, folio and date (local to the business).
+    /// The CFDI of a draft ready to stamp, for a named receiver, with its serie, folio and date (local to the business). One
+    /// that replaces an invoice with errors carries its UUID with the relation 04 (Fase 28G).
     /// </summary>
-    public static CfdiDocument From(CfdiDraftDto draft, CfdiReceiver receiver, string serie, long folio, DateTime localDate)
+    public static CfdiDocument From(
+        CfdiDraftDto draft, CfdiReceiver receiver, string serie, long folio, DateTime localDate, string? replacesUuid = null)
     {
         if (!draft.IsReadyToStamp)
             throw new InvalidOperationException("Only a draft without blockers is stamped.");
@@ -179,7 +184,8 @@ public sealed record CfdiDocument
                 concept.Amount,
                 concept.TaxObject,
                 concept.Transfer is null ? null : Transfer(concept.Transfer))).ToList(),
-            Transfers = draft.Transfers.Select(Transfer).ToList()
+            Transfers = draft.Transfers.Select(Transfer).ToList(),
+            Related = replacesUuid is null ? null : new CfdiDocumentRelated(SatCatalog.SubstitutionRelation, [replacesUuid])
         };
     }
 

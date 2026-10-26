@@ -322,7 +322,7 @@ public class CancelPaymentComplementCommandHandler : IRequestHandler<CancelPayme
         CfdiCancellationOutcome outcome;
         try
         {
-            outcome = await _gateway.CancelAsync(issuerRfc, complement.Uuid!, request.Motive, cancellationToken);
+            outcome = await _gateway.CancelAsync(issuerRfc, complement.Uuid!, request.Motive, null, cancellationToken);
         }
         catch (Exception ex) when (ex is InvoicingGatewayRefusedException or InvoicingGatewayUnavailableException)
         {
@@ -508,8 +508,9 @@ internal sealed class PaymentComplementRequester(
         if (payment is null)
             return Result.Failure<Guid>(PaymentComplements.NoInvoiceInInstallmentsMessage);
 
+        // The order's invoice now: a replaced one waits for its cancellation, and the complements go to its replacement.
         var invoice = await context.OrderInvoices.AsNoTracking()
-            .FirstOrDefaultAsync(i => i.OrderId == payment.OrderId
+            .FirstOrDefaultAsync(i => i.OrderId == payment.OrderId && i.ReplacedByInvoiceId == null
                 && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
                     || i.Status == OrderInvoiceStatus.Cancelling), cancellationToken);
         var problem = PaymentComplements.FormProblem(payment.Method) ?? PaymentComplements.InvoiceProblem(invoice);
@@ -776,7 +777,7 @@ public static class PaymentComplements
         => payments.Where(payment => payment.Method != OrderPaymentMethod.Other
             && payment.Method != OrderPaymentMethod.CustomerBalance
             && invoices.Any(invoice => invoice.TenantId == payment.TenantId && invoice.OrderId == payment.OrderId
-                && invoice.Status == OrderInvoiceStatus.Stamped
+                && invoice.Status == OrderInvoiceStatus.Stamped && invoice.ReplacedByInvoiceId == null
                 && invoice.PaymentMethod == CfdiInvoice.PaidInInstallments
                 && !complements.Any(c => c.OrderPaymentId == payment.Id && c.OrderInvoiceId == invoice.Id)));
 
@@ -825,7 +826,7 @@ public static class PaymentComplements
             .Where(s => s.TenantId == order.TenantId)
             .Select(s => s.TimeZone)
             .FirstOrDefaultAsync(cancellationToken);
-        var liveInvoice = invoices.FirstOrDefault(i => i.IsLive);
+        var liveInvoice = invoices.FirstOrDefault(i => i.IsCurrent);
         var invoiceProblem = InvoiceProblem(liveInvoice) ?? InvoicingSettings.ReadinessProblem(settings);
         if (invoiceProblem is null)
             invoiceProblem = DocumentProblem(liveInvoice!, CfdiDocument.FromJson(liveInvoice!.Document), settings.Rfc);

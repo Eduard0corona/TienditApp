@@ -56,6 +56,16 @@ public class OrderInvoiceDto
     public List<CfdiEmailDto> Emails { get; set; } = [];
     /// <summary>The customer requested it online with the ticket (Fase 28F), not a person of the business.</summary>
     public bool RequestedByCustomer { get; set; }
+    /// <summary>The invoice that replaces this one because it has errors (Fase 28G), and its number.</summary>
+    public Guid? ReplacedByInvoiceId { get; set; }
+    public string? ReplacedByNumber { get; set; }
+    /// <summary>The invoice with errors this one replaces, and its number.</summary>
+    public Guid? ReplacesInvoiceId { get; set; }
+    public string? ReplacesNumber { get; set; }
+    /// <summary>The order's stamped invoice can be replaced now by an owner or an administrator.</summary>
+    public bool CanSubstitute { get; set; }
+    /// <summary>Why the order's stamped invoice cannot be replaced now; null when it can, or for any other invoice.</summary>
+    public string? SubstitutionProblem { get; set; }
 
     public static OrderInvoiceDto From(OrderInvoice invoice) => new()
     {
@@ -80,8 +90,25 @@ public class OrderInvoiceDto
         CancellationRequestedAt = invoice.CancellationRequestedAt,
         CancelledAt = invoice.CancelledAt,
         ReceiverEmail = invoice.ReceiverEmail,
-        RequestedByCustomer = invoice.RequestedByCustomer
+        RequestedByCustomer = invoice.RequestedByCustomer,
+        ReplacedByInvoiceId = invoice.ReplacedByInvoiceId
     };
+
+    /// <summary>The order's invoices with the numbers of the ones that replace each other (Fase 28G).</summary>
+    public static List<OrderInvoiceDto> FromAll(IReadOnlyList<OrderInvoice> invoices)
+    {
+        var dtos = invoices.Select(From).ToList();
+        var byId = dtos.ToDictionary(dto => dto.Id);
+        foreach (var replaced in dtos.Where(dto => dto.ReplacedByInvoiceId is not null))
+        {
+            if (!byId.TryGetValue(replaced.ReplacedByInvoiceId!.Value, out var replacement))
+                continue;
+            replaced.ReplacedByNumber = replacement.Number;
+            replacement.ReplacesInvoiceId = replaced.Id;
+            replacement.ReplacesNumber = replaced.Number;
+        }
+        return dtos;
+    }
 }
 
 /// <summary>What the detail of an order shows of its invoicing.</summary>
@@ -155,14 +182,23 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
 
         var settings = await InvoicingSettings.ReadAsync(_context, _tenant.TenantId, _gateway, _clock.UtcNow, cancellationToken);
         var problem = InvoicingSettings.ReadinessProblem(settings)
-            ?? OrderInvoicing.LiveInvoiceProblem(invoices.FirstOrDefault(i => i.IsLive))
+            ?? OrderInvoicing.LiveInvoiceProblem(invoices.FirstOrDefault(i => i.IsCurrent))
             ?? await OrderInvoicing.GlobalInvoiceProblemAsync(_context, order.Id, cancellationToken)
             ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
 
         var last = invoices.FirstOrDefault();
         var payments = await PaymentComplements.ForOrderAsync(_context, order, invoices, settings, cancellationToken);
         var adjustments = await CreditNotes.ForOrderAsync(_context, order, invoices, settings, cancellationToken);
-        var invoiceDtos = invoices.Select(OrderInvoiceDto.From).ToList();
+        var invoiceDtos = OrderInvoiceDto.FromAll(invoices);
+        // The order's stamped invoice: whether an owner or an administrator can replace it now (Fase 28G).
+        if (invoices.FirstOrDefault(i => i.IsCurrent) is { Status: OrderInvoiceStatus.Stamped } current)
+        {
+            var dto = invoiceDtos.First(i => i.Id == current.Id);
+            dto.SubstitutionProblem = InvoicingSettings.ReadinessProblem(settings)
+                ?? await OrderInvoiceSubstitutions.ProblemAsync(_context, current, settings.Rfc, cancellationToken)
+                ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
+            dto.CanSubstitute = dto.SubstitutionProblem is null;
+        }
         var emails = await CfdiEmails.LatestAsync(_context, invoices.Select(i => i.Id).ToList(), cancellationToken);
         foreach (var invoice in invoiceDtos)
             invoice.Emails = emails.GetValueOrDefault(invoice.Id) ?? [];
@@ -306,25 +342,12 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
             _tenant.TenantId,
             new OrderInvoiceRequest(request.OrderId, request.Receiver, request.ReceiverEmail, userId, _currentUser.UserName ?? "system")
             {
-                BeforeSave = (order, invoice) => SaveToCustomerAsync(request, order, invoice, cancellationToken)
+                BeforeSave = (order, invoice) => request.SaveToCustomer
+                    ? OrderInvoicing.SaveToCustomerAsync(_context, _phones, _currentUser, request.Receiver, order, invoice, cancellationToken)
+                    : Task.CompletedTask
             },
             cancellationToken);
         return requested.IsSuccess ? Result.Success(requested.Value.Id) : Result.Failure<Guid>(requested.Error!);
-    }
-
-    private async Task SaveToCustomerAsync(
-        RequestOrderInvoiceCommand request, Order order, OrderInvoice invoice, CancellationToken cancellationToken)
-    {
-        if (!request.SaveToCustomer
-            || await OrderInvoicing.CustomerAsync(_context, _phones, order.CustomerPhone, tracked: true, cancellationToken) is not { } customer)
-            return;
-
-        var (previous, previousEmail) = (customer.FiscalData, customer.InvoiceEmail);
-        // A value of its own: an owned value is never shared between two records. An invoice without an email (not sent
-        // this time) leaves the customer's as it is.
-        customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver), invoice.ReceiverEmail ?? customer.InvoiceEmail);
-        if (CustomerFiscalDataAudit.Entry(customer, previous, previousEmail, _currentUser.UserName, $"Factura {invoice.Number}") is { } changed)
-            _context.AuditLogs.Add(changed);
     }
 }
 
@@ -397,6 +420,9 @@ public class CancelOrderInvoiceCommandHandler : IRequestHandler<CancelOrderInvoi
         $"Cancela primero los complementos de pago de esta factura ({string.Join(", ", complements)}): el SAT no cancela una " +
         "factura en parcialidades mientras sus pagos tengan complementos vigentes.";
 
+    public static string ReplacedFirstMessage(string replaced) =>
+        $"Esta factura sustituye a la {replaced}, que todavía no se cancela: cancela primero la {replaced}, con relación (01) o sin ella (02).";
+
     public static string LiveCreditNotesMessage(IReadOnlyList<string> notes) =>
         $"Cancela primero las notas de crédito de esta factura ({string.Join(", ", notes)}): el SAT no cancela una factura " +
         "mientras tenga notas de crédito vigentes relacionadas.";
@@ -437,6 +463,14 @@ public class CancelOrderInvoiceCommandHandler : IRequestHandler<CancelOrderInvoi
         // Nor one related to credit notes in force (Fase 28D).
         if (await CreditNotes.LiveNumbersAsync(_context, invoice.Id, cancellationToken) is { Count: > 0 } notes)
             return Result.Failure<OrderInvoiceDto>(LiveCreditNotesMessage(notes));
+        // The one it replaces goes first (Fase 28G): its cancellation with motive 01 names this one.
+        if (await _context.OrderInvoices.AsNoTracking()
+                .Where(i => i.ReplacedByInvoiceId == invoice.Id
+                    && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
+                        || i.Status == OrderInvoiceStatus.Cancelling))
+                .Select(i => new { i.Serie, i.Folio })
+                .FirstOrDefaultAsync(cancellationToken) is { } replaced)
+            return Result.Failure<OrderInvoiceDto>(ReplacedFirstMessage($"{replaced.Serie}-{replaced.Folio}"));
         var profile = await _context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         if (profile is not { HasCertificate: true })
             return Result.Failure<OrderInvoiceDto>(NoCertificateToCancelMessage);
@@ -446,7 +480,7 @@ public class CancelOrderInvoiceCommandHandler : IRequestHandler<CancelOrderInvoi
         CfdiCancellationOutcome outcome;
         try
         {
-            outcome = await _gateway.CancelAsync(issuerRfc, invoice.Uuid!, request.Motive, cancellationToken);
+            outcome = await _gateway.CancelAsync(issuerRfc, invoice.Uuid!, request.Motive, null, cancellationToken);
         }
         catch (InvoicingGatewayRefusedException ex)
         {
@@ -682,6 +716,29 @@ internal static class OrderInvoicing
 
     public static CfdiReceiver Receiver(CfdiReceiverInput input)
         => CfdiReceiver.Create(input.Rfc, input.Name, input.PostalCode, input.FiscalRegime, input.CfdiUse);
+
+    /// <summary>
+    /// The invoice's fiscal data kept in the customer with the order's phone, if there is one, with its audit entry. An
+    /// invoice without an email (not sent this time) leaves the customer's as it is.
+    /// </summary>
+    public static async Task SaveToCustomerAsync(
+        IApplicationDbContext context,
+        IPhoneNormalizationService phones,
+        ICurrentUserService currentUser,
+        CfdiReceiverInput receiver,
+        Order order,
+        OrderInvoice invoice,
+        CancellationToken cancellationToken)
+    {
+        if (await CustomerAsync(context, phones, order.CustomerPhone, tracked: true, cancellationToken) is not { } customer)
+            return;
+
+        var (previous, previousEmail) = (customer.FiscalData, customer.InvoiceEmail);
+        // A value of its own: an owned value is never shared between two records.
+        customer.SetFiscalData(Receiver(receiver), invoice.ReceiverEmail ?? customer.InvoiceEmail);
+        if (CustomerFiscalDataAudit.Entry(customer, previous, previousEmail, currentUser.UserName, $"Factura {invoice.Number}") is { } changed)
+            context.AuditLogs.Add(changed);
+    }
 
     /// <summary>No email, or one plain address (Fase 28E).</summary>
     public static bool IsValidEmail(string? email) => string.IsNullOrWhiteSpace(email) || InvoiceEmailAddress.IsValid(email.Trim());

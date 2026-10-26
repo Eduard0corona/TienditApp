@@ -6291,6 +6291,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoicing/invoices/{invoiceId}/substitute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    invoiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["IssueOrderInvoiceRequest"];
+                    "text/json": components["schemas"]["IssueOrderInvoiceRequest"];
+                    "application/*+json": components["schemas"]["IssueOrderInvoiceRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderInvoiceDto"];
+                        "application/json": components["schemas"]["OrderInvoiceDto"];
+                        "text/json": components["schemas"]["OrderInvoiceDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/invoices/{invoiceId}/cancel-replaced": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    invoiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderInvoiceDto"];
+                        "application/json": components["schemas"]["OrderInvoiceDto"];
+                        "text/json": components["schemas"]["OrderInvoiceDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoicing/invoices/{invoiceId}/xml": {
         parameters: {
             query?: never;
@@ -17285,6 +17369,14 @@ export interface components {
             receiverEmail?: string | null;
             emails: components["schemas"]["CfdiEmailDto"][];
             requestedByCustomer: boolean;
+            /** Format: uuid */
+            replacedByInvoiceId?: string | null;
+            replacedByNumber?: string | null;
+            /** Format: uuid */
+            replacesInvoiceId?: string | null;
+            replacesNumber?: string | null;
+            canSubstitute: boolean;
+            substitutionProblem?: string | null;
         };
         /**
          * Format: int32

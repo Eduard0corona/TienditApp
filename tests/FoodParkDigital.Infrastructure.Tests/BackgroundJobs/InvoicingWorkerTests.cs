@@ -415,7 +415,9 @@ public class InvoicingWorkerTests
         public Task RemoveCertificateAsync(string certificateNumber, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StampedCfdi> StampAsync(CfdiDocument document, Guid idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<CfdiCancellationOutcome> CancelAsync(string issuerRfc, string uuid, CfdiCancellationMotive motive, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<CfdiCancellationOutcome> CancelAsync(
+            string issuerRfc, string uuid, CfdiCancellationMotive motive, string? replacementUuid, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
         public Task<CfdiSatStatus> GetSatStatusAsync(CfdiStatusQuery query, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

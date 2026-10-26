@@ -413,7 +413,7 @@ public class SwSapienGatewayTests
             ? Login()
             : Json(HttpStatusCode.OK, $$$"""{"data":{"acuse":"<Acuse/>","uuid":{"{{{Uuid}}}":"{{{code}}}"}},"status":"success"}"""));
 
-        var outcome = await gateway.CancelAsync("EKU9003173C9", Uuid, CfdiCancellationMotive.ErrorsWithoutReplacement, CancellationToken.None);
+        var outcome = await gateway.CancelAsync("EKU9003173C9", Uuid, CfdiCancellationMotive.ErrorsWithoutReplacement, null, CancellationToken.None);
 
         Assert.Equal(expected, outcome);
         Assert.Equal($"https://services.sw.com.mx/cfdi33/cancel/EKU9003173C9/{Uuid}/02", http.Requests[1].Url);
@@ -426,14 +426,49 @@ public class SwSapienGatewayTests
             ? Login()
             : Json(HttpStatusCode.OK, $$$"""{"data":{"acuse":"","uuid":{"{{{Uuid}}}":"204"}},"status":"success"}"""));
         var refused = await Assert.ThrowsAsync<InvoicingGatewayRefusedException>(() =>
-            notCancellable.CancelAsync("EKU9003173C9", Uuid, CfdiCancellationMotive.NotCarriedOut, CancellationToken.None));
+            notCancellable.CancelAsync("EKU9003173C9", Uuid, CfdiCancellationMotive.NotCarriedOut, null, CancellationToken.None));
         Assert.Contains("no se puede cancelar", refused.Message);
 
         var (notYet, _) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"
             ? Login()
             : Json(HttpStatusCode.OK, $$$"""{"data":{"acuse":"","uuid":{"{{{Uuid}}}":"205"}},"status":"success"}"""));
         await Assert.ThrowsAsync<InvoicingGatewayUnavailableException>(() =>
-            notYet.CancelAsync("EKU9003173C9", Uuid, CfdiCancellationMotive.NotCarriedOut, CancellationToken.None));
+            notYet.CancelAsync("EKU9003173C9", Uuid, CfdiCancellationMotive.NotCarriedOut, null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Cancel_WithMotive01_ShouldNameTheInvoiceThatReplacesIt_AndOnlyThen()
+    {
+        // Fase 28G: the folio de sustitución goes last in the path.
+        const string replacement = "6F0B7C1E-2A3D-4E5F-8A9B-0C1D2E3F4A5C";
+        var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"
+            ? Login()
+            : Json(HttpStatusCode.OK, $$$"""{"data":{"acuse":"<Acuse/>","uuid":{"{{{Uuid}}}":"201"}},"status":"success"}"""));
+
+        var outcome = await gateway.CancelAsync("EKU9003173C9", Uuid, CfdiCancellationMotive.ErrorsWithReplacement, replacement, CancellationToken.None);
+
+        Assert.Equal(CfdiCancellationOutcome.Requested, outcome);
+        Assert.Equal($"https://services.sw.com.mx/cfdi33/cancel/EKU9003173C9/{Uuid}/01/{replacement}", http.Requests[1].Url);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            gateway.CancelAsync("EKU9003173C9", Uuid, CfdiCancellationMotive.ErrorsWithReplacement, null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            gateway.CancelAsync("EKU9003173C9", Uuid, CfdiCancellationMotive.ErrorsWithoutReplacement, replacement, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("207")]
+    [InlineData("208")]
+    [InlineData("212")]
+    [InlineData("312")]
+    public async Task Cancel_WithMotive01_ThatTheSatDoesNotRelateYet_ShouldSayWhy(string code)
+    {
+        var (gateway, _) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"
+            ? Login()
+            : Json(HttpStatusCode.OK, $$$"""{"data":{"acuse":"","uuid":{"{{{Uuid}}}":"{{{code}}}"}},"status":"success"}"""));
+
+        var refused = await Assert.ThrowsAsync<InvoicingGatewayRefusedException>(() => gateway.CancelAsync(
+            "EKU9003173C9", Uuid, CfdiCancellationMotive.ErrorsWithReplacement, "6F0B7C1E-2A3D-4E5F-8A9B-0C1D2E3F4A5C", CancellationToken.None));
+        Assert.Equal(SwSapienGateway.ReplacementNotRelatedMessage, refused.Message);
     }
 
     [Fact]

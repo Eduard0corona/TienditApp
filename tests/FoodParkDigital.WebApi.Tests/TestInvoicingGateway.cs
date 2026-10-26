@@ -38,7 +38,7 @@ public sealed class TestInvoicingGateway : IInvoicingGateway
         => Task.FromResult(Encoding.ASCII.GetBytes("%PDF-1.7"));
 
     public Task<CfdiCancellationOutcome> CancelAsync(
-        string issuerRfc, string uuid, CfdiCancellationMotive motive, CancellationToken cancellationToken)
+        string issuerRfc, string uuid, CfdiCancellationMotive motive, string? replacementUuid, CancellationToken cancellationToken)
     {
         Cancellations.Enqueue((issuerRfc, uuid));
         return Task.FromResult(CfdiCancellationOutcome.Requested);

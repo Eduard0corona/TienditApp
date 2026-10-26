@@ -71,6 +71,10 @@ public sealed class OrderInvoiceStamper
             invoice.Refuse(now - invoice.RequestedAt > StampPendingInvoicesCommandHandler.RetryWindow
                 ? $"{LateRefusalNote} {ex.Message}"
                 : ex.Message, now);
+            // A refused replacement never stood: the invoice it was to replace is the order's invoice again (Fase 28G).
+            if (invoice is OrderInvoice refused
+                && await _context.OrderInvoices.FirstOrDefaultAsync(i => i.ReplacedByInvoiceId == refused.Id, cancellationToken) is { } replaced)
+                replaced.KeepAfterRefusedReplacement(refused.Id);
             return await SaveAsync(invoices, invoice, cancellationToken);
         }
         catch (InvoicingGatewayUnavailableException)

@@ -158,6 +158,12 @@ public static partial class SatCatalog
     /// <summary>c_TipoRelacion «Nota de crédito de los documentos relacionados»: how a credit note names its invoice.</summary>
     public const string CreditNoteRelation = "01";
 
+    /// <summary>
+    /// c_TipoRelacion «Sustitución de los CFDI previos»: how an invoice names the one with errors it replaces, which is then
+    /// cancelled with motive 01 (Fase 28G).
+    /// </summary>
+    public const string SubstitutionRelation = "04";
+
     public const string RefundDescription = "Devolución";
     public const string WriteOffDescription = "Condonación";
 

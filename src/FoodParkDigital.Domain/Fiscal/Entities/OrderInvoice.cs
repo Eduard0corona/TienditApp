@@ -100,16 +100,17 @@ public class OrderInvoice : CfdiInvoice, IAggregateRoot
     public const string AlreadyReplacedMessage = "Esta factura ya tiene otra que la sustituye.";
 
     /// <summary>
-    /// The PAC refused the invoice that was to replace this one: this one is the order's invoice again, and can be replaced
-    /// by another. Hearing it for a replacement that is not this one's changes nothing.
+    /// The PAC refused the invoice that was to replace this one: nothing replaces this one. Still stamped, it is the order's
+    /// invoice again and can be replaced by another; cancelled meanwhile without relation (02) or because the sale did not
+    /// happen (03), it stays so. Hearing it for a replacement that is not this one's changes nothing.
     /// </summary>
     public void KeepAfterRefusedReplacement(Guid replacementId)
     {
         if (ReplacedByInvoiceId != replacementId)
             return;
-        // The replacement never stood, so this one was never asked to be cancelled with motive 01.
-        if (Status != OrderInvoiceStatus.Stamped)
-            throw new DomainException("Una factura cuya cancelación se pidió sigue sustituida.");
+        // Motive 01 is asked for once the replacement is stamped, so a refused one never got that far.
+        if (CancellationMotive == CfdiCancellationMotive.ErrorsWithReplacement)
+            throw new DomainException("Una factura cuya cancelación con relación (01) se pidió sigue sustituida.");
 
         ReplacedByInvoiceId = null;
     }

@@ -410,7 +410,7 @@ public class CancelGlobalInvoiceCommandHandler : IRequestHandler<CancelGlobalInv
         CfdiCancellationOutcome outcome;
         try
         {
-            outcome = await _gateway.CancelAsync(issuerRfc, invoice.Uuid!, request.Motive, cancellationToken);
+            outcome = await _gateway.CancelAsync(issuerRfc, invoice.Uuid!, request.Motive, null, cancellationToken);
         }
         catch (Exception ex) when (ex is InvoicingGatewayRefusedException or InvoicingGatewayUnavailableException)
         {

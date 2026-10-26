@@ -340,9 +340,25 @@ public class OrderInvoiceTests
         original.ReplaceWith(second);
         Assert.Equal(second.Id, original.ReplacedByInvoiceId);
 
-        // Once its cancellation was asked for, its replacement stood: it stays replaced.
+        // Once its cancellation with relation was asked for, its replacement stood: it stays replaced.
         original.RequestCancellation(CfdiCancellationMotive.ErrorsWithReplacement, OwnerId, Now);
         Assert.Throws<DomainException>(() => original.KeepAfterRefusedReplacement(second.Id));
+    }
+
+    [Fact]
+    public void RefusedReplacement_OfAnInvoiceCancelledWithoutRelation_ShouldLeaveItCancelled_AndReplacedByNothing()
+    {
+        var original = Stamped();
+        var replacement = Invoice(folio: 8);
+        original.ReplaceWith(replacement);
+        // While the replacement waited for the PAC, the owner cancelled it without relation.
+        original.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, OwnerId, Now);
+        original.Cancel(Now);
+
+        original.KeepAfterRefusedReplacement(replacement.Id);
+
+        Assert.Equal((OrderInvoiceStatus.Cancelled, (Guid?)null), (original.Status, original.ReplacedByInvoiceId));
+        Assert.False(original.IsCurrent);
     }
 
     [Fact]

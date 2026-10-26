@@ -332,7 +332,7 @@ public class CancelCreditNoteCommandHandler : IRequestHandler<CancelCreditNoteCo
         CfdiCancellationOutcome outcome;
         try
         {
-            outcome = await _gateway.CancelAsync(issuerRfc, note.Uuid!, request.Motive, cancellationToken);
+            outcome = await _gateway.CancelAsync(issuerRfc, note.Uuid!, request.Motive, null, cancellationToken);
         }
         catch (Exception ex) when (ex is InvoicingGatewayRefusedException or InvoicingGatewayUnavailableException)
         {
@@ -544,8 +544,9 @@ internal sealed class CreditNoteRequester(
         if (await context.Orders.AsNoTracking().AnyAsync(o => o.Id == orderId && o.Status == OrderStatus.Cancelled, cancellationToken))
             return Result.Failure<Guid>(CreditNotes.CancelledOrderMessage);
 
+        // The order's invoice now: a replaced one waits for its cancellation, and its credit notes go to its replacement.
         var invoice = await context.OrderInvoices.AsNoTracking()
-            .FirstOrDefaultAsync(i => i.OrderId == orderId
+            .FirstOrDefaultAsync(i => i.OrderId == orderId && i.ReplacedByInvoiceId == null
                 && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
                     || i.Status == OrderInvoiceStatus.Cancelling), cancellationToken);
         var problem = (refund is null ? null : CreditNotes.FormProblem(refund.Method)) ?? CreditNotes.InvoiceProblem(invoice);
@@ -813,7 +814,7 @@ public static class CreditNotes
             && refund.Method != OrderPaymentMethod.CustomerBalance
             && orders.Any(order => order.TenantId == refund.TenantId && order.Id == refund.OrderId && order.Status != OrderStatus.Cancelled)
             && invoices.Any(invoice => invoice.TenantId == refund.TenantId && invoice.OrderId == refund.OrderId
-                && invoice.Status == OrderInvoiceStatus.Stamped
+                && invoice.Status == OrderInvoiceStatus.Stamped && invoice.ReplacedByInvoiceId == null
                 && !notes.Any(n => n.OrderRefundId == refund.Id && n.OrderInvoiceId == invoice.Id)));
 
     /// <summary>The write-offs that still stand of orders whose invoice is stamped and that never had a credit note for it.</summary>
@@ -821,7 +822,7 @@ public static class CreditNotes
         IQueryable<OrderWriteOff> writeOffs, IQueryable<OrderInvoice> invoices, IQueryable<CreditNote> notes)
         => writeOffs.Where(writeOff => writeOff.ReversedAt == null
             && invoices.Any(invoice => invoice.TenantId == writeOff.TenantId && invoice.OrderId == writeOff.OrderId
-                && invoice.Status == OrderInvoiceStatus.Stamped
+                && invoice.Status == OrderInvoiceStatus.Stamped && invoice.ReplacedByInvoiceId == null
                 && !notes.Any(n => n.OrderWriteOffId == writeOff.Id && n.OrderInvoiceId == invoice.Id)));
 
     /// <summary>The refund or write-off, if the business sees its order (as the order's detail does); otherwise it is not there.</summary>
@@ -879,7 +880,7 @@ public static class CreditNotes
             .OrderByDescending(n => n.RequestedAt)
             .ThenByDescending(n => n.Folio)
             .ToListAsync(cancellationToken);
-        var liveInvoice = invoices.FirstOrDefault(i => i.IsLive);
+        var liveInvoice = invoices.FirstOrDefault(i => i.IsCurrent);
         var invoiceProblem = InvoiceProblem(liveInvoice) ?? InvoicingSettings.ReadinessProblem(settings);
         if (invoiceProblem is null)
             invoiceProblem = DocumentProblem(liveInvoice!, CfdiDocument.FromJson(liveInvoice!.Document), settings.Rfc);
