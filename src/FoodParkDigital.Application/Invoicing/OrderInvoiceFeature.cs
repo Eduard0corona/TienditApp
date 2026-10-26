@@ -54,6 +54,8 @@ public class OrderInvoiceDto
     public string? ReceiverEmail { get; set; }
     /// <summary>Its latest emails to the customer, the newest first.</summary>
     public List<CfdiEmailDto> Emails { get; set; } = [];
+    /// <summary>The customer requested it online with the ticket (Fase 28F), not a person of the business.</summary>
+    public bool RequestedByCustomer { get; set; }
 
     public static OrderInvoiceDto From(OrderInvoice invoice) => new()
     {
@@ -77,7 +79,8 @@ public class OrderInvoiceDto
         CancellationMotive = invoice.CancellationMotive,
         CancellationRequestedAt = invoice.CancellationRequestedAt,
         CancelledAt = invoice.CancelledAt,
-        ReceiverEmail = invoice.ReceiverEmail
+        ReceiverEmail = invoice.ReceiverEmail,
+        RequestedByCustomer = invoice.RequestedByCustomer
     };
 }
 
@@ -275,10 +278,8 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenant;
     private readonly ICurrentUserService _currentUser;
-    private readonly IInvoicingLock _lock;
-    private readonly IFolioGenerator _folios;
     private readonly IPhoneNormalizationService _phones;
-    private readonly IDateTimeProvider _clock;
+    private readonly OrderInvoiceRequester _requester;
 
     public RequestOrderInvoiceCommandHandler(
         IApplicationDbContext context,
@@ -292,10 +293,8 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         _context = context;
         _tenant = tenant;
         _currentUser = currentUser;
-        _lock = invoicingLock;
-        _folios = folios;
         _phones = phones;
-        _clock = clock;
+        _requester = new OrderInvoiceRequester(context, invoicingLock, folios, clock);
     }
 
     public async Task<Result<Guid>> Handle(RequestOrderInvoiceCommand request, CancellationToken cancellationToken)
@@ -303,95 +302,29 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
         if (!Guid.TryParse(_currentUser.UserId, out var userId))
             return Result.Failure<Guid>(InvoicingSettings.NotAvailableMessage);
 
-        // A global invoice of this business asked for at the same time waits for this one (Fase 28B): the sale is in one or
-        // the other, never in both.
-        await _lock.AcquireAsync(_tenant.TenantId, cancellationToken);
-        var built = await GetOrderCfdiDraftQueryHandler.BuildAsync(_context, request.OrderId, request.Receiver, cancellationToken);
-        if (built.IsFailure)
-            return Result.Failure<Guid>(built.Error!);
-        var (draft, order, _) = built.Value;
-        if (!draft.IsReadyToStamp)
-            return Result.Failure<Guid>(draft.Blockers[0]);
+        var requested = await _requester.RequestAsync(
+            _tenant.TenantId,
+            new OrderInvoiceRequest(request.OrderId, request.Receiver, request.ReceiverEmail, userId, _currentUser.UserName ?? "system")
+            {
+                BeforeSave = (order, invoice) => SaveToCustomerAsync(request, order, invoice, cancellationToken)
+            },
+            cancellationToken);
+        return requested.IsSuccess ? Result.Success(requested.Value.Id) : Result.Failure<Guid>(requested.Error!);
+    }
 
-        var live = await _context.OrderInvoices.AsNoTracking()
-            .FirstOrDefaultAsync(i => i.OrderId == order.Id
-                && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
-                    || i.Status == OrderInvoiceStatus.Cancelling), cancellationToken);
-        var orderProblem = OrderInvoicing.LiveInvoiceProblem(live)
-            ?? await OrderInvoicing.GlobalInvoiceProblemAsync(_context, order.Id, cancellationToken)
-            ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
-        if (orderProblem is not null)
-            return Result.Failure<Guid>(orderProblem);
+    private async Task SaveToCustomerAsync(
+        RequestOrderInvoiceCommand request, Order order, OrderInvoice invoice, CancellationToken cancellationToken)
+    {
+        if (!request.SaveToCustomer
+            || await OrderInvoicing.CustomerAsync(_context, _phones, order.CustomerPhone, tracked: true, cancellationToken) is not { } customer)
+            return;
 
-        var now = _clock.UtcNow;
-        var tenantId = _tenant.TenantId;
-        var profile = await _context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var certificateProblem = InvoicingSettings.CertificateProblem(profile, draft.Issuer.Rfc, now);
-        if (certificateProblem is not null)
-            return Result.Failure<Guid>(certificateProblem);
-
-        CfdiReceiver receiver;
-        try
-        {
-            receiver = OrderInvoicing.Receiver(request.Receiver);
-        }
-        catch (DomainException ex)
-        {
-            return Result.Failure<Guid>(ex.Message);
-        }
-
-        var timeZone = await _context.TenantSettings.AsNoTracking()
-            .Where(s => s.TenantId == tenantId)
-            .Select(s => s.TimeZone)
-            .FirstOrDefaultAsync(cancellationToken);
-        var serie = profile!.Serie;
-        var folio = await _folios.NextInvoiceFolioAsync(tenantId, serie, cancellationToken);
-        var document = CfdiDocument.From(draft, receiver, serie, folio, TenantDateTimeResolver.LocalNow(now, timeZone));
-        // Paid in full, in one exhibition with what paid it; otherwise in installments, «por definir» (Fase 28C).
-        var invoice = OrderInvoice.Request(
-            tenantId, order.Id, serie, folio, receiver, draft.PaymentForm, document.ToJson(),
-            draft.SubTotal, draft.TotalTransferred, draft.Total, userId, now, draft.PaymentMethod);
-        invoice.SendTo(request.ReceiverEmail);
-        _context.OrderInvoices.Add(invoice);
-
-        if (request.SaveToCustomer
-            && await OrderInvoicing.CustomerAsync(_context, _phones, order.CustomerPhone, tracked: true, cancellationToken) is { } customer)
-        {
-            var (previous, previousEmail) = (customer.FiscalData, customer.InvoiceEmail);
-            // A value of its own: an owned value is never shared between two records. An invoice without an email (not
-            // sent this time) leaves the customer's as it is.
-            customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver), invoice.ReceiverEmail ?? customer.InvoiceEmail);
-            if (CustomerFiscalDataAudit.Entry(customer, previous, previousEmail, _currentUser.UserName, $"Factura {invoice.Number}") is { } changed)
-                _context.AuditLogs.Add(changed);
-        }
-
-        _context.AuditLogs.Add(new AuditLog(
-            tenantId: tenantId,
-            entityName: nameof(OrderInvoice),
-            entityId: invoice.Id.ToString(),
-            action: "OrderInvoiceRequested",
-            performedBy: _currentUser.UserName ?? "system",
-            metadata: JsonSerializer.Serialize(new { invoice.OrderId, order.OrderNumber, Number = invoice.Number, receiver.Rfc, invoice.Total, invoice.PaymentMethod })));
-
-        try
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            // Someone invoiced the same order at the same time (the index of one live invoice per order kept theirs): this
-            // one is undone whole, folio included. Anything else is thrown on, for the execution strategy to retry.
-            await _context.DiscardUnitOfWorkAsync(cancellationToken);
-            if (await _context.OrderInvoices.AsNoTracking().AnyAsync(
-                    i => i.OrderId == request.OrderId
-                        && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
-                            || i.Status == OrderInvoiceStatus.Cancelling),
-                    cancellationToken))
-                return Result.Failure<Guid>(OrderInvoicing.AlreadyInvoicingMessage);
-            throw;
-        }
-
-        return Result.Success(invoice.Id);
+        var (previous, previousEmail) = (customer.FiscalData, customer.InvoiceEmail);
+        // A value of its own: an owned value is never shared between two records. An invoice without an email (not sent
+        // this time) leaves the customer's as it is.
+        customer.SetFiscalData(OrderInvoicing.Receiver(request.Receiver), invoice.ReceiverEmail ?? customer.InvoiceEmail);
+        if (CustomerFiscalDataAudit.Entry(customer, previous, previousEmail, _currentUser.UserName, $"Factura {invoice.Number}") is { } changed)
+            _context.AuditLogs.Add(changed);
     }
 }
 

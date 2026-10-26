@@ -13,6 +13,7 @@ using FoodParkDigital.WebApi.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using FoodParkDigital.WebApi.Controllers;
 using FoodParkDigital.WebApi.Errors;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -132,6 +133,17 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = isDev ? 300 : 30,
                 Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+    // Self-invoicing (Fase 28F): each request reads a ticket and may stamp an invoice with the PAC; a customer types the
+    // folio and the code a few times, never dozens.
+    options.AddPolicy(PublicSelfInvoiceController.RateLimitPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 300 : 30,
+                Window = TimeSpan.FromMinutes(10),
                 QueueLimit = 0
             }));
     options.AddPolicy("public-order", httpContext =>

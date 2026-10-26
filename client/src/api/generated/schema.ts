@@ -6041,6 +6041,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoicing/settings/self-invoicing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetSelfInvoicingRequest"];
+                    "text/json": components["schemas"]["SetSelfInvoicingRequest"];
+                    "application/*+json": components["schemas"]["SetSelfInvoicingRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InvoicingSettingsDto"];
+                        "application/json": components["schemas"]["InvoicingSettingsDto"];
+                        "text/json": components["schemas"]["InvoicingSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/orders/{orderId}/self-invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderSelfInvoiceDto"];
+                        "application/json": components["schemas"]["OrderSelfInvoiceDto"];
+                        "text/json": components["schemas"]["OrderSelfInvoiceDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoicing/orders/{orderId}": {
         parameters: {
             query?: never;
@@ -11632,6 +11714,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/self-invoice/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SelfInvoicePageDto"];
+                        "application/json": components["schemas"]["SelfInvoicePageDto"];
+                        "text/json": components["schemas"]["SelfInvoicePageDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/self-invoice/{slug}/ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SelfInvoiceTicketRequest"];
+                    "text/json": components["schemas"]["SelfInvoiceTicketRequest"];
+                    "application/*+json": components["schemas"]["SelfInvoiceTicketRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SelfInvoiceTicketDto"];
+                        "application/json": components["schemas"]["SelfInvoiceTicketDto"];
+                        "text/json": components["schemas"]["SelfInvoiceTicketDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/self-invoice/{slug}/invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SelfInvoiceRequest"];
+                    "text/json": components["schemas"]["SelfInvoiceRequest"];
+                    "application/*+json": components["schemas"]["SelfInvoiceRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SelfInvoiceResultDto"];
+                        "application/json": components["schemas"]["SelfInvoiceResultDto"];
+                        "text/json": components["schemas"]["SelfInvoiceResultDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/self-invoice/{slug}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ResendSelfInvoiceRequest"];
+                    "text/json": components["schemas"]["ResendSelfInvoiceRequest"];
+                    "application/*+json": components["schemas"]["ResendSelfInvoiceRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SelfInvoiceResendDto"];
+                        "application/json": components["schemas"]["SelfInvoiceResendDto"];
+                        "text/json": components["schemas"]["SelfInvoiceResendDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/purchaseorders": {
         parameters: {
             query?: never;
@@ -14317,6 +14573,7 @@ export interface components {
             /** Format: date-time */
             requestedAt: string;
             byTienditApp: boolean;
+            byCustomer: boolean;
             /** Format: date-time */
             sentAt?: string | null;
             sentWithoutPdf: boolean;
@@ -16359,6 +16616,8 @@ export interface components {
             missingData: string[];
             certificate?: components["schemas"]["InvoicingCertificateDto"];
             ready: boolean;
+            selfInvoicing: boolean;
+            selfInvoicePath: string;
         };
         IssueGlobalInvoiceRequest: {
             periodicity: components["schemas"]["GlobalInvoicePeriodicity"];
@@ -17025,6 +17284,7 @@ export interface components {
             cancelledAt?: string | null;
             receiverEmail?: string | null;
             emails: components["schemas"]["CfdiEmailDto"][];
+            requestedByCustomer: boolean;
         };
         /**
          * Format: int32
@@ -17172,6 +17432,11 @@ export interface components {
             orderItemId: string;
             /** Format: double */
             quantity: number;
+        };
+        OrderSelfInvoiceDto: {
+            path: string;
+            orderNumber: string;
+            code: string;
         };
         /**
          * Format: int32
@@ -18564,6 +18829,12 @@ export interface components {
             userId?: string | null;
             phoneNumber?: string | null;
         };
+        ResendSelfInvoiceRequest: {
+            folio: string;
+            code: string;
+            rfc: string;
+            email: string;
+        };
         ResetPasswordCommand: {
             userId: string;
             token: string;
@@ -18694,6 +18965,53 @@ export interface components {
             openings?: components["schemas"]["SpecialOpeningDto"][] | null;
             reason?: string | null;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        SelfInvoiceOutcome: 0 | 1 | 2;
+        SelfInvoicePageDto: {
+            businessName: string;
+            available: boolean;
+            sandbox: boolean;
+        };
+        SelfInvoiceRequest: {
+            folio: string;
+            code: string;
+            receiver: components["schemas"]["CfdiReceiverInput"];
+            email: string;
+        };
+        SelfInvoiceResendDto: {
+            invoiceNumber: string;
+            email: string;
+        };
+        SelfInvoiceResultDto: {
+            outcome: components["schemas"]["SelfInvoiceOutcome"];
+            invoiceNumber: string;
+            email: string;
+            message?: string | null;
+        };
+        SelfInvoiceTicketDto: {
+            orderNumber: string;
+            /** Format: date-time */
+            date: string;
+            /** Format: double */
+            total: number;
+            status: components["schemas"]["SelfInvoiceTicketStatus"];
+            invoiceNumber?: string | null;
+            message?: string | null;
+            /** Format: date */
+            invoiceBy?: string | null;
+        };
+        SelfInvoiceTicketRequest: {
+            folio: string;
+            code: string;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        SelfInvoiceTicketStatus: 0 | 1 | 2 | 3;
         SendCfdiByEmailRequest: {
             email: string;
             useForInvoice: boolean;
@@ -18889,6 +19207,9 @@ export interface components {
         };
         SetProductOptionGroupsRequest: {
             groups: components["schemas"]["ProductOptionGroupInput"][];
+        };
+        SetSelfInvoicingRequest: {
+            on: boolean;
         };
         SpecialDayDto: {
             /** Format: uuid */

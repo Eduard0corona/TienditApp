@@ -17,7 +17,8 @@ type Settings = Schemas['InvoicingSettingsDto'];
 
 const READY_TO_UPLOAD: Settings = {
   available: true, sandbox: false, serie: 'F', paymentSerie: 'P', creditNoteSerie: 'NC', rfc: 'EKU9003173C9', legalName: 'ESCUELA KEMPER URGATE', fiscalRegime: '601',
-  postalCode: '06000', missingData: [], certificate: undefined, ready: false,
+  postalCode: '06000', missingData: [], certificate: undefined, ready: false, selfInvoicing: false,
+  selfInvoicePath: '/m/demo/facturar',
 };
 
 const WITH_CERTIFICATE: Settings = {

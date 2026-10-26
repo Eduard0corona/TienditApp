@@ -14,7 +14,8 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// the CFDI 4.0 invoice of an order, stamped through the platform's PAC, downloaded and cancelled; the global invoice of a
 /// period to the general public (Fase 28B, ADR 0046), for owners and admins; the payment complements of the payments of an
 /// invoice in installments (Fase 28C, ADR 0047); the credit notes of the refunds and write-offs of an invoiced order
-/// (Fase 28D, ADR 0048); and the emails of those CFDI to the customer (Fase 28E, ADR 0049).
+/// (Fase 28D, ADR 0048); the emails of those CFDI to the customer (Fase 28E, ADR 0049); and self-invoicing, turned on
+/// here and printed on each ticket (Fase 28F, ADR 0050).
 /// </summary>
 [ApiController]
 [Route("api/v1/invoicing")]
@@ -58,6 +59,26 @@ public class InvoicingController : ControllerBase
         var result = await _mediator.Send(
             new ChangeInvoiceSerieCommand(request.Serie, request.PaymentSerie, request.CreditNoteSerie), cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    /// <summary>Turns self-invoicing on (only while the business can invoice) or off.</summary>
+    [HttpPut("settings/self-invoicing")]
+    public async Task<ActionResult<InvoicingSettingsDto>> SetSelfInvoicing(
+        [FromBody] SetSelfInvoicingRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetSelfInvoicingCommand(request.On), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    /// <summary>
+    /// The folio and code the order's ticket prints for self-invoicing; nothing (204) while it is off or for a sale that is not
+    /// invoiced online.
+    /// </summary>
+    [HttpGet("orders/{orderId:guid}/self-invoice")]
+    public async Task<ActionResult<OrderSelfInvoiceDto>> GetOrderSelfInvoice(Guid orderId, CancellationToken cancellationToken)
+    {
+        var ticket = await _mediator.Send(new GetOrderSelfInvoiceQuery(orderId), cancellationToken);
+        return ticket is null ? NoContent() : Ok(ticket);
     }
 
     /// <summary>Whether the order can be invoiced, whom to, and its invoices.</summary>
@@ -310,6 +331,11 @@ public class ChangeInvoiceSerieRequest
     public string? PaymentSerie { get; init; }
     /// <summary>The serie of the credit notes (Fase 28D); left out, it stays as it is.</summary>
     public string? CreditNoteSerie { get; init; }
+}
+
+public class SetSelfInvoicingRequest
+{
+    public bool On { get; init; }
 }
 
 public class IssueOrderInvoiceRequest

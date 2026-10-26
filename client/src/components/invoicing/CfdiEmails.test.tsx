@@ -19,7 +19,7 @@ const TOO_MANY = 'F-1 ya se envió 5 veces hoy: revisa el correo con el cliente 
 function email(overrides: Partial<CfdiEmail> = {}): CfdiEmail {
   return {
     id: 'e-1', document: CfdiEmailDocument.Invoice, cfdiId: 'inv-1', to: 'karla@ejemplo.mx', requestedAt: '2026-10-26T17:55:00Z',
-    byTienditApp: true, sentAt: null, sentWithoutPdf: false, failedAt: null, failure: undefined, failedAttempts: 0,
+    byTienditApp: true, byCustomer: false, sentAt: null, sentWithoutPdf: false, failedAt: null, failure: undefined, failedAttempts: 0,
     lastFailedAttemptAt: null, ...overrides,
   };
 }
