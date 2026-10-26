@@ -80,7 +80,8 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
             Email = request.Email,
             FirstName = request.FirstName,
             LastName = request.LastName,
-            PhoneNumber = request.PhoneNumber,
+            // The number as its profile and its SMS codes use it, not as it was typed.
+            PhoneNumber = phoneNormalized,
             Role = UserRole.Customer,
             EmailConfirmed = false,
             IsActive = true

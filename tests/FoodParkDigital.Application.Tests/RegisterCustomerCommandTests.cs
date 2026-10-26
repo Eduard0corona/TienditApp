@@ -75,6 +75,8 @@ public class RegisterCustomerCommandTests
         Assert.Equal(result.Value, user.Id);
         Assert.False(user.EmailConfirmed);
         Assert.False(user.PhoneNumberConfirmed);
+        // Typed as "55 1234 5678", kept as its profile and its SMS codes use it.
+        Assert.Equal(PhoneNormalized, user.PhoneNumber);
         Assert.Equal("CUSTOMER", Assert.Single(stored.Roles));
         var profile = Assert.Single(stored.Profiles);
         Assert.Equal(user.Id, profile.UserId);

@@ -33,6 +33,13 @@ const MX_STATES = [
   'Sinaloa', 'Sonora', 'Tabasco', 'Tamaulipas', 'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas',
 ];
 
+// The phone is the ten national digits (spaces or dashes are fine); the API saves it with the +52.
+const PHONE_RULES = {
+  required: 'El teléfono es requerido',
+  setValueAs: (value: string) => value.replace(/[\s().-]/g, ''),
+  pattern: { value: /^\d{10}$/, message: 'Escribe los 10 dígitos de tu teléfono' },
+};
+
 export default function Register() {
   const navigate = useNavigate();
   // Explorar opens it on the account a visitor asked for: ?cuenta=cliente or ?cuenta=negocio.
@@ -204,12 +211,10 @@ export default function Register() {
                           <label htmlFor="register-telefono" className="form-label">Teléfono <span className="text-danger">*</span></label>
                           <input id="register-telefono"
                             type="tel"
+                            autoComplete="tel-national"
                             className={`form-control ${customerForm.formState.errors.phoneNumber ? 'is-invalid' : ''}`}
-                            placeholder="+5215512345678"
-                            {...customerForm.register('phoneNumber', {
-                              required: 'El teléfono es requerido',
-                              pattern: { value: /^\+[1-9]\d{6,14}$/, message: 'Formato E.164 (ej: +5215512345678)' },
-                            })}
+                            placeholder="10 dígitos"
+                            {...customerForm.register('phoneNumber', PHONE_RULES)}
                           />
                           {customerForm.formState.errors.phoneNumber && (
                             <div className="invalid-feedback">{customerForm.formState.errors.phoneNumber.message}</div>
@@ -333,12 +338,10 @@ export default function Register() {
                             <label htmlFor="register-telefono-2" className="form-label">Teléfono <span className="text-danger">*</span></label>
                             <input id="register-telefono-2"
                               type="tel"
+                              autoComplete="tel-national"
                               className={`form-control ${businessForm.formState.errors.phoneNumber ? 'is-invalid' : ''}`}
-                              placeholder="+5215512345678"
-                              {...businessForm.register('phoneNumber', {
-                                required: 'El teléfono es requerido',
-                                pattern: { value: /^\+[1-9]\d{6,14}$/, message: 'Formato E.164 (ej: +5215512345678)' },
-                              })}
+                              placeholder="10 dígitos"
+                              {...businessForm.register('phoneNumber', PHONE_RULES)}
                             />
                             {businessForm.formState.errors.phoneNumber && (
                               <div className="invalid-feedback">{businessForm.formState.errors.phoneNumber.message}</div>
@@ -471,7 +474,7 @@ export default function Register() {
                               <input id="register-telefono-del-negocio"
                                 type="tel"
                                 className="form-control"
-                                placeholder="+5215512345678"
+                                placeholder="10 dígitos"
                                 {...businessForm.register('contactPhone')}
                               />
                             </div>

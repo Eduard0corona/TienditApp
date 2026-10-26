@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -71,6 +72,28 @@ public class RegisterBusinessCommandTests
         await AssertSingleRegistrationAsync(host, result.Value);
     }
 
+    [Fact]
+    public void Validator_ShouldAcceptThePhoneWithoutTheInternationalPrefix()
+    {
+        var result = new RegisterBusinessCommandValidator().Validate(ValidCommand() with { PhoneNumber = "5511112222" });
+
+        Assert.True(result.IsValid, string.Join(" ", result.Errors));
+    }
+
+    [Fact]
+    public async Task RegisterBusiness_ShouldNotPersistAnything_WhenThePhoneIsNotANumber()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
+
+        var result = await RegisterAsync(host, ValidCommand() with { PhoneNumber = "55 1234" });
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(PhoneNumberRules.InvalidPhoneMessage, result.Error);
+        await AssertNothingPersistedAsync(host);
+        await host.DispatchAccountEmailsAsync();
+        Assert.Empty(host.Email.ConfirmationRecipients);
+    }
+
     private static Task<Result<Guid>> RegisterAsync(SqliteTestHost host, RegisterBusinessCommand command)
         => host.HandleAsync<RegisterBusinessCommandHandler, Result<Guid>>(
             handler => handler.Handle(command, CancellationToken.None));
@@ -81,7 +104,7 @@ public class RegisterBusinessCommandTests
         Password = "Secreto1",
         FirstName = "Ana",
         LastName = "Dueña",
-        PhoneNumber = "+525511112222",
+        PhoneNumber = "55 1111 2222",
         BusinessName = "Taquería Demo",
         BusinessType = BusinessType.Food
     };
@@ -142,6 +165,8 @@ public class RegisterBusinessCommandTests
         // The account is activated from the emailed link; until then it cannot sign in.
         Assert.False(owner.EmailConfirmed);
         Assert.False(owner.PhoneNumberConfirmed);
+        // Typed as ten digits, kept in E.164: its SMS codes go to this number.
+        Assert.Equal("+525511112222", owner.PhoneNumber);
         Assert.Equal(new { UserId = owner.Id, Name = (string?)"TENANT_ADMIN" }, Assert.Single(stored.Roles));
 
         var membership = Assert.Single(stored.Memberships);
