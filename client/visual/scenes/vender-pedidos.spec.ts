@@ -9,11 +9,12 @@ import {
   RAPPI_ORDERS_DATA,
   RAPPI_PRICES_DATA,
   RAPPI_ROUTES,
+  SELF_INVOICING_DATA,
   SELL_ROUTES,
 } from './vender-pedidos.mocks';
 
 // Selling and following orders: Vender, Mesas, Pedidos, Orden detallada, Cocina and a customer's Mis pedidos, and the
-// orders of a delivery platform (Rappi) through all of them.
+// orders of a delivery platform (Rappi) through all of them. The ticket of a business with self-invoicing on (Fase 28F).
 
 /** The whole page. */
 async function snapPage(page: Page, name: string) {
@@ -200,6 +201,48 @@ test.describe('Vender', () => {
     await sale.getByRole('button', { name: 'Imprimir' }).click();
     await page.emulateMedia({ media: 'print' });
     await snapPage(page, 'vender-ticket-impreso');
+  });
+
+  test.describe('con autofactura', () => {
+    test.use({ prepareData: SELF_INVOICING_DATA });
+
+    /** The ticket's QR and its page's address carry the address the scenes are served from (its port changes with VISUAL_PORT). */
+    const servedFrom = (scope: Page | Locator) => [
+      scope.getByRole('img', { name: 'QR para facturar esta compra en línea' }),
+      scope.getByText(/\/m\/cafe-la-esquina\/facturar$/),
+    ];
+
+    test('Venta cobrada con factura en línea', async ({ page }) => {
+      await open(page, '/sell');
+      await fillTicket(page);
+      const sale = await charge(page, '200');
+      await expect(sale.getByText('Código: K7M2Q-9XH4C')).toBeVisible();
+      await scrollToEnd(sale);
+      await snap(page, 'vender-venta-cobrada-autofactura', { fullPage: false, mask: servedFrom(sale) });
+    });
+
+    test('Venta cobrada con factura en línea en el teléfono', async ({ page }) => {
+      await page.setViewportSize(SIZES.phone);
+      await open(page, '/sell');
+      await fillTicket(page);
+      const sale = await charge(page);
+      await expect(sale.getByText('Código: K7M2Q-9XH4C')).toBeVisible();
+      await scrollToEnd(sale);
+      await snap(page, 'vender-venta-cobrada-autofactura-telefono', { fullPage: false, mask: servedFrom(sale) });
+    });
+
+    test('Ticket impreso con factura en línea', async ({ page }) => {
+      await open(page, '/sell');
+      await fillTicket(page);
+      const sale = await charge(page, '200');
+      await expect(sale.getByText('Código: K7M2Q-9XH4C')).toBeVisible();
+      await page.evaluate(() => {
+        window.print = () => undefined;
+      });
+      await sale.getByRole('button', { name: 'Imprimir' }).click();
+      await page.emulateMedia({ media: 'print' });
+      await snap(page, 'vender-ticket-impreso-autofactura', { mask: servedFrom(page) });
+    });
   });
 
   test.describe('Modo enfocado', () => {

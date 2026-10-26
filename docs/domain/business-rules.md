@@ -613,6 +613,18 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **El historial** de cada correo (a quién, quién lo pidió, cuándo y cómo terminó) no se borra; Pedidos muestra el último de cada CFDI.
 - **Sin** WhatsApp, aviso de cancelación, envío desde el dominio del negocio ni saber si el correo rebotó después de que el servidor lo tomó.
 
+## La autofactura (Fase 28F)
+
+[ADR 0050](../adr/0050-self-invoicing.md):
+
+- **Quién la activa:** dueños y administradores, en Configuración › Facturación, solo mientras el negocio puede facturar. Apagarla siempre se puede; se audita cuando cambia.
+- **El ticket:** una venta pagada por completo de un negocio con autofactura activa imprime «Factura en línea» con la dirección `/m/{slug}/facturar`, el folio, un código de 10 caracteres (`ABCDE-12345`) y un QR que trae los dos en el fragmento de la dirección. El código es un HMAC del pedido con la llave del negocio: no se guarda, y la llave se conserva al apagarla (los tickets impresos vuelven a servir). Un ticket provisional, con saldo, cancelado, sin importe o de una app de entrega no lo lleva.
+- **La página**, sin cuenta: con el folio y el código el cliente ve el ticket y escribe sus datos fiscales y un correo. Un folio que no existe y un código equivocado responden lo mismo; el folio y el código de un negocio no sirven en la dirección de otro. Buscar, facturar y reenviar comparten un límite de 30 solicitudes por IP cada 10 minutos.
+- **Qué se factura en línea:** lo que Pedidos facturaría, pagado en una exhibición (PUE), que no sea de una app de entrega, hasta el último día del mes en que se terminó de pagar (en el calendario del negocio). Después, o con saldo, la página dice que la pida al negocio. Todo se revisa otra vez al facturar, bajo el candado de facturación del negocio.
+- **La factura** es la de Pedidos, pedida por un valor fijo que ninguna cuenta tiene (`OrderInvoice.SelfInvoiceRequester`) y auditada como «Autofactura». Se timbra en la misma solicitud y el XML y el PDF salen al correo escrito (28E). Los datos fiscales escritos no se guardan en el cliente del negocio. Si el PAC la rechaza, la página dice por qué y el cliente corrige.
+- **Ya facturado:** la página lo dice; con el RFC de esa factura y un correo se reenvía (límites de la 28E). Sin el RFC correcto no se manda nada.
+- **Pedidos** marca la factura y el correo que pidió el cliente en línea.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

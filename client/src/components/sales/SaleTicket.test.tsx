@@ -41,11 +41,11 @@ const SELF_INVOICE = { path: '/m/fonda-lupita/facturar', orderNumber: 'ORD-00000
 
 describe('SaleTicket', () => {
   it('prints «Factura en línea» with the page, the folio, the code and a QR to them (Fase 28F)', () => {
-    const { container } = render(<SaleTicket order={order} businessName="Fonda Lupita" selfInvoice={SELF_INVOICE} />);
+    render(<SaleTicket order={order} businessName="Fonda Lupita" selfInvoice={SELF_INVOICE} />);
 
     const ticket = screen.getByLabelText('Ticket ORD-000007');
     expect(ticket).toHaveTextContent(`Factura en línea${window.location.host}/m/fonda-lupita/facturarFolio: ORD-000007Código: ABCDE-12345`);
-    expect(container.querySelector('img.ta-ticket-qr')?.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
+    expect(screen.getByRole('img', { name: 'QR para facturar esta compra en línea' }).getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
   });
 
   it('leaves «Factura en línea» out while the sale is not paid in full or was charged without connection', () => {

@@ -381,3 +381,10 @@ export const CUSTOMER_PROFILE = {
   tenantRole: null,
   permissions: [],
 };
+
+/** The business has self-invoicing on (Fase 28F): the ticket of each sale paid in full carries «Factura en línea». */
+function withSelfInvoicing(data: DemoData) {
+  data.selfInvoicing = true;
+}
+
+export const SELF_INVOICING_DATA = asOption(withSelfInvoicing);

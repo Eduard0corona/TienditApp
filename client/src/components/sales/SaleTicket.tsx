@@ -197,7 +197,7 @@ function SelfInvoiceBlock({ selfInvoice }: { selfInvoice: OrderSelfInvoice }) {
   return (
     <div className="ta-ticket-self-invoice text-center mt-2">
       <div className="fw-bold">Factura en línea</div>
-      <img src={createQrSvgDataUrl(withTicket)} alt="" className="ta-ticket-qr" />
+      <img src={createQrSvgDataUrl(withTicket)} alt="QR para facturar esta compra en línea" className="ta-ticket-qr" />
       <div className="small">{page.host}{page.pathname}</div>
       <div className="small">Folio: {selfInvoice.orderNumber}</div>
       <div className="small">Código: <span className="fw-bold">{selfInvoice.code}</span></div>

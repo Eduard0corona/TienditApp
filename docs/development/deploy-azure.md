@@ -873,6 +873,21 @@ La Fase 28E trae una migración, [`database/production/20261026032721_AddCfdiEma
 - **Volver a la versión anterior:** funciona sin tocar la base. Los correos se quedan en la base; los que estén en el outbox se apartan sin salir (la 28D no conoce su evento) y, al volver a la 28E, siguen «Enviándose» hasta que se manden otra vez. Las facturas y clientes conservan su correo sin usarlo, también el cliente al que la 28D le quite los datos fiscales.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50041, sin cambiar nada, en cuanto hay un correo de CFDI o un correo guardado en una factura o un cliente. Sin ninguno, quita la tabla y las columnas; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## La autofactura del cliente (Fase 28F)
+
+La Fase 28F trae una migración, [`database/production/20261026082041_AddSelfInvoicing`](../../database/production/20261026082041_AddSelfInvoicing). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente (por ejemplo la de la 28E), también la aplica; no sirve para crear una base vacía ([ADR 0050](../adr/0050-self-invoicing.md)).
+
+- **La migración:**
+  - agrega a `InvoicingProfiles` la columna `SelfInvoicing` (`bit NOT NULL`, 0 por omisión: los negocios existentes la tienen apagada) y la columna nula `SelfInvoiceKey` (`varbinary(32)`, la llave de los códigos de los tickets, que se crea la primera vez que el negocio activa la autofactura);
+  - agrega la restricción `CK_InvoicingProfiles_SelfInvoicing`: activa solo con llave, y la llave siempre de 32 bytes.
+
+  No cambia facturas, pedidos, correos ni perfiles existentes. Después de aplicarla, el `verify.sql` muestra las columnas y la restricción, y cuenta los negocios con la autofactura activa o con llave (cero hasta que alguno la active) y las facturas pedidas en línea; nunca muestra la llave.
+- **Mientras se publica:** la versión de `master` (Fase 28E) no conoce las columnas y sigue funcionando; al crear un perfil de facturación toma los valores por omisión, que la restricción acepta. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** las rutas públicas `GET /api/v1/public/self-invoice/{slug}` y `POST …/ticket`, `…/invoice` y `…/resend`; `PUT /api/v1/invoicing/settings/self-invoicing` y `GET /api/v1/invoicing/orders/{orderId}/self-invoice`; `selfInvoicing` y `selfInvoicePath` en la configuración de facturación, `requestedByCustomer` en cada factura y `byCustomer` en cada correo; los enums `SelfInvoiceTicketStatus` y `SelfInvoiceOutcome`. Nada se quita ni cambia de nombre. La página `/m/{slug}/facturar` es del cliente (la sirve el mismo `index.html`).
+- **Sin configuración nueva:** usa el PAC y el CSD de la 28A y el correo de la 28E. Las rutas públicas tienen su propio límite por IP (política `self-invoice`, 30 cada 10 minutos). Nadie factura en línea hasta que el dueño la activa en Configuración › Facturación.
+- **Volver a la versión anterior:** funciona sin tocar la base. Los clientes dejan de poder facturar en línea (la página no existe en la 28E), las facturas que pidieron se ven como cualquier otra y los negocios conservan su llave sin usarla.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50042, sin cambiar nada, en cuanto algún negocio tiene llave (quitarla cambiaría los códigos de los tickets impresos). Sin ninguna, quita la restricción y las columnas; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
