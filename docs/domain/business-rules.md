@@ -528,7 +528,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - la vista previa no tiene bloqueos y el receptor no es público en general (esas ventas esperan la factura global);
   - el pedido está pagado por completo (PUE), o el cliente ya lo debe (se vendió fiado, o se entregó o completó) y se factura en parcialidades (PPD, Fase 28C); no está cancelado (sus facturas siguen en «Factura» para descargarlas y cancelar la timbrada con el motivo 03); sin un reembolso en línea en curso. Desde la Fase 28D, una venta con reembolsos o condonación se factura por la venta completa y cada ajuste lleva su nota de crédito;
   - el pago principal no es «Otro», que no es una forma de pago del SAT (un PUE no se declara «por definir», 99);
-  - no tiene otra factura viva (timbrando, timbrada o cancelándose) ni está en una factura global viva (Fase 28B);
+  - no tiene otra factura viva (timbrando, timbrada o cancelándose; una sustituida no cuenta, Fase 28G) ni está en una factura global viva (Fase 28B);
   - el negocio subió su CSD, vigente y del RFC de Mi negocio, y la plataforma tiene su PAC.
 - **El receptor:** RFC, nombre o razón social, código postal, régimen y uso del CFDI como aparecen en su constancia; el uso tiene que corresponder al régimen (G para quien tiene actividad, D para personas físicas, S01 para todos). Pedidos propone los del cliente del teléfono del pedido o, si no tiene, los de la última factura del pedido; «Guardar estos datos en el cliente» los deja en su ficha, y Clientes › Editar › «Cambiar datos fiscales» los cambia; las dos piden `ManageCustomers` y cada cambio queda en la auditoría. Completos o ninguno, y nunca en «Público en general».
 - **Folio:** serie del negocio («F» por omisión, de 1 a 10 letras o números) y folio consecutivo por serie, sin huecos. Un rechazo del PAC usa el folio; uno de la base lo regresa.
@@ -539,7 +539,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cancelar** (dueños y administradores): con motivo 02 (errores sin relación) o 03 (la venta no se llevó a cabo); se pide primero al PAC y, si se niega, nada cambia. Si el SAT pide la aceptación del receptor, queda «Cancelándose» y el worker pregunta cada 30 minutos: cancelada, o «Timbrada» otra vez si el receptor la rechazó. Una cancelada deja facturar el pedido otra vez con factura y folio nuevos. Nunca se borra una factura.
 - **El CSD** (dueños y administradores, Configuración › Facturación): `.cer`, `.key` y la contraseña de la llave. TienditApp revisa que sea de sello, vigente, del RFC de Mi negocio y que la llave corresponda; el PAC lo guarda y TienditApp solo su número, RFC y vigencia. Los archivos y la contraseña nunca se guardan ni se registran. Avisa 30 días antes de vencer; reemplazarlo o quitarlo pide al PAC que olvide el anterior. Un CSD es de un solo negocio de TienditApp: si otro ya lo usa, se rechaza (dos negocios del mismo RFC tramitan uno cada uno).
 - **Acceso:** timbrar, volver a pedir, ver y descargar el XML y el PDF, quien gestiona los pedidos (`ManageOrders`); cancelar, el CSD y la serie, dueños y administradores. Otro negocio recibe 404.
-- **Sin** sustitución (motivo 01), envío por WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D, el envío por correo en la 28E y la autofactura del cliente en la 28F (siguientes secciones de facturas).
+- **Sin** envío por WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D, el envío por correo en la 28E, la autofactura del cliente en la 28F y la sustitución con motivo 01 en la 28G (siguientes secciones de facturas).
 
 ## La factura global (Fase 28B)
 
@@ -624,6 +624,21 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **La factura** es la de Pedidos, pedida por un valor fijo que ninguna cuenta tiene (`OrderInvoice.SelfInvoiceRequester`) y auditada como «Autofactura». Se timbra en la misma solicitud y el XML y el PDF salen al correo escrito (28E). Los datos fiscales escritos no se guardan en el cliente del negocio. Si el PAC la rechaza, la página dice por qué y el cliente corrige.
 - **Ya facturado:** la página lo dice; con el RFC de esa factura y un correo se reenvía (límites de la 28E), también mientras el negocio no pueda timbrar. Sin el RFC correcto no se manda nada.
 - **Pedidos** marca la factura y el correo que pidió el cliente en línea.
+
+## Sustituir una factura con errores (Fase 28G)
+
+[ADR 0051](../adr/0051-invoice-substitution.md):
+
+- **Qué es:** una factura nueva del mismo pedido, con los datos corregidos, que lleva la timbrada con errores como «Sustitución de los CFDI previos» (`CfdiRelacionados` 04 con su UUID). Primero se timbra la nueva; después se cancela la anterior con el motivo 01 («con relación») y el UUID de la nueva. Solo la factura de un pedido: la global, los complementos y las notas se cancelan con 02 o 03.
+- **Quién:** dueños y administradores, en Pedidos, con «Sustituir factura». Guardar los datos en el cliente pide además `ManageCustomers`.
+- **Cuándo se puede:** la factura vigente del pedido, timbrada, sin cancelación pendiente, que ninguna otra sustituye y que no sustituye a otra que siga vigente; sin complementos de pago ni notas de crédito vigentes; con el mismo RFC del emisor con el que timbra hoy el negocio; y el pedido se facturaría hoy en Pedidos (el negocio puede timbrar, el pedido no está cancelado ni en una global vigente, y su CFDI está listo). Si no, Pedidos dice por qué.
+- **La nueva** es el CFDI que Pedidos timbraría ahora, con los datos y el correo que se escriben (se proponen los de la anterior), un folio nuevo y el mismo camino de cualquier factura: «Timbrando», el worker, el correo al timbrarse. La anterior deja de ser la factura del pedido en la misma transacción, bajo el candado de facturación; si alguien la cambió mientras tanto, no se guarda nada.
+- **La cancelación de la anterior:** en cuanto la nueva queda timbrada, en la misma solicitud. Si el PAC no contesta o el SAT todavía no relaciona las dos (puede tardar hasta dos días en recibir la nueva), la anterior sigue timbrada con el motivo y el worker lo intenta en su pasada de cancelaciones durante 72 horas desde que se timbró la nueva; después, «Cancelar con relación» a mano. Si el SAT pide la aceptación del receptor, queda «Cancelándose» como cualquier cancelación. Si el SAT no acepta el 01, se cancela con 02 («sin relacionarla con la F-n»), como lo pide el SAT.
+- **Si el PAC rechaza la nueva**, la anterior vuelve a ser la factura del pedido (o sigue cancelada, si alguien la canceló con 02 o 03 mientras tanto); se corrige y se sustituye otra vez.
+- **Mientras la anterior espera su cancelación:** los complementos, las notas de crédito y la autofactura van a la nueva; un reembolso o una condonación esperan a que la nueva quede timbrada. La nueva no se cancela ni se sustituye hasta que se cancele la anterior. La venta sigue fuera de la global.
+- **El receptor rechaza la cancelación con 01:** la anterior vuelve a timbrada con el motivo, sigue sustituida y el worker no lo intenta otra vez; el negocio pide otra vez «Cancelar con relación» o la cancela con 02.
+- **Se ve en Pedidos:** «Sustituye a la factura F-n», «Sustituida por la factura F-n», que la anterior se cancela al timbrarse la nueva y por qué no pasó. Nunca se borra una factura.
+- **Acceso:** sustituir y cancelar con relación, dueños y administradores; otro negocio recibe 404.
 
 ## Cancelación y trazabilidad
 

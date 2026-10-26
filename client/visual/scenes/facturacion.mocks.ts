@@ -16,6 +16,7 @@ const STAMPED = 1;
 const REFUSED = 2;
 const CANCELLING = 3;
 const CANCELLED = 4;
+const ERRORS_WITH_REPLACEMENT = 1;
 const ERRORS_WITHOUT_REPLACEMENT = 2;
 const NOT_CARRIED_OUT = 3;
 
@@ -329,6 +330,60 @@ export const PEDIDO_AUTOFACTURADO = asOption(orderInvoicing((data) => ({
         email('reenvio', { requestedAt: minutesFromNow(-3), byTienditApp: false, byCustomer: true, sentAt: minutesFromNow(-2) }),
         email('timbre', { sentAt: minutesFromNow(-11) }),
       ],
+    }),
+  ],
+})));
+
+/**
+ * Replacing an invoice with errors (Fase 28G, ADR 0051): F-3 went out with the wrong postal code of Grupo Altavista and can
+ * be replaced by an owner.
+ */
+export const PEDIDO_SUSTITUIBLE = asOption(orderInvoicing((data) => ({
+  canInvoice: false,
+  problem: 'Este pedido ya tiene la factura F-3: cancélala para facturarlo otra vez.',
+  invoices: [
+    invoice(data, 3, {
+      requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
+      hasXml: true, hasPdf: true, receiver: { ...ALTAVISTA, postalCode: '11650' }, receiverEmail: INVOICE_EMAIL, canSubstitute: true,
+    }),
+  ],
+})));
+/**
+ * F-4 replaced F-3 and is stamped; the SAT did not relate them yet, so F-3 is still stamped with the reason, and TienditApp
+ * asks again (or the owner does, «Cancelar con relación»). F-4 is cancelled only after F-3.
+ */
+export const PEDIDO_SUSTITUIDO = asOption(orderInvoicing((data) => ({
+  canInvoice: false,
+  problem: 'Este pedido ya tiene la factura F-4: cancélala para facturarlo otra vez.',
+  invoices: [
+    invoice(data, 4, {
+      requestedAt: minutesFromNow(-5), uuid: 'A3D9C1E2-7B5F-4C8A-9E21-6F0B4D7C2A15', stampedAt: minutesFromNow(-5),
+      hasXml: true, hasPdf: true, receiverEmail: INVOICE_EMAIL, replacesInvoiceId: uuid('invoice-3'), replacesNumber: 'F-3',
+      substitutionProblem: 'Esta factura sustituye a la F-3, que todavía no se cancela: sustitúyela cuando el SAT cancele la F-3.',
+    }),
+    invoice(data, 3, {
+      requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
+      hasXml: true, hasPdf: true, receiver: { ...ALTAVISTA, postalCode: '11650' }, receiverEmail: INVOICE_EMAIL,
+      replacedByInvoiceId: uuid('invoice-4'), replacedByNumber: 'F-4',
+      failureMessage: 'El SAT todavía no relaciona esta factura con la que la sustituye: puede que aún no reciba la nueva (tarda hasta dos días).',
+    }),
+  ],
+})));
+/** F-3 was cancelled with relation (01) to F-4, which is the order's invoice now. */
+export const PEDIDO_SUSTITUIDO_CANCELADO = asOption(orderInvoicing((data) => ({
+  canInvoice: false,
+  problem: 'Este pedido ya tiene la factura F-4: cancélala para facturarlo otra vez.',
+  invoices: [
+    invoice(data, 4, {
+      requestedAt: minutesFromNow(-5), uuid: 'A3D9C1E2-7B5F-4C8A-9E21-6F0B4D7C2A15', stampedAt: minutesFromNow(-5),
+      hasXml: true, hasPdf: true, receiverEmail: INVOICE_EMAIL, replacesInvoiceId: uuid('invoice-3'), replacesNumber: 'F-3',
+      canSubstitute: true,
+    }),
+    invoice(data, 3, {
+      status: CANCELLED, requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
+      hasXml: true, hasPdf: true, receiver: { ...ALTAVISTA, postalCode: '11650' }, receiverEmail: INVOICE_EMAIL,
+      replacedByInvoiceId: uuid('invoice-4'), replacedByNumber: 'F-4', cancellationMotive: ERRORS_WITH_REPLACEMENT,
+      cancellationRequestedAt: minutesFromNow(-4), cancelledAt: minutesFromNow(-4),
     }),
   ],
 })));
