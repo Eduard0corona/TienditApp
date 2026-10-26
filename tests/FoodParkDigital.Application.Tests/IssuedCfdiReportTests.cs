@@ -137,7 +137,7 @@ public class IssuedCfdiReportTests
     }
 
     [Fact]
-    public async Task Download_OfMoreCfdiThanItHolds_ShouldSaySo()
+    public async Task Download_OfMoreCfdiThanItHolds_ShouldSaySo_AndOfAsManyAsItHolds_ShouldZipThemAll()
     {
         await using var book = await Book.OpenAsync();
         var first = await book.PaidSaleAsync();
@@ -145,9 +145,16 @@ public class IssuedCfdiReportTests
         var second = await book.PaidSaleAsync();
         Assert.True((await book.IssueAsync(second.Id)).IsSuccess);
 
-        var downloaded = await book.ExportAsync(limit: 1);
+        var tooMany = await book.ExportAsync(limit: 1);
 
-        Assert.Equal(ExportIssuedCfdisQueryHandler.TooManyMessage(1), downloaded.Error);
+        Assert.Equal(ExportIssuedCfdisQueryHandler.TooManyMessage(1), tooMany.Error);
+
+        // Exactly as many as a download holds: all of them, none cut off.
+        var all = await book.ExportAsync(limit: 2);
+
+        Assert.True(all.IsSuccess, all.Error);
+        using var zip = new ZipArchive(all.Value.Content, ZipArchiveMode.Read);
+        Assert.Equal(2, zip.Entries.Count(e => e.FullName.StartsWith("ingresos/", StringComparison.Ordinal)));
     }
 
     [Fact]

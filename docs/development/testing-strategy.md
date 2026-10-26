@@ -1422,7 +1422,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Application:** `IssuedCfdiReportTests` (9, nuevo), sobre CFDI timbrados como los timbra TienditApp:
     - el mes lista las facturas, el complemento y la nota del negocio, la más reciente primero, con su receptor (el de su factura), su pedido y la factura de la que son; la búsqueda encuentra una parte del nombre; otro mes no tiene ninguno; el resumen suma los vigentes por tipo;
     - el ZIP lleva el XML que guardó el timbrado, por tipo, y la lista con el receptor, el uso, el método de pago (la nota, en una exhibición) y los importes que pidió cada CFDI y el UUID de su factura;
-    - un mes con más CFDI de los que junta la descarga lo dice;
+    - un mes con más CFDI de los que junta la descarga lo dice, y uno con justo esos los junta todos (la prueba falla si el límite se compara con `>=`);
     - una celda que una hoja de cálculo correría como fórmula va con apóstrofo, y la que tiene comas va entre comillas;
     - solo dueños y administradores, y un mes desde enero de 2022.
   - **Infrastructure:**
