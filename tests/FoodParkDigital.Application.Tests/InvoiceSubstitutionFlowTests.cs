@@ -247,6 +247,28 @@ public class InvoiceSubstitutionFlowTests
     }
 
     [Fact]
+    public async Task AskingAgainForTheStampOfAReplacementAlreadyStamped_ShouldNotAskTheSatToCancelTheOldOne()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync();
+        var original = (await book.IssueAsync(sale.Id, Wrong)).Value;
+        // The SAT did not take the 01 when the replacement was stamped, and 72 hours went by: only an owner or an
+        // administrator asks for it now.
+        book.Gateway.CancelRefusal = "El SAT todavía no relaciona esta factura con la que la sustituye.";
+        var replacement = (await book.SubstituteAsync(original.Id, Right)).Value;
+        book.Gateway.CancelRefusal = null;
+        book.Clock.UtcNow = replacement.StampedAt!.Value + OrderInvoiceSubstitutions.CancellationRetryWindow + TimeSpan.FromMinutes(1);
+
+        // «Volver a pedir el timbre» (ManageOrders, as a cashier has) stamps nothing here, so it cancels nothing either.
+        var retried = await book.RetryAsync(replacement.Id);
+
+        Assert.Equal(OrderInvoiceStatus.Stamped, retried.Value.Status);
+        Assert.Empty(book.Gateway.Cancellations);
+        var old = await book.InvoiceAsync(original.Id);
+        Assert.Equal((OrderInvoiceStatus.Stamped, replacement.Id), (old.Status, old.ReplacedByInvoiceId));
+    }
+
+    [Fact]
     public async Task OldInvoiceCancelledWithout02_WhileItsReplacementWaits_ShouldStayCancelled_IfThePacRefusesTheReplacement()
     {
         await using var book = await Book.OpenAsync();

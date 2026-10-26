@@ -372,8 +372,8 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
 
 /// <summary>
 /// Asks the PAC again for an invoice that is still «Timbrando» (its answer did not arrive), with the same CFDI and key: it
-/// never stamps a second one. Stamped, the invoice it replaces is cancelled with motive 01 right away (Fase 28G), as asked
-/// for by whoever replaced it, instead of waiting for the worker's next pass.
+/// never stamps a second one. Stamped by this request, the invoice it replaces is cancelled with motive 01 right away (Fase
+/// 28G), as asked for by whoever replaced it, instead of waiting for the worker's next pass.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 public record RetryOrderInvoiceCommand(Guid InvoiceId) : IRequest<Result<OrderInvoiceDto>>;
@@ -400,17 +400,20 @@ public class RetryOrderInvoiceCommandHandler : IRequestHandler<RetryOrderInvoice
 
     public async Task<Result<OrderInvoiceDto>> Handle(RetryOrderInvoiceCommand request, CancellationToken cancellationToken)
     {
-        var orderId = await _context.OrderInvoices.AsNoTracking()
+        var asked = await _context.OrderInvoices.AsNoTracking()
             .Where(i => i.Id == request.InvoiceId)
-            .Select(i => (Guid?)i.OrderId)
+            .Select(i => new { i.OrderId, i.Status })
             .FirstOrDefaultAsync(cancellationToken);
-        if (orderId is null || !await OrderInvoicing.SeesOrderAsync(_context, orderId.Value, cancellationToken))
+        if (asked is null || !await OrderInvoicing.SeesOrderAsync(_context, asked.OrderId, cancellationToken))
             throw new EntityNotFoundException(nameof(OrderInvoice), request.InvoiceId);
         if (!_gateway.IsConfigured)
             return Result.Failure<OrderInvoiceDto>(InvoicingSettings.NotAvailableMessage);
 
         var invoice = await _stamper.StampAsync(request.InvoiceId, cancellationToken);
-        if (invoice is { Status: OrderInvoiceStatus.Stamped } stamped
+        // Only a stamp this request made goes on to the cancellation its substitution asked for: whoever asks again for a
+        // stamp (ManageOrders) never cancels on their own an invoice that was already stamped (the worker or an owner does).
+        if (asked.Status == OrderInvoiceStatus.Stamping
+            && invoice is { Status: OrderInvoiceStatus.Stamped } stamped
             && await _context.OrderInvoices.AsNoTracking()
                 .Where(i => i.ReplacedByInvoiceId == stamped.Id && i.Status == OrderInvoiceStatus.Stamped)
                 .Select(i => (Guid?)i.Id)

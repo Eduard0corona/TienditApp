@@ -1391,13 +1391,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 
 - Fase 28G, sustituir una factura con errores con el motivo 01 ([ADR 0051](../adr/0051-invoice-substitution.md)):
   - **Domain:** `OrderInvoiceTests` (+6, 30): la factura sustituida sigue en pie pero ya no es la del pedido hasta que se cancela con el motivo 01, que solo acepta una sustituida; la que la sustituye es del mismo pedido y negocio, recién pedida, de una timbrada que nadie más sustituye; un rechazo del PAC la devuelve al pedido, y si mientras tanto se canceló sin relación (02) sigue cancelada y sin sustituta; con la cancelación con relación pedida, sigue sustituida; el motivo cuando el 01 no pasa se guarda (recortado) hasta pedirlo otra vez; y la sustituida se cancela con 02 como dice el SAT.
-  - **Application:** `InvoiceSubstitutionFlowTests` (13, nuevo):
+  - **Application:** `InvoiceSubstitutionFlowTests` (14, nuevo):
     - la nueva lleva la relación 04 con el UUID de la anterior y la anterior se cancela con 01 y el UUID de la nueva; la respuesta dice a cuál sustituye, y la de una nueva rechazada, que a ninguna;
     - el detalle dice que TienditApp pide el 01 mientras la nueva se timbra y hasta 72 horas después; pasadas, ya no, aunque no haya motivo; y sin CSD la anterior guarda por qué el worker no puede pedirlo (falla sin ese cambio);
     - el SAT que todavía no las relaciona: la anterior guarda el motivo, el worker lo pide otra vez y, pasadas 72 horas, lo pide una persona;
     - una cancelación que el receptor rechazó antes de sustituirla no detiene al worker;
     - el rechazo del PAC devuelve la factura al pedido para sustituirla otra vez; y, si se canceló con 02 mientras tanto, sigue cancelada y el pedido se factura de nuevo;
-    - sin respuesta del PAC, el worker la timbra y cancela la anterior en su siguiente pasada; «Volver a pedir el timbre» la cancela en ese momento, a nombre de quien sustituyó;
+    - sin respuesta del PAC, el worker la timbra y cancela la anterior en su siguiente pasada; «Volver a pedir el timbre» la cancela en ese momento, a nombre de quien sustituyó, pero de una nueva que ya estaba timbrada no pide cancelar nada (el cajero también puede pedirlo; la prueba falla con el código anterior);
     - solo se sustituye la factura timbrada vigente del pedido: no la ya sustituida, ni la nueva mientras la anterior siga vigente, ni una que se está timbrando o ya se canceló, ni sin el PAC; la de otro negocio no existe; y la nueva no se cancela antes que la anterior;
     - lo que sigue (notas de crédito) va a la nueva.
   - **Infrastructure:**
@@ -1415,7 +1415,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `CfdiDraftModal.test.tsx` (+7, 24): «Sustituir factura» abre el formulario con los datos y el correo de la factura, timbra la nueva en su lugar, deja lo que se mandó y lleva el foco a las facturas; si el PAC la rechaza, el formulario sigue; «No sustituir» regresa el foco; solo para dueños y administradores; por qué no se puede; si la factura deja de ser la del pedido mientras se sustituye; y las tarjetas con «Cancelar con relación» y la nueva que se cancela después de la anterior.
     - `OrderInvoiceList.test.tsx` (+4, 5): la sustituida que espera a la nueva, sin cancelar ni mandar por correo; con la nueva timbrada, la siguiente revisión y «Cancelar con relación»; pasadas las 72 horas, que TienditApp ya no lo pide solo, con «Cancelar con relación» y «Cancelar factura»; y la cancelación sin relación (02) que manda el motivo.
     - `invoicing.test.ts` (+1, 10): el detalle se vuelve a leer mientras la API dice que TienditApp todavía pide el 01 de la sustituida, y deja de hacerlo cuando ya no (con motivo o pasadas las 72 horas).
-  - **Total:** `dotnet test` con SQL Server 2022, 3,919 pruebas sin fallos ni omitidas (Domain 1,174, Application 1,726, Infrastructure 559, WebApi 460).
+  - **Total:** `dotnet test` con SQL Server 2022, 3,920 pruebas sin fallos ni omitidas (Domain 1,174, Application 1,727, Infrastructure 559, WebApi 460).
   - **Cliente en total:** 169 archivos y 1,188 pruebas.
   - **Primera visita:** 180,037 B de 180,100 B (`master`: 180,031 B): la sustitución vive en el módulo de facturación, que se carga aparte. El presupuesto no cambia.
   - **Escenas visuales:** `facturacion.spec.ts` (+7): el formulario para sustituir (escritorio y teléfono), la factura sustituida que espera su cancelación con relación (escritorio, teléfono y oscuro), cancelarla sin relación y la sustituida ya cancelada.
