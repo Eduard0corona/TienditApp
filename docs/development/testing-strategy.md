@@ -1418,6 +1418,24 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Total:** `dotnet test` con SQL Server 2022, 3,920 pruebas sin fallos ni omitidas (Domain 1,174, Application 1,727, Infrastructure 559, WebApi 460).
   - **Cliente en total:** 169 archivos y 1,188 pruebas.
   - **Primera visita:** 180,037 B de 180,100 B (`master`: 180,031 B): la sustitución vive en el módulo de facturación, que se carga aparte. El presupuesto no cambia.
+- Fase 28H, los CFDI emitidos del mes y sus XML para el contador ([ADR 0052](../adr/0052-issued-cfdi-report.md)):
+  - **Application:** `IssuedCfdiReportTests` (9, nuevo), sobre CFDI timbrados como los timbra TienditApp:
+    - el mes lista las facturas, el complemento y la nota del negocio, la más reciente primero, con su receptor (el de su factura), su pedido y la factura de la que son; la búsqueda encuentra una parte del nombre; otro mes no tiene ninguno; el resumen suma los vigentes por tipo;
+    - el ZIP lleva el XML que guardó el timbrado, por tipo, y la lista con el receptor, el uso y los importes que pidió cada CFDI y el UUID de su factura;
+    - un mes con más CFDI de los que junta la descarga lo dice;
+    - una celda que una hoja de cálculo correría como fórmula va con apóstrofo, y la que tiene comas va entre comillas;
+    - solo dueños y administradores, y un mes desde enero de 2022.
+  - **Infrastructure:** `IssuedCfdisSqlServerTests` (3, nuevo), en SQL Server:
+    - la unión de las cuatro tablas se traduce y pagina en el orden del mes, con su receptor, su pedido, la factura que sustituye o la que la sustituye, el periodo de la global y por qué se rechazó; deja fuera la factura del 30 de septiembre a las 23:59 de la Ciudad de México y la de otro negocio, y deja dentro la del 31 de octubre a las 23:30 (ya noviembre en UTC); filtra por tipo, estado y búsqueda;
+    - el resumen suma los vigentes por tipo y cuenta los cancelados y rechazados;
+    - el ZIP lleva los XML timbrados por tipo y la lista al final, con la fecha del CFDI en la zona del negocio, y dice qué XML no se encontró; la lista sola lleva la marca UTF-8.
+  - **WebApi:** `CrossTenantInvoicingSqlServerTests` (+1, 14): otro negocio, también con el encabezado de mi negocio, ve una lista vacía, un resumen en ceros y un ZIP solo con su lista vacía; el mío trae mi factura y su XML; y el cajero, aunque lea reportes, recibe 403 en las tres rutas.
+  - **Cliente:**
+    - `IssuedCfdis.test.tsx` (5, nuevo): abre en el mes del negocio con el resumen y lo que se canceló, espera o se rechazó; cada fila con su tipo, estado, receptor y relación (pedido, global, sustitución); los filtros, la búsqueda y el mes anterior; descargar el ZIP y el mensaje si no se puede; y el XML o PDF de una fila por su tipo.
+    - `navigation.test.ts` (10): CFDI emitidos en Reportes solo para dueños y administradores, y la búsqueda la encuentra por «contador» y «xml».
+  - **Total:** `dotnet test` con SQL Server 2022, 3,933 pruebas sin fallos ni omitidas (Domain 1,174, Application 1,736, Infrastructure 562, WebApi 461).
+  - **Cliente en total:** 171 archivos y 1,194 pruebas.
+  - **Primera visita:** 180,333 B de 180,400 B (`master`: 180,037 B): +296 B por la entrada de Reportes › CFDI emitidos en el menú y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube de 180,100 B a 180,400 B.
   - **Escenas visuales:** `facturacion.spec.ts` (+7): el formulario para sustituir (escritorio y teléfono), la factura sustituida que espera su cancelación con relación (escritorio, teléfono y oscuro), cancelarla sin relación y la sustituida ya cancelada.
     - **Resultado:** la comparación contra `master` en `bd4810f` dio 700 pruebas iguales (con la de cobertura), ninguna que cambie y las 7 nuevas (que no existen en `master`); las 7 nuevas pasaron dos corridas seguidas contra el mismo build, después de las revisiones.
 

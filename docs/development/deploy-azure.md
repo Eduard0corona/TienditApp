@@ -904,6 +904,14 @@ La Fase 28G trae una migración, [`database/production/20261026145713_AddInvoice
 - **Volver a la versión anterior:** funciona sin tocar la base, pero la 28F no sabe de sustituciones: en un pedido cuya sustituida sigue vigente ve dos facturas vigentes, su worker no pide la cancelación con 01, y podría relacionar una nota o un complemento con la sustituida o dejar cancelar la nueva antes. Antes de volver, cancela con 02 las sustituidas que sigan vigentes (la consulta 3 del `verify.sql` las cuenta); conviene no sustituir mientras se prueba el despliegue.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50043, sin cambiar nada, en cuanto alguna factura está sustituida (quitar la columna perdería la relación y dejaría pedidos con dos facturas vigentes que el índice anterior rechaza). Sin ninguna, regresa el índice y la restricción de antes y quita la columna, su índice y `CK_OrderInvoices_Replacement`; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Los CFDI emitidos del mes (Fase 28H)
+
+La Fase 28H **no trae migración**: no hay `apply.sql` antes del merge, y `/health/schema` sigue respondiendo como con la 28G ([ADR 0052](../adr/0052-issued-cfdi-report.md)).
+
+- **El contrato solo agrega:** `GET /api/v1/invoicing/issued-cfdis` (la lista del mes), `GET /api/v1/invoicing/issued-cfdis/summary` (el resumen) y `GET /api/v1/invoicing/issued-cfdis/export` (el ZIP o el CSV), con `IssuedCfdiDto`, `IssuedCfdiSummaryDto`, `IssuedCfdiKindSummaryDto` y los enums `IssuedCfdiKind` e `IssuedCfdiExportFormat`. Nada se quita ni cambia de nombre.
+- **Sin configuración nueva:** lee los XML de los archivos privados, donde los dejó el timbrado. El ZIP se arma en memoria, hasta 5,000 CFDI por mes.
+- **Volver a la versión anterior:** funciona sin tocar nada; solo desaparece Reportes › CFDI emitidos.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
