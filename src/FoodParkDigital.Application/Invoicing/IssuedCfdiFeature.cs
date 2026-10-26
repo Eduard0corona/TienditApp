@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
 using FluentValidation;
 using MediatR;
@@ -60,7 +61,7 @@ public class IssuedCfdiDto
     public string ReceiverRfc { get; set; } = string.Empty;
     public string ReceiverName { get; set; } = string.Empty;
 
-    /// <summary>PUE or PPD, for an invoice; a complement or a credit note has none of its own.</summary>
+    /// <summary>PUE or PPD; a credit note is always PUE, and a complement has none.</summary>
     public string? PaymentMethod { get; set; }
 
     public string PaymentForm { get; set; } = string.Empty;
@@ -172,14 +173,14 @@ public class GetIssuedCfdisQueryHandler : IRequestHandler<GetIssuedCfdisQuery, P
     public async Task<PaginatedList<IssuedCfdiDto>> Handle(GetIssuedCfdisQuery request, CancellationToken cancellationToken)
     {
         var month = await IssuedCfdis.MonthAsync(_context, _tenant.TenantId, request.Year, request.Month, cancellationToken);
-        var rows = IssuedCfdis.Search(IssuedCfdis.Rows(_context, month, request.Kind, request.Status), request.Search);
+        var rows = IssuedCfdis.Search(_context, IssuedCfdis.Rows(_context, month, request.Kind, request.Status), request.Search);
         var page = await PaginatedList<IssuedCfdiRow>.CreateAsync(
             rows.OrderByDescending(r => r.IssuedAt).ThenBy(r => r.Serie).ThenByDescending(r => r.Folio).ThenBy(r => r.Id),
             request.PageNumber,
             request.PageSize,
             cancellationToken);
-        var (pageNumber, pageSize) = Paging.Normalize(request.PageNumber, request.PageSize);
-        return new PaginatedList<IssuedCfdiDto>(page.Items.Select(IssuedCfdis.ToDto).ToList(), page.TotalCount, pageNumber, pageSize);
+        return new PaginatedList<IssuedCfdiDto>(
+            page.Items.Select(IssuedCfdis.ToDto).ToList(), page.TotalCount, request.PageNumber, request.PageSize);
     }
 }
 
@@ -288,8 +289,8 @@ public class ExportIssuedCfdisQueryHandler : IRequestHandler<ExportIssuedCfdisQu
     // How many XML files are read from the private files at a time.
     private const int ReadBatchSize = 8;
 
-    public static string TooManyMessage(int count, int limit = MaxCount) =>
-        $"El mes tiene {count:N0} CFDI y la descarga junta hasta {limit:N0}: pide los XML del mes con la descarga masiva del portal del SAT.";
+    public static string TooManyMessage(int limit = MaxCount) =>
+        $"El mes tiene más de {limit:N0} CFDI, los que junta una descarga: pide los XML del mes con la descarga masiva del portal del SAT.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenant;
@@ -314,14 +315,13 @@ public class ExportIssuedCfdisQueryHandler : IRequestHandler<ExportIssuedCfdisQu
     public async Task<Result<PrivateFileDownload>> Handle(ExportIssuedCfdisQuery request, CancellationToken cancellationToken)
     {
         var month = await IssuedCfdis.MonthAsync(_context, _tenant.TenantId, request.Year, request.Month, cancellationToken);
-        var rows = IssuedCfdis.Rows(_context, month, kind: null, status: null);
-        var count = await rows.CountAsync(cancellationToken);
-        if (count > Limit)
-            return Result.Failure<PrivateFileDownload>(TooManyMessage(count, Limit));
-
-        // In the order the accountant reads a month: by date, then by folio.
-        var ordered = await rows.OrderBy(r => r.IssuedAt).ThenBy(r => r.Serie).ThenBy(r => r.Folio).ThenBy(r => r.Id)
+        // In the order the accountant reads a month: by date, then by folio. One more than the limit says it is past it.
+        var ordered = await IssuedCfdis.Rows(_context, month, kind: null, status: null)
+            .OrderBy(r => r.IssuedAt).ThenBy(r => r.Serie).ThenBy(r => r.Folio).ThenBy(r => r.Id)
+            .Take(Limit + 1)
             .ToListAsync(cancellationToken);
+        if (ordered.Count > Limit)
+            return Result.Failure<PrivateFileDownload>(TooManyMessage(Limit));
         var documents = await IssuedCfdis.DocumentsAsync(_context, month, cancellationToken);
         var name = $"CFDI_{request.Year:0000}-{request.Month:00}";
 
@@ -471,7 +471,7 @@ internal static class IssuedCfdis
         return parts.Skip(1).Aggregate(parts[0], (all, part) => all.Concat(part));
     }
 
-    public static IQueryable<IssuedCfdiRow> Search(IQueryable<IssuedCfdiRow> rows, string? search)
+    public static IQueryable<IssuedCfdiRow> Search(IApplicationDbContext context, IQueryable<IssuedCfdiRow> rows, string? search)
     {
         if (string.IsNullOrWhiteSpace(search))
             return rows;
@@ -483,11 +483,14 @@ internal static class IssuedCfdis
         long? folio = long.TryParse(upper[(dash + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var number)
             ? number
             : null;
+        // A global invoice is found by the folio of any sale it covers, as in Reportes › Factura global.
+        var globalOrders = context.GlobalInvoiceOrders.AsNoTracking();
         return rows.Where(r =>
             (folio != null && r.Folio == folio && (serie == null || r.Serie == serie))
             || r.Uuid == upper
             || r.ReceiverRfc == upper
             || r.OrderNumber == upper
+            || (r.Kind == IssuedCfdiKind.GlobalInvoice && globalOrders.Any(o => o.GlobalInvoiceId == r.Id && o.OrderNumber == upper))
             || r.ReceiverName.Contains(upper));
     }
 
@@ -522,16 +525,15 @@ internal static class IssuedCfdis
         HasXml = row.XmlFileKey is not null
     };
 
-    /// <summary>The CFDI each one of the month asked the PAC for (what the CSV says of its receiver and date).</summary>
+    /// <summary>
+    /// The CFDI each one of the month asked the PAC for (what the CSV says of its receiver and date). A global invoice's is
+    /// left out: it can carry 2,000 concepts, and its receiver is always the general public with the use S01.
+    /// </summary>
     public static async Task<Dictionary<Guid, string>> DocumentsAsync(
         IApplicationDbContext context, IssuedCfdiMonth month, CancellationToken cancellationToken)
     {
         var documents = new Dictionary<Guid, string>();
         foreach (var cfdi in await context.OrderInvoices.AsNoTracking()
-                     .Where(i => i.IssuedAt >= month.Start && i.IssuedAt < month.End)
-                     .Select(i => new { i.Id, i.Document }).ToListAsync(cancellationToken))
-            documents[cfdi.Id] = cfdi.Document;
-        foreach (var cfdi in await context.GlobalInvoices.AsNoTracking()
                      .Where(i => i.IssuedAt >= month.Start && i.IssuedAt < month.End)
                      .Select(i => new { i.Id, i.Document }).ToListAsync(cancellationToken))
             documents[cfdi.Id] = cfdi.Document;
@@ -707,7 +709,8 @@ internal static class IssuedCfdis
                    FailureMessage = n.FailureMessage,
                    ReceiverRfc = i.Receiver.Rfc,
                    ReceiverName = i.Receiver.Name,
-                   PaymentMethod = null,
+                   // A credit note is paid in one exhibition: its CFDI says so.
+                   PaymentMethod = CfdiInvoice.PaidInOneExhibition,
                    PaymentForm = n.PaymentForm,
                    SubTotal = n.SubTotal,
                    TaxTotal = n.TaxTotal,
@@ -774,8 +777,8 @@ internal static class IssuedCfdiCsv
                 row.CancellationMotive is { } motive ? ((int)motive).ToString("00", CultureInfo.InvariantCulture) : null,
                 document?.Receiver.Rfc ?? row.ReceiverRfc,
                 document?.Receiver.Name ?? row.ReceiverName,
-                document?.Receiver.CfdiUse,
-                row.PaymentMethod,
+                document?.Receiver.CfdiUse ?? (row.Kind == IssuedCfdiKind.GlobalInvoice ? SatCatalog.GeneralPublicUse : null),
+                document?.PaymentMethod ?? row.PaymentMethod,
                 row.PaymentForm,
                 Money(row.SubTotal),
                 Money(row.TaxTotal),
@@ -790,7 +793,10 @@ internal static class IssuedCfdiCsv
         return [.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes(csv.ToString())];
     }
 
-    /// <summary>Where a stamped XML goes in the ZIP: by kind, named by its folio and UUID.</summary>
+    /// <summary>
+    /// Where a stamped XML goes in the ZIP: by kind, named by its folio and UUID. A cancelled one goes in `cancelados/` of its
+    /// kind, so a folder of the ones in force can be taken whole; one whose cancellation waits is still in force.
+    /// </summary>
     public static string XmlPath(IssuedCfdiRow row)
     {
         var folder = row.Kind switch
@@ -799,6 +805,8 @@ internal static class IssuedCfdiCsv
             IssuedCfdiKind.CreditNote => "egresos",
             _ => "ingresos"
         };
+        if (row.Status == OrderInvoiceStatus.Cancelled)
+            folder += "/cancelados";
         return $"{folder}/{SafeName(row.Serie)}-{row.Folio}_{SafeName(row.Uuid ?? row.Id.ToString())}.xml";
     }
 

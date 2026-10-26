@@ -27,27 +27,29 @@ Tomé las decisiones de la Fase 28H con la autorización permanente del dueño d
      - si tiene XML;
      - por qué la rechazó el PAC.
    - La búsqueda encuentra:
-     - el folio (F-12 o 12);
+     - el folio: F-12, o 12 en cualquier serie;
      - el UUID;
      - el RFC o una parte del nombre del receptor (los nombres se guardan en mayúsculas, como los pide el SAT);
-     - el folio del pedido.
+     - el folio del pedido;
+     - una global, por el folio de cualquier venta que cubre, como en Reportes › Factura global.
 4. **El resumen** (`GET …/issued-cfdis/summary?year&month`), por tipo:
    - cuántos están vigentes y lo que suman (subtotal, impuestos trasladados y total). Vigentes son los timbrados y los que esperan que el cliente acepte su cancelación: el SAT los tiene vigentes hasta entonces. El CFDI de un complemento no tiene subtotal ni impuestos propios: suma lo que declara pagado;
    - cuántos se cancelaron, esperan su cancelación, se están timbrando o fueron rechazados.
    - Se suma en el servidor sobre lo que se leyó del mes, en `decimal`. No da un «neto» de ingresos menos notas: eso lo decide el contador.
 5. **La descarga** (`GET …/issued-cfdis/export?year&month&format`):
    - `Zip` (la de siempre): `CFDI_{aaaa-mm}.zip` con el XML timbrado de cada CFDI que se timbró, vigente, cancelándose o cancelado. Van en `ingresos/`, `pagos/` y `egresos/` como `{serie}-{folio}_{UUID}.xml`, y al final la lista `CFDI_{aaaa-mm}.csv`.
+   - Un cancelado va en `cancelados/` de su tipo (`ingresos/cancelados/`), para que la carpeta de los vigentes se tome entera. Uno cuya cancelación espera sigue vigente y va con ellos.
    - `Csv`: la lista sola.
    - **La lista** (UTF-8 con marca para que Excel lea los acentos, coma y punto decimal):
      - del documento: tipo de comprobante, documento, serie, folio y UUID;
      - fechas y estado: la fecha del CFDI, la de timbrado, el estado como lo dice el SAT, y la fecha y el motivo de la cancelación;
-     - receptor: RFC, nombre y uso, tomados del CFDI que se pidió;
-     - pago: método y forma;
+     - receptor: RFC, nombre y uso, tomados del CFDI que se pidió (el de una global es el público en general, con uso S01);
+     - pago: método y forma. Una nota de crédito siempre es en una exhibición (PUE);
      - importes: subtotal, impuestos, total y lo pagado de un complemento;
      - relación: el UUID relacionado, el pedido y el archivo del XML en el ZIP.
    - Una celda de texto que empieza con `=`, `+`, `-`, `@`, tabulador o retorno va con un apóstrofo: una hoja de cálculo no la corre como fórmula.
    - Un XML que no está en los archivos privados se marca «No se encontró» en la lista, y el log registra el tipo y el id del CFDI, sin datos del cliente.
-   - Hasta 5,000 CFDI por descarga, leídos a memoria; los XML se leen de ocho en ocho. Con más, responde 400 y dice que se pidan con la descarga masiva del SAT.
+   - Hasta 5,000 CFDI por descarga, leídos a memoria con una sola consulta (se piden 5,001 para saber si hay más); los XML se leen de ocho en ocho. Con más, responde 400 y dice que se pidan con la descarga masiva del portal del SAT.
    - Sin PDF: el PAC tendría que dibujar cada uno que no se guardó. Se descargan uno por uno desde la fila.
 6. **La pantalla:**
    - Se abre en el mes actual del negocio, o en el de la dirección (`?year=&month=`, para volver al mismo mes desde un pedido), con flechas al mes anterior y al siguiente (desde enero de 2022, cuando empezó CFDI 4.0, hasta el actual).
@@ -56,7 +58,7 @@ Tomé las decisiones de la Fase 28H con la autorización permanente del dueño d
    - Cada fila lleva un enlace a su pedido o a su global, y «Descargar XML» y «Descargar PDF» con las rutas de cada tipo.
    - Mientras un CFDI se timbra, la lista y el resumen se leen otra vez cada 30 segundos.
 7. **La API se mantiene compatible:** solo agrega las tres rutas, `IssuedCfdiDto`, `IssuedCfdiSummaryDto`, `IssuedCfdiKindSummaryDto` y los enums `IssuedCfdiKind` e `IssuedCfdiExportFormat`. Nada se quita ni cambia de nombre.
-8. **Sin migración:** los índices `(TenantId, Serie, Folio)` de cada tabla ya acotan por negocio, y un negocio timbra pocos CFDI al mes.
+8. **La migración** `20261026201123_AddIssuedCfdiDateIndexes`: un índice `(TenantId, IssuedAt)` en cada una de las cuatro tablas. Los de `(TenantId, Serie, Folio)` ya acotaban por negocio, pero leer un mes recorría todos los CFDI que el negocio ha timbrado; con estos se lee solo el mes. Solo agrega índices: no cambia columnas, restricciones ni datos.
 9. **Fuera de esta fase:**
    - los PDF dentro del ZIP y los acuses de cancelación;
    - los CFDI recibidos (la descarga masiva del SAT);
@@ -76,6 +78,7 @@ Tomé las decisiones de la Fase 28H con la autorización permanente del dueño d
   - La lista es fiscal: también trae los CFDI de pedidos de un módulo que el negocio ya no tiene, y el ZIP los incluye. Sus descargas sueltas siguen la regla del pedido (ADR 0045) y no se encuentran.
   - Un mes con más de 5,000 CFDI no se descarga desde aquí.
   - La búsqueda por nombre en SQL Server distingue acentos: «PUBLICO EN GENERAL» no se encuentra con «público».
+  - Excel, al abrir la lista con doble clic, lee como número lo que parece número: la forma de pago `01` se ve como `1`. Importarla con esas columnas como texto conserva los ceros: el archivo los lleva.
   - La primera visita sube 296 B (de 180,037 a 180,333 B, contra `master` en `1e52cf7`) por la entrada del menú, con sus palabras de búsqueda, y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube a 180,400 B.
-- **Compatibilidad durante el despliegue:** no hay cambios de base. La versión anterior (28G) no conoce las rutas nuevas, y volver a ella solo quita la pantalla.
-- **Reversibilidad:** total. Es de solo lectura y no guarda nada.
+- **Compatibilidad durante el despliegue:** el `apply.sql` de la migración se aplica antes del merge, como siempre. La versión anterior (28G) no usa los índices ni conoce las rutas nuevas; volver a ella solo quita la pantalla, y los índices se quedan sin estorbar.
+- **Reversibilidad:** total. Es de solo lectura y no guarda nada; el `rollback.sql` quita los índices sin tocar datos.

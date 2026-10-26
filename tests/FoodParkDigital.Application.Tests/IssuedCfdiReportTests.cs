@@ -130,10 +130,10 @@ public class IssuedCfdiReportTests
         using var csv = new StreamReader(zip.GetEntry("CFDI_2026-10.csv")!.Open(), Encoding.UTF8);
         var lines = (await csv.ReadToEndAsync()).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(3, lines.Length);
-        // The credit note: the invoice's receiver with the use of a credit note, related to the invoice.
+        // The credit note: the invoice's receiver with the use of a credit note, paid in one exhibition, related to the invoice.
         var cells = lines[2].Split(',');
-        Assert.Equal(("E", "Nota de crédito", "XIQB891116QE4", "G02", "04", "17.24", "2.76", "20.00", invoice.Uuid, paid.OrderNumber),
-            (cells[0], cells[1], cells[10], cells[12], cells[14], cells[15], cells[16], cells[17], cells[19], cells[20]));
+        Assert.Equal(("E", "Nota de crédito", "XIQB891116QE4", "G02", "PUE", "04", "17.24", "2.76", "20.00", invoice.Uuid, paid.OrderNumber),
+            (cells[0], cells[1], cells[10], cells[12], cells[13], cells[14], cells[15], cells[16], cells[17], cells[19], cells[20]));
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class IssuedCfdiReportTests
 
         var downloaded = await book.ExportAsync(limit: 1);
 
-        Assert.Equal(ExportIssuedCfdisQueryHandler.TooManyMessage(2, 1), downloaded.Error);
+        Assert.Equal(ExportIssuedCfdisQueryHandler.TooManyMessage(1), downloaded.Error);
     }
 
     [Fact]

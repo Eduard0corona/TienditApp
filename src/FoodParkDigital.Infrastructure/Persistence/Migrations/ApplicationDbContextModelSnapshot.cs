@@ -1913,6 +1913,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status", "RequestedAt")
                         .HasFilter("[Status] IN (0, 3)");
 
+                    b.HasIndex("TenantId", "IssuedAt");
+
                     b.HasIndex("TenantId", "Uuid")
                         .IsUnique()
                         .HasFilter("[Uuid] IS NOT NULL");
@@ -2096,6 +2098,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status", "RequestedAt")
                         .HasFilter("[Status] IN (0, 3)");
+
+                    b.HasIndex("TenantId", "IssuedAt");
 
                     b.HasIndex("TenantId", "PeriodFrom");
 
@@ -2406,6 +2410,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status", "RequestedAt")
                         .HasFilter("[Status] IN (0, 3)");
 
+                    b.HasIndex("TenantId", "IssuedAt");
+
                     b.HasIndex("TenantId", "Uuid")
                         .IsUnique()
                         .HasFilter("[Uuid] IS NOT NULL");
@@ -2577,6 +2583,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status", "RequestedAt")
                         .HasFilter("[Status] IN (0, 3)");
+
+                    b.HasIndex("TenantId", "IssuedAt");
 
                     b.HasIndex("TenantId", "Uuid")
                         .IsUnique()

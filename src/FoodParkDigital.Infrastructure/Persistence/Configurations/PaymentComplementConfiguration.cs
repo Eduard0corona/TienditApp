@@ -102,5 +102,7 @@ public class PaymentComplementConfiguration : IEntityTypeConfiguration<PaymentCo
         builder.HasIndex(x => x.OrderId);
         builder.HasIndex(x => x.OrderPaymentId);
         builder.HasIndex(x => new { x.Status, x.RequestedAt }).HasFilter("[Status] IN (0, 3)");
+        // A month of the business's CFDI, in Reportes › CFDI emitidos (Fase 28H).
+        builder.HasIndex(x => new { x.TenantId, x.IssuedAt });
     }
 }

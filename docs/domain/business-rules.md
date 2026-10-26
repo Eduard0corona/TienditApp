@@ -647,7 +647,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Qué es:** Reportes › CFDI emitidos lista los CFDI que el negocio pidió al PAC con fecha en un mes, en su zona horaria: facturas de pedido y globales, complementos de pago y notas de crédito, en cualquier estado. Un rechazado no es CFDI, pero explica un folio que falta.
 - **Quién:** dueños y administradores (la lista lleva el RFC y el nombre de los clientes); otro negocio no ve ninguno.
 - **El resumen:** por tipo, cuántos están vigentes (timbrados o esperando que el cliente acepte su cancelación) y lo que suman, y cuántos se cancelaron, esperan, se timbran o fueron rechazados. Lo de un complemento es lo que declara pagado. No calcula un neto: lo decide el contador.
-- **La descarga:** un ZIP con el XML de cada CFDI que se timbró (también los cancelados), por tipo, y la lista de todos en CSV; o la lista sola. Hasta 5,000 CFDI por mes. La lista dice el receptor y la fecha tal como los lleva cada CFDI; una celda que una hoja de cálculo correría como fórmula va como texto.
+- **La descarga:** un ZIP con el XML de cada CFDI que se timbró, por tipo (los cancelados aparte, en `cancelados/`), y la lista de todos en CSV; o la lista sola. Hasta 5,000 CFDI por mes. La lista dice el receptor y la fecha tal como los lleva cada CFDI; una celda que una hoja de cálculo correría como fórmula va como texto.
 - **No cambia nada:** es de solo lectura; cada CFDI se cancela o se sustituye donde nació (Pedidos o Factura global).
 
 ## Cancelación y trazabilidad

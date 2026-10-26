@@ -86,6 +86,8 @@ public class GlobalInvoiceConfiguration : IEntityTypeConfiguration<GlobalInvoice
         // The list of a business's global invoices (newest period first), and the ones the worker follows.
         builder.HasIndex(x => new { x.TenantId, x.PeriodFrom });
         builder.HasIndex(x => new { x.Status, x.RequestedAt }).HasFilter("[Status] IN (0, 3)");
+        // A month of the business's CFDI, in Reportes › CFDI emitidos (Fase 28H).
+        builder.HasIndex(x => new { x.TenantId, x.IssuedAt });
     }
 }
 

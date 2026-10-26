@@ -1421,23 +1421,30 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 - Fase 28H, los CFDI emitidos del mes y sus XML para el contador ([ADR 0052](../adr/0052-issued-cfdi-report.md)):
   - **Application:** `IssuedCfdiReportTests` (9, nuevo), sobre CFDI timbrados como los timbra TienditApp:
     - el mes lista las facturas, el complemento y la nota del negocio, la más reciente primero, con su receptor (el de su factura), su pedido y la factura de la que son; la búsqueda encuentra una parte del nombre; otro mes no tiene ninguno; el resumen suma los vigentes por tipo;
-    - el ZIP lleva el XML que guardó el timbrado, por tipo, y la lista con el receptor, el uso y los importes que pidió cada CFDI y el UUID de su factura;
+    - el ZIP lleva el XML que guardó el timbrado, por tipo, y la lista con el receptor, el uso, el método de pago (la nota, en una exhibición) y los importes que pidió cada CFDI y el UUID de su factura;
     - un mes con más CFDI de los que junta la descarga lo dice;
     - una celda que una hoja de cálculo correría como fórmula va con apóstrofo, y la que tiene comas va entre comillas;
     - solo dueños y administradores, y un mes desde enero de 2022.
-  - **Infrastructure:** `IssuedCfdisSqlServerTests` (3, nuevo), en SQL Server:
-    - la unión de las cuatro tablas se traduce y pagina en el orden del mes, con su receptor, su pedido, la factura que sustituye o la que la sustituye, el periodo de la global y por qué se rechazó; deja fuera la factura del 30 de septiembre a las 23:59 de la Ciudad de México y la de otro negocio, y deja dentro la del 31 de octubre a las 23:30 (ya noviembre en UTC); filtra por tipo, estado y búsqueda;
-    - el resumen suma los vigentes por tipo y cuenta los cancelados y rechazados;
-    - el ZIP lleva los XML timbrados por tipo y la lista al final, con la fecha del CFDI en la zona del negocio, y dice qué XML no se encontró; la lista sola lleva la marca UTF-8.
-  - **WebApi:** `CrossTenantInvoicingSqlServerTests` (+1, 14): otro negocio, también con el encabezado de mi negocio, ve una lista vacía, un resumen en ceros y un ZIP solo con su lista vacía; el mío trae mi factura y su XML; y el cajero, aunque lea reportes, recibe 403 en las tres rutas.
+  - **Infrastructure:**
+    - `IssuedCfdisSqlServerTests` (3, nuevo), en SQL Server:
+      - la unión de las cuatro tablas se traduce y pagina en el orden del mes, con su receptor, su pedido, la factura que sustituye o la que la sustituye, el periodo de la global y por qué se rechazó; deja fuera la factura del 30 de septiembre a las 23:59 de la Ciudad de México y la de otro negocio, y deja dentro la del 31 de octubre a las 23:30 (ya noviembre en UTC);
+      - filtra por tipo y por estado (también cancelándose y timbrando); la búsqueda encuentra un folio sin serie en todas las series, el UUID, el RFC, una parte del nombre, el folio del pedido y una global por el folio de una venta que cubre;
+      - el resumen cuenta como vigente la factura que espera su cancelación, y cuenta las canceladas, las que se timbran y las rechazadas;
+      - el ZIP lleva los XML timbrados por tipo, los cancelados en `cancelados/`, y la lista al final, con la fecha del CFDI en la zona del negocio y la nota en una exhibición, y dice qué XML no se encontró; la lista sola lleva la marca UTF-8.
+    - `IssuedCfdiDateIndexesMigrationSqlServerTests` (1, nuevo): la migración agrega el índice `(TenantId, IssuedAt)` a las cuatro tablas, no único y sin filtro, sin tocar la factura que ya estaba; revertirla solo quita los índices, y otra vez no hace nada.
+  - **WebApi:** `CrossTenantInvoicingSqlServerTests` (+1, 14): otro negocio, también con el encabezado de mi negocio, ve una lista vacía, un resumen en ceros, un ZIP solo con su lista vacía y una lista sola sin mi factura; el mío trae mi factura, su XML y su lista; y el cajero, aunque lea reportes, recibe 403 en las tres rutas.
   - **Cliente:**
-    - `IssuedCfdis.test.tsx` (5, nuevo): abre en el mes del negocio con el resumen y lo que se canceló, espera o se rechazó; cada fila con su tipo, estado, receptor y relación (pedido, global, sustitución); los filtros, la búsqueda y el mes anterior; descargar el ZIP y el mensaje si no se puede; y el XML o PDF de una fila por su tipo.
+    - `IssuedCfdis.test.tsx` (11, nuevo):
+      - abre en el mes del negocio (no en el de UTC al cambiar de mes) con el resumen y lo que se canceló, espera o se rechazó; o en el mes de la dirección, de enero de 2022 al actual, y en el actual si la dirección nombra otro;
+      - cada fila con su tipo, estado, receptor y relación (pedido, global, sustitución);
+      - los filtros, la búsqueda y el mes anterior; el primer tipo y el primer estado también se mandan, y filtrar regresa a la primera página; en los extremos del rango el foco pasa al título del mes;
+      - descargar el ZIP y el mensaje si no se puede; un mes sin CFDI no ofrece descargas, y los filtros que no dejan nada lo dicen;
+      - el XML o PDF de una fila por su tipo; y el resumen que no cargó dice por qué y se vuelve a pedir.
     - `navigation.test.ts` (10): CFDI emitidos en Reportes solo para dueños y administradores, y la búsqueda la encuentra por «contador» y «xml».
-  - **Total:** `dotnet test` con SQL Server 2022, 3,933 pruebas sin fallos ni omitidas (Domain 1,174, Application 1,736, Infrastructure 562, WebApi 461).
-  - **Cliente en total:** 171 archivos y 1,194 pruebas.
+  - **Total:** `dotnet test` con SQL Server 2022, 3,934 pruebas sin fallos ni omitidas (Domain 1,174, Application 1,736, Infrastructure 563, WebApi 461).
+  - **Cliente en total:** 171 archivos y 1,200 pruebas.
   - **Primera visita:** 180,333 B de 180,400 B (`master`: 180,037 B): +296 B por la entrada de Reportes › CFDI emitidos en el menú y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube de 180,100 B a 180,400 B.
-  - **Escenas visuales:** `facturacion.spec.ts` (+7): el formulario para sustituir (escritorio y teléfono), la factura sustituida que espera su cancelación con relación (escritorio, teléfono y oscuro), cancelarla sin relación y la sustituida ya cancelada.
-    - **Resultado:** la comparación contra `master` en `bd4810f` dio 700 pruebas iguales (con la de cobertura), ninguna que cambie y las 7 nuevas (que no existen en `master`); las 7 nuevas pasaron dos corridas seguidas contra el mismo build, después de las revisiones.
+  - **Escenas visuales:** `cfdiEmitidos.spec.ts` (4, nuevo): Reportes › CFDI emitidos en escritorio, teléfono y oscuro, y un mes sin CFDI.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.

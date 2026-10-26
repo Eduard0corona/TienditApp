@@ -313,7 +313,7 @@ public class InvoicingController : ControllerBase
     /// <summary>
     /// The CFDI the business issued with a date in that month, in its time zone, the newest first: invoices of orders,
     /// global invoices, payment complements and credit notes, in any state. The search finds one by its folio, its UUID,
-    /// its receiver's RFC or name, or its order's folio.
+    /// its receiver's RFC or name, its order's folio, or the folio of a sale its global invoice covers.
     /// </summary>
     [HttpGet("issued-cfdis")]
     public async Task<ActionResult<PaginatedList<IssuedCfdiDto>>> GetIssuedCfdis(

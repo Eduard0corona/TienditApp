@@ -906,11 +906,16 @@ La Fase 28G trae una migración, [`database/production/20261026145713_AddInvoice
 
 ## Los CFDI emitidos del mes (Fase 28H)
 
-La Fase 28H **no trae migración**: no hay `apply.sql` antes del merge, y `/health/schema` sigue respondiendo como con la 28G ([ADR 0052](../adr/0052-issued-cfdi-report.md)).
+La Fase 28H trae una migración, [`database/production/20261026201123_AddIssuedCfdiDateIndexes`](../../database/production/20261026201123_AddIssuedCfdiDateIndexes). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente (por ejemplo la de la 28G), también la aplica; no sirve para crear una base vacía ([ADR 0052](../adr/0052-issued-cfdi-report.md)).
 
+- **La migración:** agrega un índice `(TenantId, IssuedAt)` a cada tabla de CFDI: `IX_OrderInvoices_TenantId_IssuedAt`, `IX_GlobalInvoices_TenantId_IssuedAt`, `IX_PaymentComplements_TenantId_IssuedAt` e `IX_CreditNotes_TenantId_IssuedAt`. Con ellos, un mes de Reportes › CFDI emitidos se lee sin recorrer todos los CFDI del negocio.
+
+  No cambia columnas, restricciones ni datos. Crear cada índice bloquea la escritura en su tabla mientras se construye; con los CFDI de hoy toma segundos. Después de aplicarla, el `verify.sql` muestra los cuatro índices con sus columnas y cuenta los CFDI de cada tabla; nunca muestra datos fiscales.
+- **Mientras se publica:** la versión de `master` (Fase 28G) no usa los índices y sigue igual. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
 - **El contrato solo agrega:** `GET /api/v1/invoicing/issued-cfdis` (la lista del mes), `GET /api/v1/invoicing/issued-cfdis/summary` (el resumen) y `GET /api/v1/invoicing/issued-cfdis/export` (el ZIP o el CSV), con `IssuedCfdiDto`, `IssuedCfdiSummaryDto`, `IssuedCfdiKindSummaryDto` y los enums `IssuedCfdiKind` e `IssuedCfdiExportFormat`. Nada se quita ni cambia de nombre.
 - **Sin configuración nueva:** lee los XML de los archivos privados, donde los dejó el timbrado. El ZIP se arma en memoria, hasta 5,000 CFDI por mes.
-- **Volver a la versión anterior:** funciona sin tocar nada; solo desaparece Reportes › CFDI emitidos.
+- **Volver a la versión anterior:** funciona sin tocar la base; solo desaparece Reportes › CFDI emitidos, y los índices se quedan sin estorbar.
+- **Dejar también la base como estaba:** el `rollback.sql` borra los cuatro índices y no toca datos; ejecutarlo otra vez no hace nada.
 
 ## Slot de staging con swap y aprobación
 

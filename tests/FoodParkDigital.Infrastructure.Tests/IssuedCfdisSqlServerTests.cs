@@ -38,10 +38,12 @@ public class IssuedCfdisSqlServerTests
         var all = await ListAsync(context, book.TenantId);
 
         // The September one and the other business's are not in it; the refused one of the 31st at night is.
-        Assert.Equal(7, all.TotalCount);
+        Assert.Equal(9, all.TotalCount);
         Assert.Equal(
             [
                 (IssuedCfdiKind.OrderInvoice, "F-5", OrderInvoiceStatus.Refused),
+                (IssuedCfdiKind.OrderInvoice, "F-7", OrderInvoiceStatus.Stamping),
+                (IssuedCfdiKind.OrderInvoice, "F-6", OrderInvoiceStatus.Cancelling),
                 (IssuedCfdiKind.GlobalInvoice, "F-4", OrderInvoiceStatus.Stamped),
                 (IssuedCfdiKind.PaymentComplement, "P-1", OrderInvoiceStatus.Stamped),
                 (IssuedCfdiKind.OrderInvoice, "F-3", OrderInvoiceStatus.Stamped),
@@ -59,7 +61,11 @@ public class IssuedCfdisSqlServerTests
         Assert.Equal((ReceiverRfc, "F-3", (decimal?)null, 120m, "01", (string?)null),
             (complement.ReceiverRfc, complement.RelatedNumber, complement.Total, complement.PaidAmount, complement.PaymentForm, complement.PaymentMethod));
         var note = all.Items.Single(c => c.Kind == IssuedCfdiKind.CreditNote);
-        Assert.Equal(("F-2", book.OrderNumber, 17.24m, 2.76m, 20m), (note.RelatedNumber, note.OrderNumber, note.SubTotal, note.TaxTotal, note.Total));
+        Assert.Equal(("F-2", book.OrderNumber, 17.24m, 2.76m, 20m, "PUE"),
+            (note.RelatedNumber, note.OrderNumber, note.SubTotal, note.TaxTotal, note.Total, note.PaymentMethod));
+        var cancelling = all.Items.Single(c => c.Number == "F-6");
+        Assert.Equal((CfdiCancellationMotive.ErrorsWithoutReplacement, (DateTimeOffset?)null, true),
+            (cancelling.CancellationMotive, cancelling.CancelledAt, cancelling.HasXml));
         var global = all.Items.Single(c => c.Kind == IssuedCfdiKind.GlobalInvoice);
         Assert.Equal((SatCatalog.GeneralPublicRfc, SatCatalog.GeneralPublicName, (Guid?)null, GlobalInvoicePeriodicity.Daily,
                 new DateOnly(2026, 10, 8), 1, "PUE"),
@@ -69,21 +75,25 @@ public class IssuedCfdisSqlServerTests
 
         // A page at a time, the same order.
         var second = await ListAsync(context, book.TenantId, pageNumber: 2, pageSize: 3);
-        Assert.Equal(["F-3", "NC-1", "F-2"], second.Items.Select(c => c.Number));
-        Assert.Equal(7, second.TotalCount);
+        Assert.Equal(["F-4", "P-1", "F-3"], second.Items.Select(c => c.Number));
+        Assert.Equal(9, second.TotalCount);
 
         // By kind and by state.
         Assert.Equal(["NC-1"], (await ListAsync(context, book.TenantId, kind: IssuedCfdiKind.CreditNote)).Items.Select(c => c.Number));
         Assert.Equal(["F-1"], (await ListAsync(context, book.TenantId, status: OrderInvoiceStatus.Cancelled)).Items.Select(c => c.Number));
+        Assert.Equal(["F-6"], (await ListAsync(context, book.TenantId, status: OrderInvoiceStatus.Cancelling)).Items.Select(c => c.Number));
+        Assert.Equal(["F-7"], (await ListAsync(context, book.TenantId, status: OrderInvoiceStatus.Stamping)).Items.Select(c => c.Number));
         Assert.Empty((await ListAsync(context, book.TenantId, kind: IssuedCfdiKind.GlobalInvoice, status: OrderInvoiceStatus.Refused)).Items);
 
-        // By folio, UUID, RFC, part of the name or the order's folio.
+        // By folio (of any series without one), UUID, RFC, part of the name, the order's folio or a sale of the global invoice.
         Assert.Equal(["F-2"], await NumbersAsync(context, book.TenantId, "f-2"));
+        Assert.Equal(["P-1", "NC-1", "F-1"], await NumbersAsync(context, book.TenantId, "1"));
         Assert.Equal(["P-1"], await NumbersAsync(context, book.TenantId, book.ComplementUuid.ToLowerInvariant()));
         Assert.Equal(["F-4"], await NumbersAsync(context, book.TenantId, "en general"));
-        Assert.Equal(["F-5", "P-1", "F-3", "NC-1", "F-2", "F-1"], await NumbersAsync(context, book.TenantId, ReceiverRfc.ToLowerInvariant()));
+        Assert.Equal(["F-5", "F-7", "F-6", "P-1", "F-3", "NC-1", "F-2", "F-1"], await NumbersAsync(context, book.TenantId, ReceiverRfc.ToLowerInvariant()));
         Assert.Equal(["NC-1", "F-2", "F-1"], await NumbersAsync(context, book.TenantId, book.OrderNumber));
-        Assert.Equal(["F-5", "P-1", "F-3", "NC-1", "F-2", "F-1"], await NumbersAsync(context, book.TenantId, "fuente"));
+        Assert.Equal(["F-4"], await NumbersAsync(context, book.TenantId, "ord-000003"));
+        Assert.Equal(["F-5", "F-7", "F-6", "P-1", "F-3", "NC-1", "F-2", "F-1"], await NumbersAsync(context, book.TenantId, "fuente"));
     }
 
     [SqlServerFact]
@@ -99,7 +109,8 @@ public class IssuedCfdisSqlServerTests
         Assert.Equal((new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)), (summary.From, summary.To));
         Assert.Equal(
             [
-                (IssuedCfdiKind.OrderInvoice, 2, 344.82m, 55.18m, 400m, 0, 1, 0, 1),
+                // F-2, F-3 and F-6, whose cancellation waits: the SAT has it in force until then.
+                (IssuedCfdiKind.OrderInvoice, 3, 517.23m, 82.77m, 600m, 1, 1, 1, 1),
                 (IssuedCfdiKind.GlobalInvoice, 1, 86.21m, 13.79m, 100m, 0, 0, 0, 0),
                 (IssuedCfdiKind.PaymentComplement, 1, 0m, 0m, 120m, 0, 0, 0, 0),
                 (IssuedCfdiKind.CreditNote, 1, 17.24m, 2.76m, 20m, 0, 0, 0, 0)
@@ -108,7 +119,7 @@ public class IssuedCfdisSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task Export_ShouldZipTheXmlOfTheStampedOnesByKind_WithTheListOfAll_SayingWhichXmlWasNotFound()
+    public async Task Export_ShouldZipTheXmlOfTheStampedOnesByKind_TheCancelledApart_WithTheListOfAll_SayingWhichXmlWasNotFound()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
         var book = await SeedAsync(database);
@@ -126,11 +137,12 @@ public class IssuedCfdisSqlServerTests
         using var zip = new ZipArchive(exported.Value.Content, ZipArchiveMode.Read);
         Assert.Equal(
             [
-                $"ingresos/F-1_{book.Uuids["F-1"]}.xml",
+                $"ingresos/cancelados/F-1_{book.Uuids["F-1"]}.xml",
                 $"ingresos/F-2_{book.Uuids["F-2"]}.xml",
                 $"egresos/NC-1_{book.Uuids["NC-1"]}.xml",
                 $"ingresos/F-3_{book.Uuids["F-3"]}.xml",
                 $"pagos/P-1_{book.ComplementUuid}.xml",
+                $"ingresos/F-6_{book.Uuids["F-6"]}.xml",
                 "CFDI_2026-10.csv"
             ],
             zip.Entries.Select(e => e.FullName));
@@ -138,13 +150,18 @@ public class IssuedCfdisSqlServerTests
             Assert.Equal("<cfdi:Comprobante key=\"cfdi/p1.xml\"/>", await reader.ReadToEndAsync());
 
         var lines = await CsvLinesAsync(zip.GetEntry("CFDI_2026-10.csv")!);
-        Assert.Equal(8, lines.Length);
+        Assert.Equal(10, lines.Length);
         Assert.StartsWith("Tipo de comprobante,Documento,Serie,Folio,UUID,Fecha,", lines[0]);
         // By date: the CFDI's own date, in the business's time zone.
         Assert.Equal(
             $"I,Factura,F,1,{book.Uuids["F-1"]},2026-10-02 06:00:00,2026-10-02 06:00:00,Cancelado,2026-10-04 06:00:00,01," +
-            $"{ReceiverRfc},Karla Fuente Nolasco,G03,PUE,01,172.41,27.59,200.00,,,{book.OrderNumber},ingresos/F-1_{book.Uuids["F-1"]}.xml",
+            $"{ReceiverRfc},Karla Fuente Nolasco,G03,PUE,01,172.41,27.59,200.00,,,{book.OrderNumber},ingresos/cancelados/F-1_{book.Uuids["F-1"]}.xml",
             lines[1]);
+        // The credit note, paid in one exhibition.
+        Assert.Equal(
+            $"E,Nota de crédito,NC,1,{book.Uuids["NC-1"]},2026-10-05 06:00:00,2026-10-05 06:00:00,Vigente,,,{ReceiverRfc},Karla Fuente Nolasco,G02,PUE," +
+            $"01,17.24,2.76,20.00,,{book.Uuids["F-2"]},{book.OrderNumber},egresos/NC-1_{book.Uuids["NC-1"]}.xml",
+            lines[3]);
         Assert.Equal(
             $"P,Complemento de pago,P,1,{book.ComplementUuid},2026-10-07 06:00:00,2026-10-07 06:00:00,Vigente,,,{ReceiverRfc},Karla Fuente Nolasco,CP01,," +
             $"01,,,,120.00,{book.Uuids["F-3"]},ORD-000002,pagos/P-1_{book.ComplementUuid}.xml",
@@ -154,8 +171,15 @@ public class IssuedCfdisSqlServerTests
             $"{SatCatalog.GeneralPublicName},S01,PUE,01,86.21,13.79,100.00,,,,{ExportIssuedCfdisQueryHandler.MissingXml}",
             lines[6]);
         Assert.Equal(
-            $"I,Factura,F,5,,2026-10-31 23:30:00,,Rechazado por el PAC,,,{ReceiverRfc},Karla Fuente Nolasco,G03,PUE,01,172.41,27.59,200.00,,,ORD-000005,",
+            $"I,Factura,F,6,{book.Uuids["F-6"]},2026-10-20 06:00:00,2026-10-20 06:00:00,En proceso de cancelación,,02,{ReceiverRfc},Karla Fuente Nolasco," +
+            $"G03,PUE,01,172.41,27.59,200.00,,,ORD-000006,ingresos/F-6_{book.Uuids["F-6"]}.xml",
             lines[7]);
+        Assert.Equal(
+            $"I,Factura,F,7,,2026-10-21 06:00:00,,Timbrando,,,{ReceiverRfc},Karla Fuente Nolasco,G03,PUE,01,172.41,27.59,200.00,,,ORD-000007,",
+            lines[8]);
+        Assert.Equal(
+            $"I,Factura,F,5,,2026-10-31 23:30:00,,Rechazado por el PAC,,,{ReceiverRfc},Karla Fuente Nolasco,G03,PUE,01,172.41,27.59,200.00,,,ORD-000005,",
+            lines[9]);
 
         // The list alone, with the file each XML has in the ZIP.
         var csv = await new ExportIssuedCfdisQueryHandler(
@@ -195,8 +219,8 @@ public class IssuedCfdisSqlServerTests
     /// <summary>
     /// A business in Mexico City with, in October 2026: F-1, replaced by F-2 and cancelled with motive 01, and the credit note
     /// of a refund of that order (NC-1); F-3 in installments with the complement of a payment (P-1); the global invoice of the
-    /// 8th (F-4); and F-5, refused by the PAC, asked on the 31st at 23:30. Also an invoice of 30 September at 23:59 and another
-    /// business's invoice of October.
+    /// 8th (F-4); F-6, whose cancellation waits for the receiver; F-7, still stamping; and F-5, refused by the PAC, asked on the
+    /// 31st at 23:30. Also an invoice of 30 September at 23:59 and another business's invoice of October.
     /// </summary>
     private static async Task<Book> SeedAsync(SqlServerTestDatabase database)
     {
@@ -217,6 +241,12 @@ public class IssuedCfdisSqlServerTests
         // 23:30 of the 31st in Mexico City is already November in UTC: it is October's.
         var f5 = Invoice(tenant.Id, refused.Id, 5, new DateTimeOffset(2026, 11, 1, 5, 30, 0, TimeSpan.Zero));
         f5.Refuse("El RFC del receptor no existe.", new DateTimeOffset(2026, 11, 1, 5, 31, 0, TimeSpan.Zero));
+        var waiting = PaidOrder(tenant.Id, "ORD-000006", October(20));
+        var f6 = Invoice(tenant.Id, waiting.Id, 6, October(20));
+        Stamp(f6, uuids, October(20), "cfdi/f6.xml");
+        f6.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, userId, October(22));
+        var stamping = PaidOrder(tenant.Id, "ORD-000007", October(21));
+        var f7 = Invoice(tenant.Id, stamping.Id, 7, October(21));
         // 23:59 of 30 September in Mexico City is already October in UTC: it is September's.
         var september = PaidOrder(tenant.Id, "ORD-000000", October(1, 5));
         var f9 = Invoice(tenant.Id, september.Id, 9, new DateTimeOffset(2026, 10, 1, 5, 59, 0, TimeSpan.Zero));
@@ -229,7 +259,7 @@ public class IssuedCfdisSqlServerTests
         {
             context.AddRange(
                 tenant, new TenantSettings(tenant.Id, TenantCapability.Retail), other, new TenantSettings(other.Id, TenantCapability.Retail),
-                first, second, publicSale, refused, september, otherOrder, f1, f3, f5, f9, otherInvoice);
+                first, second, publicSale, refused, waiting, stamping, september, otherOrder, f1, f3, f5, f6, f7, f9, otherInvoice);
             await context.SaveChangesAsync();
         }
 
@@ -266,7 +296,7 @@ public class IssuedCfdisSqlServerTests
         }
 
         return new Book(tenant.Id, first.OrderNumber, uuids, uuids["P-1"],
-            ["cfdi/f1.xml", "cfdi/f2.xml", "cfdi/nc1.xml", "cfdi/f3.xml", "cfdi/p1.xml", "cfdi/f4.xml"]);
+            ["cfdi/f1.xml", "cfdi/f2.xml", "cfdi/nc1.xml", "cfdi/f3.xml", "cfdi/p1.xml", "cfdi/f4.xml", "cfdi/f6.xml"]);
     }
 
     private static Tenant NewTenant()

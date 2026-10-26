@@ -641,6 +641,9 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Equal(("application/zip", true), (zip.Content.Headers.ContentType?.MediaType, zip.Headers.CacheControl is { Private: true, NoStore: true }));
         using (var archive = new System.IO.Compression.ZipArchive(await zip.Content.ReadAsStreamAsync()))
             Assert.Contains($"ingresos/F-1_{uuid}.xml", archive.Entries.Select(e => e.FullName));
+        var list = await mine.Client.GetAsync($"/api/v1/invoicing/issued-cfdis/export?{month}&format=Csv");
+        Assert.Equal(("text/csv", true), (list.Content.Headers.ContentType?.MediaType, list.Headers.CacheControl is { Private: true, NoStore: true }));
+        Assert.Contains($",{uuid},", await list.Content.ReadAsStringAsync());
 
         // The other owner, even with the header of my business, has none: an empty list, a summary of zeros, a ZIP with
         // only its empty list.
@@ -659,6 +662,7 @@ public sealed class CrossTenantInvoicingSqlServerTests
             Assert.Equal([$"CFDI_{dated.Year:0000}-{dated.Month:00}.csv"], archive.Entries.Select(e => e.FullName));
             using var csv = new StreamReader(archive.Entries[0].Open());
             Assert.DoesNotContain(uuid, await csv.ReadToEndAsync());
+            Assert.DoesNotContain(uuid, await (await send($"/api/v1/invoicing/issued-cfdis/export?{month}&format=Csv")).Content.ReadAsStringAsync());
         }
 
         // The month's fiscal list carries the customers' RFC and name: owners and admins only, not who manages the orders.
