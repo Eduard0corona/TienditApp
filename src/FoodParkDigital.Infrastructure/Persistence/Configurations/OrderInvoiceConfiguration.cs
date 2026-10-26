@@ -9,7 +9,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Configurations;
 
 /// <summary>
 /// The CFDI invoices of the orders (Fase 28A, ADR 0045; in installments too, Fase 28C). An order has at most one live
-/// invoice (stamping, stamped or waiting for its cancellation), a folio is never used twice in a business, and each request to the PAC has its own key.
+/// invoice (stamping, stamped or waiting for its cancellation) that no other replaces (Fase 28G), a folio is never used
+/// twice in a business, and each request to the PAC has its own key.
 /// The rest of what the domain guarantees is repeated here, so a row the domain never writes is refused.
 /// </summary>
 public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
@@ -44,7 +45,14 @@ public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
                 + " OR ([Status] IN (3, 4) AND [CancellationMotive] IS NOT NULL AND [CancellationRequestedAt] IS NOT NULL"
                 + " AND [CancellationRequestedByUserId] IS NOT NULL AND (([Status] = 3 AND [CancelledAt] IS NULL)"
                 + " OR ([Status] = 4 AND [CancelledAt] IS NOT NULL)))");
-            table.HasCheckConstraint("CK_OrderInvoices_CancellationMotive", "[CancellationMotive] IS NULL OR [CancellationMotive] IN (2, 3)");
+            // With relation (01) only one that another invoice replaces (Fase 28G).
+            table.HasCheckConstraint(
+                "CK_OrderInvoices_CancellationMotive",
+                "[CancellationMotive] IS NULL OR [CancellationMotive] IN (2, 3) OR ([CancellationMotive] = 1 AND [ReplacedByInvoiceId] IS NOT NULL)");
+            // Replaced once stamped, by another invoice (Fase 28G).
+            table.HasCheckConstraint(
+                "CK_OrderInvoices_Replacement",
+                "[ReplacedByInvoiceId] IS NULL OR ([ReplacedByInvoiceId] <> [Id] AND [Status] IN (1, 3, 4))");
         });
         builder.HasKey(x => x.Id);
 
@@ -69,6 +77,7 @@ public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
         builder.Ignore(x => x.IsLive);
         builder.Ignore(x => x.Number);
         builder.Ignore(x => x.RequestedByCustomer);
+        builder.Ignore(x => x.IsCurrent);
 
         builder.OwnsOne(x => x.Receiver, receiver => CfdiReceiverColumns.Map(receiver, "Receiver"));
         builder.Navigation(x => x.Receiver).IsRequired();
@@ -82,10 +91,16 @@ public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
             .HasForeignKey(x => x.OrderId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        // One live invoice per order: stamping, stamped or waiting for its cancellation.
+        // One live invoice per order: stamping, stamped or waiting for its cancellation, and not replaced by another (the
+        // replaced one stays live until the SAT cancels it, Fase 28G).
         builder.HasIndex(x => new { x.TenantId, x.OrderId }, "IX_OrderInvoices_TenantId_OrderId_Live")
             .IsUnique()
-            .HasFilter("[Status] IN (0, 1, 3)");
+            .HasFilter("[Status] IN (0, 1, 3) AND [ReplacedByInvoiceId] IS NULL");
+        // The invoice that replaces it (Fase 28G): one replaces at most one. Without a foreign key: SQL Server checks each
+        // statement on its own, so the replaced one stops counting as live (above) before its replacement is inserted, and
+        // a key would need the replacement first. Invoices are never deleted, and the domain sets it only with the
+        // replacement saved in the same transaction.
+        builder.HasIndex(x => x.ReplacedByInvoiceId).IsUnique().HasFilter("[ReplacedByInvoiceId] IS NOT NULL");
         builder.HasIndex(x => new { x.TenantId, x.Serie, x.Folio }).IsUnique();
         builder.HasIndex(x => x.IdempotencyKey).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.Uuid }).IsUnique().HasFilter("[Uuid] IS NOT NULL");

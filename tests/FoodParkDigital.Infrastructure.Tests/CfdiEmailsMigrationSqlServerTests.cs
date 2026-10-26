@@ -46,7 +46,7 @@ public class CfdiEmailsMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
 
-        await using var context = database.CreateContext(seed.TenantId);
+        await using var context = BeforeSelfInvoicing.CreateContext(database, seed.TenantId);
         Assert.All(await context.Customers.Where(c => !c.IsPublicGeneral).ToListAsync(), customer =>
         {
             Assert.NotNull(customer.FiscalData);
@@ -57,13 +57,13 @@ public class CfdiEmailsMigrationSqlServerTests
 
         // It forgets the fiscal data of a customer this version gave an address to: it does not know the address, and no
         // check of the database refuses it (the domain of this version forgets both).
-        var withAddress = await AddCustomerAsync(database.CreateContext(seed.TenantId), seed.TenantId, "Lupita", "facturas@ejemplo.mx");
+        var withAddress = await AddCustomerAsync(BeforeSelfInvoicing.CreateContext(database, seed.TenantId), seed.TenantId, "Lupita", "facturas@ejemplo.mx");
         await using (var previous = BeforeCfdiEmails.CreateContext(database, seed.TenantId))
         {
             (await previous.Customers.SingleAsync(c => c.Id == withAddress)).SetFiscalData(null, null);
             await previous.SaveChangesAsync();
         }
-        await using var after = database.CreateContext(seed.TenantId);
+        await using var after = BeforeSelfInvoicing.CreateContext(database, seed.TenantId);
         Assert.Null((await after.Customers.AsNoTracking().SingleAsync(c => c.Id == withAddress)).FiscalData);
     }
 
@@ -76,15 +76,15 @@ public class CfdiEmailsMigrationSqlServerTests
         var invoice = StampedInvoice(seed);
         invoice.SendTo("karla@ejemplo.mx");
         var email = CfdiEmail.Request(invoice, invoice.ReceiverEmail, null, DateTimeOffset.UtcNow);
-        var customerId = await AddCustomerAsync(database.CreateContext(seed.TenantId), seed.TenantId, "Karla", "facturas@ejemplo.mx");
-        await using (var context = database.CreateContext(seed.TenantId))
+        var customerId = await AddCustomerAsync(BeforeSelfInvoicing.CreateContext(database, seed.TenantId), seed.TenantId, "Karla", "facturas@ejemplo.mx");
+        await using (var context = BeforeSelfInvoicing.CreateContext(database, seed.TenantId))
         {
             context.OrderInvoices.Add(invoice);
             context.CfdiEmails.Add(email);
             await context.SaveChangesAsync();
         }
 
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeSelfInvoicing.CreateContext(database, seed.TenantId))
         {
             var sent = await context.CfdiEmails.SingleAsync();
             Assert.Equal((invoice.Id, CfdiEmailDocument.Invoice, invoice.Id, "karla@ejemplo.mx", true),
@@ -97,7 +97,7 @@ public class CfdiEmailsMigrationSqlServerTests
         }
 
         // Another business does not see them.
-        await using (var other = database.CreateContext(seed.OtherTenantId))
+        await using (var other = BeforeSelfInvoicing.CreateContext(database, seed.OtherTenantId))
             Assert.Empty(await other.CfdiEmails.ToListAsync());
 
         FormattableString[] never =
@@ -129,13 +129,13 @@ public class CfdiEmailsMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var seed = await SeedAsync(database);
         var invoice = StampedInvoice(seed);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeSelfInvoicing.CreateContext(database, seed.TenantId))
         {
             context.OrderInvoices.Add(invoice);
             context.CfdiEmails.Add(CfdiEmail.Request(invoice, "karla@ejemplo.mx", seed.UserId, DateTimeOffset.UtcNow));
             await context.SaveChangesAsync();
         }
-        var customerId = await AddCustomerAsync(database.CreateContext(seed.TenantId), seed.TenantId, "Karla", "facturas@ejemplo.mx");
+        var customerId = await AddCustomerAsync(BeforeSelfInvoicing.CreateContext(database, seed.TenantId), seed.TenantId, "Karla", "facturas@ejemplo.mx");
 
         async Task StopsAsync(string what)
         {
@@ -153,12 +153,12 @@ public class CfdiEmailsMigrationSqlServerTests
         await ExecuteAsync(database, $"UPDATE [Customers] SET [InvoiceEmail] = NULL WHERE [Id] = {customerId}");
         await ExecuteAsync(database, $"UPDATE [OrderInvoices] SET [ReceiverEmail] = N'karla@ejemplo.mx'");
         await StopsAsync("The address of an invoice alone");
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeSelfInvoicing.CreateContext(database))
             Assert.Equal(Migration, await LatestMigrationAsync(context));
 
         await ExecuteAsync(database, $"UPDATE [OrderInvoices] SET [ReceiverEmail] = NULL");
         await MigrateAsync(database, BeforeEmails);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeSelfInvoicing.CreateContext(database))
         {
             Assert.Equal(BeforeEmails, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 0, 1, 1), (
@@ -178,7 +178,7 @@ public class CfdiEmailsMigrationSqlServerTests
         // Rolling back again does nothing, and forward again it is there, empty.
         await MigrateAsync(database, BeforeEmails);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeSelfInvoicing.CreateContext(database, seed.TenantId);
         Assert.Empty(await forward.CfdiEmails.ToListAsync());
     }
 

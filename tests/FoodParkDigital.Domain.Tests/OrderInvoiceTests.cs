@@ -260,10 +260,122 @@ public class OrderInvoiceTests
     [Theory]
     [InlineData(CfdiCancellationMotive.ErrorsWithReplacement)]
     [InlineData(CfdiCancellationMotive.NominativeInGlobalInvoice)]
-    public void Cancellation_ShouldOfferOnlyTheMotivesWithoutAnotherInvoice(CfdiCancellationMotive motive)
+    public void Cancellation_ShouldOfferOnlyTheMotivesWithoutAnotherInvoice_UntilOneReplacesIt(CfdiCancellationMotive motive)
     {
         var error = Assert.Throws<DomainException>(() => Stamped().RequestCancellation(motive, OwnerId, Now));
         Assert.Contains("02", error.Message);
+        Assert.False(Stamped().TakesCancellationMotive(motive));
+    }
+
+    [Fact]
+    public void Replacement_ShouldLeaveTheInvoiceStanding_ButNoLongerTheOrdersOne_UntilItIsCancelledWithMotive01()
+    {
+        // Fase 28G: F-8 replaces F-7, whose receiver had the wrong postal code; F-7 is cancelled with 01 once F-8 stands.
+        var original = Stamped();
+        var replacement = Invoice(folio: 8);
+        Assert.True(original.IsCurrent);
+
+        original.ReplaceWith(replacement);
+
+        Assert.Equal(replacement.Id, original.ReplacedByInvoiceId);
+        Assert.Equal((OrderInvoiceStatus.Stamped, true, false), (original.Status, original.IsLive, original.IsCurrent));
+        Assert.True(replacement.IsCurrent);
+        Assert.True(original.TakesCancellationMotive(CfdiCancellationMotive.ErrorsWithReplacement));
+        Assert.False(original.TakesCancellationMotive(CfdiCancellationMotive.NominativeInGlobalInvoice));
+
+        original.RequestCancellation(CfdiCancellationMotive.ErrorsWithReplacement, OwnerId, Now.AddMinutes(5));
+        Assert.Equal((OrderInvoiceStatus.Cancelling, CfdiCancellationMotive.ErrorsWithReplacement), (original.Status, original.CancellationMotive));
+        original.Cancel(Now.AddMinutes(6));
+
+        // It stays cancelled and replaced: the relation is part of its history.
+        Assert.Equal((OrderInvoiceStatus.Cancelled, replacement.Id), (original.Status, original.ReplacedByInvoiceId));
+        Assert.False(original.IsCurrent);
+    }
+
+    [Fact]
+    public void Replacement_ShouldBeOfTheSameOrder_JustRequested_AndOfAStampedInvoiceNothingElseReplaces()
+    {
+        var original = Stamped();
+        Assert.Throws<DomainException>(() => original.ReplaceWith(original));
+        Assert.Throws<DomainException>(() => original.ReplaceWith(OrderInvoice.Request(
+            TenantId, Guid.NewGuid(), "F", 8, Receiver(), "04", Document, 100m, 16m, 116m, CashierId, Now)));
+        Assert.Throws<DomainException>(() => original.ReplaceWith(OrderInvoice.Request(
+            Guid.NewGuid(), OrderId, "F", 8, Receiver(), "04", Document, 100m, 16m, 116m, CashierId, Now)));
+        Assert.Throws<DomainException>(() => original.ReplaceWith(Stamped()));
+        Assert.Throws<ArgumentNullException>(() => original.ReplaceWith(null!));
+        Assert.Null(original.ReplacedByInvoiceId);
+
+        original.ReplaceWith(Invoice(folio: 8));
+        Assert.Equal(OrderInvoice.AlreadyReplacedMessage,
+            Assert.Throws<DomainException>(() => original.ReplaceWith(Invoice(folio: 9))).Message);
+
+        // Only a stamped one: not one still stamping, refused, waiting for its cancellation or cancelled.
+        Assert.Throws<DomainException>(() => Invoice().ReplaceWith(Invoice(folio: 8)));
+        Assert.Throws<DomainException>(() => RefusedWith("CFDI40145").ReplaceWith(Invoice(folio: 8)));
+        var cancelling = Stamped();
+        cancelling.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, OwnerId, Now);
+        Assert.Contains("espera su cancelación", Assert.Throws<DomainException>(() => cancelling.ReplaceWith(Invoice(folio: 8))).Message);
+        cancelling.Cancel(Now);
+        Assert.Throws<DomainException>(() => cancelling.ReplaceWith(Invoice(folio: 8)));
+    }
+
+    [Fact]
+    public void RefusedReplacement_ShouldMakeTheInvoiceTheOrdersOneAgain()
+    {
+        var original = Stamped();
+        var replacement = Invoice(folio: 8);
+        original.ReplaceWith(replacement);
+
+        // Another invoice's refusal changes nothing.
+        original.KeepAfterRefusedReplacement(Guid.NewGuid());
+        Assert.Equal(replacement.Id, original.ReplacedByInvoiceId);
+
+        original.KeepAfterRefusedReplacement(replacement.Id);
+        Assert.Null(original.ReplacedByInvoiceId);
+        Assert.True(original.IsCurrent);
+        Assert.False(original.TakesCancellationMotive(CfdiCancellationMotive.ErrorsWithReplacement));
+        // Hearing it again changes nothing, and another one can replace it.
+        original.KeepAfterRefusedReplacement(replacement.Id);
+        var second = Invoice(folio: 9);
+        original.ReplaceWith(second);
+        Assert.Equal(second.Id, original.ReplacedByInvoiceId);
+
+        // Once its cancellation was asked for, its replacement stood: it stays replaced.
+        original.RequestCancellation(CfdiCancellationMotive.ErrorsWithReplacement, OwnerId, Now);
+        Assert.Throws<DomainException>(() => original.KeepAfterRefusedReplacement(second.Id));
+    }
+
+    [Fact]
+    public void FailedReplacementCancellation_ShouldKeepTheReason_UntilItIsAskedAgain()
+    {
+        var original = Stamped();
+        Assert.Throws<DomainException>(() => original.KeepAfterFailedReplacementCancellation("no"));
+        original.ReplaceWith(Invoice(folio: 8));
+
+        original.KeepAfterFailedReplacementCancellation("  El SAT todavía no recibe la factura que la sustituye.  ");
+        Assert.Equal((OrderInvoiceStatus.Stamped, "El SAT todavía no recibe la factura que la sustituye."),
+            (original.Status, original.FailureMessage));
+        original.KeepAfterFailedReplacementCancellation(new string('x', 600));
+        Assert.Equal(OrderInvoice.MaxFailureMessageLength, original.FailureMessage!.Length);
+        original.KeepAfterFailedReplacementCancellation(" ");
+        Assert.Equal("El SAT no canceló la factura sustituida.", original.FailureMessage);
+
+        original.RequestCancellation(CfdiCancellationMotive.ErrorsWithReplacement, OwnerId, Now);
+        Assert.Null(original.FailureMessage);
+        Assert.Throws<DomainException>(() => original.KeepAfterFailedReplacementCancellation("no"));
+    }
+
+    [Fact]
+    public void ReplacedInvoice_ShouldStillBeCancelledWithoutRelation_AsTheSatSaysWhen01Fails()
+    {
+        var original = Stamped();
+        original.ReplaceWith(Invoice(folio: 8));
+
+        original.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, OwnerId, Now);
+        original.Cancel(Now);
+
+        Assert.Equal((OrderInvoiceStatus.Cancelled, CfdiCancellationMotive.ErrorsWithoutReplacement),
+            (original.Status, original.CancellationMotive));
     }
 
     [Fact]

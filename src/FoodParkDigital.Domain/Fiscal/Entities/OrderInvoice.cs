@@ -59,16 +59,82 @@ public class OrderInvoice : CfdiInvoice, IAggregateRoot
         return invoice;
     }
 
+    /// <summary>
+    /// The invoice of the same order that replaces this one because this one has errors (Fase 28G, ADR 0051): it carries
+    /// this one's UUID with the relation «Sustitución de los CFDI previos» (04), and this one is cancelled with motive 01 and
+    /// its UUID once it is stamped. From then on this one is no longer the order's invoice, whatever the SAT says of it.
+    /// </summary>
+    public Guid? ReplacedByInvoiceId { get; private set; }
+
     /// <summary>Whether the customer requested it online with their ticket, and not the business.</summary>
     public bool RequestedByCustomer => RequestedByUserId == SelfInvoiceRequester;
+
+    /// <summary>The order's invoice now: one that stands (or may) with the SAT and that no other replaces.</summary>
+    public bool IsCurrent => IsLive && ReplacedByInvoiceId is null;
 
     /// <summary>Where its CFDI go by email from now on, or nowhere (null).</summary>
     public void SendTo(string? email) => ReceiverEmail = InvoiceEmailAddress.Normalize(email);
 
-    /// <summary>Because it has errors and nothing replaces it (02), or because the sale did not happen (03).</summary>
-    public override bool TakesCancellationMotive(CfdiCancellationMotive motive)
-        => motive is CfdiCancellationMotive.ErrorsWithoutReplacement or CfdiCancellationMotive.NotCarriedOut;
+    /// <summary>
+    /// Another invoice of the same order replaces this stamped one, which then waits to be cancelled with motive 01. The
+    /// replacement is just being requested: it is stamped after this is saved.
+    /// </summary>
+    public void ReplaceWith(OrderInvoice replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        if (replacement.Id == Id || replacement.TenantId != TenantId || replacement.OrderId != OrderId)
+            throw new DomainException("La factura que sustituye a otra es del mismo pedido.");
+        if (replacement.Status != OrderInvoiceStatus.Stamping)
+            throw new DomainException("La factura que sustituye a otra se pide antes de timbrarse.");
+        if (ReplacedByInvoiceId is not null)
+            throw new DomainException(AlreadyReplacedMessage);
+        if (Status != OrderInvoiceStatus.Stamped)
+            throw new DomainException(Status == OrderInvoiceStatus.Cancelling
+                ? "Esta factura ya espera su cancelación: no se sustituye."
+                : "Solo se sustituye una factura timbrada.");
 
-    protected override string CancellationMotivesMessage
-        => "Cancela por errores sin relación (02) o porque la venta no se llevó a cabo (03).";
+        ReplacedByInvoiceId = replacement.Id;
+        FailureMessage = null;
+    }
+
+    public const string AlreadyReplacedMessage = "Esta factura ya tiene otra que la sustituye.";
+
+    /// <summary>
+    /// The PAC refused the invoice that was to replace this one: this one is the order's invoice again, and can be replaced
+    /// by another. Hearing it for a replacement that is not this one's changes nothing.
+    /// </summary>
+    public void KeepAfterRefusedReplacement(Guid replacementId)
+    {
+        if (ReplacedByInvoiceId != replacementId)
+            return;
+        // The replacement never stood, so this one was never asked to be cancelled with motive 01.
+        if (Status != OrderInvoiceStatus.Stamped)
+            throw new DomainException("Una factura cuya cancelación se pidió sigue sustituida.");
+
+        ReplacedByInvoiceId = null;
+    }
+
+    /// <summary>
+    /// The PAC or the SAT did not take its cancellation with motive 01 (the SAT may not have its replacement yet): it stays
+    /// stamped and replaced, with the reason, to be asked again.
+    /// </summary>
+    public void KeepAfterFailedReplacementCancellation(string? message)
+    {
+        if (ReplacedByInvoiceId is null || Status != OrderInvoiceStatus.Stamped)
+            throw new DomainException("Solo una factura sustituida y timbrada espera su cancelación con relación (01).");
+
+        FailureMessage = Trim(message, "El SAT no canceló la factura sustituida.");
+    }
+
+    /// <summary>
+    /// Because it has errors and nothing replaces it (02), or because the sale did not happen (03); because it has errors
+    /// and another invoice replaces it (01), only once one does (Fase 28G).
+    /// </summary>
+    public override bool TakesCancellationMotive(CfdiCancellationMotive motive)
+        => motive is CfdiCancellationMotive.ErrorsWithoutReplacement or CfdiCancellationMotive.NotCarriedOut
+            || (motive == CfdiCancellationMotive.ErrorsWithReplacement && ReplacedByInvoiceId is not null);
+
+    protected override string CancellationMotivesMessage => ReplacedByInvoiceId is null
+        ? "Cancela por errores sin relación (02) o porque la venta no se llevó a cabo (03); para cancelar con relación (01), sustitúyela."
+        : "Cancela por errores con relación (01), sin relación (02) o porque la venta no se llevó a cabo (03).";
 }
