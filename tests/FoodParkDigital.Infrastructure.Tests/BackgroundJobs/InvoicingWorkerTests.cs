@@ -17,7 +17,9 @@ namespace FoodParkDigital.Infrastructure.Tests.BackgroundJobs;
 /// <summary>
 /// The invoicing worker (Fase 28A; global invoices too, Fase 28B, and payment complements, Fase 28C) finds the businesses with
 /// invoices still stamping within the PAC's window, the ones whose payments owe a complement, and every half hour the ones
-/// with cancellations waiting for the SAT, and sends each one its command in its own scope.
+/// with cancellations waiting for the SAT (and, Fase 28G, with replaced invoices to cancel with motive 01), and sends each one
+/// its command in its own scope. <see cref="InvoiceSubstitutionWorkerSqlServerTests"/> runs its replaced invoices' queries on
+/// SQL Server.
 /// </summary>
 public class InvoicingWorkerTests
 {
@@ -57,6 +59,25 @@ public class InvoicingWorkerTests
         await worker.RunPassAsync(CancellationToken.None);
 
         Assert.Equal([cancelling, cancelling], sent.Checks);
+        Assert.Empty(sent.Stamps);
+    }
+
+    [Fact]
+    public async Task Pass_ShouldFindTheBusinessesWithAReplacedInvoiceToCancelWithRelation_WhileTheirReplacementIsNewerThan72Hours()
+    {
+        var sent = new SentCommands();
+        await using var host = Host(sent);
+        var now = host.Clock.UtcNow;
+        // Their only work: an invoice whose replacement is stamped (Fase 28G), the longest waiting first.
+        var waiting = await AddReplacedInvoiceAsync(host, "sustituida", replacementStampedAt: now.AddHours(-1));
+        var waitingLonger = await AddReplacedInvoiceAsync(host, "sustituida-antes", replacementStampedAt: now.AddHours(-2));
+        // Replaced more than 72 hours ago: a person asks for it now.
+        await AddReplacedInvoiceAsync(host, "sustituida-vieja", replacementStampedAt: now - OrderInvoiceSubstitutions.CancellationRetryWindow - TimeSpan.FromMinutes(1));
+        var worker = host.Get<InvoicingWorkerService>();
+
+        Assert.Equal(2, await worker.RunPassAsync(CancellationToken.None));
+
+        Assert.Equal([waitingLonger, waiting], sent.Checks);
         Assert.Empty(sent.Stamps);
     }
 
@@ -369,6 +390,28 @@ public class InvoicingWorkerTests
             }
             context.Tenants.Add(tenant);
             context.OrderInvoices.Add(invoice);
+            await context.SaveChangesAsync();
+            return tenant.Id;
+        });
+
+    /// <summary>A business with an order whose stamped invoice another one replaces, stamped at <paramref name="replacementStampedAt"/>.</summary>
+    private static Task<Guid> AddReplacedInvoiceAsync(OutboxTestHost host, string slug, DateTimeOffset replacementStampedAt)
+        => host.InScopeAsync(async services =>
+        {
+            var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
+            services.GetRequiredService<ICurrentTenantService>().SetTenant(tenant.Id);
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            var orderId = Guid.NewGuid();
+            OrderInvoice Request(long folio) => OrderInvoice.Request(
+                tenant.Id, orderId, "F", folio, CfdiReceiver.Create("XIQB891116QE4", "Karla", "26015", "612", "G03"), "04", "{}",
+                86.21m, 13.79m, 100m, Guid.NewGuid(), replacementStampedAt.AddDays(-1));
+            var original = Request(1);
+            original.Stamp(Guid.NewGuid().ToString(), "sw", replacementStampedAt.AddDays(-1), "invoices/1.xml");
+            var replacement = Request(2);
+            original.ReplaceWith(replacement);
+            replacement.Stamp(Guid.NewGuid().ToString(), "sw", replacementStampedAt, "invoices/2.xml");
+            context.Tenants.Add(tenant);
+            context.OrderInvoices.AddRange(original, replacement);
             await context.SaveChangesAsync();
             return tenant.Id;
         });
