@@ -12,6 +12,12 @@ namespace FoodParkDigital.Domain.Fiscal.Entities;
 /// </summary>
 public class OrderInvoice : CfdiInvoice, IAggregateRoot
 {
+    /// <summary>
+    /// Who requested it when the customer invoiced their ticket online (Fase 28F, ADR 0050): a value no account has, so who
+    /// requested an invoice is always known.
+    /// </summary>
+    public static readonly Guid SelfInvoiceRequester = new("00000000-0000-0000-0000-00000000028f");
+
     private OrderInvoice() { }
 
     public Guid OrderId { get; private set; }
@@ -52,6 +58,9 @@ public class OrderInvoice : CfdiInvoice, IAggregateRoot
         invoice.Begin(tenantId, serie, folio, paymentForm, paymentMethod, document, subTotal, taxTotal, total, requestedByUserId, now);
         return invoice;
     }
+
+    /// <summary>Whether the customer requested it online with their ticket, and not the business.</summary>
+    public bool RequestedByCustomer => RequestedByUserId == SelfInvoiceRequester;
 
     /// <summary>Where its CFDI go by email from now on, or nowhere (null).</summary>
     public void SendTo(string? email) => ReceiverEmail = InvoiceEmailAddress.Normalize(email);

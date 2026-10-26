@@ -68,6 +68,7 @@ public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
         builder.Property(x => x.Version).IsRowVersion();
         builder.Ignore(x => x.IsLive);
         builder.Ignore(x => x.Number);
+        builder.Ignore(x => x.RequestedByCustomer);
 
         builder.OwnsOne(x => x.Receiver, receiver => CfdiReceiverColumns.Map(receiver, "Receiver"));
         builder.Navigation(x => x.Receiver).IsRequired();
