@@ -137,19 +137,22 @@ public class CfdiEmailsMigrationSqlServerTests
         }
         var customerId = await AddCustomerAsync(database.CreateContext(seed.TenantId), seed.TenantId, "Karla", "facturas@ejemplo.mx");
 
-        // An email, the address of an invoice or of a customer: each one stops it.
-        FormattableString[] clearing =
-        [
-            $"DELETE FROM [CfdiEmails]",
-            $"UPDATE [Customers] SET [InvoiceEmail] = NULL WHERE [Id] = {customerId}",
-        ];
-        await ExecuteAsync(database, $"UPDATE [OrderInvoices] SET [ReceiverEmail] = N'karla@ejemplo.mx'");
-        foreach (var sql in clearing)
+        async Task StopsAsync(string what)
         {
-            Assert.Equal(50041, (await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeEmails))).Number);
-            await ExecuteAsync(database, sql);
+            var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeEmails));
+            Assert.True(stopped is SqlException { Number: 50041 }, $"{what}: {stopped?.Message ?? "it was not stopped"}");
         }
-        Assert.Equal(50041, (await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeEmails))).Number);
+
+        // An email, the address of a customer or of an invoice: each one alone stops it.
+        await ExecuteAsync(database, $"UPDATE [Customers] SET [InvoiceEmail] = NULL WHERE [Id] = {customerId}");
+        await ExecuteAsync(database, $"UPDATE [OrderInvoices] SET [ReceiverEmail] = NULL");
+        await StopsAsync("An email alone");
+        await ExecuteAsync(database, $"DELETE FROM [CfdiEmails]");
+        await ExecuteAsync(database, $"UPDATE [Customers] SET [InvoiceEmail] = N'facturas@ejemplo.mx' WHERE [Id] = {customerId}");
+        await StopsAsync("The address of a customer alone");
+        await ExecuteAsync(database, $"UPDATE [Customers] SET [InvoiceEmail] = NULL WHERE [Id] = {customerId}");
+        await ExecuteAsync(database, $"UPDATE [OrderInvoices] SET [ReceiverEmail] = N'karla@ejemplo.mx'");
+        await StopsAsync("The address of an invoice alone");
         await using (var context = database.CreateContext())
             Assert.Equal(Migration, await LatestMigrationAsync(context));
 
