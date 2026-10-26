@@ -7306,6 +7306,128 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoicing/issued-cfdis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    year?: number;
+                    month?: number;
+                    kind?: components["schemas"]["IssuedCfdiKind"];
+                    status?: components["schemas"]["OrderInvoiceStatus"];
+                    search?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IssuedCfdiDtoPaginatedList"];
+                        "application/json": components["schemas"]["IssuedCfdiDtoPaginatedList"];
+                        "text/json": components["schemas"]["IssuedCfdiDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/issued-cfdis/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    year?: number;
+                    month?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["IssuedCfdiSummaryDto"];
+                        "application/json": components["schemas"]["IssuedCfdiSummaryDto"];
+                        "text/json": components["schemas"]["IssuedCfdiSummaryDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/issued-cfdis/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    year?: number;
+                    month?: number;
+                    format?: components["schemas"]["IssuedCfdiExportFormat"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kitchen/orders": {
         parameters: {
             query?: never;
@@ -16717,6 +16839,98 @@ export interface components {
             receiver: components["schemas"]["CfdiReceiverInput"];
             saveToCustomer: boolean;
             receiverEmail?: string | null;
+        };
+        IssuedCfdiDto: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["IssuedCfdiKind"];
+            number: string;
+            uuid?: string | null;
+            status: components["schemas"]["OrderInvoiceStatus"];
+            /** Format: date-time */
+            issuedAt: string;
+            /** Format: date-time */
+            stampedAt?: string | null;
+            cancellationMotive?: components["schemas"]["CfdiCancellationMotive"];
+            /** Format: date-time */
+            cancelledAt?: string | null;
+            failureMessage?: string | null;
+            receiverRfc: string;
+            receiverName: string;
+            paymentMethod?: string | null;
+            paymentForm: string;
+            /** Format: double */
+            subTotal?: number | null;
+            /** Format: double */
+            taxTotal?: number | null;
+            /** Format: double */
+            total?: number | null;
+            /** Format: double */
+            paidAmount?: number | null;
+            /** Format: uuid */
+            orderId?: string | null;
+            orderNumber?: string | null;
+            relatedNumber?: string | null;
+            replacedByNumber?: string | null;
+            periodicity?: components["schemas"]["GlobalInvoicePeriodicity"];
+            /** Format: date */
+            periodFrom?: string | null;
+            /** Format: date */
+            periodTo?: string | null;
+            /** Format: int32 */
+            orderCount?: number | null;
+            hasXml: boolean;
+        };
+        IssuedCfdiDtoPaginatedList: {
+            items: components["schemas"]["IssuedCfdiDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        IssuedCfdiExportFormat: 0 | 1;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        IssuedCfdiKind: 0 | 1 | 2 | 3;
+        IssuedCfdiKindSummaryDto: {
+            kind: components["schemas"]["IssuedCfdiKind"];
+            /** Format: int32 */
+            inForce: number;
+            /** Format: double */
+            subTotal: number;
+            /** Format: double */
+            taxTotal: number;
+            /** Format: double */
+            total: number;
+            /** Format: int32 */
+            cancelling: number;
+            /** Format: int32 */
+            cancelled: number;
+            /** Format: int32 */
+            stamping: number;
+            /** Format: int32 */
+            refused: number;
+        };
+        IssuedCfdiSummaryDto: {
+            /** Format: int32 */
+            year: number;
+            /** Format: int32 */
+            month: number;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            kinds: components["schemas"]["IssuedCfdiKindSummaryDto"][];
         };
         KitchenOrderDto: {
             /** Format: uuid */

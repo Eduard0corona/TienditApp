@@ -47,6 +47,7 @@ const PlatformWithholdings = lazy(() => import('./pages/reports/PlatformWithhold
 const GlobalInvoices = lazy(() => import('./pages/reports/GlobalInvoices'));
 const NewGlobalInvoice = lazy(() => import('./pages/reports/NewGlobalInvoice'));
 const GlobalInvoicePage = lazy(() => import('./pages/reports/GlobalInvoicePage'));
+const IssuedCfdis = lazy(() => import('./pages/reports/IssuedCfdis'));
 const KitchenBoard = lazy(() => import('./pages/kitchen/KitchenBoard'));
 const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const PlatformConsole = lazy(() => import('./pages/platform/PlatformConsole'));
@@ -354,6 +355,14 @@ export default function App() {
                 element={(
                   <AccessRoute area="businessSettings">
                     <GlobalInvoicePage />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/reports/issued-cfdis"
+                element={(
+                  <AccessRoute area="businessSettings">
+                    <IssuedCfdis />
                   </AccessRoute>
                 )}
               />

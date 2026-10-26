@@ -96,6 +96,8 @@ export const NAV_GROUPS: NavGroup[] = [
           { label: 'Liquidaciones', path: '/reports/settlements', icon: 'ri-bank-line', area: 'reports', keywords: 'depósitos rappi uber eats didi food conciliación por cobrar retenciones cfdi isr iva' },
           // Owners and admins: the global invoice is the business's fiscal side, like Configuración › Facturación.
           { label: 'Factura global', path: '/reports/global-invoices', icon: 'ri-bill-line', area: 'businessSettings', keywords: 'cfdi público en general xaxx010101000 factura del día timbrar ventas sin factura sat' },
+          // The month's CFDI carry the customers' fiscal data: owners and admins too.
+          { label: 'CFDI emitidos', path: '/reports/issued-cfdis', icon: 'ri-file-list-3-line', area: 'businessSettings', keywords: 'facturas emitidas xml zip csv contador sat mes complementos de pago notas de crédito canceladas descarga' },
         ],
       },
       {

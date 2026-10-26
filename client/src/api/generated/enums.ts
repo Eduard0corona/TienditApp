@@ -239,6 +239,20 @@ export const InventoryReconciliationEventKind = {
 } as const;
 export type InventoryReconciliationEventKind = (typeof InventoryReconciliationEventKind)[keyof typeof InventoryReconciliationEventKind];
 
+export const IssuedCfdiExportFormat = {
+  Zip: 0,
+  Csv: 1,
+} as const;
+export type IssuedCfdiExportFormat = (typeof IssuedCfdiExportFormat)[keyof typeof IssuedCfdiExportFormat];
+
+export const IssuedCfdiKind = {
+  OrderInvoice: 0,
+  GlobalInvoice: 1,
+  PaymentComplement: 2,
+  CreditNote: 3,
+} as const;
+export type IssuedCfdiKind = (typeof IssuedCfdiKind)[keyof typeof IssuedCfdiKind];
+
 export const KitchenTicketStatus = {
   Pending: 0,
   Preparing: 1,
