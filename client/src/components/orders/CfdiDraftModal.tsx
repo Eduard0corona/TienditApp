@@ -154,9 +154,25 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
   const [substituting, setSubstituting] = useState<OrderInvoice | null>(null);
   const target = substituting ? invoicing?.invoices.find((invoice) => invoice.id === substituting.id) : undefined;
   const substitutingId = substituting?.id ?? null;
+  // Gone from the order's current invoice meanwhile (cancelled, or replaced from elsewhere): it is not replaced from here.
+  const targetGone = !!substituting && !substitute.isPending
+    && (!target || (!target.canSubstitute && !target.substitutionProblem));
+  // The focus goes to what the mode says, and when it ends back to what opened it, or to the invoices once replaced (the
+  // invoice it opened from is no longer offered to be replaced).
   const notice = useRef<HTMLDivElement>(null);
+  const invoicesHeading = useRef<HTMLHeadingElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const focusAfter = useRef<'opener' | 'invoices' | null>(null);
   useEffect(() => {
-    if (substitutingId) notice.current?.focus();
+    if (substitutingId) {
+      notice.current?.focus();
+      return;
+    }
+    const back = focusAfter.current === 'opener' ? opener.current : null;
+    if (focusAfter.current === null) return;
+    focusAfter.current = null;
+    if (back?.isConnected && !back.hasAttribute('disabled')) back.focus();
+    else invoicesHeading.current?.focus();
   }, [substitutingId]);
 
   const available = invoicing?.available ?? false;
@@ -171,6 +187,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
 
   /** The form takes the invoice's data and email, to correct them. */
   const startSubstituting = (invoice: OrderInvoice) => {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setSubstituting(invoice);
     setForm(invoice.receiver);
     setReceiver(normalizeReceiver(invoice.receiver));
@@ -178,12 +195,14 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
     setEmail(invoice.receiverEmail ?? invoicing?.proposedEmail ?? '');
   };
 
-  /** Back to what the order proposes. */
-  const stopSubstituting = () => {
+  /** Back to what the order proposes, or, once replaced, to the data the new one went with. */
+  const stopSubstituting = (kept?: { receiver: CfdiReceiver; email: string }) => {
+    focusAfter.current = kept ? 'invoices' : 'opener';
     setSubstituting(null);
-    setForm(proposed ?? EMPTY_RECEIVER);
-    setReceiver(proposed ? normalizeReceiver(proposed) : undefined);
-    setEmail(invoicing?.proposedEmail ?? '');
+    const next = kept?.receiver ?? proposed;
+    setForm(next ?? EMPTY_RECEIVER);
+    setReceiver(next ? normalizeReceiver(next) : undefined);
+    setEmail(kept ? kept.email : invoicing?.proposedEmail ?? '');
   };
 
   const applyReceiver = (event: React.FormEvent) => {
@@ -232,7 +251,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
       } else {
         toast.info(`El PAC no respondió: TienditApp sigue pidiendo el timbre de ${invoice.number} y después cancela la ${replaced}.`);
       }
-      stopSubstituting();
+      stopSubstituting({ receiver, email: typedEmail });
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo sustituir la factura.'));
     }
@@ -251,6 +270,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             proposedEmail={invoicing.proposedEmail}
             onSubstitute={!orderCancelled && available ? startSubstituting : undefined}
             substitutingId={substitutingId}
+            headingRef={invoicesHeading}
           />
         )}
         {invoicing && (
@@ -302,14 +322,17 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             <div ref={notice} tabIndex={-1} role="group" className="alert alert-info py-2 small" aria-labelledby="cfdi-substituting-title">
               <div id="cfdi-substituting-title" className="fw-semibold">Sustituir la factura {substituting.number}</div>
               <p className="mb-1">
-                Corrige los datos y timbra la nueva: lleva la {substituting.number} como «Sustitución de los CFDI previos» (04). En
-                cuanto quede timbrada, TienditApp le pide al SAT cancelar la {substituting.number} con relación (motivo 01); si el SAT
-                todavía no recibe la nueva, lo vuelve a intentar durante 3 días.
+                Corrige los datos y timbra la nueva: relaciona la {substituting.number} como «Sustitución de los CFDI previos» (04).
+                En cuanto quede timbrada, TienditApp le pide al SAT cancelar la {substituting.number} con relación (motivo 01); si el
+                SAT todavía no recibe la nueva, lo vuelve a intentar durante 3 días.
               </p>
               {target && !target.canSubstitute && target.substitutionProblem && (
                 <p className="mb-1 text-danger">{target.substitutionProblem}</p>
               )}
-              <button type="button" className="btn btn-link btn-sm p-0" disabled={substitute.isPending} onClick={stopSubstituting}>
+              {targetGone && (
+                <p className="mb-1 text-danger">La {substituting.number} ya no es la factura vigente del pedido: no se sustituye.</p>
+              )}
+              <button type="button" className="btn btn-link btn-sm p-0" disabled={substitute.isPending} onClick={() => stopSubstituting()}>
                 No sustituir
               </button>
             </div>

@@ -305,9 +305,16 @@ internal sealed class ReplacedInvoiceCanceller
         var cancelled = 0;
         foreach (var waiting in pending)
         {
-            // Asked for by whoever replaced it.
-            if ((await CancelAsync(waiting.Id, waiting.ReplacedBy, "invoicing", cancellationToken)).IsSuccess)
-                cancelled++;
+            try
+            {
+                // Asked for by whoever replaced it.
+                if ((await CancelAsync(waiting.Id, waiting.ReplacedBy, "invoicing", cancellationToken)).IsSuccess)
+                    cancelled++;
+            }
+            catch (DbUpdateException)
+            {
+                // Changed again and again meanwhile: the next pass asks again, and the others of this pass go on.
+            }
             _context.ChangeTracker.Clear();
         }
         return cancelled;
@@ -401,12 +408,14 @@ public static class OrderInvoiceSubstitutions
     }
 
     /// <summary>
-    /// The replaced invoices still stamped and never asked to be cancelled, whose replacement was stamped since
+    /// The replaced invoices still stamped and not asked to be cancelled since their replacement was stamped, after
     /// <paramref name="since"/>: the worker asks the SAT to cancel them with motive 01. One whose cancellation the customer
-    /// refused, or whose replacement is older, waits for a person.
+    /// refused since then, or whose replacement is older, waits for a person; a cancellation refused before it was replaced
+    /// does not count.
     /// </summary>
     public static IQueryable<OrderInvoice> WaitingForCancellation(IQueryable<OrderInvoice> invoices, DateTimeOffset since)
-        => invoices.Where(i => i.ReplacedByInvoiceId != null && i.Status == OrderInvoiceStatus.Stamped && i.CancellationRequestedAt == null
+        => invoices.Where(i => i.ReplacedByInvoiceId != null && i.Status == OrderInvoiceStatus.Stamped
             && invoices.Any(r => r.Id == i.ReplacedByInvoiceId && r.TenantId == i.TenantId
-                && r.Status == OrderInvoiceStatus.Stamped && r.StampedAt > since));
+                && r.Status == OrderInvoiceStatus.Stamped && r.StampedAt > since
+                && (i.CancellationRequestedAt == null || i.CancellationRequestedAt < r.StampedAt)));
 }

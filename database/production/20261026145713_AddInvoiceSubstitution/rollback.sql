@@ -12,7 +12,10 @@
 -- sustituciones, borra [IX_OrderInvoices_ReplacedByInvoiceId], [CK_OrderInvoices_Replacement] y
 -- [OrderInvoices].[ReplacedByInvoiceId], y deja
 -- [IX_OrderInvoices_TenantId_OrderId_Live] y [CK_OrderInvoices_CancellationMotive] como estaban.
--- Volver al código anterior (master con la Fase 28F) funciona también sin este script.
+-- Volver al código anterior (master con la Fase 28F) también corre sin este script, pero no sabe de
+-- sustituciones: un pedido cuya sustituida sigue viva le muestra dos facturas vivas, y podría
+-- relacionar una nota o un complemento con la sustituida o dejar cancelar la nueva antes. Antes de
+-- volver, cancela con 02 las sustituidas que sigan vivas (la consulta 3 de verify.sql las cuenta).
 -- Idempotente: no hace nada si la migración no está aplicada.
 --     sqlcmd -S <servidor> -d <base> <autenticación> -b -i rollback.sql
 -- =====================================================================================

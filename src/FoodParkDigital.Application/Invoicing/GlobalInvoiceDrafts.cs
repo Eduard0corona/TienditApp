@@ -290,7 +290,7 @@ public static class GlobalInvoiceDrafts
             .Where(i => candidateIds.Contains(i.OrderId)
                 && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
                     || i.Status == OrderInvoiceStatus.Cancelling))
-            .Select(i => new { i.OrderId, i.Serie, i.Folio })
+            .Select(i => new { i.OrderId, i.Serie, i.Folio, Replaced = i.ReplacedByInvoiceId != null })
             .ToListAsync(cancellationToken);
         var inGlobals = await context.GlobalInvoiceOrders.AsNoTracking()
             .Where(o => !o.Released && candidateIds.Contains(o.OrderId))
@@ -312,7 +312,9 @@ public static class GlobalInvoiceDrafts
                 && i.RequestedAt >= covered.CancelledAt))
             .Select(covered => covered.OrderId)
             .ToListAsync(cancellationToken)).ToHashSet();
-        var ownByOrder = ownInvoices.GroupBy(i => i.OrderId).ToDictionary(g => g.Key, g => $"{g.First().Serie}-{g.First().Folio}");
+        // The order's invoice now, not the one it replaces (Fase 28G).
+        var ownByOrder = ownInvoices.GroupBy(i => i.OrderId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(i => i.Replaced).Select(i => $"{i.Serie}-{i.Folio}").First());
         var globalByOrder = inGlobals.GroupBy(i => i.OrderId).ToDictionary(g => g.Key, g => $"{g.First().Serie}-{g.First().Folio}");
         var refunding = refundsInCourse.ToHashSet();
 

@@ -1389,6 +1389,34 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Lo que cambia y por qué:** 5 escenas de `facturacion.spec.ts` (lista en escritorio, teléfono y oscuro, sin certificado y en pruebas por vencer): la tarjeta «Autofactura» con su interruptor y el punto nuevo de «Cómo funciona». «No disponible» no cambia.
     - **Resultado:** la comparación contra `master` en `b4f2a4b` dio 676 pruebas iguales (con la de cobertura), las 5 que cambian y las 19 nuevas (que no existen en `master`); las 19 nuevas pasaron dos corridas seguidas contra el mismo build, después de las revisiones.
 
+- Fase 28G, sustituir una factura con errores con el motivo 01 ([ADR 0051](../adr/0051-invoice-substitution.md)):
+  - **Domain:** `OrderInvoiceTests` (+6, 30): la factura sustituida sigue en pie pero ya no es la del pedido hasta que se cancela con el motivo 01, que solo acepta una sustituida; la que la sustituye es del mismo pedido y negocio, recién pedida, de una timbrada que nadie más sustituye; un rechazo del PAC la devuelve al pedido, y si mientras tanto se canceló sin relación (02) sigue cancelada y sin sustituta; con la cancelación con relación pedida, sigue sustituida; el motivo cuando el 01 no pasa se guarda (recortado) hasta pedirlo otra vez; y la sustituida se cancela con 02 como dice el SAT.
+  - **Application:** `InvoiceSubstitutionFlowTests` (11, nuevo):
+    - la nueva lleva la relación 04 con el UUID de la anterior y la anterior se cancela con 01 y el UUID de la nueva;
+    - el SAT que todavía no las relaciona: la anterior guarda el motivo, el worker lo pide otra vez y, pasadas 72 horas, lo pide una persona;
+    - una cancelación que el receptor rechazó antes de sustituirla no detiene al worker;
+    - el rechazo del PAC devuelve la factura al pedido para sustituirla otra vez; y, si se canceló con 02 mientras tanto, sigue cancelada y el pedido se factura de nuevo;
+    - sin respuesta del PAC, el worker la timbra y cancela la anterior en su siguiente pasada; «Volver a pedir el timbre» la cancela en ese momento, a nombre de quien sustituyó;
+    - solo se sustituye la factura timbrada vigente del pedido: no la ya sustituida, ni la nueva mientras la anterior siga vigente, ni una que se está timbrando o ya se canceló, ni sin el PAC; la de otro negocio no existe; y la nueva no se cancela antes que la anterior;
+    - lo que sigue (notas de crédito) va a la nueva.
+  - **Infrastructure:**
+    - `InvoiceSubstitutionMigrationSqlServerTests` (3, nuevo): la versión anterior sigue facturando con la base migrada, con una factura vigente por pedido; la sustituida convive con la nueva solo si deja de contar antes de guardar la nueva (en una transacción), y la base rechaza una tercera vigente, una factura que se sustituye a sí misma, una que se está timbrando sustituida, dos que sustituyen a la misma y el motivo 01 sin sustituta; y el rollback se detiene con 50043 si alguna factura está sustituida y, sin ninguna, deja todo como estaba. Las pruebas de migración anteriores leen con el modelo de antes de la 28G (`BeforeInvoiceSubstitution`).
+    - `SwSapienGatewayTests` (+2, 22): la ruta de cancelación lleva el folio de sustitución solo con el motivo 01, y 207, 208, 212 y 312 con el motivo 01 dicen que el SAT todavía no las relaciona.
+  - **WebApi:** `CrossTenantInvoicingSqlServerTests` (+2, 12):
+    - otro negocio no sustituye ni pide la cancelación con relación de mi factura (404, también con el encabezado de mi negocio); yo la sustituyo en SQL Server y la anterior queda «Cancelándose» con el motivo 01;
+    - la sustituta que el PAC rechaza devuelve la factura al pedido con la llave de la nueva antes y después de la de la anterior: en un solo guardado SQL Server chocaba con el índice de una factura vigente por pedido (la prueba falla con el código anterior);
+    - el cajero no sustituye ni pide la cancelación con relación (403).
+    - `TenantFilterBypassAllowlistTests`: el worker busca también las sustituidas que esperan su cancelación (21).
+  - **Cliente:**
+    - `CfdiDraftModal.test.tsx` (+7, 24): «Sustituir factura» abre el formulario con los datos y el correo de la factura, timbra la nueva en su lugar, deja lo que se mandó y lleva el foco a las facturas; si el PAC la rechaza, el formulario sigue; «No sustituir» regresa el foco; solo para dueños y administradores; por qué no se puede; si la factura deja de ser la del pedido mientras se sustituye; y las tarjetas con «Cancelar con relación» y la nueva que se cancela después de la anterior.
+    - `OrderInvoiceList.test.tsx` (+3, 4): la sustituida que espera a la nueva, sin cancelar ni mandar por correo; con la nueva timbrada, la siguiente revisión y «Cancelar con relación»; y la cancelación sin relación (02) que manda el motivo.
+    - `invoicing.test.ts` (+1, 10): el detalle se vuelve a leer mientras la sustituida espera su cancelación con relación, y deja de hacerlo cuando guarda por qué no pasó.
+  - **Total:** `dotnet test` con SQL Server 2022, TOTAL_NET pruebas sin fallos ni omitidas (Domain D_NET, Application A_NET, Infrastructure I_NET, WebApi W_NET).
+  - **Cliente en total:** 169 archivos y 1,187 pruebas.
+  - **Primera visita:** 180,032 B de 180,100 B (`master`: 180,031 B): la sustitución vive en el módulo de facturación, que se carga aparte. El presupuesto no cambia.
+  - **Escenas visuales:** `facturacion.spec.ts` (+7): el formulario para sustituir (escritorio y teléfono), la factura sustituida que espera su cancelación con relación (escritorio, teléfono y oscuro), cancelarla sin relación y la sustituida ya cancelada.
+    - **Resultado:** la comparación contra `master` en `bd4810f` dio 700 pruebas iguales (con la de cobertura), ninguna que cambie y las 7 nuevas (que no existen en `master`); las 7 nuevas pasaron dos corridas seguidas contra el mismo build, después de las revisiones.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

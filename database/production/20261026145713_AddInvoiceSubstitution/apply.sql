@@ -28,7 +28,8 @@
 -- la deja nula y el índice nuevo la trata como antes; /health/schema sigue sano. Volver a ella
 -- (redespliegue, o swap si el slot de staging está activo) funciona sin rollback.sql, pero un
 -- pedido cuya factura sustituida el SAT todavía no cancela verá dos facturas vivas: la anterior no
--- sabe de sustituciones.
+-- sabe de sustituciones, y podría relacionar una nota o un complemento con la sustituida o dejar
+-- cancelar la nueva antes. Antes de volver, cancela con 02 las sustituidas que sigan vivas.
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a

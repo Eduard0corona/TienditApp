@@ -56,6 +56,9 @@ internal sealed class SalesTestFixture : IAsyncDisposable
         var tenantService = new SalesTenantService();
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            // A unit of work in a transaction runs whole here too (the refusal of a replacing invoice, Fase 28G); what the
+            // transaction guards is proven on SQL Server.
+            .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .AddInterceptors(interceptors)
             .Options;
         return new SalesTestFixture(new SalesDbContext(options, tenantService, mediator), tenantService);

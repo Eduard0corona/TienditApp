@@ -203,11 +203,14 @@ public sealed class InvoicingWorkerService : BackgroundService
                         .GroupBy(n => n.TenantId)
                         .Select(g => new Waiting(g.Key, g.Min(n => n.CancellationRequestedAt)))
                         .ToListAsync(cancellationToken),
-                    // The invoices whose replacement is stamped, to be cancelled with motive 01 (Fase 28G).
+                    // The invoices whose replacement is stamped, to be cancelled with motive 01 (Fase 28G): waiting since
+                    // their replacement was stamped.
                     await OrderInvoiceSubstitutions.WaitingForCancellation(
                             context.OrderInvoices.IgnoreQueryFilters(), now - OrderInvoiceSubstitutions.CancellationRetryWindow)
-                        .GroupBy(i => i.TenantId)
-                        .Select(g => new Waiting(g.Key, g.Min(i => i.StampedAt)))
+                        .Join(context.OrderInvoices.IgnoreQueryFilters(), i => i.ReplacedByInvoiceId, r => (Guid?)r.Id,
+                            (i, r) => new { i.TenantId, r.StampedAt })
+                        .GroupBy(w => w.TenantId)
+                        .Select(g => new Waiting(g.Key, g.Min(w => w.StampedAt)))
                         .ToListAsync(cancellationToken));
                 _cancellationsCheckedAt = now;
             }

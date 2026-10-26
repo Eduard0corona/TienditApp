@@ -32,6 +32,8 @@ interface OrderInvoiceListProps {
   onSubstitute?: (invoice: OrderInvoice) => void;
   /** The invoice being replaced on that form, if any. */
   substitutingId?: string | null;
+  /** The list's heading, where the focus goes once an invoice is replaced. */
+  headingRef?: React.Ref<HTMLHeadingElement>;
 }
 
 /**
@@ -39,7 +41,7 @@ interface OrderInvoiceListProps {
  * one replaces which (Fase 28G) and what can be done with each one.
  */
 export default function OrderInvoiceList({
-  orderId, invoices, canCancel, liveRelated = {}, proposedEmail, onSubstitute, substitutingId,
+  orderId, invoices, canCancel, liveRelated = {}, proposedEmail, onSubstitute, substitutingId, headingRef,
 }: OrderInvoiceListProps) {
   const toast = useToast();
   const retry = useRetryOrderInvoice(orderId);
@@ -85,7 +87,7 @@ export default function OrderInvoiceList({
 
   return (
     <div className="mb-3">
-      <h3 className="h6">Facturas de este pedido</h3>
+      <h3 className="h6" ref={headingRef} tabIndex={-1}>Facturas de este pedido</h3>
       <ul className="list-unstyled mb-0">
         {invoices.map((invoice) => (
           <li key={invoice.id} className="border rounded p-2 mb-2">
@@ -115,7 +117,9 @@ export default function OrderInvoiceList({
             )}
             {awaitsReplacedCancellation(invoice) && (
               <p className="small text-muted mb-0 mt-1">
-                En cuanto la {invoice.replacedByNumber ?? 'nueva'} quede timbrada, TienditApp le pide al SAT cancelar esta con relación (motivo 01).
+                {replacementStamped(invoice, invoices)
+                  ? `La ${invoice.replacedByNumber ?? 'nueva'} ya está timbrada: TienditApp le pide al SAT cancelar esta con relación (motivo 01) en su siguiente revisión, cada 30 minutos.`
+                  : `En cuanto la ${invoice.replacedByNumber ?? 'nueva'} quede timbrada, TienditApp le pide al SAT cancelar esta con relación (motivo 01).`}
               </p>
             )}
             {invoice.status === OrderInvoiceStatus.Cancelling && (
@@ -152,7 +156,8 @@ export default function OrderInvoiceList({
                   </button>
                 </>
               )}
-              {invoice.status === OrderInvoiceStatus.Stamped && (
+              {/* One another replaces has errors: what goes to the customer is the new one. */}
+              {invoice.status === OrderInvoiceStatus.Stamped && !invoice.replacedByInvoiceId && (
                 <SendCfdiEmailButton
                   orderId={orderId}
                   document={CfdiEmailDocument.Invoice}
@@ -196,10 +201,13 @@ export default function OrderInvoiceList({
                   Cancelar con relación
                 </button>
               )}
-              {canCancel && invoice.status === OrderInvoiceStatus.Stamped && !liveRelated[invoice.id]?.length && (
+              {/* Without relation (02) only once the SAT did not take it with relation, or the customer refused it. */}
+              {canCancel && invoice.status === OrderInvoiceStatus.Stamped && !liveRelated[invoice.id]?.length
+                && !awaitsReplacedCancellation(invoice) && (
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-danger"
+                  disabled={substitutingId === invoice.id}
                   aria-label={`Cancelar factura ${invoice.number}`}
                   onClick={() => setCancelling(invoice)}
                 >
@@ -210,8 +218,9 @@ export default function OrderInvoiceList({
             {canCancel && invoice.status === OrderInvoiceStatus.Stamped && !!liveRelated[invoice.id]?.length && (
               <p className="small text-muted mb-0 mt-2">Para cancelarla, primero cancela {liveRelated[invoice.id]!.join(', ')}.</p>
             )}
-            {canCancel && onSubstitute && invoice.substitutionProblem && !liveRelated[invoice.id]?.length && (
-              <p className="small text-muted mb-0 mt-2">No se puede sustituir por ahora. {invoice.substitutionProblem}</p>
+            {canCancel && onSubstitute && invoice.substitutionProblem && !liveRelated[invoice.id]?.length
+              && substitutingId !== invoice.id && (
+              <p className="small text-muted mb-0 mt-2">No se puede sustituir. {invoice.substitutionProblem}</p>
             )}
           </li>
         ))}

@@ -369,14 +369,23 @@ describe('CfdiDraftModal', () => {
 
     it('opens the form with the invoice\'s data and email to correct them, and stamps the new one in its place', async () => {
       let substituted: unknown;
+      const wrong: Invoice = { ...STAMPED, receiver: { ...KARLA, postalCode: '26016' }, receiverEmail: 'karla.f@ejemplo.mx', canSubstitute: true };
+      // The customer's fiscal data still has the wrong postal code: the order proposes it until someone changes it.
+      const before: Invoicing = {
+        ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, proposedEmail: 'karla@ejemplo.mx',
+        proposedReceiver: wrong.receiver, invoices: [wrong],
+      };
+      const replacement: Invoice = { ...STAMPED, id: 'inv-2', number: 'F-2', replacesInvoiceId: 'inv-1', replacesNumber: 'F-1' };
+      let current = before;
       serve(
-        {
-          ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, proposedEmail: 'karla@ejemplo.mx',
-          invoices: [{ ...STAMPED, receiver: { ...KARLA, postalCode: '26016' }, receiverEmail: 'karla.f@ejemplo.mx', canSubstitute: true }],
-        },
+        () => Promise.resolve(current),
         (method, path, body) => {
           substituted = { method, path, body };
-          return Promise.resolve({ ...STAMPED, id: 'inv-2', number: 'F-2', replacesInvoiceId: 'inv-1' });
+          current = {
+            ...before, problem: 'Este pedido ya tiene la factura F-2.',
+            invoices: [replacement, { ...wrong, canSubstitute: false, replacedByInvoiceId: 'inv-2', replacedByNumber: 'F-2', status: OrderInvoiceStatus.Cancelling }],
+          };
+          return Promise.resolve(replacement);
         },
       );
       renderModal(true);
@@ -404,6 +413,40 @@ describe('CfdiDraftModal', () => {
         body: { receiver: KARLA, saveToCustomer: true, receiverEmail: 'karla.f@ejemplo.mx' },
       });
       expect(screen.queryByRole('group', { name: 'Sustituir la factura F-1' })).not.toBeInTheDocument();
+      // The form keeps what the new one went with, and the focus goes to the order's invoices.
+      expect(screen.getByLabelText('Código postal fiscal')).toHaveValue('26015');
+      expect(screen.getByRole('heading', { name: 'Facturas de este pedido' })).toHaveFocus();
+    });
+
+    it('gives the focus back to «Sustituir factura» when it is left', async () => {
+      serve({ ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, invoices: [{ ...STAMPED, canSubstitute: true }] });
+      renderModal(true);
+      const open = await screen.findByRole('button', { name: 'Sustituir factura F-1' });
+      await userEvent.click(open);
+      expect(screen.getByRole('button', { name: 'Cancelar factura F-1' })).toBeDisabled();
+
+      await userEvent.click(screen.getByRole('button', { name: 'No sustituir' }));
+
+      expect(open).toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Cancelar factura F-1' })).toBeEnabled();
+    });
+
+    it('says the invoice is no longer replaced from here once it stops being the order\'s invoice', async () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      let current: Invoicing = { ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, invoices: [{ ...STAMPED, canSubstitute: true }] };
+      serve(() => Promise.resolve(current));
+      renderModal(true, queryClient);
+      await userEvent.click(await screen.findByRole('button', { name: 'Sustituir factura F-1' }));
+
+      // Someone cancelled it meanwhile.
+      current = {
+        ...current, problem: 'Este pedido ya tiene la factura F-1.',
+        invoices: [{ ...STAMPED, status: OrderInvoiceStatus.Cancelling, cancellationMotive: CfdiCancellationMotive.NotCarriedOut }],
+      };
+      await queryClient.invalidateQueries({ queryKey: ['invoicing', 'orders', 'o-1'] });
+
+      expect(await screen.findByText('La F-1 ya no es la factura vigente del pedido: no se sustituye.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Timbrar y sustituir la F-1' })).toBeDisabled();
     });
 
     it('keeps the form when the PAC refuses the new one, since the old one still stands, until it is left', async () => {
@@ -440,7 +483,7 @@ describe('CfdiDraftModal', () => {
       serve({ ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, invoices: [{ ...STAMPED, substitutionProblem: otherRfc }] });
       renderModal(true);
 
-      expect(await screen.findByText(`No se puede sustituir por ahora. ${otherRfc}`)).toBeInTheDocument();
+      expect(await screen.findByText(`No se puede sustituir. ${otherRfc}`)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Sustituir factura F-1' })).not.toBeInTheDocument();
     });
 

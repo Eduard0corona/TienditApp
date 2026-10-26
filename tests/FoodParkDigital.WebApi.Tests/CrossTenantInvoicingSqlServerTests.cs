@@ -135,6 +135,38 @@ public sealed class CrossTenantInvoicingSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task RefusedReplacement_ShouldGiveTheOrderItsInvoiceBack_WhicheverKeyGoesFirst()
+    {
+        var mine = await _api.SignUpAsync("sustituir-rechazo", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Sustituir rechazo"), phone: null, name: "Mostrador");
+        var invoiceId = (await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }))).GetProperty("id").GetGuid();
+        var corrected = new { rfc = "XIQB891116QE4", name = "Karla Fuente Nolasco", postalCode = "26015", fiscalRegime = "612", cfdiUse = "S01" };
+
+        // The refused replacement leaves the order's live invoices and the original comes back. SQL Server checks the index of
+        // one live invoice per order statement by statement, and one save orders its updates by key: it has to work with the
+        // replacement's key before and after the original's.
+        var orders = new HashSet<int>();
+        for (var attempt = 0; attempt < 40 && orders.Count < 2; attempt++)
+        {
+            _api.Invoicing.RefuseNextStamp = "CFDI40147 - El código postal del receptor no corresponde al RFC.";
+            var refused = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+                $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }));
+            Assert.Equal((int)OrderInvoiceStatus.Refused, refused.GetProperty("status").GetInt32());
+            orders.Add(Math.Sign(refused.GetProperty("id").GetGuid().CompareTo(invoiceId)));
+        }
+        Assert.Equal(2, orders.Count);
+        var original = await _api.QueryAsync(mine.TenantId, db => db.OrderInvoices.AsNoTracking().SingleAsync(i => i.Id == invoiceId));
+        Assert.Equal((OrderInvoiceStatus.Stamped, (Guid?)null), (original.Status, original.ReplacedByInvoiceId));
+
+        // It is the order's invoice again, and it is replaced.
+        var replacement = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/substitute", new { receiver = corrected, saveToCustomer = false }));
+        Assert.Equal((int)OrderInvoiceStatus.Stamped, replacement.GetProperty("status").GetInt32());
+    }
+
+    [SqlServerFact]
     public async Task CfdiEmails_OfAnotherBusiness_ShouldBeInvisible_AndUnsendable()
     {
         var mine = await _api.SignUpAsync("correo-cfdi-a", TwoBusinessesApi.FoodBusiness);

@@ -353,7 +353,8 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
 
 /// <summary>
 /// Asks the PAC again for an invoice that is still «Timbrando» (its answer did not arrive), with the same CFDI and key: it
-/// never stamps a second one.
+/// never stamps a second one. Stamped, the invoice it replaces is cancelled with motive 01 right away (Fase 28G), as asked
+/// for by whoever replaced it, instead of waiting for the worker's next pass.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 public record RetryOrderInvoiceCommand(Guid InvoiceId) : IRequest<Result<OrderInvoiceDto>>;
@@ -363,6 +364,7 @@ public class RetryOrderInvoiceCommandHandler : IRequestHandler<RetryOrderInvoice
     private readonly IApplicationDbContext _context;
     private readonly IInvoicingGateway _gateway;
     private readonly OrderInvoiceStamper _stamper;
+    private readonly ReplacedInvoiceCanceller _canceller;
 
     public RetryOrderInvoiceCommandHandler(
         IApplicationDbContext context,
@@ -374,6 +376,7 @@ public class RetryOrderInvoiceCommandHandler : IRequestHandler<RetryOrderInvoice
         _context = context;
         _gateway = gateway;
         _stamper = new OrderInvoiceStamper(context, gateway, storage, clock, logger);
+        _canceller = new ReplacedInvoiceCanceller(context, gateway, clock);
     }
 
     public async Task<Result<OrderInvoiceDto>> Handle(RetryOrderInvoiceCommand request, CancellationToken cancellationToken)
@@ -388,6 +391,15 @@ public class RetryOrderInvoiceCommandHandler : IRequestHandler<RetryOrderInvoice
             return Result.Failure<OrderInvoiceDto>(InvoicingSettings.NotAvailableMessage);
 
         var invoice = await _stamper.StampAsync(request.InvoiceId, cancellationToken);
+        if (invoice is { Status: OrderInvoiceStatus.Stamped } stamped
+            && await _context.OrderInvoices.AsNoTracking()
+                .Where(i => i.ReplacedByInvoiceId == stamped.Id && i.Status == OrderInvoiceStatus.Stamped)
+                .Select(i => (Guid?)i.Id)
+                .FirstOrDefaultAsync(cancellationToken) is { } replacedId)
+        {
+            // When the SAT does not have it yet, the replaced one keeps the reason and the worker asks again.
+            await _canceller.CancelAsync(replacedId, stamped.RequestedByUserId, "invoicing", cancellationToken);
+        }
         return Result.Success(OrderInvoiceDto.From(invoice));
     }
 }

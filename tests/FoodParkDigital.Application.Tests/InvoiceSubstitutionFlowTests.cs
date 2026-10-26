@@ -174,6 +174,26 @@ public class InvoiceSubstitutionFlowTests
     }
 
     [Fact]
+    public async Task ReplacementStampedByAskingAgain_ShouldCancelTheOldOneRightAway()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync();
+        var original = (await book.IssueAsync(sale.Id, Wrong)).Value;
+        book.Gateway.LoseNextAnswer = true;
+        var stamping = (await book.SubstituteAsync(original.Id, Right)).Value;
+
+        var stamped = await book.RetryAsync(stamping.Id);
+
+        Assert.Equal(OrderInvoiceStatus.Stamped, stamped.Value.Status);
+        var old = await book.InvoiceAsync(original.Id);
+        Assert.Equal((OrderInvoiceStatus.Cancelling, CfdiCancellationMotive.ErrorsWithReplacement), (old.Status, old.CancellationMotive));
+        // Asked for by whoever replaced it, as the worker does.
+        Assert.Equal(stamping.Id, old.ReplacedByInvoiceId);
+        Assert.Equal((await book.InvoiceAsync(stamping.Id)).RequestedByUserId, old.CancellationRequestedByUserId);
+        Assert.Equal(book.Gateway.Replacements[original.Uuid!], stamped.Value.Uuid);
+    }
+
+    [Fact]
     public async Task OldInvoiceCancelledWithout02_WhileItsReplacementWaits_ShouldStayCancelled_IfThePacRefusesTheReplacement()
     {
         await using var book = await Book.OpenAsync();
@@ -247,6 +267,32 @@ public class InvoiceSubstitutionFlowTests
         book.Gateway.SatStatus = new CfdiSatStatus(CfdiSatState.Cancelled, false);
         await book.CheckCancellationsAsync();
         Assert.True((await book.CancelAsync(replacement.Id, CfdiCancellationMotive.NotCarriedOut)).IsSuccess);
+    }
+
+    [Fact]
+    public async Task CancellationTheCustomerRefusedBeforeTheReplacement_ShouldNotKeepTheWorkerFromAskingWith01()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync();
+        var original = (await book.IssueAsync(sale.Id, Wrong)).Value;
+        // First it was cancelled without relation, and the customer refused it.
+        Assert.True((await book.CancelAsync(original.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        book.Gateway.SatStatus = new CfdiSatStatus(CfdiSatState.InForce, true);
+        book.Clock.UtcNow = book.Clock.UtcNow.AddMinutes(30);
+        await book.CheckCancellationsAsync();
+        Assert.Equal(OrderInvoiceStatus.Stamped, (await book.InvoiceAsync(original.Id)).Status);
+        book.Gateway.SatStatus = new CfdiSatStatus(CfdiSatState.InForce, false);
+
+        // Then it is replaced, before the SAT has the new one.
+        book.Gateway.CancelRefusal = "El SAT todavía no relaciona esta factura con la que la sustituye.";
+        Assert.Equal(OrderInvoiceStatus.Stamped, (await book.SubstituteAsync(original.Id, Right)).Value.Status);
+        book.Gateway.CancelRefusal = null;
+
+        // The worker asks again with 01: the refusal it had before it was replaced does not count.
+        book.Clock.UtcNow = book.Clock.UtcNow.AddMinutes(30);
+        await book.CheckCancellationsAsync();
+        var asked = await book.InvoiceAsync(original.Id);
+        Assert.Equal((OrderInvoiceStatus.Cancelling, CfdiCancellationMotive.ErrorsWithReplacement), (asked.Status, asked.CancellationMotive));
     }
 
     [Fact]
@@ -373,6 +419,10 @@ public class InvoiceSubstitutionFlowTests
             => new SubstituteOrderInvoiceCommandHandler(
                     this, Context, Fixture.CurrentUser, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
                 .Handle(new SubstituteOrderInvoiceCommand(invoiceId, receiver, false, email), CancellationToken.None);
+
+        public Task<Result<OrderInvoiceDto>> RetryAsync(Guid invoiceId)
+            => new RetryOrderInvoiceCommandHandler(Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
+                .Handle(new RetryOrderInvoiceCommand(invoiceId), CancellationToken.None);
 
         public Task<Result<OrderInvoiceDto>> CancelReplacedAsync(Guid invoiceId)
             => new CancelReplacedOrderInvoiceCommandHandler(Context, Fixture.CurrentUser, Gateway, Clock)
