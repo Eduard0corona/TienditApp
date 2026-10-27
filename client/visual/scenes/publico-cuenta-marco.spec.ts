@@ -128,7 +128,8 @@ for (const look of LOOKS) {
     });
 
     test(`página para negocios ${look.suffix}`, async ({ page }) => {
-      await open(page, '/negocios');
+      // A visitor sees it at /; its own address (/negocios) is the scene of the business types below.
+      await open(page, '/');
       await expect(page.getByRole('heading', { level: 1, name: 'Vende, cobra y factura desde una sola app' })).toBeVisible();
       await snap(page, `negocios-${look.suffix}`);
     });

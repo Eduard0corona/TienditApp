@@ -97,7 +97,9 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             {/* The link of an invitation to a team (from the email or shared by WhatsApp). */}
             <Route path="/aceptar-invitacion" element={<AcceptInvitation />} />
-            {/* TienditApp presented to whoever has a business: what it does and how to join (no sign-in). */}
+            {/* TienditApp presented to whoever has a business: what it does and how to join. A visitor sees it at /;
+                its own address shows it to whoever has a session too. */}
+            <Route path="/" element={<HomeRedirect visitor={<BusinessLandingPage />} />} />
             <Route path="/negocios" element={<BusinessLandingPage />} />
             {/* The public menu of a business, opened from its link or QR (no sign-in). */}
             <Route path="/m/:slug" element={<PublicMenuPage />} />
