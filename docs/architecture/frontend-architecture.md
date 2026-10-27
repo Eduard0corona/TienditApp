@@ -389,7 +389,7 @@ Explorar (Fase 24A, [ADR 0021](../adr/0021-business-directory.md)):
   - Una categoría que no existe va a `/explorar`.
 - **`CustomerLayout`:** el marco de TienditApp para los clientes. Mis pedidos va dentro de `.cl-page`, con el ancho y los márgenes de Explorar, y «Salir» deja al cliente en Explorar. Lleva la marca, «Explorar», «Mis pedidos» (cliente), «Mi negocio» (equipo), «Entrar» y «Crear cuenta» (`/register?cuenta=cliente`), el perfil, «Salir» y el tema claro u oscuro (desde una tableta: en el teléfono, la marca y la cuenta caben en un renglón).
   - Pinta los colores de TienditApp (`previewBusinessTheme(Nopal)`, antes del primer pintado) y no los del último negocio del dispositivo.
-  - El pie invita a los negocios (`/register?cuenta=negocio`). `Register` abre en la cuenta pedida.
+  - El pie invita a los negocios a su página (`/negocios`), que lleva al registro (`/register?cuenta=negocio`). `Register` abre en la cuenta pedida.
 - **`ExplorePage`:**
   - La búsqueda escribe `?q=` 300 ms después de la última tecla y se lee otra vez al ir atrás o adelante. Las categorías con negocios salen como enlaces con su número (`aria-current` en la actual).
   - Las tarjetas (`components/explore/DirectoryBusinessCard`) llevan el logo o la inicial en los colores del tema de cada negocio (`--dc-tint`, claro y oscuro), nombre, descripción, categoría y ciudad o «Solo a domicilio», y lo que responde su menú (`orderStatus`, con `closed` del servidor: «Pide en línea», en pausa, cerrado y cuándo abre, solo menú). La tarjeta entera abre `/m/{slug}`.
@@ -764,6 +764,16 @@ Inventario › Historial por insumo › «Revisar que cuadre» (Fase 27C, [ADR 0
   - `LedgerGapModal`: «Por qué no cuadra», cada lugar del historial en palabras (`ledgerGaps.ts`, con pruebas) con lo que suma a la diferencia, y avisa cuando se revisaron solo los movimientos más recientes. Su «Cuadrar» manda la diferencia que acaba de leer.
   - `InventoryManagement`: «Revisar que cuadre» va junto a «Actualizar» en la pestaña. Al cuadrar dice qué se anotó y vuelve a leer el historial y las entradas y salidas.
 - **Lo que decide la API:** qué no cuadra, por cuánto y dónde; el cliente solo lo muestra y manda lo que se revisó. El motivo «Cuadre del historial» no se ofrece en los movimientos manuales (`MANUAL_MOVEMENT_REASON_OPTIONS`).
+
+La página para negocios (`/negocios`, la landing de TienditApp):
+
+- **Ruta:** `pages/landing/BusinessLandingPage`, pública y fuera de `CustomerLayout`, con su propio encabezado (secciones, tema, «Entrar» y «Empieza gratis»; con sesión, «Abrir TienditApp»). Baja aparte con su CSS (`BusinessLandingPage.css`, clases `lp-*`, solo tokens de `theme.css`, claro y oscuro). `/` sigue llevando a Explorar (ADR 0021); el pie de Explorar lleva a esta página.
+- **Contenido:** `landingContent.ts` reúne los textos. Solo dice lo que la app hace en `master`: nada de lealtad, inteligencia artificial en el chat ni integración por API con Rappi, Uber Eats o DiDi Food (sus pedidos se registran a mano y la pregunta frecuente lo aclara). No hay precios: los planes no son públicos (no hay endpoint ni planes sembrados).
+- **Llamadas a la acción:** todas abren `/register?cuenta=negocio` (`SIGN_UP_PATH`).
+- **Pantallas de ejemplo:** Vender, el menú en el teléfono, el tablero de cada giro y las tarjetas de Explorar se dibujan con HTML y los colores del tema, no son capturas: cambian con el modo oscuro y no pesan imágenes. Son `role="img"` con su descripción.
+- **Giros:** Comida, Comercio y Servicios son pestañas (`role="tablist"`): flechas, Inicio y Fin cambian de pestaña y mueven el foco.
+- **Buscadores:** el servidor escribe su título, descripción y canónica (`PublicPages.StaticHeadFor`) y la lista en `sitemap.xml`; la app pone el mismo título en la pestaña (`LANDING_TITLE`). Pinta los colores de TienditApp (`previewBusinessTheme(Nopal)`), como Explorar.
+- **Primera visita:** 180,091 B de 180,100 B (+60 B contra `master`, la ruta nueva), dentro del presupuesto. El CSS global no cambia.
 
 ## Guardrails
 

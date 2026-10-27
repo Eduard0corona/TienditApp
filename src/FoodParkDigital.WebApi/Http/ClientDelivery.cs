@@ -77,7 +77,8 @@ public static class ClientDelivery
 
     /// <summary>
     /// Any other route that is not the API's is a screen of the app: it gets index.html, checked again on each visit,
-    /// with the head of Explorar and its categories; the store pages have their own endpoints (<see cref="PublicPages"/>).
+    /// with the head of Explorar, its categories and the page for businesses; the store pages have their own endpoints
+    /// (<see cref="PublicPages"/>).
     /// A missing file (a name with an extension) is a 404, so an open page of an older version reloads.
     /// </summary>
     public static void MapClientFallback(this WebApplication app)

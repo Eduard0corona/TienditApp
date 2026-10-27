@@ -285,6 +285,26 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Empty(_api.Sender.Requests);
     }
 
+    [Theory]
+    [InlineData("/negocios")]
+    [InlineData("/Negocios/")]
+    public async Task ThePageForBusinesses_ShouldComeWithItsHead_WithoutReadingTheStores(string path)
+    {
+        using var response = await _api.Http.GetAsync(path);
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Headers.Contains("X-Robots-Tag"));
+        Assert.Contains("<title>TienditApp para negocios: punto de venta, menú en línea y facturación</title>", html);
+        Assert.Contains("<link rel=\"canonical\" href=\"https://app.tienditapp.mx/negocios\">", html);
+        // Whole, without the ellipsis of a description cut to what search engines show.
+        Assert.Equal(
+            "Vende en mostrador y en línea, controla inventario y caja, recibe pedidos a domicilio y factura CFDI desde un solo lugar. Crea la cuenta de tu negocio gratis.",
+            Meta(html, "name", "description"));
+        Assert.Equal("index, follow", Meta(html, "name", "robots"));
+        Assert.Empty(_api.Sender.Requests);
+    }
+
     [Fact]
     public async Task TheCategoryOfOtherBusinesses_ShouldSayItInWords()
     {
@@ -331,7 +351,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
     }
 
     [Fact]
-    public async Task TheSitemap_ShouldListExplorar_ItsCategoriesWithBusinesses_AndEachStore()
+    public async Task TheSitemap_ShouldListExplorar_ThePageForBusinesses_ItsCategoriesWithBusinesses_AndEachStore()
     {
         _api.Sender.Sitemap = new PublicSitemapDto
         {
@@ -348,6 +368,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Equal(
             [
                 "https://app.tienditapp.mx/explorar",
+                "https://app.tienditapp.mx/negocios",
                 "https://app.tienditapp.mx/explorar/comida",
                 "https://app.tienditapp.mx/explorar/belleza",
                 "https://app.tienditapp.mx/m/cafe-luna",

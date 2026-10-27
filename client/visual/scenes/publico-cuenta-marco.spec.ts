@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { SIZES, dialog, open, settle, snap } from '../helpers';
+import { SIZES, dialog, open, settle, snap, snapElement } from '../helpers';
 import {
   CON_DOS_PASOS,
   INICIO_CON_ERROR,
@@ -126,8 +126,25 @@ for (const look of LOOKS) {
       await expect(page.getByRole('heading', { name: 'Hola, Andrea' })).toBeVisible();
       await snap(page, `aceptar-invitacion-${look.suffix}`);
     });
+
+    test(`página para negocios ${look.suffix}`, async ({ page }) => {
+      await open(page, '/negocios');
+      await expect(page.getByRole('heading', { level: 1, name: 'Vende, cobra y factura desde una sola app' })).toBeVisible();
+      await snap(page, `negocios-${look.suffix}`);
+    });
   });
 }
+
+test.describe('Página para negocios: los giros', () => {
+  test.use({ signedIn: false });
+
+  test('página para negocios con servicios', async ({ page }) => {
+    await open(page, '/negocios');
+    await page.getByRole('tab', { name: 'Servicios' }).click();
+    await expect(page.getByRole('tabpanel', { name: 'Servicios' })).toContainText('Citas en línea');
+    await snapElement(page.getByRole('tabpanel', { name: 'Servicios' }), 'negocios-giro-servicios-escritorio');
+  });
+});
 
 test.describe('Login con verificación en dos pasos', () => {
   test.use({ signedIn: false, prepareData: CON_DOS_PASOS });
