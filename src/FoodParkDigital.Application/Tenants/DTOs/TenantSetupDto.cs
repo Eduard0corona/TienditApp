@@ -30,4 +30,6 @@ public class StarterCatalogDto
     public BusinessType BusinessType { get; set; }
     public int ProductCount { get; set; }
     public List<string> Categories { get; set; } = new();
+    /// <summary>Made for the giro of the business: the guided setup shows it first.</summary>
+    public bool IsRecommended { get; set; }
 }

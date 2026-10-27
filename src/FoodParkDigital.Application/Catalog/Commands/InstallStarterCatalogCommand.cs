@@ -111,7 +111,8 @@ public class InstallStarterCatalogCommandHandler
                     isFeatured: productDefinition.IsFeatured,
                     taxRate: productDefinition.TaxRate,
                     unit: productDefinition.Unit,
-                    isTrackable: productDefinition.IsTrackable));
+                    isTrackable: productDefinition.IsTrackable,
+                    isTaxExempt: productDefinition.IsTaxExempt));
             }
         }
 

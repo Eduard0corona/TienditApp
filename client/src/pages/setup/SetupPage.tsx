@@ -170,15 +170,21 @@ export default function SetupPage() {
     );
   }
 
-  const ownCatalogs = setup.starterCatalogs.filter((catalog) => catalog.businessType === setup.businessType);
-  const otherCatalogs = setup.starterCatalogs.filter((catalog) => catalog.businessType !== setup.businessType);
+  // The one made for the giro goes first, even when it is of another type.
+  const ownCatalogs = setup.starterCatalogs
+    .filter((catalog) => catalog.isRecommended || catalog.businessType === setup.businessType)
+    .sort((a, b) => Number(b.isRecommended) - Number(a.isRecommended));
+  const otherCatalogs = setup.starterCatalogs.filter((catalog) => !ownCatalogs.includes(catalog));
   const stepDone = (key: TenantSetupStepKey) => setup.steps.find((item) => item.key === key)?.done ?? false;
 
   const renderCatalog = (catalog: StarterCatalogDto) => (
     <div className="col-md-6 col-xl-4" key={catalog.id}>
       <div className="card h-100 setup-catalog">
         <div className="card-body d-flex flex-column">
-          <h3 className="h5 mb-1">{catalog.name}</h3>
+          <div className="d-flex justify-content-between align-items-start gap-2 mb-1">
+            <h3 className="h5 mb-0">{catalog.name}</h3>
+            {catalog.isRecommended && <span className="ta-chip ta-chip-confirmed">Para tu giro</span>}
+          </div>
           <p className="text-muted small mb-2">{catalog.description}</p>
           <p className="small mb-3">
             {catalog.productCount} productos en {catalog.categories.join(', ')}.

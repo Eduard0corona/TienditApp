@@ -34814,6 +34814,7 @@
           "categories",
           "description",
           "id",
+          "isRecommended",
           "name",
           "productCount"
         ],
@@ -34840,6 +34841,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "isRecommended": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

@@ -19362,6 +19362,7 @@ export interface components {
             /** Format: int32 */
             productCount: number;
             categories: string[];
+            isRecommended: boolean;
         };
         SubscriptionDetailDto: {
             hasPlan: boolean;
