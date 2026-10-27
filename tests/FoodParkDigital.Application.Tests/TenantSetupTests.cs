@@ -163,7 +163,10 @@ public class TenantSetupTests
     [Theory]
     [InlineData("consultorio-medico")]
     [InlineData("consultorio-dental")]
-    public async Task InstallStarterCatalog_ForADoctorOrDentist_ShouldGiveEachServiceTheLengthOfItsAppointment(string templateId)
+    [InlineData("electricista")]
+    [InlineData("plomeria")]
+    [InlineData("aire-acondicionado")]
+    public async Task InstallStarterCatalog_ForWorkDoneByAppointment_ShouldGiveEachServiceItsLengthAndNoTracking(string templateId)
     {
         await using var fixture = SalesTestFixture.Create();
         await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments);
@@ -172,27 +175,34 @@ public class TenantSetupTests
         var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = templateId }, CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
-        Assert.All(await fixture.Context.Products.ToListAsync(), s => Assert.True(s.PreparationTimeMinutes > 0, s.Name));
-        Assert.All(await fixture.Context.Products.ToListAsync(), s => Assert.False(s.IsTrackable, s.Name));
+        // Done in the office or at the customer's home: nothing is taken in, so nothing waits on the service board.
+        var services = await fixture.Context.Products.ToListAsync();
+        Assert.All(services, s => Assert.True(s.PreparationTimeMinutes > 0, s.Name));
+        Assert.All(services, s => Assert.False(s.IsTrackable, s.Name));
     }
 
-    [Fact]
-    public async Task InstallStarterCatalog_ForAWorkshop_ShouldTrackTheWorkItTakesInButNotTheOneDoneAtHome()
+    [Theory]
+    [InlineData("carpinteria")]
+    [InlineData("herreria-soldadura")]
+    public async Task InstallStarterCatalog_ForAWorkshop_ShouldTrackTheWorkItTakesInButNotTheOneDoneAtHome(string templateId)
     {
         await using var fixture = SalesTestFixture.Create();
         await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service);
         var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService);
 
-        var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = "carpinteria" }, CancellationToken.None);
+        var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = templateId }, CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
-        var furniture = await fixture.Context.Products.SingleAsync(p => p.Name == "Mueble a medida");
-        var visit = await fixture.Context.Products.SingleAsync(p => p.Name == "Visita para medir y cotizar");
-        var labor = await fixture.Context.Products.SingleAsync(p => p.Name == "Mano de obra por hora");
-        Assert.True(furniture.IsTrackable);
-        Assert.False(visit.IsTrackable);
-        Assert.Equal(60, visit.PreparationTimeMinutes);
-        Assert.Equal(UnitType.Hour, labor.Unit);
+        var categoryNames = await fixture.Context.Categories.ToDictionaryAsync(category => category.Id, category => category.Name);
+        var services = await fixture.Context.Products.ToListAsync();
+        var atHome = services.Where(s => categoryNames[s.CategoryId] == "A domicilio").ToList();
+        var inTheWorkshop = services.Except(atHome).ToList();
+        Assert.NotEmpty(atHome);
+        Assert.NotEmpty(inTheWorkshop);
+        Assert.All(inTheWorkshop, s => Assert.True(s.IsTrackable, s.Name));
+        Assert.All(atHome, s => Assert.False(s.IsTrackable, s.Name));
+        Assert.All(atHome, s => Assert.True(s.PreparationTimeMinutes > 0, s.Name));
+        Assert.Equal(UnitType.Hour, Assert.Single(atHome, s => s.Name == "Mano de obra por hora").Unit);
     }
 
     [Theory]
