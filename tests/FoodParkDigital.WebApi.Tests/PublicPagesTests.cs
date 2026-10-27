@@ -269,7 +269,6 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
     }
 
     [Theory]
-    [InlineData("/", "<title>Explorar · TienditApp</title>", "https://app.tienditapp.mx/explorar")]
     [InlineData("/explorar", "<title>Explorar · TienditApp</title>", "https://app.tienditapp.mx/explorar")]
     [InlineData("/explorar/comida", "<title>Comida · Explorar · TienditApp</title>", "https://app.tienditapp.mx/explorar/comida")]
     [InlineData("/explorar/Ferreteria/", "<title>Ferretería y hogar · Explorar · TienditApp</title>", "https://app.tienditapp.mx/explorar/ferreteria")]
@@ -285,23 +284,38 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         Assert.Empty(_api.Sender.Requests);
     }
 
-    [Theory]
-    [InlineData("/negocios")]
-    [InlineData("/Negocios/")]
-    public async Task ThePageForBusinesses_ShouldComeWithItsHead_WithoutReadingTheStores(string path)
+    [Fact]
+    public async Task TheRoot_ShouldComeWithTheHeadOfThePageForBusinesses_WithoutReadingTheStores()
     {
-        using var response = await _api.Http.GetAsync(path);
+        using var response = await _api.Http.GetAsync("/");
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.False(response.Headers.Contains("X-Robots-Tag"));
         Assert.Contains("<title>TienditApp para negocios: punto de venta, menú en línea y facturación</title>", html);
-        Assert.Contains("<link rel=\"canonical\" href=\"https://app.tienditapp.mx/negocios\">", html);
+        Assert.Contains("<link rel=\"canonical\" href=\"https://app.tienditapp.mx/\">", html);
         // Whole, without the ellipsis of a description cut to what search engines show.
         Assert.Equal(
             "Vende en mostrador y en línea, controla inventario y caja, recibe pedidos a domicilio y factura CFDI desde un solo lugar. Crea la cuenta de tu negocio gratis.",
             Meta(html, "name", "description"));
         Assert.Equal("index, follow", Meta(html, "name", "robots"));
+        Assert.Empty(_api.Sender.Requests);
+    }
+
+    [Theory]
+    [InlineData("/negocios")]
+    [InlineData("/Negocios/")]
+    public async Task ThePageForBusinessesAtItsOwnAddress_ShouldPreviewAsTheRoot_AndStayOutOfSearchEngines(string path)
+    {
+        using var response = await _api.Http.GetAsync(path);
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("noindex", Assert.Single(response.Headers.GetValues("X-Robots-Tag")));
+        Assert.Contains("<title>TienditApp para negocios: punto de venta, menú en línea y facturación</title>", html);
+        Assert.Equal("noindex", Meta(html, "name", "robots"));
+        Assert.DoesNotContain("rel=\"canonical\"", html);
+        Assert.Equal("https://app.tienditapp.mx/", Meta(html, "property", "og:url"));
         Assert.Empty(_api.Sender.Requests);
     }
 
@@ -351,7 +365,7 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
     }
 
     [Fact]
-    public async Task TheSitemap_ShouldListExplorar_ThePageForBusinesses_ItsCategoriesWithBusinesses_AndEachStore()
+    public async Task TheSitemap_ShouldListTheRoot_Explorar_ItsCategoriesWithBusinesses_AndEachStore()
     {
         _api.Sender.Sitemap = new PublicSitemapDto
         {
@@ -367,8 +381,8 @@ public sealed class PublicPagesTests : IClassFixture<PublicPagesTests.PagesApi>
         XNamespace ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
         Assert.Equal(
             [
+                "https://app.tienditapp.mx/",
                 "https://app.tienditapp.mx/explorar",
-                "https://app.tienditapp.mx/negocios",
                 "https://app.tienditapp.mx/explorar/comida",
                 "https://app.tienditapp.mx/explorar/belleza",
                 "https://app.tienditapp.mx/m/cafe-luna",

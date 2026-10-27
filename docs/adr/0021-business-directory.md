@@ -37,6 +37,7 @@ La Fase 24A abre TienditApp a los clientes. Un cliente ve los negocios registrad
    - La migración da a cada negocio la categoría de su giro con la misma regla, y una prueba compara las dos para cada giro y tipo.
    - El dueño la cambia en Configuración › Negocio, tarjeta «Cómo te ven en TienditApp», junto con una descripción de un renglón (hasta 160 caracteres, sin saltos ni separadores de línea) y «Aparecer en Explorar». La tarjeta dice por qué no aparece y qué hacer: publicar el menú, activar productos o encenderlo. Lo cambian dueños y administradores (`[RequiresTenantManager]`), y cada cambio queda en la bitácora como `DirectoryProfileUpdated`. La bitácora guarda que la descripción cambió, no el texto.
 5. **`/` lleva a Explorar a visitantes y clientes (D2).** El equipo de un negocio sigue entrando a su trabajo.
+   - Cambio del 27 de octubre de 2026 (decisión del dueño del producto): en `/`, un visitante sin sesión ve la página para negocios, la presentación de TienditApp ([ADR 0027](0027-search-engines-and-link-previews.md)). Los clientes con sesión siguen empezando en Explorar, el equipo en su trabajo, y una dirección que no existe sigue llevando a Explorar. Explorar sigue en `/explorar`.
    - Explorar y Mis pedidos usan un marco propio, con los colores de TienditApp y sin el menú del negocio.
    - Desde ahí, un visitante entra o crea su cuenta de cliente, y el equipo regresa a su negocio.
    - La búsqueda queda en la dirección (`/explorar/comida?q=tacos`), así que se puede compartir.
