@@ -216,6 +216,7 @@ public class TenantSetupTests
     [InlineData("Aire acondicionado", "aire-acondicionado")]
     [InlineData("Lavandería", "lavanderia")]
     [InlineData("Abarrotes", "abarrotes")]
+    [InlineData("Papelería", "papeleria")]
     [InlineData("Comida a domicilio", "comida-a-domicilio")]
     public async Task Setup_ShouldRecommendTheStarterCatalogOfTheGiro(string industry, string expected)
     {
