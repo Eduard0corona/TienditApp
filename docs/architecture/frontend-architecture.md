@@ -773,7 +773,7 @@ La página para negocios (`/negocios`, la landing de TienditApp):
 - **Pantallas de ejemplo:** Vender, el menú en el teléfono, el tablero de cada giro y las tarjetas de Explorar se dibujan con HTML y los colores del tema, no son capturas: cambian con el modo oscuro y no pesan imágenes. Son `role="img"` con su descripción.
 - **Giros:** Comida, Comercio y Servicios son pestañas (`role="tablist"`): flechas, Inicio y Fin cambian de pestaña y mueven el foco.
 - **Buscadores:** el servidor escribe su título, descripción y canónica (`PublicPages.StaticHeadFor`) y la lista en `sitemap.xml`; la app pone el mismo título en la pestaña (`LANDING_TITLE`). Pinta los colores de TienditApp (`previewBusinessTheme(Nopal)`), como Explorar.
-- **Primera visita:** 180,091 B de 180,100 B (+60 B contra `master`, la ruta nueva), dentro del presupuesto. El CSS global no cambia.
+- **Primera visita:** suma 91 B (de 180,031 a 180,122 B, contra `master` en `1e52cf7`, igual en CI): la entrada de la ruta nueva en el mapa de módulos, cuyo tamaño comprimido cambia unos bytes con las huellas de los nombres de los archivos. Pasaba el presupuesto (180,100 B): sube a 180,200 B. El CSS global no cambia.
 
 ## Guardrails
 
