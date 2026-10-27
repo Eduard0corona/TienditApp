@@ -28,6 +28,13 @@ describe('industries', () => {
     }
   });
 
+  it('offers the service giros that have their own templates, written as the server reads them', () => {
+    // Same texts as the giros of StarterCatalogTemplates and CategoryTemplateCatalog.
+    for (const giro of ['Consultorio', 'Consultorio dental', 'Carpintería', 'Herrería y soldadura', 'Electricista', 'Plomería', 'Aire acondicionado']) {
+      expect(INDUSTRY_OPTIONS).toContain(giro);
+    }
+  });
+
   it('offers the giro of a kitchen that only delivers, written as the server reads it', () => {
     expect(HOME_DELIVERY_INDUSTRY).toBe('Comida a domicilio');
     expect(INDUSTRY_OPTIONS).toContain(HOME_DELIVERY_INDUSTRY);

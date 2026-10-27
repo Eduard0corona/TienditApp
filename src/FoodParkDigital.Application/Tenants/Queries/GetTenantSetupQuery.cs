@@ -40,7 +40,7 @@ public class GetTenantSetupQueryHandler : IRequestHandler<GetTenantSetupQuery, R
         var tenant = await _context.Tenants
             .AsNoTracking()
             .Where(t => t.Id == tenantId.Value)
-            .Select(t => new { t.BusinessType, HasLogo = t.LogoUrl != null })
+            .Select(t => new { t.BusinessType, t.Industry, HasLogo = t.LogoUrl != null })
             .FirstOrDefaultAsync(cancellationToken);
         if (tenant is null)
             return Result.Failure<TenantSetupDto>("Negocio no encontrado.");
@@ -86,7 +86,8 @@ public class GetTenantSetupQueryHandler : IRequestHandler<GetTenantSetupQuery, R
                     Description = template.Description,
                     BusinessType = template.BusinessType,
                     ProductCount = template.ProductCount,
-                    Categories = template.Categories.Select(category => category.Name).ToList()
+                    Categories = template.Categories.Select(category => category.Name).ToList(),
+                    IsRecommended = template.IsMadeFor(tenant.Industry)
                 })
                 .ToList()
         });

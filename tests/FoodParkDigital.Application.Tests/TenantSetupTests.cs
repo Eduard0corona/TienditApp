@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Catalog.Commands;
+using FoodParkDigital.Application.Catalog.Templates;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.Queries;
 using FoodParkDigital.Application.Tests.Support;
@@ -124,6 +125,138 @@ public class TenantSetupTests
         Assert.NotEmpty(services);
         Assert.All(services, s => Assert.Equal(UnitType.Service, s.Unit));
         Assert.All(services, s => Assert.True(s.IsTrackable));
+    }
+
+    [Theory]
+    [InlineData("consultorio-medico", true)]
+    [InlineData("consultorio-dental", true)]
+    [InlineData("carpinteria", false)]
+    [InlineData("herreria-soldadura", false)]
+    [InlineData("electricista", false)]
+    [InlineData("plomeria", false)]
+    [InlineData("aire-acondicionado", false)]
+    public async Task InstallStarterCatalog_ShouldCreateTheServicesOfEachServiceGiro_WithOnlyTheServicesModule(
+        string templateId,
+        bool exempt)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service, pricesIncludeTax: true);
+        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService);
+        var template = StarterCatalogTemplates.GetById(templateId)!;
+
+        var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = templateId }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(BusinessType.Service, template.BusinessType);
+        Assert.Equal(template.Categories.Count, result.Value.CategoriesCreated);
+        var services = await fixture.Context.Products.ToListAsync();
+        Assert.Equal(template.ProductCount, services.Count);
+        Assert.All(services, s => Assert.True(s.Unit?.IsService() == true, s.Name));
+        Assert.All(services, s => Assert.True(s.PriceAmount > 0, s.Name));
+        // The medical services of a doctor or dentist are exempt (LIVA art. 15-XIV), not at 0 %; a trade charges the
+        // IVA of the business.
+        Assert.All(services, s => Assert.Equal(exempt, s.IsTaxExempt));
+        Assert.All(services, s => Assert.Null(s.TaxRate));
+        Assert.All(services, s => Assert.Equal(exempt, s.GetVatRate(16m).IsExempt));
+    }
+
+    [Theory]
+    [InlineData("consultorio-medico")]
+    [InlineData("consultorio-dental")]
+    [InlineData("electricista")]
+    [InlineData("plomeria")]
+    [InlineData("aire-acondicionado")]
+    public async Task InstallStarterCatalog_ForWorkDoneByAppointment_ShouldGiveEachServiceItsLengthAndNoTracking(string templateId)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments);
+        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService);
+
+        var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = templateId }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        // Done in the office or at the customer's home: nothing is taken in, so nothing waits on the service board.
+        var services = await fixture.Context.Products.ToListAsync();
+        Assert.All(services, s => Assert.True(s.PreparationTimeMinutes > 0, s.Name));
+        Assert.All(services, s => Assert.False(s.IsTrackable, s.Name));
+    }
+
+    [Theory]
+    [InlineData("carpinteria")]
+    [InlineData("herreria-soldadura")]
+    public async Task InstallStarterCatalog_ForAWorkshop_ShouldTrackTheWorkItTakesInButNotTheOneDoneAtHome(string templateId)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service);
+        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService);
+
+        var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = templateId }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var categoryNames = await fixture.Context.Categories.ToDictionaryAsync(category => category.Id, category => category.Name);
+        var services = await fixture.Context.Products.ToListAsync();
+        var atHome = services.Where(s => categoryNames[s.CategoryId] == "A domicilio").ToList();
+        var inTheWorkshop = services.Except(atHome).ToList();
+        Assert.NotEmpty(atHome);
+        Assert.NotEmpty(inTheWorkshop);
+        Assert.All(inTheWorkshop, s => Assert.True(s.IsTrackable, s.Name));
+        Assert.All(atHome, s => Assert.False(s.IsTrackable, s.Name));
+        Assert.All(atHome, s => Assert.True(s.PreparationTimeMinutes > 0, s.Name));
+        Assert.Equal(UnitType.Hour, Assert.Single(atHome, s => s.Name == "Mano de obra por hora").Unit);
+    }
+
+    [Theory]
+    [InlineData("Consultorio", "consultorio-medico")]
+    [InlineData("Consultorio dental", "consultorio-dental")]
+    [InlineData("  consultorio DENTAL ", "consultorio-dental")]
+    [InlineData("Carpintería", "carpinteria")]
+    [InlineData("Herreria y soldadura", "herreria-soldadura")]
+    [InlineData("Electricista", "electricista")]
+    [InlineData("Plomeria", "plomeria")]
+    [InlineData("Aire acondicionado", "aire-acondicionado")]
+    [InlineData("Lavandería", "lavanderia")]
+    [InlineData("Abarrotes", "abarrotes")]
+    [InlineData("Papelería", "papeleria")]
+    [InlineData("Comida a domicilio", "comida-a-domicilio")]
+    public async Task Setup_ShouldRecommendTheStarterCatalogOfTheGiro(string industry, string expected)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service);
+        tenant.SetBusinessInfo(null, null, industry, null, null);
+        await fixture.Context.SaveChangesAsync();
+        var query = new GetTenantSetupQueryHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService);
+
+        var result = await query.Handle(new GetTenantSetupQuery(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var recommended = Assert.Single(result.Value.StarterCatalogs, c => c.IsRecommended);
+        Assert.Equal(expected, recommended.Id);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Otro")]
+    [InlineData("Servicios profesionales")]
+    public async Task Setup_ShouldRecommendNoStarterCatalog_ForAGiroWithoutOne(string? industry)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service);
+        tenant.SetBusinessInfo(null, null, industry, null, null);
+        await fixture.Context.SaveChangesAsync();
+        var query = new GetTenantSetupQueryHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService);
+
+        var result = await query.Handle(new GetTenantSetupQuery(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.DoesNotContain(result.Value.StarterCatalogs, c => c.IsRecommended);
+    }
+
+    [Fact]
+    public void StarterCatalogs_ShouldEachHaveTheirOwnId()
+    {
+        var ids = StarterCatalogTemplates.GetAll().Select(template => template.Id).ToList();
+
+        Assert.Equal(ids.Count, ids.Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
     [Fact]

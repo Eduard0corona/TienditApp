@@ -33,8 +33,7 @@ public class GetCategoryTemplatesQueryHandler : IRequestHandler<GetCategoryTempl
             .Select(x => new { x.BusinessType, x.Industry })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var industryNormalized = tenant?.Industry?.Trim().ToLowerInvariant();
-        var recommendedTemplateId = ResolveRecommendedTemplateId(tenant?.BusinessType, industryNormalized);
+        var recommendedTemplateId = ResolveRecommendedTemplateId(tenant?.BusinessType, tenant?.Industry);
 
         return CategoryTemplateCatalog.GetAll()
             .Select(template => new CategoryTemplateDto
@@ -57,8 +56,14 @@ public class GetCategoryTemplatesQueryHandler : IRequestHandler<GetCategoryTempl
             .ToList();
     }
 
-    private static string ResolveRecommendedTemplateId(Domain.Tenants.Enums.BusinessType? businessType, string? industryNormalized)
+    private static string ResolveRecommendedTemplateId(Domain.Tenants.Enums.BusinessType? businessType, string? industry)
     {
+        // The template made for a giro of the list first; a giro written by hand still finds the older ones by a word.
+        var templateOfTheGiro = CategoryTemplateCatalog.GetAll().FirstOrDefault(template => template.IsMadeFor(industry));
+        if (templateOfTheGiro is not null)
+            return templateOfTheGiro.Id;
+
+        var industryNormalized = industry?.Trim().ToLowerInvariant();
         if (!string.IsNullOrWhiteSpace(industryNormalized))
         {
             if (industryNormalized.Contains("lavander"))

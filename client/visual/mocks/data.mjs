@@ -853,10 +853,10 @@ export function buildData() {
       { key: 'logo', done: false },
     ],
     starterCatalogs: [
-      { id: 'cafe', name: 'Cafetería', description: 'Bebidas calientes y frías, panadería y desayunos.', businessType: 0, productCount: 14, categories: ['Bebidas calientes', 'Bebidas frías', 'Panadería', 'Desayunos'] },
-      { id: 'fondita', name: 'Fonda o cocina económica', description: 'Comida corrida, guisados, antojitos y aguas frescas.', businessType: 0, productCount: 12, categories: ['Comida corrida', 'Antojitos', 'Bebidas'] },
-      { id: 'tienda', name: 'Tienda de abarrotes', description: 'Refrescos, botanas, abarrotes y limpieza.', businessType: 1, productCount: 15, categories: ['Bebidas', 'Botanas', 'Abarrotes', 'Limpieza'] },
-      { id: 'barberia', name: 'Barbería o estética', description: 'Cortes, barba, tratamientos y productos.', businessType: 2, productCount: 9, categories: ['Cortes', 'Barba', 'Productos'] },
+      { id: 'cafe', name: 'Cafetería', description: 'Bebidas calientes y frías, panadería y desayunos.', businessType: 0, productCount: 14, categories: ['Bebidas calientes', 'Bebidas frías', 'Panadería', 'Desayunos'], isRecommended: false },
+      { id: 'fondita', name: 'Fonda o cocina económica', description: 'Comida corrida, guisados, antojitos y aguas frescas.', businessType: 0, productCount: 12, categories: ['Comida corrida', 'Antojitos', 'Bebidas'], isRecommended: false },
+      { id: 'tienda', name: 'Tienda de abarrotes', description: 'Refrescos, botanas, abarrotes y limpieza.', businessType: 1, productCount: 15, categories: ['Bebidas', 'Botanas', 'Abarrotes', 'Limpieza'], isRecommended: false },
+      { id: 'barberia', name: 'Barbería o estética', description: 'Cortes, barba, tratamientos y productos.', businessType: 2, productCount: 9, categories: ['Cortes', 'Barba', 'Productos'], isRecommended: false },
     ],
   };
 
