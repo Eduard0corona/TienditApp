@@ -36,15 +36,19 @@ public class GlobalInvoiceCreditNotesSqlServerTests
         var voided = PaidOrder(tenant.Id, "ORD-000004");
         var global = Global(tenant.Id, 1, userId, owing, refused, other, voided);
         global.Stamp(Guid.NewGuid().ToString().ToUpperInvariant(), "sw", Stamped, "cfdi/g1.xml");
-        // Another business: its global invoice still stamping, and one cancelled (its sale is free again).
+        // Another business: its global invoice still stamping, one cancelled (its sale is free again), and a stamped one
+        // whose sale owes a credit note.
         var otherTenant = NewTenant();
         var waiting = PaidOrder(otherTenant.Id, "ORD-000001");
         var released = PaidOrder(otherTenant.Id, "ORD-000002");
+        var theirs = PaidOrder(otherTenant.Id, "ORD-000003");
         var stamping = Global(otherTenant.Id, 1, userId, waiting);
         var cancelled = Global(otherTenant.Id, 2, userId, released);
         cancelled.Stamp(Guid.NewGuid().ToString().ToUpperInvariant(), "sw", Stamped, "cfdi/g2.xml");
         cancelled.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, userId, Stamped.AddHours(1));
         cancelled.Cancel(Stamped.AddHours(1));
+        var theirGlobal = Global(otherTenant.Id, 3, userId, theirs);
+        theirGlobal.Stamp(Guid.NewGuid().ToString().ToUpperInvariant(), "sw", Stamped, "cfdi/g3.xml");
 
         var at = Stamped.AddHours(2);
         var owingRefund = owing.RegisterRefund(20m, OrderPaymentMethod.Card, "Devolución", at, "cajero", null, null, false, []);
@@ -53,7 +57,8 @@ public class GlobalInvoiceCreditNotesSqlServerTests
         var voidedRefund = voided.RegisterRefund(100m, OrderPaymentMethod.Cash, "Anulada", at.AddMinutes(3), "cajero", null, null, false, []);
         waiting.RegisterRefund(20m, OrderPaymentMethod.Card, "Devolución", at, "cajero", null, null, false, []);
         released.RegisterRefund(20m, OrderPaymentMethod.Card, "Devolución", at, "cajero", null, null, false, []);
-        // A refused credit note of it: issued again only by a person.
+        var theirRefund = theirs.RegisterRefund(20m, OrderPaymentMethod.Card, "Devolución", at.AddMinutes(4), "cajero", null, null, false, []);
+        // The credit note of `refused` was refused: it is issued again only by a person.
         var refusedNote = CreditNote.ForRefundInGlobalInvoice(
             global, global.Orders.Single(o => o.OrderId == refused.Id), refusedRefund, "NC", 1, 17.24m, 2.76m, "{}", null, at.AddMinutes(5));
         refusedNote.Refuse("CFDI40108", at.AddMinutes(6));
@@ -63,7 +68,7 @@ public class GlobalInvoiceCreditNotesSqlServerTests
             context.AddRange(
                 tenant, new TenantSettings(tenant.Id, TenantCapability.Retail),
                 otherTenant, new TenantSettings(otherTenant.Id, TenantCapability.Retail),
-                owing, refused, other, voided, waiting, released, global, stamping, cancelled, refusedNote);
+                owing, refused, other, voided, waiting, released, theirs, global, stamping, cancelled, theirGlobal, refusedNote);
             // «Anular venta» leaves it cancelled once everything was given back.
             context.Entry(voided).Property(o => o.Status).CurrentValue = OrderStatus.Cancelled;
             await context.SaveChangesAsync();
@@ -82,9 +87,9 @@ public class GlobalInvoiceCreditNotesSqlServerTests
                 .OrderBy(r => r.RefundedAt)
                 .Select(r => r.Id)
                 .ToListAsync();
-            Assert.Equal([owingRefund.Id, voidedRefund.Id], everyone);
+            Assert.Equal([owingRefund.Id, voidedRefund.Id, theirRefund.Id], everyone);
 
-            // As a business's pass reads it.
+            // As a business's pass reads it: never the other business's.
             var own = await CreditNotes.PendingRefunds(
                     context.OrderRefunds, context.Orders, context.OrderInvoices, context.GlobalInvoiceOrders, context.GlobalInvoices,
                     context.CreditNotes)
