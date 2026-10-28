@@ -904,6 +904,14 @@ La Fase 28G trae una migración, [`database/production/20261026145713_AddInvoice
 - **Volver a la versión anterior:** funciona sin tocar la base, pero la 28F no sabe de sustituciones: en un pedido cuya sustituida sigue vigente ve dos facturas vigentes, su worker no pide la cancelación con 01, y podría relacionar una nota o un complemento con la sustituida o dejar cancelar la nueva antes. Antes de volver, cancela con 02 las sustituidas que sigan vigentes (la consulta 3 del `verify.sql` las cuenta); conviene no sustituir mientras se prueba el despliegue.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50043, sin cambiar nada, en cuanto alguna factura está sustituida (quitar la columna perdería la relación y dejaría pedidos con dos facturas vigentes que el índice anterior rechaza). Sin ninguna, regresa el índice y la restricción de antes y quita la columna, su índice y `CK_OrderInvoices_Replacement`; ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## La página para negocios en `/`
+
+Sin migración ni configuración nueva.
+
+- **Desde el despliegue, un visitante sin sesión ve en `/` la página para negocios** (antes iba a Explorar). Un cliente con sesión sigue empezando en Explorar, el equipo de un negocio en su trabajo, y una dirección que no existe sigue llevando a Explorar (`/explorar`).
+- **Buscadores:** `/` lleva el título, la descripción y la canónica de la página, y `sitemap.xml` lista `/` en lugar de `/negocios`, que sigue abriendo la página pero con `noindex` y la vista previa en `/`. Conviene volver a enviar el sitemap en Search Console.
+- **Volver a la versión anterior:** no necesita la base; `/` vuelve a llevar a Explorar.
+
 ## Los CFDI emitidos del mes (Fase 28H)
 
 La Fase 28H trae una migración, [`database/production/20261026201123_AddIssuedCfdiDateIndexes`](../../database/production/20261026201123_AddIssuedCfdiDateIndexes). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración reciente (por ejemplo la de la 28G), también la aplica; no sirve para crear una base vacía ([ADR 0052](../adr/0052-issued-cfdi-report.md)).
@@ -911,7 +919,7 @@ La Fase 28H trae una migración, [`database/production/20261026201123_AddIssuedC
 - **La migración:** agrega un índice `(TenantId, IssuedAt)` a cada tabla de CFDI: `IX_OrderInvoices_TenantId_IssuedAt`, `IX_GlobalInvoices_TenantId_IssuedAt`, `IX_PaymentComplements_TenantId_IssuedAt` e `IX_CreditNotes_TenantId_IssuedAt`. Con ellos, un mes de Reportes › CFDI emitidos se lee sin recorrer todos los CFDI del negocio.
 
   No cambia columnas, restricciones ni datos. Crear cada índice bloquea la escritura en su tabla mientras se construye; con los CFDI de hoy toma segundos. Después de aplicarla, el `verify.sql` muestra los cuatro índices con sus columnas y cuenta los CFDI de cada tabla; nunca muestra datos fiscales.
-- **Mientras se publica:** la versión de `master` (Fase 28G) no usa los índices y sigue igual. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Mientras se publica:** la versión de `master` (la 28G, con la página para negocios en `/`) no usa los índices y sigue igual. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
 - **El contrato solo agrega:** `GET /api/v1/invoicing/issued-cfdis` (la lista del mes), `GET /api/v1/invoicing/issued-cfdis/summary` (el resumen) y `GET /api/v1/invoicing/issued-cfdis/export` (el ZIP o el CSV), con `IssuedCfdiDto`, `IssuedCfdiSummaryDto`, `IssuedCfdiKindSummaryDto` y los enums `IssuedCfdiKind` e `IssuedCfdiExportFormat`. Nada se quita ni cambia de nombre.
 - **Sin configuración nueva:** lee los XML de los archivos privados, donde los dejó el timbrado. El ZIP se arma en memoria, hasta 5,000 CFDI por mes.
 - **Volver a la versión anterior:** funciona sin tocar la base; solo desaparece Reportes › CFDI emitidos, y los índices se quedan sin estorbar.

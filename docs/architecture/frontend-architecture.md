@@ -59,7 +59,7 @@ Shell y diseño (Fase 1):
   - Una búsqueda local (`searchFilter`) vuelve a la primera página.
   - En el teléfono la tabla se desliza de lado y sus encabezados no se parten, para que las filas no crezcan.
 - Vender (`/sell`) concentra la venta: catálogo táctil con categorías, favoritos y lector de código, ticket con notas por artículo guardado por negocio en `localStorage` (`tienditapp.sell.draft.v1.{tenantId}`), cobro con cambio y pago mixto (`ChargePanel`) y ticket imprimible o por WhatsApp (`SaleTicket`, `utils/ticket.ts`). Cada cobro (y cada "Guardar sin cobrar") lleva una llave de idempotencia que se guarda en el borrador antes de enviarlo (`pendingCharge`: la llave y, con `describeSale`, las líneas y el cliente para los que se mandó). Un reintento, también después de recargar la página a mitad del cobro, manda la misma llave y el servidor responde con la venta que ya tenía. La llave se suelta cuando la venta queda registrada o cuando el carrito cambia, porque eso ya es otra venta. Sin red (Fase 3), `src/offline/` guarda en IndexedDB el último catálogo del negocio y las ventas cobradas pendientes de enviar (por negocio y cajero); `PendingSalesSync` (montado en el layout) las envía al volver la conexión con su clave de idempotencia y `PendingSalesModal` muestra las pendientes y las no aceptadas. Ver [ventas sin conexión](../domain/order-lifecycles.md#ventas-sin-conexión-fase-3).
-- El arranque guiado (`/setup`) pide módulos, política de IVA y catálogo de ejemplo, y deja una lista de primeros pasos que Inicio sigue mostrando.
+- El arranque guiado (`/setup`) pide módulos, política de IVA y catálogo de ejemplo, y deja una lista de primeros pasos que Inicio sigue mostrando. El catálogo hecho para el giro del negocio (`isRecommended`) va primero con «Para tu giro», aunque sea de otro tipo.
 
 Datos del servidor y cliente generado (Fase 2):
 
@@ -385,11 +385,11 @@ Servicios a domicilio (Fase 22E, [ADR 0020](../adr/0020-home-visits.md)):
 Explorar (Fase 24A, [ADR 0021](../adr/0021-business-directory.md)):
 
 - **Rutas:** `/explorar` y `/explorar/:categoria` (`pages/explore/ExplorePage`) y `/mis-pedidos`, dentro de `CustomerLayout`. Las tres bajan aparte.
-  - `HomeRedirect` lleva a Explorar a visitantes y clientes (`getAccess(...).myOrders`), y el comodín `*` también. `getLandingPath` da `/explorar` a un cliente.
+  - `HomeRedirect` lleva a Explorar a los clientes (`getAccess(...).myOrders`) y, por el comodín `*`, a los visitantes. En `/` un visitante ve la página para negocios (`visitor`). `getLandingPath` da `/explorar` a un cliente.
   - Una categoría que no existe va a `/explorar`.
 - **`CustomerLayout`:** el marco de TienditApp para los clientes. Mis pedidos va dentro de `.cl-page`, con el ancho y los márgenes de Explorar, y «Salir» deja al cliente en Explorar. Lleva la marca, «Explorar», «Mis pedidos» (cliente), «Mi negocio» (equipo), «Entrar» y «Crear cuenta» (`/register?cuenta=cliente`), el perfil, «Salir» y el tema claro u oscuro (desde una tableta: en el teléfono, la marca y la cuenta caben en un renglón).
   - Pinta los colores de TienditApp (`previewBusinessTheme(Nopal)`, antes del primer pintado) y no los del último negocio del dispositivo.
-  - El pie invita a los negocios (`/register?cuenta=negocio`). `Register` abre en la cuenta pedida.
+  - El pie invita a los negocios a su página (`/negocios`), que lleva al registro (`/register?cuenta=negocio`). `Register` abre en la cuenta pedida.
 - **`ExplorePage`:**
   - La búsqueda escribe `?q=` 300 ms después de la última tecla y se lee otra vez al ir atrás o adelante. Las categorías con negocios salen como enlaces con su número (`aria-current` en la actual).
   - Las tarjetas (`components/explore/DirectoryBusinessCard`) llevan el logo o la inicial en los colores del tema de cada negocio (`--dc-tint`, claro y oscuro), nombre, descripción, categoría y ciudad o «Solo a domicilio», y lo que responde su menú (`orderStatus`, con `closed` del servidor: «Pide en línea», en pausa, cerrado y cuándo abre, solo menú). La tarjeta entera abre `/m/{slug}`.
@@ -764,6 +764,19 @@ Inventario › Historial por insumo › «Revisar que cuadre» (Fase 27C, [ADR 0
   - `LedgerGapModal`: «Por qué no cuadra», cada lugar del historial en palabras (`ledgerGaps.ts`, con pruebas) con lo que suma a la diferencia, y avisa cuando se revisaron solo los movimientos más recientes. Su «Cuadrar» manda la diferencia que acaba de leer.
   - `InventoryManagement`: «Revisar que cuadre» va junto a «Actualizar» en la pestaña. Al cuadrar dice qué se anotó y vuelve a leer el historial y las entradas y salidas.
 - **Lo que decide la API:** qué no cuadra, por cuánto y dónde; el cliente solo lo muestra y manda lo que se revisó. El motivo «Cuadre del historial» no se ofrece en los movimientos manuales (`MANUAL_MOVEMENT_REASON_OPTIONS`).
+
+La página para negocios (la landing de TienditApp, en `/` para un visitante y en `/negocios`):
+
+- **Ruta:** `pages/landing/BusinessLandingPage`, pública y fuera de `CustomerLayout`, con su propio encabezado (secciones, tema, «Entrar» y «Empieza gratis»; con sesión, «Abrir TienditApp»). Baja aparte con su CSS (`BusinessLandingPage.css`, clases `lp-*`, solo tokens de `theme.css`, claro y oscuro).
+  - En `/`, `HomeRedirect visitor` la muestra a quien no tiene sesión, también mientras se revisa la sesión (sin esperar un spinner); una sesión que aparece sigue a donde iba: el cliente a Explorar y el equipo a su trabajo. Mientras la muestra no le cambia el título. El comodín `*` sigue llevando a Explorar a un visitante (ADR 0021, con el cambio del 27 de octubre de 2026).
+  - `/negocios` la muestra a cualquiera, con sesión o sin ella: es a donde lleva el pie de Explorar.
+- **Contenido:** `landingContent.ts` reúne los textos. Solo dice lo que la app hace en `master`: nada de lealtad, inteligencia artificial en el chat ni integración por API con Rappi, Uber Eats o DiDi Food (sus pedidos se registran a mano y la pregunta frecuente lo aclara). No hay precios: los planes no son públicos (no hay endpoint ni planes sembrados).
+- **Llamadas a la acción:** todas abren `/register?cuenta=negocio` (`SIGN_UP_PATH`).
+- **Pantallas de ejemplo:** Vender, el menú en el teléfono, el tablero de cada giro y las tarjetas de Explorar se dibujan con HTML y los colores del tema, no son capturas: cambian con el modo oscuro y no pesan imágenes. Son `role="img"` con su descripción.
+- **Giros:** Comida, Comercio y Servicios son pestañas (`role="tablist"`): flechas, Inicio y Fin cambian de pestaña y mueven el foco.
+- **Buscadores:** el servidor escribe su título, descripción y la canónica `/` (`PublicPages.StaticHeadFor`) y lista `/` en `sitemap.xml`; `/negocios` lleva lo mismo con `noindex` y la vista previa en `/`. La app pone el mismo título en la pestaña (`LANDING_TITLE`). Pinta los colores de TienditApp (`previewBusinessTheme(Nopal)`), como Explorar.
+- **Primera visita:** suma 91 B (de 180,031 a 180,122 B, contra `master` en `1e52cf7`, igual en CI): la entrada de la ruta nueva en el mapa de módulos, cuyo tamaño comprimido cambia unos bytes con las huellas de los nombres de los archivos. Pasaba el presupuesto (180,100 B): sube a 180,200 B. El CSS global no cambia.
+  - En `/` suma 54 B más (de 180,122 a 180,176 B): la ruta y lo que `HomeRedirect` muestra a un visitante. Quedaban 24 B de margen, menos de lo que varía el tamaño comprimido con las huellas de los nombres: el presupuesto sube a 180,300 B.
 
 ## Guardrails
 

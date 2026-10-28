@@ -46,7 +46,7 @@ describe('CustomerLayout', () => {
     expect(screen.getByRole('link', { name: 'Crear cuenta' })).toHaveAttribute('href', '/register?cuenta=cliente');
     expect(screen.getByRole('link', { name: 'Explorar' })).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('link', { name: /Mis pedidos/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Recibe pedidos en línea con TienditApp' })).toHaveAttribute('href', '/register?cuenta=negocio');
+    expect(screen.getByRole('link', { name: 'Conoce TienditApp para negocios' })).toHaveAttribute('href', '/negocios');
   });
 
   it('gives a customer its orders, its profile and a way out', async () => {

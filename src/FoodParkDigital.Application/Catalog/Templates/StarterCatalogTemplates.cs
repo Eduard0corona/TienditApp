@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 
@@ -11,7 +12,12 @@ public sealed class StarterCatalogDefinition
     public BusinessType BusinessType { get; init; }
     public IReadOnlyList<StarterCategoryDefinition> Categories { get; init; } = [];
 
+    /// <summary>The giros of the sign-up list it is made for; the guided setup recommends it to them.</summary>
+    public IReadOnlyList<string> Industries { get; init; } = [];
+
     public int ProductCount => Categories.Sum(category => category.Products.Count);
+
+    public bool IsMadeFor(string? industry) => Industries.Any(giro => BusinessIndustries.IsGiro(industry, giro));
 }
 
 public sealed class StarterCategoryDefinition
@@ -22,6 +28,8 @@ public sealed class StarterCategoryDefinition
 }
 
 /// <param name="TaxRate">IVA in percent; null uses the business default (16 % unless changed).</param>
+/// <param name="PreparationTimeMinutes">For a service, how long it takes: the length of its appointments.</param>
+/// <param name="IsTaxExempt">Exempt from IVA ("exento", not 0 %), so it takes no rate.</param>
 public sealed record StarterProductDefinition(
     string Name,
     decimal Price,
@@ -29,12 +37,14 @@ public sealed record StarterProductDefinition(
     decimal? TaxRate = null,
     bool IsTrackable = false,
     bool IsFeatured = false,
-    int? PreparationTimeMinutes = null);
+    int? PreparationTimeMinutes = null,
+    bool IsTaxExempt = false);
 
 /// <summary>
 /// Sample catalogs offered by the guided setup so a new business reaches its first sale in minutes.
 /// Prices are examples in pesos that the owner edits; the IVA rate follows the usual Mexican rule for
-/// each product (prepared food and services 16 %, basic groceries 0 %).
+/// each product (prepared food and services 16 %, basic groceries 0 %, and exempt the medical services of a
+/// doctor or dentist who is a person or a sociedad civil: LIVA art. 15-XIV and its Reglamento, art. 41).
 /// </summary>
 public static class StarterCatalogTemplates
 {
@@ -154,6 +164,7 @@ public static class StarterCatalogTemplates
             Name = "Comida a domicilio",
             Description = "Paquetes, platos fuertes, guarniciones, bebidas y postres para entregar.",
             BusinessType = BusinessType.Food,
+            Industries = [BusinessIndustries.HomeDelivery],
             Categories =
             [
                 new StarterCategoryDefinition
@@ -214,6 +225,7 @@ public static class StarterCatalogTemplates
             Name = "Abarrotes",
             Description = "Básicos con IVA 0 %, bebidas, botanas y limpieza.",
             BusinessType = BusinessType.Retail,
+            Industries = ["Abarrotes"],
             Categories =
             [
                 new StarterCategoryDefinition
@@ -260,6 +272,7 @@ public static class StarterCatalogTemplates
             Name = "Papelería",
             Description = "Útiles escolares, copias e impresiones.",
             BusinessType = BusinessType.Retail,
+            Industries = ["Papelería"],
             Categories =
             [
                 new StarterCategoryDefinition
@@ -293,6 +306,7 @@ public static class StarterCatalogTemplates
             Name = "Lavandería",
             Description = "Lavado, planchado y tintorería con seguimiento de prendas.",
             BusinessType = BusinessType.Service,
+            Industries = ["Lavandería"],
             Categories =
             [
                 new StarterCategoryDefinition
@@ -338,6 +352,295 @@ public static class StarterCatalogTemplates
                     ]
                 }
             ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "consultorio-medico",
+            Name = "Consultorio médico",
+            Description = "Consultas y procedimientos exentos de IVA, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = ["Consultorio"],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Consultas",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        MedicalService("Consulta general", 500m, 30, isFeatured: true),
+                        MedicalService("Consulta de seguimiento", 350m, 20),
+                        MedicalService("Certificado médico", 300m, 20)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Procedimientos",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        MedicalService("Curación", 250m, 20),
+                        MedicalService("Aplicación de inyección", 80m, 10),
+                        MedicalService("Retiro de puntos", 300m, 20),
+                        MedicalService("Toma de glucosa", 80m, 10)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "consultorio-dental",
+            Name = "Consultorio dental",
+            Description = "Consultas, limpiezas y tratamientos exentos de IVA, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = ["Consultorio dental"],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Consultas y limpieza",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        MedicalService("Consulta y diagnóstico", 400m, 30, isFeatured: true),
+                        MedicalService("Limpieza dental", 700m, 45, isFeatured: true),
+                        MedicalService("Aplicación de flúor", 350m, 20)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Tratamientos",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        MedicalService("Resina", 900m, 45),
+                        MedicalService("Extracción simple", 800m, 40),
+                        MedicalService("Endodoncia", 4500m, 90)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Estética dental",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        MedicalService("Blanqueamiento", 3500m, 60)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "carpinteria",
+            Name = "Carpintería",
+            Description = "Muebles a medida, reparaciones e instalaciones, con seguimiento de cada trabajo del taller.",
+            BusinessType = BusinessType.Service,
+            Industries = ["Carpintería"],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Muebles a medida",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Mueble a medida", 4500m, UnitType.Service, IsTrackable: true, IsFeatured: true),
+                        new("Clóset a medida", 9500m, UnitType.Service, IsTrackable: true),
+                        new("Puerta de madera a medida", 5500m, UnitType.Service, IsTrackable: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Reparación y restauración",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Reparación de silla", 350m, UnitType.Service, IsTrackable: true),
+                        new("Restauración de mueble", 1800m, UnitType.Service, IsTrackable: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "A domicilio",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Visita para medir y cotizar", 250m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Instalación de puerta", 900m, UnitType.Service, PreparationTimeMinutes: 120),
+                        new("Mano de obra por hora", 250m, UnitType.Hour, PreparationTimeMinutes: 60)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "herreria-soldadura",
+            Name = "Herrería y soldadura",
+            Description = "Soldadura, protecciones, barandales y portones, con seguimiento de cada trabajo del taller.",
+            BusinessType = BusinessType.Service,
+            Industries = ["Herrería y soldadura"],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Soldadura",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Soldadura de pieza", 250m, UnitType.Service, IsTrackable: true, IsFeatured: true),
+                        new("Reparación de silla o mesa metálica", 400m, UnitType.Service, IsTrackable: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Fabricación",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Protección para ventana", 1800m, UnitType.Service, IsTrackable: true),
+                        new("Barandal a medida", 3500m, UnitType.Service, IsTrackable: true),
+                        new("Portón a medida", 12000m, UnitType.Service, IsTrackable: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "A domicilio",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Visita para medir y cotizar", 250m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Reparación de reja o portón", 800m, UnitType.Service, PreparationTimeMinutes: 120),
+                        new("Mano de obra por hora", 300m, UnitType.Hour, PreparationTimeMinutes: 60)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "electricista",
+            Name = "Electricista",
+            Description = "Visitas, instalaciones y reparaciones eléctricas, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = ["Electricista"],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Visitas",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Visita y diagnóstico", 350m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Instalaciones",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Instalación de contacto o apagador", 250m, UnitType.Service, PreparationTimeMinutes: 30),
+                        new("Instalación de lámpara", 300m, UnitType.Service, PreparationTimeMinutes: 45),
+                        new("Instalación de ventilador de techo", 600m, UnitType.Service, PreparationTimeMinutes: 90),
+                        new("Instalación de centro de carga", 1800m, UnitType.Service, PreparationTimeMinutes: 180)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Reparaciones",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Reparación de cortocircuito", 650m, UnitType.Service, PreparationTimeMinutes: 90),
+                        new("Mano de obra por hora", 300m, UnitType.Hour, PreparationTimeMinutes: 60)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "plomeria",
+            Name = "Plomería",
+            Description = "Visitas, fugas, destapes e instalaciones, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = ["Plomería"],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Visitas",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Visita y diagnóstico", 350m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Reparaciones",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Reparación de fuga", 500m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60),
+                        new("Destape de drenaje", 700m, UnitType.Service, PreparationTimeMinutes: 90),
+                        new("Cambio de llave o mezcladora", 400m, UnitType.Service, PreparationTimeMinutes: 45),
+                        new("Mano de obra por hora", 300m, UnitType.Hour, PreparationTimeMinutes: 60)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Instalaciones",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Instalación de inodoro", 800m, UnitType.Service, PreparationTimeMinutes: 120),
+                        new("Instalación de calentador", 1200m, UnitType.Service, PreparationTimeMinutes: 150),
+                        new("Instalación de tinaco", 1500m, UnitType.Service, PreparationTimeMinutes: 180)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "aire-acondicionado",
+            Name = "Aire acondicionado",
+            Description = "Mantenimiento, instalación y reparación de minisplits, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = ["Aire acondicionado"],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Mantenimiento",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Mantenimiento preventivo de minisplit", 800m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 90),
+                        new("Limpieza profunda de minisplit", 1200m, UnitType.Service, PreparationTimeMinutes: 120)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Instalación",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Instalación de minisplit de 1 tonelada", 2800m, UnitType.Service, PreparationTimeMinutes: 240),
+                        new("Instalación de minisplit de 2 toneladas", 3500m, UnitType.Service, PreparationTimeMinutes: 300)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Reparación",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Visita y diagnóstico", 400m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Carga de gas refrigerante", 1200m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Reparación de fuga de gas", 1500m, UnitType.Service, PreparationTimeMinutes: 120)
+                    ]
+                }
+            ]
         }
     ];
 
@@ -345,4 +648,8 @@ public static class StarterCatalogTemplates
 
     public static StarterCatalogDefinition? GetById(string templateId)
         => Templates.FirstOrDefault(x => x.Id.Equals(templateId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>A service of a doctor or dentist: exempt from IVA, and as long as its appointment.</summary>
+    private static StarterProductDefinition MedicalService(string name, decimal price, int minutes, bool isFeatured = false)
+        => new(name, price, UnitType.Service, IsFeatured: isFeatured, PreparationTimeMinutes: minutes, IsTaxExempt: true);
 }

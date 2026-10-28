@@ -42,6 +42,15 @@ public static class PublicPages
     private const string ExploreDescription =
         "Compra en los negocios de tu ciudad: mira su menú, pide en línea o agenda tu cita.";
 
+    /// <summary>
+    /// The page that presents TienditApp to businesses also has its own address: the app shows it there to whoever has a
+    /// session too (at / a session goes to its own start). The app titles its tab the same way (BusinessLandingPage).
+    /// </summary>
+    public const string BusinessesPath = "/negocios";
+    private const string BusinessesTitle = "TienditApp para negocios: punto de venta, menú en línea y facturación";
+    private const string BusinessesDescription =
+        "Vende en mostrador y en línea, controla inventario y caja, recibe pedidos a domicilio y factura CFDI desde un solo lugar. Crea la cuenta de tu negocio gratis.";
+
     private static readonly Regex TitleTag = new("<title>.*?</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
     private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-MX");
 
@@ -77,13 +86,18 @@ public static class PublicPages
     }
 
     /// <summary>
-    /// The head of a page of the app that needs nothing from the database: Explorar and its categories (and / for
-    /// visitors, which opens Explorar). Null for every other page: it stays out of search engines.
+    /// The head of a page of the app that needs nothing from the database: the page for businesses (/ for visitors, which
+    /// shows it) and Explorar and its categories. Null for every other page: it stays out of search engines.
     /// </summary>
     public static PageHead? StaticHeadFor(PathString path)
     {
         var value = (path.Value ?? "/").TrimEnd('/');
-        if (value.Length == 0 || value.Equals("/explorar", StringComparison.OrdinalIgnoreCase))
+        if (value.Length == 0)
+            return new PageHead(BusinessesTitle, BusinessesDescription, "/", null, false, true, null);
+        // The same page at its own address: search engines list / only, and a shared link previews as /.
+        if (value.Equals(BusinessesPath, StringComparison.OrdinalIgnoreCase))
+            return new PageHead(BusinessesTitle, BusinessesDescription, "/", null, false, false, null);
+        if (value.Equals("/explorar", StringComparison.OrdinalIgnoreCase))
             return new PageHead($"Explorar · {SiteName}", ExploreDescription, "/explorar", null, false, true, null);
 
         const string prefix = "/explorar/";
@@ -271,7 +285,7 @@ public static class PublicPages
         }
 
         var baseUrl = BaseUrl(context);
-        var paths = new List<string> { "/explorar" };
+        var paths = new List<string> { "/", "/explorar" };
         paths.AddRange(sitemap.Categories.Select(ExploreCategories.Of).Where(category => category is not null).Select(category => $"/explorar/{category!.Slug}"));
         foreach (var store in sitemap.Stores)
         {

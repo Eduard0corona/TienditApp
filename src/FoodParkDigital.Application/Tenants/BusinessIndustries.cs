@@ -13,7 +13,10 @@ public static class BusinessIndustries
     public const string HomeDelivery = "Comida a domicilio";
 
     /// <summary>A business of this giro starts with a main branch that only delivers, so its address is never published.</summary>
-    public static bool OnlyDelivers(string? industry) => Comparable(industry) == Comparable(HomeDelivery);
+    public static bool OnlyDelivers(string? industry) => IsGiro(industry, HomeDelivery);
+
+    /// <summary>Whether the giro of a business is this one of the list, written with other accents, capitals or spaces around.</summary>
+    public static bool IsGiro(string? industry, string giro) => Comparable(industry) == Comparable(giro);
 
     private static string Comparable(string? value)
     {

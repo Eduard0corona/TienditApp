@@ -85,7 +85,7 @@ export default function CustomerLayout() {
       </main>
       <footer className="cl-footer">
         <span>¿Tienes un negocio?</span>{' '}
-        <Link to="/register?cuenta=negocio">Recibe pedidos en línea con TienditApp</Link>
+        <Link to="/negocios">Conoce TienditApp para negocios</Link>
       </footer>
     </div>
   );

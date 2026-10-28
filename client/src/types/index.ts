@@ -236,6 +236,8 @@ export interface StarterCatalogDto {
   businessType: BusinessType;
   productCount: number;
   categories: string[];
+  /** Made for the giro of the business: shown first. */
+  isRecommended: boolean;
 }
 
 export interface TenantSetupDto {

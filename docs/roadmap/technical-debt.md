@@ -79,6 +79,11 @@ Actualizada el 2026-10-26 con la Fase 28H y antes el 2026-10-20 con la Fase 26B 
   - En la agenda, una solicitud que nadie decidió sigue «Por confirmar» después de su hora (la cuenta del cliente ya dice «No se confirmó»), y Aceptar responde que ya terminó.
   - Mis citas trae solo las citas agendadas en línea con la cuenta: no las que el negocio registró con el teléfono del cliente.
   - La 24D-1 suma 286 B a la primera visita (de 177,674 a 177,960 B, contra `master` en `d21f0f2`) y sube el presupuesto a 178,200 B.
+- Oficios a domicilio (plomería, electricidad, aire acondicionado y parecidos; propuesta en la [ADR 0053](../adr/0053-home-visit-quotes.md), sin implementar):
+  - Un giro de oficio empieza con la sucursal principal con local: `BusinessIndustries.OnlyDelivers` solo cubre «Comida a domicilio». Su tienda publica la dirección, a menudo la casa del dueño, y una cita en línea sería en ella.
+  - Sus plantillas son de servicios, que el menú no muestra: no aparece en Explorar, o aparece por algún producto con «Pide en línea» solo mientras tiene una caja abierta.
+  - Las citas en línea no son a domicilio (`OnlineBookingBlocker.NoPremises`), aunque el negocio haga visitas.
+  - No hay cotización: lo que el negocio propone después de la visita no se guarda, ni si el cliente lo aceptó.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.
@@ -719,3 +724,4 @@ Pendientes detectados en la Fase 3:
 - Cantidades fraccionarias y control de stock por producto.
 - Capabilities ligadas al plan contratado.
 - Evidencia de servicios: si el cliente recibe las fotos (WhatsApp, ticket o seguimiento) y si se guardan con un plazo; la Fase 25 decidió fotos por orden, solo para el negocio, mientras exista la orden ([ADR 0024](../adr/0024-service-photos.md)).
+- Oficios a domicilio: confirmar las decisiones por omisión de la [ADR 0053](../adr/0053-home-visit-quotes.md) (el interruptor prendido por giro, qué giros empiezan «Solo a domicilio», 15 días de vigencia de la cotización) y cuándo el cliente acepta la cotización en línea.

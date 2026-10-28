@@ -25,6 +25,7 @@ const SelfInvoicePage = lazy(() => import('./pages/public/SelfInvoicePage'));
 const AccountPage = lazy(() => import('./pages/account/AccountPage'));
 const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
 const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
+const BusinessLandingPage = lazy(() => import('./pages/landing/BusinessLandingPage'));
 const ProductsList = lazy(() => import('./pages/products/ProductsList'));
 const ProductForm = lazy(() => import('./pages/products/ProductForm'));
 const CategoriesList = lazy(() => import('./pages/categories/CategoriesList'));
@@ -97,6 +98,10 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             {/* The link of an invitation to a team (from the email or shared by WhatsApp). */}
             <Route path="/aceptar-invitacion" element={<AcceptInvitation />} />
+            {/* TienditApp presented to whoever has a business: what it does and how to join. A visitor sees it at /;
+                its own address shows it to whoever has a session too. */}
+            <Route path="/" element={<HomeRedirect visitor={<BusinessLandingPage />} />} />
+            <Route path="/negocios" element={<BusinessLandingPage />} />
             {/* The public menu of a business, opened from its link or QR (no sign-in). */}
             <Route path="/m/:slug" element={<PublicMenuPage />} />
             {/* Its booking page (Fase 24D): a service, a day and a free time, without signing in. */}
