@@ -30,7 +30,10 @@ public enum CreditNoteAdjustment
 public class CreditNoteDto
 {
     public Guid Id { get; set; }
-    public Guid OrderInvoiceId { get; set; }
+    /// <summary>The order's invoice it credits; none for a sale of a global invoice.</summary>
+    public Guid? OrderInvoiceId { get; set; }
+    /// <summary>The global invoice it credits, for a sale it covers (Fase 28I); none for an order's invoice.</summary>
+    public Guid? GlobalInvoiceId { get; set; }
     /// <summary>Serie and folio, «NC-3».</summary>
     public string Number { get; set; } = null!;
     public OrderInvoiceStatus Status { get; set; }
@@ -59,6 +62,7 @@ public class CreditNoteDto
     {
         Id = note.Id,
         OrderInvoiceId = note.OrderInvoiceId,
+        GlobalInvoiceId = note.GlobalInvoiceId,
         Number = note.Number,
         Status = note.Status,
         PaymentForm = note.PaymentForm,

@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace FoodParkDigital.Infrastructure.Persistence.Configurations;
 
 /// <summary>
-/// The credit notes (CFDI de egreso) of the refunds and write-offs of the orders with an invoice (Fase 28D, ADR 0048), with
+/// The credit notes (CFDI de egreso) of the refunds and write-offs of the orders with an invoice (Fase 28D, ADR 0048), and of
+/// the refunds of the sales a global invoice covers (Fase 28I, ADR 0054), with
 /// the same states, stamp and cancellation as the invoices: an adjustment has at most one live credit note, a folio is never
 /// used twice in a business and each request to the PAC has its own key. The rest of what the domain guarantees is repeated
 /// here, so a row the domain never writes is refused.
@@ -49,11 +50,17 @@ public class CreditNoteConfiguration : IEntityTypeConfiguration<CreditNote>
                 + " OR ([Status] = 4 AND [CancelledAt] IS NOT NULL)))");
             table.HasCheckConstraint(
                 "CK_CreditNotes_CancellationMotive", "[CancellationMotive] IS NULL OR [CancellationMotive] IN (2, 3)");
+            // It credits an order's invoice or a global invoice (Fase 28I), never both: a global invoice's, only a refund of
+            // one of its sales, paid in one exhibition.
+            table.HasCheckConstraint(
+                "CK_CreditNotes_Invoice",
+                "([OrderInvoiceId] IS NOT NULL AND [GlobalInvoiceId] IS NULL)"
+                + " OR ([OrderInvoiceId] IS NULL AND [GlobalInvoiceId] IS NOT NULL AND [OrderRefundId] IS NOT NULL"
+                + " AND [AfterInstallment] = 0)");
         });
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.TenantId).IsRequired();
-        builder.Property(x => x.OrderInvoiceId).IsRequired();
         builder.Property(x => x.OrderId).IsRequired();
         builder.Property(x => x.Serie).HasMaxLength(Cfdi.MaxSerieLength).IsUnicode(false).IsRequired();
         builder.Property(x => x.Status).HasConversion<int>();
@@ -72,6 +79,7 @@ public class CreditNoteConfiguration : IEntityTypeConfiguration<CreditNote>
         builder.Ignore(x => x.IsLive);
         builder.Ignore(x => x.Number);
         builder.Ignore(x => x.IsForRefund);
+        builder.Ignore(x => x.IsForGlobalInvoice);
 
         builder.HasOne<Tenant>()
             .WithMany()
@@ -80,6 +88,10 @@ public class CreditNoteConfiguration : IEntityTypeConfiguration<CreditNote>
         builder.HasOne<OrderInvoice>()
             .WithMany()
             .HasForeignKey(x => x.OrderInvoiceId)
+            .OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<GlobalInvoice>()
+            .WithMany()
+            .HasForeignKey(x => x.GlobalInvoiceId)
             .OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<Order>()
             .WithMany()
@@ -104,9 +116,10 @@ public class CreditNoteConfiguration : IEntityTypeConfiguration<CreditNote>
         builder.HasIndex(x => new { x.TenantId, x.Serie, x.Folio }).IsUnique();
         builder.HasIndex(x => x.IdempotencyKey).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.Uuid }).IsUnique().HasFilter("[Uuid] IS NOT NULL");
-        // An order's credit notes, an invoice's, and the ones the worker follows.
+        // An order's credit notes, an invoice's, a global invoice's, and the ones the worker follows.
         builder.HasIndex(x => x.OrderId);
         builder.HasIndex(x => x.OrderInvoiceId);
+        builder.HasIndex(x => x.GlobalInvoiceId).HasFilter("[GlobalInvoiceId] IS NOT NULL");
         builder.HasIndex(x => new { x.Status, x.RequestedAt }).HasFilter("[Status] IN (0, 3)");
         // A month of the business's CFDI, in Reportes › CFDI emitidos (Fase 28H).
         builder.HasIndex(x => new { x.TenantId, x.IssuedAt });

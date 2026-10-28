@@ -53,8 +53,12 @@ public class CfdiEmail : BaseEntity, ITenantScoped
 
     /// <summary>
     /// An email of the stamped <paramref name="cfdi"/> to <paramref name="to"/>. Only the invoice of an order and its payment
-    /// complements and credit notes go to a customer: a global invoice has nobody to go to.
+    /// complements and credit notes go to a customer: a global invoice, and the credit notes of its sales (Fase 28I), have
+    /// nobody to go to.
     /// </summary>
+    public const string GlobalCreditNoteMessage =
+        "La nota de crédito de una venta de la factura global es para el público en general: no se envía por correo.";
+
     public static CfdiEmail Request(Cfdi cfdi, string? to, Guid? requestedByUserId, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(cfdi);
@@ -62,7 +66,8 @@ public class CfdiEmail : BaseEntity, ITenantScoped
         {
             OrderInvoice invoice => (CfdiEmailDocument.Invoice, invoice.Id),
             PaymentComplement complement => (CfdiEmailDocument.PaymentComplement, complement.OrderInvoiceId),
-            CreditNote note => (CfdiEmailDocument.CreditNote, note.OrderInvoiceId),
+            CreditNote { OrderInvoiceId: { } invoiceId } => (CfdiEmailDocument.CreditNote, invoiceId),
+            CreditNote => throw new DomainException(GlobalCreditNoteMessage),
             _ => throw new DomainException("Solo la factura de un pedido, sus complementos y sus notas de crédito se envían por correo.")
         };
         if (cfdi.Status != OrderInvoiceStatus.Stamped)

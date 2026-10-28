@@ -18,6 +18,8 @@ internal static class BeforeInvoiceSubstitution
     /// <summary>For the context of an earlier version, which does not know it either.</summary>
     public static void Ignore(ModelBuilder modelBuilder)
     {
+        // Before the 28G is also before the 28I.
+        BeforeGlobalInvoiceCreditNotes.Ignore(modelBuilder);
         var invoice = modelBuilder.Entity<OrderInvoice>();
         foreach (var index in invoice.Metadata.GetIndexes()
                      .Where(i => i.Properties.Any(p => p.Name == nameof(OrderInvoice.ReplacedByInvoiceId)))

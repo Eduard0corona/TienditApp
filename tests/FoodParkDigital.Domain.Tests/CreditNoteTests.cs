@@ -10,7 +10,8 @@ namespace FoodParkDigital.Domain.Tests;
 /// <summary>
 /// The credit note (CFDI de egreso, Fase 28D, ADR 0048) of a refund or a write-off of an order whose invoice is stamped: for
 /// exactly what was refunded or forgiven, settled with the refund's form or by «Condonación» (15), with amounts that add up;
-/// stamped, refused and cancelled like any CFDI, never deleted.
+/// stamped, refused and cancelled like any CFDI, never deleted. A refund of a sale a stamped global invoice covers credits the
+/// global invoice instead (Fase 28I, ADR 0054), never more than the sale charged in it.
 /// </summary>
 public class CreditNoteTests
 {
@@ -172,6 +173,71 @@ public class CreditNoteTests
         Assert.Equal((OrderInvoiceStatus.Cancelling, CfdiCancellationMotive.NotCarriedOut), (note.Status, note.CancellationMotive));
     }
 
+    [Fact]
+    public void ForRefundInGlobalInvoice_ShouldCreditTheSaleInTheGlobalInvoice_WithTheRefundsForm()
+    {
+        var (global, sale) = StampedGlobal();
+        var refund = Refund(58m, OrderPaymentMethod.Card);
+
+        var note = CreditNote.ForRefundInGlobalInvoice(global, sale, refund, "NC", 4, 50m, 8m, Document, null, Now);
+
+        Assert.Equal((TenantId, (Guid?)null, (Guid?)global.Id, OrderId, (Guid?)refund.Id, (Guid?)null),
+            (note.TenantId, note.OrderInvoiceId, note.GlobalInvoiceId, note.OrderId, note.OrderRefundId, note.OrderWriteOffId));
+        // Paid in one exhibition: no installment before it.
+        Assert.Equal(("NC-4", "04", 50m, 8m, 58m, 0, OrderInvoiceStatus.Stamping), (note.Number, note.PaymentForm, note.SubTotal,
+            note.TaxTotal, note.Total, note.AfterInstallment, note.Status));
+        Assert.True(note.IsForGlobalInvoice);
+        Assert.True(note.IsForRefund);
+        // A refund recorded here is never undone: only errors (02) cancel it.
+        Assert.False(note.TakesCancellationMotive(CfdiCancellationMotive.NotCarriedOut));
+        Assert.False(Note().IsForGlobalInvoice);
+    }
+
+    [Fact]
+    public void ForRefundInGlobalInvoice_ShouldOnlyGoForAStampedGlobalInvoice_ThatCoversTheSale_UpToWhatTheSaleCharged()
+    {
+        var (global, sale) = StampedGlobal();
+
+        // The sale charged $116 in the global invoice.
+        var tooMuch = Assert.Throws<DomainException>(() => CreditNote.ForRefundInGlobalInvoice(
+            global, sale, Refund(116.01m), "NC", 1, 100.01m, 16m, Document, null, Now));
+        Assert.Equal("La nota de crédito es mayor que lo que la venta cobró en la factura global.", tooMuch.Message);
+        Assert.Equal(116m, CreditNote.ForRefundInGlobalInvoice(global, sale, Refund(116m), "NC", 1, 100m, 16m, Document, null, Now).Total);
+
+        var stamping = Global();
+        var notStamped = Assert.Throws<DomainException>(() => CreditNote.ForRefundInGlobalInvoice(
+            stamping, stamping.Orders.First(o => o.OrderId == OrderId), Refund(10m), "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        Assert.Equal(CreditNote.NeedsStampedGlobalInvoiceMessage, notStamped.Message);
+
+        // A sale of another global invoice, or a refund of another sale or business.
+        var (otherGlobal, otherSale) = StampedGlobal();
+        Assert.Throws<DomainException>(() => CreditNote.ForRefundInGlobalInvoice(global, otherSale, Refund(10m), "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        var otherOrder = new OrderRefund(TenantId, Guid.NewGuid(), 10m, OrderPaymentMethod.Cash, "Devolución", Now, "cajero", null, null, false);
+        Assert.Throws<DomainException>(() => CreditNote.ForRefundInGlobalInvoice(global, sale, otherOrder, "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        var otherBusiness = new OrderRefund(Guid.NewGuid(), OrderId, 10m, OrderPaymentMethod.Cash, "Devolución", Now, "cajero", null, null, false);
+        Assert.Throws<DomainException>(() => CreditNote.ForRefundInGlobalInvoice(global, sale, otherBusiness, "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        Assert.NotNull(otherGlobal);
+
+        // Nor one without a form of the SAT's, nor with amounts that do not add up.
+        var noForm = Assert.Throws<DomainException>(() => CreditNote.ForRefundInGlobalInvoice(
+            global, sale, Refund(10m, OrderPaymentMethod.Other), "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        Assert.Equal(CreditNote.NoRefundFormMessage, noForm.Message);
+        Assert.Throws<DomainException>(() => CreditNote.ForRefundInGlobalInvoice(global, sale, Refund(10m), "NC", 1, 8.62m, 1.37m, Document, null, Now));
+    }
+
+    [Fact]
+    public void ForRefundInGlobalInvoice_ShouldNotGoForASaleTheGlobalInvoiceReleased()
+    {
+        // Cancelled, the global invoice frees its sales: they no longer take its credit notes.
+        var (global, sale) = StampedGlobal();
+        global.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, CashierId, Now);
+        global.Cancel(Now);
+
+        var error = Assert.Throws<DomainException>(() =>
+            CreditNote.ForRefundInGlobalInvoice(global, sale, Refund(10m), "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        Assert.Equal("La venta no está en esa factura global.", error.Message);
+    }
+
     [Theory]
     [InlineData("601", "G02")]
     [InlineData("612", "G02")]
@@ -194,6 +260,29 @@ public class CreditNoteTests
         => OrderInvoice.Request(
             TenantId, OrderId, "F", 7, CfdiReceiver.Create("URE180429TM6", "UNIVERSIDAD ROBOTICA ESPAÑOLA", "86991", "601", "G03"),
             form, "{\"tipo\":\"I\"}", 100m, 16m, 116m, CashierId, Now.AddDays(-3), method);
+
+    /// <summary>A stamped global invoice that covers the order (for $116) and another sale.</summary>
+    private static (GlobalInvoice Global, GlobalInvoiceOrder Sale) StampedGlobal()
+    {
+        var global = Global();
+        global.Stamp(Guid.NewGuid().ToString(), "pac-g", Now.AddDays(-2), "g.xml");
+        return (global, global.Orders.First(o => o.OrderId == OrderId));
+    }
+
+    private static GlobalInvoice Global()
+        => GlobalInvoice.Request(
+            TenantId,
+            GlobalInvoicePeriod.Containing(GlobalInvoicePeriodicity.Daily, new DateOnly(2026, 10, 20)),
+            "F",
+            12,
+            "01",
+            "{\"tipo\":\"I\"}",
+            200m,
+            32m,
+            232m,
+            [new GlobalInvoiceSale(OrderId, "ORD-000001", 116m), new GlobalInvoiceSale(Guid.NewGuid(), "ORD-000002", 116m)],
+            CashierId,
+            Now.AddDays(-2));
 
     private static OrderInvoice StampedInvoice(string method = "PPD", string form = "99")
     {
