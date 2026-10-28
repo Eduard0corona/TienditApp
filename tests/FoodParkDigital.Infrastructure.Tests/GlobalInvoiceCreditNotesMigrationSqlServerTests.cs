@@ -91,6 +91,9 @@ public class GlobalInvoiceCreditNotesMigrationSqlServerTests
             ($"UPDATE [CreditNotes] SET [OrderInvoiceId] = NULL WHERE [Id] = {invoiceNote.Id}", 547),
             // A global invoice is paid in one exhibition: no installment before its credit notes.
             ($"UPDATE [CreditNotes] SET [AfterInstallment] = 1 WHERE [Id] = {globalNote.Id}", 547),
+            // A global invoice's credit note is only of a refund: never of a write-off.
+            ($"UPDATE [CreditNotes] SET [OrderRefundId] = NULL, [OrderWriteOffId] = {seed.WriteOffId}, [PaymentForm] = '15' WHERE [Id] = {globalNote.Id}",
+                547),
             // A global invoice that does not exist.
             ($"UPDATE [CreditNotes] SET [GlobalInvoiceId] = NEWID() WHERE [Id] = {globalNote.Id}", 547)
         ];
@@ -159,12 +162,13 @@ public class GlobalInvoiceCreditNotesMigrationSqlServerTests
         Guid GlobalInvoiceId,
         Guid SaleOrderId,
         IReadOnlyList<OrderRefund> Refunds,
+        Guid WriteOffId,
         OrderInvoice Invoice,
         GlobalInvoice Global);
 
     /// <summary>
     /// Two businesses; the first with an order paid in cash and invoiced (two refunds), and a sale paid in cash that a stamped
-    /// global invoice covers (one refund), as any version stores them.
+    /// global invoice covers (one refund), and an order sold on credit with part of it forgiven, as any version stores them.
     /// </summary>
     private static async Task<Seed> SeedAsync(SqlServerTestDatabase database)
     {
@@ -195,10 +199,16 @@ public class GlobalInvoiceCreditNotesMigrationSqlServerTests
             Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(-1));
         global.Stamp(Guid.NewGuid().ToString(), "pac-2", DateTimeOffset.UtcNow.AddDays(-1), "invoices/2.xml");
         var refunds = new List<OrderRefund> { Refund(orders[0], 20m), Refund(orders[0], 10m), Refund(orders[1], 50m) };
-        context.Orders.AddRange(orders);
+        var owed = new Order(tenantId, null, null, true, "ORD-000003", BusinessType.Retail, OrderType.Retail, "Karla",
+            "+525512345678", null, null, pricesIncludeTax: true);
+        owed.AddItem(Guid.NewGuid(), "Café", 2, 100m);
+        owed.RegisterPayment(100m, OrderPaymentMethod.Cash, DateTimeOffset.UtcNow.AddDays(-2), null, null, null, null);
+        owed.SellOnCredit();
+        var writeOff = owed.WriteOff(30m, OrderWriteOffReason.WontBeCollected, null, DateTimeOffset.UtcNow.AddDays(-1), "dueña");
+        context.Orders.AddRange([.. orders, owed]);
         context.AddRange(invoice, global);
         await context.SaveChangesAsync();
-        return new Seed(tenantId, tenants[1].Id, invoice.Id, global.Id, orders[1].Id, refunds, invoice, global);
+        return new Seed(tenantId, tenants[1].Id, invoice.Id, global.Id, orders[1].Id, refunds, writeOff.Id, invoice, global);
     }
 
     private static OrderRefund Refund(Order order, decimal amount)
