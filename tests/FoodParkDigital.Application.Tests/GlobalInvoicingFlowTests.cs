@@ -230,7 +230,7 @@ public class GlobalInvoicingFlowTests
     }
 
     [Fact]
-    public async Task Draft_ShouldLeaveOutSalesOnCredit_WithRefunds_OrWithAnInvoiceOfTheirOwn()
+    public async Task Draft_ShouldLeaveOutSalesOnCredit_GivenBackWhole_OrWithAnInvoiceOfTheirOwn()
     {
         await using var book = await Book.OpenAsync();
         var invoiced = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
@@ -241,6 +241,9 @@ public class GlobalInvoicingFlowTests
         var refunded = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
         var order = await book.Context.Orders.Include(o => o.Payments).SingleAsync(o => o.Id == refunded.Id);
         order.RegisterRefund(10m, OrderPaymentMethod.Cash, "Cambio", SalesTestFixture.Now, "cajero", null, null, false, []);
+        var returned = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        var whole = await book.Context.Orders.Include(o => o.Payments).SingleAsync(o => o.Id == returned.Id);
+        whole.RegisterRefund(100m, OrderPaymentMethod.Cash, "Devolución", SalesTestFixture.Now, "cajero", null, null, false, []);
         var refunding = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
         book.Context.OnlinePaymentRefunds.Add(OnlinePaymentRefund.ForOrder(
             book.Tenant.Id, refunding.Id, Guid.NewGuid(), "MP-881", 100m, SalesTestFixture.Now));
@@ -249,13 +252,16 @@ public class GlobalInvoicingFlowTests
 
         var draft = await book.DraftAsync();
 
-        Assert.Equal([GlobalInvoiceDrafts.NoSalesMessage], draft.Blockers);
+        // Given back in part, it goes in for its total: its refund takes a credit note of the global invoice (Fase 28I).
+        Assert.Equal([refunded.OrderNumber], draft.Sales.Select(sale => sale.OrderNumber));
+        Assert.Equal((100m, true), (draft.Total, draft.IsReadyToStamp));
+        Assert.Contains(GlobalInvoiceDrafts.RefundsWarning(1), draft.Warnings);
         Assert.Equal(
             new Dictionary<string, string>
             {
                 [invoiced.OrderNumber] = GlobalInvoiceDrafts.OwnInvoiceReason("F-1"),
                 [onCredit.OrderNumber] = GlobalInvoiceDrafts.CreditReason,
-                [refunded.OrderNumber] = GlobalInvoiceDrafts.RefundedReason,
+                [returned.OrderNumber] = GlobalInvoiceDrafts.FullyRefundedReason,
                 [refunding.OrderNumber] = GlobalInvoiceDrafts.RefundInCourseReason
             },
             draft.LeftOut.ToDictionary(sale => sale.OrderNumber, sale => sale.Reason));
@@ -388,7 +394,7 @@ public class GlobalInvoicingFlowTests
         var draft = await book.DraftAsync();
         Assert.Equal([cash.OrderNumber], draft.Sales.Select(sale => sale.OrderNumber));
         Assert.Equal((100m, true), (draft.Total, draft.IsReadyToStamp));
-        Assert.Contains(GlobalInvoiceDrafts.CoveredRefundsWarning(1), draft.Warnings);
+        Assert.Contains(GlobalInvoiceDrafts.RefundsWarning(1), draft.Warnings);
         Assert.Equal(OrderInvoiceStatus.Stamped, (await book.IssueAsync(1, 100m)).Value.Status);
     }
 
@@ -410,7 +416,7 @@ public class GlobalInvoicingFlowTests
         var draft = await book.DraftAsync();
         Assert.Equal([sale.OrderNumber], draft.Sales.Select(s => s.OrderNumber));
         Assert.Equal(100m, draft.Total);
-        Assert.Contains(GlobalInvoiceDrafts.CoveredRefundsWarning(1), draft.Warnings);
+        Assert.Contains(GlobalInvoiceDrafts.RefundsWarning(1), draft.Warnings);
     }
 
     [Fact]
@@ -438,8 +444,9 @@ public class GlobalInvoicingFlowTests
         book.Clock.UtcNow = NextMorning.AddDays(2);
         var next = await book.DraftAsync(day: SaleDay.AddDays(1));
         Assert.DoesNotContain(cash.OrderNumber, next.Sales.Select(sale => sale.OrderNumber));
-        Assert.DoesNotContain(GlobalInvoiceDrafts.CoveredRefundsWarning(1), next.Warnings);
-        Assert.Equal(GlobalInvoiceDrafts.RefundedReason, Assert.Single((await book.DraftAsync()).LeftOut, sale => sale.OrderNumber == cash.OrderNumber).Reason);
+        Assert.DoesNotContain(GlobalInvoiceDrafts.RefundsWarning(1), next.Warnings);
+        Assert.Equal(GlobalInvoiceDrafts.FullyRefundedReason,
+            Assert.Single((await book.DraftAsync()).LeftOut, sale => sale.OrderNumber == cash.OrderNumber).Reason);
     }
 
     [Fact]

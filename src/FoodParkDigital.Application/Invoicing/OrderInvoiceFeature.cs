@@ -144,9 +144,15 @@ public class OrderInvoicingDto
     /// </summary>
     public List<OrderPaymentComplementsDto> Payments { get; set; } = [];
     /// <summary>
-    /// Its refunds and write-offs with their credit notes, when it has had an invoice (Fase 28D); none otherwise.
+    /// Its refunds and write-offs with their credit notes, when it has had an invoice (Fase 28D) or a global invoice covers
+    /// it (Fase 28I); none otherwise.
     /// </summary>
     public List<OrderAdjustmentDto> Adjustments { get; set; } = [];
+    /// <summary>
+    /// The serie and folio of the global invoice that covers the sale now (Fase 28B), if one does: its refunds' credit notes
+    /// credit that one (Fase 28I).
+    /// </summary>
+    public string? GlobalInvoiceNumber { get; set; }
 }
 
 /// <summary>The invoicing of an order: whether it can be invoiced, whom to, and its invoices.</summary>
@@ -186,9 +192,10 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
         var customer = await OrderInvoicing.CustomerAsync(_context, _phones, order.CustomerPhone, tracked: false, cancellationToken);
 
         var settings = await InvoicingSettings.ReadAsync(_context, _tenant.TenantId, _gateway, _clock.UtcNow, cancellationToken);
+        var globalInvoiceNumber = await OrderInvoicing.GlobalInvoiceNumberAsync(_context, order.Id, cancellationToken);
         var problem = InvoicingSettings.ReadinessProblem(settings)
             ?? OrderInvoicing.LiveInvoiceProblem(invoices.FirstOrDefault(i => i.IsCurrent))
-            ?? await OrderInvoicing.GlobalInvoiceProblemAsync(_context, order.Id, cancellationToken)
+            ?? (globalInvoiceNumber is null ? null : OrderInvoicing.InGlobalInvoiceMessage(globalInvoiceNumber))
             ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
 
         var last = invoices.FirstOrDefault();
@@ -241,7 +248,8 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
             CustomerName = customer?.Name,
             Invoices = invoiceDtos,
             Payments = payments,
-            Adjustments = adjustments
+            Adjustments = adjustments,
+            GlobalInvoiceNumber = globalInvoiceNumber
         };
     }
 }
@@ -699,12 +707,16 @@ internal static class OrderInvoicing
     /// global invoice (motive 04), invoice the sale to the customer and issue the period's global invoice again without it.
     /// </summary>
     public static async Task<string?> GlobalInvoiceProblemAsync(IApplicationDbContext context, Guid orderId, CancellationToken cancellationToken)
+        => await GlobalInvoiceNumberAsync(context, orderId, cancellationToken) is { } number ? InGlobalInvoiceMessage(number) : null;
+
+    /// <summary>The serie and folio of the global invoice that covers the sale now, if one does («F-12»).</summary>
+    public static async Task<string?> GlobalInvoiceNumberAsync(IApplicationDbContext context, Guid orderId, CancellationToken cancellationToken)
     {
         var global = await context.GlobalInvoiceOrders.AsNoTracking()
             .Where(o => o.OrderId == orderId && !o.Released)
             .Join(context.GlobalInvoices.AsNoTracking(), o => o.GlobalInvoiceId, g => g.Id, (o, g) => new { g.Serie, g.Folio })
             .FirstOrDefaultAsync(cancellationToken);
-        return global is null ? null : InGlobalInvoiceMessage($"{global.Serie}-{global.Folio}");
+        return global is null ? null : $"{global.Serie}-{global.Folio}";
     }
 
     public static string InGlobalInvoiceMessage(string number) =>

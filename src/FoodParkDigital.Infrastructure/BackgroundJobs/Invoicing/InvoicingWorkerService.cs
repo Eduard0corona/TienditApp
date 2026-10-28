@@ -149,12 +149,15 @@ public sealed class InvoicingWorkerService : BackgroundService
                 .Select(g => new Waiting(g.Key, g.Min(p => p.PaidAt)))
                 .ToListAsync(cancellationToken);
             complementing = Fairly(owing, _complementsWithoutProgress, max);
-            // The refunds and write-offs of orders with a stamped invoice that never had a credit note for it (Fase 28D),
-            // each business's own, of the businesses whose CSD seals now, by the same turns.
+            // The refunds and write-offs of orders with a stamped invoice that never had a credit note for it (Fase 28D), and
+            // the refunds of sales a stamped global invoice covers (Fase 28I), each business's own, of the businesses whose CSD
+            // seals now, by the same turns.
             var refunds = await CreditNotes.PendingRefunds(
                     context.OrderRefunds.IgnoreQueryFilters(),
                     context.Orders.IgnoreQueryFilters(),
                     context.OrderInvoices.IgnoreQueryFilters(),
+                    context.GlobalInvoiceOrders.IgnoreQueryFilters(),
+                    context.GlobalInvoices.IgnoreQueryFilters(),
                     context.CreditNotes.IgnoreQueryFilters())
                 .Where(r => sealing.Contains(r.TenantId))
                 .GroupBy(r => r.TenantId)

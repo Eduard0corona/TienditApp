@@ -11,6 +11,7 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Infrastructure.Tests;
@@ -94,6 +95,40 @@ public class IssuedCfdisSqlServerTests
         Assert.Equal(["NC-1", "F-2", "F-1"], await NumbersAsync(context, book.TenantId, book.OrderNumber));
         Assert.Equal(["F-4"], await NumbersAsync(context, book.TenantId, "ord-000003"));
         Assert.Equal(["F-5", "F-7", "F-6", "P-1", "F-3", "NC-1", "F-2", "F-1"], await NumbersAsync(context, book.TenantId, "fuente"));
+    }
+
+    [SqlServerFact]
+    public async Task List_ShouldShowTheCreditNoteOfASaleOfTheGlobalInvoice_ToTheGeneralPublic_RelatedToIt()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var book = await SeedAsync(database);
+        // A refund of the global invoice's sale, and its credit note (Fase 28I).
+        await using (var context = database.CreateContext(book.TenantId))
+        {
+            var global = await context.GlobalInvoices.Include(g => g.Orders).SingleAsync();
+            var sale = global.Orders.Single();
+            var order = await context.Orders.Include(o => o.Payments).Include(o => o.Refunds).Include(o => o.Items)
+                .SingleAsync(o => o.Id == sale.OrderId);
+            var refund = order.RegisterRefund(20m, OrderPaymentMethod.Cash, "Devolución de un café", October(10), "cajero", null, null, false, []);
+            var note = CreditNote.ForRefundInGlobalInvoice(global, sale, refund, "NC", 2, 17.24m, 2.76m,
+                Document("NC", 2, October(10), "E", "S01", SatCatalog.GeneralPublicRfc, SatCatalog.GeneralPublicName), null, October(10));
+            Stamp(note, new Dictionary<string, string>(), October(10), "cfdi/nc2.xml");
+            context.CreditNotes.Add(note);
+            await context.SaveChangesAsync();
+        }
+        await using var reading = database.CreateContext(book.TenantId);
+
+        var notes = (await ListAsync(reading, book.TenantId, kind: IssuedCfdiKind.CreditNote)).Items;
+
+        Assert.Equal(
+            [
+                ("NC-2", SatCatalog.GeneralPublicRfc, SatCatalog.GeneralPublicName, "F-4", "ORD-000003"),
+                ("NC-1", ReceiverRfc, "KARLA FUENTE NOLASCO", "F-2", book.OrderNumber)
+            ],
+            notes.Select(n => (n.Number, n.ReceiverRfc, n.ReceiverName, n.RelatedNumber, n.OrderNumber!)));
+        // Found by the sale's folio, with the global invoice that covers it, and by the general public.
+        Assert.Equal(["NC-2", "F-4"], await NumbersAsync(reading, book.TenantId, "ord-000003"));
+        Assert.Equal(["NC-2", "F-4"], await NumbersAsync(reading, book.TenantId, "en general"));
     }
 
     [SqlServerFact]

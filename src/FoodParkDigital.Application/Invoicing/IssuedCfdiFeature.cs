@@ -689,9 +689,12 @@ internal static class IssuedCfdis
         var notes = context.CreditNotes.AsNoTracking().Where(n => n.IssuedAt >= month.Start && n.IssuedAt < month.End);
         if (status is { } only)
             notes = notes.Where(n => n.Status == only);
-        // The receiver is its invoice's, as the credit note's.
+        // The receiver is its invoice's, as the credit note's; a global invoice's is to the general public (Fase 28I).
         return from n in notes
-               join i in context.OrderInvoices.AsNoTracking() on n.OrderInvoiceId equals i.Id
+               join i in context.OrderInvoices.AsNoTracking() on n.OrderInvoiceId equals (Guid?)i.Id into invoices
+               from i in invoices.DefaultIfEmpty()
+               join g in context.GlobalInvoices.AsNoTracking() on n.GlobalInvoiceId equals (Guid?)g.Id into globals
+               from g in globals.DefaultIfEmpty()
                join o in context.Orders.AsNoTracking() on n.OrderId equals o.Id into orders
                from o in orders.DefaultIfEmpty()
                select new IssuedCfdiRow
@@ -707,8 +710,8 @@ internal static class IssuedCfdis
                    CancellationMotive = n.CancellationMotive,
                    CancelledAt = n.CancelledAt,
                    FailureMessage = n.FailureMessage,
-                   ReceiverRfc = i.Receiver.Rfc,
-                   ReceiverName = i.Receiver.Name,
+                   ReceiverRfc = n.GlobalInvoiceId != null ? SatCatalog.GeneralPublicRfc : i.Receiver.Rfc,
+                   ReceiverName = n.GlobalInvoiceId != null ? SatCatalog.GeneralPublicName : i.Receiver.Name,
                    // A credit note is paid in one exhibition: its CFDI says so.
                    PaymentMethod = CfdiInvoice.PaidInOneExhibition,
                    PaymentForm = n.PaymentForm,
@@ -718,9 +721,9 @@ internal static class IssuedCfdis
                    PaidAmount = null,
                    OrderId = n.OrderId,
                    OrderNumber = o.OrderNumber,
-                   RelatedSerie = i.Serie,
-                   RelatedFolio = (long?)i.Folio,
-                   RelatedUuid = i.Uuid,
+                   RelatedSerie = n.GlobalInvoiceId != null ? g.Serie : i.Serie,
+                   RelatedFolio = n.GlobalInvoiceId != null ? (long?)g.Folio : (long?)i.Folio,
+                   RelatedUuid = n.GlobalInvoiceId != null ? g.Uuid : i.Uuid,
                    ReplacedBySerie = null,
                    ReplacedByFolio = null,
                    Periodicity = null,
