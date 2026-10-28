@@ -189,6 +189,13 @@ public static class GlobalInvoiceDrafts
     public static string RefundsWarning(int count) => count == 1
         ? "Incluye 1 venta con devoluciones: va por su total, y TienditApp emite la nota de crédito de cada devolución, al público en general, en cuanto quede timbrada."
         : $"Incluye {count} ventas con devoluciones: van por su total, y TienditApp emite la nota de crédito de cada devolución, al público en general, en cuanto quede timbrada.";
+    // Only a sale a cancelled global invoice covered goes in with these refunds: it is issued again as it was then.
+    public static string CoveredRefundWithoutFormWarning(int count) => count == 1
+        ? "Incluye 1 venta que ya estaba en una factura global cancelada y tiene un reembolso registrado como «Otro» o devuelto como saldo a favor: va por su total, como la primera, y ese reembolso no lleva nota de crédito. Consulta con tu contador cómo reflejarlo."
+        : $"Incluye {count} ventas que ya estaban en una factura global cancelada y tienen un reembolso registrado como «Otro» o devuelto como saldo a favor: van por su total, como la primera, y esos reembolsos no llevan nota de crédito. Consulta con tu contador cómo reflejarlos.";
+    public static string CoveredRefundInCourseWarning(int count) => count == 1
+        ? "Incluye 1 venta que ya estaba en una factura global cancelada y tiene un reembolso en curso en Mercado Pago: va por su total, como la primera, y TienditApp emite la nota de crédito de ese reembolso cuando Mercado Pago lo confirme."
+        : $"Incluye {count} ventas que ya estaban en una factura global cancelada y tienen un reembolso en curso en Mercado Pago: van por su total, como la primera, y TienditApp emite la nota de crédito de cada uno cuando Mercado Pago lo confirme.";
     public const string AmountsReason = "Sus importes no cuadran con lo que cobró: revisa su vista previa del CFDI en Pedidos.";
 
     private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-MX");
@@ -323,6 +330,8 @@ public static class GlobalInvoiceDrafts
 
         var included = new List<(Guid Id, DateTimeOffset PaidAt, bool Late)>();
         var withRefunds = 0;
+        var coveredWithoutForm = 0;
+        var coveredRefunding = 0;
         // The earlier periods' first, in the order they were paid.
         foreach (var (candidate, isLate) in late.Select(c => (c, true)).Concat(candidates.Select(c => (c, false))))
         {
@@ -343,7 +352,13 @@ public static class GlobalInvoiceDrafts
             // not was said in its own period's preview.
             if (reason is null || (isLate && reason.Length > 0))
                 continue;
-            if (reason.Length == 0 && (candidate.RefundedAmount > 0 || refunding.Contains(candidate.Id)))
+            // Which refunds of the sales that go in take their credit note, and when: a refund without a form of the SAT's never
+            // does, and one in course in Mercado Pago, once it is confirmed (only a sale a cancelled global covered gets here).
+            if (reason.Length == 0 && candidate.RefundedWithoutForm)
+                coveredWithoutForm++;
+            else if (reason.Length == 0 && refunding.Contains(candidate.Id))
+                coveredRefunding++;
+            else if (reason.Length == 0 && candidate.RefundedAmount > 0)
                 withRefunds++;
             if (reason.Length == 0)
                 included.Add((candidate.Id, candidate.PaidAt, isLate));
@@ -447,6 +462,10 @@ public static class GlobalInvoiceDrafts
             dto.Warnings.Add(LateSalesWarning(lateSales));
         if (withRefunds > 0)
             dto.Warnings.Add(RefundsWarning(withRefunds));
+        if (coveredWithoutForm > 0)
+            dto.Warnings.Add(CoveredRefundWithoutFormWarning(coveredWithoutForm));
+        if (coveredRefunding > 0)
+            dto.Warnings.Add(CoveredRefundInCourseWarning(coveredRefunding));
         if (platformSales > 0)
         {
             dto.Warnings.Add(platformSales == 1

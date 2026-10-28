@@ -9,6 +9,7 @@ using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
+using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -313,6 +314,42 @@ public class GlobalInvoiceCreditNoteFlowTests
         var leftOut = Assert.Single(draft.LeftOut);
         Assert.Equal((other.OrderNumber, GlobalInvoiceDrafts.RefundWithoutFormReason), (leftOut.OrderNumber, leftOut.Reason));
         Assert.Contains(GlobalInvoiceDrafts.RefundsWarning(1), draft.Warnings);
+    }
+
+    [Fact]
+    public async Task SalesOfACancelledGlobalInvoice_ShouldGoInAsTheyWere_AndThePreviewSayWhichRefundsTakeTheirCreditNote()
+    {
+        await using var book = await Book.OpenAsync();
+        var card = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
+        var other = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        var online = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
+        var first = await book.IssueGlobalAsync(3, 300m);
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        Assert.True((await book.CancelGlobalAsync(first.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        // Since, one gave $20 back by card, another «Otro», and the third has a refund in course in Mercado Pago.
+        await book.RefundAsync(card.Id, 20m, OrderPaymentMethod.Card);
+        await book.RefundAsync(other.Id, 20m, OrderPaymentMethod.Other);
+        book.Context.OnlinePaymentRefunds.Add(OnlinePaymentRefund.ForOrder(
+            book.Tenant.Id, online.Id, Guid.NewGuid(), "MP-881", 100m, book.Clock.UtcNow));
+        await book.Context.SaveChangesAsync();
+        book.Context.ChangeTracker.Clear();
+
+        // The three go in as the first one had them; the refund «Otro» is not promised a credit note.
+        var draft = await book.DraftAsync();
+        Assert.Equal(300m, draft.Total);
+        Assert.Empty(draft.LeftOut);
+        Assert.Equal(
+            [
+                GlobalInvoiceDrafts.RefundsWarning(1),
+                GlobalInvoiceDrafts.CoveredRefundWithoutFormWarning(1),
+                GlobalInvoiceDrafts.CoveredRefundInCourseWarning(1)
+            ],
+            draft.Warnings);
+
+        // Once stamped, only the card refund takes its credit note.
+        await book.IssueGlobalAsync(3, 300m);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+        Assert.Equal(20m, (await book.Context.CreditNotes.SingleAsync()).Total);
     }
 
     [Fact]

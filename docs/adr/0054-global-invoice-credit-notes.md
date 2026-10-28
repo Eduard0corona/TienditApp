@@ -32,6 +32,9 @@ Tomé las decisiones de la Fase 28I con la autorización permanente del dueño d
    - Una venta con un reembolso sin forma del SAT («Otro» o con saldo a favor) queda fuera: ese reembolso nunca llevaría nota y la global declararía lo que se devolvió. El motivo pide consultar al contador.
    - El reembolso en línea en curso sigue fuera (su monto todavía puede cambiar).
    - La vista previa avisa cuántas ventas con devoluciones incluye.
+   - Una venta que ya estaba en una global cancelada vuelve a entrar como la primera vez, aunque tenga uno de esos reembolsos. Tiene su propio aviso:
+     - el reembolso «Otro» o con saldo a favor no lleva nota de crédito;
+     - la nota del reembolso en curso sale cuando Mercado Pago lo confirme.
    - Las ventas devueltas en parte que una global ya timbrada dejó fuera antes de esta fase entran en la siguiente, como ventas de periodos anteriores, con su aviso.
 3. **El agregado `CreditNote`** (ADR 0048) acredita la factura de un pedido o una factura global, nunca las dos ni ninguna:
    - `OrderInvoiceId` pasa a ser opcional y se agrega `GlobalInvoiceId`;
