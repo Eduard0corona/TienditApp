@@ -222,18 +222,23 @@ public class IssuedCfdisSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        foreach (var (tenantId, number, stampedAt) in new[]
+        foreach (var (tenantId, number, otherMonth, stampedAt) in new[]
                  {
-                     (tijuana.Id, "F-2", "2026-10-31 23:30:00"),
-                     (mexicoCity.Id, "F-1", "2026-10-01 00:30:00")
+                     (tijuana.Id, "F-2", 9, "2026-10-31 23:30:00"),
+                     (mexicoCity.Id, "F-1", 11, "2026-10-01 00:30:00")
                  })
         {
             await using var context = database.CreateContext(tenantId);
 
             Assert.Equal([number], (await ListAsync(context, tenantId)).Items.Select(c => c.Number));
-            var summary = await new GetIssuedCfdiSummaryQueryHandler(context, Tenant(tenantId))
-                .Handle(new GetIssuedCfdiSummaryQuery(2026, 10), CancellationToken.None);
-            Assert.Equal(1, summary.Kinds.Single(k => k.Kind == IssuedCfdiKind.OrderInvoice).InForce);
+            // October has one of the two in any zone: the other month (September in Tijuana, November in Mexico City) has
+            // the other only in the business's.
+            foreach (var month in new[] { 10, otherMonth })
+            {
+                var summary = await new GetIssuedCfdiSummaryQueryHandler(context, Tenant(tenantId))
+                    .Handle(new GetIssuedCfdiSummaryQuery(2026, month), CancellationToken.None);
+                Assert.Equal(1, summary.Kinds.Single(k => k.Kind == IssuedCfdiKind.OrderInvoice).InForce);
+            }
             var csv = await new ExportIssuedCfdisQueryHandler(
                     context, Tenant(tenantId), new Files(), NullLogger<ExportIssuedCfdisQueryHandler>.Instance)
                 .Handle(new ExportIssuedCfdisQuery(2026, 10, IssuedCfdiExportFormat.Csv), CancellationToken.None);
