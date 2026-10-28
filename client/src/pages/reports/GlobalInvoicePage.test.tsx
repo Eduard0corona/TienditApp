@@ -29,8 +29,8 @@ function invoice(patch: Partial<GlobalInvoiceDetail> = {}): GlobalInvoiceDetail 
     uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: '2026-10-19T15:00:02Z', hasXml: true, hasPdf: true,
     failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null,
     orders: [
-      { orderId: 'o-1', orderNumber: 'ORD-000001', total: 200 },
-      { orderId: 'o-2', orderNumber: 'ORD-000002', total: 100 },
+      { orderId: 'o-1', orderNumber: 'ORD-000001', total: 200, creditNotes: [] },
+      { orderId: 'o-2', orderNumber: 'ORD-000002', total: 100, creditNotes: [] },
     ],
     ...patch,
   };
@@ -103,6 +103,36 @@ describe('GlobalInvoicePage', () => {
     expect(toast.success).toHaveBeenCalledWith('Factura global F-5 cancelada.');
     expect(await screen.findByText('Cancelada', { selector: '.ta-chip' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancelar factura global' })).not.toBeInTheDocument();
+  });
+
+  it('lists the credit notes of its sales, and says which go first while one stands instead of offering to cancel it', async () => {
+    const note = {
+      id: 'nc-1', orderInvoiceId: null, globalInvoiceId: 'g-1', globalInvoiceNumber: 'F-5', number: 'NC-1',
+      status: OrderInvoiceStatus.Stamped, paymentForm: '01', subTotal: 17.24, taxTotal: 2.76, total: 20,
+      requestedAt: '2026-10-20T17:00:00Z', issuedAutomatically: true, uuid: null, stampedAt: '2026-10-20T17:00:03Z',
+      hasXml: true, hasPdf: true, failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null,
+      emails: [],
+    };
+    const withNotes = (status: OrderInvoiceStatus) => invoice({
+      orders: [
+        { orderId: 'o-1', orderNumber: 'ORD-000001', total: 200, creditNotes: [{ ...note, status }] },
+        { orderId: 'o-2', orderNumber: 'ORD-000002', total: 100, creditNotes: [] },
+      ],
+    });
+    const { unmount } = renderPage(() => Promise.resolve(withNotes(OrderInvoiceStatus.Stamped)));
+
+    const notes = await screen.findByRole('region', { name: 'Notas de crédito (1)' });
+    const row = within(notes).getByRole('row', { name: /NC-1/ });
+    expect(row).toHaveTextContent('NC-1ORD-000001Timbrada$20.00');
+    expect(within(row).getByRole('link', { name: 'ORD-000001' })).toHaveAttribute('href', '/orders?search=ORD-000001');
+    expect(screen.getByText(/^Para cancelarla, cancela primero sus notas de crédito vigentes \(NC-1\)/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancelar factura global' })).not.toBeInTheDocument();
+    unmount();
+
+    // Once its credit notes are cancelled, it is cancelled from here.
+    renderPage(() => Promise.resolve(withNotes(OrderInvoiceStatus.Cancelled)));
+    expect(await screen.findByRole('button', { name: 'Cancelar factura global' })).toBeInTheDocument();
+    expect(screen.queryByText(/^Para cancelarla/)).not.toBeInTheDocument();
   });
 
   it('downloads its XML with the session', async () => {

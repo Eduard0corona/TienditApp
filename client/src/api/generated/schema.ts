@@ -15455,7 +15455,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            orderInvoiceId: string;
+            orderInvoiceId?: string | null;
+            /** Format: uuid */
+            globalInvoiceId?: string | null;
+            globalInvoiceNumber?: string | null;
             number: string;
             status: components["schemas"]["OrderInvoiceStatus"];
             paymentForm: string;
@@ -16222,6 +16225,7 @@ export interface components {
             orderNumber: string;
             /** Format: double */
             total: number;
+            creditNotes: components["schemas"]["CreditNoteDto"][];
         };
         /**
          * Format: int32
@@ -17611,6 +17615,7 @@ export interface components {
             invoices: components["schemas"]["OrderInvoiceDto"][];
             payments: components["schemas"]["OrderPaymentComplementsDto"][];
             adjustments: components["schemas"]["OrderAdjustmentDto"][];
+            globalInvoiceNumber?: string | null;
         };
         OrderItemCancellationDto: {
             /** Format: uuid */

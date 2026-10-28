@@ -43,11 +43,17 @@ const WRITE_OFF: Adjustment = {
   awaitsAutomaticIssue: true, creditNotes: [],
 };
 
-function renderList(adjustments: Adjustment[], canCancel = false, invoices: Invoice[] = [F3]) {
+function renderList(adjustments: Adjustment[], canCancel = false, invoices: Invoice[] = [F3], globalInvoiceNumber?: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <CreditNoteList orderId="o-1" adjustments={adjustments} invoices={invoices} canCancel={canCancel} />
+      <CreditNoteList
+        orderId="o-1"
+        adjustments={adjustments}
+        invoices={invoices}
+        canCancel={canCancel}
+        globalInvoiceNumber={globalInvoiceNumber}
+      />
     </QueryClientProvider>,
   );
 }
@@ -82,6 +88,19 @@ describe('CreditNoteList', () => {
     // Whoever manages the orders downloads; only owners and admins cancel. An adjustment with its note issues no other.
     expect(screen.queryByRole('button', { name: /^Cancelar nota de crédito/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Emitir/ })).not.toBeInTheDocument();
+  });
+
+  it('shows the credit note of a sale of a global invoice: to the general public, of that global invoice, never by email', () => {
+    const global: Note = { ...NC1, orderInvoiceId: null, globalInvoiceId: 'g-1', globalInvoiceNumber: 'F-12' };
+    renderList([{ ...REFUND, creditNotes: [global] }], true, [], 'F-12');
+
+    expect(screen.getByText(/^La factura global F-12 ampara esta venta: cada reembolso lleva su nota de crédito al público/))
+      .toBeInTheDocument();
+    const refund = screen.getAllByRole('listitem')[0];
+    expect(refund).toHaveTextContent('Forma 04 (Tarjeta) · la emitió TienditApp · al público en general, de la factura global F-12');
+    expect(screen.getByRole('button', { name: 'Descargar XML de la nota de crédito NC-1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-1' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Enviar por correo/ })).not.toBeInTheDocument();
   });
 
   it('issues the credit note of a write-off before TienditApp does it on its own', async () => {

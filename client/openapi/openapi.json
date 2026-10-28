@@ -21485,7 +21485,6 @@
           "id",
           "issuedAutomatically",
           "number",
-          "orderInvoiceId",
           "paymentForm",
           "requestedAt",
           "status",
@@ -21501,7 +21500,17 @@
           },
           "orderInvoiceId": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "nullable": true
+          },
+          "globalInvoiceId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "globalInvoiceNumber": {
+            "type": "string",
+            "nullable": true
           },
           "number": {
             "type": "string"
@@ -23993,6 +24002,7 @@
       },
       "GlobalInvoiceOrderDto": {
         "required": [
+          "creditNotes",
           "orderId",
           "orderNumber",
           "total"
@@ -24009,6 +24019,12 @@
           "total": {
             "type": "number",
             "format": "double"
+          },
+          "creditNotes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreditNoteDto"
+            }
           }
         },
         "additionalProperties": false
@@ -28675,6 +28691,10 @@
             "items": {
               "$ref": "#/components/schemas/OrderAdjustmentDto"
             }
+          },
+          "globalInvoiceNumber": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
