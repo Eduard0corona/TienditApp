@@ -20,6 +20,8 @@ import { formatMoney } from '../../utils/money';
 
 const PARENT = { label: 'Factura global', to: '/reports/global-invoices' };
 
+// On a phone a credit note's status goes under its folio, so the sale and the total fit; its own column from a tablet up.
+const FROM_TABLET = 'd-none d-sm-table-cell';
 const LIVE: OrderInvoiceStatus[] = [OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Cancelling];
 
 /**
@@ -259,16 +261,25 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
                   <tr>
                     <th scope="col">Folio</th>
                     <th scope="col">Venta</th>
-                    <th scope="col">Estado</th>
+                    <th scope="col" className={FROM_TABLET}>Estado</th>
                     <th scope="col" className="text-end">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {creditNotes.map((note) => (
                     <tr key={note.id}>
-                      <td>{note.number}</td>
-                      <td><Link to={`/orders?search=${encodeURIComponent(note.orderNumber)}`}>{note.orderNumber}</Link></td>
-                      <td><span className={`ta-chip ${invoiceStatusChip(note.status)}`}>{invoiceStatusLabel(note.status)}</span></td>
+                      <td>
+                        <span className="text-nowrap">{note.number}</span>
+                        <div className="d-sm-none mt-1">
+                          <span className={`ta-chip ${invoiceStatusChip(note.status)}`}>{invoiceStatusLabel(note.status)}</span>
+                        </div>
+                      </td>
+                      <td className="text-nowrap">
+                        <Link to={`/orders?search=${encodeURIComponent(note.orderNumber)}`}>{note.orderNumber}</Link>
+                      </td>
+                      <td className={FROM_TABLET}>
+                        <span className={`ta-chip ${invoiceStatusChip(note.status)}`}>{invoiceStatusLabel(note.status)}</span>
+                      </td>
                       <td className="text-end ta-money">{formatMoney(note.total)}</td>
                     </tr>
                   ))}

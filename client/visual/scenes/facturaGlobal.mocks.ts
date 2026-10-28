@@ -5,7 +5,8 @@ type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 
 // The global invoice (Fase 28B, ADR 0046): Reportes › Factura global of Café La Esquina on Sunday 2026-10-04. The list
 // (yesterday's stamped, a weekly one cancelled with 04 and issued again, one still stamping and one refused), the preview
-// of yesterday's (ready, and one that cannot be stamped yet) and the detail of a stamped one.
+// of yesterday's (ready, and one that cannot be stamped yet) and the detail of a stamped one; since the Fase 28I (ADR 0054),
+// the detail of one with the credit notes of its sales' refunds.
 
 // OrderInvoiceStatus, GlobalInvoicePeriodicity and CfdiCancellationMotive as the contract numbers them.
 const STAMPING = 0;
@@ -96,13 +97,50 @@ const draftFor = (query: URLSearchParams) => (Number(query.get('periodicity')) =
 
 const DETAIL = {
   ...STAMPED_YESTERDAY,
-  orders: SALES.map((sale) => ({ orderId: sale.orderId, orderNumber: sale.orderNumber, total: sale.total })),
+  orders: SALES.map((sale) => ({ orderId: sale.orderId, orderNumber: sale.orderNumber, total: sale.total, creditNotes: [] })),
+};
+
+/** A credit note of F-58 (CFDI tipo E, Fase 28I) for what a refund of one of its sales gave back, stamped by TienditApp. */
+function creditNote(folio: number, total: number, fields: Record<string, unknown>) {
+  const subTotal = r2(total / 1.16);
+  return {
+    id: uuid(`global-credit-note-${folio}`), orderInvoiceId: null, globalInvoiceId: GLOBAL_STAMPED_ID, globalInvoiceNumber: 'F-58',
+    number: `NC-${folio}`, status: STAMPED, paymentForm: '01', subTotal, taxTotal: r2(total - subTotal), total,
+    requestedAt: '2026-10-04T16:20:00Z', issuedAutomatically: true, uuid: null, stampedAt: '2026-10-04T16:20:03Z', hasXml: true,
+    hasPdf: true, failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, emails: [],
+    ...fields,
+  };
+}
+
+// A literal id: the scene opens its detail by it, and the coverage check reads the URL as written.
+const GLOBAL_WITH_NOTES_ID = '7a2d4c6e-8b1f-4e3a-9c5d-2f4e6a8b0c71';
+
+/**
+ * F-58 with the credit notes of two refunds: NC-7, in force, of ORD-000334, and NC-5, cancelled with 02 and issued again as
+ * NC-6, of ORD-000337. While NC-6 and NC-7 stand, F-58 is not cancelled.
+ */
+const DETAIL_WITH_NOTES = {
+  ...DETAIL,
+  id: GLOBAL_WITH_NOTES_ID,
+  orders: DETAIL.orders.map((order) => ({
+    ...order,
+    creditNotes: order.orderNumber === 'ORD-000334'
+      ? [creditNote(7, 40, { paymentForm: '04', requestedAt: '2026-10-04T18:02:00Z', stampedAt: '2026-10-04T18:02:03Z' })]
+      : order.orderNumber === 'ORD-000337'
+        ? [
+          creditNote(6, 62, { issuedAutomatically: false, requestedAt: '2026-10-04T17:10:00Z', stampedAt: '2026-10-04T17:10:02Z' }),
+          creditNote(5, 62, {
+            status: CANCELLED, cancellationMotive: 2, cancellationRequestedAt: '2026-10-04T17:05:00Z', cancelledAt: '2026-10-04T17:05:03Z',
+          }),
+        ]
+        : [],
+  })),
 };
 
 const globalInvoiceRoutes: ExtraRoutes = (_data, helpers) => [
   ['GET', /^\/invoicing\/global-invoices$/, (_match, query) => helpers.ok(helpers.paginate(LIST, query, 20))],
   ['GET', /^\/invoicing\/global-invoices\/draft$/, (_match, query) => helpers.ok(draftFor(query))],
-  ['GET', /^\/invoicing\/global-invoices\/([^/]+)$/, () => helpers.ok(DETAIL)],
+  ['GET', /^\/invoicing\/global-invoices\/([^/]+)$/, (match) => helpers.ok(match[1] === GLOBAL_WITH_NOTES_ID ? DETAIL_WITH_NOTES : DETAIL)],
 ];
 
 export const FACTURA_GLOBAL_ROUTES = asOption(globalInvoiceRoutes);

@@ -23,7 +23,7 @@ Tomé las decisiones de la Fase 28D con la autorización permanente del dueño d
    - Se levanta el bloqueo de la 28A: una venta con reembolsos o con condonación ya se factura (por la venta completa, PUE o PPD) y cada ajuste lleva su nota. La vista previa lo avisa.
    - Sigue bloqueado el reembolso en línea en curso.
    - Un pedido cancelado no lleva notas: la venta no se llevó a cabo y su factura se cancela con el motivo 03. Sus reembolsos (los de «Anular venta») lo dicen en lugar de emitirse.
-   - La global sigue sin ventas con ajustes: la vista previa dice que se facturen en Pedidos si el cliente da sus datos fiscales, o que se consulte al contador (el egreso relacionado con una global queda fuera).
+   - La global sigue sin ventas con ajustes: la vista previa dice que se facturen en Pedidos si el cliente da sus datos fiscales, o que se consulte al contador (el egreso relacionado con una global queda fuera; llegó en la Fase 28I, [ADR 0054](0054-global-invoice-credit-notes.md)).
 2. **El agregado `CreditNote`** (`ITenantScoped`, CFDI tipo E) hereda de `Cfdi` (ADR 0047) el estado, el documento, el timbre, los archivos, el rechazo y la cancelación.
    - Guarda la factura, el pedido, el reembolso o la condonación (exactamente uno), la forma, el subtotal, el IVA, el total, la parcialidad más alta de los complementos al pedirla (`AfterInstallment`; la que se emite otra vez conserva la de la nota anterior del ajuste en esa factura, para que los complementos que la descontaron la sigan descontando) y quién la pidió (sin persona, la emitió TienditApp).
    - Hay una sola nota viva (timbrando, timbrada o cancelándose) por ajuste, garantizado por dos índices únicos filtrados. Son únicos la serie y el folio por negocio, la llave y el UUID por negocio.

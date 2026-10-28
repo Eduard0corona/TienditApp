@@ -45,3 +45,17 @@ IF OBJECT_ID(N'dbo.GlobalInvoiceOrders') IS NOT NULL
             AND EXISTS (SELECT 1 FROM [GlobalInvoiceOrders] s
                 INNER JOIN [GlobalInvoices] g ON g.[Id] = s.[GlobalInvoiceId]
                 WHERE s.[OrderId] = r.[OrderId] AND s.[Released] = 0 AND g.[Status] = 1);');
+
+-- 5. Antes de desplegar: las ventas devueltas en parte, pagadas por completo, sin condonar ni vender a
+--    crédito, sin factura propia viva y fuera de toda factura global viva. Desde la Fase 28I la global
+--    las toma por su total y cada reembolso lleva su nota: las de un periodo que ya tiene su global
+--    timbrada entran en la siguiente que se emita, como ventas de periodos anteriores (su vista previa
+--    las cuenta). Solo cuenta ventas y negocios.
+IF OBJECT_ID(N'dbo.GlobalInvoiceOrders') IS NOT NULL
+    EXEC(N'SELECT COUNT(*) AS [VentasDevueltasEnParteSinCfdi], COUNT(DISTINCT o.[TenantId]) AS [Negocios]
+        FROM [Orders] o
+        WHERE o.[Status] <> 99 AND o.[Total] > 0 AND o.[PaidAmount] >= o.[Total]
+            AND o.[RefundedAmount] > 0 AND o.[RefundedAmount] < o.[Total]
+            AND o.[WrittenOffAmount] = 0 AND o.[SoldOnCredit] = 0
+            AND NOT EXISTS (SELECT 1 FROM [OrderInvoices] i WHERE i.[OrderId] = o.[Id] AND i.[Status] IN (0, 1, 3))
+            AND NOT EXISTS (SELECT 1 FROM [GlobalInvoiceOrders] s WHERE s.[OrderId] = o.[Id] AND s.[Released] = 0);');

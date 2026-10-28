@@ -123,7 +123,8 @@ describe('GlobalInvoicePage', () => {
 
     const notes = await screen.findByRole('region', { name: 'Notas de crédito (1)' });
     const row = within(notes).getByRole('row', { name: /NC-1/ });
-    expect(row).toHaveTextContent('NC-1ORD-000001Timbrada$20.00');
+    // The status under the folio is the phone's; its column, the tablet's (CSS shows one of the two).
+    expect(row).toHaveTextContent('NC-1TimbradaORD-000001Timbrada$20.00');
     expect(within(row).getByRole('link', { name: 'ORD-000001' })).toHaveAttribute('href', '/orders?search=ORD-000001');
     expect(screen.getByText(/^Para cancelarla, cancela primero sus notas de crédito vigentes \(NC-1\)/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancelar factura global' })).not.toBeInTheDocument();

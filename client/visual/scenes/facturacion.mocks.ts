@@ -270,6 +270,35 @@ export const PEDIDO_CON_NOTAS_DE_CREDITO = asOption(((data) => {
   }))(data);
 }) as PrepareData);
 
+/**
+ * A sale to the general public that the global invoice F-58 covers (Fase 28I, ADR 0054): it is not invoiced on its own, and
+ * its refunds take credit notes of F-58, to the general public, never by email:
+ * - two conchas that were missing, given back by transfer: NC-4, issued by TienditApp;
+ * - a cold americano given back in cash a moment ago, still without one: TienditApp issues it soon, or «Emitir ahora».
+ */
+export const PEDIDO_EN_FACTURA_GLOBAL = asOption(((data) => {
+  const order = data.orders.find((o: { orderNumber: string }) => o.orderNumber === ORDER_NUMBER);
+  const share = (part: number) => r2(order.total * part);
+  const [transfer, cash] = [share(0.12), share(0.06)];
+  orderInvoicing(() => ({
+    canInvoice: false,
+    problem: 'Esta venta está en la factura global F-58. Si el cliente pide su factura, cancela esa global con el motivo 04 en '
+      + 'Reportes › Factura global, factura esta venta y emite otra vez la global del periodo: ya no la incluirá.',
+    proposedReceiver: null,
+    proposedEmail: null,
+    globalInvoiceNumber: 'F-58',
+    adjustments: [
+      refund('conchas', minutesFromNow(-40), TRANSFER, transfer, 'Faltaron dos conchas', {
+        creditNotes: [creditNote(4, transfer, {
+          orderInvoiceId: null, globalInvoiceId: uuid('global-58'), globalInvoiceNumber: 'F-58',
+          uuid: '3C8E1B2D-5F4A-4B6C-9D7E-8A0F1B2C3D4E', stampedAt: minutesFromNow(-34), hasXml: true, hasPdf: true,
+        })],
+      }),
+      refund('americano', minutesFromNow(-4), CASH, cash, 'Un americano llegó frío', { canIssue: true, awaitsAutomaticIssue: true }),
+    ],
+  }))(data);
+}) as PrepareData);
+
 /** Grupo Altavista keeps its fiscal data and the email for its invoices; the list shows its RFC. */
 export const CLIENTE_CON_DATOS_FISCALES = asOption(((data) => {
   const customer = data.customers.find((c: { name: string }) => c.name === CUSTOMER_NAME);

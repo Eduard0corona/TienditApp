@@ -15,6 +15,7 @@ import {
   PEDIDO_CANCELANDOSE,
   PEDIDO_CON_NOTAS_DE_CREDITO,
   PEDIDO_CORREO_RECHAZADO,
+  PEDIDO_EN_FACTURA_GLOBAL,
   PEDIDO_EN_PARCIALIDADES,
   PEDIDO_FACTURA_POR_CORREO,
   PEDIDO_FACTURADO,
@@ -33,7 +34,8 @@ import {
 // the Fase 28E (ADR 0049), the invoice sent by email or refused by the customer's mail server, and «Enviar por correo»;
 // since the Fase 28F (ADR 0050), self-invoicing turned on, and the invoice the customer asked for online; since the Fase
 // 28G (ADR 0051), the form to replace an invoice with errors, the replaced invoice waiting for its cancellation with
-// relation, the dialog to cancel it without relation, and the replaced one once cancelled.
+// relation, the dialog to cancel it without relation, and the replaced one once cancelled; since the Fase 28I (ADR 0054),
+// the refunds of a sale of a global invoice with their credit notes of that global invoice.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -375,6 +377,29 @@ test.describe('Pedidos › Notas de crédito', () => {
     await expect(cancelling.getByLabel('02 · Tiene errores (después emites otra para el reembolso)')).toBeChecked();
     await snapScreen(page, 'pedidos-factura-cancelar-nota-de-credito');
   });
+});
+
+test.describe('Pedidos › Notas de crédito de una venta de la factura global', () => {
+  test.use({ prepareData: PEDIDO_EN_FACTURA_GLOBAL });
+
+  for (const look of LOOKS.slice(0, 2)) {
+    test.describe(look.suffix, () => {
+      test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+      test(`notas de crédito de la factura global ${look.suffix}`, async ({ page }) => {
+        await open(page, '/orders');
+        await page.getByRole('button', { name: ORDER_NUMBER, exact: true }).click();
+        const detail = await dialog(page, `Pedido ${ORDER_NUMBER}`);
+        await detail.getByRole('button', { name: 'Factura' }).click();
+        const invoice = await dialog(page, `Facturar ${ORDER_NUMBER}`);
+        const heading = invoice.getByRole('heading', { name: 'Notas de crédito' });
+        await heading.scrollIntoViewIfNeeded();
+        await expect(invoice.getByText(/al público en general, de la factura global F-58/)).toBeVisible();
+        await expect(invoice.getByText('Sin nota de crédito todavía: TienditApp la emite en unos minutos.')).toBeVisible();
+        await snapScreen(page, `pedidos-factura-notas-de-la-global-${look.suffix}`);
+      });
+    });
+  }
 });
 
 test.describe('Clientes › Datos fiscales', () => {

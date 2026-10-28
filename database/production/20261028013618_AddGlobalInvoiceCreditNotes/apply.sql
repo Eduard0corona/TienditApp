@@ -32,7 +32,9 @@
 -- Al desplegar, el worker de facturación emite por su cuenta, con la fecha de ese día, la nota de
 -- crédito de cada reembolso de una venta que cubre una factura global timbrada (la consulta 4 de
 -- verify.sql los cuenta): si alguno ya tiene su CFDI de egreso hecho a mano, avísalo antes de
--- desplegar para cancelarla después con 02.
+-- desplegar para cancelarla después con 02. Y la factura global toma desde entonces las ventas
+-- devueltas en parte: las que una global ya timbrada dejó fuera entran en la siguiente que se emita
+-- (la consulta 5 de verify.sql las cuenta).
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a
