@@ -14,8 +14,9 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// the CFDI 4.0 invoice of an order, stamped through the platform's PAC, downloaded and cancelled; the global invoice of a
 /// period to the general public (Fase 28B, ADR 0046), for owners and admins; the payment complements of the payments of an
 /// invoice in installments (Fase 28C, ADR 0047); the credit notes of the refunds and write-offs of an invoiced order
-/// (Fase 28D, ADR 0048); the emails of those CFDI to the customer (Fase 28E, ADR 0049); and self-invoicing, turned on
-/// here and printed on each ticket (Fase 28F, ADR 0050).
+/// (Fase 28D, ADR 0048); the emails of those CFDI to the customer (Fase 28E, ADR 0049); self-invoicing, turned on here and
+/// printed on each ticket (Fase 28F, ADR 0050); and the CFDI issued in a month, with their XML for the accountant
+/// (Fase 28H, ADR 0052), for owners and admins.
 /// </summary>
 [ApiController]
 [Route("api/v1/invoicing")]
@@ -309,6 +310,44 @@ public class InvoicingController : ControllerBase
     public Task<IActionResult> DownloadGlobalPdf(Guid invoiceId, CancellationToken cancellationToken)
         => DownloadAsync(new GetGlobalInvoiceFileQuery(invoiceId, OrderInvoiceFileKind.Pdf), cancellationToken);
 
+    /// <summary>
+    /// The CFDI the business issued with a date in that month, in its time zone, the newest first: invoices of orders,
+    /// global invoices, payment complements and credit notes, in any state. The search finds one by its folio, its UUID,
+    /// its receiver's RFC or name, its order's folio, or the folio of a sale its global invoice covers.
+    /// </summary>
+    [HttpGet("issued-cfdis")]
+    public async Task<ActionResult<PaginatedList<IssuedCfdiDto>>> GetIssuedCfdis(
+        [FromQuery] int year,
+        [FromQuery] int month,
+        [FromQuery] IssuedCfdiKind? kind = null,
+        [FromQuery] OrderInvoiceStatus? status = null,
+        [FromQuery] string? search = null,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+        => Ok(await _mediator.Send(new GetIssuedCfdisQuery(year, month, kind, status, search, pageNumber, pageSize), cancellationToken));
+
+    /// <summary>What the CFDI of that month add up to, by kind: the ones in force, cancelled, cancelling, stamping and refused.</summary>
+    [HttpGet("issued-cfdis/summary")]
+    public async Task<ActionResult<IssuedCfdiSummaryDto>> GetIssuedCfdiSummary(
+        [FromQuery] int year, [FromQuery] int month, CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetIssuedCfdiSummaryQuery(year, month), cancellationToken));
+
+    /// <summary>
+    /// The month's CFDI for the accountant: a ZIP with the stamped XML of each one that was stamped, by kind, and the list of
+    /// all of them as CSV; or the list alone. Up to 5,000 CFDI.
+    /// </summary>
+    [HttpGet("issued-cfdis/export")]
+    public async Task<IActionResult> ExportIssuedCfdis(
+        [FromQuery] int year,
+        [FromQuery] int month,
+        [FromQuery] IssuedCfdiExportFormat format = IssuedCfdiExportFormat.Zip,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(new ExportIssuedCfdisQuery(year, month, format), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Download(result.Value!);
+    }
+
     private async Task<ActionResult<CreditNoteDto>> IssueCreditNoteAsync(
         CreditNoteAdjustment adjustment, Guid adjustmentId, CancellationToken cancellationToken)
     {
@@ -327,10 +366,11 @@ public class InvoicingController : ControllerBase
     private async Task<IActionResult> DownloadAsync(IRequest<Result<PrivateFileDownload>> query, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(query, cancellationToken);
-        if (result.IsFailure)
-            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status404NotFound, result.Error) : Download(result.Value!);
+    }
 
-        var file = result.Value!;
+    private FileStreamResult Download(PrivateFileDownload file)
+    {
         // Downloaded, never rendered as a page of this origin nor kept by shared caches.
         Response.Headers.ContentSecurityPolicy = "sandbox";
         Response.Headers.CacheControl = "private, no-store";

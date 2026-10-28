@@ -107,5 +107,7 @@ public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
         // An order's invoices, and the ones the worker follows (stamping or waiting for their cancellation).
         builder.HasIndex(x => x.OrderId);
         builder.HasIndex(x => new { x.Status, x.RequestedAt }).HasFilter("[Status] IN (0, 3)");
+        // A month of the business's CFDI, in Reportes › CFDI emitidos (Fase 28H).
+        builder.HasIndex(x => new { x.TenantId, x.IssuedAt });
     }
 }

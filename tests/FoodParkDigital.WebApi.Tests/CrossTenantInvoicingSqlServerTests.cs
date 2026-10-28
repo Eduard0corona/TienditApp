@@ -619,6 +619,64 @@ public sealed class CrossTenantInvoicingSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task IssuedCfdis_OfAnotherBusiness_ShouldBeOutOfItsList_SummaryAndDownload_AndOnlyOwnersSeeThem()
+    {
+        var mine = await _api.SignUpAsync("emitidos-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("emitidos-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        var (order, total) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Emitida A"), phone: "5512345678", name: "Karla");
+        var invoice = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }));
+        var uuid = invoice.GetProperty("uuid").GetString()!;
+        // The month the invoice is dated in, in the business's time zone (Mexico City).
+        var dated = TimeZoneInfo.ConvertTime(invoice.GetProperty("requestedAt").GetDateTimeOffset(), TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City"));
+        var month = $"year={dated.Year}&month={dated.Month}";
+
+        var listed = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/issued-cfdis?{month}"));
+        var item = Assert.Single(listed.GetProperty("items").EnumerateArray());
+        Assert.Equal(("F-1", uuid, "XIQB891116QE4", total, true), (item.GetProperty("number").GetString(), item.GetProperty("uuid").GetString(),
+            item.GetProperty("receiverRfc").GetString(), item.GetProperty("total").GetDecimal(), item.GetProperty("hasXml").GetBoolean()));
+        var zip = await mine.Client.GetAsync($"/api/v1/invoicing/issued-cfdis/export?{month}");
+        Assert.Equal(("application/zip", true), (zip.Content.Headers.ContentType?.MediaType, zip.Headers.CacheControl is { Private: true, NoStore: true }));
+        using (var archive = new System.IO.Compression.ZipArchive(await zip.Content.ReadAsStreamAsync()))
+            Assert.Contains($"ingresos/F-1_{uuid}.xml", archive.Entries.Select(e => e.FullName));
+        var list = await mine.Client.GetAsync($"/api/v1/invoicing/issued-cfdis/export?{month}&format=Csv");
+        Assert.Equal(("text/csv", true), (list.Content.Headers.ContentType?.MediaType, list.Headers.CacheControl is { Private: true, NoStore: true }));
+        Assert.Contains($",{uuid},", await list.Content.ReadAsStringAsync());
+
+        // The other owner, even with the header of my business, has none: an empty list, a summary of zeros, a ZIP with
+        // only its empty list.
+        foreach (var send in new Func<string, Task<HttpResponseMessage>>[]
+        {
+            url => theirs.Client.GetAsync(url),
+            url => theirs.Client.SendAsync(AsOther(mine, HttpMethod.Get, url))
+        })
+        {
+            Assert.Equal(0, (await TwoBusinessesApi.ReadAsync(await send($"/api/v1/invoicing/issued-cfdis?{month}"))).GetProperty("totalCount").GetInt32());
+            var summary = await TwoBusinessesApi.ReadAsync(await send($"/api/v1/invoicing/issued-cfdis/summary?{month}"));
+            Assert.All(summary.GetProperty("kinds").EnumerateArray(), k => Assert.Equal(0, k.GetProperty("inForce").GetInt32()));
+            var theirZip = await send($"/api/v1/invoicing/issued-cfdis/export?{month}");
+            Assert.Equal(HttpStatusCode.OK, theirZip.StatusCode);
+            using var archive = new System.IO.Compression.ZipArchive(await theirZip.Content.ReadAsStreamAsync());
+            Assert.Equal([$"CFDI_{dated.Year:0000}-{dated.Month:00}.csv"], archive.Entries.Select(e => e.FullName));
+            using var csv = new StreamReader(archive.Entries[0].Open());
+            Assert.DoesNotContain(uuid, await csv.ReadToEndAsync());
+            Assert.DoesNotContain(uuid, await (await send($"/api/v1/invoicing/issued-cfdis/export?{month}&format=Csv")).Content.ReadAsStringAsync());
+        }
+
+        // The month's fiscal list carries the customers' RFC and name: owners and admins only, not who manages the orders.
+        var cashier = await EmployeeAsync(mine, "ManageOrders", "ChargeOrders", "ManageCash", "ViewReports");
+        foreach (var url in new[]
+        {
+            $"/api/v1/invoicing/issued-cfdis?{month}",
+            $"/api/v1/invoicing/issued-cfdis/summary?{month}",
+            $"/api/v1/invoicing/issued-cfdis/export?{month}"
+        })
+            Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync(url)).StatusCode);
+    }
+
+    [SqlServerFact]
     public async Task TheSameOrderInvoicedAtOnce_ShouldBeStampedOnce_AndGiveTheOtherFolioBack()
     {
         var mine = await _api.SignUpAsync("facturas-carrera", TwoBusinessesApi.FoodBusiness);

@@ -640,6 +640,16 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Se ve en Pedidos:** «Sustituye a la factura F-n», «Sustituida por la factura F-n», que la anterior se cancela al timbrarse la nueva y por qué no pasó. Nunca se borra una factura.
 - **Acceso:** sustituir y cancelar con relación, dueños y administradores; otro negocio recibe 404.
 
+## Los CFDI emitidos del mes (Fase 28H)
+
+[ADR 0052](../adr/0052-issued-cfdi-report.md):
+
+- **Qué es:** Reportes › CFDI emitidos lista los CFDI que el negocio pidió al PAC con fecha en un mes, en su zona horaria: facturas de pedido y globales, complementos de pago y notas de crédito, en cualquier estado. Un rechazado no es CFDI, pero explica un folio que falta.
+- **Quién:** dueños y administradores (la lista lleva el RFC y el nombre de los clientes); otro negocio no ve ninguno.
+- **El resumen:** por tipo, cuántos están vigentes (timbrados o esperando que el cliente acepte su cancelación) y lo que suman, y cuántos se cancelaron, esperan, se timbran o fueron rechazados. Lo de un complemento es lo que declara pagado. No calcula un neto: lo decide el contador.
+- **La descarga:** un ZIP con el XML de cada CFDI que se timbró, por tipo (los cancelados aparte, en `cancelados/`), y la lista de todos en CSV; o la lista sola. Hasta 5,000 CFDI por mes. La lista dice el receptor y la fecha tal como los lleva cada CFDI; una celda que una hoja de cálculo correría como fórmula va como texto.
+- **No cambia nada:** es de solo lectura; cada CFDI se cancela o se sustituye donde nació (Pedidos o Factura global).
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

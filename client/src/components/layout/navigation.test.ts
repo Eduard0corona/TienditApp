@@ -94,16 +94,20 @@ describe('navigation', () => {
     expect(settlement.pages.filter((page) => isNavItemActive(page, '/reports')).map((page) => page.label)).toEqual(['Ventas']);
   });
 
-  it('adds the global invoice to Reportes for owners and admins only, with each one under its tab', () => {
+  it('adds the global invoice and the issued CFDI to Reportes for owners and admins only, with each one under its tab', () => {
     const admin = getAccess(user('TENANT_ADMIN'), RESTAURANT);
     const tabs = getSectionTabs('/reports/global-invoices/7f1c', admin, RESTAURANT)!;
 
-    expect(tabs.pages.map((page) => page.label)).toEqual(['Ventas', 'Liquidaciones', 'Factura global']);
+    expect(tabs.pages.map((page) => page.label)).toEqual(['Ventas', 'Liquidaciones', 'Factura global', 'CFDI emitidos']);
     expect(tabs.pages.filter((page) => isNavItemActive(page, '/reports/global-invoices/7f1c')).map((page) => page.label))
       .toEqual(['Factura global']);
     // Who reads the reports does not issue invoices: the page is not theirs (the API refuses it too).
     const reader = getAccess(user('STAFF', ['ViewReports']), RESTAURANT);
     expect(getAllowedPages(reader, RESTAURANT).map((page) => page.path)).not.toContain('/reports/global-invoices');
+    // Nor the month's CFDI, with the customers' fiscal data (Fase 28H).
+    expect(getAllowedPages(reader, RESTAURANT).map((page) => page.path)).not.toContain('/reports/issued-cfdis');
+    expect(getSectionTabs('/reports/issued-cfdis', admin, RESTAURANT)!.pages
+      .filter((page) => isNavItemActive(page, '/reports/issued-cfdis')).map((page) => page.label)).toEqual(['CFDI emitidos']);
   });
 
   it('lets the global search find the settlements by what people call them', () => {
@@ -116,8 +120,11 @@ describe('navigation', () => {
     expect(found('depósitos')).toEqual(['Liquidaciones']);
     // Retenciones hangs from Liquidaciones (Fase 22J).
     expect(found('retenciones')).toEqual(['Liquidaciones']);
-    // The CFDI of withholdings, since the Fase 28A the business's own invoices, and since the 28B its global invoice.
-    expect(found('cfdi')).toEqual(['Liquidaciones', 'Factura global', 'Facturación']);
+    // The CFDI of withholdings, since the Fase 28A the business's own invoices, since the 28B its global invoice, and since
+    // the 28H the month's CFDI.
+    expect(found('cfdi')).toEqual(['Liquidaciones', 'Factura global', 'CFDI emitidos', 'Facturación']);
+    expect(found('contador')).toEqual(['CFDI emitidos']);
+    expect(found('xml')).toEqual(['CFDI emitidos']);
     expect(found('público en general')).toEqual(['Factura global']);
     expect(found('csd')).toEqual(['Facturación']);
     expect(found('reportes')).toEqual(['Ventas']);

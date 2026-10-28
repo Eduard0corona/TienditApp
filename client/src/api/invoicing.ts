@@ -7,6 +7,8 @@ import {
   CfdiEmailDocument,
   CreditNoteAdjustment,
   GlobalInvoicePeriodicity,
+  IssuedCfdiExportFormat,
+  IssuedCfdiKind,
   OrderInvoiceStatus,
   OrderStatus,
   type OrderDto,
@@ -16,8 +18,9 @@ import { isDeliveryPlatform } from '../utils/deliveryPlatforms';
 // Invoicing (Fase 28A, ADR 0045): Configuración › Facturación and the invoice of an order; the global invoice of a period
 // (Fase 28B, ADR 0046) in Reportes › Factura global; the payment complements of an invoice in installments (Fase 28C,
 // ADR 0047); the credit notes of an invoiced order's refunds and write-offs (Fase 28D, ADR 0048); and the emails of those
-// CFDI to the customer (Fase 28E, ADR 0049); and self-invoicing, turned on here and printed on each ticket (Fase 28F,
-// ADR 0050). Kept out of queries.ts, which the first visit loads.
+// CFDI to the customer (Fase 28E, ADR 0049); self-invoicing, turned on here and printed on each ticket (Fase 28F,
+// ADR 0050); and the CFDI issued in a month, with their XML for the accountant (Fase 28H, ADR 0052), in Reportes › CFDI
+// emitidos. Kept out of queries.ts, which the first visit loads.
 
 export type InvoicingSettings = Schemas['InvoicingSettingsDto'];
 export type OrderInvoicing = Schemas['OrderInvoicingDto'];
@@ -31,12 +34,15 @@ export type GlobalInvoice = Schemas['GlobalInvoiceDto'];
 export type GlobalInvoiceDetail = Schemas['GlobalInvoiceDetailDto'];
 export type GlobalInvoiceDraft = Schemas['GlobalInvoiceDraftDto'];
 export type OrderSelfInvoice = Schemas['OrderSelfInvoiceDto'];
+export type IssuedCfdi = Schemas['IssuedCfdiDto'];
+export type IssuedCfdiSummary = Schemas['IssuedCfdiSummaryDto'];
 
 export const invoicingSettingsKey = ['invoicing', 'settings'] as const;
 export const orderInvoicingKey = (orderId: string) => ['invoicing', 'orders', orderId] as const;
 const cfdiDraftKey = (orderId: string, receiver?: CfdiReceiver) => ['orders', orderId, 'cfdi-draft', receiver ?? null] as const;
 /** Everything of the global invoices (list, previews and each one): a change reads it all again. */
 const globalInvoicesKey = ['invoicing', 'global-invoices'] as const;
+const issuedCfdisKey = ['invoicing', 'issued-cfdis'] as const;
 
 /** Fiscal data of the customer an invoice is for (CFDI 4.0 receptor). */
 export interface CfdiReceiver {
@@ -290,6 +296,78 @@ export function useSendCfdiByEmail(orderId: string) {
   });
 }
 
+/** What Reportes › CFDI emitidos narrows the month to; empty, all of them. */
+export interface IssuedCfdiFilters {
+  kind?: IssuedCfdiKind;
+  status?: OrderInvoiceStatus;
+  search: string;
+}
+
+/**
+ * The CFDI the business issued in a month, the newest first; while one is being stamped, it is asked again. Another page of
+ * the same list keeps the one on screen while it arrives; another month, kind, state or search does not (it would show
+ * under the new title what the old one had).
+ */
+export function useIssuedCfdis(year: number, month: number, filters: IssuedCfdiFilters, page: number, pageSize: number) {
+  const listing = [...issuedCfdisKey, 'list', year, month, filters.kind ?? null, filters.status ?? null, filters.search] as const;
+  return useQuery({
+    queryKey: [...listing, page, pageSize],
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/issued-cfdis', {
+      query: {
+        year,
+        month,
+        kind: filters.kind,
+        status: filters.status,
+        search: filters.search || undefined,
+        pageNumber: page,
+        pageSize,
+      },
+      signal,
+    }),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery && listing.every((part, index) => previousQuery.queryKey[index] === part) ? previous : undefined,
+    // A CFDI is stamped, cancelled or replaced from its order or its global invoice: coming back reads the month again.
+    refetchOnMount: 'always',
+    refetchInterval: (query) => query.state.data?.items.some((cfdi) => cfdi.status === OrderInvoiceStatus.Stamping)
+      ? PENDING_REFRESH_MS
+      : false,
+  });
+}
+
+/** What the CFDI of a month add up to, by kind; while one is being stamped, it is asked again, as the list. */
+export function useIssuedCfdiSummary(year: number, month: number) {
+  return useQuery({
+    queryKey: [...issuedCfdisKey, 'summary', year, month],
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/issued-cfdis/summary', { query: { year, month }, signal }),
+    refetchOnMount: 'always',
+    refetchInterval: (query) => query.state.data?.kinds.some((kind) => kind.stamping > 0) ? PENDING_REFRESH_MS : false,
+  });
+}
+
+/** The month's CFDI for the accountant: a ZIP with their XML and the list, or the list alone (CSV). */
+export function downloadIssuedCfdis(year: number, month: number, format: IssuedCfdiExportFormat): Promise<{ blob: Blob; fileName: string }> {
+  const name = `CFDI_${year}-${String(month).padStart(2, '0')}`;
+  return downloadNamed(
+    '/invoicing/issued-cfdis/export',
+    `${name}.${format === IssuedCfdiExportFormat.Csv ? 'csv' : 'zip'}`,
+    { year, month, format },
+  );
+}
+
+/** The stamped XML or the PDF of a row of Reportes › CFDI emitidos, from where its kind keeps it. */
+export function downloadIssuedCfdiFile(cfdi: IssuedCfdi, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
+  switch (cfdi.kind) {
+    case IssuedCfdiKind.GlobalInvoice:
+      return downloadGlobalInvoiceFile(cfdi.id, kind);
+    case IssuedCfdiKind.PaymentComplement:
+      return downloadPaymentComplementFile(cfdi.id, kind);
+    case IssuedCfdiKind.CreditNote:
+      return downloadCreditNoteFile(cfdi.id, kind);
+    default:
+      return downloadInvoiceFile(cfdi.id, kind);
+  }
+}
+
 /** The stamped XML or the PDF of an invoice, fetched with the session. */
 export function downloadInvoiceFile(invoiceId: string, kind: 'xml' | 'pdf'): Promise<{ blob: Blob; fileName: string }> {
   return downloadFile(`/invoicing/invoices/${encodeURIComponent(invoiceId)}/${kind}`, kind);
@@ -310,10 +388,16 @@ export function downloadGlobalInvoiceFile(invoiceId: string, kind: 'xml' | 'pdf'
   return downloadFile(`/invoicing/global-invoices/${encodeURIComponent(invoiceId)}/${kind}`, kind);
 }
 
-async function downloadFile(path: string, kind: 'xml' | 'pdf', fallbackName = 'factura'): Promise<{ blob: Blob; fileName: string }> {
+function downloadFile(path: string, kind: 'xml' | 'pdf', fallbackName = 'factura'): Promise<{ blob: Blob; fileName: string }> {
+  return downloadNamed(path, `${fallbackName}.${kind}`);
+}
+
+async function downloadNamed(
+  path: string, fallbackFileName: string, params?: Record<string, string | number>,
+): Promise<{ blob: Blob; fileName: string }> {
   let response;
   try {
-    response = await api.get<Blob>(path, { responseType: 'blob' });
+    response = await api.get<Blob>(path, params ? { responseType: 'blob', params } : { responseType: 'blob' });
   } catch (err: unknown) {
     // The refusal comes as a blob too: read back, its message (the PDF not available, say) reaches the person.
     if (isAxiosError(err) && err.response?.data instanceof Blob) {
@@ -327,7 +411,7 @@ async function downloadFile(path: string, kind: 'xml' | 'pdf', fallbackName = 'f
   }
   const disposition = String(response.headers['content-disposition'] ?? '');
   const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
-  return { blob: response.data, fileName: match ? decodeURIComponent(match[1]) : `${fallbackName}.${kind}` };
+  return { blob: response.data, fileName: match ? decodeURIComponent(match[1]) : fallbackFileName };
 }
 
 /** The customer's fiscal data and the email for their invoices, for their next invoices; null forgets both. */
