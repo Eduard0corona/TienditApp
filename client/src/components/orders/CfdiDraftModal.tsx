@@ -298,9 +298,12 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
 
         {orderCancelled && invoicing && (
           <p className="text-muted small mb-0">
-            {invoicing.invoices.length === 0
-              ? 'Este pedido está cancelado y no tiene facturas.'
-              : 'El pedido está cancelado: si una de sus facturas sigue timbrada, cancélala ante el SAT con el motivo 03 (la venta no se llevó a cabo).'}
+            {invoicing.globalInvoiceNumber
+              ? `El pedido está cancelado y la factura global ${invoicing.globalInvoiceNumber} lo ampara: la global no se cancela `
+                + 'por una de sus ventas, y cada reembolso lleva su nota de crédito de esa global.'
+              : invoicing.invoices.length === 0
+                ? 'Este pedido está cancelado y no tiene facturas.'
+                : 'El pedido está cancelado: si una de sus facturas sigue timbrada, cancélala ante el SAT con el motivo 03 (la venta no se llevó a cabo).'}
           </p>
         )}
         {!orderCancelled && (

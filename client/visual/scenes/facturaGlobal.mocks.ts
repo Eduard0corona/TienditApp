@@ -100,28 +100,31 @@ const DETAIL = {
   orders: SALES.map((sale) => ({ orderId: sale.orderId, orderNumber: sale.orderNumber, total: sale.total, creditNotes: [] })),
 };
 
-/** A credit note of F-58 (CFDI tipo E, Fase 28I) for what a refund of one of its sales gave back, stamped by TienditApp. */
+// A literal id: the scene opens its detail by it, and the coverage check reads the URL as written.
+const GLOBAL_WITH_NOTES_ID = '7a2d4c6e-8b1f-4e3a-9c5d-2f4e6a8b0c71';
+
+/** A credit note of F-59 (CFDI tipo E, Fase 28I) for what a refund of one of its sales gave back, stamped by TienditApp. */
 function creditNote(folio: number, total: number, fields: Record<string, unknown>) {
   const subTotal = r2(total / 1.16);
   return {
-    id: uuid(`global-credit-note-${folio}`), orderInvoiceId: null, globalInvoiceId: GLOBAL_STAMPED_ID, globalInvoiceNumber: 'F-58',
+    id: uuid(`global-credit-note-${folio}`), orderInvoiceId: null, globalInvoiceId: GLOBAL_WITH_NOTES_ID, globalInvoiceNumber: 'F-59',
     number: `NC-${folio}`, status: STAMPED, paymentForm: '01', subTotal, taxTotal: r2(total - subTotal), total,
-    requestedAt: '2026-10-04T16:20:00Z', issuedAutomatically: true, uuid: null, stampedAt: '2026-10-04T16:20:03Z', hasXml: true,
-    hasPdf: true, failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, emails: [],
+    requestedAt: '2026-10-04T16:20:00Z', issuedAutomatically: true, uuid: `0E5A7C3B-91D2-4F6A-8B3C-2D4E6F8A0B${String(folio).padStart(2, '0')}`,
+    stampedAt: '2026-10-04T16:20:03Z', hasXml: true, hasPdf: true, failureMessage: null, refusedAt: null, cancellationRequestedAt: null,
+    cancelledAt: null, emails: [],
     ...fields,
   };
 }
 
-// A literal id: the scene opens its detail by it, and the coverage check reads the URL as written.
-const GLOBAL_WITH_NOTES_ID = '7a2d4c6e-8b1f-4e3a-9c5d-2f4e6a8b0c71';
-
 /**
- * F-58 with the credit notes of two refunds: NC-7, in force, of ORD-000334, and NC-5, cancelled with 02 and issued again as
- * NC-6, of ORD-000337. While NC-6 and NC-7 stand, F-58 is not cancelled.
+ * F-59, the global invoice of 1 October, with the credit notes of two refunds: NC-7, in force, of ORD-000334, and NC-5,
+ * cancelled with 02 and issued again as NC-6, of ORD-000337. While NC-6 and NC-7 stand, F-59 is not cancelled.
  */
 const DETAIL_WITH_NOTES = {
-  ...DETAIL,
-  id: GLOBAL_WITH_NOTES_ID,
+  ...global(59, {
+    id: GLOBAL_WITH_NOTES_ID, periodFrom: '2026-10-01', periodTo: '2026-10-01', total: 1450,
+    uuid: '4B7E2C91-6D3A-4F58-A0B2-7C9E1D4F6A23', stampedAt: '2026-10-02T14:05:03Z', hasXml: true, hasPdf: true,
+  }),
   orders: DETAIL.orders.map((order) => ({
     ...order,
     creditNotes: order.orderNumber === 'ORD-000334'

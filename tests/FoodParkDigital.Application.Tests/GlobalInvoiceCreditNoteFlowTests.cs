@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
@@ -296,6 +297,133 @@ public class GlobalInvoiceCreditNoteFlowTests
         Assert.Empty(await book.Context.CfdiEmails.ToListAsync());
     }
 
+    [Fact]
+    public async Task SaleWithARefundWithoutAFormOfTheSat_ShouldStayOutOfTheGlobalInvoice()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
+        var other = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        await book.RefundAsync(sale.Id, 20m, OrderPaymentMethod.Card);
+        await book.RefundAsync(other.Id, 20m, OrderPaymentMethod.Other);
+        book.Clock.UtcNow = NextMorning;
+
+        // Its refund would never get a credit note: the global invoice would declare what was given back.
+        var draft = await book.DraftAsync();
+        Assert.Equal([sale.OrderNumber], draft.Sales.Select(s => s.OrderNumber));
+        var leftOut = Assert.Single(draft.LeftOut);
+        Assert.Equal((other.OrderNumber, GlobalInvoiceDrafts.RefundWithoutFormReason), (leftOut.OrderNumber, leftOut.Reason));
+        Assert.Contains(GlobalInvoiceDrafts.RefundsWarning(1), draft.Warnings);
+    }
+
+    [Fact]
+    public async Task SaleGivenBackInPart_LeftOutOfAnEarlierGlobalInvoice_ShouldGoInTheNextOne_AndTakeItsCreditNote()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
+        var other = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        var refund = await book.RefundAsync(sale.Id, 20m, OrderPaymentMethod.Card);
+        // The sale day's global invoice, stamped before Fase 28I, left the sale given back in part out.
+        var earlier = GlobalInvoice.Request(
+            book.Tenant.Id, GlobalInvoicePeriod.Containing(GlobalInvoicePeriodicity.Daily, SaleDay), "A", 900, "01", "{}",
+            86.21m, 13.79m, 100m, [new GlobalInvoiceSale(other.Id, other.OrderNumber, 100m)], Guid.NewGuid(), NextMorning);
+        earlier.Stamp(Guid.NewGuid().ToString().ToUpperInvariant(), "sw", NextMorning, "cfdi/a-900.xml");
+        book.Context.GlobalInvoices.Add(earlier);
+        await book.Context.SaveChangesAsync();
+        book.Context.ChangeTracker.Clear();
+
+        // The next day's global invoice takes it, for its total, as a sale of an earlier period.
+        var nextDay = SaleDay.AddDays(1);
+        book.Clock.UtcNow = NextMorning.AddDays(1);
+        var draft = await book.DraftAsync(nextDay);
+        Assert.Equal([sale.OrderNumber], draft.Sales.Select(s => s.OrderNumber));
+        Assert.Contains(GlobalInvoiceDrafts.LateSalesWarning(1), draft.Warnings);
+        Assert.Contains(GlobalInvoiceDrafts.RefundsWarning(1), draft.Warnings);
+        var global = await book.IssueGlobalAsync(1, 100m, nextDay);
+
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+        var note = await book.Context.CreditNotes.SingleAsync();
+        Assert.Equal((refund.Id, (Guid?)global.Id, 20m), (note.OrderRefundId, note.GlobalInvoiceId, note.Total));
+    }
+
+    [Fact]
+    public async Task GlobalInvoice_ShouldNotBeCancelled_WhileACreditNoteOfItsSalesStampsOrCancels()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
+        var global = await book.IssueGlobalAsync(1, 100m);
+        var refund = await book.RefundAsync(sale.Id, 20m, OrderPaymentMethod.Card);
+
+        // The PAC does not answer: the credit note is still being stamped.
+        book.Gateway.Unavailable = true;
+        var issued = await book.IssueCreditNoteAsync(refund.Id);
+        Assert.True(issued.IsSuccess, issued.Error);
+        Assert.Equal((OrderInvoiceStatus.Stamping, "F-1"), (issued.Value.Status, issued.Value.GlobalInvoiceNumber));
+        book.Gateway.Unavailable = false;
+        Assert.Equal(GlobalInvoicing.LiveCreditNotesMessage(["NC-1"]),
+            (await book.CancelGlobalAsync(global.Id, CfdiCancellationMotive.NominativeInGlobalInvoice)).Error);
+        // Pedidos says which go first when a customer asks for the sale's own invoice.
+        Assert.Equal(OrderInvoicing.InGlobalInvoiceMessage("F-1", ["NC-1"]), (await book.OrderInvoicingAsync(sale.Id)).Problem);
+
+        // Stamped, and its cancellation waits for the SAT: still in force.
+        var retried = await new RetryCreditNoteCommandHandler(book.Context, book.Gateway, book.Storage, book.Clock, NullLogger<OrderInvoiceStamper>.Instance)
+            .Handle(new RetryCreditNoteCommand(issued.Value.Id), CancellationToken.None);
+        Assert.Equal((OrderInvoiceStatus.Stamped, "F-1"), (retried.Value.Status, retried.Value.GlobalInvoiceNumber));
+        book.Context.ChangeTracker.Clear();
+        var cancelling = await book.CancelCreditNoteAsync(issued.Value.Id, CfdiCancellationMotive.ErrorsWithoutReplacement);
+        Assert.Equal((OrderInvoiceStatus.Cancelling, "F-1"), (cancelling.Value.Status, cancelling.Value.GlobalInvoiceNumber));
+        Assert.Equal(GlobalInvoicing.LiveCreditNotesMessage(["NC-1"]),
+            (await book.CancelGlobalAsync(global.Id, CfdiCancellationMotive.NominativeInGlobalInvoice)).Error);
+        Assert.DoesNotContain(book.Gateway.Cancellations, c => c.Uuid == global.Uuid);
+    }
+
+    [Fact]
+    public async Task VoidedSale_WhoseGlobalInvoiceWasCancelled_ShouldSayNoCfdiCoversIt()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
+        var global = await book.IssueGlobalAsync(1, 100m);
+        await book.RefundAsync(sale.Id, 100m, OrderPaymentMethod.Card);
+        await book.CancelOrderAsync(sale.Id);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        var note = await book.Context.CreditNotes.SingleAsync();
+        Assert.True((await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        Assert.True((await book.CancelGlobalAsync(global.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+
+        // It never had an invoice of its own to cancel with 03.
+        Assert.Equal(CreditNotes.CancelledOrderWithoutCfdiMessage, Assert.Single((await book.OrderInvoicingAsync(sale.Id)).Adjustments).Problem);
+    }
+
+    [Fact]
+    public async Task CreditNotes_OfAGlobalInvoice_ShouldBeInvisibleToAnotherBusiness()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync(1, OrderPaymentMethod.Card);
+        var global = await book.IssueGlobalAsync(1, 100m);
+        var refund = await book.RefundAsync(sale.Id, 20m, OrderPaymentMethod.Card);
+        var issued = await book.IssueCreditNoteAsync(refund.Id);
+        Assert.True(issued.IsSuccess, issued.Error);
+        var pending = await book.RefundAsync(sale.Id, 10m, OrderPaymentMethod.Card);
+
+        // Another business neither reads, issues, cancels nor downloads them, and its worker pass does not see them.
+        await book.Fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.OrderInvoicingAsync(sale.Id));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.GlobalDetailAsync(global.Id));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.IssueCreditNoteAsync(pending.Id));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.CancelCreditNoteAsync(issued.Value.Id, CfdiCancellationMotive.ErrorsWithoutReplacement));
+        var download = await new GetCreditNoteFileQueryHandler(
+                book.Context, book.Storage, book.Gateway, NullLogger<GetCreditNoteFileQueryHandler>.Instance)
+            .Handle(new GetCreditNoteFileQuery(issued.Value.Id, OrderInvoiceFileKind.Xml), CancellationToken.None);
+        Assert.Equal(GetOrderInvoiceFileQueryHandler.NotFoundMessage, download.Error);
+        Assert.Equal(0, (await book.IssuePendingAsync()).Value);
+
+        // Its own business still does.
+        book.Fixture.TenantService.SetTenant(book.Tenant.Id);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+        Assert.Equal(2, (await book.GlobalDetailAsync(global.Id)).Orders.Single().CreditNotes.Count);
+    }
+
     private sealed class Book : IAsyncDisposable, ISender
     {
         private Book(SalesTestFixture fixture, Tenant tenant, Product product)
@@ -359,19 +487,23 @@ public class GlobalInvoiceCreditNoteFlowTests
         /// <summary>
         /// Stamps the sale day's global invoice the next morning (or later), as its preview showed it, and expects it saved.
         /// </summary>
-        public async Task<GlobalInvoiceDto> IssueGlobalAsync(int saleCount, decimal total)
+        public async Task<GlobalInvoiceDto> IssueGlobalAsync(int saleCount, decimal total, DateOnly? day = null)
         {
             if (Clock.UtcNow < NextMorning)
                 Clock.UtcNow = NextMorning;
-            var draft = await new GetGlobalInvoiceDraftQueryHandler(Context, Fixture.TenantService, Gateway, Clock)
-                .Handle(new GetGlobalInvoiceDraftQuery(GlobalInvoicePeriodicity.Daily, SaleDay), CancellationToken.None);
+            var draft = await DraftAsync(day);
             var issued = await new IssueGlobalInvoiceCommandHandler(this, Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
-                .Handle(new IssueGlobalInvoiceCommand(GlobalInvoicePeriodicity.Daily, SaleDay, saleCount, total, draft.Fingerprint),
+                .Handle(new IssueGlobalInvoiceCommand(GlobalInvoicePeriodicity.Daily, day ?? SaleDay, saleCount, total, draft.Fingerprint),
                     CancellationToken.None);
             Assert.True(issued.IsSuccess, issued.Error);
             Context.ChangeTracker.Clear();
             return issued.Value;
         }
+
+        /// <summary>The preview of the daily global invoice of that day (the sale day by default).</summary>
+        public Task<GlobalInvoiceDraftDto> DraftAsync(DateOnly? day = null)
+            => new GetGlobalInvoiceDraftQueryHandler(Context, Fixture.TenantService, Gateway, Clock)
+                .Handle(new GetGlobalInvoiceDraftQuery(GlobalInvoicePeriodicity.Daily, day ?? SaleDay), CancellationToken.None);
 
         public Task<Result<GlobalInvoiceDto>> RetryGlobalAsync(Guid invoiceId)
             => new RetryGlobalInvoiceCommandHandler(Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)

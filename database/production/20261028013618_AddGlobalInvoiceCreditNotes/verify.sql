@@ -35,11 +35,21 @@ ELSE IF OBJECT_ID(N'dbo.CreditNotes') IS NOT NULL
     EXEC(N'SELECT COUNT(*) AS [NotasDeCredito] FROM [CreditNotes];');
 
 -- 4. Antes y después: los reembolsos de ventas que cubre una factura global timbrada, con una forma
---    del SAT (los «Otro» y con saldo a favor no llevan nota). Al desplegar, TienditApp emite por su
---    cuenta la nota de crédito de cada uno, con la fecha de ese día: si alguno ya tiene su CFDI de
---    egreso hecho a mano, avísalo antes de desplegar. La migración no los cambia.
-IF OBJECT_ID(N'dbo.GlobalInvoiceOrders') IS NOT NULL
-    EXEC(N'SELECT COUNT(*) AS [ReembolsosEnFacturaGlobal]
+--    del SAT (los «Otro» y con saldo a favor no llevan nota), sin nota de crédito de esa global. Al
+--    desplegar, TienditApp emite por su cuenta la nota de cada uno, con la fecha de ese día, y la
+--    cuenta baja conforme lo hace (los que no pueda emitir, Pedidos dice por qué): si alguno ya
+--    tiene su CFDI de egreso hecho a mano, avísalo antes de desplegar. La migración no los cambia.
+IF COL_LENGTH(N'dbo.CreditNotes', N'GlobalInvoiceId') IS NOT NULL
+    EXEC(N'SELECT COUNT(*) AS [ReembolsosEnFacturaGlobalSinNota]
+        FROM [OrderRefunds] r
+        WHERE r.[Method] NOT IN (4, 7)
+            AND EXISTS (SELECT 1 FROM [GlobalInvoiceOrders] s
+                INNER JOIN [GlobalInvoices] g ON g.[Id] = s.[GlobalInvoiceId]
+                WHERE s.[OrderId] = r.[OrderId] AND s.[Released] = 0 AND g.[Status] = 1
+                    AND NOT EXISTS (SELECT 1 FROM [CreditNotes] n
+                        WHERE n.[OrderRefundId] = r.[Id] AND n.[GlobalInvoiceId] = g.[Id]));');
+ELSE IF OBJECT_ID(N'dbo.GlobalInvoiceOrders') IS NOT NULL
+    EXEC(N'SELECT COUNT(*) AS [ReembolsosEnFacturaGlobalSinNota]
         FROM [OrderRefunds] r
         WHERE r.[Method] NOT IN (4, 7)
             AND EXISTS (SELECT 1 FROM [GlobalInvoiceOrders] s
@@ -47,15 +57,18 @@ IF OBJECT_ID(N'dbo.GlobalInvoiceOrders') IS NOT NULL
                 WHERE s.[OrderId] = r.[OrderId] AND s.[Released] = 0 AND g.[Status] = 1);');
 
 -- 5. Antes de desplegar: las ventas devueltas en parte, pagadas por completo, sin condonar ni vender a
---    crédito, sin factura propia viva y fuera de toda factura global viva. Desde la Fase 28I la global
---    las toma por su total y cada reembolso lleva su nota: las de un periodo que ya tiene su global
---    timbrada entran en la siguiente que se emita, como ventas de periodos anteriores (su vista previa
---    las cuenta). Solo cuenta ventas y negocios.
+--    crédito, sin reembolsos «Otro» o con saldo a favor, sin factura propia viva y fuera de toda
+--    factura global viva. Desde la Fase 28I la global las toma por su total y cada reembolso lleva su
+--    nota: las de un periodo que ya tiene su global timbrada entran en la siguiente que se emita, como
+--    ventas de periodos anteriores (su vista previa las cuenta). Es un tope: también cuenta las de
+--    periodos sin global todavía, que esperan la suya, y las que siguen pendientes o abiertas. Solo
+--    cuenta ventas y negocios.
 IF OBJECT_ID(N'dbo.GlobalInvoiceOrders') IS NOT NULL
     EXEC(N'SELECT COUNT(*) AS [VentasDevueltasEnParteSinCfdi], COUNT(DISTINCT o.[TenantId]) AS [Negocios]
         FROM [Orders] o
         WHERE o.[Status] <> 99 AND o.[Total] > 0 AND o.[PaidAmount] >= o.[Total]
             AND o.[RefundedAmount] > 0 AND o.[RefundedAmount] < o.[Total]
             AND o.[WrittenOffAmount] = 0 AND o.[SoldOnCredit] = 0
+            AND NOT EXISTS (SELECT 1 FROM [OrderRefunds] r WHERE r.[OrderId] = o.[Id] AND r.[Method] IN (4, 7))
             AND NOT EXISTS (SELECT 1 FROM [OrderInvoices] i WHERE i.[OrderId] = o.[Id] AND i.[Status] IN (0, 1, 3))
             AND NOT EXISTS (SELECT 1 FROM [GlobalInvoiceOrders] s WHERE s.[OrderId] = o.[Id] AND s.[Released] = 0);');

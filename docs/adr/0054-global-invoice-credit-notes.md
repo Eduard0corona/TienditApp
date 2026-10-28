@@ -29,6 +29,7 @@ Tomé las decisiones de la Fase 28I con la autorización permanente del dueño d
    Sin condonaciones: la global solo toma ventas pagadas por completo y sin condonar, y una venta pagada ya no se condona.
 2. **La global toma las ventas devueltas en parte:** entran por su total, como la primera vez que la 28B emite otra vez una global cancelada, y cada reembolso lleva su nota.
    - Una venta devuelta completa sigue fuera: «Se devolvió completa: no hay nada que facturar».
+   - Una venta con un reembolso sin forma del SAT («Otro» o con saldo a favor) queda fuera: ese reembolso nunca llevaría nota y la global declararía lo que se devolvió. El motivo pide consultar al contador.
    - El reembolso en línea en curso sigue fuera (su monto todavía puede cambiar).
    - La vista previa avisa cuántas ventas con devoluciones incluye.
    - Las ventas devueltas en parte que una global ya timbrada dejó fuera antes de esta fase entran en la siguiente, como ventas de periodos anteriores, con su aviso.
@@ -52,7 +53,8 @@ Tomé las decisiones de la Fase 28I con la autorización permanente del dueño d
    - Si Mi negocio cambió de RFC, la nota no se emite desde TienditApp, y lo dice.
 8. **Cancelar:**
    - la nota de una global solo se cancela con 02, como toda nota de reembolso;
-   - una global con notas vivas no se cancela: la API dice cuáles van primero y Reportes › Factura global lo dice en lugar del botón.
+   - una global con notas vivas no se cancela: la API dice cuáles van primero y Reportes › Factura global lo dice en lugar del botón (las timbradas se cancelan en su pedido; las que se timbran o se cancelan, que terminen);
+   - en Pedidos, el aviso de una venta de la global que el cliente quiere facturar a su nombre nombra esas notas antes de pedir cancelar la global con 04.
 9. **Nunca va por correo:** es para el público en general. Al timbrarla no se encola un correo, y «Enviar por correo» la rechaza.
 10. **Dónde se ve:**
     - **Pedidos › Factura de la venta:** sus reembolsos con sus notas, «al público en general, de la factura global F-x», sin «Enviar por correo». El texto de arriba dice qué global ampara la venta.
@@ -81,7 +83,7 @@ Tomé las decisiones de la Fase 28I con la autorización permanente del dueño d
   - La nota se emite con el código postal de hoy: si el negocio se mudó después de la global, el receptor y el lugar de expedición son los nuevos, como pide la guía.
   - Al desplegar, el worker emite con la fecha de ese día las notas de los reembolsos de ventas que ya cubre una global timbrada (la consulta 4 del `verify.sql` los cuenta). Si alguno ya tiene su egreso hecho a mano, su nota se cancela con 02.
   - La siguiente global de cada negocio puede traer ventas devueltas en parte de periodos anteriores (punto 2). La vista previa las cuenta antes de timbrar.
-  - Cancelar la global revisa sus notas vivas antes de pedirlo al PAC, sin el candado de facturación: si el worker timbra una nota justo en medio, el SAT rechaza la cancelación.
+  - Cancelar la global revisa sus notas vivas antes de pedirlo al PAC, sin el candado de facturación (tomarlo obligaría a mantener la transacción abierta durante la llamada al PAC). Si el worker emite una nota justo entre esa revisión y la respuesta del SAT, pasa una de dos cosas: el SAT rechaza la cancelación, o la cancela y la nota queda relacionada con una global ya cancelada. En el segundo caso Pedidos la muestra vigente, con «Cancelar nota de crédito», y la nota del mismo reembolso en la siguiente global espera hasta que se cancele.
   - El formato de `CfdiRelacionados` en el JSON de SW Sapien sigue sin probarse en su ambiente de pruebas (ADR 0048).
 - **Compatibilidad durante el despliegue:**
   - La versión anterior (28H) funciona con la base migrada: sigue emitiendo las notas de sus facturas con `OrderInvoiceId` y no conoce la columna nueva.

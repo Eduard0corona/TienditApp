@@ -5,8 +5,10 @@ import { getApiErrorMessage } from './errors';
 import {
   downloadInvoiceFile,
   downloadPaymentComplementFile,
+  isGlobalInvoiceWaiting,
   isOrderInvoicingWaiting,
   mayPrintSelfInvoice,
+  type GlobalInvoiceDetail,
   type OrderInvoicing,
 } from './invoicing';
 import { CreditNoteAdjustment, OrderChannel, OrderInvoiceStatus, OrderStatus, type OrderDto } from '../types';
@@ -131,6 +133,26 @@ describe('isOrderInvoicingWaiting', () => {
 
     expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(true)], payments: [], adjustments: [] })).toBe(true);
     expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(false)], payments: [], adjustments: [] })).toBe(false);
+  });
+});
+
+describe('isGlobalInvoiceWaiting', () => {
+  const detail = (status: OrderInvoiceStatus, ...notes: OrderInvoiceStatus[]) => ({
+    status,
+    orders: [{ orderId: 'o-1', orderNumber: 'ORD-000001', total: 100, creditNotes: notes.map((note) => ({ status: note })) }],
+  }) as unknown as GlobalInvoiceDetail;
+
+  it('reads again while it, or a credit note of one of its sales, waits for the PAC or the SAT (Fase 28I)', () => {
+    expect(isGlobalInvoiceWaiting(detail(OrderInvoiceStatus.Stamping))).toBe(true);
+    expect(isGlobalInvoiceWaiting(detail(OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Stamping))).toBe(true);
+    expect(isGlobalInvoiceWaiting(detail(OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Cancelling))).toBe(true);
+  });
+
+  it('stops once nothing changes on its own', () => {
+    expect(isGlobalInvoiceWaiting(detail(OrderInvoiceStatus.Stamped))).toBe(false);
+    expect(isGlobalInvoiceWaiting(detail(
+      OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Cancelled, OrderInvoiceStatus.Refused,
+    ))).toBe(false);
   });
 });
 

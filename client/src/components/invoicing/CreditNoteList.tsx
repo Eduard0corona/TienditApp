@@ -126,7 +126,7 @@ export default function CreditNoteList({
           : globalInvoiceNumber
             ? `La factura global ${globalInvoiceNumber} ampara esta venta: cada reembolso lleva su nota de crédito al público en `
               + 'general, relacionada con esa factura global, que TienditApp emite por su cuenta unos minutos después de '
-              + 'registrarlo. Si uno no la lleva, dice por qué.'
+              + 'registrarlo (o de timbrar la factura global, si fue antes). Si uno no la lleva, dice por qué.'
             : 'Lo que se devolvió o se condonó de este pedido. Sus notas de crédito se emiten con una factura timbrada.'}
       </p>
       <ul className="list-unstyled mb-0">
@@ -181,7 +181,11 @@ export default function CreditNoteList({
                         </p>
                       )}
                       {note.status === OrderInvoiceStatus.Cancelling && (
-                        <p className="small text-muted mb-0 mt-1">El SAT pidió al cliente que acepte la cancelación.</p>
+                        <p className="small text-muted mb-0 mt-1">
+                          {note.globalInvoiceId != null
+                            ? 'El SAT está procesando la cancelación; TienditApp la vuelve a consultar.'
+                            : 'El SAT pidió al cliente que acepte la cancelación.'}
+                        </p>
                       )}
                       {note.failureMessage && (
                         <p className={`small mb-0 mt-1 ${note.status === OrderInvoiceStatus.Refused ? 'text-danger' : 'text-warning-emphasis'}`}>
@@ -293,7 +297,9 @@ function CancelCreditNoteModal({ orderId, note, kind, onClose }: CancelCreditNot
       const result = await cancel.mutateAsync({ creditNoteId: note.id, motive });
       toast.success(result.status === OrderInvoiceStatus.Cancelled
         ? `Nota de crédito ${result.number} cancelada.`
-        : `Cancelación de ${result.number} pedida: el SAT espera la respuesta del cliente.`);
+        : note.globalInvoiceId != null
+          ? `Cancelación de ${result.number} pedida: el SAT la está procesando.`
+          : `Cancelación de ${result.number} pedida: el SAT espera la respuesta del cliente.`);
       onClose();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo cancelar la nota de crédito.'));
@@ -308,7 +314,9 @@ function CancelCreditNoteModal({ orderId, note, kind, onClose }: CancelCreditNot
         </Modal.Header>
         <Modal.Body>
           <p className="small">
-            TienditApp le pide al SAT que la cancele; si el SAT le pide al cliente que lo acepte, sigue vigente mientras tanto.{' '}
+            {note.globalInvoiceId != null
+              ? 'TienditApp le pide al SAT que la cancele; va al público en general, así que nadie tiene que aceptarla. '
+              : 'TienditApp le pide al SAT que la cancele; si el SAT le pide al cliente que lo acepte, sigue vigente mientras tanto. '}
             {kind === CreditNoteAdjustment.Refund
               ? 'Un reembolso registrado no se deshace: su nota solo se cancela por errores (02), y después emites otra para el mismo reembolso.'
               : 'Con el motivo 02, después emites otra para la misma condonación; con el 03, la condonación se deshace después.'}

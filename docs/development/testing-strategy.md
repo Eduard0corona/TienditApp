@@ -1475,10 +1475,25 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Cliente:**
     - `CreditNoteList.test.tsx` (+1): la nota de una global dice «al público en general, de la factura global F-12», se descarga y se cancela, y no se manda por correo; el texto de arriba nombra la global.
     - `GlobalInvoicePage.test.tsx` (+1): las notas de crédito de sus ventas con la venta enlazada a Pedidos, y, mientras una está vigente, cuáles van primero en lugar de «Cancelar factura global».
-  - **Total:** `dotnet test` con SQL Server 2022, 4,010 pruebas sin fallos ni omitidas (Domain 1,183, Application 1,795, Infrastructure 569, WebApi 463), sobre `master` en `f7a46bd`.
-  - **Cliente en total:** 172 archivos y 1,212 pruebas.
-  - **Primera visita:** 180,435 B de 180,500 B (`master` en `f7a46bd`: 180,440 B): las notas de la global viven en los módulos de facturación y de la factura global, que se cargan aparte. El presupuesto no cambia.
-  - **Escenas visuales:** contra la línea base de `master` en `f7a46bd`, las 715 escenas que ya había salen iguales. Hay cuatro nuevas, en escritorio y teléfono: «notas de crédito de la factura global» (Pedidos › Factura de la venta) y «factura global con notas de crédito» (Reportes › Factura global, donde en teléfono el estado de cada nota va bajo su folio para que quepan la venta y el total). Pasaron dos corridas seguidas contra el mismo build.
+  - **Revisión independiente** (servidor y cliente), con sus pruebas:
+    - `GlobalInvoiceCreditNoteFlowTests` (+5, 16):
+      - la global deja fuera una venta con un reembolso «Otro», con su motivo;
+      - una venta devuelta en parte que una global timbrada antes de la fase dejó fuera entra en la siguiente como venta de un periodo anterior, con su aviso, y su reembolso lleva nota de la nueva;
+      - la global no se cancela mientras una nota se timbra o espera su cancelación, y Pedidos nombra esas notas cuando el cliente pide su factura;
+      - «Emitir ahora», «Volver a pedir el timbre» y «Cancelar» responden con el folio de la global;
+      - la venta anulada cuya global se canceló dice que ningún CFDI la ampara;
+      - otro negocio no lee, emite, cancela ni descarga las notas de una global, ni las ve su pase del worker.
+    - La búsqueda del worker une también las notas por su negocio, y Pedidos lee la global (su CFDI completo) solo si la venta tiene reembolsos.
+    - `verify.sql`: la consulta 4 baja conforme TienditApp emite las notas, y la 5 deja fuera las ventas con reembolsos sin forma del SAT y dice que es un tope.
+    - **Cliente:**
+      - `invoicing.test.ts` (+2): el detalle de la global se vuelve a leer mientras ella o una nota de sus ventas espera al PAC o al SAT; además, cambiar una factura de un pedido vuelve a leer las globales.
+      - `CreditNoteList.test.tsx` (+1, y la de la factura propia pide su «Enviar por correo»): cancelar la nota de una global dice que nadie tiene que aceptarla, y el texto de arriba incluye los reembolsos de antes de la global.
+      - `GlobalInvoicePage.test.tsx` (la de las notas, ampliada): con una nota timbrándose o cancelándose dice que espere; con una timbrada y otra en camino, las dos cosas; con rechazadas o canceladas ofrece cancelar.
+      - `CfdiDraftModal.test.tsx` (+1): la venta anulada de una global dice que la global la sigue amparando.
+  - **Total:** `dotnet test` con SQL Server 2022, 4,015 pruebas sin fallos ni omitidas (Domain 1,183, Application 1,800, Infrastructure 569, WebApi 463), sobre `master` en `f7a46bd`.
+  - **Cliente en total:** 172 archivos y 1,216 pruebas.
+  - **Primera visita:** 180,445 B de 180,500 B (`master` en `f7a46bd`: 180,440 B): las notas de la global viven en los módulos de facturación y de la factura global, que se cargan aparte; los 5 B son leer otra vez las globales al cambiar una factura de un pedido. El presupuesto no cambia.
+  - **Escenas visuales:** contra la línea base de `master` en `f7a46bd`, las 715 escenas que ya había salen iguales (después de la revisión se corrieron otra vez completas `facturacion.spec.ts` y `facturaGlobal.spec.ts`, las únicas que tocan sus pantallas). Hay cuatro nuevas, en escritorio y teléfono: «notas de crédito de la factura global» (Pedidos › Factura de la venta, una venta al público sin cliente) y «factura global con notas de crédito» (Reportes › Factura global F-59, donde en teléfono el estado de cada nota va bajo su folio para que quepan la venta y el total). Pasaron dos corridas seguidas contra el mismo build.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.

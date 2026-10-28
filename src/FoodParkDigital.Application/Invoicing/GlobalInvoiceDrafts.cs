@@ -167,9 +167,13 @@ public static class GlobalInvoiceDrafts
     public const string CreditReason =
         "Se vendió a crédito (fiado): el SAT pide reflejar las ventas en parcialidades en una factura global aparte, que TienditApp todavía no genera.";
     // A sale given back in part goes in for its total, and each refund takes its credit note of the global invoice (Fase
-    // 28I); one given back whole has nothing to invoice. A write-off forgives what was never paid: the sale is not paid in
-    // full, and its credit note of a global invoice is outside Fase 28I.
+    // 28I); one given back whole has nothing to invoice, and one with a refund without a form of the SAT's would keep that
+    // refund without its credit note. A write-off forgives what was never paid: the sale is not paid in full, and its credit
+    // note of a global invoice is outside Fase 28I.
     public const string FullyRefundedReason = "Se devolvió completa: no hay nada que facturar.";
+    public const string RefundWithoutFormReason =
+        "Tiene un reembolso registrado como «Otro» o devuelto como saldo a favor, que no lleva nota de crédito: la factura " +
+        "global no la toma. Consulta con tu contador cómo facturarla.";
     public const string WrittenOffReason =
         "Se condonó parte de ella: la factura global no la toma. Si el cliente te da sus datos fiscales, factúrala en Pedidos " +
         "(lo condonado lleva su nota de crédito); si no, consulta con tu contador.";
@@ -332,6 +336,7 @@ public static class GlobalInvoiceDrafts
                 : candidate.Total - candidate.PaidAmount > 0 ? NotPaidReason
                 : candidate.SoldOnCredit ? CreditReason
                 : candidate.RefundedAmount >= candidate.Total && !covered ? FullyRefundedReason
+                : candidate.RefundedWithoutForm && !covered ? RefundWithoutFormReason
                 : refunding.Contains(candidate.Id) && !covered ? RefundInCourseReason
                 : string.Empty;
             // A sale without amount is not invoiced, nor listed; one of an earlier period, only when it goes in: why it does
@@ -476,6 +481,8 @@ public static class GlobalInvoiceDrafts
         public decimal Total { get; init; }
         public decimal PaidAmount { get; init; }
         public decimal RefundedAmount { get; init; }
+        /// <summary>A refund of it has no form of the SAT's («Otro» or the customer's balance): it never gets a credit note.</summary>
+        public bool RefundedWithoutForm { get; init; }
         public decimal WrittenOffAmount { get; init; }
         public bool SoldOnCredit { get; init; }
         public OrderStatus Status { get; init; }
@@ -495,6 +502,7 @@ public static class GlobalInvoiceDrafts
                 Total = o.Total,
                 PaidAmount = o.PaidAmount,
                 RefundedAmount = o.RefundedAmount,
+                RefundedWithoutForm = o.Refunds.Any(r => r.Method == OrderPaymentMethod.Other || r.Method == OrderPaymentMethod.CustomerBalance),
                 WrittenOffAmount = o.WrittenOffAmount,
                 SoldOnCredit = o.SoldOnCredit,
                 Status = o.Status,

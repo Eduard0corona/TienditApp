@@ -51,14 +51,14 @@ public class CfdiEmail : BaseEntity, ITenantScoped
     /// <summary>Still to go out: neither sent nor refused for good.</summary>
     public bool IsPending => SentAt is null && FailedAt is null;
 
+    public const string GlobalCreditNoteMessage =
+        "La nota de crédito de una venta de la factura global es para el público en general: no se envía por correo.";
+
     /// <summary>
     /// An email of the stamped <paramref name="cfdi"/> to <paramref name="to"/>. Only the invoice of an order and its payment
     /// complements and credit notes go to a customer: a global invoice, and the credit notes of its sales (Fase 28I), have
     /// nobody to go to.
     /// </summary>
-    public const string GlobalCreditNoteMessage =
-        "La nota de crédito de una venta de la factura global es para el público en general: no se envía por correo.";
-
     public static CfdiEmail Request(Cfdi cfdi, string? to, Guid? requestedByUserId, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(cfdi);

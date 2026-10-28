@@ -184,7 +184,8 @@ export function isWaiting(invoice: Pick<OrderInvoice, 'status'>): boolean {
 
 /**
  * Each change answers the invoice as it ended up; the order's invoicing and its draft are read again, and the change stays
- * pending until they are, so what it changed (a live invoice) is on screen before anything else can be pressed.
+ * pending until they are, so what it changed (a live invoice) is on screen before anything else can be pressed. The global
+ * invoices are read again too: the detail of one lists the credit notes of its sales, and whether it can be cancelled.
  */
 function useInvoiceChange<TVariables, TResult = OrderInvoice>(orderId: string, change: (variables: TVariables) => Promise<TResult>) {
   const client = useQueryClient();
@@ -193,6 +194,7 @@ function useInvoiceChange<TVariables, TResult = OrderInvoice>(orderId: string, c
     onSettled: () => Promise.all([
       client.invalidateQueries({ queryKey: orderInvoicingKey(orderId) }),
       client.invalidateQueries({ queryKey: ['orders', orderId, 'cfdi-draft'] }),
+      client.invalidateQueries({ queryKey: globalInvoicesKey }),
     ]),
   });
 }
@@ -462,12 +464,20 @@ export function useGlobalInvoiceDraft(periodicity: GlobalInvoicePeriodicity, day
   });
 }
 
-/** A global invoice with its sales, read again while it waits for the PAC or the SAT. */
+/**
+ * The global invoice waits for the PAC or the SAT, or a credit note of one of its sales does (Fase 28I): whether it can be
+ * cancelled depends on them.
+ */
+export function isGlobalInvoiceWaiting(invoice: GlobalInvoiceDetail): boolean {
+  return isWaiting(invoice) || invoice.orders.some((order) => order.creditNotes.some(isWaiting));
+}
+
+/** A global invoice with its sales, read again while it or one of its credit notes waits for the PAC or the SAT. */
 export function useGlobalInvoice(invoiceId: string) {
   return useQuery({
     queryKey: [...globalInvoicesKey, invoiceId],
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/global-invoices/{invoiceId}', { path: { invoiceId }, signal }),
-    refetchInterval: (query) => query.state.data && isWaiting(query.state.data) ? PENDING_REFRESH_MS : false,
+    refetchInterval: (query) => (query.state.data && isGlobalInvoiceWaiting(query.state.data) ? PENDING_REFRESH_MS : false),
   });
 }
 

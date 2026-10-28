@@ -83,6 +83,18 @@ public class CreditNoteDto
         CancellationRequestedAt = note.CancellationRequestedAt,
         CancelledAt = note.CancelledAt
     };
+
+    /// <summary>As <see cref="From"/>, with the serie and folio of the global invoice it credits, if it credits one.</summary>
+    public static async Task<CreditNoteDto> FromAsync(IApplicationDbContext context, CreditNote note, CancellationToken cancellationToken)
+    {
+        var dto = From(note);
+        if (note.GlobalInvoiceId is { } globalId)
+            dto.GlobalInvoiceNumber = await context.GlobalInvoices.AsNoTracking()
+                .Where(g => g.Id == globalId)
+                .Select(g => new { g.Serie, g.Folio })
+                .FirstOrDefaultAsync(cancellationToken) is { } global ? $"{global.Serie}-{global.Folio}" : null;
+        return dto;
+    }
 }
 
 /// <summary>
@@ -167,7 +179,7 @@ public class IssueCreditNoteCommandHandler : IRequestHandler<IssueCreditNoteComm
             return Result.Failure<CreditNoteDto>(requested.Error!);
 
         var note = await _stamper.StampAsync(_context.CreditNotes, requested.Value, cancellationToken);
-        return Result.Success(CreditNoteDto.From(note));
+        return Result.Success(await CreditNoteDto.FromAsync(_context, note, cancellationToken));
     }
 }
 
@@ -274,7 +286,7 @@ public class RetryCreditNoteCommandHandler : IRequestHandler<RetryCreditNoteComm
             return Result.Failure<CreditNoteDto>(InvoicingSettings.NotAvailableMessage);
 
         var note = await _stamper.StampAsync(_context.CreditNotes, request.CreditNoteId, cancellationToken);
-        return Result.Success(CreditNoteDto.From(note));
+        return Result.Success(await CreditNoteDto.FromAsync(_context, note, cancellationToken));
     }
 }
 
@@ -319,7 +331,7 @@ public class CancelCreditNoteCommandHandler : IRequestHandler<CancelCreditNoteCo
         if (!Guid.TryParse(_currentUser.UserId, out var userId))
             return Result.Failure<CreditNoteDto>(InvoicingSettings.NotAvailableMessage);
         if (note.Status == OrderInvoiceStatus.Cancelling && note.CancellationMotive == request.Motive)
-            return Result.Success(CreditNoteDto.From(note));
+            return Result.Success(await CreditNoteDto.FromAsync(_context, note, cancellationToken));
         if (note.Status != OrderInvoiceStatus.Stamped)
             return Result.Failure<CreditNoteDto>(note.Status == OrderInvoiceStatus.Cancelled
                 ? "Esta nota de crédito ya está cancelada."
@@ -364,7 +376,7 @@ public class CancelCreditNoteCommandHandler : IRequestHandler<CancelCreditNoteCo
             try
             {
                 await _context.SaveChangesAsync(cancellationToken);
-                return Result.Success(CreditNoteDto.From(tracked));
+                return Result.Success(await CreditNoteDto.FromAsync(_context, tracked, cancellationToken));
             }
             catch (DbUpdateConcurrencyException) when (attempt < 3)
             {
@@ -818,6 +830,9 @@ public static class CreditNotes
     public const string CancelledOrderMessage =
         "Este pedido está cancelado: su factura se cancela ante el SAT con el motivo 03 (la venta no se llevó a cabo), sin notas " +
         "de crédito.";
+    /// <summary>A voided sale no CFDI covers any more: its global invoice was cancelled after it was voided (Fase 28I).</summary>
+    public const string CancelledOrderWithoutCfdiMessage =
+        "Este pedido está cancelado y ningún CFDI lo ampara: su reembolso no lleva nota de crédito.";
     public const string IssuedByHandMessage =
         "Ya tuvo una nota de crédito de esta factura: la siguiente se emite a mano, con «Emitir otra vez».";
     public const string OtherFormMessage =
@@ -1031,11 +1046,11 @@ public static class CreditNotes
             && ((orders.Any(order => order.TenantId == refund.TenantId && order.Id == refund.OrderId && order.Status != OrderStatus.Cancelled)
                     && invoices.Any(invoice => invoice.TenantId == refund.TenantId && invoice.OrderId == refund.OrderId
                         && invoice.Status == OrderInvoiceStatus.Stamped && invoice.ReplacedByInvoiceId == null
-                        && !notes.Any(n => n.OrderRefundId == refund.Id && n.OrderInvoiceId == invoice.Id)))
+                        && !notes.Any(n => n.TenantId == refund.TenantId && n.OrderRefundId == refund.Id && n.OrderInvoiceId == invoice.Id)))
                 || globalSales.Any(sale => sale.TenantId == refund.TenantId && sale.OrderId == refund.OrderId && !sale.Released
                     && globals.Any(global => global.TenantId == refund.TenantId && global.Id == sale.GlobalInvoiceId
                         && global.Status == OrderInvoiceStatus.Stamped
-                        && !notes.Any(n => n.OrderRefundId == refund.Id && n.GlobalInvoiceId == global.Id)))));
+                        && !notes.Any(n => n.TenantId == refund.TenantId && n.OrderRefundId == refund.Id && n.GlobalInvoiceId == global.Id)))));
 
     /// <summary>The write-offs that still stand of orders whose invoice is stamped and that never had a credit note for it.</summary>
     public static IQueryable<OrderWriteOff> PendingWriteOffs(
@@ -1043,7 +1058,7 @@ public static class CreditNotes
         => writeOffs.Where(writeOff => writeOff.ReversedAt == null
             && invoices.Any(invoice => invoice.TenantId == writeOff.TenantId && invoice.OrderId == writeOff.OrderId
                 && invoice.Status == OrderInvoiceStatus.Stamped && invoice.ReplacedByInvoiceId == null
-                && !notes.Any(n => n.OrderWriteOffId == writeOff.Id && n.OrderInvoiceId == invoice.Id)));
+                && !notes.Any(n => n.TenantId == writeOff.TenantId && n.OrderWriteOffId == writeOff.Id && n.OrderInvoiceId == invoice.Id)));
 
     /// <summary>The refund or write-off, if the business sees its order (as the order's detail does); otherwise it is not there.</summary>
     public static async Task EnsureVisibleAdjustmentAsync(
@@ -1081,12 +1096,6 @@ public static class CreditNotes
         CancellationToken cancellationToken)
     {
         var liveInvoice = invoices.FirstOrDefault(i => i.IsCurrent);
-        // Without a live invoice of its own, the global invoice that covers the sale takes its refunds' credit notes.
-        var inGlobal = liveInvoice is null ? await GlobalSaleAsync(context, order.Id, cancellationToken) : null;
-        if (invoices.Count == 0 && inGlobal is null
-            && !await context.CreditNotes.AsNoTracking().AnyAsync(n => n.OrderId == order.Id, cancellationToken))
-            return [];
-
         var refunds = await context.OrderRefunds.AsNoTracking()
             .Where(r => r.OrderId == order.Id)
             .OrderBy(r => r.RefundedAt)
@@ -1098,6 +1107,12 @@ public static class CreditNotes
             .ThenBy(w => w.Id)
             .ToListAsync(cancellationToken);
         if (refunds.Count == 0 && writeOffs.Count == 0)
+            return [];
+        // Without a live invoice of its own, the global invoice that covers the sale takes its refunds' credit notes. Read
+        // only for a sale with refunds: it carries the CFDI of the whole period.
+        var inGlobal = liveInvoice is null && refunds.Count > 0 ? await GlobalSaleAsync(context, order.Id, cancellationToken) : null;
+        if (invoices.Count == 0 && inGlobal is null
+            && !await context.CreditNotes.AsNoTracking().AnyAsync(n => n.OrderId == order.Id, cancellationToken))
             return [];
 
         var notes = await context.CreditNotes.AsNoTracking()
@@ -1161,7 +1176,8 @@ public static class CreditNotes
             var problem = live is not null
                 ? null
                 : reversed ? CreditNote.ReversedWriteOffMessage
-                : order.Status == OrderStatus.Cancelled && inGlobal is null ? CancelledOrderMessage
+                : order.Status == OrderStatus.Cancelled && inGlobal is null
+                    ? invoices.Count == 0 ? CancelledOrderWithoutCfdiMessage : CancelledOrderMessage
                 : formProblem ?? targetProblem ?? RoomProblem(kind, id, amount);
             return new OrderAdjustmentDto
             {

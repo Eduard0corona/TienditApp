@@ -271,8 +271,9 @@ export const PEDIDO_CON_NOTAS_DE_CREDITO = asOption(((data) => {
 }) as PrepareData);
 
 /**
- * A sale to the general public that the global invoice F-58 covers (Fase 28I, ADR 0054): it is not invoiced on its own, and
- * its refunds take credit notes of F-58, to the general public, never by email:
+ * A sale to the general public, without a customer, that the global invoice F-58 covers (Fase 28I, ADR 0054): it is not
+ * invoiced on its own (its credit notes in force go first if the customer asks for theirs), and its refunds take credit notes
+ * of F-58, to the general public, never by email:
  * - two conchas that were missing, given back by transfer: NC-4, issued by TienditApp;
  * - a cold americano given back in cash a moment ago, still without one: TienditApp issues it soon, or «Emitir ahora».
  */
@@ -282,10 +283,13 @@ export const PEDIDO_EN_FACTURA_GLOBAL = asOption(((data) => {
   const [transfer, cash] = [share(0.12), share(0.06)];
   orderInvoicing(() => ({
     canInvoice: false,
-    problem: 'Esta venta está en la factura global F-58. Si el cliente pide su factura, cancela esa global con el motivo 04 en '
-      + 'Reportes › Factura global, factura esta venta y emite otra vez la global del periodo: ya no la incluirá.',
+    problem: 'Esta venta está en la factura global F-58. Si el cliente pide su factura, cancela con el motivo 02 las notas '
+      + 'de crédito vigentes de esa global (NC-4) en el pedido de cada venta, cancela la global con el motivo 04 en Reportes › '
+      + 'Factura global, factura esta venta y emite otra vez la global del periodo: ya no la incluirá.',
     proposedReceiver: null,
     proposedEmail: null,
+    customerId: null,
+    customerName: null,
     globalInvoiceNumber: 'F-58',
     adjustments: [
       refund('conchas', minutesFromNow(-40), TRANSFER, transfer, 'Faltaron dos conchas', {

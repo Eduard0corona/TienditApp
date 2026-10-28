@@ -192,10 +192,10 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
         var customer = await OrderInvoicing.CustomerAsync(_context, _phones, order.CustomerPhone, tracked: false, cancellationToken);
 
         var settings = await InvoicingSettings.ReadAsync(_context, _tenant.TenantId, _gateway, _clock.UtcNow, cancellationToken);
-        var globalInvoiceNumber = await OrderInvoicing.GlobalInvoiceNumberAsync(_context, order.Id, cancellationToken);
+        var global = await OrderInvoicing.CoveringGlobalInvoiceAsync(_context, order.Id, cancellationToken);
         var problem = InvoicingSettings.ReadinessProblem(settings)
             ?? OrderInvoicing.LiveInvoiceProblem(invoices.FirstOrDefault(i => i.IsCurrent))
-            ?? (globalInvoiceNumber is null ? null : OrderInvoicing.InGlobalInvoiceMessage(globalInvoiceNumber))
+            ?? (global is { } covering ? await OrderInvoicing.InGlobalInvoiceMessageAsync(_context, covering, cancellationToken) : null)
             ?? await OrderInvoicing.OrderProblemAsync(_context, order, cancellationToken);
 
         var last = invoices.FirstOrDefault();
@@ -249,7 +249,7 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
             Invoices = invoiceDtos,
             Payments = payments,
             Adjustments = adjustments,
-            GlobalInvoiceNumber = globalInvoiceNumber
+            GlobalInvoiceNumber = global?.Number
         };
     }
 }
@@ -707,21 +707,37 @@ internal static class OrderInvoicing
     /// global invoice (motive 04), invoice the sale to the customer and issue the period's global invoice again without it.
     /// </summary>
     public static async Task<string?> GlobalInvoiceProblemAsync(IApplicationDbContext context, Guid orderId, CancellationToken cancellationToken)
-        => await GlobalInvoiceNumberAsync(context, orderId, cancellationToken) is { } number ? InGlobalInvoiceMessage(number) : null;
+        => await CoveringGlobalInvoiceAsync(context, orderId, cancellationToken) is { } global
+            ? await InGlobalInvoiceMessageAsync(context, global, cancellationToken)
+            : null;
 
-    /// <summary>The serie and folio of the global invoice that covers the sale now, if one does («F-12»).</summary>
-    public static async Task<string?> GlobalInvoiceNumberAsync(IApplicationDbContext context, Guid orderId, CancellationToken cancellationToken)
+    /// <summary>The global invoice that covers the sale now, if one does, with its serie and folio («F-12»).</summary>
+    public static async Task<(Guid Id, string Number)?> CoveringGlobalInvoiceAsync(
+        IApplicationDbContext context, Guid orderId, CancellationToken cancellationToken)
     {
         var global = await context.GlobalInvoiceOrders.AsNoTracking()
             .Where(o => o.OrderId == orderId && !o.Released)
-            .Join(context.GlobalInvoices.AsNoTracking(), o => o.GlobalInvoiceId, g => g.Id, (o, g) => new { g.Serie, g.Folio })
+            .Join(context.GlobalInvoices.AsNoTracking(), o => o.GlobalInvoiceId, g => g.Id, (o, g) => new { g.Id, g.Serie, g.Folio })
             .FirstOrDefaultAsync(cancellationToken);
-        return global is null ? null : $"{global.Serie}-{global.Folio}";
+        return global is null ? null : (global.Id, $"{global.Serie}-{global.Folio}");
     }
 
-    public static string InGlobalInvoiceMessage(string number) =>
-        $"Esta venta está en la factura global {number}. Si el cliente pide su factura, cancela esa global con el motivo 04 en " +
-        "Reportes › Factura global, factura esta venta y emite otra vez la global del periodo: ya no la incluirá.";
+    /// <summary>
+    /// Why the sale is not invoiced on its own, with the credit notes in force of its global invoice (Fase 28I): the SAT does
+    /// not cancel the global invoice while they stand.
+    /// </summary>
+    public static async Task<string> InGlobalInvoiceMessageAsync(
+        IApplicationDbContext context, (Guid Id, string Number) global, CancellationToken cancellationToken)
+        => InGlobalInvoiceMessage(global.Number, await CreditNotes.LiveNumbersOfGlobalInvoiceAsync(context, global.Id, cancellationToken));
+
+    public static string InGlobalInvoiceMessage(string number, IReadOnlyList<string>? liveCreditNotes = null) =>
+        liveCreditNotes is { Count: > 0 }
+            ? $"Esta venta está en la factura global {number}. Si el cliente pide su factura, cancela con el motivo 02 las notas " +
+              $"de crédito vigentes de esa global ({string.Join(", ", liveCreditNotes)}) en el pedido de cada venta, cancela la " +
+              "global con el motivo 04 en Reportes › Factura global, factura esta venta y emite otra vez la global del periodo: " +
+              "ya no la incluirá."
+            : $"Esta venta está en la factura global {number}. Si el cliente pide su factura, cancela esa global con el motivo 04 en " +
+              "Reportes › Factura global, factura esta venta y emite otra vez la global del periodo: ya no la incluirá.";
 
     /// <summary>A sale that is still pending or an open tab can change its total: it is invoiced in installments once closed.</summary>
     public const string StillChangingMessage =

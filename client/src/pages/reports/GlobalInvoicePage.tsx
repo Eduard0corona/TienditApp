@@ -80,10 +80,14 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
   const [downloading, setDownloading] = useState<'xml' | 'pdf' | null>(null);
   const paymentForm = `${invoice.paymentForm} · ${PAYMENT_FORMS[invoice.paymentForm] ?? 'Otra'}`;
   const creditNotes = invoice.orders.flatMap((order) => order.creditNotes.map((note) => ({ ...note, orderNumber: order.orderNumber })));
-  const liveNotes = creditNotes
-    .filter((note) => LIVE.includes(note.status))
+  const notesIn = (statuses: OrderInvoiceStatus[]) => creditNotes
+    .filter((note) => statuses.includes(note.status))
     .map((note) => note.number)
     .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  // A stamped one is cancelled in its order; one that is stamping or cancelling has to finish first.
+  const stampedNotes = notesIn([OrderInvoiceStatus.Stamped]);
+  const waitingNotes = notesIn([OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Cancelling]);
+  const hasLiveNotes = creditNotes.some((note) => LIVE.includes(note.status));
 
   const download = async (kind: 'xml' | 'pdf') => {
     setDownloading(kind);
@@ -208,16 +212,16 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
                 Volver a pedir el timbre
               </button>
             )}
-            {invoice.status === OrderInvoiceStatus.Stamped && liveNotes.length === 0 && (
+            {invoice.status === OrderInvoiceStatus.Stamped && !hasLiveNotes && (
               <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setCancelling(true)}>
                 Cancelar factura global
               </button>
             )}
           </div>
-          {invoice.status === OrderInvoiceStatus.Stamped && liveNotes.length > 0 && (
+          {invoice.status === OrderInvoiceStatus.Stamped && hasLiveNotes && (
             <p className="small text-muted mb-0 mt-2">
-              Para cancelarla, cancela primero sus notas de crédito vigentes ({liveNotes.join(', ')}) en el pedido de cada venta:
-              el SAT no cancela una factura mientras tenga notas de crédito relacionadas.
+              Para cancelarla, {whatGoesFirst(stampedNotes, waitingNotes)}: el SAT no cancela una factura mientras tenga notas de
+              crédito relacionadas.
             </p>
           )}
         </div>
@@ -293,6 +297,17 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
       {cancelling && <CancelGlobalInvoiceModal invoice={invoice} onClose={() => setCancelling(false)} />}
     </>
   );
+}
+
+/** What has to happen to the live credit notes of a global invoice before it is cancelled. */
+function whatGoesFirst(stamped: string[], waiting: string[]): string {
+  const cancel = `cancela primero sus notas de crédito vigentes (${stamped.join(', ')}) en el pedido de cada venta`;
+  if (waiting.length === 0) return cancel;
+  if (stamped.length === 0) {
+    return `espera a que sus notas de crédito (${waiting.join(', ')}) terminen de timbrarse o de cancelarse, y cancela en su `
+      + 'pedido las que queden vigentes';
+  }
+  return `${cancel}, y espera a que las demás (${waiting.join(', ')}) terminen de timbrarse o de cancelarse`;
 }
 
 /** Owners and admins ask the SAT to cancel a stamped global invoice, with its reason; nobody has to accept it. */
