@@ -191,6 +191,60 @@ public class IssuedCfdisSqlServerTests
         Assert.EndsWith($",F-4_{book.Uuids["F-4"]}.xml", Encoding.UTF8.GetString(bytes).Split("\r\n")[6]);
     }
 
+    [SqlServerFact]
+    public async Task TheMonth_ShouldBeTheOneOfEachBusinesssTimeZone_InTheListTheSummaryAndTheDownload()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        // Two CFDI of each business at the same instants: 1 October at 06:30 UTC is still 30 September in Tijuana (UTC-7 in
+        // summer) and already October in Mexico City (UTC-6); 1 November at 06:30 UTC is still October in Tijuana and already
+        // November in Mexico City.
+        var early = new DateTimeOffset(2026, 10, 1, 6, 30, 0, TimeSpan.Zero);
+        var late = new DateTimeOffset(2026, 11, 1, 6, 30, 0, TimeSpan.Zero);
+        var tijuana = NewTenant();
+        var tijuanaSettings = new TenantSettings(tijuana.Id, TenantCapability.Retail);
+        tijuanaSettings.SetTimeZone("America/Tijuana");
+        var mexicoCity = NewTenant();
+        var entities = new List<object>
+        {
+            tijuana, tijuanaSettings, mexicoCity, new TenantSettings(mexicoCity.Id, TenantCapability.Retail)
+        };
+        foreach (var tenantId in new[] { tijuana.Id, mexicoCity.Id })
+        foreach (var (folio, at) in new[] { (1L, early), (2L, late) })
+        {
+            var order = PaidOrder(tenantId, $"ORD-00000{folio}", at);
+            var invoice = Invoice(tenantId, order.Id, folio, at);
+            Stamp(invoice, new Dictionary<string, string>(), at, $"cfdi/{tenantId:N}-{folio}.xml");
+            entities.AddRange([order, invoice]);
+        }
+        await using (var context = database.CreateContext(tijuana.Id))
+        {
+            context.AddRange(entities);
+            await context.SaveChangesAsync();
+        }
+
+        foreach (var (tenantId, number, stampedAt) in new[]
+                 {
+                     (tijuana.Id, "F-2", "2026-10-31 23:30:00"),
+                     (mexicoCity.Id, "F-1", "2026-10-01 00:30:00")
+                 })
+        {
+            await using var context = database.CreateContext(tenantId);
+
+            Assert.Equal([number], (await ListAsync(context, tenantId)).Items.Select(c => c.Number));
+            var summary = await new GetIssuedCfdiSummaryQueryHandler(context, Tenant(tenantId))
+                .Handle(new GetIssuedCfdiSummaryQuery(2026, 10), CancellationToken.None);
+            Assert.Equal(1, summary.Kinds.Single(k => k.Kind == IssuedCfdiKind.OrderInvoice).InForce);
+            var csv = await new ExportIssuedCfdisQueryHandler(
+                    context, Tenant(tenantId), new Files(), NullLogger<ExportIssuedCfdisQueryHandler>.Instance)
+                .Handle(new ExportIssuedCfdisQuery(2026, 10, IssuedCfdiExportFormat.Csv), CancellationToken.None);
+            var lines = Encoding.UTF8.GetString(((MemoryStream)csv.Value.Content).ToArray())
+                .Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+            // The header and the one CFDI, stamped at that hour of the business.
+            Assert.Equal(2, lines.Length);
+            Assert.Equal(stampedAt, lines[1].Split(',')[6]);
+        }
+    }
+
     private static async Task<string[]> CsvLinesAsync(ZipArchiveEntry entry)
     {
         using var reader = new StreamReader(entry.Open(), Encoding.UTF8);

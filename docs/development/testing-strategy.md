@@ -1428,11 +1428,12 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - una celda que una hoja de cálculo correría como fórmula va con apóstrofo, y la que tiene comas va entre comillas;
     - solo dueños y administradores, y un mes desde enero de 2022.
   - **Infrastructure:**
-    - `IssuedCfdisSqlServerTests` (3, nuevo), en SQL Server:
+    - `IssuedCfdisSqlServerTests` (4, nuevo), en SQL Server:
       - la unión de las cuatro tablas se traduce y pagina en el orden del mes, con su receptor, su pedido, la factura que sustituye o la que la sustituye, el periodo de la global y por qué se rechazó; deja fuera la factura del 30 de septiembre a las 23:59 de la Ciudad de México y la de otro negocio, y deja dentro la del 31 de octubre a las 23:30 (ya noviembre en UTC);
       - filtra por tipo y por estado (también cancelándose y timbrando); la búsqueda encuentra un folio sin serie en todas las series, el UUID, el RFC, una parte del nombre, el folio del pedido y una global por el folio de una venta que cubre;
       - el resumen cuenta como vigente la factura que espera su cancelación, y cuenta las canceladas, las que se timbran y las rechazadas;
-      - el ZIP lleva los XML timbrados por tipo, los cancelados en `cancelados/`, y la lista al final, con la fecha del CFDI en la zona del negocio y la nota en una exhibición, y dice qué XML no se encontró; la lista sola lleva la marca UTF-8.
+      - el ZIP lleva los XML timbrados por tipo, los cancelados en `cancelados/`, y la lista al final, con la fecha del CFDI en la zona del negocio y la nota en una exhibición, y dice qué XML no se encontró; la lista sola lleva la marca UTF-8;
+      - el mes es el de la zona de cada negocio: a las mismas horas, el de Tijuana tiene en octubre la factura del 31 a las 23:30 (ya noviembre en la Ciudad de México) y no la del 30 de septiembre a las 23:30, y el de la Ciudad de México al revés, en la lista, el resumen y la descarga, con la hora de timbrado de cada uno (la prueba falla si el mes se lee siempre en la zona de la Ciudad de México).
     - `IssuedCfdiDateIndexesMigrationSqlServerTests` (1, nuevo): la migración agrega el índice `(TenantId, IssuedAt)` a las cuatro tablas, no único y sin filtro, sin tocar la factura que ya estaba; revertirla solo quita los índices, y otra vez no hace nada.
   - **WebApi:** `CrossTenantInvoicingSqlServerTests` (+1, 14): otro negocio, también con el encabezado de mi negocio, ve una lista vacía, un resumen en ceros, un ZIP solo con su lista vacía y una lista sola sin mi factura; el mío trae mi factura, su XML y su lista; y el cajero, aunque lea reportes, recibe 403 en las tres rutas.
   - **Cliente:**
@@ -1444,7 +1445,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - el XML o PDF de una fila por su tipo; y el resumen que no cargó dice por qué y se vuelve a pedir;
       - al volver a la pantalla dentro de los 30 segundos en que la app da por frescos los datos, lee otra vez la lista y el resumen: la factura cancelada desde su pedido ya no sale timbrada ni se suma (la prueba falla sin el cambio).
     - `navigation.test.ts` (10): CFDI emitidos en Reportes solo para dueños y administradores, y la búsqueda la encuentra por «contador» y «xml».
-  - **Total:** `dotnet test` con SQL Server 2022, 3,991 pruebas sin fallos ni omitidas (Domain 1,180, Application 1,785, Infrastructure 563, WebApi 463), con `master` en `8dd72f9` integrado.
+  - **Total:** `dotnet test` con SQL Server 2022, 3,992 pruebas sin fallos ni omitidas (Domain 1,180, Application 1,785, Infrastructure 564, WebApi 463), con `master` en `8dd72f9` integrado.
   - **Cliente en total:** 172 archivos y 1,210 pruebas, con `master` en `8dd72f9` integrado.
   - **Primera visita:** 180,440 B de 180,500 B (`master` en `8dd72f9`: 180,167 B): +273 B por la entrada de Reportes › CFDI emitidos en el menú y los dos enums del contrato, que viven en el primer chunk. El presupuesto sube de 180,300 B a 180,500 B.
   - **Escenas visuales:** `cfdiEmitidos.spec.ts` (4, nuevo): Reportes › CFDI emitidos en escritorio, teléfono y oscuro, y un mes sin CFDI.
