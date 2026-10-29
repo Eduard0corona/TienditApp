@@ -6,7 +6,8 @@ import { SELL_ROUTES } from './vender-pedidos.mocks';
 
 // Condonar y plazo del fiado (Fase 26B): Clientes › Por cobrar with a term of 7 days, what is overdue and «Solo vencidos»,
 // the term of the fiado, the account with the due day of each order and what was forgiven, «Condonar» and «Deshacer»,
-// what is overdue when charging in Vender and what was forgiven of a sale in Pedidos.
+// what is overdue when charging in Vender and what was forgiven of a sale in Pedidos; and (Fase 28J) a discount after the
+// sale as the reason, with what it says.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -114,6 +115,17 @@ test.describe('Por cobrar con plazo', () => {
     await panel.getByLabel(/^Nota/).fill('Pagaron con un servicio de impresión');
     await expect(panel.getByRole('button', { name: 'Condonar $150.00' })).toBeEnabled();
     await snapScreen(page, 'por-cobrar-condonar-telefono');
+  });
+
+  test('condonar con un descuento', async ({ page }) => {
+    await open(page, '/customers/receivables');
+    const panel = await openWriteOff(page, 'Roberto Sánchez Vega');
+    await panel.getByLabel('Cuánto').fill('50');
+    await panel.getByLabel('Motivo').selectOption({ label: 'Descuento o bonificación' });
+    // A discount is of one sale: the whole account is not offered for it.
+    await expect(panel.getByText('Un descuento es de una venta: elige su pedido en «¿Qué condonas?».')).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Condonar $50.00' })).toBeDisabled();
+    await snapScreen(page, 'por-cobrar-condonar-con-descuento-escritorio');
   });
 
   test('condonado', async ({ page }) => {

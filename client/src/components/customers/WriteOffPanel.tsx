@@ -23,6 +23,10 @@ interface WriteOffPanelProps {
 
 const NOTES_MAX_LENGTH = 500;
 const NOTES_NEEDED = 'Escribe por qué condonas cuando el motivo es «Otro».';
+const DISCOUNT_HELP = 'Para rebajar el precio de una venta después de hacerla: su nota de crédito dice «Descuento o bonificación». '
+  + 'Si el cliente ya pagó, usa «Reembolsar» en el pedido.';
+// The server refuses it too: spread over the account, its credit notes would credit orders that were not discounted.
+const DISCOUNT_NEEDS_ORDER = 'Un descuento es de una venta: elige su pedido en «¿Qué condonas?».';
 
 /**
  * Condonar (Fase 26B): the owner forgives part or all of what a customer owes, of one order or of the whole account from
@@ -30,7 +34,9 @@ const NOTES_NEEDED = 'Escribe por qué condonas cuando el motivo es «Otro».';
  * condonado» in the account.
  */
 export default function WriteOffPanel({ account, submitting, error, onSubmit, onCancel }: WriteOffPanelProps) {
-  const ids = { scope: useId(), amount: useId(), reason: useId(), notes: useId(), amountHelp: useId(), notesHelp: useId() };
+  const ids = {
+    scope: useId(), amount: useId(), reason: useId(), reasonHelp: useId(), notes: useId(), amountHelp: useId(), notesHelp: useId(),
+  };
   const [orderId, setOrderId] = useState('');
   const maxCents = toCents(orderId ? account.orders.find((o) => o.orderId === orderId)?.balance ?? 0 : account.owed);
   // It starts empty: the owner writes how much, even when it is all of it, so a slip never forgives the whole account.
@@ -42,8 +48,9 @@ export default function WriteOffPanel({ account, submitting, error, onSubmit, on
   const showAmountProblem = amount.trim() !== '' && !!amountProblem;
   const notesProblem = reason === OrderWriteOffReason.Other && notes.trim().length < 3 ? NOTES_NEEDED : null;
   const showNotesProblem = notes.trim() !== '' && !!notesProblem;
+  const discount = reason === OrderWriteOffReason.Discount;
   const typedCents = amountProblem ? 0 : toCents(parseMoneyInput(amount) ?? 0);
-  const canSubmit = !submitting && !amountProblem && !notesProblem;
+  const canSubmit = !submitting && !amountProblem && !notesProblem && !(discount && !orderId);
 
   return (
     <form
@@ -101,10 +108,17 @@ export default function WriteOffPanel({ account, submitting, error, onSubmit, on
           className="form-select"
           value={reason}
           onChange={(event) => setReason(Number(event.target.value) as OrderWriteOffReason)}
+          aria-describedby={discount ? ids.reasonHelp : undefined}
           disabled={submitting}
         >
           {WRITE_OFF_REASONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
+        {discount && (
+          <div id={ids.reasonHelp} className="form-text">
+            {DISCOUNT_HELP}
+            {!orderId && <span className="d-block mt-1">{DISCOUNT_NEEDS_ORDER}</span>}
+          </div>
+        )}
       </div>
 
       <div className="mb-3">

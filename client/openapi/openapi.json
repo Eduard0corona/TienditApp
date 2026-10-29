@@ -29376,6 +29376,7 @@
           1,
           2,
           3,
+          4,
           99
         ],
         "type": "integer",
@@ -29384,6 +29385,7 @@
           "WontBeCollected",
           "RecordingError",
           "Courtesy",
+          "Discount",
           "Other"
         ]
       },

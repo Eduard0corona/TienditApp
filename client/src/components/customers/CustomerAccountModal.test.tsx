@@ -242,6 +242,45 @@ describe('CustomerAccountModal', () => {
     expect(screen.getByRole('dialog', { name: 'Estado de cuenta' })).toBeInTheDocument();
   });
 
+  it('offers a discount after the sale as a reason, of one order, and says a paid one is a refund', async () => {
+    signIn([], 'TenantAdmin');
+    request.mockImplementation(((method: string) => Promise.resolve(method === 'post' ? { ...ACCOUNT, owed: 130 } : ACCOUNT)) as never);
+    renderModal();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Condonar' }));
+    await userEvent.type(screen.getByLabelText('Cuánto'), '20');
+    // Another reason says nothing more.
+    expect(screen.getByLabelText('Motivo')).not.toHaveAccessibleDescription();
+    await userEvent.selectOptions(screen.getByLabelText('Motivo'), 'Descuento o bonificación');
+    const help = 'Para rebajar el precio de una venta después de hacerla: su nota de crédito dice «Descuento o bonificación». '
+      + 'Si el cliente ya pagó, usa «Reembolsar» en el pedido.';
+    // A discount is of one sale: over the whole account it would land on orders that were not discounted.
+    expect(screen.getByLabelText('Motivo')).toHaveAccessibleDescription(
+      `${help}Un descuento es de una venta: elige su pedido en «¿Qué condonas?».`);
+    expect(screen.getByRole('button', { name: 'Condonar $20.00' })).toBeDisabled();
+    await userEvent.selectOptions(screen.getByLabelText('¿Qué condonas?'), 'o2');
+    expect(screen.getByLabelText('Motivo')).toHaveAccessibleDescription(help);
+    await userEvent.click(screen.getByRole('button', { name: 'Condonar $20.00' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Se condonaron $20.00.'));
+    expect(request).toHaveBeenCalledWith('post', '/api/v1/customers/account/write-offs', {
+      body: expect.objectContaining({ customerId: 'c1', orderId: 'o2', amount: 20, reason: 4, expectedOwed: 150 }),
+    });
+  });
+
+  it('says nothing more once the reason is not a discount again', async () => {
+    signIn([], 'TenantAdmin');
+    request.mockImplementation((() => Promise.resolve(ACCOUNT)) as never);
+    renderModal();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Condonar' }));
+    await userEvent.selectOptions(screen.getByLabelText('Motivo'), 'Descuento o bonificación');
+    expect(screen.getByText(/^Para rebajar el precio de una venta/)).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Motivo'), 'Cortesía');
+    expect(screen.queryByText(/^Para rebajar el precio de una venta/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Motivo')).not.toHaveAccessibleDescription();
+  });
+
   it('keeps the write-off panel with the server’s reason when it is refused', async () => {
     signIn([], 'TenantAdmin');
     request.mockImplementation(((method: string) => method === 'post'

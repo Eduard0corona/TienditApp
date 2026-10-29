@@ -9,7 +9,8 @@ namespace FoodParkDigital.Domain.Fiscal.Entities;
 /// The credit note (CFDI de egreso, tipo E, Fase 28D, ADR 0048) of an adjustment of an order whose invoice is stamped: a
 /// refund (money given back) or a write-off (a debt the business forgave). It is related to the invoice (TipoRelacion 01)
 /// and lowers what the invoice amounts to by exactly what was refunded or forgiven. A refund of a sale a stamped global
-/// invoice covers is related to the global invoice instead (Fase 28I, ADR 0054), to the general public. An adjustment has
+/// invoice covers is related to the global invoice instead (Fase 28I, ADR 0054), to the general public, as is a write-off
+/// of one (Fase 28J, ADR 0055). An adjustment has
 /// at most one credit note that stands with the SAT; refused or cancelled, it stays, and another one can be issued.
 /// </summary>
 public class CreditNote : Cfdi, IAggregateRoot
@@ -22,7 +23,7 @@ public class CreditNote : Cfdi, IAggregateRoot
     /// <summary>The order's invoice it credits; null when it credits a global invoice.</summary>
     public Guid? OrderInvoiceId { get; private set; }
 
-    /// <summary>The global invoice it credits, for a sale it covers (Fase 28I); null when it credits an order's invoice.</summary>
+    /// <summary>The global invoice it credits, for a sale it covers (Fases 28I and 28J); null when it credits an order's invoice.</summary>
     public Guid? GlobalInvoiceId { get; private set; }
 
     public Guid OrderId { get; private set; }
@@ -148,6 +149,49 @@ public class CreditNote : Cfdi, IAggregateRoot
 
         var note = new CreditNote { OrderWriteOffId = writeOff.Id, PaymentForm = SatCatalog.PaymentFormWriteOff };
         note.Begin(invoice, serie, folio, writeOff.Amount, subTotal, taxTotal, afterInstallment, document, requestedByUserId, now);
+        return note;
+    }
+
+    /// <summary>
+    /// The credit note of a write-off that still stands of a sale a stamped global invoice covers (Fase 28J), with its folio,
+    /// amounts and CFDI, before the PAC is asked: paid by «Condonación» (15), never more than what the sale charged in the
+    /// global invoice, and with no installment before it.
+    /// </summary>
+    public static CreditNote ForWriteOffInGlobalInvoice(
+        GlobalInvoice globalInvoice,
+        GlobalInvoiceOrder sale,
+        OrderWriteOff writeOff,
+        string serie,
+        long folio,
+        decimal subTotal,
+        decimal taxTotal,
+        string document,
+        Guid? requestedByUserId,
+        DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(globalInvoice);
+        ArgumentNullException.ThrowIfNull(sale);
+        ArgumentNullException.ThrowIfNull(writeOff);
+        if (sale.TenantId != globalInvoice.TenantId || sale.GlobalInvoiceId != globalInvoice.Id || sale.Released)
+            throw new DomainException("La venta no está en esa factura global.");
+        if (writeOff.TenantId != globalInvoice.TenantId || writeOff.OrderId != sale.OrderId)
+            throw new DomainException("La condonación no es de la venta de la factura global.");
+        if (writeOff.IsReversed)
+            throw new DomainException(ReversedWriteOffMessage);
+        if (globalInvoice.Status != OrderInvoiceStatus.Stamped || globalInvoice.Uuid is null)
+            throw new DomainException(NeedsStampedGlobalInvoiceMessage);
+        if (writeOff.Amount > sale.Total)
+            throw new DomainException("La nota de crédito es mayor que lo que la venta cobró en la factura global.");
+
+        var note = new CreditNote
+        {
+            GlobalInvoiceId = globalInvoice.Id,
+            OrderId = sale.OrderId,
+            OrderWriteOffId = writeOff.Id,
+            PaymentForm = SatCatalog.PaymentFormWriteOff
+        };
+        note.Begin(globalInvoice.TenantId, serie, folio, writeOff.Amount, subTotal, taxTotal, afterInstallment: 0, document,
+            requestedByUserId, now);
         return note;
     }
 

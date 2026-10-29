@@ -17826,7 +17826,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OrderWriteOffReason: 1 | 2 | 3 | 99;
+        OrderWriteOffReason: 1 | 2 | 3 | 4 | 99;
         OutgoingMessageDto: {
             /** Format: uuid */
             id: string;

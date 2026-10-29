@@ -96,13 +96,31 @@ describe('CreditNoteList', () => {
     const global: Note = { ...NC1, orderInvoiceId: null, globalInvoiceId: 'g-1', globalInvoiceNumber: 'F-12' };
     renderList([{ ...REFUND, creditNotes: [global] }], true, [], 'F-12');
 
-    expect(screen.getByText(/^La factura global F-12 ampara esta venta: cada reembolso lleva su nota de crédito al público/))
+    expect(screen.getByText(/^La factura global F-12 ampara esta venta: cada reembolso y cada condonación lleva su nota de crédito al público/))
       .toHaveTextContent('unos minutos después de registrarlo (o de timbrar la factura global, si fue antes)');
     const refund = screen.getAllByRole('listitem')[0];
     expect(refund).toHaveTextContent('Forma 04 (Tarjeta) · la emitió TienditApp · al público en general, de la factura global F-12');
     expect(screen.getByRole('button', { name: 'Descargar XML de la nota de crédito NC-1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-1' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Enviar por correo/ })).not.toBeInTheDocument();
+  });
+
+  it('shows the credit note of a discount on a sale of a global invoice, by «Condonación», to the general public', () => {
+    const global: Note = {
+      ...NC1, id: 'nc-3', number: 'NC-3', orderInvoiceId: null, globalInvoiceId: 'g-1', globalInvoiceNumber: 'F-12', paymentForm: '15',
+    };
+    const discount: Adjustment = {
+      ...WRITE_OFF, amount: 20, writeOffReason: OrderWriteOffReason.Discount, canIssue: false, awaitsAutomaticIssue: false,
+      creditNotes: [global],
+    };
+    renderList([discount], true, [], 'F-12');
+
+    const item = screen.getAllByRole('listitem')[0];
+    expect(item).toHaveTextContent(/Condonación del .*Descuento o bonificación · \$20\.00/);
+    expect(item).toHaveTextContent('Forma 15 (Condonación) · la emitió TienditApp · al público en general, de la factura global F-12');
+    expect(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-3' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Enviar por correo/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Emitir/ })).not.toBeInTheDocument();
   });
 
   it('says nobody has to accept the cancellation of a credit note of a global invoice', async () => {

@@ -26,8 +26,8 @@ const LIVE: OrderInvoiceStatus[] = [OrderInvoiceStatus.Stamping, OrderInvoiceSta
 
 /**
  * Reportes › Factura global › una: the global invoice with its sales, its files, and what can be done with it (ask the PAC
- * again while it stamps; cancel it once stamped), and the credit notes of its sales' refunds (Fase 28I): while one stands,
- * the SAT does not cancel it, so the screen says which go first.
+ * again while it stamps; cancel it once stamped), and the credit notes of its sales' refunds (Fase 28I) and write-offs
+ * (Fase 28J): while one stands, the SAT does not cancel it, so the screen says which go first.
  */
 export default function GlobalInvoicePage() {
   const { id = '' } = useParams<{ id: string }>();
@@ -256,8 +256,8 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
           <div className="card-body">
             <h2 id={`${id}-notes`} className="h5 mb-1">Notas de crédito ({creditNotes.length})</h2>
             <p className="small text-muted">
-              Las de los reembolsos de sus ventas, al público en general. Se emiten, se cancelan y se descargan en el pedido de
-              cada venta.
+              Las de los reembolsos y las condonaciones de sus ventas, al público en general. Se emiten, se cancelan y se
+              descargan en el pedido de cada venta.
             </p>
             <div className="table-responsive">
               <table className="table table-sm align-middle mb-0">

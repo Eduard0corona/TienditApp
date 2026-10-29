@@ -163,6 +163,10 @@ public class CustomerWriteOffFlowTests
         Assert.False(validator.Validate(command with { Amount = 0m }).IsValid);
         Assert.False(validator.Validate(command with { ExpectedOwed = 0m }).IsValid);
         Assert.False(validator.Validate(command with { Reason = (OrderWriteOffReason)7 }).IsValid);
+        // A discount is of one sale (Fase 28J): never spread over the account.
+        Assert.Contains(WriteOffCustomerAccountCommandValidator.DiscountNeedsOrderMessage,
+            validator.Validate(command with { Reason = OrderWriteOffReason.Discount }).Errors.Select(e => e.ErrorMessage));
+        Assert.True(validator.Validate(command with { Reason = OrderWriteOffReason.Discount, OrderId = Guid.NewGuid() }).IsValid);
         Assert.False(validator.Validate(command with { Phone = null }).IsValid);
         Assert.False(validator.Validate(command with { Notes = new string('a', OrderWriteOff.MaxNotesLength + 1) }).IsValid);
     }

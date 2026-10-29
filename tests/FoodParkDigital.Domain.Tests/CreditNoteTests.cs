@@ -238,6 +238,72 @@ public class CreditNoteTests
         Assert.Equal("La venta no está en esa factura global.", error.Message);
     }
 
+    [Fact]
+    public void ForWriteOffInGlobalInvoice_ShouldCreditTheSaleInTheGlobalInvoice_ByCondonacion()
+    {
+        var (global, sale) = StampedGlobal();
+        var writeOff = WriteOff(29m);
+
+        var note = CreditNote.ForWriteOffInGlobalInvoice(global, sale, writeOff, "NC", 5, 25m, 4m, Document, null, Now);
+
+        Assert.Equal((TenantId, (Guid?)null, (Guid?)global.Id, OrderId, (Guid?)null, (Guid?)writeOff.Id),
+            (note.TenantId, note.OrderInvoiceId, note.GlobalInvoiceId, note.OrderId, note.OrderRefundId, note.OrderWriteOffId));
+        Assert.Equal(("NC-5", "15", 29m, 0, OrderInvoiceStatus.Stamping), (note.Number, note.PaymentForm, note.Total,
+            note.AfterInstallment, note.Status));
+        Assert.True(note.IsForGlobalInvoice);
+        Assert.False(note.IsForRefund);
+        // Before the write-off is undone, because it did not happen (03), or because it has errors (02).
+        Assert.True(note.TakesCancellationMotive(CfdiCancellationMotive.NotCarriedOut));
+        Assert.True(note.TakesCancellationMotive(CfdiCancellationMotive.ErrorsWithoutReplacement));
+    }
+
+    [Fact]
+    public void ForWriteOffInGlobalInvoice_ShouldOnlyGoForAStampedGlobalInvoice_ThatCoversTheSale_UpToWhatTheSaleCharged()
+    {
+        var (global, sale) = StampedGlobal();
+
+        var tooMuch = Assert.Throws<DomainException>(() => CreditNote.ForWriteOffInGlobalInvoice(
+            global, sale, WriteOff(116.01m), "NC", 1, 100.01m, 16m, Document, null, Now));
+        Assert.Equal("La nota de crédito es mayor que lo que la venta cobró en la factura global.", tooMuch.Message);
+        Assert.Equal(116m, CreditNote.ForWriteOffInGlobalInvoice(global, sale, WriteOff(116m), "NC", 1, 100m, 16m, Document, null, Now).Total);
+
+        var stamping = Global();
+        var notStamped = Assert.Throws<DomainException>(() => CreditNote.ForWriteOffInGlobalInvoice(
+            stamping, stamping.Orders.First(o => o.OrderId == OrderId), WriteOff(10m), "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        Assert.Equal(CreditNote.NeedsStampedGlobalInvoiceMessage, notStamped.Message);
+
+        // A sale of another global invoice, or a write-off of another sale or business, or one undone.
+        var (_, otherSale) = StampedGlobal();
+        Assert.Throws<DomainException>(() => CreditNote.ForWriteOffInGlobalInvoice(global, otherSale, WriteOff(10m), "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        var otherOrder = new OrderWriteOff(TenantId, Guid.NewGuid(), 10m, OrderWriteOffReason.Courtesy, null, Now, "dueña");
+        Assert.Throws<DomainException>(() => CreditNote.ForWriteOffInGlobalInvoice(global, sale, otherOrder, "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        var otherBusiness = new OrderWriteOff(Guid.NewGuid(), OrderId, 10m, OrderWriteOffReason.Courtesy, null, Now, "dueña");
+        Assert.Throws<DomainException>(() => CreditNote.ForWriteOffInGlobalInvoice(global, sale, otherBusiness, "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        var undone = WriteOff(10m);
+        undone.Reverse(Now, "dueña");
+        var reversed = Assert.Throws<DomainException>(() =>
+            CreditNote.ForWriteOffInGlobalInvoice(global, sale, undone, "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        Assert.Equal(CreditNote.ReversedWriteOffMessage, reversed.Message);
+
+        // Cancelled, the global invoice frees its sales.
+        global.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, CashierId, Now);
+        global.Cancel(Now);
+        var released = Assert.Throws<DomainException>(() =>
+            CreditNote.ForWriteOffInGlobalInvoice(global, sale, WriteOff(10m), "NC", 1, 8.62m, 1.38m, Document, null, Now));
+        Assert.Equal("La venta no está en esa factura global.", released.Message);
+    }
+
+    [Theory]
+    [InlineData(OrderWriteOffReason.WontBeCollected, "Condonación")]
+    [InlineData(OrderWriteOffReason.RecordingError, "Condonación")]
+    [InlineData(OrderWriteOffReason.Courtesy, "Condonación")]
+    [InlineData(OrderWriteOffReason.Other, "Condonación")]
+    [InlineData(OrderWriteOffReason.Discount, "Descuento o bonificación")]
+    public void WriteOffsCreditNote_ShouldSayWhetherItIsADiscountOrADebtGivenUpOn(OrderWriteOffReason reason, string concept)
+    {
+        Assert.Equal(concept, SatCatalog.WriteOffDescriptionFor(reason));
+    }
+
     [Theory]
     [InlineData("601", "G02")]
     [InlineData("612", "G02")]

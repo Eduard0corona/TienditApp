@@ -1,10 +1,12 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Entities;
@@ -12,6 +14,7 @@ using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
@@ -22,15 +25,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace FoodParkDigital.Application.Tests;
 
 /// <summary>
-/// The credit note of a refund of a sale a global invoice covers (Fase 28I, ADR 0054): to the general public, related to the
-/// global invoice, for what was given back with the rates the sale had in it, never more than what the sale charged in it;
-/// TienditApp issues it on its own (also a voided sale's), a person issues it again or cancels it, it never goes by email,
-/// and the global invoice is not cancelled while one stands.
+/// The credit note of a refund (Fase 28I, ADR 0054) or a write-off (Fase 28J, ADR 0055) of a sale a global invoice covers:
+/// to the general public, related to the global invoice, for what was given back or forgiven with the rates the sale had in
+/// it, never more than what the sale charged in it; TienditApp issues it on its own (also a voided sale's), a person issues
+/// it again or cancels it, it never goes by email, and the global invoice is not cancelled while one stands.
 /// </summary>
 public class GlobalInvoiceCreditNoteFlowTests
 {
     private const string Rfc = "EKU9003173C9";
     private const string OtherRfc = "XIA190128J61";
+    private const string KarlaPhone = "+525512345678";
 
     // The sales are made on Sunday 4 October 2026 (11:00 in Mexico City); the next morning the day is over.
     private static readonly DateOnly SaleDay = new(2026, 10, 4);
@@ -172,7 +176,7 @@ public class GlobalInvoiceCreditNoteFlowTests
         // The first fits; the second does not fit in what the first left.
         Assert.Equal(1, (await book.IssuePendingAsync()).Value);
         Assert.Equal(first.Id, (await book.Context.CreditNotes.SingleAsync()).OrderRefundId);
-        var message = CreditNotes.AboveSaleMessage("F-1", sale.OrderNumber);
+        var message = CreditNotes.AboveSaleMessage("F-1", sale.OrderNumber, CreditNoteAdjustment.Refund);
         Assert.Equal(message, (await book.IssueCreditNoteAsync(second.Id)).Error);
         var shown = (await book.OrderInvoicingAsync(sale.Id)).Adjustments.Single(a => a.AdjustmentId == second.Id);
         Assert.Equal((false, false, message), (shown.CanIssue, shown.AwaitsAutomaticIssue, shown.Problem));
@@ -461,6 +465,234 @@ public class GlobalInvoiceCreditNoteFlowTests
         Assert.Equal(2, (await book.GlobalDetailAsync(global.Id)).Orders.Single().CreditNotes.Count);
     }
 
+    [Fact]
+    public async Task SaleSettledWithAWriteOff_ShouldGoInForItsTotal_AndEachWriteOffTakeItsCreditNote_ByCondonacionOrDiscount()
+    {
+        await using var book = await Book.OpenAsync();
+        // Handed over owing $30 that the business forgives, and owing $20 that it takes off as a discount.
+        var forgiven = await book.OwedSaleAsync(70m);
+        var discounted = await book.OwedSaleAsync(80m, OrderPaymentMethod.Card);
+        var forgivenWriteOff = await book.WriteOffAsync(forgiven.Id, 30m);
+        var discount = await book.WriteOffAsync(discounted.Id, 20m, OrderWriteOffReason.Discount);
+        book.Clock.UtcNow = NextMorning;
+
+        // Settled, both go in for their total, and the preview says which credit notes follow.
+        var draft = await book.DraftAsync();
+        Assert.Equal([forgiven.OrderNumber, discounted.OrderNumber], draft.Sales.Select(s => s.OrderNumber));
+        Assert.Empty(draft.LeftOut);
+        Assert.Equal(200m, draft.Total);
+        Assert.Contains(GlobalInvoiceDrafts.WriteOffsWarning(2), draft.Warnings);
+        var global = await book.IssueGlobalAsync(2, 200m);
+
+        Assert.Equal(2, (await book.IssuePendingAsync()).Value);
+
+        var notes = await book.Context.CreditNotes.OrderBy(n => n.Folio).ToListAsync();
+        Assert.Equal(
+            [
+                ("NC-1", forgivenWriteOff.Id, (Guid?)global.Id, (Guid?)null, "15", 25.86m, 4.14m, 30m, OrderInvoiceStatus.Stamped),
+                ("NC-2", discount.Id, (Guid?)global.Id, (Guid?)null, "15", 17.24m, 2.76m, 20m, OrderInvoiceStatus.Stamped)
+            ],
+            notes.Select(n => (n.Number, n.OrderWriteOffId!.Value, n.GlobalInvoiceId, n.OrderRefundId, n.PaymentForm, n.SubTotal,
+                n.TaxTotal, n.Total, n.Status)));
+        // Egreso, in one exhibition by «Condonación» (15), related to the global invoice, to the general public; its concept
+        // says whether the business forgave a debt or gave a discount.
+        var documents = book.Gateway.StampRequests.TakeLast(2).Select(r => r.Document).ToList();
+        Assert.All(documents, document =>
+        {
+            Assert.Equal(("E", "PUE", "15"), (document.VoucherType, document.PaymentMethod, document.PaymentForm));
+            Assert.Equal(("01", global.Uuid), (document.Related!.RelationType, Assert.Single(document.Related.Uuids)));
+            Assert.Equal(new CfdiDocumentReceiver("XAXX010101000", "PUBLICO EN GENERAL", "06000", "616", "S01"), document.Receiver);
+        });
+        Assert.Equal(
+            [("Condonación", forgiven.OrderNumber), ("Descuento o bonificación", discounted.OrderNumber)],
+            documents.Select(d => (Assert.Single(d.Concepts).Description, d.Concepts[0].Identification)));
+        // Nobody to send them to.
+        Assert.Empty(await book.Context.CfdiEmails.ToListAsync());
+
+        // Pedidos and the global invoice's detail show each one under its sale; nothing is issued twice.
+        Assert.Equal(0, (await book.IssuePendingAsync()).Value);
+        var invoicing = await book.OrderInvoicingAsync(discounted.Id);
+        Assert.Equal("F-1", invoicing.GlobalInvoiceNumber);
+        var shown = Assert.Single(invoicing.Adjustments);
+        Assert.Equal((CreditNoteAdjustment.WriteOff, discount.Id, (OrderWriteOffReason?)OrderWriteOffReason.Discount, false, false, (string?)null),
+            (shown.Kind, shown.AdjustmentId, shown.WriteOffReason, shown.CanIssue, shown.AwaitsAutomaticIssue, shown.Problem));
+        Assert.Equal(("NC-2", "F-1"), (Assert.Single(shown.CreditNotes).Number, shown.CreditNotes[0].GlobalInvoiceNumber));
+        var detail = await book.GlobalDetailAsync(global.Id);
+        Assert.Equal(["NC-1"], detail.Orders.Single(o => o.OrderId == forgiven.Id).CreditNotes.Select(n => n.Number));
+        Assert.Equal(["NC-2"], detail.Orders.Single(o => o.OrderId == discounted.Id).CreditNotes.Select(n => n.Number));
+        // And the global invoice is not cancelled while they stand.
+        Assert.Equal(GlobalInvoicing.LiveCreditNotesMessage(["NC-1", "NC-2"]),
+            (await book.CancelGlobalAsync(global.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).Error);
+    }
+
+    [Fact]
+    public async Task SaleStillOwed_SoldOnCredit_OrGivenBackWholeBetweenRefundsAndWriteOffs_ShouldStayOutOfTheGlobalInvoice()
+    {
+        await using var book = await Book.OpenAsync();
+        var owed = await book.OwedSaleAsync(70m);
+        var onCredit = await book.OwedSaleAsync(70m, onCredit: true);
+        // Sold on credit and still owed: its reason is that it was sold on credit, not that it is owed.
+        var owedOnCredit = await book.OwedSaleAsync(70m, onCredit: true);
+        var givenBack = await book.OwedSaleAsync(70m);
+        var paid = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        await book.WriteOffAsync(onCredit.Id, 30m);
+        await book.WriteOffAsync(givenBack.Id, 30m);
+        await book.RefundAsync(givenBack.Id, 70m, OrderPaymentMethod.Cash);
+        book.Clock.UtcNow = NextMorning;
+
+        var draft = await book.DraftAsync();
+
+        Assert.Equal([paid.OrderNumber], draft.Sales.Select(s => s.OrderNumber));
+        Assert.Equal(
+            [
+                (owed.OrderNumber, GlobalInvoiceDrafts.NotPaidReason),
+                (onCredit.OrderNumber, GlobalInvoiceDrafts.CreditReason),
+                (owedOnCredit.OrderNumber, GlobalInvoiceDrafts.CreditReason),
+                (givenBack.OrderNumber, GlobalInvoiceDrafts.FullyGivenBackReason)
+            ],
+            draft.LeftOut.Select(l => (l.OrderNumber, l.Reason)));
+        Assert.DoesNotContain(draft.Warnings, w => w.Contains("condonaciones", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SaleSettledWithAWriteOff_AfterItsPeriodsGlobalInvoice_ShouldGoInTheNextOne_AndTakeItsCreditNote()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.OwedSaleAsync(70m);
+        await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        // Still owed when the sale day's global invoice is stamped: it stays out.
+        var draft = await book.DraftAsync(SaleDay);
+        Assert.Equal(GlobalInvoiceDrafts.NotPaidReason, draft.LeftOut.Single(l => l.OrderId == sale.Id).Reason);
+        await book.IssueGlobalAsync(1, 100m);
+
+        // The next day the business forgives what is left: settled, it goes in the next global invoice, for its total.
+        var writeOff = await book.WriteOffAsync(sale.Id, 30m);
+        var nextDay = SaleDay.AddDays(1);
+        book.Clock.UtcNow = NextMorning.AddDays(1);
+        draft = await book.DraftAsync(nextDay);
+        Assert.Equal([sale.OrderNumber], draft.Sales.Select(s => s.OrderNumber));
+        Assert.Contains(GlobalInvoiceDrafts.LateSalesWarning(1), draft.Warnings);
+        Assert.Contains(GlobalInvoiceDrafts.WriteOffsWarning(1), draft.Warnings);
+        var global = await book.IssueGlobalAsync(1, 100m, nextDay);
+
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+        var note = await book.Context.CreditNotes.SingleAsync();
+        Assert.Equal((writeOff.Id, (Guid?)global.Id, "F-2", 30m), (note.OrderWriteOffId, note.GlobalInvoiceId, global.Number, note.Total));
+    }
+
+    [Fact]
+    public async Task WriteOff_OfASaleOfTheGlobalInvoice_ShouldNotBeUndone_WhileTheGlobalInvoiceCoversIt()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.OwedSaleAsync(70m);
+        await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        var writeOff = await book.WriteOffAsync(sale.Id, 30m);
+        await book.IssueGlobalAsync(2, 200m);
+
+        // The global invoice took it settled: undone, the sale would owe inside a CFDI paid in one exhibition. Before its credit
+        // note is issued, and after.
+        var inGlobal = ReverseCustomerWriteOffCommandHandler.InGlobalInvoiceMessage("F-1");
+        Assert.Equal(inGlobal, (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+        Assert.Equal(inGlobal, (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
+        // Its credit note cancelled, the global invoice still covers it.
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        var note = await book.Context.CreditNotes.SingleAsync();
+        Assert.True((await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        Assert.Equal(inGlobal, (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
+
+        // With the global invoice cancelled it is undone, takes no credit note, and the global invoice issued again leaves it
+        // out while it owes.
+        Assert.True((await book.CancelGlobalAsync((await book.Context.GlobalInvoices.SingleAsync()).Id,
+            CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        var undone = await book.ReverseWriteOffAsync(writeOff.Id);
+        Assert.True(undone.IsSuccess, undone.Error);
+        Assert.Equal(0, (await book.IssuePendingAsync()).Value);
+        var draft = await book.DraftAsync();
+        Assert.Equal(GlobalInvoiceDrafts.NotPaidReason, Assert.Single(draft.LeftOut).Reason);
+        Assert.Equal(100m, draft.Total);
+    }
+
+    [Fact]
+    public async Task WriteOff_OfAGlobalInvoiceCancelledAndIssuedAgain_ShouldTakeItsCreditNoteOfTheNewOne()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.OwedSaleAsync(70m);
+        var writeOff = await book.WriteOffAsync(sale.Id, 30m, OrderWriteOffReason.Discount);
+        var first = await book.IssueGlobalAsync(1, 100m);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+
+        // Its credit note and the global invoice cancelled with 02 to correct it: the sale goes in the new one as it was, and the
+        // discount takes its credit note of the new one, on its own.
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        var note = await book.Context.CreditNotes.SingleAsync();
+        Assert.True((await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        Assert.True((await book.CancelGlobalAsync(first.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        var second = await book.IssueGlobalAsync(1, 100m);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+
+        var issued = await book.Context.CreditNotes.SingleAsync(n => n.Status == OrderInvoiceStatus.Stamped);
+        Assert.Equal(("NC-2", writeOff.Id, (Guid?)second.Id, 30m), (issued.Number, issued.OrderWriteOffId!.Value, issued.GlobalInvoiceId, issued.Total));
+        Assert.Equal(("01", second.Uuid), (book.Gateway.StampRequests[^1].Document.Related!.RelationType,
+            Assert.Single(book.Gateway.StampRequests[^1].Document.Related!.Uuids)));
+    }
+
+    [Fact]
+    public void SaleRoom_ShouldCountTheCreditNotesOfItsRefundsAndWriteOffs_ButNotItsOwnNorAnUndoneWriteOffs()
+    {
+        var now = new DateTimeOffset(2026, 10, 5, 15, 0, 0, TimeSpan.Zero);
+        var tenantId = Guid.NewGuid();
+        var order = new Order(tenantId, null, null, true, "ORD-000001", BusinessType.Retail, OrderType.Retail, "Karla", KarlaPhone,
+            null, null, pricesIncludeTax: true);
+        order.AddItem(Guid.NewGuid(), "Café", 2, 100m);
+        order.RegisterPayment(150m, OrderPaymentMethod.Cash, now, null, null, null, null);
+        order.TransitionTo(OrderStatus.Delivered, OrderStateMachineFactory.Create(BusinessType.Retail, OrderType.Retail), "cajero");
+        var refund = order.RegisterRefund(40m, OrderPaymentMethod.Cash, "Devolución", now, "cajero", null, null, false, []);
+        var forgiven = order.WriteOff(30m, OrderWriteOffReason.WontBeCollected, null, now, "dueña");
+        var undone = order.WriteOff(20m, OrderWriteOffReason.Courtesy, null, now, "dueña");
+        var global = GlobalInvoice.Request(
+            tenantId, GlobalInvoicePeriod.Containing(GlobalInvoicePeriodicity.Daily, SaleDay), "F", 1, "01", "{}",
+            172.41m, 27.59m, 200m, [new GlobalInvoiceSale(order.Id, order.OrderNumber, 200m)], Guid.NewGuid(), now);
+        global.Stamp(Guid.NewGuid().ToString().ToUpperInvariant(), "sw", now, "cfdi/f-1.xml");
+        var sale = global.Orders.Single();
+        var refundNote = CreditNote.ForRefundInGlobalInvoice(global, sale, refund, "NC", 1, 34.48m, 5.52m, "{}", null, now);
+        // Refused, and issued again: only the latest counts.
+        var refusedNote = CreditNote.ForWriteOffInGlobalInvoice(global, sale, forgiven, "NC", 2, 25.86m, 4.14m, "{}", null, now);
+        refusedNote.Refuse("CFDI40108", now);
+        var forgivenNote = CreditNote.ForWriteOffInGlobalInvoice(global, sale, forgiven, "NC", 3, 25.86m, 4.14m, "{}", null, now.AddMinutes(1));
+        var undoneNote = CreditNote.ForWriteOffInGlobalInvoice(global, sale, undone, "NC", 4, 17.24m, 2.76m, "{}", null, now);
+        order.ReverseWriteOff(undone.Id, now.AddMinutes(2), "dueña");
+
+        var standing = CreditNotes.SaleStandingOf([refundNote, refusedNote, forgivenNote, undoneNote], [undone.Id]);
+
+        Assert.Equal([refundNote.Id, forgivenNote.Id], standing.Select(n => n.Id).OrderBy(id => id == forgivenNote.Id));
+        // $200 − $40 − $30, for a new adjustment; each one's own credit note does not count against it.
+        Assert.Equal(130m, CreditNotes.SaleRoom(sale, standing, Guid.NewGuid()));
+        Assert.Equal(170m, CreditNotes.SaleRoom(sale, standing, refund.Id));
+        Assert.Equal(160m, CreditNotes.SaleRoom(sale, standing, forgiven.Id));
+    }
+
+    [Fact]
+    public async Task WriteOffCreditNotes_OfAGlobalInvoice_ShouldBeInvisibleToAnotherBusiness()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.OwedSaleAsync(70m);
+        var writeOff = await book.WriteOffAsync(sale.Id, 30m);
+        var global = await book.IssueGlobalAsync(1, 100m);
+
+        // Another business neither reads, issues nor takes it in its worker pass.
+        await book.Fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.OrderInvoicingAsync(sale.Id));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.IssueCreditNoteAsync(CreditNoteAdjustment.WriteOff, writeOff.Id));
+        Assert.Equal(0, (await book.IssuePendingAsync()).Value);
+        Assert.Empty(await book.Context.CreditNotes.IgnoreQueryFilters().ToListAsync());
+
+        // Its own business does.
+        book.Fixture.TenantService.SetTenant(book.Tenant.Id);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+        Assert.Equal(["NC-1"], (await book.GlobalDetailAsync(global.Id)).Orders.Single().CreditNotes.Select(n => n.Number));
+    }
+
     private sealed class Book : IAsyncDisposable, ISender
     {
         private Book(SalesTestFixture fixture, Tenant tenant, Product product)
@@ -485,6 +717,10 @@ public class GlobalInvoiceCreditNoteFlowTests
             var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
             await fixture.OpenCashSessionAsync(tenant);
             var book = new Book(fixture, tenant, await fixture.AddProductAsync(tenant, "Café", 100m));
+            // Karla may buy on credit (Fase 26A).
+            var karla = new Customer(tenant.Id, "Karla", KarlaPhone, null);
+            karla.SetCreditLimit(1_000m);
+            fixture.Context.Customers.Add(karla);
             tenant.SetBusinessInfo(
                 Rfc, "ESCUELA KEMPER URGATE", "Comercio", "601 - General de Ley Personas Morales",
                 new Address("Reforma", "1", null, "Centro", "06000", "Cuauhtémoc", "Ciudad de México"));
@@ -519,6 +755,50 @@ public class GlobalInvoiceCreditNoteFlowTests
             }, CancellationToken.None);
             Assert.True(created.IsSuccess, created.Error);
             return created.Value;
+        }
+
+        /// <summary>
+        /// A sale of Café to Karla handed over with only part of it paid on the sale day (or sold on credit): she owes the
+        /// rest, which the business may forgive.
+        /// </summary>
+        public async Task<OrderDto> OwedSaleAsync(decimal paid, OrderPaymentMethod method = OrderPaymentMethod.Cash, bool onCredit = false)
+        {
+            var created = await Fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+            {
+                CustomerName = "Karla",
+                CustomerPhone = KarlaPhone,
+                OnCredit = onCredit,
+                Items = [new CreateOrderItemDto { ProductId = Product.Id, Quantity = 1 }],
+                Payments = [new CreateOrderPaymentDto { Amount = paid, Method = method }]
+            }, CancellationToken.None);
+            Assert.True(created.IsSuccess, created.Error);
+            var order = await Context.Orders.Include(o => o.StatusHistory).SingleAsync(o => o.Id == created.Value.Id);
+            if (order.Status != OrderStatus.Delivered && order.Status != OrderStatus.Completed)
+                order.TransitionTo(OrderStatus.Delivered, OrderStateMachineFactory.Create(BusinessType.Retail, OrderType.Retail), "cajero");
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+            return created.Value;
+        }
+
+        public async Task<OrderWriteOff> WriteOffAsync(
+            Guid orderId, decimal amount, OrderWriteOffReason reason = OrderWriteOffReason.WontBeCollected)
+        {
+            Clock.UtcNow = Clock.UtcNow.AddMinutes(1);
+            var order = await Context.Orders.Include(o => o.Payments).Include(o => o.WriteOffs).SingleAsync(o => o.Id == orderId);
+            var writeOff = order.WriteOff(amount, reason, null, Clock.UtcNow, "dueña");
+            await Context.SaveChangesAsync();
+            Context.ChangeTracker.Clear();
+            return writeOff;
+        }
+
+        public async Task<Result<CustomerAccountDto>> ReverseWriteOffAsync(Guid writeOffId)
+        {
+            var reversed = await new ReverseCustomerWriteOffCommandHandler(
+                    Context, Fixture.TenantService, Fixture.CurrentUser, new PhoneNormalizationService(), Clock,
+                    new CustomerCreditLock(Context), new InvoicingLock(Context))
+                .Handle(new ReverseCustomerWriteOffCommand { WriteOffId = writeOffId }, CancellationToken.None);
+            Context.ChangeTracker.Clear();
+            return reversed;
         }
 
         /// <summary>
@@ -580,10 +860,13 @@ public class GlobalInvoiceCreditNoteFlowTests
             => new GetOrderInvoicingQueryHandler(Context, Fixture.TenantService, Gateway, new PhoneNormalizationService(), Clock)
                 .Handle(new GetOrderInvoicingQuery(orderId), CancellationToken.None);
 
-        public async Task<Result<CreditNoteDto>> IssueCreditNoteAsync(Guid refundId)
+        public Task<Result<CreditNoteDto>> IssueCreditNoteAsync(Guid refundId)
+            => IssueCreditNoteAsync(CreditNoteAdjustment.Refund, refundId);
+
+        public async Task<Result<CreditNoteDto>> IssueCreditNoteAsync(CreditNoteAdjustment adjustment, Guid adjustmentId)
         {
             var issued = await new IssueCreditNoteCommandHandler(this, Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
-                .Handle(new IssueCreditNoteCommand(CreditNoteAdjustment.Refund, refundId), CancellationToken.None);
+                .Handle(new IssueCreditNoteCommand(adjustment, adjustmentId), CancellationToken.None);
             Context.ChangeTracker.Clear();
             return issued;
         }

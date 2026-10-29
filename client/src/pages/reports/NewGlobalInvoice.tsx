@@ -102,8 +102,8 @@ export default function NewGlobalInvoice() {
             </div>
           </div>
           <p className="small text-muted mt-2 mb-0">
-            Entran las ventas pagadas por completo en el periodo que no tienen factura propia. Las semanas y quincenas se cortan
-            al terminar el mes.
+            Entran las ventas del periodo que ya no deben nada (pagadas, o con lo que faltaba condonado) y no tienen factura
+            propia. Las semanas y quincenas se cortan al terminar el mes.
           </p>
         </div>
       </section>

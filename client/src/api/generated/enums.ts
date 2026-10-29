@@ -409,6 +409,7 @@ export const OrderWriteOffReason = {
   WontBeCollected: 1,
   RecordingError: 2,
   Courtesy: 3,
+  Discount: 4,
   Other: 99,
 } as const;
 export type OrderWriteOffReason = (typeof OrderWriteOffReason)[keyof typeof OrderWriteOffReason];

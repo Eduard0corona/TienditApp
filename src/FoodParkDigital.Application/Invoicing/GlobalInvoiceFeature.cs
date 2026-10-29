@@ -117,8 +117,8 @@ public class GlobalInvoiceOrderDto
     public string OrderNumber { get; set; } = null!;
     public decimal Total { get; set; }
     /// <summary>
-    /// The credit notes of its refunds that credit this global invoice (Fase 28I), the newest first: while one stands with
-    /// the SAT, the global invoice is not cancelled.
+    /// The credit notes of its refunds (Fase 28I) and write-offs (Fase 28J) that credit this global invoice, the newest first:
+    /// while one stands with the SAT, the global invoice is not cancelled.
     /// </summary>
     public List<CreditNoteDto> CreditNotes { get; set; } = [];
 }
@@ -424,7 +424,8 @@ public class CancelGlobalInvoiceCommandHandler : IRequestHandler<CancelGlobalInv
                 : "Solo se cancela una factura timbrada.");
         if (!_gateway.IsConfigured)
             return Result.Failure<GlobalInvoiceDto>(InvoicingSettings.NotAvailableMessage);
-        // The SAT does not cancel one related to credit notes in force: those of its sales' refunds go first (Fase 28I).
+        // The SAT does not cancel one related to credit notes in force: those of its sales' refunds and write-offs go first
+        // (Fases 28I and 28J).
         if (await CreditNotes.LiveNumbersOfGlobalInvoiceAsync(_context, invoice.Id, cancellationToken) is { Count: > 0 } notes)
             return Result.Failure<GlobalInvoiceDto>(GlobalInvoicing.LiveCreditNotesMessage(notes));
         var profile = await _context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);

@@ -28,7 +28,7 @@ interface CreditNoteListProps {
   canCancel: boolean;
   /** The email the order's invoicing proposes, to send a note whose invoice has none (Fase 28E). */
   proposedEmail?: string | null;
-  /** The global invoice that covers the sale now, whose credit notes its refunds take (Fase 28I). */
+  /** The global invoice that covers the sale now, whose credit notes its refunds (Fase 28I) and write-offs (Fase 28J) take. */
   globalInvoiceNumber?: string | null;
 }
 
@@ -63,8 +63,8 @@ interface Cancelling {
  * The refunds and write-offs of an invoiced order (Fase 28D) with their credit notes (CFDI de egreso): TienditApp issues
  * each one on its own a few minutes after it is recorded (or after the invoice is stamped); from here it is issued before
  * that («Emitir ahora»), again after a refused or cancelled one, asked again of the PAC, cancelled or downloaded. The
- * refunds of a sale a global invoice covers take theirs of that global invoice, to the general public (Fase 28I): those
- * never go by email.
+ * refunds (Fase 28I) and write-offs (Fase 28J) of a sale a global invoice covers take theirs of that global invoice, to the
+ * general public: those never go by email.
  */
 export default function CreditNoteList({
   orderId,
@@ -124,9 +124,9 @@ export default function CreditNoteList({
             + 'que TienditApp emite por su cuenta unos minutos después de registrarlo (o de timbrar la factura, si fue antes). '
             + 'Si uno no la lleva, dice por qué.'
           : globalInvoiceNumber
-            ? `La factura global ${globalInvoiceNumber} ampara esta venta: cada reembolso lleva su nota de crédito al público en `
-              + 'general, relacionada con esa factura global, que TienditApp emite por su cuenta unos minutos después de '
-              + 'registrarlo (o de timbrar la factura global, si fue antes). Si uno no la lleva, dice por qué.'
+            ? `La factura global ${globalInvoiceNumber} ampara esta venta: cada reembolso y cada condonación lleva su nota de `
+              + 'crédito al público en general, relacionada con esa factura global, que TienditApp emite por su cuenta unos '
+              + 'minutos después de registrarlo (o de timbrar la factura global, si fue antes). Si uno no la lleva, dice por qué.'
             : 'Lo que se devolvió o se condonó de este pedido. Sus notas de crédito se emiten con una factura timbrada.'}
       </p>
       <ul className="list-unstyled mb-0">

@@ -12,6 +12,11 @@ public enum OrderWriteOffReason
     RecordingError = 2,
     /// <summary>The business decided to give it.</summary>
     Courtesy = 3,
+    /// <summary>
+    /// The business lowered the price after the sale (a defect, a delay, a deal): a discount or rebate, not a debt it gave up
+    /// on (Fase 28J). Its credit note says so.
+    /// </summary>
+    Discount = 4,
     /// <summary>Anything else, always with a note.</summary>
     Other = 99
 }

@@ -429,8 +429,8 @@ public class GetCreditNoteFileQueryHandler : IRequestHandler<GetCreditNoteFileQu
 
 /// <summary>
 /// Issues the credit notes a business owes (the invoicing worker sends it in the business's scope, Fase 28D): each refund
-/// and each write-off that still stands of an order whose invoice is stamped and that never had a credit note for it, the
-/// oldest first, as long as the refund has a form of the SAT's. A refused or cancelled credit note is issued again only by
+/// and each write-off that still stands of an order whose invoice is stamped, or of a sale a stamped global invoice covers
+/// (Fases 28I and 28J), that never had a credit note for it, the oldest first, as long as the refund has a form of the SAT's. A refused or cancelled credit note is issued again only by
 /// a person. Up to <see cref="IssuePendingCreditNotesCommandHandler.MaxPerPass"/> are issued in a pass; the ones that cannot
 /// be issued yet are passed over, so they never hold up the newer ones behind them.
 /// </summary>
@@ -478,7 +478,8 @@ public class IssuePendingCreditNotesCommandHandler : IRequestHandler<IssuePendin
             .Select(r => new { r.Id, At = r.RefundedAt })
             .Take(MaxCandidatesPerPass)
             .ToListAsync(cancellationToken);
-        var writeOffs = await CreditNotes.PendingWriteOffs(_context.OrderWriteOffs, _context.OrderInvoices, _context.CreditNotes)
+        var writeOffs = await CreditNotes.PendingWriteOffs(
+                _context.OrderWriteOffs, _context.OrderInvoices, _context.GlobalInvoiceOrders, _context.GlobalInvoices, _context.CreditNotes)
             .OrderBy(w => w.WrittenOffAt)
             .ThenBy(w => w.Id)
             .Select(w => new { w.Id, At = w.WrittenOffAt })
@@ -531,7 +532,8 @@ public class IssuePendingCreditNotesCommandHandler : IRequestHandler<IssuePendin
 
 /// <summary>
 /// What issuing a credit note asks for (Fase 28D): the adjustment, its order's invoice and what else it credits; or, for a
-/// refund of a sale a global invoice covers, that global invoice and what else the sale's refunds credit (Fase 28I).
+/// refund (Fase 28I) or write-off (Fase 28J) of a sale a global invoice covers, that global invoice and what else the sale's
+/// adjustments credit.
 /// </summary>
 internal sealed class CreditNoteRequester(
     IApplicationDbContext context,
@@ -570,10 +572,10 @@ internal sealed class CreditNoteRequester(
                 && (i.Status == OrderInvoiceStatus.Stamping || i.Status == OrderInvoiceStatus.Stamped
                     || i.Status == OrderInvoiceStatus.Cancelling), cancellationToken);
         // Without one, a sale a global invoice covers: its refunds credit the global invoice, also a voided sale's, since the
-        // global invoice is not cancelled for one of its sales (Fase 28I).
-        if (invoice is null && refund is not null
-            && await CreditNotes.GlobalSaleAsync(context, orderId, cancellationToken) is { } inGlobal)
-            return await RequestInGlobalInvoiceAsync(refund, inGlobal.Global, inGlobal.Sale, requestedByUserId, cancellationToken);
+        // global invoice is not cancelled for one of its sales (Fase 28I), and so do its write-offs (Fase 28J).
+        if (invoice is null && await CreditNotes.GlobalSaleAsync(context, orderId, cancellationToken) is { } inGlobal)
+            return await RequestInGlobalInvoiceAsync(
+                adjustment, refund, writeOff, inGlobal.Global, inGlobal.Sale, requestedByUserId, cancellationToken);
         // A cancelled sale did not happen: its invoice is cancelled with 03, without credit notes in between.
         if (await context.Orders.AsNoTracking().AnyAsync(o => o.Id == orderId && o.Status == OrderStatus.Cancelled, cancellationToken))
             return Result.Failure<Guid>(CreditNotes.CancelledOrderMessage);
@@ -622,7 +624,7 @@ internal sealed class CreditNoteRequester(
             folio,
             await LocalNowAsync(tenantId, now, cancellationToken),
             paymentForm,
-            refund is null ? SatCatalog.WriteOffDescription : SatCatalog.RefundDescription,
+            refund is null ? SatCatalog.WriteOffDescriptionFor(writeOff!.Reason) : SatCatalog.RefundDescription,
             transfers,
             notSubject,
             invoice.Uuid!);
@@ -644,18 +646,25 @@ internal sealed class CreditNoteRequester(
     }
 
     /// <summary>
-    /// The credit note of a refund of a sale a global invoice covers (Fase 28I, ADR 0054): to the general public, related
-    /// with the global invoice, for what the sale's rates in it say, never more than what the sale charged in it after its
-    /// other refunds' credit notes.
+    /// The credit note of a refund (Fase 28I, ADR 0054) or a write-off (Fase 28J, ADR 0055) of a sale a global invoice covers:
+    /// to the general public, related with the global invoice, for what the sale's rates in it say, never more than what the
+    /// sale charged in it after the credit notes of its other adjustments.
     /// </summary>
     private async Task<Result<Guid>> RequestInGlobalInvoiceAsync(
-        OrderRefund refund, GlobalInvoice global, GlobalInvoiceOrder sale, Guid? requestedByUserId, CancellationToken cancellationToken)
+        CreditNoteAdjustment adjustment,
+        OrderRefund? refund,
+        OrderWriteOff? writeOff,
+        GlobalInvoice global,
+        GlobalInvoiceOrder sale,
+        Guid? requestedByUserId,
+        CancellationToken cancellationToken)
     {
-        var problem = CreditNotes.FormProblem(refund.Method) ?? CreditNotes.GlobalInvoiceProblem(global);
+        var adjustmentId = refund?.Id ?? writeOff!.Id;
+        var amount = refund?.Amount ?? writeOff!.Amount;
+        var problem = (refund is null ? null : CreditNotes.FormProblem(refund.Method)) ?? CreditNotes.GlobalInvoiceProblem(global);
         if (problem is not null)
             return Result.Failure<Guid>(problem);
-        if (await LiveOrIssuedProblemAsync(
-                CreditNoteAdjustment.Refund, refund.Id, requestedByUserId, n => n.GlobalInvoiceId == global.Id, cancellationToken)
+        if (await LiveOrIssuedProblemAsync(adjustment, adjustmentId, requestedByUserId, n => n.GlobalInvoiceId == global.Id, cancellationToken)
             is { } issuedProblem)
             return Result.Failure<Guid>(issuedProblem);
 
@@ -671,14 +680,14 @@ internal sealed class CreditNoteRequester(
         if (CreditNotes.SaleTransfers(globalDocument, sale) is not { } saleTransfers)
             return Result.Failure<Guid>(CreditNotes.NoSaleInGlobalMessage(global.Number, sale.OrderNumber));
         var others = await CreditNotes.SaleStandingAsync(context, global.Id, sale.OrderId, cancellationToken);
-        if (refund.Amount > CreditNotes.SaleRoom(sale, others, refund.Id))
-            return Result.Failure<Guid>(CreditNotes.AboveSaleMessage(global.Number, sale.OrderNumber));
+        if (amount > CreditNotes.SaleRoom(sale, others, adjustmentId))
+            return Result.Failure<Guid>(CreditNotes.AboveSaleMessage(global.Number, sale.OrderNumber, adjustment));
 
         IReadOnlyList<CfdiTransfer> transfers;
         decimal notSubject;
         try
         {
-            (transfers, notSubject) = CreditNoteTaxes.Split(saleTransfers, sale.Total, refund.Amount);
+            (transfers, notSubject) = CreditNoteTaxes.Split(saleTransfers, sale.Total, amount);
         }
         catch (DomainException ex)
         {
@@ -696,8 +705,8 @@ internal sealed class CreditNoteRequester(
             serie,
             folio,
             await LocalNowAsync(tenantId, now, cancellationToken),
-            SatCatalog.PaymentComplementForm(refund.Method)!,
-            SatCatalog.RefundDescription,
+            refund is null ? SatCatalog.PaymentFormWriteOff : SatCatalog.PaymentComplementForm(refund.Method)!,
+            refund is null ? SatCatalog.WriteOffDescriptionFor(writeOff!.Reason) : SatCatalog.RefundDescription,
             transfers,
             notSubject,
             global.Uuid!,
@@ -706,14 +715,17 @@ internal sealed class CreditNoteRequester(
         CreditNote note;
         try
         {
-            note = CreditNote.ForRefundInGlobalInvoice(global, sale, refund, serie, folio, document.SubTotal, document.TotalTransferred,
-                document.ToJson(), requestedByUserId, now);
+            note = refund is not null
+                ? CreditNote.ForRefundInGlobalInvoice(global, sale, refund, serie, folio, document.SubTotal, document.TotalTransferred,
+                    document.ToJson(), requestedByUserId, now)
+                : CreditNote.ForWriteOffInGlobalInvoice(global, sale, writeOff!, serie, folio, document.SubTotal,
+                    document.TotalTransferred, document.ToJson(), requestedByUserId, now);
         }
         catch (DomainException ex)
         {
             return Result.Failure<Guid>(ex.Message);
         }
-        return await SaveAsync(note, global.Number, CreditNoteAdjustment.Refund, refund.Id, requestedByUserId, cancellationToken);
+        return await SaveAsync(note, global.Number, adjustment, adjustmentId, requestedByUserId, cancellationToken);
     }
 
     /// <summary>
@@ -870,9 +882,9 @@ public static class CreditNotes
     public static string? DocumentProblem(string invoiceNumber, CfdiDocument document, string? businessRfc)
         => string.Equals(businessRfc, document.Issuer.Rfc, StringComparison.Ordinal) ? null : OtherRfcMessage(invoiceNumber);
 
-    public static string AboveSaleMessage(string globalNumber, string orderNumber) =>
-        $"El reembolso es mayor que lo que la venta {orderNumber} todavía ampara en la factura global {globalNumber} después de " +
-        "sus otras notas de crédito.";
+    public static string AboveSaleMessage(string globalNumber, string orderNumber, CreditNoteAdjustment adjustment) =>
+        $"{(adjustment == CreditNoteAdjustment.Refund ? "El reembolso" : "Lo condonado")} es mayor que lo que la venta {orderNumber} " +
+        $"todavía ampara en la factura global {globalNumber} después de sus otras notas de crédito.";
 
     public static string NoSaleInGlobalMessage(string globalNumber, string orderNumber) =>
         $"La factura global {globalNumber} no tiene los conceptos de la venta {orderNumber}: su nota de crédito no se emite desde " +
@@ -902,26 +914,38 @@ public static class CreditNotes
     }
 
     /// <summary>
-    /// What stands against a sale of a global invoice when a credit note of one of its refunds is issued (Fase 28I): each
-    /// refund of the sale holds its latest credit note of that global invoice, refused or cancelled ones included (the refund
-    /// happened, and its credit note is issued again).
+    /// What stands against a sale of a global invoice when a credit note of one of its adjustments is issued (Fases 28I and
+    /// 28J): each refund and each write-off that still stands holds its latest credit note of that global invoice, refused or
+    /// cancelled ones included (it happened, and its credit note is issued again). A write-off that was undone holds none.
     /// </summary>
     public static async Task<List<CreditNote>> SaleStandingAsync(
         IApplicationDbContext context, Guid globalInvoiceId, Guid orderId, CancellationToken cancellationToken)
-        => SaleStandingOf(await context.CreditNotes.AsNoTracking()
+    {
+        var notes = await context.CreditNotes.AsNoTracking()
             .Where(n => n.GlobalInvoiceId == globalInvoiceId && n.OrderId == orderId)
-            .ToListAsync(cancellationToken));
+            .ToListAsync(cancellationToken);
+        var undone = await context.OrderWriteOffs.AsNoTracking()
+            .Where(w => w.OrderId == orderId && w.ReversedAt != null)
+            .Select(w => w.Id)
+            .ToListAsync(cancellationToken);
+        return SaleStandingOf(notes, undone);
+    }
 
     /// <param name="notes">Every credit note of the sale in the global invoice, whatever its status.</param>
-    public static List<CreditNote> SaleStandingOf(IEnumerable<CreditNote> notes)
-        => notes.GroupBy(n => n.OrderRefundId).Select(g => g.OrderByDescending(n => n.RequestedAt).First()).ToList();
+    /// <param name="undoneWriteOffs">The write-offs of the sale that were undone.</param>
+    public static List<CreditNote> SaleStandingOf(IEnumerable<CreditNote> notes, IReadOnlyCollection<Guid> undoneWriteOffs)
+        => notes
+            .Where(n => n.OrderWriteOffId is not { } writeOffId || !undoneWriteOffs.Contains(writeOffId))
+            .GroupBy(n => n.OrderRefundId ?? n.OrderWriteOffId)
+            .Select(g => g.OrderByDescending(n => n.RequestedAt).First())
+            .ToList();
 
     /// <summary>
-    /// What a credit note of the refund may credit at most: what the sale charged in the global invoice after the other
-    /// refunds' credit notes. The global invoice is paid in one exhibition, so no payment limits it.
+    /// What a credit note of the refund or write-off may credit at most: what the sale charged in the global invoice after
+    /// the credit notes of its other adjustments. The global invoice is paid in one exhibition, so no payment limits it.
     /// </summary>
-    public static decimal SaleRoom(GlobalInvoiceOrder sale, IReadOnlyList<CreditNote> standing, Guid refundId)
-        => sale.Total - standing.Where(n => n.OrderRefundId != refundId).Sum(n => n.Total);
+    public static decimal SaleRoom(GlobalInvoiceOrder sale, IReadOnlyList<CreditNote> standing, Guid adjustmentId)
+        => sale.Total - standing.Where(n => (n.OrderRefundId ?? n.OrderWriteOffId) != adjustmentId).Sum(n => n.Total);
 
     /// <summary>
     /// The sale's transfers in the global invoice, one per rate: those of its concepts, which carry its folio
@@ -1052,13 +1076,25 @@ public static class CreditNotes
                         && global.Status == OrderInvoiceStatus.Stamped
                         && !notes.Any(n => n.TenantId == refund.TenantId && n.OrderRefundId == refund.Id && n.GlobalInvoiceId == global.Id)))));
 
-    /// <summary>The write-offs that still stand of orders whose invoice is stamped and that never had a credit note for it.</summary>
+    /// <summary>
+    /// The write-offs that still stand of orders whose invoice is stamped and that never had a credit note for it, and those
+    /// of sales a stamped global invoice covers that never had one for it (Fase 28J). It takes the sets to read, as
+    /// <see cref="PendingRefunds"/> does.
+    /// </summary>
     public static IQueryable<OrderWriteOff> PendingWriteOffs(
-        IQueryable<OrderWriteOff> writeOffs, IQueryable<OrderInvoice> invoices, IQueryable<CreditNote> notes)
+        IQueryable<OrderWriteOff> writeOffs,
+        IQueryable<OrderInvoice> invoices,
+        IQueryable<GlobalInvoiceOrder> globalSales,
+        IQueryable<GlobalInvoice> globals,
+        IQueryable<CreditNote> notes)
         => writeOffs.Where(writeOff => writeOff.ReversedAt == null
-            && invoices.Any(invoice => invoice.TenantId == writeOff.TenantId && invoice.OrderId == writeOff.OrderId
-                && invoice.Status == OrderInvoiceStatus.Stamped && invoice.ReplacedByInvoiceId == null
-                && !notes.Any(n => n.TenantId == writeOff.TenantId && n.OrderWriteOffId == writeOff.Id && n.OrderInvoiceId == invoice.Id)));
+            && (invoices.Any(invoice => invoice.TenantId == writeOff.TenantId && invoice.OrderId == writeOff.OrderId
+                    && invoice.Status == OrderInvoiceStatus.Stamped && invoice.ReplacedByInvoiceId == null
+                    && !notes.Any(n => n.TenantId == writeOff.TenantId && n.OrderWriteOffId == writeOff.Id && n.OrderInvoiceId == invoice.Id))
+                || globalSales.Any(sale => sale.TenantId == writeOff.TenantId && sale.OrderId == writeOff.OrderId && !sale.Released
+                    && globals.Any(global => global.TenantId == writeOff.TenantId && global.Id == sale.GlobalInvoiceId
+                        && global.Status == OrderInvoiceStatus.Stamped
+                        && !notes.Any(n => n.TenantId == writeOff.TenantId && n.OrderWriteOffId == writeOff.Id && n.GlobalInvoiceId == global.Id)))));
 
     /// <summary>The refund or write-off, if the business sees its order (as the order's detail does); otherwise it is not there.</summary>
     public static async Task EnsureVisibleAdjustmentAsync(
@@ -1083,7 +1119,7 @@ public static class CreditNotes
     }
 
     /// <summary>
-    /// The refunds and write-offs of an order that has an invoice, or of a sale a global invoice covers (Fase 28I), with their
+    /// The refunds and write-offs of an order that has an invoice, or of a sale a global invoice covers (Fases 28I and 28J), with their
     /// credit notes and whether one can be issued now; none for an order that never had either. It says what issuing one
     /// would refuse (without the lock, which only orders who goes first), so the screen never waits for one that TienditApp
     /// cannot issue.
@@ -1108,9 +1144,9 @@ public static class CreditNotes
             .ToListAsync(cancellationToken);
         if (refunds.Count == 0 && writeOffs.Count == 0)
             return [];
-        // Without a live invoice of its own, the global invoice that covers the sale takes its refunds' credit notes. Read
-        // only for a sale with refunds: it carries the CFDI of the whole period.
-        var inGlobal = liveInvoice is null && refunds.Count > 0 ? await GlobalSaleAsync(context, order.Id, cancellationToken) : null;
+        // Without a live invoice of its own, the global invoice that covers the sale takes its adjustments' credit notes. Read
+        // only then: it carries the CFDI of the whole period.
+        var inGlobal = liveInvoice is null ? await GlobalSaleAsync(context, order.Id, cancellationToken) : null;
         if (invoices.Count == 0 && inGlobal is null
             && !await context.CreditNotes.AsNoTracking().AnyAsync(n => n.OrderId == order.Id, cancellationToken))
             return [];
@@ -1139,7 +1175,8 @@ public static class CreditNotes
                 ?? DocumentProblem(global.Number, globalDocument, settings.Rfc)
                 ?? (SaleTransfers(globalDocument, sale) is null ? NoSaleInGlobalMessage(global.Number, sale.OrderNumber) : null);
             if (targetProblem is null)
-                saleStanding = SaleStandingOf(notes.Where(n => n.GlobalInvoiceId == global.Id));
+                saleStanding = SaleStandingOf(
+                    notes.Where(n => n.GlobalInvoiceId == global.Id), writeOffs.Where(w => w.IsReversed).Select(w => w.Id).ToList());
         }
         else
         {
@@ -1161,9 +1198,7 @@ public static class CreditNotes
         string? RoomProblem(CreditNoteAdjustment kind, Guid id, decimal amount)
         {
             if (inGlobal is var (global, sale))
-                return kind == CreditNoteAdjustment.WriteOff ? NoStampedInvoiceMessage
-                    : amount > SaleRoom(sale, saleStanding!, id) ? AboveSaleMessage(global.Number, sale.OrderNumber)
-                    : null;
+                return amount > SaleRoom(sale, saleStanding!, id) ? AboveSaleMessage(global.Number, sale.OrderNumber, kind) : null;
             return amount > RoomFor(liveInvoice!, standing!, kind, id).Available ? AboveRoomMessage(liveInvoice!.Number, kind) : null;
         }
 
@@ -1249,8 +1284,9 @@ public static class CreditNotes
     public static async Task<List<string>> ComplementsCountingWriteOffAsync(
         IApplicationDbContext context, Guid writeOffId, CancellationToken cancellationToken)
     {
+        // A global invoice is paid in one exhibition: no complement counts its credit notes (Fase 28J).
         var held = (await context.CreditNotes.AsNoTracking()
-                .Where(n => n.OrderWriteOffId == writeOffId)
+                .Where(n => n.OrderWriteOffId == writeOffId && n.OrderInvoiceId != null)
                 .ToListAsync(cancellationToken))
             .GroupBy(n => n.OrderInvoiceId)
             .Select(g => g.OrderByDescending(n => n.RequestedAt).First())
