@@ -38,6 +38,12 @@ public class OrderInvoiceDto
     public decimal TaxTotal { get; set; }
     public decimal Total { get; set; }
     public DateTimeOffset RequestedAt { get; set; }
+
+    /// <summary>
+    /// While it is «Timbrando», until when TienditApp asks the PAC for its stamp; after that it is checked in the SAT's portal
+    /// (Fase 28K).
+    /// </summary>
+    public DateTimeOffset? StampWindowEndsAt { get; set; }
     /// <summary>The folio fiscal, once stamped.</summary>
     public string? Uuid { get; set; }
     public DateTimeOffset? StampedAt { get; set; }
@@ -85,6 +91,7 @@ public class OrderInvoiceDto
         TaxTotal = invoice.TaxTotal,
         Total = invoice.Total,
         RequestedAt = invoice.RequestedAt,
+        StampWindowEndsAt = invoice.Status == OrderInvoiceStatus.Stamping ? StuckStamps.WindowEndsAt(invoice.RequestedAt) : null,
         Uuid = invoice.Uuid,
         StampedAt = invoice.StampedAt,
         HasXml = invoice.XmlFileKey is not null,
@@ -416,6 +423,8 @@ public class RetryOrderInvoiceCommandHandler : IRequestHandler<RetryOrderInvoice
             throw new EntityNotFoundException(nameof(OrderInvoice), request.InvoiceId);
         if (!_gateway.IsConfigured)
             return Result.Failure<OrderInvoiceDto>(InvoicingSettings.NotAvailableMessage);
+        if (await _stamper.RetryRefusalAsync(_context.OrderInvoices, request.InvoiceId, cancellationToken) is { } refusal)
+            return Result.Failure<OrderInvoiceDto>(refusal);
 
         var invoice = await _stamper.StampAsync(request.InvoiceId, cancellationToken);
         // Only a stamp this request made goes on to the cancellation its substitution asked for: whoever asks again for a

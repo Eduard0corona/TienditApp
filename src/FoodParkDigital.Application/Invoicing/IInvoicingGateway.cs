@@ -27,6 +27,12 @@ public interface IInvoicingGateway
     /// </summary>
     Task<StampedCfdi> StampAsync(CfdiDocument document, Guid idempotencyKey, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The CFDI the PAC stamped for the platform with that folio fiscal, or null when it has none (Fase 28K): how a stamp a
+    /// person found in the SAT's portal is brought back, once the key no longer gives it back.
+    /// </summary>
+    Task<StampedCfdi?> FindStampedAsync(string uuid, CancellationToken cancellationToken);
+
     /// <summary>The PDF of a stamped CFDI.</summary>
     Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken);
 

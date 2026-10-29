@@ -64,7 +64,9 @@ internal sealed class FakeInvoicingGateway : IInvoicingGateway
             stamped = new StampedCfdi(
                 uuid,
                 $"<cfdi:Comprobante xmlns:cfdi=\"http://www.sat.gob.mx/cfd/4\" Serie=\"{document.Serie}\" Folio=\"{document.Folio}\" "
-                + $"Total=\"{document.Total}\" Sello=\"AAAABBBB{SealTail}\"><cfdi:Complemento UUID=\"{uuid}\" /></cfdi:Comprobante>",
+                + $"Total=\"{document.Total}\" TipoDeComprobante=\"{document.VoucherType}\" Sello=\"AAAABBBB{SealTail}\">"
+                + $"<cfdi:Emisor Rfc=\"{document.Issuer.Rfc}\" /><cfdi:Receptor Rfc=\"{document.Receiver.Rfc}\" />"
+                + $"<cfdi:Complemento UUID=\"{uuid}\" /></cfdi:Comprobante>",
                 new DateTimeOffset(2026, 10, 4, 11, 0, 5, TimeSpan.FromHours(-6)));
             Stamped[idempotencyKey] = stamped;
         }
@@ -74,6 +76,16 @@ internal sealed class FakeInvoicingGateway : IInvoicingGateway
             throw new InvoicingGatewayUnavailableException("El PAC no respondió.");
         }
         return Task.FromResult(stamped);
+    }
+
+    /// <summary>The folios fiscales a person brought from the SAT's portal, looked up (Fase 28K).</summary>
+    public List<string> Lookups { get; } = [];
+
+    public Task<StampedCfdi?> FindStampedAsync(string uuid, CancellationToken cancellationToken)
+    {
+        ThrowIfUnavailable();
+        Lookups.Add(uuid);
+        return Task.FromResult(Stamped.Values.FirstOrDefault(s => string.Equals(s.Uuid, uuid, StringComparison.OrdinalIgnoreCase)));
     }
 
     public Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken)

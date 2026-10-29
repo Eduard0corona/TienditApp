@@ -45,6 +45,12 @@ public class CreditNoteDto
     public decimal TaxTotal { get; set; }
     public decimal Total { get; set; }
     public DateTimeOffset RequestedAt { get; set; }
+
+    /// <summary>
+    /// While it is «Timbrando», until when TienditApp asks the PAC for its stamp; after that it is checked in the SAT's portal
+    /// (Fase 28K).
+    /// </summary>
+    public DateTimeOffset? StampWindowEndsAt { get; set; }
     /// <summary>TienditApp issued it on its own once the adjustment was made (nobody asked for it).</summary>
     public bool IssuedAutomatically { get; set; }
     public string? Uuid { get; set; }
@@ -72,6 +78,7 @@ public class CreditNoteDto
         TaxTotal = note.TaxTotal,
         Total = note.Total,
         RequestedAt = note.RequestedAt,
+        StampWindowEndsAt = note.Status == OrderInvoiceStatus.Stamping ? StuckStamps.WindowEndsAt(note.RequestedAt) : null,
         IssuedAutomatically = note.RequestedByUserId is null,
         Uuid = note.Uuid,
         StampedAt = note.StampedAt,
@@ -284,6 +291,8 @@ public class RetryCreditNoteCommandHandler : IRequestHandler<RetryCreditNoteComm
         await CreditNotes.EnsureVisibleNoteAsync(_context, request.CreditNoteId, cancellationToken);
         if (!_gateway.IsConfigured)
             return Result.Failure<CreditNoteDto>(InvoicingSettings.NotAvailableMessage);
+        if (await _stamper.RetryRefusalAsync(_context.CreditNotes, request.CreditNoteId, cancellationToken) is { } refusal)
+            return Result.Failure<CreditNoteDto>(refusal);
 
         var note = await _stamper.StampAsync(_context.CreditNotes, request.CreditNoteId, cancellationToken);
         return Result.Success(await CreditNoteDto.FromAsync(_context, note, cancellationToken));

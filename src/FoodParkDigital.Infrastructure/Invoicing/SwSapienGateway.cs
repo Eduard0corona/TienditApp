@@ -467,14 +467,32 @@ public sealed class SwSapienGateway : IInvoicingGateway
         return new StampedCfdi(uuid, xml, StampedAt(xml) ?? _clock.UtcNow);
     }
 
+    public async Task<StampedCfdi?> FindStampedAsync(string uuid, CancellationToken cancellationToken)
+    {
+        // SW answers a folio fiscal it does not have for this account (or keeps no longer) with no records, not an error.
+        var xml = await StoredXmlAsync(uuid, cancellationToken, missingIsNull: true);
+        if (xml is null)
+            return null;
+        var stampedUuid = StampUuid(xml);
+        if (!string.Equals(stampedUuid, uuid, StringComparison.OrdinalIgnoreCase))
+            throw new InvoicingGatewayUnavailableException("El PAC entregó otro comprobante. Intenta de nuevo en unos minutos.");
+        return new StampedCfdi(stampedUuid!, xml, StampedAt(xml) ?? _clock.UtcNow);
+    }
+
     private async Task<string> StoredXmlAsync(string uuid, CancellationToken cancellationToken)
+        => (await StoredXmlAsync(uuid, cancellationToken, missingIsNull: false))!;
+
+    private async Task<string?> StoredXmlAsync(string uuid, CancellationToken cancellationToken, bool missingIsNull)
     {
         using var response = await SendAsync(
             HttpMethod.Get, $"{ApiUrl}/datawarehouse/v1/live/{Uri.EscapeDataString(uuid)}", "stored xml", cancellationToken: cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw Unavailable(response, default, "stored xml");
         var data = await ReadDataAsync(response, cancellationToken);
-        var url = Text((data?["records"] as JsonArray)?.FirstOrDefault()?["urlXml"]);
+        var records = data?["records"] as JsonArray;
+        if (missingIsNull && records is { Count: 0 })
+            return null;
+        var url = Text(records?.FirstOrDefault()?["urlXml"]);
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var xmlUri) || xmlUri.Scheme != Uri.UriSchemeHttps)
             throw new InvoicingGatewayUnavailableException("El PAC todavía no entrega el XML de la factura.");
 

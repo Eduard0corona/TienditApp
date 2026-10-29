@@ -682,6 +682,52 @@ public sealed class CrossTenantInvoicingSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task CfdisToReview_OfAnotherBusiness_ShouldBeOutOfItsList_AndUnresolvable_AndOnlyOwnersResolveThem()
+    {
+        var mine = await _api.SignUpAsync("revisar-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("revisar-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Revisar A"), phone: "5512345678", name: "Karla");
+        var invoice = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }));
+        var invoiceId = invoice.GetProperty("id").GetGuid();
+        var uuid = invoice.GetProperty("uuid").GetString()!;
+        // Its answer was lost three days ago: it stayed «Timbrando» past the PAC's window.
+        await _api.QueryAsync(mine.TenantId, db => db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE OrderInvoices SET Status = 0, Uuid = NULL, ProviderInvoiceId = NULL, StampedAt = NULL, XmlFileKey = NULL,
+                PdfFileKey = NULL, IssuedAt = DATEADD(hour, -80, IssuedAt), RequestedAt = DATEADD(hour, -80, RequestedAt)
+            WHERE Id = {invoiceId}
+            """));
+        var stamped = $"/api/v1/invoicing/issued-cfdis/OrderInvoice/{invoiceId}/stamped";
+        var notStamped = $"/api/v1/invoicing/issued-cfdis/OrderInvoice/{invoiceId}/not-stamped";
+
+        // The other owner, even with the header of my business, has nothing to review and cannot resolve mine.
+        foreach (var send in new Func<HttpMethod, string, object?, Task<HttpResponseMessage>>[]
+        {
+            (method, url, body) => theirs.Client.SendAsync(new HttpRequestMessage(method, url) { Content = body is null ? null : JsonContent.Create(body) }),
+            (method, url, body) => theirs.Client.SendAsync(AsOther(mine, method, url, body))
+        })
+        {
+            Assert.Empty((await TwoBusinessesApi.ReadAsync(await send(HttpMethod.Get, "/api/v1/invoicing/issued-cfdis/to-review", null))).EnumerateArray());
+            Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Post, stamped, new { uuid })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await send(HttpMethod.Post, notStamped, null)).StatusCode);
+        }
+
+        // Owners and admins only: it decides whether what the CFDI covered can be invoiced again.
+        var cashier = await EmployeeAsync(mine, "ManageOrders", "ChargeOrders", "ManageCash", "ViewReports");
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync("/api/v1/invoicing/issued-cfdis/to-review")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync(stamped, new { uuid })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsync(notStamped, null)).StatusCode);
+
+        var toReview = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync("/api/v1/invoicing/issued-cfdis/to-review"));
+        Assert.Equal(invoiceId, Assert.Single(toReview.EnumerateArray()).GetProperty("id").GetGuid());
+        var brought = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(stamped, new { uuid = uuid.ToLowerInvariant() }));
+        Assert.Equal(((int)OrderInvoiceStatus.Stamped, uuid), (brought.GetProperty("status").GetInt32(), brought.GetProperty("uuid").GetString()));
+        Assert.Empty((await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync("/api/v1/invoicing/issued-cfdis/to-review"))).EnumerateArray());
+    }
+
+    [SqlServerFact]
     public async Task TheSameOrderInvoicedAtOnce_ShouldBeStampedOnce_AndGiveTheOtherFolioBack()
     {
         var mine = await _api.SignUpAsync("facturas-carrera", TwoBusinessesApi.FoodBusiness);

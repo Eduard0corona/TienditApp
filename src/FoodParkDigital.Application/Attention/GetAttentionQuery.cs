@@ -1,8 +1,10 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -40,6 +42,8 @@ public static class AttentionKeys
     public const string AppointmentsToConfirm = "appointmentsToConfirm";
     /// <summary>Appointments customers requested online that the business has not accepted nor declined (Fase 24D).</summary>
     public const string AppointmentRequests = "appointmentRequests";
+    /// <summary>CFDI still «Timbrando» past the PAC's window, checked in the SAT's portal from Reportes › CFDI emitidos (Fase 28K).</summary>
+    public const string CfdisToReview = "cfdisToReview";
 }
 
 public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, AttentionDto>
@@ -153,6 +157,21 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
                 .Where(a => a.Status == AppointmentStatus.Requested && a.StartAt > now);
             Add(AttentionKeys.AppointmentRequests, await requests.CountAsync(cancellationToken),
                 await requests.CountAsync(a => a.StartAt <= endOfToday, cancellationToken));
+        }
+
+        if (isManager)
+        {
+            // Only the SAT's portal tells now whether they were stamped; until someone checks, what they cover stays unsettled.
+            var oldestInWindow = now - StampPendingInvoicesCommandHandler.RetryWindow;
+            var toReview = await _context.OrderInvoices.AsNoTracking()
+                    .CountAsync(i => i.Status == OrderInvoiceStatus.Stamping && i.RequestedAt < oldestInWindow, cancellationToken)
+                + await _context.GlobalInvoices.AsNoTracking()
+                    .CountAsync(i => i.Status == OrderInvoiceStatus.Stamping && i.RequestedAt < oldestInWindow, cancellationToken)
+                + await _context.PaymentComplements.AsNoTracking()
+                    .CountAsync(c => c.Status == OrderInvoiceStatus.Stamping && c.RequestedAt < oldestInWindow, cancellationToken)
+                + await _context.CreditNotes.AsNoTracking()
+                    .CountAsync(n => n.Status == OrderInvoiceStatus.Stamping && n.RequestedAt < oldestInWindow, cancellationToken);
+            Add(AttentionKeys.CfdisToReview, toReview, toReview);
         }
 
         return new AttentionDto { Items = items };

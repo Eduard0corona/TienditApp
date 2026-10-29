@@ -239,23 +239,119 @@ public class OrderInvoicingFlowTests
     }
 
     [Fact]
-    public async Task Worker_ShouldLeaveAloneInvoicesOlderThanThePacsWindow_AndALateRefusalSaysToCheckThePac()
+    public async Task InvoiceStillStampingPastThePacsWindow_ShouldBeLeftToAPerson_WhoChecksItInTheSatsPortal()
     {
         await using var book = await Book.OpenAsync();
         var order = await book.PaidOrderAsync();
         book.Gateway.Unavailable = true;
         var issued = await book.IssueAsync(order.Id);
         book.Gateway.Unavailable = false;
+        Assert.Equal(SalesTestFixture.Now + StampPendingInvoicesCommandHandler.RetryWindow, issued.Value.StampWindowEndsAt);
+
+        // Within the window TienditApp still asks by itself: nothing to check yet.
+        Assert.Empty(await book.ToReviewAsync());
+        Assert.Equal(StuckStamps.InWindowMessage, (await book.ConfirmNotStampedAsync(issued.Value.Id)).Error);
 
         book.Clock.UtcNow = SalesTestFixture.Now + StampPendingInvoicesCommandHandler.RetryWindow + TimeSpan.FromMinutes(1);
         Assert.Equal(0, (await book.StampPendingAsync()).Value);
+        // The PAC no longer gives the stamp back, and the CFDI's date is too old to stamp: nobody asks it again.
+        Assert.Equal(StuckStamps.PastWindowMessage, (await book.RetryAsync(issued.Value.Id)).Error);
         Assert.Empty(book.Gateway.StampRequests);
 
-        // Asked for by a person after the PAC's window: its refusal of the date may hide a stamp it did make.
-        book.Gateway.Refusal = "CFDI40101 - La fecha de emisión no está dentro del rango permitido.";
-        var late = await book.RetryAsync(issued.Value.Id);
-        Assert.Equal(OrderInvoiceStatus.Refused, late.Value.Status);
-        Assert.Equal($"{OrderInvoiceStamper.LateRefusalNote} {book.Gateway.Refusal}", late.Value.FailureMessage);
+        var toReview = Assert.Single(await book.ToReviewAsync());
+        Assert.Equal((IssuedCfdiKind.OrderInvoice, issued.Value.Id, issued.Value.Number, (Guid?)order.Id, OrderInvoiceStatus.Stamping),
+            (toReview.Kind, toReview.Id, toReview.Number, toReview.OrderId, toReview.Status));
+    }
+
+    [Fact]
+    public async Task StuckInvoice_FoundStampedInTheSatsPortal_ShouldComeBackWithItsXml_OnlyWithItsOwnFolioFiscal()
+    {
+        await using var book = await Book.OpenAsync();
+        var order = await book.PaidOrderAsync();
+        // The PAC stamped it, but its answer never arrived.
+        book.Gateway.LoseNextAnswer = true;
+        var issued = await book.IssueAsync(order.Id);
+        Assert.Equal(OrderInvoiceStatus.Stamping, issued.Value.Status);
+        var made = book.Gateway.Stamped.Values.Single();
+        var otherOrder = await book.PaidOrderAsync();
+        var other = await book.IssueAsync(otherOrder.Id);
+        book.Clock.UtcNow = SalesTestFixture.Now + StampPendingInvoicesCommandHandler.RetryWindow + TimeSpan.FromHours(5);
+
+        Assert.Equal(StuckStamps.UuidNotFoundMessage,
+            (await book.ConfirmStampedAsync(issued.Value.Id, Guid.NewGuid().ToString())).Error);
+        // Another CFDI's stamp is not this one's, even of the same business and customer.
+        Assert.Equal(StuckStamps.OtherCfdiMessage(issued.Value.Number),
+            (await book.ConfirmStampedAsync(issued.Value.Id, other.Value.Uuid!)).Error);
+        Assert.Equal(OrderInvoiceStatus.Stamping, (await book.Context.OrderInvoices.AsNoTracking().SingleAsync(i => i.Id == issued.Value.Id)).Status);
+
+        // As the portal shows it, in small letters and with spaces around it.
+        var confirmed = await book.ConfirmStampedAsync(issued.Value.Id, $" {made.Uuid.ToLowerInvariant()} ");
+
+        Assert.True(confirmed.IsSuccess, confirmed.Error);
+        Assert.Equal((OrderInvoiceStatus.Stamped, made.Uuid, issued.Value.Number), (confirmed.Value.Status, confirmed.Value.Uuid, confirmed.Value.Number));
+        var stored = await book.Context.OrderInvoices.AsNoTracking().SingleAsync(i => i.Id == issued.Value.Id);
+        Assert.Equal((made.Uuid, made.StampedAt), (stored.Uuid, stored.StampedAt));
+        Assert.Equal(made.Xml, book.Storage.Text(stored.XmlFileKey!));
+        Assert.NotNull(stored.PdfFileKey);
+        Assert.Empty(await book.ToReviewAsync());
+        Assert.Equal(StuckStamps.NotStuckMessage, (await book.ConfirmNotStampedAsync(issued.Value.Id)).Error);
+    }
+
+    [Fact]
+    public async Task StuckInvoice_NotStamped_ShouldBeRefusedWithWhoCheckedIt_AndTheOrderInvoicedAgain()
+    {
+        await using var book = await Book.OpenAsync();
+        var order = await book.PaidOrderAsync();
+        book.Gateway.Unavailable = true;
+        var issued = await book.IssueAsync(order.Id);
+        book.Gateway.Unavailable = false;
+        book.Clock.UtcNow = SalesTestFixture.Now + StampPendingInvoicesCommandHandler.RetryWindow + TimeSpan.FromDays(3);
+        book.Fixture.CurrentUser.UserName = "Dueña Rosa";
+
+        var refused = await book.ConfirmNotStampedAsync(issued.Value.Id);
+
+        Assert.True(refused.IsSuccess, refused.Error);
+        Assert.Equal((OrderInvoiceStatus.Refused, StuckStamps.NotStampedReason("Dueña Rosa")),
+            (refused.Value.Status, refused.Value.FailureMessage));
+        Assert.Empty(await book.ToReviewAsync());
+        Assert.Empty(book.Gateway.Lookups);
+        Assert.Equal(StuckStamps.NotStuckMessage, (await book.ConfirmStampedAsync(issued.Value.Id, Guid.NewGuid().ToString())).Error);
+        // What it covered is invoiced again, with a new folio.
+        var again = await book.IssueAsync(order.Id);
+        Assert.Equal(OrderInvoiceStatus.Stamped, again.Value.Status);
+        Assert.NotEqual(issued.Value.Number, again.Value.Number);
+    }
+
+    [Fact]
+    public async Task StuckInvoice_OfAnotherBusiness_ShouldNotBeListedNorResolved()
+    {
+        await using var book = await Book.OpenAsync();
+        var order = await book.PaidOrderAsync();
+        book.Gateway.Unavailable = true;
+        var issued = await book.IssueAsync(order.Id);
+        book.Gateway.Unavailable = false;
+        book.Clock.UtcNow = SalesTestFixture.Now + StampPendingInvoicesCommandHandler.RetryWindow + TimeSpan.FromHours(1);
+
+        var other = await book.Fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+        book.Fixture.TenantService.SetTenant(other.Id);
+
+        Assert.Empty(await book.ToReviewAsync());
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.ConfirmNotStampedAsync(issued.Value.Id));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => book.ConfirmStampedAsync(issued.Value.Id, Guid.NewGuid().ToString()));
+        book.Fixture.TenantService.SetTenant(book.Tenant.Id);
+        Assert.Equal(OrderInvoiceStatus.Stamping, Assert.Single(await book.ToReviewAsync()).Status);
+    }
+
+    [Fact]
+    public void FolioFiscal_ShouldBeAskedForComplete()
+    {
+        var validator = new ConfirmStuckCfdiStampedCommandValidator();
+
+        Assert.True(validator.Validate(new ConfirmStuckCfdiStampedCommand(IssuedCfdiKind.OrderInvoice, Guid.NewGuid(),
+            " 5f0b7c1e-2a3d-4e5f-8a9b-0c1d2e3f4a5b ")).IsValid);
+        foreach (var uuid in new[] { "", "5F0B7C1E2A3D4E5F8A9B0C1D2E3F4A5B", "5F0B7C1E-2A3D-4E5F-8A9B-0C1D2E3F4A5", "F-12" })
+            Assert.Equal(StuckStamps.UuidMessage, Assert.Single(validator.Validate(
+                new ConfirmStuckCfdiStampedCommand(IssuedCfdiKind.OrderInvoice, Guid.NewGuid(), uuid)).Errors.Select(e => e.ErrorMessage).Distinct()));
     }
 
     [Fact]
@@ -626,6 +722,18 @@ public class OrderInvoicingFlowTests
         public Task<Result<OrderInvoiceDto>> CancelAsync(Guid invoiceId, CfdiCancellationMotive motive = CfdiCancellationMotive.NotCarriedOut)
             => new CancelOrderInvoiceCommandHandler(Context, Fixture.CurrentUser, Gateway, Clock)
                 .Handle(new CancelOrderInvoiceCommand(invoiceId, motive), CancellationToken.None);
+
+        public Task<List<IssuedCfdiDto>> ToReviewAsync()
+            => new GetCfdisToReviewQueryHandler(Context, Clock).Handle(new GetCfdisToReviewQuery(), CancellationToken.None);
+
+        public Task<Result<IssuedCfdiDto>> ConfirmStampedAsync(Guid invoiceId, string uuid)
+            => new ConfirmStuckCfdiStampedCommandHandler(Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
+                .Handle(new ConfirmStuckCfdiStampedCommand(IssuedCfdiKind.OrderInvoice, invoiceId, uuid), CancellationToken.None);
+
+        public Task<Result<IssuedCfdiDto>> ConfirmNotStampedAsync(Guid invoiceId)
+            => new ConfirmStuckCfdiNotStampedCommandHandler(
+                    Context, Gateway, Storage, Fixture.CurrentUser, Clock, NullLogger<OrderInvoiceStamper>.Instance)
+                .Handle(new ConfirmStuckCfdiNotStampedCommand(IssuedCfdiKind.OrderInvoice, invoiceId), CancellationToken.None);
 
         public Task<Result<int>> StampPendingAsync()
             => new StampPendingInvoicesCommandHandler(Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
