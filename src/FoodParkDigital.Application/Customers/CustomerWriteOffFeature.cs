@@ -43,6 +43,10 @@ public record WriteOffCustomerAccountCommand : IRequest<Result<CustomerAccountDt
 
 public class WriteOffCustomerAccountCommandValidator : AbstractValidator<WriteOffCustomerAccountCommand>
 {
+    // A discount lowers the price of one sale (Fase 28J): spread over the account from the oldest order, its credit notes
+    // would credit the CFDI of orders that were not discounted.
+    public const string DiscountNeedsOrderMessage = "Un descuento es de una venta: elige su pedido.";
+
     public WriteOffCustomerAccountCommandValidator()
     {
         RuleFor(x => x.Phone).MaximumLength(30);
@@ -55,6 +59,9 @@ public class WriteOffCustomerAccountCommandValidator : AbstractValidator<WriteOf
         RuleFor(x => x.Notes).Must(notes => notes is { } text && text.Trim().Length >= 3)
             .When(x => x.Reason == OrderWriteOffReason.Other)
             .WithMessage(OrderWriteOff.NotesNeededMessage);
+        RuleFor(x => x.OrderId).NotNull()
+            .When(x => x.Reason == OrderWriteOffReason.Discount)
+            .WithMessage(DiscountNeedsOrderMessage);
         RuleFor(x => x.ExpectedOwed).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
     }
 }
@@ -181,7 +188,8 @@ public class WriteOffCustomerAccountCommandHandler : IRequestHandler<WriteOffCus
 /// with when and who undid it, and what it forgave is owed again (<see cref="Order.ReverseWriteOff"/>). Once: a write-off
 /// undone is refused the second time, so sending it twice undoes it once. Inside the customer's credit lock, like a write-off.
 /// While its credit note stands with the SAT (Fase 28D) it is not undone: the note is cancelled first, under the business's
-/// invoicing lock, so no note is issued for it meanwhile.
+/// invoicing lock, so no note is issued for it meanwhile. Nor while a global invoice covers the sale (Fase 28J): it went in
+/// settled, so the global invoice is cancelled first.
 /// </summary>
 [RequiresTenantManager]
 public record ReverseCustomerWriteOffCommand : IRequest<Result<CustomerAccountDto>>, ITransactionalRequest
@@ -201,6 +209,11 @@ public class ReverseCustomerWriteOffCommandHandler : IRequestHandler<ReverseCust
 
     public static string LiveCreditNoteMessage(string number) =>
         $"Esta condonación tiene la nota de crédito {number} vigente: cancélala en Pedidos › Factura antes de deshacerla.";
+
+    public static string InGlobalInvoiceMessage(string globalNumber) =>
+        $"Esta venta está en la factura global {globalNumber}, que la ampara como pagada: para deshacer la condonación, cancela " +
+        "con el motivo 02 sus notas de crédito en Pedidos y la factura global en Reportes › Factura global, deshazla y emite " +
+        "otra vez la global del periodo (no la incluirá mientras deba).";
 
     public static string ComplementsCountingItMessage(IReadOnlyList<string> complements) =>
         $"Los complementos de pago {string.Join(", ", complements)} descuentan la nota de crédito de esta condonación de su " +
@@ -242,6 +255,14 @@ public class ReverseCustomerWriteOffCommandHandler : IRequestHandler<ReverseCust
         await _creditLock.AcquireAsync(_tenant.TenantId, account.Phone, cancellationToken);
         // And its credit note (Fase 28D): none is issued for it while it is undone.
         await _invoicingLock.AcquireAsync(_tenant.TenantId, cancellationToken);
+        // A sale a global invoice covers went in settled (Fase 28J): undone, it would owe inside a CFDI paid in one exhibition.
+        // The global invoice is cancelled first, and issued again without it.
+        var inGlobal = await _context.GlobalInvoiceOrders.AsNoTracking()
+            .Where(o => o.OrderId == target.Id && !o.Released)
+            .Join(_context.GlobalInvoices.AsNoTracking(), o => o.GlobalInvoiceId, g => g.Id, (o, g) => new { g.Serie, g.Folio })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (inGlobal is not null)
+            return Result.Failure<CustomerAccountDto>(InGlobalInvoiceMessage($"{inGlobal.Serie}-{inGlobal.Folio}"));
         if (await CreditNotes.LiveOfWriteOffAsync(_context, request.WriteOffId, cancellationToken) is { } note)
             return Result.Failure<CustomerAccountDto>(LiveCreditNoteMessage(note.Number));
         if (await CreditNotes.ComplementsCountingWriteOffAsync(_context, request.WriteOffId, cancellationToken) is { Count: > 0 } complements)

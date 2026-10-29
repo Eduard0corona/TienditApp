@@ -128,8 +128,9 @@ public sealed record GlobalInvoiceDraft(
 /// rate it charged, worked out from the bases and IVA of its own CFDI draft, so the global invoice adds up to what the sales
 /// charged; what a sale charged that is not subject to IVA is a second concept with the same folio. A sale goes in when it
 /// was paid in full during the period (the day of its last payment, in the business's time zone), at once (not on credit:
-/// those go in a global invoice of their own), is not cancelled, has nothing given back or forgiven (that needs a credit
-/// note), has no invoice of its own and is not in another global invoice. A sale paid in an earlier period that already has
+/// those go in a global invoice of their own), is not cancelled, has no invoice of its own and is not in another global
+/// invoice. One given back in part (Fase 28I) or settled with a write-off (Fase 28J) goes in for its total, and each of those
+/// adjustments takes its credit note of the global invoice. A sale paid in an earlier period that already has
 /// its global invoice, and could only go in after it was stamped, goes in the next one. FormaPago is the form of its largest
 /// sale.
 /// </summary>
@@ -164,7 +165,7 @@ public static class GlobalInvoiceDrafts
     public static string OwnInvoiceReason(string number) => $"Tiene su propia factura ({number}).";
     public static string InGlobalReason(string number) => $"Ya está en la factura global {number}.";
     public const string NotPaidReason =
-        "No está pagada por completo: entra en una factura global cuando se termine de pagar o se condone lo que falta.";
+        "No está pagada por completo: entra en una factura global cuando se termine de pagar, o cuando se condone lo que falta una vez entregada.";
     public const string CreditReason =
         "Se vendió a crédito (fiado): el SAT pide reflejar las ventas en parcialidades en una factura global aparte, que TienditApp todavía no genera.";
     // A sale given back in part goes in for its total, and each refund takes its credit note of the global invoice (Fase
@@ -343,9 +344,10 @@ public static class GlobalInvoiceDrafts
                 : candidate.Total <= 0 ? null
                 // What it charges later would stay out of the global invoice and could not be invoiced on its own.
                 : Order.TotalCanChange(candidate.Status, candidate.IsTab) ? CanStillChangeReason
+                // Sold on credit, it never goes in, settled or not.
+                : candidate.SoldOnCredit ? CreditReason
                 // What is still owed: what it pays later would stay out; what was forgiven or discounted takes its credit note.
                 : candidate.Total - candidate.PaidAmount - candidate.WrittenOffAmount > 0 ? NotPaidReason
-                : candidate.SoldOnCredit ? CreditReason
                 : candidate.RefundedAmount >= candidate.Total && !covered ? FullyRefundedReason
                 : candidate.RefundedAmount + candidate.WrittenOffAmount >= candidate.Total && !covered ? FullyGivenBackReason
                 : candidate.RefundedWithoutForm && !covered ? RefundWithoutFormReason
@@ -363,8 +365,6 @@ public static class GlobalInvoiceDrafts
                 coveredRefunding++;
             else if (reason.Length == 0 && candidate.RefundedAmount > 0)
                 withRefunds++;
-            if (reason.Length == 0 && candidate.WrittenOffAmount > 0)
-                withWriteOffs++;
             if (reason.Length == 0)
                 included.Add((candidate.Id, candidate.PaidAt, isLate));
             else
@@ -414,6 +414,8 @@ public static class GlobalInvoiceDrafts
 
             concepts.AddRange(orderConcepts);
             sales.Add(new GlobalInvoiceSale(order.Id, order.OrderNumber, order.Total));
+            if (order.WrittenOffAmount > 0)
+                withWriteOffs++;
             // The largest sale gives its form of payment; between two as large, one with a form of the SAT.
             var form = SatCatalog.PaymentForm(GetOrderCfdiDraftQueryHandler.MainPaymentMethod(
                 order.Payments.Select(payment => (payment.Method, payment.Amount))));

@@ -429,8 +429,8 @@ public class GetCreditNoteFileQueryHandler : IRequestHandler<GetCreditNoteFileQu
 
 /// <summary>
 /// Issues the credit notes a business owes (the invoicing worker sends it in the business's scope, Fase 28D): each refund
-/// and each write-off that still stands of an order whose invoice is stamped and that never had a credit note for it, the
-/// oldest first, as long as the refund has a form of the SAT's. A refused or cancelled credit note is issued again only by
+/// and each write-off that still stands of an order whose invoice is stamped, or of a sale a stamped global invoice covers
+/// (Fases 28I and 28J), that never had a credit note for it, the oldest first, as long as the refund has a form of the SAT's. A refused or cancelled credit note is issued again only by
 /// a person. Up to <see cref="IssuePendingCreditNotesCommandHandler.MaxPerPass"/> are issued in a pass; the ones that cannot
 /// be issued yet are passed over, so they never hold up the newer ones behind them.
 /// </summary>
@@ -532,7 +532,8 @@ public class IssuePendingCreditNotesCommandHandler : IRequestHandler<IssuePendin
 
 /// <summary>
 /// What issuing a credit note asks for (Fase 28D): the adjustment, its order's invoice and what else it credits; or, for a
-/// refund of a sale a global invoice covers, that global invoice and what else the sale's refunds credit (Fase 28I).
+/// refund (Fase 28I) or write-off (Fase 28J) of a sale a global invoice covers, that global invoice and what else the sale's
+/// adjustments credit.
 /// </summary>
 internal sealed class CreditNoteRequester(
     IApplicationDbContext context,

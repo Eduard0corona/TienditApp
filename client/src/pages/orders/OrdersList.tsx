@@ -1175,7 +1175,7 @@ export default function OrdersList() {
               {(selectedOrder.writeOffs ?? []).length > 0 && (
                 <div className="mt-3">
                   <h5 className="mb-2">Condonado</h5>
-                  <p className="small text-muted mb-2">Lo que el negocio perdonó de lo que debía el cliente: no salió dinero de la caja.</p>
+                  <p className="small text-muted mb-2">Lo que el negocio condonó o descontó de lo que debía el cliente: no salió dinero de la caja.</p>
                   <div className="table-responsive">
                     <table className="table table-sm table-striped mb-0">
                       <thead>

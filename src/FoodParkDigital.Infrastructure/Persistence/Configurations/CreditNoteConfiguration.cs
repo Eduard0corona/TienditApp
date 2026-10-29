@@ -8,7 +8,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Configurations;
 
 /// <summary>
 /// The credit notes (CFDI de egreso) of the refunds and write-offs of the orders with an invoice (Fase 28D, ADR 0048), and of
-/// the refunds of the sales a global invoice covers (Fase 28I, ADR 0054), with
+/// the refunds (Fase 28I, ADR 0054) and write-offs (Fase 28J, ADR 0055) of the sales a global invoice covers, with
 /// the same states, stamp and cancellation as the invoices: an adjustment has at most one live credit note, a folio is never
 /// used twice in a business and each request to the PAC has its own key. The rest of what the domain guarantees is repeated
 /// here, so a row the domain never writes is refused.

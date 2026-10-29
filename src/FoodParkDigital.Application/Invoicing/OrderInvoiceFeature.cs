@@ -145,12 +145,12 @@ public class OrderInvoicingDto
     public List<OrderPaymentComplementsDto> Payments { get; set; } = [];
     /// <summary>
     /// Its refunds and write-offs with their credit notes, when it has had an invoice (Fase 28D) or a global invoice covers
-    /// it (Fase 28I); none otherwise.
+    /// it (Fases 28I and 28J); none otherwise.
     /// </summary>
     public List<OrderAdjustmentDto> Adjustments { get; set; } = [];
     /// <summary>
-    /// The serie and folio of the global invoice that covers the sale now (Fase 28B), if one does: its refunds' credit notes
-    /// credit that one (Fase 28I).
+    /// The serie and folio of the global invoice that covers the sale now (Fase 28B), if one does: the credit notes of its
+    /// refunds (Fase 28I) and write-offs (Fase 28J) credit that one.
     /// </summary>
     public string? GlobalInvoiceNumber { get; set; }
 }

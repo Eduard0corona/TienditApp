@@ -28,6 +28,9 @@
 -- saldadas con una condonación: las que una global ya timbrada dejó fuera entran en la siguiente
 -- que se emita, como ventas de periodos anteriores (la consulta 4 de verify.sql da un tope), y el
 -- worker de facturación emite la nota de cada condonación en cuanto esa global quede timbrada.
+-- Hasta hoy la vista previa le pedía al negocio consultar a su contador por esas ventas: si alguna
+-- ya tiene un CFDI hecho fuera de TienditApp, avísalo antes de emitir la siguiente global (la
+-- vista previa no deja quitar una venta y saldría facturada dos veces).
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a

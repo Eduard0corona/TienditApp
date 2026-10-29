@@ -578,33 +578,60 @@ public class GlobalInvoiceCreditNoteFlowTests
     }
 
     [Fact]
-    public async Task WriteOff_OfASaleOfTheGlobalInvoice_ShouldNotBeUndone_WhileItsCreditNoteStands_NorItsNoteCountOnceUndone()
+    public async Task WriteOff_OfASaleOfTheGlobalInvoice_ShouldNotBeUndone_WhileTheGlobalInvoiceCoversIt()
     {
         await using var book = await Book.OpenAsync();
         var sale = await book.OwedSaleAsync(70m);
+        await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
         var writeOff = await book.WriteOffAsync(sale.Id, 30m);
-        await book.IssueGlobalAsync(1, 100m);
+        await book.IssueGlobalAsync(2, 200m);
+
+        // The global invoice took it settled: undone, the sale would owe inside a CFDI paid in one exhibition. Before its credit
+        // note is issued, and after.
+        var inGlobal = ReverseCustomerWriteOffCommandHandler.InGlobalInvoiceMessage("F-1");
+        Assert.Equal(inGlobal, (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
         Assert.Equal(1, (await book.IssuePendingAsync()).Value);
-        var note = await book.Context.CreditNotes.SingleAsync();
-
-        Assert.Equal(ReverseCustomerWriteOffCommandHandler.LiveCreditNoteMessage("NC-1"), (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
-
-        // Cancelled (the write-off did not happen: 03), it is undone, and takes no credit note again.
+        Assert.Equal(inGlobal, (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
+        // Its credit note cancelled, the global invoice still covers it.
         book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
-        Assert.True((await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.NotCarriedOut)).IsSuccess);
+        var note = await book.Context.CreditNotes.SingleAsync();
+        Assert.True((await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        Assert.Equal(inGlobal, (await book.ReverseWriteOffAsync(writeOff.Id)).Error);
+
+        // With the global invoice cancelled it is undone, takes no credit note, and the global invoice issued again leaves it
+        // out while it owes.
+        Assert.True((await book.CancelGlobalAsync((await book.Context.GlobalInvoices.SingleAsync()).Id,
+            CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
         var undone = await book.ReverseWriteOffAsync(writeOff.Id);
         Assert.True(undone.IsSuccess, undone.Error);
         Assert.Equal(0, (await book.IssuePendingAsync()).Value);
-        Assert.Equal(CreditNote.ReversedWriteOffMessage, (await book.IssueCreditNoteAsync(CreditNoteAdjustment.WriteOff, writeOff.Id)).Error);
+        var draft = await book.DraftAsync();
+        Assert.Equal(GlobalInvoiceDrafts.NotPaidReason, Assert.Single(draft.LeftOut).Reason);
+        Assert.Equal(100m, draft.Total);
+    }
 
-        // Given as a discount instead, its credit note has the whole sale to credit: the undone one's does not count.
-        var discount = await book.WriteOffAsync(sale.Id, 30m, OrderWriteOffReason.Discount);
-        var shown = (await book.OrderInvoicingAsync(sale.Id)).Adjustments.Single(a => a.AdjustmentId == discount.Id);
-        Assert.Equal((true, true, (string?)null), (shown.CanIssue, shown.AwaitsAutomaticIssue, shown.Problem));
+    [Fact]
+    public async Task WriteOff_OfAGlobalInvoiceCancelledAndIssuedAgain_ShouldTakeItsCreditNoteOfTheNewOne()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.OwedSaleAsync(70m);
+        var writeOff = await book.WriteOffAsync(sale.Id, 30m, OrderWriteOffReason.Discount);
+        var first = await book.IssueGlobalAsync(1, 100m);
         Assert.Equal(1, (await book.IssuePendingAsync()).Value);
-        var second = await book.Context.CreditNotes.SingleAsync(n => n.OrderWriteOffId == discount.Id);
-        Assert.Equal(("NC-2", 30m, OrderInvoiceStatus.Stamped), (second.Number, second.Total, second.Status));
-        Assert.Equal("Descuento o bonificación", Assert.Single(book.Gateway.StampRequests[^1].Document.Concepts).Description);
+
+        // Its credit note and the global invoice cancelled with 02 to correct it: the sale goes in the new one as it was, and the
+        // discount takes its credit note of the new one, on its own.
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        var note = await book.Context.CreditNotes.SingleAsync();
+        Assert.True((await book.CancelCreditNoteAsync(note.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        Assert.True((await book.CancelGlobalAsync(first.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).IsSuccess);
+        var second = await book.IssueGlobalAsync(1, 100m);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+
+        var issued = await book.Context.CreditNotes.SingleAsync(n => n.Status == OrderInvoiceStatus.Stamped);
+        Assert.Equal(("NC-2", writeOff.Id, (Guid?)second.Id, 30m), (issued.Number, issued.OrderWriteOffId!.Value, issued.GlobalInvoiceId, issued.Total));
+        Assert.Equal(("01", second.Uuid), (book.Gateway.StampRequests[^1].Document.Related!.RelationType,
+            Assert.Single(book.Gateway.StampRequests[^1].Document.Related!.Uuids)));
     }
 
     [Fact]
@@ -728,9 +755,6 @@ public class GlobalInvoiceCreditNoteFlowTests
         }
 
         /// <summary>
-        /// Stamps the sale day's global invoice the next morning (or later), as its preview showed it, and expects it saved.
-        /// </summary>
-        /// <summary>
         /// A sale of Café to Karla handed over with only part of it paid on the sale day (or sold on credit): she owes the
         /// rest, which the business may forgive.
         /// </summary>
@@ -774,6 +798,9 @@ public class GlobalInvoiceCreditNoteFlowTests
             return reversed;
         }
 
+        /// <summary>
+        /// Stamps the sale day's global invoice the next morning (or later), as its preview showed it, and expects it saved.
+        /// </summary>
         public async Task<GlobalInvoiceDto> IssueGlobalAsync(int saleCount, decimal total, DateOnly? day = null)
         {
             if (Clock.UtcNow < NextMorning)

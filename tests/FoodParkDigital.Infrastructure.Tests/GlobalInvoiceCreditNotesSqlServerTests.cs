@@ -136,8 +136,7 @@ public class GlobalInvoiceCreditNotesSqlServerTests
         cancelled.Cancel(Stamped.AddHours(1));
         var theirGlobal = Global(otherTenant.Id, 3, userId, theirs);
         theirGlobal.Stamp(Guid.NewGuid().ToString().ToUpperInvariant(), "sw", Stamped, "cfdi/g3.xml");
-        // `noted` has its credit note (refused: issued again only by a person); `undone` was undone after its own was
-        // cancelled.
+        // `noted` has its credit note (refused: issued again only by a person); `undone` was undone before it had one.
         var notedNote = CreditNote.ForWriteOffInGlobalInvoice(
             global, global.Orders.Single(o => o.OrderId == noted.Id), notedWriteOff, "NC", 1, 25.86m, 4.14m, "{}", null, Stamped.AddMinutes(5));
         notedNote.Refuse("CFDI40108", Stamped.AddMinutes(6));

@@ -28,7 +28,7 @@ interface CreditNoteListProps {
   canCancel: boolean;
   /** The email the order's invoicing proposes, to send a note whose invoice has none (Fase 28E). */
   proposedEmail?: string | null;
-  /** The global invoice that covers the sale now, whose credit notes its refunds take (Fase 28I). */
+  /** The global invoice that covers the sale now, whose credit notes its refunds (Fase 28I) and write-offs (Fase 28J) take. */
   globalInvoiceNumber?: string | null;
 }
 

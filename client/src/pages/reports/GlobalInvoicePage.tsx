@@ -26,8 +26,8 @@ const LIVE: OrderInvoiceStatus[] = [OrderInvoiceStatus.Stamping, OrderInvoiceSta
 
 /**
  * Reportes › Factura global › una: the global invoice with its sales, its files, and what can be done with it (ask the PAC
- * again while it stamps; cancel it once stamped), and the credit notes of its sales' refunds (Fase 28I): while one stands,
- * the SAT does not cancel it, so the screen says which go first.
+ * again while it stamps; cancel it once stamped), and the credit notes of its sales' refunds (Fase 28I) and write-offs
+ * (Fase 28J): while one stands, the SAT does not cancel it, so the screen says which go first.
  */
 export default function GlobalInvoicePage() {
   const { id = '' } = useParams<{ id: string }>();
