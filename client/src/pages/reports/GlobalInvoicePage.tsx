@@ -11,10 +11,13 @@ import {
   type GlobalInvoiceDetail,
 } from '../../api/invoicing';
 import PageTitle from '../../components/common/PageTitle';
+import StuckStampNote from '../../components/invoicing/StuckStampNote';
 import { globalPeriodLabel } from '../../components/invoicing/globalPeriod';
 import { useToast } from '../../hooks/useToast';
 import { CfdiCancellationMotive, OrderInvoiceStatus } from '../../types';
-import { GLOBAL_CANCELLATION_MOTIVES, PAYMENT_FORMS, invoiceStatusChip, invoiceStatusLabel, saveBlob } from '../../utils/cfdi';
+import {
+  GLOBAL_CANCELLATION_MOTIVES, PAYMENT_FORMS, invoiceStatusChip, invoiceStatusLabel, isStuckStamping, saveBlob,
+} from '../../utils/cfdi';
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 
@@ -131,11 +134,13 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
             Al público en general (XAXX010101000) · Meses {invoice.months} · Año {invoice.year}
           </p>
 
-          {invoice.status === OrderInvoiceStatus.Stamping && (
+          {invoice.status === OrderInvoiceStatus.Stamping && !isStuckStamping(invoice) && (
             <p className="small text-muted">
               El PAC no respondió todavía. TienditApp lo vuelve a intentar con la misma solicitud: nunca timbra dos veces.
             </p>
           )}
+          {/* Only owners and admins open the global invoices, as Reportes › CFDI emitidos. */}
+          {isStuckStamping(invoice) && <StuckStampNote canReview />}
           {invoice.status === OrderInvoiceStatus.Cancelling && (
             <p className="small text-muted">El SAT está procesando la cancelación; TienditApp la vuelve a consultar.</p>
           )}
@@ -207,7 +212,7 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
                 </button>
               </>
             )}
-            {invoice.status === OrderInvoiceStatus.Stamping && (
+            {invoice.status === OrderInvoiceStatus.Stamping && !isStuckStamping(invoice) && (
               <button type="button" className="btn btn-sm btn-outline-secondary" disabled={retry.isPending} onClick={() => void askAgain()}>
                 Volver a pedir el timbre
               </button>

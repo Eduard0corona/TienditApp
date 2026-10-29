@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import api from './axios';
+import { queryKeys } from './queries';
 import { apiRequest, type Schemas } from './typedClient';
 import {
   CfdiCancellationMotive,
@@ -13,6 +14,7 @@ import {
   OrderStatus,
   type OrderDto,
 } from '../types';
+import { isStuckStamping } from '../utils/cfdi';
 import { isDeliveryPlatform } from '../utils/deliveryPlatforms';
 
 // Invoicing (Fase 28A, ADR 0045): Configuración › Facturación and the invoice of an order; the global invoice of a period
@@ -20,7 +22,8 @@ import { isDeliveryPlatform } from '../utils/deliveryPlatforms';
 // ADR 0047); the credit notes of an invoiced order's refunds and write-offs (Fase 28D, ADR 0048); and the emails of those
 // CFDI to the customer (Fase 28E, ADR 0049); self-invoicing, turned on here and printed on each ticket (Fase 28F,
 // ADR 0050); and the CFDI issued in a month, with their XML for the accountant (Fase 28H, ADR 0052), in Reportes › CFDI
-// emitidos. Kept out of queries.ts, which the first visit loads.
+// emitidos, with the ones still «Timbrando» past the PAC's window that a person checks (Fase 28K, ADR 0056). Kept out of
+// queries.ts, which the first visit loads.
 
 export type InvoicingSettings = Schemas['InvoicingSettingsDto'];
 export type OrderInvoicing = Schemas['OrderInvoicingDto'];
@@ -151,7 +154,7 @@ export function useOrderInvoicing(orderId: string) {
  * pass.
  */
 export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments' | 'adjustments'>): boolean {
-  const waits = (cfdi: Pick<OrderInvoice, 'status' | 'emails'>) => isWaiting(cfdi) || isEmailOnItsWay(cfdi.emails[0]);
+  const waits = (cfdi: Pick<OrderInvoice, 'status' | 'stampWindowEndsAt' | 'emails'>) => isWaiting(cfdi) || isEmailOnItsWay(cfdi.emails[0]);
   return data.invoices.some((invoice) => waits(invoice) || invoice.awaitsReplacedCancellation)
     || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some(waits))
     || data.adjustments.some((adjustment) => adjustment.awaitsAutomaticIssue || adjustment.creditNotes.some(waits));
@@ -177,9 +180,13 @@ export function useCfdiDraft(orderId: string, receiver?: CfdiReceiver, enabled =
   });
 }
 
-/** «Timbrando» waits for the PAC; «Cancelándose», for the SAT. */
-export function isWaiting(invoice: Pick<OrderInvoice, 'status'>): boolean {
-  return invoice.status === OrderInvoiceStatus.Stamping || invoice.status === OrderInvoiceStatus.Cancelling;
+/**
+ * «Timbrando» waits for the PAC; «Cancelándose», for the SAT. One still «Timbrando» past the PAC's window no longer changes on
+ * its own (Fase 28K): a person resolves it from Reportes › CFDI emitidos.
+ */
+export function isWaiting(invoice: Pick<OrderInvoice, 'status' | 'stampWindowEndsAt'>): boolean {
+  return invoice.status === OrderInvoiceStatus.Cancelling
+    || (invoice.status === OrderInvoiceStatus.Stamping && !isStuckStamping(invoice));
 }
 
 /**
@@ -344,6 +351,52 @@ export function useIssuedCfdiSummary(year: number, month: number) {
     refetchOnMount: 'always',
     refetchInterval: (query) => query.state.data?.kinds.some((kind) => kind.stamping > 0) ? PENDING_REFRESH_MS : false,
   });
+}
+
+/**
+ * Every CFDI still «Timbrando» past the PAC's window, the oldest first, whatever their month (Fase 28K): a person checks in
+ * the SAT's portal whether each one was stamped. Read again each time the screen opens.
+ */
+export function useCfdisToReview() {
+  return useQuery({
+    queryKey: [...issuedCfdisKey, 'to-review'],
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/issued-cfdis/to-review', { signal }),
+    refetchOnMount: 'always',
+  });
+}
+
+/**
+ * Resolving one answers the CFDI as it ended up. Everything that shows it is read again: the month and its list, the order's
+ * invoicing or the global invoice it belongs to, and the notices of Inicio.
+ */
+function useStuckCfdiChange<TVariables>(change: (variables: TVariables) => Promise<IssuedCfdi>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: change,
+    onSettled: () => Promise.all([
+      client.invalidateQueries({ queryKey: issuedCfdisKey }),
+      client.invalidateQueries({ queryKey: ['invoicing', 'orders'] }),
+      client.invalidateQueries({ queryKey: globalInvoicesKey }),
+      client.invalidateQueries({ queryKey: queryKeys.attention }),
+    ]),
+  });
+}
+
+/** «Ya se timbró»: the folio fiscal the SAT's portal shows; TienditApp brings its XML from the PAC if it is this CFDI. */
+export function useConfirmStuckCfdiStamped() {
+  return useStuckCfdiChange(({ cfdi, uuid }: { cfdi: Pick<IssuedCfdi, 'kind' | 'id'>; uuid: string }) =>
+    apiRequest('post', '/api/v1/invoicing/issued-cfdis/{kind}/{cfdiId}/stamped', {
+      path: { kind: cfdi.kind, cfdiId: cfdi.id },
+      body: { uuid },
+    }));
+}
+
+/** «No se timbró»: it becomes «Rechazada», with who checked it, and what it covered can be invoiced again. */
+export function useConfirmStuckCfdiNotStamped() {
+  return useStuckCfdiChange((cfdi: Pick<IssuedCfdi, 'kind' | 'id'>) =>
+    apiRequest('post', '/api/v1/invoicing/issued-cfdis/{kind}/{cfdiId}/not-stamped', {
+      path: { kind: cfdi.kind, cfdiId: cfdi.id },
+    }));
 }
 
 /** The month's CFDI for the accountant: a ZIP with their XML and the list, or the list alone (CSV). */

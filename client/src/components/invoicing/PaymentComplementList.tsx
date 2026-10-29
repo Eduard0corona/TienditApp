@@ -15,6 +15,7 @@ import {
   COMPLEMENT_CANCELLATION_MOTIVES,
   complementStatusLabel,
   invoiceStatusChip,
+  isStuckStamping,
   PAYMENT_FORMS,
   saveBlob,
 } from '../../utils/cfdi';
@@ -22,6 +23,7 @@ import { formatCalendarDate, formatDateTime, getBusinessToday } from '../../util
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
+import StuckStampNote from './StuckStampNote';
 
 interface PaymentComplementListProps {
   orderId: string;
@@ -150,11 +152,12 @@ export default function PaymentComplementList({
                         {complement.uuid && <> · folio fiscal <span className="ta-money">{complement.uuid}</span></>}
                         {complement.stampedAt && <> · timbrado el {formatDateTime(complement.stampedAt)}</>}
                       </div>
-                      {complement.status === OrderInvoiceStatus.Stamping && (
+                      {complement.status === OrderInvoiceStatus.Stamping && !isStuckStamping(complement) && (
                         <p className="small text-muted mb-0 mt-1">
                           El PAC no respondió todavía. TienditApp lo vuelve a intentar con la misma solicitud: nunca timbra dos veces.
                         </p>
                       )}
+                      {isStuckStamping(complement) && <StuckStampNote canReview={canCancel} />}
                       {complement.status === OrderInvoiceStatus.Cancelling && (
                         <p className="small text-muted mb-0 mt-1">El SAT pidió al cliente que acepte la cancelación.</p>
                       )}
@@ -198,7 +201,7 @@ export default function PaymentComplementList({
                             proposedEmail={proposedEmail}
                           />
                         )}
-                        {complement.status === OrderInvoiceStatus.Stamping && (
+                        {complement.status === OrderInvoiceStatus.Stamping && !isStuckStamping(complement) && (
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-secondary"

@@ -10,10 +10,11 @@ import {
 } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
 import { CfdiCancellationMotive, CfdiEmailDocument, OrderInvoiceStatus } from '../../types';
-import { CANCELLATION_MOTIVES, invoiceStatusChip, invoiceStatusLabel, saveBlob } from '../../utils/cfdi';
+import { CANCELLATION_MOTIVES, invoiceStatusChip, invoiceStatusLabel, isStuckStamping, saveBlob } from '../../utils/cfdi';
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
+import StuckStampNote from './StuckStampNote';
 
 interface OrderInvoiceListProps {
   orderId: string;
@@ -109,11 +110,12 @@ export default function OrderInvoiceList({
                 {invoice.stampedAt && <> · timbrada el {formatDateTime(invoice.stampedAt)}</>}
               </div>
             )}
-            {invoice.status === OrderInvoiceStatus.Stamping && (
+            {invoice.status === OrderInvoiceStatus.Stamping && !isStuckStamping(invoice) && (
               <p className="small text-muted mb-0 mt-1">
                 El PAC no respondió todavía. TienditApp lo vuelve a intentar con la misma solicitud: nunca timbra dos veces.
               </p>
             )}
+            {isStuckStamping(invoice) && <StuckStampNote canReview={canCancel} />}
             {invoice.awaitsReplacedCancellation && (
               <p className="small text-muted mb-0 mt-1">
                 {replacementStamped(invoice, invoices)
@@ -174,7 +176,7 @@ export default function OrderInvoiceList({
                   proposedEmail={proposedEmail}
                 />
               )}
-              {invoice.status === OrderInvoiceStatus.Stamping && (
+              {invoice.status === OrderInvoiceStatus.Stamping && !isStuckStamping(invoice) && (
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-secondary"

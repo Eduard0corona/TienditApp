@@ -20,6 +20,7 @@ vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../../hooks/useToast', () => ({ useToast: () => toast }));
+vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm: vi.fn(), prompt: vi.fn() }) }));
 
 const request = vi.mocked(apiRequest);
 type Query = { year: number; month: number; kind?: IssuedCfdiKind; status?: OrderInvoiceStatus; search?: string; pageNumber?: number };
@@ -52,6 +53,8 @@ interface Answers {
   route?: string;
   /** The app's cache, to come back to the page with what it read before. */
   client?: QueryClient;
+  /** The CFDI still «Timbrando» past the PAC's window (Fase 28K); none by default. */
+  toReview?: IssuedCfdi[];
 }
 
 function renderPage(list: (query: Query) => IssuedCfdi[], answers: Answers = {}) {
@@ -67,6 +70,7 @@ function renderPage(list: (query: Query) => IssuedCfdi[], answers: Answers = {})
     if (path === '/api/v1/invoicing/issued-cfdis/summary') {
       return answers.summary ? answers.summary(options!.query) : Promise.resolve({ ...SUMMARY, ...options!.query });
     }
+    if (path === '/api/v1/invoicing/issued-cfdis/to-review') return Promise.resolve(answers.toReview ?? []);
     return Promise.reject(new Error(`Sin respuesta para ${method} ${path}`));
   }) as unknown as typeof apiRequest);
   const client = answers.client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -318,5 +322,16 @@ describe('IssuedCfdis', () => {
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(await screen.findByRole('region', { name: 'Resumen de octubre de 2026' })).toBeInTheDocument();
+  });
+
+  it('puts the CFDI to check in the SAT\'s portal above the month, whatever month they are of (Fase 28K)', async () => {
+    renderPage(() => [cfdi()], {
+      toReview: [cfdi({ id: 's-1', number: 'F-9', status: OrderInvoiceStatus.Stamping, issuedAt: '2026-09-28T18:00:00Z', hasXml: false })],
+    });
+
+    const toReview = await screen.findByRole('region', { name: 'Por revisar en el portal del SAT' });
+    expect(within(toReview).getByRole('button', { name: 'Ya se timbró la factura F-9' })).toBeInTheDocument();
+    const month = screen.getByRole('heading', { name: 'Octubre de 2026' });
+    expect(toReview.compareDocumentPosition(month) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

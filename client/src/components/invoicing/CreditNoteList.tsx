@@ -12,12 +12,15 @@ import {
 } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
 import { CfdiCancellationMotive, CfdiEmailDocument, CreditNoteAdjustment, OrderInvoiceStatus } from '../../types';
-import { creditNoteCancellationMotives, invoiceStatusChip, invoiceStatusLabel, PAYMENT_FORMS, saveBlob } from '../../utils/cfdi';
+import {
+  creditNoteCancellationMotives, invoiceStatusChip, invoiceStatusLabel, isStuckStamping, PAYMENT_FORMS, saveBlob,
+} from '../../utils/cfdi';
 import { formatDateTime } from '../../utils/dates';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
+import StuckStampNote from './StuckStampNote';
 
 interface CreditNoteListProps {
   orderId: string;
@@ -175,11 +178,12 @@ export default function CreditNoteList({
                         {note.uuid && <> · folio fiscal <span className="ta-money">{note.uuid}</span></>}
                         {note.stampedAt && <> · timbrada el {formatDateTime(note.stampedAt)}</>}
                       </div>
-                      {note.status === OrderInvoiceStatus.Stamping && (
+                      {note.status === OrderInvoiceStatus.Stamping && !isStuckStamping(note) && (
                         <p className="small text-muted mb-0 mt-1">
                           El PAC no respondió todavía. TienditApp lo vuelve a intentar con la misma solicitud: nunca timbra dos veces.
                         </p>
                       )}
+                      {isStuckStamping(note) && <StuckStampNote canReview={canCancel} />}
                       {note.status === OrderInvoiceStatus.Cancelling && (
                         <p className="small text-muted mb-0 mt-1">
                           {note.globalInvoiceId != null
@@ -227,7 +231,7 @@ export default function CreditNoteList({
                             proposedEmail={proposedEmail}
                           />
                         )}
-                        {note.status === OrderInvoiceStatus.Stamping && (
+                        {note.status === OrderInvoiceStatus.Stamping && !isStuckStamping(note) && (
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-secondary"

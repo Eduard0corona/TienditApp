@@ -81,6 +81,18 @@ export function complementStatusLabel(status: OrderInvoiceStatus): string {
   return COMPLEMENT_STATUS_LABELS[status] ?? 'Desconocido';
 }
 
+/**
+ * A CFDI still «Timbrando» past the PAC's window (Fase 28K, ADR 0056): TienditApp no longer asks for its stamp, and asking
+ * again by hand is refused, so a person checks in the SAT's portal whether it was stamped. The API decides it (by its own
+ * clock); the screen only stops offering «Volver a pedir el timbre» and says what to do instead.
+ */
+export function isStuckStamping(
+  cfdi: { status: OrderInvoiceStatus; stampWindowEndsAt?: string | null },
+  now: number = Date.now(),
+): boolean {
+  return cfdi.status === OrderInvoiceStatus.Stamping && !!cfdi.stampWindowEndsAt && Date.parse(cfdi.stampWindowEndsAt) < now;
+}
+
 /** The two reasons TienditApp cancels with (01 needs the invoice that replaces it; 04 is for the global invoice). */
 export const CANCELLATION_MOTIVES: Array<[CfdiCancellationMotive, string]> = [
   [CfdiCancellationMotive.ErrorsWithoutReplacement, '02 · Tiene errores y no se va a sustituir'],
