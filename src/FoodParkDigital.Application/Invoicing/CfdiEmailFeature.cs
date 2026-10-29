@@ -90,7 +90,8 @@ public static class CfdiEmails
         {
             OrderInvoice invoice => invoice.ReceiverEmail,
             PaymentComplement complement => await EmailOfAsync(context, complement.OrderInvoiceId, cancellationToken),
-            CreditNote note => await EmailOfAsync(context, note.OrderInvoiceId, cancellationToken),
+            // A global invoice's credit note is to the general public (Fase 28I): nobody to send it to.
+            CreditNote { OrderInvoiceId: { } invoiceId } => await EmailOfAsync(context, invoiceId, cancellationToken),
             _ => null
         };
         if (address is not null && cfdi.Status == OrderInvoiceStatus.Stamped && InvoiceEmailAddress.IsValid(address))

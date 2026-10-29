@@ -82,12 +82,29 @@ public class GlobalInvoiceDetailDto : GlobalInvoiceDto
 {
     public List<GlobalInvoiceOrderDto> Orders { get; set; } = [];
 
-    public static GlobalInvoiceDetailDto WithSales(GlobalInvoice invoice)
+    /// <param name="creditNotes">The global invoice's credit notes (Fase 28I), whatever their status.</param>
+    public static GlobalInvoiceDetailDto WithSales(GlobalInvoice invoice, IReadOnlyCollection<CreditNote> creditNotes)
     {
         var detail = Fill(new GlobalInvoiceDetailDto(), invoice);
         detail.Orders = invoice.Orders
             .OrderBy(order => order.OrderNumber)
-            .Select(order => new GlobalInvoiceOrderDto { OrderId = order.OrderId, OrderNumber = order.OrderNumber, Total = order.Total })
+            .Select(order => new GlobalInvoiceOrderDto
+            {
+                OrderId = order.OrderId,
+                OrderNumber = order.OrderNumber,
+                Total = order.Total,
+                CreditNotes = creditNotes
+                    .Where(n => n.OrderId == order.OrderId)
+                    .OrderByDescending(n => n.RequestedAt)
+                    .ThenByDescending(n => n.Folio)
+                    .Select(n =>
+                    {
+                        var dto = CreditNoteDto.From(n);
+                        dto.GlobalInvoiceNumber = invoice.Number;
+                        return dto;
+                    })
+                    .ToList()
+            })
             .ToList();
         return detail;
     }
@@ -99,6 +116,11 @@ public class GlobalInvoiceOrderDto
     public Guid OrderId { get; set; }
     public string OrderNumber { get; set; } = null!;
     public decimal Total { get; set; }
+    /// <summary>
+    /// The credit notes of its refunds that credit this global invoice (Fase 28I), the newest first: while one stands with
+    /// the SAT, the global invoice is not cancelled.
+    /// </summary>
+    public List<CreditNoteDto> CreditNotes { get; set; } = [];
 }
 
 /// <summary>
@@ -402,6 +424,9 @@ public class CancelGlobalInvoiceCommandHandler : IRequestHandler<CancelGlobalInv
                 : "Solo se cancela una factura timbrada.");
         if (!_gateway.IsConfigured)
             return Result.Failure<GlobalInvoiceDto>(InvoicingSettings.NotAvailableMessage);
+        // The SAT does not cancel one related to credit notes in force: those of its sales' refunds go first (Fase 28I).
+        if (await CreditNotes.LiveNumbersOfGlobalInvoiceAsync(_context, invoice.Id, cancellationToken) is { Count: > 0 } notes)
+            return Result.Failure<GlobalInvoiceDto>(GlobalInvoicing.LiveCreditNotesMessage(notes));
         var profile = await _context.InvoicingProfiles.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         if (profile is not { HasCertificate: true })
             return Result.Failure<GlobalInvoiceDto>(CancelOrderInvoiceCommandHandler.NoCertificateToCancelMessage);
@@ -523,8 +548,11 @@ public class GetGlobalInvoiceQueryHandler : IRequestHandler<GetGlobalInvoiceQuer
         var invoice = await GlobalInvoicing.WithSales(_context).AsNoTracking()
             .FirstOrDefaultAsync(i => i.Id == request.InvoiceId, cancellationToken)
             ?? throw new EntityNotFoundException(nameof(GlobalInvoice), request.InvoiceId);
+        var creditNotes = await _context.CreditNotes.AsNoTracking()
+            .Where(n => n.GlobalInvoiceId == invoice.Id)
+            .ToListAsync(cancellationToken);
 
-        return GlobalInvoiceDetailDto.WithSales(invoice);
+        return GlobalInvoiceDetailDto.WithSales(invoice, creditNotes);
     }
 }
 
@@ -581,6 +609,10 @@ public static class GlobalInvoicing
 
     public const string SalesChangedMessage =
         "Las ventas del periodo cambiaron desde que viste la vista previa: revísala otra vez antes de timbrar.";
+
+    public static string LiveCreditNotesMessage(IReadOnlyList<string> notes) =>
+        $"Cancela primero las notas de crédito de esta factura global ({string.Join(", ", notes)}): el SAT no cancela una " +
+        "factura mientras tenga notas de crédito vigentes relacionadas.";
 
     /// <summary>A day since CFDI 4.0 (2022): a period that has not ended yet is refused with its reason, not here.</summary>
     public static bool IsReasonableDay(DateOnly day) => day.Year is >= 2022 and <= 9998;

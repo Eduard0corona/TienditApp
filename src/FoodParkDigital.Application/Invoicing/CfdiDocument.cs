@@ -99,7 +99,9 @@ public sealed record CfdiDocument
     /// The CFDI of a credit note (Fase 28D): of type E, paid in one exhibition with the form of what it credits, for the
     /// invoice's receiver with the use a credit note takes, related to the invoice (TipoRelacion 01). It has one concept per
     /// IVA rate of what it credits, with that rate's base and IVA, and one more, not subject to tax, for the share of the
-    /// invoice without IVA transfers; their amounts add up to exactly what it credits.
+    /// invoice without IVA transfers; their amounts add up to exactly what it credits. The credit note of a sale of a global
+    /// invoice (Fase 28I) goes to the general public and its concepts carry the sale's folio, as its concept in the global
+    /// invoice does.
     /// </summary>
     public static CfdiDocument ForCreditNote(
         CfdiDocumentIssuer issuer,
@@ -112,19 +114,20 @@ public sealed record CfdiDocument
         string description,
         IReadOnlyList<CfdiTransfer> transfers,
         decimal notSubject,
-        string invoiceUuid)
+        string invoiceUuid,
+        string? identification = null)
     {
         var documentTransfers = transfers.Select(Transfer).ToList();
         var concepts = documentTransfers
             .Select(transfer => new CfdiDocumentConcept(
                 SatCatalog.PaymentReceivedProductCode, SatCatalog.ActivityUnitCode, description, 1m, transfer.Base, transfer.Base,
-                SatCatalog.Code(CfdiTaxObject.Subject), transfer))
+                SatCatalog.Code(CfdiTaxObject.Subject), transfer, identification))
             .ToList();
         if (notSubject > 0)
         {
             concepts.Add(new CfdiDocumentConcept(
                 SatCatalog.PaymentReceivedProductCode, SatCatalog.ActivityUnitCode, description, 1m, notSubject, notSubject,
-                SatCatalog.Code(CfdiTaxObject.NotSubject), null));
+                SatCatalog.Code(CfdiTaxObject.NotSubject), null, identification));
         }
 
         var subTotal = concepts.Sum(concept => concept.Amount);

@@ -1811,6 +1811,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<long>("Folio")
                         .HasColumnType("bigint");
 
+                    b.Property<Guid?>("GlobalInvoiceId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("IdempotencyKey")
                         .HasColumnType("uniqueidentifier");
 
@@ -1820,7 +1823,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("OrderInvoiceId")
+                    b.Property<Guid?>("OrderInvoiceId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("OrderRefundId")
@@ -1903,6 +1906,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("GlobalInvoiceId")
+                        .HasFilter("[GlobalInvoiceId] IS NOT NULL");
+
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
 
@@ -1943,6 +1949,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_CreditNotes_CancellationMotive", "[CancellationMotive] IS NULL OR [CancellationMotive] IN (2, 3)");
 
                             t.HasCheckConstraint("CK_CreditNotes_Folio", "[Folio] > 0");
+
+                            t.HasCheckConstraint("CK_CreditNotes_Invoice", "([OrderInvoiceId] IS NOT NULL AND [GlobalInvoiceId] IS NULL) OR ([OrderInvoiceId] IS NULL AND [GlobalInvoiceId] IS NOT NULL AND [OrderRefundId] IS NOT NULL AND [AfterInstallment] = 0)");
 
                             t.HasCheckConstraint("CK_CreditNotes_Refused", "([Status] = 2 AND [RefusedAt] IS NOT NULL AND [FailureMessage] IS NOT NULL) OR ([Status] <> 2 AND [RefusedAt] IS NULL)");
 
@@ -7231,6 +7239,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.CreditNote", b =>
                 {
+                    b.HasOne("FoodParkDigital.Domain.Fiscal.Entities.GlobalInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("GlobalInvoiceId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
                         .WithMany()
                         .HasForeignKey("OrderId")
@@ -7240,8 +7253,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasOne("FoodParkDigital.Domain.Fiscal.Entities.OrderInvoice", null)
                         .WithMany()
                         .HasForeignKey("OrderInvoiceId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.OrderRefund", null)
                         .WithMany()

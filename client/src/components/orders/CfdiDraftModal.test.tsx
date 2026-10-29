@@ -279,6 +279,14 @@ describe('CfdiDraftModal', () => {
     expect(await screen.findByText('Este pedido está cancelado y no tiene facturas.')).toBeInTheDocument();
   });
 
+  it('says the global invoice still covers a voided sale of it', async () => {
+    serve({ ...INVOICING, canInvoice: false, problem: 'Una orden cancelada no se factura.', invoices: [], globalInvoiceNumber: 'F-12' });
+    renderModal(false, undefined, true, true);
+
+    expect(await screen.findByText(/^El pedido está cancelado y la factura global F-12 lo ampara/)).toBeInTheDocument();
+    expect(screen.queryByText('Este pedido está cancelado y no tiene facturas.')).not.toBeInTheDocument();
+  });
+
   it('is only a preview while the platform does not invoice', async () => {
     serve({ ...INVOICING, available: false, canInvoice: false, proposedReceiver: undefined, customerId: undefined });
     renderModal();

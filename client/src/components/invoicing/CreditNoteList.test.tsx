@@ -43,11 +43,17 @@ const WRITE_OFF: Adjustment = {
   awaitsAutomaticIssue: true, creditNotes: [],
 };
 
-function renderList(adjustments: Adjustment[], canCancel = false, invoices: Invoice[] = [F3]) {
+function renderList(adjustments: Adjustment[], canCancel = false, invoices: Invoice[] = [F3], globalInvoiceNumber?: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <CreditNoteList orderId="o-1" adjustments={adjustments} invoices={invoices} canCancel={canCancel} />
+      <CreditNoteList
+        orderId="o-1"
+        adjustments={adjustments}
+        invoices={invoices}
+        canCancel={canCancel}
+        globalInvoiceNumber={globalInvoiceNumber}
+      />
     </QueryClientProvider>,
   );
 }
@@ -79,9 +85,39 @@ describe('CreditNoteList', () => {
     expect(refund).toHaveTextContent('7A1C2E3F-4B5D-4C6E-8F9A-0B1C2D3E4F5A');
     expect(screen.getByRole('button', { name: 'Descargar XML de la nota de crédito NC-1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Descargar PDF de la nota de crédito NC-1' })).toBeInTheDocument();
+    // The note of the order's own invoice goes to the customer by email.
+    expect(screen.getByRole('button', { name: /^Enviar por correo la nota de crédito NC-1/ })).toBeInTheDocument();
     // Whoever manages the orders downloads; only owners and admins cancel. An adjustment with its note issues no other.
     expect(screen.queryByRole('button', { name: /^Cancelar nota de crédito/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Emitir/ })).not.toBeInTheDocument();
+  });
+
+  it('shows the credit note of a sale of a global invoice: to the general public, of that global invoice, never by email', () => {
+    const global: Note = { ...NC1, orderInvoiceId: null, globalInvoiceId: 'g-1', globalInvoiceNumber: 'F-12' };
+    renderList([{ ...REFUND, creditNotes: [global] }], true, [], 'F-12');
+
+    expect(screen.getByText(/^La factura global F-12 ampara esta venta: cada reembolso lleva su nota de crédito al público/))
+      .toHaveTextContent('unos minutos después de registrarlo (o de timbrar la factura global, si fue antes)');
+    const refund = screen.getAllByRole('listitem')[0];
+    expect(refund).toHaveTextContent('Forma 04 (Tarjeta) · la emitió TienditApp · al público en general, de la factura global F-12');
+    expect(screen.getByRole('button', { name: 'Descargar XML de la nota de crédito NC-1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-1' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Enviar por correo/ })).not.toBeInTheDocument();
+  });
+
+  it('says nobody has to accept the cancellation of a credit note of a global invoice', async () => {
+    const global: Note = { ...NC1, orderInvoiceId: null, globalInvoiceId: 'g-1', globalInvoiceNumber: 'F-12' };
+    const { unmount } = renderList([{ ...REFUND, creditNotes: [{ ...global, status: OrderInvoiceStatus.Cancelling }] }], true, [], 'F-12');
+    expect(screen.getByText('El SAT está procesando la cancelación; TienditApp la vuelve a consultar.')).toBeInTheDocument();
+    unmount();
+
+    answer(() => Promise.resolve({ ...global, status: OrderInvoiceStatus.Cancelling }));
+    renderList([{ ...REFUND, creditNotes: [global] }], true, [], 'F-12');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar nota de crédito NC-1' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancelar la nota de crédito NC-1' });
+    expect(dialog).toHaveTextContent('va al público en general, así que nadie tiene que aceptarla');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Cancelar nota de crédito/ }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Cancelación de NC-1 pedida: el SAT la está procesando.'));
   });
 
   it('issues the credit note of a write-off before TienditApp does it on its own', async () => {

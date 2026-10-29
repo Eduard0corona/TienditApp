@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
 import {
   downloadGlobalInvoiceFile,
@@ -20,9 +20,14 @@ import { formatMoney } from '../../utils/money';
 
 const PARENT = { label: 'Factura global', to: '/reports/global-invoices' };
 
+// On a phone a credit note's status goes under its folio, so the sale and the total fit; its own column from a tablet up.
+const FROM_TABLET = 'd-none d-sm-table-cell';
+const LIVE: OrderInvoiceStatus[] = [OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Cancelling];
+
 /**
  * Reportes › Factura global › una: the global invoice with its sales, its files, and what can be done with it (ask the PAC
- * again while it stamps; cancel it once stamped).
+ * again while it stamps; cancel it once stamped), and the credit notes of its sales' refunds (Fase 28I): while one stands,
+ * the SAT does not cancel it, so the screen says which go first.
  */
 export default function GlobalInvoicePage() {
   const { id = '' } = useParams<{ id: string }>();
@@ -74,6 +79,15 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
   const [cancelling, setCancelling] = useState(false);
   const [downloading, setDownloading] = useState<'xml' | 'pdf' | null>(null);
   const paymentForm = `${invoice.paymentForm} · ${PAYMENT_FORMS[invoice.paymentForm] ?? 'Otra'}`;
+  const creditNotes = invoice.orders.flatMap((order) => order.creditNotes.map((note) => ({ ...note, orderNumber: order.orderNumber })));
+  const notesIn = (statuses: OrderInvoiceStatus[]) => creditNotes
+    .filter((note) => statuses.includes(note.status))
+    .map((note) => note.number)
+    .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  // A stamped one is cancelled in its order; one that is stamping or cancelling has to finish first.
+  const stampedNotes = notesIn([OrderInvoiceStatus.Stamped]);
+  const waitingNotes = notesIn([OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Cancelling]);
+  const hasLiveNotes = creditNotes.some((note) => LIVE.includes(note.status));
 
   const download = async (kind: 'xml' | 'pdf') => {
     setDownloading(kind);
@@ -198,12 +212,18 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
                 Volver a pedir el timbre
               </button>
             )}
-            {invoice.status === OrderInvoiceStatus.Stamped && (
+            {invoice.status === OrderInvoiceStatus.Stamped && !hasLiveNotes && (
               <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setCancelling(true)}>
                 Cancelar factura global
               </button>
             )}
           </div>
+          {invoice.status === OrderInvoiceStatus.Stamped && hasLiveNotes && (
+            <p className="small text-muted mb-0 mt-2">
+              Para cancelarla, {whatGoesFirst(stampedNotes, waitingNotes)}: el SAT no cancela una factura mientras tenga notas de
+              crédito relacionadas.
+            </p>
+          )}
         </div>
       </section>
 
@@ -231,9 +251,63 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
         </div>
       </section>
 
+      {creditNotes.length > 0 && (
+        <section className="card" aria-labelledby={`${id}-notes`}>
+          <div className="card-body">
+            <h2 id={`${id}-notes`} className="h5 mb-1">Notas de crédito ({creditNotes.length})</h2>
+            <p className="small text-muted">
+              Las de los reembolsos de sus ventas, al público en general. Se emiten, se cancelan y se descargan en el pedido de
+              cada venta.
+            </p>
+            <div className="table-responsive">
+              <table className="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th scope="col">Folio</th>
+                    <th scope="col">Venta</th>
+                    <th scope="col" className={FROM_TABLET}>Estado</th>
+                    <th scope="col" className="text-end">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditNotes.map((note) => (
+                    <tr key={note.id}>
+                      <td>
+                        <span className="text-nowrap">{note.number}</span>
+                        <div className="d-sm-none mt-1">
+                          <span className={`ta-chip ${invoiceStatusChip(note.status)}`}>{invoiceStatusLabel(note.status)}</span>
+                        </div>
+                      </td>
+                      <td className="text-nowrap">
+                        <Link to={`/orders?search=${encodeURIComponent(note.orderNumber)}`}>{note.orderNumber}</Link>
+                      </td>
+                      <td className={FROM_TABLET}>
+                        <span className={`ta-chip ${invoiceStatusChip(note.status)}`}>{invoiceStatusLabel(note.status)}</span>
+                      </td>
+                      <td className="text-end ta-money">{formatMoney(note.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
       {cancelling && <CancelGlobalInvoiceModal invoice={invoice} onClose={() => setCancelling(false)} />}
     </>
   );
+}
+
+/** What has to happen to the live credit notes of a global invoice before it is cancelled. */
+function whatGoesFirst(stamped: string[], waiting: string[]): string {
+  const cancel = `cancela primero sus notas de crédito vigentes (${stamped.join(', ')}) en el pedido de cada venta`;
+  if (waiting.length === 0) return cancel;
+  if (stamped.length === 0) {
+    return `espera a que sus notas de crédito (${waiting.join(', ')}) terminen de timbrarse o de cancelarse, y cancela en su `
+      + 'pedido las que queden vigentes';
+  }
+  return `${cancel}, y espera a que las demás (${waiting.join(', ')}) terminen de timbrarse o de cancelarse`;
 }
 
 /** Owners and admins ask the SAT to cancel a stamped global invoice, with its reason; nobody has to accept it. */

@@ -29,8 +29,8 @@ function invoice(patch: Partial<GlobalInvoiceDetail> = {}): GlobalInvoiceDetail 
     uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: '2026-10-19T15:00:02Z', hasXml: true, hasPdf: true,
     failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null,
     orders: [
-      { orderId: 'o-1', orderNumber: 'ORD-000001', total: 200 },
-      { orderId: 'o-2', orderNumber: 'ORD-000002', total: 100 },
+      { orderId: 'o-1', orderNumber: 'ORD-000001', total: 200, creditNotes: [] },
+      { orderId: 'o-2', orderNumber: 'ORD-000002', total: 100, creditNotes: [] },
     ],
     ...patch,
   };
@@ -103,6 +103,64 @@ describe('GlobalInvoicePage', () => {
     expect(toast.success).toHaveBeenCalledWith('Factura global F-5 cancelada.');
     expect(await screen.findByText('Cancelada', { selector: '.ta-chip' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancelar factura global' })).not.toBeInTheDocument();
+  });
+
+  it('lists the credit notes of its sales, and says which go first while one stands instead of offering to cancel it', async () => {
+    const note = {
+      id: 'nc-1', orderInvoiceId: null, globalInvoiceId: 'g-1', globalInvoiceNumber: 'F-5', number: 'NC-1',
+      status: OrderInvoiceStatus.Stamped, paymentForm: '01', subTotal: 17.24, taxTotal: 2.76, total: 20,
+      requestedAt: '2026-10-20T17:00:00Z', issuedAutomatically: true, uuid: null, stampedAt: '2026-10-20T17:00:03Z',
+      hasXml: true, hasPdf: true, failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null,
+      emails: [],
+    };
+    const withNotes = (status: OrderInvoiceStatus) => invoice({
+      orders: [
+        { orderId: 'o-1', orderNumber: 'ORD-000001', total: 200, creditNotes: [{ ...note, status }] },
+        { orderId: 'o-2', orderNumber: 'ORD-000002', total: 100, creditNotes: [] },
+      ],
+    });
+    const { unmount } = renderPage(() => Promise.resolve(withNotes(OrderInvoiceStatus.Stamped)));
+
+    const notes = await screen.findByRole('region', { name: 'Notas de crédito (1)' });
+    const row = within(notes).getByRole('row', { name: /NC-1/ });
+    // The status under the folio is the phone's; its column, the tablet's (CSS shows one of the two).
+    expect(row).toHaveTextContent('NC-1TimbradaORD-000001Timbrada$20.00');
+    expect(within(row).getByRole('link', { name: 'ORD-000001' })).toHaveAttribute('href', '/orders?search=ORD-000001');
+    expect(screen.getByText(/^Para cancelarla, cancela primero sus notas de crédito vigentes \(NC-1\)/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancelar factura global' })).not.toBeInTheDocument();
+    unmount();
+
+    // One the PAC is still stamping, or whose cancellation the SAT is processing, has to finish first.
+    for (const status of [OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Cancelling]) {
+      const { unmount: close } = renderPage(() => Promise.resolve(withNotes(status)));
+      expect(await screen.findByText(/^Para cancelarla, espera a que sus notas de crédito \(NC-1\) terminen de timbrarse o de cancelarse/))
+        .toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Cancelar factura global' })).not.toBeInTheDocument();
+      close();
+    }
+
+    // A stamped one is cancelled in its order, and the others finish first.
+    const { unmount: closeBoth } = renderPage(() => Promise.resolve(invoice({
+      orders: [
+        { orderId: 'o-1', orderNumber: 'ORD-000001', total: 200, creditNotes: [{ ...note, status: OrderInvoiceStatus.Stamped }] },
+        {
+          orderId: 'o-2', orderNumber: 'ORD-000002', total: 100,
+          creditNotes: [{ ...note, id: 'nc-2', number: 'NC-2', status: OrderInvoiceStatus.Stamping }],
+        },
+      ],
+    })));
+    expect(await screen.findByText(
+      /^Para cancelarla, cancela primero sus notas de crédito vigentes \(NC-1\) en el pedido de cada venta, y espera a que las demás \(NC-2\) terminen/,
+    )).toBeInTheDocument();
+    closeBoth();
+
+    // Once its credit notes are cancelled or refused, it is cancelled from here.
+    for (const status of [OrderInvoiceStatus.Cancelled, OrderInvoiceStatus.Refused]) {
+      const { unmount: close } = renderPage(() => Promise.resolve(withNotes(status)));
+      expect(await screen.findByRole('button', { name: 'Cancelar factura global' })).toBeInTheDocument();
+      expect(screen.queryByText(/^Para cancelarla/)).not.toBeInTheDocument();
+      close();
+    }
   });
 
   it('downloads its XML with the session', async () => {

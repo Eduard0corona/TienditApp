@@ -166,11 +166,14 @@ public static class GlobalInvoiceDrafts
     public const string NotPaidReason = "No está pagada por completo: entra en la factura global del periodo en que se termine de pagar.";
     public const string CreditReason =
         "Se vendió a crédito (fiado): el SAT pide reflejar las ventas en parcialidades en una factura global aparte, que TienditApp todavía no genera.";
-    // The global invoice does not take a sale with adjustments: its credit note would have to relate to the global (outside
-    // Fase 28D). With the customer's fiscal data it is invoiced on its own in Pedidos, where each adjustment gets its note.
-    public const string RefundedReason =
-        "Tiene reembolsos: la factura global no la toma. Si el cliente te da sus datos fiscales, factúrala en Pedidos (cada " +
-        "reembolso lleva su nota de crédito); si no, consulta con tu contador.";
+    // A sale given back in part goes in for its total, and each refund takes its credit note of the global invoice (Fase
+    // 28I); one given back whole has nothing to invoice, and one with a refund without a form of the SAT's would keep that
+    // refund without its credit note. A write-off forgives what was never paid: the sale is not paid in full, and its credit
+    // note of a global invoice is outside Fase 28I.
+    public const string FullyRefundedReason = "Se devolvió completa: no hay nada que facturar.";
+    public const string RefundWithoutFormReason =
+        "Tiene un reembolso registrado como «Otro» o devuelto como saldo a favor, que no lleva nota de crédito: la factura " +
+        "global no la toma. Consulta con tu contador cómo facturarla.";
     public const string WrittenOffReason =
         "Se condonó parte de ella: la factura global no la toma. Si el cliente te da sus datos fiscales, factúrala en Pedidos " +
         "(lo condonado lleva su nota de crédito); si no, consulta con tu contador.";
@@ -183,9 +186,16 @@ public static class GlobalInvoiceDrafts
         ? "Incluye 1 venta de un periodo anterior que no entró en su factura global: se aceptó o se cerró, o se resolvió su factura o su reembolso, después de timbrarla."
         : $"Incluye {count} ventas de periodos anteriores que no entraron en su factura global: se aceptaron o se cerraron, o se resolvió su factura o su reembolso, después de timbrarla.";
 
-    public static string CoveredRefundsWarning(int count) => count == 1
-        ? "Incluye 1 venta con devoluciones que ya estaba en una factura global cancelada: va por su total, como la primera; la devolución requiere una nota de crédito."
-        : $"Incluye {count} ventas con devoluciones que ya estaban en una factura global cancelada: van por su total, como la primera; las devoluciones requieren una nota de crédito.";
+    public static string RefundsWarning(int count) => count == 1
+        ? "Incluye 1 venta con devoluciones: va por su total, y TienditApp emite la nota de crédito de cada devolución, al público en general, en cuanto quede timbrada."
+        : $"Incluye {count} ventas con devoluciones: van por su total, y TienditApp emite la nota de crédito de cada devolución, al público en general, en cuanto quede timbrada.";
+    // Only a sale a cancelled global invoice covered goes in with these refunds: it is issued again as it was then.
+    public static string CoveredRefundWithoutFormWarning(int count) => count == 1
+        ? "Incluye 1 venta que ya estaba en una factura global cancelada y tiene un reembolso registrado como «Otro» o devuelto como saldo a favor: va por su total, como la primera, y ese reembolso no lleva nota de crédito. Consulta con tu contador cómo reflejarlo."
+        : $"Incluye {count} ventas que ya estaban en una factura global cancelada y tienen un reembolso registrado como «Otro» o devuelto como saldo a favor: van por su total, como la primera, y esos reembolsos no llevan nota de crédito. Consulta con tu contador cómo reflejarlos.";
+    public static string CoveredRefundInCourseWarning(int count) => count == 1
+        ? "Incluye 1 venta que ya estaba en una factura global cancelada y tiene un reembolso en curso en Mercado Pago: va por su total, como la primera, y TienditApp emite la nota de crédito de ese reembolso cuando Mercado Pago lo confirme."
+        : $"Incluye {count} ventas que ya estaban en una factura global cancelada y tienen un reembolso en curso en Mercado Pago: van por su total, como la primera, y TienditApp emite la nota de crédito de cada uno cuando Mercado Pago lo confirme.";
     public const string AmountsReason = "Sus importes no cuadran con lo que cobró: revisa su vista previa del CFDI en Pedidos.";
 
     private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-MX");
@@ -319,7 +329,9 @@ public static class GlobalInvoiceDrafts
         var refunding = refundsInCourse.ToHashSet();
 
         var included = new List<(Guid Id, DateTimeOffset PaidAt, bool Late)>();
-        var coveredWithRefunds = 0;
+        var withRefunds = 0;
+        var coveredWithoutForm = 0;
+        var coveredRefunding = 0;
         // The earlier periods' first, in the order they were paid.
         foreach (var (candidate, isLate) in late.Select(c => (c, true)).Concat(candidates.Select(c => (c, false))))
         {
@@ -332,15 +344,22 @@ public static class GlobalInvoiceDrafts
                 : candidate.WrittenOffAmount > 0 ? WrittenOffReason
                 : candidate.Total - candidate.PaidAmount > 0 ? NotPaidReason
                 : candidate.SoldOnCredit ? CreditReason
-                : candidate.RefundedAmount > 0 && !covered ? RefundedReason
+                : candidate.RefundedAmount >= candidate.Total && !covered ? FullyRefundedReason
+                : candidate.RefundedWithoutForm && !covered ? RefundWithoutFormReason
                 : refunding.Contains(candidate.Id) && !covered ? RefundInCourseReason
                 : string.Empty;
             // A sale without amount is not invoiced, nor listed; one of an earlier period, only when it goes in: why it does
             // not was said in its own period's preview.
             if (reason is null || (isLate && reason.Length > 0))
                 continue;
-            if (reason.Length == 0 && covered && (candidate.RefundedAmount > 0 || refunding.Contains(candidate.Id)))
-                coveredWithRefunds++;
+            // Which refunds of the sales that go in take their credit note, and when: a refund without a form of the SAT's never
+            // does, and one in course in Mercado Pago, once it is confirmed (only a sale a cancelled global covered gets here).
+            if (reason.Length == 0 && candidate.RefundedWithoutForm)
+                coveredWithoutForm++;
+            else if (reason.Length == 0 && refunding.Contains(candidate.Id))
+                coveredRefunding++;
+            else if (reason.Length == 0 && candidate.RefundedAmount > 0)
+                withRefunds++;
             if (reason.Length == 0)
                 included.Add((candidate.Id, candidate.PaidAt, isLate));
             else
@@ -441,8 +460,12 @@ public static class GlobalInvoiceDrafts
         }
         if (lateSales > 0)
             dto.Warnings.Add(LateSalesWarning(lateSales));
-        if (coveredWithRefunds > 0)
-            dto.Warnings.Add(CoveredRefundsWarning(coveredWithRefunds));
+        if (withRefunds > 0)
+            dto.Warnings.Add(RefundsWarning(withRefunds));
+        if (coveredWithoutForm > 0)
+            dto.Warnings.Add(CoveredRefundWithoutFormWarning(coveredWithoutForm));
+        if (coveredRefunding > 0)
+            dto.Warnings.Add(CoveredRefundInCourseWarning(coveredRefunding));
         if (platformSales > 0)
         {
             dto.Warnings.Add(platformSales == 1
@@ -477,6 +500,8 @@ public static class GlobalInvoiceDrafts
         public decimal Total { get; init; }
         public decimal PaidAmount { get; init; }
         public decimal RefundedAmount { get; init; }
+        /// <summary>A refund of it has no form of the SAT's («Otro» or the customer's balance): it never gets a credit note.</summary>
+        public bool RefundedWithoutForm { get; init; }
         public decimal WrittenOffAmount { get; init; }
         public bool SoldOnCredit { get; init; }
         public OrderStatus Status { get; init; }
@@ -496,6 +521,7 @@ public static class GlobalInvoiceDrafts
                 Total = o.Total,
                 PaidAmount = o.PaidAmount,
                 RefundedAmount = o.RefundedAmount,
+                RefundedWithoutForm = o.Refunds.Any(r => r.Method == OrderPaymentMethod.Other || r.Method == OrderPaymentMethod.CustomerBalance),
                 WrittenOffAmount = o.WrittenOffAmount,
                 SoldOnCredit = o.SoldOnCredit,
                 Status = o.Status,

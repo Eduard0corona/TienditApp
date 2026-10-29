@@ -56,9 +56,10 @@ function liveRelated(invoicing: OrderInvoicing): Record<string, string[]> {
   for (const payment of invoicing.payments)
     for (const complement of payment.complements)
       if (LIVE.includes(complement.status)) add(complement.orderInvoiceId, complement.number);
+  // A global invoice's credit notes hold that one, not the order's invoices (Fase 28I).
   for (const adjustment of invoicing.adjustments)
     for (const note of adjustment.creditNotes)
-      if (LIVE.includes(note.status)) add(note.orderInvoiceId, note.number);
+      if (LIVE.includes(note.status) && note.orderInvoiceId != null) add(note.orderInvoiceId, note.number);
   for (const invoice of invoicing.invoices)
     if (invoice.replacedByInvoiceId && LIVE.includes(invoice.status)) add(invoice.replacedByInvoiceId, invoice.number);
   return related;
@@ -291,14 +292,18 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             invoices={invoicing.invoices}
             canCancel={canCancel}
             proposedEmail={invoicing.proposedEmail}
+            globalInvoiceNumber={invoicing.globalInvoiceNumber}
           />
         )}
 
         {orderCancelled && invoicing && (
           <p className="text-muted small mb-0">
-            {invoicing.invoices.length === 0
-              ? 'Este pedido está cancelado y no tiene facturas.'
-              : 'El pedido está cancelado: si una de sus facturas sigue timbrada, cancélala ante el SAT con el motivo 03 (la venta no se llevó a cabo).'}
+            {invoicing.globalInvoiceNumber
+              ? `El pedido está cancelado y la factura global ${invoicing.globalInvoiceNumber} lo ampara: la global no se cancela `
+                + 'por una de sus ventas, y cada reembolso lleva su nota de crédito de esa global.'
+              : invoicing.invoices.length === 0
+                ? 'Este pedido está cancelado y no tiene facturas.'
+                : 'El pedido está cancelado: si una de sus facturas sigue timbrada, cancélala ante el SAT con el motivo 03 (la venta no se llevó a cabo).'}
           </p>
         )}
         {!orderCancelled && (
