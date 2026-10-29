@@ -7,6 +7,7 @@ import {
   downloadPaymentComplementFile,
   isGlobalInvoiceWaiting,
   isOrderInvoicingWaiting,
+  isWaiting,
   mayPrintSelfInvoice,
   type GlobalInvoiceDetail,
   type OrderInvoicing,
@@ -133,6 +134,26 @@ describe('isOrderInvoicingWaiting', () => {
 
     expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(true)], payments: [], adjustments: [] })).toBe(true);
     expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(false)], payments: [], adjustments: [] })).toBe(false);
+  });
+});
+
+describe('isWaiting', () => {
+  const now = Date.parse('2026-10-29T18:00:00Z');
+
+  it('reads again a CFDI being stamped within the PAC\'s window, and one waiting for the SAT to cancel it', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    expect(isWaiting({ status: OrderInvoiceStatus.Stamping, stampWindowEndsAt: '2026-10-29T18:01:00Z' })).toBe(true);
+    // An API that does not say its window yet: as before, until it is stamped or refused.
+    expect(isWaiting({ status: OrderInvoiceStatus.Stamping, stampWindowEndsAt: null })).toBe(true);
+    expect(isWaiting({ status: OrderInvoiceStatus.Cancelling, stampWindowEndsAt: null })).toBe(true);
+    vi.restoreAllMocks();
+  });
+
+  it('stops reading again one stuck past the window: only a person resolves it (Fase 28K)', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    expect(isWaiting({ status: OrderInvoiceStatus.Stamping, stampWindowEndsAt: '2026-10-29T17:59:00Z' })).toBe(false);
+    expect(isWaiting({ status: OrderInvoiceStatus.Stamped, stampWindowEndsAt: null })).toBe(false);
+    vi.restoreAllMocks();
   });
 });
 

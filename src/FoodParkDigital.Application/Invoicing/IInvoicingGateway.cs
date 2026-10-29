@@ -29,7 +29,8 @@ public interface IInvoicingGateway
 
     /// <summary>
     /// The CFDI the PAC stamped for the platform with that folio fiscal, or null when it has none (Fase 28K): how a stamp a
-    /// person found in the SAT's portal is brought back, once the key no longer gives it back.
+    /// person found in the SAT's portal is brought back, once the key no longer gives it back. One the SAT has cancelled is
+    /// refused (<see cref="InvoicingGatewayRefusedException"/>).
     /// </summary>
     Task<StampedCfdi?> FindStampedAsync(string uuid, CancellationToken cancellationToken);
 

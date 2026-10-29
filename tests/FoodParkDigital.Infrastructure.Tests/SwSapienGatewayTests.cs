@@ -360,6 +360,23 @@ public class SwSapienGatewayTests
     }
 
     [Fact]
+    public async Task FindStamped_OfAFolioFiscalTheSatHasCancelled_ShouldRefuseIt_WithoutReadingItsXml()
+    {
+        var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/v2/security/authenticate" => Login(),
+            "/datawarehouse/v1/live/" + Uuid => Json(HttpStatusCode.OK,
+                """{"data":{"records":[{"status":"Cancelado","urlXml":"https://swstorage.s3.amazonaws.com/xml/f-7.xml?signature=abc"}]},"status":"success"}"""),
+            _ => throw new InvalidOperationException(request.RequestUri!.ToString())
+        });
+
+        var refused = await Assert.ThrowsAsync<InvoicingGatewayRefusedException>(() => gateway.FindStampedAsync(Uuid, CancellationToken.None));
+
+        Assert.Contains("cancelado", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(http.Requests, request => request.Url.Contains("/xml/", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Stamp_OfTheSameCfdiAgain_ShouldGiveBackTheStampItAlreadyHad()
     {
         var (gateway, _) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"

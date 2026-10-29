@@ -261,6 +261,12 @@ public class OrderInvoicingFlowTests
         var toReview = Assert.Single(await book.ToReviewAsync());
         Assert.Equal((IssuedCfdiKind.OrderInvoice, issued.Value.Id, issued.Value.Number, (Guid?)order.Id, OrderInvoiceStatus.Stamping),
             (toReview.Kind, toReview.Id, toReview.Number, toReview.OrderId, toReview.Status));
+        var notStampedFrom = SalesTestFixture.Now + StampPendingInvoicesCommandHandler.RetryWindow + StuckStamps.SatReceptionWindow;
+        Assert.Equal((issued.Value.StampWindowEndsAt, (DateTimeOffset?)notStampedFrom), (toReview.StampWindowEndsAt, toReview.NotStampedFrom));
+        // A stamp of its last request may not show in the SAT's portal yet: not finding it there says nothing until then.
+        Assert.Equal(StuckStamps.SatMayNotShowItYetMessage, (await book.ConfirmNotStampedAsync(issued.Value.Id)).Error);
+        book.Clock.UtcNow = notStampedFrom;
+        Assert.True((await book.ConfirmNotStampedAsync(issued.Value.Id)).IsSuccess);
     }
 
     [Fact]
@@ -298,7 +304,7 @@ public class OrderInvoicingFlowTests
     }
 
     [Fact]
-    public async Task StuckInvoice_NotStamped_ShouldBeRefusedWithWhoCheckedIt_AndTheOrderInvoicedAgain()
+    public async Task StuckInvoice_NotStamped_ShouldBeRefused_WithWhoCheckedItInTheAudit_AndTheOrderInvoicedAgain()
     {
         await using var book = await Book.OpenAsync();
         var order = await book.PaidOrderAsync();
@@ -311,8 +317,10 @@ public class OrderInvoicingFlowTests
         var refused = await book.ConfirmNotStampedAsync(issued.Value.Id);
 
         Assert.True(refused.IsSuccess, refused.Error);
-        Assert.Equal((OrderInvoiceStatus.Refused, StuckStamps.NotStampedReason("Dueña Rosa")),
-            (refused.Value.Status, refused.Value.FailureMessage));
+        // Who checked it goes to the audit, not to what the whole team reads.
+        Assert.Equal((OrderInvoiceStatus.Refused, StuckStamps.NotStampedReason), (refused.Value.Status, refused.Value.FailureMessage));
+        var audit = Assert.Single(book.Context.AuditLogs.AsNoTracking().Where(a => a.Action == "CfdiNotStampedConfirmed"));
+        Assert.Equal((nameof(OrderInvoice), issued.Value.Id.ToString(), "Dueña Rosa"), (audit.EntityName, audit.EntityId, audit.PerformedBy));
         Assert.Empty(await book.ToReviewAsync());
         Assert.Empty(book.Gateway.Lookups);
         Assert.Equal(StuckStamps.NotStuckMessage, (await book.ConfirmStampedAsync(issued.Value.Id, Guid.NewGuid().ToString())).Error);
@@ -727,7 +735,8 @@ public class OrderInvoicingFlowTests
             => new GetCfdisToReviewQueryHandler(Context, Clock).Handle(new GetCfdisToReviewQuery(), CancellationToken.None);
 
         public Task<Result<IssuedCfdiDto>> ConfirmStampedAsync(Guid invoiceId, string uuid)
-            => new ConfirmStuckCfdiStampedCommandHandler(Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
+            => new ConfirmStuckCfdiStampedCommandHandler(
+                    Context, Gateway, Storage, Fixture.CurrentUser, Clock, NullLogger<OrderInvoiceStamper>.Instance)
                 .Handle(new ConfirmStuckCfdiStampedCommand(IssuedCfdiKind.OrderInvoice, invoiceId, uuid), CancellationToken.None);
 
         public Task<Result<IssuedCfdiDto>> ConfirmNotStampedAsync(Guid invoiceId)

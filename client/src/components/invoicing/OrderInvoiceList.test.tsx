@@ -34,7 +34,7 @@ describe('OrderInvoiceList', () => {
   it('stops offering to ask the PAC again past its window, and says where it is checked instead (Fase 28K)', () => {
     const stuck: Invoice = {
       ...F7, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, hasXml: false, hasPdf: false,
-      stampWindowEndsAt: '2020-01-04T17:00:00Z', failureMessage: 'El PAC no responde.',
+      stampWindowEndsAt: '2020-01-04T17:00:00Z', failureMessage: null,
     };
     const waiting: Invoice = { ...stuck, id: 'inv-8', number: 'F-8', stampWindowEndsAt: '2999-01-01T00:00:00Z' };
     const view = (canCancel: boolean) => (

@@ -91,17 +91,20 @@ export const CFDI_EMITIDOS_ROUTES = asOption(issuedCfdiRoutes);
 
 /**
  * Two CFDI stayed «Timbrando» past the PAC's window, the oldest first: September's invoice of an order, asked for while the
- * PAC did not answer, and a payment complement of two days later.
+ * PAC did not answer, and a payment complement of two days later. The SAT already shows whatever was stamped for the
+ * invoice («No se timbró» is offered); for the complement, it says from when.
  */
 const porRevisar: PrepareData = (data) => {
   data.cfdisToReview = [
     cfdi(INVOICE, 'F-52', '2026-09-28T17:40:00Z', {
       status: STAMPING, uuid: null, stampedAt: null, hasXml: false, total: 980, orderNumber: 'ORD-000219',
-      receiverRfc: 'GAL1203157T2', receiverName: 'GRUPO ALTAVISTA', failureMessage: 'El PAC no responde.',
+      receiverRfc: 'GAL1203157T2', receiverName: 'GRUPO ALTAVISTA',
+      stampWindowEndsAt: '2026-10-01T16:40:00Z', notStampedFrom: '2026-10-04T16:40:00Z',
     }),
     cfdi(COMPLEMENT, 'P-2', '2026-09-30T16:10:00Z', {
       status: STAMPING, uuid: null, stampedAt: null, hasXml: false, total: null, paidAmount: 250, paymentForm: '03',
-      relatedNumber: 'F-49', orderNumber: 'ORD-000204', failureMessage: 'El PAC no responde.',
+      relatedNumber: 'F-49', orderNumber: 'ORD-000204',
+      stampWindowEndsAt: '2026-10-03T15:10:00Z', notStampedFrom: '2026-10-06T15:10:00Z',
     }),
   ];
 };

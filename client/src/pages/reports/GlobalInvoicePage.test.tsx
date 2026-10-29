@@ -154,6 +154,26 @@ describe('GlobalInvoicePage', () => {
     )).toBeInTheDocument();
     closeBoth();
 
+    // One stuck past the PAC's window does not finish on its own: it is checked in the SAT's portal (Fase 28K).
+    const { unmount: closeStuck } = renderPage(() => Promise.resolve(invoice({
+      orders: [
+        {
+          orderId: 'o-1', orderNumber: 'ORD-000001', total: 200,
+          creditNotes: [{ ...note, status: OrderInvoiceStatus.Stamping, stampWindowEndsAt: '2020-01-04T17:00:00Z' }],
+        },
+        {
+          orderId: 'o-2', orderNumber: 'ORD-000002', total: 100,
+          creditNotes: [{ ...note, id: 'nc-2', number: 'NC-2', status: OrderInvoiceStatus.Cancelling }],
+        },
+      ],
+    })));
+    expect(await screen.findByText(
+      'Para cancelarla, espera a que sus notas de crédito (NC-2) terminen de timbrarse o de cancelarse, revisa en el portal del SAT si '
+      + 'se timbraron las que se quedaron timbrando (NC-1) y dilo en CFDI emitidos, y cancela en su pedido las que queden vigentes: el '
+      + 'SAT no cancela una factura mientras tenga notas de crédito relacionadas.',
+    )).toBeInTheDocument();
+    closeStuck();
+
     // Once its credit notes are cancelled or refused, it is cancelled from here.
     for (const status of [OrderInvoiceStatus.Cancelled, OrderInvoiceStatus.Refused]) {
       const { unmount: close } = renderPage(() => Promise.resolve(withNotes(status)));

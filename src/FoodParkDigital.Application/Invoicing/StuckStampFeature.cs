@@ -1,9 +1,11 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
@@ -31,6 +33,15 @@ public static class StuckStamps
     public const string UuidMessage = "Escribe el folio fiscal (UUID) completo, como aparece en el portal del SAT.";
     public const string UuidNotFoundMessage =
         "El PAC de TienditApp no tiene ese folio fiscal: revisa que lo copiaste completo.";
+    public const string SatMayNotShowItYetMessage =
+        "El SAT tarda hasta 72 horas en mostrar un CFDI timbrado: di que no se timbró cuando pasen, si para entonces no aparece en su portal.";
+    public const string NotStampedReason = "No se timbró: se revisó en el portal del SAT.";
+
+    /// <summary>
+    /// How long the SAT may take to show a CFDI the PAC stamped (as <see cref="OrderInvoiceSubstitutions.CancellationRetryWindow"/>):
+    /// a stamp made in TienditApp's last request shows in the SAT's portal by then.
+    /// </summary>
+    public static readonly TimeSpan SatReceptionWindow = TimeSpan.FromHours(72);
 
     /// <summary>The folio fiscal of a stamp a person found: 32 hexadecimal digits in groups of 8, 4, 4, 4 and 12.</summary>
     public static readonly Regex UuidPattern = new(
@@ -39,11 +50,15 @@ public static class StuckStamps
     public static string OtherCfdiMessage(string number)
         => $"Ese folio fiscal es de otro comprobante, no de {number}: revisa su serie y folio en el portal del SAT.";
 
-    public static string NotStampedReason(string person) => $"No se timbró: lo revisó {person} en el portal del SAT.";
-
     /// <summary>Until when TienditApp asks the PAC for the CFDI's stamp by itself.</summary>
     public static DateTimeOffset WindowEndsAt(DateTimeOffset requestedAt)
         => requestedAt + StampPendingInvoicesCommandHandler.RetryWindow;
+
+    /// <summary>
+    /// From when a person may say a stuck CFDI was not stamped: any stamp of its requests shows in the SAT's portal by then,
+    /// so not finding it there means there is none.
+    /// </summary>
+    public static DateTimeOffset NotStampedFrom(DateTimeOffset requestedAt) => WindowEndsAt(requestedAt) + SatReceptionWindow;
 
     /// <summary>A CFDI still «Timbrando» whose stamp the PAC no longer gives back: a person checks it in the SAT's portal.</summary>
     public static bool IsStuck(OrderInvoiceStatus status, DateTimeOffset requestedAt, DateTimeOffset now)
@@ -51,7 +66,8 @@ public static class StuckStamps
 
     /// <summary>
     /// What tells the stamped XML apart from the CFDI TienditApp asked for, or null when it is the same one: its serie and
-    /// folio, its type, its total, and the RFC of its issuer and of its receiver.
+    /// folio, its date (to the second it was asked for: two businesses of the same RFC have their own folios), its type, its
+    /// total, and the RFC of its issuer and of its receiver.
     /// </summary>
     public static string? Mismatch(CfdiDocument document, string stampedXml)
     {
@@ -77,6 +93,8 @@ public static class StuckStamps
             return "Serie";
         if (Attribute(root, "Folio") != document.Folio)
             return "Folio";
+        if (Attribute(root, "Fecha") != document.Date)
+            return "Fecha";
         if (Attribute(root, "TipoDeComprobante") != document.VoucherType)
             return "TipoDeComprobante";
         if (total != document.Total)
@@ -149,22 +167,27 @@ public class ConfirmStuckCfdiStampedCommandHandler : IRequestHandler<ConfirmStuc
 {
     private readonly IApplicationDbContext _context;
     private readonly IInvoicingGateway _gateway;
+    private readonly ICurrentUserService _currentUser;
     private readonly IDateTimeProvider _clock;
     private readonly OrderInvoiceStamper _stamper;
+    private readonly ReplacedInvoiceCanceller _canceller;
     private readonly ILogger<OrderInvoiceStamper> _logger;
 
     public ConfirmStuckCfdiStampedCommandHandler(
         IApplicationDbContext context,
         IInvoicingGateway gateway,
         IPrivateFileStorage storage,
+        ICurrentUserService currentUser,
         IDateTimeProvider clock,
         ILogger<OrderInvoiceStamper> logger)
     {
         _context = context;
         _gateway = gateway;
+        _currentUser = currentUser;
         _clock = clock;
         _logger = logger;
         _stamper = new OrderInvoiceStamper(context, gateway, storage, clock, logger);
+        _canceller = new ReplacedInvoiceCanceller(context, gateway, clock);
     }
 
     public async Task<Result<IssuedCfdiDto>> Handle(ConfirmStuckCfdiStampedCommand request, CancellationToken cancellationToken)
@@ -197,7 +220,7 @@ public class ConfirmStuckCfdiStampedCommandHandler : IRequestHandler<ConfirmStuc
         {
             stamped = await _gateway.FindStampedAsync(uuid, cancellationToken);
         }
-        catch (InvoicingGatewayUnavailableException ex)
+        catch (Exception ex) when (ex is InvoicingGatewayUnavailableException or InvoicingGatewayRefusedException)
         {
             return Result.Failure<IssuedCfdiDto>(ex.Message);
         }
@@ -209,9 +232,33 @@ public class ConfirmStuckCfdiStampedCommandHandler : IRequestHandler<ConfirmStuc
             return Result.Failure<IssuedCfdiDto>(StuckStamps.OtherCfdiMessage(invoice.Number));
         }
 
-        _logger.LogInformation("A person brought back from the SAT's portal the stamp of CFDI {CfdiId}", invoice.Id);
         invoice = await _stamper.KeepStampAsync(invoices, invoice, stamped, cancellationToken);
+        // Someone else said meanwhile that it was not stamped: what they wrote stands, and this person is told.
+        if (invoice.Status != OrderInvoiceStatus.Stamped || invoice.Uuid != stamped.Uuid)
+            return Result.Failure<IssuedCfdiDto>(StuckStamps.NotStuckMessage);
+
+        _logger.LogInformation("A person brought back from the SAT's portal the stamp of CFDI {CfdiId}", invoice.Id);
+        await StuckCfdis.AuditAsync(_context, _currentUser, invoice, "CfdiStampConfirmed", cancellationToken);
+        if (invoice is OrderInvoice replacement)
+            await CancelReplacedAsync(replacement, cancellationToken);
         return Result.Success(await StuckCfdis.DtoAsync(_context, request.Kind, invoice, cancellationToken));
+    }
+
+    /// <summary>
+    /// A replacement (Fase 28G) stamped this way goes on to the cancellation (01) of the invoice it replaces, as when its
+    /// stamp is asked for again: its stamp is older than the 72 hours the worker keeps asking for it.
+    /// </summary>
+    private async Task CancelReplacedAsync(OrderInvoice replacement, CancellationToken cancellationToken)
+    {
+        var replacedId = await _context.OrderInvoices.AsNoTracking()
+            .Where(i => i.ReplacedByInvoiceId == replacement.Id && i.Status == OrderInvoiceStatus.Stamped)
+            .Select(i => (Guid?)i.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (replacedId is null)
+            return;
+        // When the SAT does not take it, the replaced one keeps the reason and «Cancelar con relación» asks again.
+        var userId = Guid.TryParse(_currentUser.UserId, out var current) ? current : replacement.RequestedByUserId;
+        await _canceller.CancelAsync(replacedId.Value, userId, _currentUser.UserName ?? "invoicing", cancellationToken);
     }
 }
 
@@ -269,12 +316,20 @@ public class ConfirmStuckCfdiNotStampedCommandHandler : IRequestHandler<ConfirmS
     {
         var invoice = await invoices.FirstOrDefaultAsync(i => i.Id == request.CfdiId, cancellationToken)
             ?? throw new EntityNotFoundException(typeof(TInvoice).Name, request.CfdiId);
-        if (StuckCfdis.Refusal(invoice, _clock.UtcNow) is { } refusal)
+        var now = _clock.UtcNow;
+        if (StuckCfdis.Refusal(invoice, now) is { } refusal)
             return Result.Failure<IssuedCfdiDto>(refusal);
+        // Not finding it in the SAT's portal says nothing until the SAT shows any stamp the PAC made.
+        if (now < StuckStamps.NotStampedFrom(invoice.RequestedAt))
+            return Result.Failure<IssuedCfdiDto>(StuckStamps.SatMayNotShowItYetMessage);
+
+        invoice = await _stamper.RefuseAsync(invoices, invoice, StuckStamps.NotStampedReason, cancellationToken);
+        // Someone else brought its stamp back meanwhile: that stands, and this person is told.
+        if (invoice.Status != OrderInvoiceStatus.Refused || invoice.FailureMessage != StuckStamps.NotStampedReason)
+            return Result.Failure<IssuedCfdiDto>(StuckStamps.NotStuckMessage);
 
         _logger.LogInformation("A person checked in the SAT's portal that CFDI {CfdiId} was not stamped", invoice.Id);
-        var person = string.IsNullOrWhiteSpace(_currentUser.UserName) ? "una persona" : _currentUser.UserName.Trim();
-        invoice = await _stamper.RefuseAsync(invoices, invoice, StuckStamps.NotStampedReason(person), cancellationToken);
+        await StuckCfdis.AuditAsync(_context, _currentUser, invoice, "CfdiNotStampedConfirmed", cancellationToken);
         return Result.Success(await StuckCfdis.DtoAsync(_context, request.Kind, invoice, cancellationToken));
     }
 }
@@ -286,6 +341,20 @@ internal static class StuckCfdis
         => invoice.Status != OrderInvoiceStatus.Stamping ? StuckStamps.NotStuckMessage
             : !StuckStamps.IsStuck(invoice.Status, invoice.RequestedAt, now) ? StuckStamps.InWindowMessage
             : null;
+
+    /// <summary>Who resolved it and how: a fiscal decision a person made, kept in the business's audit.</summary>
+    public static async Task AuditAsync(
+        IApplicationDbContext context, ICurrentUserService currentUser, Cfdi invoice, string action, CancellationToken cancellationToken)
+    {
+        context.AuditLogs.Add(new AuditLog(
+            tenantId: invoice.TenantId,
+            entityName: invoice.GetType().Name,
+            entityId: invoice.Id.ToString(),
+            action: action,
+            performedBy: currentUser.UserName ?? "system",
+            metadata: JsonSerializer.Serialize(new { invoice.Number, invoice.Uuid })));
+        await context.SaveChangesAsync(cancellationToken);
+    }
 
     /// <summary>The CFDI as Reportes › CFDI emitidos shows it, after it was resolved.</summary>
     public static async Task<IssuedCfdiDto> DtoAsync(

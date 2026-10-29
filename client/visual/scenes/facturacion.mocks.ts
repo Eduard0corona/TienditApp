@@ -138,7 +138,6 @@ export const PEDIDO_TIMBRANDO_SIN_TIMBRE = asOption(orderInvoicing((data) => ({
   invoices: [
     invoice(data, 3, {
       status: STAMPING, requestedAt: minutesFromNow(-4 * 24 * 60), stampWindowEndsAt: minutesFromNow(-4 * 24 * 60 + 71 * 60),
-      failureMessage: 'El PAC no responde. TienditApp lo vuelve a intentar en unos minutos.',
     }),
   ],
 })));

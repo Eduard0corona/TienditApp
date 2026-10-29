@@ -247,6 +247,28 @@ public class InvoiceSubstitutionFlowTests
     }
 
     [Fact]
+    public async Task StuckReplacement_FoundStampedInTheSatsPortal_ShouldCancelTheOldOneWith01()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.PaidOrderAsync();
+        var original = (await book.IssueAsync(sale.Id, Wrong)).Value;
+        // The PAC stamped the replacement, but its answer never arrived, and the worker stopped asking at 71 hours.
+        book.Gateway.LoseNextAnswer = true;
+        var stuck = (await book.SubstituteAsync(original.Id, Right)).Value;
+        var made = book.Gateway.Stamped.Values.Single(s => s.Uuid != original.Uuid);
+        book.Clock.UtcNow += StampPendingInvoicesCommandHandler.RetryWindow + TimeSpan.FromHours(1);
+
+        var confirmed = await book.ConfirmStampedAsync(stuck.Id, made.Uuid);
+
+        Assert.True(confirmed.IsSuccess, confirmed.Error);
+        var old = await book.InvoiceAsync(original.Id);
+        Assert.Equal((OrderInvoiceStatus.Cancelling, CfdiCancellationMotive.ErrorsWithReplacement), (old.Status, old.CancellationMotive));
+        Assert.Equal(book.Fixture.CurrentUser.UserId, old.CancellationRequestedByUserId.ToString());
+        Assert.Equal(made.Uuid, book.Gateway.Replacements[original.Uuid!]);
+        Assert.Contains(book.Gateway.Cancellations, c => c.Uuid == original.Uuid);
+    }
+
+    [Fact]
     public async Task AskingAgainForTheStampOfAReplacementAlreadyStamped_ShouldNotAskTheSatToCancelTheOldOne()
     {
         await using var book = await Book.OpenAsync();
@@ -498,6 +520,11 @@ public class InvoiceSubstitutionFlowTests
         public Task<Result<OrderInvoiceDto>> RetryAsync(Guid invoiceId)
             => new RetryOrderInvoiceCommandHandler(Context, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
                 .Handle(new RetryOrderInvoiceCommand(invoiceId), CancellationToken.None);
+
+        public Task<Result<IssuedCfdiDto>> ConfirmStampedAsync(Guid invoiceId, string uuid)
+            => new ConfirmStuckCfdiStampedCommandHandler(
+                    Context, Gateway, Storage, Fixture.CurrentUser, Clock, NullLogger<OrderInvoiceStamper>.Instance)
+                .Handle(new ConfirmStuckCfdiStampedCommand(IssuedCfdiKind.OrderInvoice, invoiceId, uuid), CancellationToken.None);
 
         public Task<Result<OrderInvoiceDto>> CancelReplacedAsync(Guid invoiceId)
             => new CancelReplacedOrderInvoiceCommandHandler(Context, Fixture.CurrentUser, Gateway, Clock)

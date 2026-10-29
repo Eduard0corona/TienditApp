@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OrderInvoiceStatus } from '../types';
-import { CFDI_REGIMES, cfdiUsesFor, invoiceStatusChip, invoiceStatusLabel, isStuckStamping } from './cfdi';
+import { CFDI_REGIMES, cfdiUsesFor, invoiceStatusChip, invoiceStatusLabel, isStuckStamping, isTooSoonForNotStamped } from './cfdi';
 
 describe('invoice status', () => {
   it('names every status the API sends, with the chip of a status (never the accent)', () => {
@@ -19,6 +19,13 @@ describe('stamping past the PAC\'s window (Fase 28K)', () => {
     // An API before the phase sends no window: what it does not say is not assumed.
     expect(isStuckStamping({ status: OrderInvoiceStatus.Stamping }, now)).toBe(false);
     expect(isStuckStamping({ status: OrderInvoiceStatus.Stamped, stampWindowEndsAt: '2026-10-20T00:00:00Z' }, now)).toBe(false);
+  });
+
+  it('waits to say it was not stamped until the SAT shows whatever was stamped, from when the API says', () => {
+    expect(isTooSoonForNotStamped({ notStampedFrom: '2026-10-26T18:01:00Z' }, now)).toBe(true);
+    expect(isTooSoonForNotStamped({ notStampedFrom: '2026-10-26T18:00:00Z' }, now)).toBe(false);
+    // An API that does not say it: the screen offers it, and the API answers.
+    expect(isTooSoonForNotStamped({ notStampedFrom: null }, now)).toBe(false);
   });
 });
 

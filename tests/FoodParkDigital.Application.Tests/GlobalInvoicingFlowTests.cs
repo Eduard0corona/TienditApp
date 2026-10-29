@@ -213,7 +213,7 @@ public class GlobalInvoicingFlowTests
 
         Assert.Equal(StuckStamps.PastWindowMessage, (await book.RetryAsync(pending.Value.Id)).Error);
         var stamped = await new ConfirmStuckCfdiStampedCommandHandler(
-                book.Context, book.Gateway, book.Storage, book.Clock, NullLogger<OrderInvoiceStamper>.Instance)
+                book.Context, book.Gateway, book.Storage, book.Fixture.CurrentUser, book.Clock, NullLogger<OrderInvoiceStamper>.Instance)
             .Handle(new ConfirmStuckCfdiStampedCommand(IssuedCfdiKind.GlobalInvoice, pending.Value.Id, made.Uuid), CancellationToken.None);
         Assert.Equal((OrderInvoiceStatus.Stamped, made.Uuid), (stamped.Value.Status, stamped.Value.Uuid));
 
@@ -228,6 +228,8 @@ public class GlobalInvoicingFlowTests
         book.Gateway.Unavailable = false;
         book.Clock.UtcNow += StampPendingInvoicesCommandHandler.RetryWindow + TimeSpan.FromHours(1);
         Assert.Equal(GlobalInvoiceDrafts.InGlobalReason(stuck.Value.Number), Assert.Single((await book.DraftAsync(day: day)).LeftOut).Reason);
+        // Once the SAT shows any stamp the PAC made.
+        book.Clock.UtcNow += StuckStamps.SatReceptionWindow;
 
         var refused = await new ConfirmStuckCfdiNotStampedCommandHandler(
                 book.Context, book.Gateway, book.Storage, book.Fixture.CurrentUser, book.Clock, NullLogger<OrderInvoiceStamper>.Instance)

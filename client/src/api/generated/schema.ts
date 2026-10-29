@@ -17016,6 +17016,10 @@ export interface components {
             /** Format: int32 */
             orderCount?: number | null;
             hasXml: boolean;
+            /** Format: date-time */
+            stampWindowEndsAt?: string | null;
+            /** Format: date-time */
+            notStampedFrom?: string | null;
         };
         IssuedCfdiDtoPaginatedList: {
             items: components["schemas"]["IssuedCfdiDto"][];

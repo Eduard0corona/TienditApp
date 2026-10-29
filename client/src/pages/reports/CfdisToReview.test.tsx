@@ -21,9 +21,11 @@ function cfdi(patch: Partial<IssuedCfdi> = {}): IssuedCfdi {
   return {
     id: 'i-1', kind: IssuedCfdiKind.OrderInvoice, number: 'F-12', uuid: null, status: OrderInvoiceStatus.Stamping,
     issuedAt: '2026-10-22T16:30:00Z', stampedAt: null, cancellationMotive: undefined, cancelledAt: null,
-    failureMessage: 'El PAC no responde.', receiverRfc: 'XIQB891116QE4', receiverName: 'KARLA FUENTE NOLASCO', paymentMethod: 'PUE',
+    failureMessage: null, receiverRfc: 'XIQB891116QE4', receiverName: 'KARLA FUENTE NOLASCO', paymentMethod: 'PUE',
     paymentForm: '04', subTotal: 172.41, taxTotal: 27.59, total: 200, paidAmount: null, orderId: 'o-1', orderNumber: 'ORD-000123',
     relatedNumber: null, replacedByNumber: null, periodicity: undefined, periodFrom: null, periodTo: null, orderCount: null, hasXml: false,
+    // Past the window, and past the 72 hours the SAT takes to show what was stamped.
+    stampWindowEndsAt: '2026-10-25T15:30:00Z', notStampedFrom: '2026-10-28T15:30:00Z',
     ...patch,
   };
 }
@@ -48,13 +50,16 @@ function renderSection(toReview: () => Promise<IssuedCfdi[]>, answers: Answers =
     return Promise.reject(new Error(`Sin respuesta para ${method} ${path}`));
   }) as unknown as typeof apiRequest);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <ConfirmProvider>
-        <CfdisToReview />
-      </ConfirmProvider>
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <ConfirmProvider>
+          <CfdisToReview />
+        </ConfirmProvider>
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 describe('CfdisToReview', () => {
@@ -130,8 +135,84 @@ describe('CfdisToReview', () => {
       body: { uuid: UUID.toLowerCase() },
     });
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    // Read again: resolved, it leaves the list.
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Por revisar en el portal del SAT' })).not.toBeInTheDocument());
+    // Read again: resolved, it leaves the list, and the focus goes to the section, which says nothing is left.
+    const section = screen.getByRole('region', { name: 'Por revisar en el portal del SAT' });
+    await waitFor(() => expect(within(section).getByRole('heading', { name: 'Por revisar en el portal del SAT' })).toHaveFocus());
+    expect(section).toHaveTextContent('Ya no queda ningún CFDI por revisar.');
+    expect(within(section).queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('does not close the dialog while it saves the stamp', async () => {
+    const user = userEvent.setup();
+    let answer: (value: IssuedCfdi) => void = () => undefined;
+    renderSection(() => Promise.resolve([cfdi()]), {
+      stamped: () => new Promise<IssuedCfdi>((resolve) => { answer = resolve; }),
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Ya se timbró la factura F-12' }));
+    const dialog = screen.getByRole('dialog', { name: 'Factura F-12 ya se timbró' });
+    await user.type(within(dialog).getByLabelText('Folio fiscal (UUID)'), UUID);
+    await user.click(within(dialog).getByRole('button', { name: 'Guardar el timbre' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Guardando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Volver' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('dialog', { name: 'Factura F-12 ya se timbró' })).toBeInTheDocument();
+
+    answer(cfdi({ status: OrderInvoiceStatus.Stamped, uuid: UUID, hasXml: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps the dialog open with what was written when the list can no longer be read', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    const { client } = renderSection(() => (fail ? Promise.reject(new Error('sin red')) : Promise.resolve([cfdi()])));
+
+    await user.click(await screen.findByRole('button', { name: 'Ya se timbró la factura F-12' }));
+    await user.type(screen.getByLabelText('Folio fiscal (UUID)'), '5F0B7C1E');
+    fail = true;
+    await client.refetchQueries({ queryKey: ['invoicing', 'issued-cfdis', 'to-review'] });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron cargar los CFDI por revisar en el portal del SAT.');
+    expect(screen.getByLabelText('Folio fiscal (UUID)')).toHaveValue('5F0B7C1E');
+  });
+
+  it('says from when «No se timbró» can be said, until the SAT shows whatever was stamped', async () => {
+    renderSection(() => Promise.resolve([cfdi({ notStampedFrom: '2999-01-01T18:00:00Z' })]));
+
+    const row = (await screen.findAllByRole('row'))[1];
+    expect(within(row).getByRole('button', { name: 'Ya se timbró la factura F-12' })).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /No se timbró/ })).not.toBeInTheDocument();
+    // 18:00 UTC is noon in Mexico City.
+    expect(row).toHaveTextContent('«No se timbró», desde el 1 ene 2999, 12:00');
+  });
+
+  it('speaks of one or of many in what to do', async () => {
+    renderSection(() => Promise.resolve([cfdi()]));
+
+    const section = await screen.findByRole('region', { name: 'Por revisar en el portal del SAT' });
+    expect(section).toHaveTextContent('Se pidió hace más de 71 horas');
+    expect(section).toHaveTextContent('Búscalo en el portal del SAT');
+  });
+
+  it.each([
+    ['la factura F-12', {}, 'Factura F-12 queda rechazada: el pedido se puede facturar otra vez.'],
+    // A replacement gives the order back the invoice it was to replace.
+    ['la factura F-12', { relatedNumber: 'F-9' }, 'Factura F-12 queda rechazada: el pedido se queda con la factura F-9, que puedes sustituir otra vez.'],
+    ['la factura global G-4', { kind: IssuedCfdiKind.GlobalInvoice, number: 'G-4' }, 'Factura global G-4 queda rechazada: sus ventas pueden entrar en otra factura global.'],
+    ['la nota de crédito NC-2', { kind: IssuedCfdiKind.CreditNote, number: 'NC-2' }, 'Nota de crédito NC-2 queda rechazada: la nota se emite otra vez en su pedido.'],
+  ])('says what refusing %s gives back', async (named, patch, said) => {
+    const user = userEvent.setup();
+    const stuck = cfdi(patch);
+    renderSection(() => Promise.resolve([stuck]), {
+      notStamped: () => Promise.resolve({ ...stuck, status: OrderInvoiceStatus.Refused }),
+    });
+
+    await user.click(await screen.findByRole('button', { name: `No se timbró ${named}` }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'No se timbró' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(said));
   });
 
   it('refuses one that is not in the portal only once confirmed, in its gender', async () => {
@@ -143,7 +224,8 @@ describe('CfdisToReview', () => {
 
     await user.click(await screen.findByRole('button', { name: 'No se timbró el complemento de pago P-3' }));
     let dialog = screen.getByRole('dialog', { name: 'Complemento de pago P-3 no se timbró' });
-    expect(dialog).toHaveTextContent('el complemento de pago P-3 queda rechazado con tu nombre');
+    expect(dialog).toHaveTextContent('el complemento de pago P-3 queda rechazado y el cobro se declara otra vez con «Emitir otra vez» en su pedido');
+    expect(dialog).toHaveTextContent('Queda registrado que tú lo revisaste.');
     await user.click(within(dialog).getByRole('button', { name: 'Volver' }));
     expect(request).not.toHaveBeenCalledWith('post', '/api/v1/invoicing/issued-cfdis/{kind}/{cfdiId}/not-stamped', expect.anything());
 
@@ -152,7 +234,7 @@ describe('CfdisToReview', () => {
     await user.click(within(dialog).getByRole('button', { name: 'No se timbró' }));
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith(
-      'Complemento de pago P-3 queda rechazado: ya puedes facturar otra vez lo que cubría.'));
+      'Complemento de pago P-3 queda rechazado: el cobro se declara otra vez con «Emitir otra vez» en su pedido.'));
     expect(request).toHaveBeenCalledWith('post', '/api/v1/invoicing/issued-cfdis/{kind}/{cfdiId}/not-stamped', {
       path: { kind: IssuedCfdiKind.PaymentComplement, cfdiId: 'p-1' },
     });

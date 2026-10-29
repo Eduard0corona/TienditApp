@@ -64,7 +64,8 @@ internal sealed class FakeInvoicingGateway : IInvoicingGateway
             stamped = new StampedCfdi(
                 uuid,
                 $"<cfdi:Comprobante xmlns:cfdi=\"http://www.sat.gob.mx/cfd/4\" Serie=\"{document.Serie}\" Folio=\"{document.Folio}\" "
-                + $"Total=\"{document.Total}\" TipoDeComprobante=\"{document.VoucherType}\" Sello=\"AAAABBBB{SealTail}\">"
+                + $"Fecha=\"{document.Date}\" Total=\"{document.Total.ToString(System.Globalization.CultureInfo.InvariantCulture)}\" "
+                + $"TipoDeComprobante=\"{document.VoucherType}\" Sello=\"AAAABBBB{SealTail}\">"
                 + $"<cfdi:Emisor Rfc=\"{document.Issuer.Rfc}\" /><cfdi:Receptor Rfc=\"{document.Receiver.Rfc}\" />"
                 + $"<cfdi:Complemento UUID=\"{uuid}\" /></cfdi:Comprobante>",
                 new DateTimeOffset(2026, 10, 4, 11, 0, 5, TimeSpan.FromHours(-6)));

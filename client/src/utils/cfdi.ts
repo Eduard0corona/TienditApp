@@ -83,14 +83,22 @@ export function complementStatusLabel(status: OrderInvoiceStatus): string {
 
 /**
  * A CFDI still «Timbrando» past the PAC's window (Fase 28K, ADR 0056): TienditApp no longer asks for its stamp, and asking
- * again by hand is refused, so a person checks in the SAT's portal whether it was stamped. The API decides it (by its own
- * clock); the screen only stops offering «Volver a pedir el timbre» and says what to do instead.
+ * again by hand is refused, so a person checks in the SAT's portal whether it was stamped. The API decides it by its own
+ * clock; the screen, by the device's, only stops offering «Volver a pedir el timbre» and says what to do instead.
  */
 export function isStuckStamping(
   cfdi: { status: OrderInvoiceStatus; stampWindowEndsAt?: string | null },
   now: number = Date.now(),
 ): boolean {
   return cfdi.status === OrderInvoiceStatus.Stamping && !!cfdi.stampWindowEndsAt && Date.parse(cfdi.stampWindowEndsAt) < now;
+}
+
+/**
+ * Whether it is still too soon to say a stuck CFDI was not stamped: the SAT takes up to 72 hours to show what the PAC stamped
+ * (Fase 28K). The API says from when, and decides it by its own clock.
+ */
+export function isTooSoonForNotStamped(cfdi: { notStampedFrom?: string | null }, now: number = Date.now()): boolean {
+  return !!cfdi.notStampedFrom && Date.parse(cfdi.notStampedFrom) > now;
 }
 
 /** The two reasons TienditApp cancels with (01 needs the invoice that replaces it; 04 is for the global invoice). */

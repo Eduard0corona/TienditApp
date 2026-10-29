@@ -87,9 +87,12 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
     .filter((note) => statuses.includes(note.status))
     .map((note) => note.number)
     .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
-  // A stamped one is cancelled in its order; one that is stamping or cancelling has to finish first.
+  // A stamped one is cancelled in its order; one that is stamping or cancelling has to finish first, and one stuck past the
+  // PAC's window (Fase 28K) finishes only when a person says what the SAT's portal shows.
   const stampedNotes = notesIn([OrderInvoiceStatus.Stamped]);
-  const waitingNotes = notesIn([OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Cancelling]);
+  const stuckNotes = creditNotes.filter((note) => isStuckStamping(note)).map((note) => note.number)
+    .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  const waitingNotes = notesIn([OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Cancelling]).filter((number) => !stuckNotes.includes(number));
   const hasLiveNotes = creditNotes.some((note) => LIVE.includes(note.status));
 
   const download = async (kind: 'xml' | 'pdf') => {
@@ -225,7 +228,7 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
           </div>
           {invoice.status === OrderInvoiceStatus.Stamped && hasLiveNotes && (
             <p className="small text-muted mb-0 mt-2">
-              Para cancelarla, {whatGoesFirst(stampedNotes, waitingNotes)}: el SAT no cancela una factura mientras tenga notas de
+              Para cancelarla, {whatGoesFirst(stampedNotes, waitingNotes, stuckNotes)}: el SAT no cancela una factura mientras tenga notas de
               crédito relacionadas.
             </p>
           )}
@@ -305,14 +308,18 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
 }
 
 /** What has to happen to the live credit notes of a global invoice before it is cancelled. */
-function whatGoesFirst(stamped: string[], waiting: string[]): string {
-  const cancel = `cancela primero sus notas de crédito vigentes (${stamped.join(', ')}) en el pedido de cada venta`;
-  if (waiting.length === 0) return cancel;
-  if (stamped.length === 0) {
-    return `espera a que sus notas de crédito (${waiting.join(', ')}) terminen de timbrarse o de cancelarse, y cancela en su `
-      + 'pedido las que queden vigentes';
+function whatGoesFirst(stamped: string[], waiting: string[], stuck: string[]): string {
+  const steps: string[] = [];
+  if (stamped.length > 0) steps.push(`cancela primero sus notas de crédito vigentes (${stamped.join(', ')}) en el pedido de cada venta`);
+  if (waiting.length > 0) {
+    steps.push(`espera a que ${steps.length > 0 ? 'las demás' : 'sus notas de crédito'} (${waiting.join(', ')}) terminen de timbrarse o de cancelarse`);
   }
-  return `${cancel}, y espera a que las demás (${waiting.join(', ')}) terminen de timbrarse o de cancelarse`;
+  if (stuck.length > 0) {
+    steps.push(`revisa en el portal del SAT si se timbraron ${steps.length > 0 ? 'las que se quedaron timbrando' : 'sus notas de crédito'} `
+      + `(${stuck.join(', ')}) y dilo en CFDI emitidos`);
+  }
+  if (stamped.length === 0) steps.push('cancela en su pedido las que queden vigentes');
+  return steps.length === 1 ? steps[0] : `${steps.slice(0, -1).join(', ')}, y ${steps[steps.length - 1]}`;
 }
 
 /** Owners and admins ask the SAT to cancel a stamped global invoice, with its reason; nobody has to accept it. */

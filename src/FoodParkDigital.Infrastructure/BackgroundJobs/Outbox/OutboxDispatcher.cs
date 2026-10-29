@@ -45,7 +45,7 @@ public sealed class OutboxDispatcher
         var claimed = await ClaimDueAsync(cancellationToken);
         await using var leases = new LeaseKeeper<OutboxMessage>(
             _scopeFactory, _clock, TimeSpan.FromSeconds(_options.LeaseSeconds), claimed,
-            (message, now, lease) => message.Claim(now, lease), message => message.Id, _logger, cancellationToken);
+            (message, now, lease) => message.RenewLease(now, lease), message => message.Id, _logger, cancellationToken);
         foreach (var message in claimed)
             await DispatchAsync(message, leases, cancellationToken);
 

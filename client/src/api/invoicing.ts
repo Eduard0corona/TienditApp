@@ -313,7 +313,8 @@ export interface IssuedCfdiFilters {
 }
 
 /**
- * The CFDI the business issued in a month, the newest first; while one is being stamped, it is asked again. Another page of
+ * The CFDI the business issued in a month, the newest first; while one is being stamped (not one stuck past the PAC's window,
+ * Fase 28K), it is asked again. Another page of
  * the same list keeps the one on screen while it arrives; another month, kind, state or search does not (it would show
  * under the new title what the old one had).
  */
@@ -337,19 +338,25 @@ export function useIssuedCfdis(year: number, month: number, filters: IssuedCfdiF
       previousQuery && listing.every((part, index) => previousQuery.queryKey[index] === part) ? previous : undefined,
     // A CFDI is stamped, cancelled or replaced from its order or its global invoice: coming back reads the month again.
     refetchOnMount: 'always',
-    refetchInterval: (query) => query.state.data?.items.some((cfdi) => cfdi.status === OrderInvoiceStatus.Stamping)
+    refetchInterval: (query) => query.state.data?.items.some((cfdi) => cfdi.status === OrderInvoiceStatus.Stamping && !isStuckStamping(cfdi))
       ? PENDING_REFRESH_MS
       : false,
   });
 }
 
-/** What the CFDI of a month add up to, by kind; while one is being stamped, it is asked again, as the list. */
-export function useIssuedCfdiSummary(year: number, month: number) {
+/**
+ * What the CFDI of a month add up to, by kind; while one is being stamped, it is asked again, as the list. Those stuck past
+ * the PAC's window (`stuck`, of that month) do not count: nothing changes them until a person says what the SAT shows.
+ */
+export function useIssuedCfdiSummary(year: number, month: number, stuck = 0) {
   return useQuery({
     queryKey: [...issuedCfdisKey, 'summary', year, month],
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/issued-cfdis/summary', { query: { year, month }, signal }),
     refetchOnMount: 'always',
-    refetchInterval: (query) => query.state.data?.kinds.some((kind) => kind.stamping > 0) ? PENDING_REFRESH_MS : false,
+    refetchInterval: (query) => {
+      const stamping = query.state.data?.kinds.reduce((sum, kind) => sum + kind.stamping, 0) ?? 0;
+      return stamping > stuck ? PENDING_REFRESH_MS : false;
+    },
   });
 }
 
@@ -391,7 +398,7 @@ export function useConfirmStuckCfdiStamped() {
     }));
 }
 
-/** «No se timbró»: it becomes «Rechazada», with who checked it, and what it covered can be invoiced again. */
+/** «No se timbró»: it becomes «Rechazada» (who checked it goes to the audit), and what it covered can be invoiced again. */
 export function useConfirmStuckCfdiNotStamped() {
   return useStuckCfdiChange((cfdi: Pick<IssuedCfdi, 'kind' | 'id'>) =>
     apiRequest('post', '/api/v1/invoicing/issued-cfdis/{kind}/{cfdiId}/not-stamped', {

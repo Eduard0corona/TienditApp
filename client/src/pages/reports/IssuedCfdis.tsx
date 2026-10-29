@@ -4,6 +4,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import {
   downloadIssuedCfdiFile,
   downloadIssuedCfdis,
+  useCfdisToReview,
   useIssuedCfdiSummary,
   useIssuedCfdis,
   type IssuedCfdi,
@@ -116,7 +117,11 @@ export default function IssuedCfdis() {
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [exporting, setExporting] = useState<IssuedCfdiExportFormat | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
-  const summary = useIssuedCfdiSummary(period.year, period.month);
+  // Those stuck past the PAC's window are not asked again by the month's summary: only a person resolves them.
+  const toReview = useCfdisToReview();
+  const monthKey = `${period.year}-${String(period.month).padStart(2, '0')}`;
+  const stuck = toReview.data?.filter((cfdi) => getBusinessToday(new Date(cfdi.issuedAt)).startsWith(monthKey)).length ?? 0;
+  const summary = useIssuedCfdiSummary(period.year, period.month, stuck);
   const cfdis = useIssuedCfdis(period.year, period.month, { kind, status, search }, page, pageSize);
 
   const previous = shift(period, -1);

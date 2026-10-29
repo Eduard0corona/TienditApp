@@ -195,6 +195,30 @@ public class OutboxTests
     }
 
     [Fact]
+    public async Task RenewalThatFails_ShouldBeTriedAgain_WithoutLosingTheMessage()
+    {
+        var failing = new FailingRenewals(failures: 2);
+        await using var host = OutboxTestHost.Create(interceptor: failing, configure: services =>
+        {
+            services.Configure<BackgroundJobOptions>(options => options.Outbox.LeaseSeconds = 1);
+            services.AddScoped<IOutboxEventHandler<OrderCreatedEvent>, SlowHandler>();
+        });
+        await host.CreateOrderAsync(TenantA);
+
+        var first = host.Dispatcher.DispatchDueAsync(CancellationToken.None);
+        await host.Log.SlowStarted.Task.WaitAsync(Patience);
+        host.Clock.Advance(TimeSpan.FromMinutes(5));
+        // The database does not answer twice; the next renewal still holds the message, as nobody else took it.
+        await EventuallyAsync(async () =>
+            failing.Failed == 2 && (await host.MessagesAsync()).All(m => m.LockedUntil > host.Clock.UtcNow));
+
+        host.Log.SlowRelease.SetResult();
+        Assert.Equal(1, await first.WaitAsync(Patience));
+        Assert.False(host.Log.SlowCancelled);
+        Assert.NotNull(Assert.Single(await host.MessagesAsync()).ProcessedAt);
+    }
+
+    [Fact]
     public async Task MessageAnotherWorkerTook_ShouldStopItsHandler_AndBeLeftToThatWorker()
     {
         await using var host = OutboxTestHost.Create(configure: services =>

@@ -26365,6 +26365,16 @@
           },
           "hasXml": {
             "type": "boolean"
+          },
+          "stampWindowEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "notStampedFrom": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false

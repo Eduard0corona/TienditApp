@@ -470,7 +470,7 @@ public sealed class SwSapienGateway : IInvoicingGateway
     public async Task<StampedCfdi?> FindStampedAsync(string uuid, CancellationToken cancellationToken)
     {
         // SW answers a folio fiscal it does not have for this account (or keeps no longer) with no records, not an error.
-        var xml = await StoredXmlAsync(uuid, cancellationToken, missingIsNull: true);
+        var xml = await StoredXmlAsync(uuid, cancellationToken, missingIsNull: true, refuseCancelled: true);
         if (xml is null)
             return null;
         var stampedUuid = StampUuid(xml);
@@ -480,9 +480,10 @@ public sealed class SwSapienGateway : IInvoicingGateway
     }
 
     private async Task<string> StoredXmlAsync(string uuid, CancellationToken cancellationToken)
-        => (await StoredXmlAsync(uuid, cancellationToken, missingIsNull: false))!;
+        => (await StoredXmlAsync(uuid, cancellationToken, missingIsNull: false, refuseCancelled: false))!;
 
-    private async Task<string?> StoredXmlAsync(string uuid, CancellationToken cancellationToken, bool missingIsNull)
+    /// <param name="refuseCancelled">A CFDI SW keeps as cancelled with the SAT is refused instead of read.</param>
+    private async Task<string?> StoredXmlAsync(string uuid, CancellationToken cancellationToken, bool missingIsNull, bool refuseCancelled)
     {
         using var response = await SendAsync(
             HttpMethod.Get, $"{ApiUrl}/datawarehouse/v1/live/{Uri.EscapeDataString(uuid)}", "stored xml", cancellationToken: cancellationToken);
@@ -492,6 +493,10 @@ public sealed class SwSapienGateway : IInvoicingGateway
         var records = data?["records"] as JsonArray;
         if (missingIsNull && records is { Count: 0 })
             return null;
+        // «Vigente» or «Cancelado», as the SAT has it.
+        var status = Text(records?.FirstOrDefault()?["status"]);
+        if (refuseCancelled && status is not null && !string.Equals(status, "Vigente", StringComparison.OrdinalIgnoreCase))
+            throw new InvoicingGatewayRefusedException("El SAT tiene ese folio fiscal cancelado: no puede ser el timbre de este CFDI.");
         var url = Text(records?.FirstOrDefault()?["urlXml"]);
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var xmlUri) || xmlUri.Scheme != Uri.UriSchemeHttps)
             throw new InvoicingGatewayUnavailableException("El PAC todavía no entrega el XML de la factura.");

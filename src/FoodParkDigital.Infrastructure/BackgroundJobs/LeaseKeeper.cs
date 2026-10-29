@@ -8,9 +8,10 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs;
 
 /// <summary>
 /// Keeps the lease of a batch of claimed items while a worker goes through them (Fase 28K, ADR 0056). Every third of the
-/// lease it claims again, with a new <c>LockToken</c>, each item it has not finished, the waiting ones included: a handler
-/// that takes longer than the lease (an email whose PDF and mail server take minutes) is not taken by another instance and
-/// run twice.
+/// lease it extends the lease of each item it has not finished, the waiting ones included: a handler that takes longer
+/// than the lease (an email whose PDF and mail server take minutes) is not taken by another instance and run twice. The
+/// renewal keeps the item's <c>LockToken</c>, a concurrency token, so it matches no row once another instance claimed the
+/// item, and a renewal that failed or was sent twice (a retry after a lost reply) leaves nothing to tell apart.
 /// <list type="bullet">
 /// <item>An item another instance claimed anyway (this one stalled past its lease) is lost: <see cref="TokenFor"/> is
 /// cancelled, and <see cref="CompleteAsync"/> does not complete it, so only the instance that holds it does.</item>
@@ -25,7 +26,7 @@ internal sealed class LeaseKeeper<TItem> : IAsyncDisposable
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IDateTimeProvider _clock;
     private readonly TimeSpan _lease;
-    private readonly Action<TItem, DateTimeOffset, TimeSpan> _claim;
+    private readonly Action<TItem, DateTimeOffset, TimeSpan> _renew;
     private readonly Func<TItem, Guid> _id;
     private readonly ILogger _logger;
     private readonly Dictionary<TItem, CancellationTokenSource> _held;
@@ -39,7 +40,7 @@ internal sealed class LeaseKeeper<TItem> : IAsyncDisposable
         IDateTimeProvider clock,
         TimeSpan lease,
         IReadOnlyCollection<TItem> items,
-        Action<TItem, DateTimeOffset, TimeSpan> claim,
+        Action<TItem, DateTimeOffset, TimeSpan> renew,
         Func<TItem, Guid> id,
         ILogger logger,
         CancellationToken cancellationToken)
@@ -47,7 +48,7 @@ internal sealed class LeaseKeeper<TItem> : IAsyncDisposable
         _scopeFactory = scopeFactory;
         _clock = clock;
         _lease = lease;
-        _claim = claim;
+        _renew = renew;
         _id = id;
         _logger = logger;
         _held = items.ToDictionary<TItem, TItem, CancellationTokenSource>(
@@ -153,10 +154,13 @@ internal sealed class LeaseKeeper<TItem> : IAsyncDisposable
             var now = _clock.UtcNow;
             foreach (var item in pending)
             {
-                // The renewed LockToken is a concurrency token, as when it was claimed: an item another instance took
-                // since then matches no row.
-                context.Attach(item);
-                _claim(item, now, _lease);
+                // Its LockToken is a concurrency token, as when it was claimed: an item another instance took since then
+                // matches no row. The token goes in the update with the same value, so the update is sent (and checked)
+                // even when the lease would end at the same moment as before.
+                var entry = context.Attach(item);
+                _renew(item, now, _lease);
+                foreach (var token in entry.Properties.Where(p => p.Metadata.IsConcurrencyToken))
+                    token.IsModified = true;
                 try
                 {
                     await context.SaveChangesAsync(cancellationToken);
@@ -167,6 +171,12 @@ internal sealed class LeaseKeeper<TItem> : IAsyncDisposable
                     lock (_lost)
                         _lost.Add(item);
                     await _held[item].CancelAsync();
+                }
+                catch
+                {
+                    // Not saved: the item goes back to what the database keeps, so the next renewal sends its lease again.
+                    entry.CurrentValues.SetValues(entry.OriginalValues);
+                    throw;
                 }
                 finally
                 {

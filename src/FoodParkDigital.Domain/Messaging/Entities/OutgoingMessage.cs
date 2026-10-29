@@ -88,6 +88,12 @@ public class OutgoingMessage : AuditableEntity, ITenantScoped
         LockToken = Guid.NewGuid();
     }
 
+    /// <summary>
+    /// Extends the lease of the message this worker claimed, with the same token: the update matches no row once another
+    /// worker claimed it, and sending it again (a retry after a lost reply) does no harm.
+    /// </summary>
+    public void RenewLease(DateTimeOffset now, TimeSpan lease) => LockedUntil = now.Add(lease);
+
     public void MarkSent(DateTimeOffset sentAt, string? providerMessageId)
     {
         Attempts++;

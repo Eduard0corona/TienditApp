@@ -92,6 +92,15 @@ public class IssuedCfdiDto
 
     /// <summary>Whether its stamped XML is kept: it was stamped, even if it was cancelled since.</summary>
     public bool HasXml { get; set; }
+
+    /// <summary>While it is «Timbrando», until when TienditApp asks the PAC for its stamp (Fase 28K).</summary>
+    public DateTimeOffset? StampWindowEndsAt { get; set; }
+
+    /// <summary>
+    /// While it is «Timbrando», from when a person may say it was not stamped: the SAT shows by then any stamp the PAC made
+    /// (Fase 28K).
+    /// </summary>
+    public DateTimeOffset? NotStampedFrom { get; set; }
 }
 
 /// <summary>What the CFDI of a month add up to, by kind (Fase 28H).</summary>
@@ -522,7 +531,10 @@ internal static class IssuedCfdis
         PeriodFrom = row.PeriodFrom,
         PeriodTo = row.PeriodTo,
         OrderCount = row.OrderCount,
-        HasXml = row.XmlFileKey is not null
+        HasXml = row.XmlFileKey is not null,
+        // The date a CFDI carries is the one it was asked for with.
+        StampWindowEndsAt = row.Status == OrderInvoiceStatus.Stamping ? StuckStamps.WindowEndsAt(row.IssuedAt) : null,
+        NotStampedFrom = row.Status == OrderInvoiceStatus.Stamping ? StuckStamps.NotStampedFrom(row.IssuedAt) : null
     };
 
     /// <summary>
