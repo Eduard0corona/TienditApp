@@ -125,6 +125,23 @@ public class CreditNoteFlowTests
     }
 
     [Fact]
+    public async Task CreditNote_OfADiscountAfterTheSale_ShouldSaySo_AndGoByCondonacion()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id);
+
+        // The business lowers the price of what is still owed (Fase 28J): its credit note is a discount, not a debt forgiven.
+        var discount = await book.WriteOffAsync(sale.Id, 20m, OrderWriteOffReason.Discount);
+        Assert.Equal(1, (await book.IssuePendingAsync()).Value);
+
+        var note = await book.Context.CreditNotes.SingleAsync();
+        Assert.Equal((discount.Id, "15", 20m), (note.OrderWriteOffId, note.PaymentForm, note.Total));
+        Assert.Equal("Descuento o bonificación", Assert.Single(book.Gateway.StampRequests[^1].Document.Concepts).Description);
+        Assert.Equal(OrderWriteOffReason.Discount, Assert.Single((await book.InvoicingAsync(sale.Id)).Adjustments).WriteOffReason);
+    }
+
+    [Fact]
     public async Task CreditNote_OfARefund_ShouldNotTouchTheComplements_OfAnInvoiceAlreadyPaid()
     {
         await using var book = await Book.OpenAsync();
@@ -576,11 +593,12 @@ public class CreditNoteFlowTests
             return refund;
         }
 
-        public async Task<OrderWriteOff> WriteOffAsync(Guid orderId, decimal amount)
+        public async Task<OrderWriteOff> WriteOffAsync(
+            Guid orderId, decimal amount, OrderWriteOffReason reason = OrderWriteOffReason.WontBeCollected)
         {
             Clock.UtcNow = Clock.UtcNow.AddMinutes(1);
             var order = await Context.Orders.Include(o => o.Payments).Include(o => o.WriteOffs).SingleAsync(o => o.Id == orderId);
-            var writeOff = order.WriteOff(amount, OrderWriteOffReason.WontBeCollected, null, Clock.UtcNow, "dueña");
+            var writeOff = order.WriteOff(amount, reason, null, Clock.UtcNow, "dueña");
             await Context.SaveChangesAsync();
             Context.ChangeTracker.Clear();
             return writeOff;
