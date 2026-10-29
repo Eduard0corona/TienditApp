@@ -1950,7 +1950,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_CreditNotes_Folio", "[Folio] > 0");
 
-                            t.HasCheckConstraint("CK_CreditNotes_Invoice", "([OrderInvoiceId] IS NOT NULL AND [GlobalInvoiceId] IS NULL) OR ([OrderInvoiceId] IS NULL AND [GlobalInvoiceId] IS NOT NULL AND [OrderRefundId] IS NOT NULL AND [AfterInstallment] = 0)");
+                            t.HasCheckConstraint("CK_CreditNotes_Invoice", "([OrderInvoiceId] IS NOT NULL AND [GlobalInvoiceId] IS NULL) OR ([OrderInvoiceId] IS NULL AND [GlobalInvoiceId] IS NOT NULL AND [AfterInstallment] = 0)");
 
                             t.HasCheckConstraint("CK_CreditNotes_Refused", "([Status] = 2 AND [RefusedAt] IS NOT NULL AND [FailureMessage] IS NOT NULL) OR ([Status] <> 2 AND [RefusedAt] IS NULL)");
 

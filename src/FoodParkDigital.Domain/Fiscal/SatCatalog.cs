@@ -166,6 +166,14 @@ public static partial class SatCatalog
 
     public const string RefundDescription = "Devolución";
     public const string WriteOffDescription = "Condonación";
+    public const string DiscountDescription = "Descuento o bonificación";
+
+    /// <summary>
+    /// The concept of a write-off's credit note: a discount or rebate after the sale says so (Fase 28J), so the accountant
+    /// tells it from a debt the business gave up on.
+    /// </summary>
+    public static string WriteOffDescriptionFor(OrderWriteOffReason reason)
+        => reason == OrderWriteOffReason.Discount ? DiscountDescription : WriteOffDescription;
 
     /// <summary>
     /// The use a credit note's receiver gets: «Devoluciones, descuentos o bonificaciones» (G02), or «Sin efectos fiscales»
