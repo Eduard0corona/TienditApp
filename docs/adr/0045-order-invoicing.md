@@ -51,7 +51,7 @@ Tomé las decisiones de la Fase 28A con la autorización permanente del dueño d
    - respuesta → el XML timbrado a los archivos privados (`invoices/{negocio}/{aaaamm}/{factura}.xml`), «Timbrada» con su UUID, y el PDF si el PAC lo da (si no, se pide al descargarlo);
    - rechazo definitivo → «Rechazada» con el mensaje del PAC: el folio se usó y el pedido se puede facturar otra vez con el siguiente;
    - sin respuesta → sigue «Timbrando». La persona o el worker vuelven a pedirla con la misma llave y el mismo CFDI: el PAC devuelve el timbre que ya hizo (CFDI3307 con el `TimbreFiscalDigital`, de donde se lee el UUID, y el XML se toma de lo que guarda el PAC), nunca uno segundo. Dos intentos a la vez guardan el mismo XML una vez y la versión de la fila deja ganar al primero;
-   - un rechazo después de 71 horas dice que se revise en el portal del PAC que no se haya timbrado antes de facturar otra vez (la llave ya no devuelve el timbre y la fecha que rechaza pudo ser de una factura timbrada).
+   - un rechazo después de 71 horas dice que se revise en el portal del SAT que no se haya timbrado antes de facturar otra vez (la llave ya no devuelve el timbre y la fecha que rechaza pudo ser de una factura timbrada). Desde la Fase 28K ya no se pide otra vez pasada esa ventana: una persona la revisa en el portal del SAT desde Reportes › CFDI emitidos ([ADR 0056](0056-stamping-robustness.md)).
 
    Solo el índice de una factura viva por pedido se toma como «otra persona está facturando»; cualquier otra falla de la base sigue su curso (la estrategia de reintentos).
 7. **El worker de facturación** (`InvoicingWorkerService`, en el alcance de cada negocio):
@@ -81,7 +81,7 @@ Tomé las decisiones de la Fase 28A con la autorización permanente del dueño d
 - **Lo que limita:**
   - Solo ventas pagadas por completo y a un cliente con RFC: las de público en general esperan la factura global.
   - El CFDI lleva la hora local de la zona del negocio: si su zona no es la de su código postal de expedición, el PAC puede rechazar la fecha (se ve el mensaje y se corrige la zona).
-  - Si el PAC no responde durante más de 71 horas, el worker deja de pedirla; volver a pedirla a mano después puede recibir un rechazo por la fecha aunque el PAC la hubiera timbrado (se revisa en el portal del PAC).
+  - Si el PAC no responde durante más de 71 horas, el worker deja de pedirla; volver a pedirla a mano después podía recibir un rechazo por la fecha aunque el PAC la hubiera timbrado. Desde la Fase 28K no se vuelve a pedir: se revisa en el portal del SAT ([ADR 0056](0056-stamping-robustness.md)).
   - El PDF es el del PAC, sin logo del negocio.
   - Un CSD sirve a un solo negocio de TienditApp.
   - TienditApp no revisa que el certificado lo haya emitido el SAT: lo revisan el PAC al guardarlo y el SAT al timbrar.

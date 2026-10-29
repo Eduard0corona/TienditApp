@@ -13,6 +13,7 @@ import {
   ORDER_NUMBER,
   PEDIDO_AUTOFACTURADO,
   PEDIDO_CANCELANDOSE,
+  PEDIDO_TIMBRANDO_SIN_TIMBRE,
   PEDIDO_CON_NOTAS_DE_CREDITO,
   PEDIDO_CORREO_RECHAZADO,
   PEDIDO_EN_FACTURA_GLOBAL,
@@ -180,6 +181,18 @@ test.describe('Pedidos › Factura', () => {
       const invoice = await openInvoice(page);
       await expect(invoice.getByText(/El SAT pidió al cliente que acepte la cancelación/)).toBeVisible();
       await snapScreen(page, 'pedidos-factura-cancelandose');
+    });
+  });
+
+  test.describe('se quedó timbrando', () => {
+    test.use({ prepareData: PEDIDO_TIMBRANDO_SIN_TIMBRE });
+
+    test('factura que se quedó timbrando', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await expect(invoice.getByText(/Se pidió hace más de 71 horas/)).toBeVisible();
+      await expect(invoice.getByRole('link', { name: 'CFDI emitidos' })).toBeVisible();
+      await expect(invoice.getByRole('button', { name: /^Volver a pedir el timbre/ })).toBeHidden();
+      await snapScreen(page, 'pedidos-factura-timbrando-sin-timbre');
     });
   });
 });

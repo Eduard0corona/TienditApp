@@ -12,6 +12,7 @@ type PrepareData = NonNullable<SceneOptions['prepareData']>;
 // email to the customer went; since the Fase 28F (ADR 0050), whether the customer asked for it online.
 
 // OrderInvoiceStatus and CfdiCancellationMotive as the contract numbers them.
+const STAMPING = 0;
 const STAMPED = 1;
 const REFUSED = 2;
 const CANCELLING = 3;
@@ -123,6 +124,21 @@ export const PEDIDO_CANCELANDOSE = asOption(orderInvoicing((data) => ({
     invoice(data, 2, {
       status: CANCELLING, uuid: '0C9F1E7A-2B44-4E1D-9A63-7D5E28B1F0A4', stampedAt: minutesFromNow(-2 * 24 * 60), hasXml: true, hasPdf: true,
       cancellationMotive: NOT_CARRIED_OUT, cancellationRequestedAt: minutesFromNow(-30),
+    }),
+  ],
+})));
+
+/**
+ * F-3 stayed «Timbrando» past the PAC's window (Fase 28K, ADR 0056): asked for four days ago, while the PAC did not answer.
+ * It is no longer asked again: it is checked in the SAT's portal.
+ */
+export const PEDIDO_TIMBRANDO_SIN_TIMBRE = asOption(orderInvoicing((data) => ({
+  canInvoice: false,
+  problem: 'Este pedido ya tiene la factura F-3: cancélala para facturarlo otra vez.',
+  invoices: [
+    invoice(data, 3, {
+      status: STAMPING, requestedAt: minutesFromNow(-4 * 24 * 60), stampWindowEndsAt: minutesFromNow(-4 * 24 * 60 + 71 * 60),
+      failureMessage: 'El PAC no responde. TienditApp lo vuelve a intentar en unos minutos.',
     }),
   ],
 })));
