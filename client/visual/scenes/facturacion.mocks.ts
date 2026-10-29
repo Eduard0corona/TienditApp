@@ -209,8 +209,14 @@ export const PEDIDO_EN_PARCIALIDADES = asOption(((data) => {
 
 // CreditNoteAdjustment as the contract numbers it.
 const REFUND = 0;
+const WRITE_OFF = 1;
+/** OrderWriteOffReason.Discount (Fase 28J): a discount or rebate after the sale. */
+const DISCOUNT = 4;
 
-/** A credit note of F-3 (CFDI tipo E) for what a refund gave back, with its IVA; stamped by TienditApp unless the fields say otherwise. */
+/**
+ * A credit note of F-3 (CFDI tipo E) for what a refund gave back or a write-off forgave, with its IVA; stamped by TienditApp
+ * unless the fields say otherwise (also which invoice it credits).
+ */
 function creditNote(folio: number, amount: number, fields: Record<string, unknown>) {
   const subTotal = r2(amount / 1.16);
   return {
@@ -227,6 +233,15 @@ function refund(name: string, at: string, method: number, amount: number, notes:
   return {
     kind: REFUND, adjustmentId: uuid(`refund-${name}`), at, amount, method, writeOffReason: null, notes, reversed: false,
     canIssue: false, problem: null, awaitsAutomaticIssue: false, creditNotes: [],
+    ...fields,
+  };
+}
+
+/** A write-off of the order (Fase 26B), as the invoicing of the order describes it. */
+function writeOff(name: string, at: string, reason: number, amount: number, notes: string, fields: Record<string, unknown>) {
+  return {
+    kind: WRITE_OFF, adjustmentId: uuid(`write-off-${name}`), at, amount, method: null, writeOffReason: reason, notes,
+    reversed: false, canIssue: false, problem: null, awaitsAutomaticIssue: false, creditNotes: [],
     ...fields,
   };
 }
@@ -273,18 +288,21 @@ export const PEDIDO_CON_NOTAS_DE_CREDITO = asOption(((data) => {
 /**
  * A sale to the general public, without a customer, that the global invoice F-58 covers (Fase 28I, ADR 0054): it is not
  * invoiced on its own (its credit notes in force go first if the customer asks for theirs), and its refunds take credit notes
- * of F-58, to the general public, never by email:
+ * of F-58, to the general public, never by email, and so do its write-offs (Fase 28J, ADR 0055):
+ * - a discount for the delay, taken off what was still owed before the global invoice: NC-3, by «Condonación» (15),
+ *   «Descuento o bonificación», issued by TienditApp before the refund's, which came after it;
  * - two conchas that were missing, given back by transfer: NC-4, issued by TienditApp;
  * - a cold americano given back in cash a moment ago, still without one: TienditApp issues it soon, or «Emitir ahora».
  */
 export const PEDIDO_EN_FACTURA_GLOBAL = asOption(((data) => {
   const order = data.orders.find((o: { orderNumber: string }) => o.orderNumber === ORDER_NUMBER);
   const share = (part: number) => r2(order.total * part);
-  const [transfer, cash] = [share(0.12), share(0.06)];
+  const [discount, transfer, cash] = [share(0.05), share(0.12), share(0.06)];
+  const ofF58 = { orderInvoiceId: null, globalInvoiceId: uuid('global-58'), globalInvoiceNumber: 'F-58' };
   orderInvoicing(() => ({
     canInvoice: false,
     problem: 'Esta venta está en la factura global F-58. Si el cliente pide su factura, cancela con el motivo 02 las notas '
-      + 'de crédito vigentes de esa global (NC-4) en el pedido de cada venta, cancela la global con el motivo 04 en Reportes › '
+      + 'de crédito vigentes de esa global (NC-3, NC-4) en el pedido de cada venta, cancela la global con el motivo 04 en Reportes › '
       + 'Factura global, factura esta venta y emite otra vez la global del periodo: ya no la incluirá.',
     proposedReceiver: null,
     proposedEmail: null,
@@ -292,10 +310,15 @@ export const PEDIDO_EN_FACTURA_GLOBAL = asOption(((data) => {
     customerName: null,
     globalInvoiceNumber: 'F-58',
     adjustments: [
+      writeOff('retraso', minutesFromNow(-90), DISCOUNT, discount, 'Se entregó una hora tarde', {
+        creditNotes: [creditNote(3, discount, {
+          ...ofF58, paymentForm: '15', requestedAt: minutesFromNow(-36),
+          uuid: '9B2D4F6A-1C3E-4A5B-8C7D-6E5F4A3B2C1D', stampedAt: minutesFromNow(-36), hasXml: true, hasPdf: true,
+        })],
+      }),
       refund('conchas', minutesFromNow(-40), TRANSFER, transfer, 'Faltaron dos conchas', {
         creditNotes: [creditNote(4, transfer, {
-          orderInvoiceId: null, globalInvoiceId: uuid('global-58'), globalInvoiceNumber: 'F-58',
-          uuid: '3C8E1B2D-5F4A-4B6C-9D7E-8A0F1B2C3D4E', stampedAt: minutesFromNow(-34), hasXml: true, hasPdf: true,
+          ...ofF58, uuid: '3C8E1B2D-5F4A-4B6C-9D7E-8A0F1B2C3D4E', stampedAt: minutesFromNow(-34), hasXml: true, hasPdf: true,
         })],
       }),
       refund('americano', minutesFromNow(-4), CASH, cash, 'Un americano llegó frío', { canIssue: true, awaitsAutomaticIssue: true }),

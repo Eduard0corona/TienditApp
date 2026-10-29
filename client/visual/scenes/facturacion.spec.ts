@@ -35,7 +35,8 @@ import {
 // since the Fase 28F (ADR 0050), self-invoicing turned on, and the invoice the customer asked for online; since the Fase
 // 28G (ADR 0051), the form to replace an invoice with errors, the replaced invoice waiting for its cancellation with
 // relation, the dialog to cancel it without relation, and the replaced one once cancelled; since the Fase 28I (ADR 0054),
-// the refunds of a sale of a global invoice with their credit notes of that global invoice.
+// the refunds of a sale of a global invoice with their credit notes of that global invoice, and since the Fase 28J (ADR
+// 0055) its discount with its own.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -394,7 +395,8 @@ test.describe('Pedidos › Notas de crédito de una venta de la factura global',
         const invoice = await dialog(page, `Facturar ${ORDER_NUMBER}`);
         const heading = invoice.getByRole('heading', { name: 'Notas de crédito' });
         await heading.scrollIntoViewIfNeeded();
-        await expect(invoice.getByText(/al público en general, de la factura global F-58/)).toBeVisible();
+        await expect(invoice.getByText(/al público en general, de la factura global F-58/)).toHaveCount(2);
+        await expect(invoice.getByText(/^Descuento o bonificación · \$/)).toBeVisible();
         await expect(invoice.getByText('Sin nota de crédito todavía: TienditApp la emite en unos minutos.')).toBeVisible();
         await snapScreen(page, `pedidos-factura-notas-de-la-global-${look.suffix}`);
       });
