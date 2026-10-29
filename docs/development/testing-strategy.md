@@ -1503,7 +1503,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - el concepto dice «Descuento o bonificación» para el motivo nuevo y «Condonación» para los otros cuatro.
   - **Application:** `GlobalInvoiceCreditNoteFlowTests` (+7, 23):
     - dos ventas saldadas con una condonación y con un descuento entran en la global por su total, con su aviso; el worker emite una nota para cada una, a público en general, relacionada (01) con la global, con forma 15 y el concepto según el motivo; no van por correo; Pedidos y el detalle de la global las muestran, y la global no se cancela mientras estén vivas;
-    - quedan fuera, con su motivo, la venta que todavía debe, la vendida a crédito aunque tenga una condonación, y la que entre devoluciones y condonaciones no tiene nada que facturar;
+    - quedan fuera, con su motivo, la venta que todavía debe, la vendida a crédito (saldada con una condonación o todavía debiendo: «Se vendió a crédito» va antes que «No está pagada por completo»), y la que entre devoluciones y condonaciones no tiene nada que facturar;
     - la venta condonada después de timbrar la global de su periodo entra en la siguiente, como venta de un periodo anterior, y lleva su nota;
     - la condonación de una venta de una global viva no se deshace, antes de su nota, con ella o con ella cancelada; con la global cancelada se deshace, no lleva nota y la global emitida otra vez la deja fuera mientras deba;
     - cancelada con 02 la nota y la global, la venta entra en la nueva como estaba y su descuento lleva la nota de la nueva, sola;

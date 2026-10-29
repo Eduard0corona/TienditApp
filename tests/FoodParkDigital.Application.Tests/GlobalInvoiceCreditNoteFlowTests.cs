@@ -531,6 +531,8 @@ public class GlobalInvoiceCreditNoteFlowTests
         await using var book = await Book.OpenAsync();
         var owed = await book.OwedSaleAsync(70m);
         var onCredit = await book.OwedSaleAsync(70m, onCredit: true);
+        // Sold on credit and still owed: its reason is that it was sold on credit, not that it is owed.
+        var owedOnCredit = await book.OwedSaleAsync(70m, onCredit: true);
         var givenBack = await book.OwedSaleAsync(70m);
         var paid = await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
         await book.WriteOffAsync(onCredit.Id, 30m);
@@ -545,6 +547,7 @@ public class GlobalInvoiceCreditNoteFlowTests
             [
                 (owed.OrderNumber, GlobalInvoiceDrafts.NotPaidReason),
                 (onCredit.OrderNumber, GlobalInvoiceDrafts.CreditReason),
+                (owedOnCredit.OrderNumber, GlobalInvoiceDrafts.CreditReason),
                 (givenBack.OrderNumber, GlobalInvoiceDrafts.FullyGivenBackReason)
             ],
             draft.LeftOut.Select(l => (l.OrderNumber, l.Reason)));
