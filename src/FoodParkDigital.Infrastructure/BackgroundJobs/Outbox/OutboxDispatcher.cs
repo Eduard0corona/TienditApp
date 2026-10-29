@@ -12,10 +12,10 @@ using Microsoft.Extensions.Options;
 namespace FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
 
 /// <summary>
-/// Runs the durable handlers of committed domain events. Each message is claimed with a lease, every
-/// handler runs in its own scope with the tenant and actor of the event, and a handler that succeeded is
-/// recorded so a retry skips it. Failures wait according to <see cref="RetrySchedule"/> and are set aside
-/// after <see cref="BackgroundJobOptions.QueueOptions.MaxAttempts"/>.
+/// Runs the durable handlers of committed domain events. Each message is claimed with a lease, renewed while the batch is
+/// worked on (<see cref="LeaseKeeper{TItem}"/>, Fase 28K), every handler runs in its own scope with the tenant and actor of
+/// the event, and a handler that succeeded is recorded so a retry skips it. Failures wait according to
+/// <see cref="RetrySchedule"/> and are set aside after <see cref="BackgroundJobOptions.QueueOptions.MaxAttempts"/>.
 /// </summary>
 public sealed class OutboxDispatcher
 {
@@ -43,8 +43,11 @@ public sealed class OutboxDispatcher
     public async Task<int> DispatchDueAsync(CancellationToken cancellationToken)
     {
         var claimed = await ClaimDueAsync(cancellationToken);
+        await using var leases = new LeaseKeeper<OutboxMessage>(
+            _scopeFactory, _clock, TimeSpan.FromSeconds(_options.LeaseSeconds), claimed,
+            (message, now, lease) => message.Claim(now, lease), message => message.Id, _logger, cancellationToken);
         foreach (var message in claimed)
-            await DispatchAsync(message, cancellationToken);
+            await DispatchAsync(message, leases, cancellationToken);
 
         return claimed.Count;
     }
@@ -109,7 +112,7 @@ public sealed class OutboxDispatcher
         return claimed;
     }
 
-    private async Task DispatchAsync(OutboxMessage message, CancellationToken cancellationToken)
+    private async Task DispatchAsync(OutboxMessage message, LeaseKeeper<OutboxMessage> leases, CancellationToken cancellationToken)
     {
         string? failure = null;
         var permanent = false;
@@ -121,10 +124,20 @@ public sealed class OutboxDispatcher
         }
         else
         {
-            failure = await RunHandlersAsync(message, domainEvent, cancellationToken);
+            try
+            {
+                failure = await RunHandlersAsync(message, domainEvent, leases.TokenFor(message));
+            }
+            catch (OperationCanceledException) when (leases.IsLost(message) && !cancellationToken.IsCancellationRequested)
+            {
+                // Another instance holds it now and finishes it: the handlers that succeeded here are recorded, and it
+                // skips them.
+                return;
+            }
         }
 
-        await CompleteAsync(message, failure, permanent, cancellationToken);
+        if (!await leases.CompleteAsync(message, () => CompleteAsync(message, failure, permanent, cancellationToken), cancellationToken))
+            _logger.LogWarning("Outbox message {MessageId} was claimed by another worker before it finished", message.Id);
     }
 
     private DomainEvent? Deserialize(OutboxMessage message, ref string? failure)

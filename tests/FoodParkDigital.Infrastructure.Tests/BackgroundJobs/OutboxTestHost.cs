@@ -163,6 +163,15 @@ internal sealed class HandlerLog
 
     /// <summary>Whether each run of <see cref="FlakyHandler"/> was the outbox's last attempt for its message.</summary>
     public List<bool> FlakyLastAttempts { get; } = [];
+
+    /// <summary>Set when <see cref="SlowHandler"/> starts its first run.</summary>
+    public TaskCompletionSource SlowStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>What <see cref="SlowHandler"/> waits for before it finishes.</summary>
+    public TaskCompletionSource SlowRelease { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Whether a run of <see cref="SlowHandler"/> was stopped by its token.</summary>
+    public bool SlowCancelled { get; set; }
 }
 
 /// <summary>Audits the order through the scoped context without saving, as real outbox handlers do.</summary>
@@ -211,5 +220,34 @@ internal sealed class FlakyHandler : IOutboxEventHandler<OrderCreatedEvent>
         }
 
         return Task.CompletedTask;
+    }
+}
+
+/// <summary>Takes as long as the test wants: an email whose PDF and mail server take minutes.</summary>
+internal sealed class SlowHandler : IOutboxEventHandler<OrderCreatedEvent>
+{
+    private readonly HandlerLog _log;
+    private readonly ICurrentTenantService _tenant;
+
+    public SlowHandler(HandlerLog log, ICurrentTenantService tenant)
+    {
+        _log = log;
+        _tenant = tenant;
+    }
+
+    public async Task HandleAsync(OrderCreatedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
+    {
+        lock (_log.Runs)
+            _log.Runs.Add((nameof(SlowHandler), _tenant.TenantId, null, context.Attempt));
+        _log.SlowStarted.TrySetResult();
+        try
+        {
+            await _log.SlowRelease.Task.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _log.SlowCancelled = true;
+            throw;
+        }
     }
 }

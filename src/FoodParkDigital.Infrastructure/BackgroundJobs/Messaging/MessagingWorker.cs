@@ -17,7 +17,8 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs.Messaging;
 /// Starts due campaigns, queues appointment reminders and sends the queued WhatsApp messages with retries.
 /// It finds work across businesses (an explicit system scope, the only place it reads without the tenant
 /// filter) and does each piece in a scope of its own business, where the Application services run with the
-/// query filters on.
+/// query filters on. The lease of each claimed message is renewed while the batch is sent
+/// (<see cref="LeaseKeeper{TItem}"/>, Fase 28K).
 /// </summary>
 public sealed class MessagingWorker
 {
@@ -277,9 +278,12 @@ public sealed class MessagingWorker
     public async Task<int> DispatchDueAsync(CancellationToken cancellationToken)
     {
         var claimed = await ClaimDueAsync(cancellationToken);
+        await using var leases = new LeaseKeeper<OutgoingMessage>(
+            _scopeFactory, _clock, TimeSpan.FromSeconds(_options.LeaseSeconds), claimed,
+            (message, now, lease) => message.Claim(now, lease), message => message.Id, _logger, cancellationToken);
         foreach (var message in claimed)
         {
-            var sent = await ProcessAsync(message, cancellationToken);
+            var sent = await ProcessAsync(message, leases, cancellationToken);
             if (sent && _options.SendIntervalMilliseconds > 0)
                 await Task.Delay(_options.SendIntervalMilliseconds, cancellationToken);
         }
@@ -322,13 +326,19 @@ public sealed class MessagingWorker
     }
 
     /// <returns>True when the message was handed to the provider.</returns>
-    private async Task<bool> ProcessAsync(OutgoingMessage message, CancellationToken cancellationToken)
+    private async Task<bool> ProcessAsync(OutgoingMessage message, LeaseKeeper<OutgoingMessage> leases, CancellationToken cancellationToken)
     {
         OutgoingSendOutcome outcome;
         try
         {
             await using var scope = _scopeFactory.CreateTenantScope(message.TenantId, WorkerActor);
-            outcome = await scope.ServiceProvider.GetRequiredService<OutgoingMessageSender>().SendAsync(message, cancellationToken);
+            outcome = await scope.ServiceProvider.GetRequiredService<OutgoingMessageSender>()
+                .SendAsync(message, leases.TokenFor(message));
+        }
+        catch (OperationCanceledException) when (leases.IsLost(message) && !cancellationToken.IsCancellationRequested)
+        {
+            // Another instance holds it now and decides what happens to it.
+            return false;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -340,6 +350,13 @@ public sealed class MessagingWorker
             outcome = new OutgoingSendOutcome(OutgoingSendDecision.TransientFailure, Reason: FailureDescription.Describe(ex));
         }
 
+        if (!await leases.CompleteAsync(message, () => CompleteAsync(message, outcome, cancellationToken), cancellationToken))
+            _logger.LogWarning("Outgoing message {MessageId} was claimed by another worker before it finished", message.Id);
+        return outcome.Decision == OutgoingSendDecision.Sent;
+    }
+
+    private async Task CompleteAsync(OutgoingMessage message, OutgoingSendOutcome outcome, CancellationToken cancellationToken)
+    {
         await using var completionScope = _scopeFactory.CreateAsyncScope();
         var context = completionScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         context.Attach(message);
@@ -381,7 +398,5 @@ public sealed class MessagingWorker
         {
             _logger.LogWarning("Outgoing message {MessageId} was claimed by another worker before it finished", message.Id);
         }
-
-        return outcome.Decision == OutgoingSendDecision.Sent;
     }
 }
