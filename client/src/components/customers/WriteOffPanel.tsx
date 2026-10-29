@@ -30,7 +30,9 @@ const NOTES_NEEDED = 'Escribe por qué condonas cuando el motivo es «Otro».';
  * condonado» in the account.
  */
 export default function WriteOffPanel({ account, submitting, error, onSubmit, onCancel }: WriteOffPanelProps) {
-  const ids = { scope: useId(), amount: useId(), reason: useId(), notes: useId(), amountHelp: useId(), notesHelp: useId() };
+  const ids = {
+    scope: useId(), amount: useId(), reason: useId(), reasonHelp: useId(), notes: useId(), amountHelp: useId(), notesHelp: useId(),
+  };
   const [orderId, setOrderId] = useState('');
   const maxCents = toCents(orderId ? account.orders.find((o) => o.orderId === orderId)?.balance ?? 0 : account.owed);
   // It starts empty: the owner writes how much, even when it is all of it, so a slip never forgives the whole account.
@@ -101,10 +103,16 @@ export default function WriteOffPanel({ account, submitting, error, onSubmit, on
           className="form-select"
           value={reason}
           onChange={(event) => setReason(Number(event.target.value) as OrderWriteOffReason)}
+          aria-describedby={reason === OrderWriteOffReason.Discount ? ids.reasonHelp : undefined}
           disabled={submitting}
         >
           {WRITE_OFF_REASONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
+        {reason === OrderWriteOffReason.Discount && (
+          <div id={ids.reasonHelp} className="form-text">
+            Baja lo que se debe. Si el cliente ya pagó, registra un reembolso en el pedido.
+          </div>
+        )}
       </div>
 
       <div className="mb-3">

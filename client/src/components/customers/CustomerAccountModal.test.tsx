@@ -242,6 +242,24 @@ describe('CustomerAccountModal', () => {
     expect(screen.getByRole('dialog', { name: 'Estado de cuenta' })).toBeInTheDocument();
   });
 
+  it('offers a discount after the sale as a reason, and says a paid one is a refund', async () => {
+    signIn([], 'TenantAdmin');
+    request.mockImplementation(((method: string) => Promise.resolve(method === 'post' ? { ...ACCOUNT, owed: 130 } : ACCOUNT)) as never);
+    renderModal();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Condonar' }));
+    await userEvent.type(screen.getByLabelText('Cuánto'), '20');
+    await userEvent.selectOptions(screen.getByLabelText('Motivo'), 'Descuento o bonificación');
+    expect(screen.getByLabelText('Motivo')).toHaveAccessibleDescription(
+      'Baja lo que se debe. Si el cliente ya pagó, registra un reembolso en el pedido.');
+    await userEvent.click(screen.getByRole('button', { name: 'Condonar $20.00' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Se condonaron $20.00.'));
+    expect(request).toHaveBeenCalledWith('post', '/api/v1/customers/account/write-offs', {
+      body: expect.objectContaining({ customerId: 'c1', amount: 20, reason: 4, expectedOwed: 150 }),
+    });
+  });
+
   it('keeps the write-off panel with the server’s reason when it is refused', async () => {
     signIn([], 'TenantAdmin');
     request.mockImplementation(((method: string) => method === 'post'

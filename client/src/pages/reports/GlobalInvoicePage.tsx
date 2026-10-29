@@ -256,8 +256,8 @@ function GlobalInvoiceScreen({ invoice, refreshError, onRefresh }: GlobalInvoice
           <div className="card-body">
             <h2 id={`${id}-notes`} className="h5 mb-1">Notas de crédito ({creditNotes.length})</h2>
             <p className="small text-muted">
-              Las de los reembolsos de sus ventas, al público en general. Se emiten, se cancelan y se descargan en el pedido de
-              cada venta.
+              Las de los reembolsos y las condonaciones de sus ventas, al público en general. Se emiten, se cancelan y se
+              descargan en el pedido de cada venta.
             </p>
             <div className="table-responsive">
               <table className="table table-sm align-middle mb-0">
