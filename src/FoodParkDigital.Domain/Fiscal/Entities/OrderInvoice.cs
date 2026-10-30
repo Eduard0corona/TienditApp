@@ -31,6 +31,13 @@ public class OrderInvoice : CfdiInvoice, IAggregateRoot
     public string? ReceiverEmail { get; private set; }
 
     /// <summary>
+    /// The WhatsApp the customer gets the PDF of its CFDI at, with a link to their XML, once each is stamped (Fase 28M,
+    /// ADR 0058): the invoice, its payment complements and its credit notes. Null when nobody gets them by WhatsApp. It is
+    /// not part of the CFDI.
+    /// </summary>
+    public string? ReceiverWhatsApp { get; private set; }
+
+    /// <summary>
     /// The invoice of an order, with its folio and the amounts of its CFDI draft, before the PAC is asked: what is saved here
     /// is what every attempt sends. Paid in full, in one exhibition (PUE) with the form that paid it; otherwise in
     /// installments (PPD) with «Por definir» (99).
@@ -74,6 +81,9 @@ public class OrderInvoice : CfdiInvoice, IAggregateRoot
 
     /// <summary>Where its CFDI go by email from now on, or nowhere (null).</summary>
     public void SendTo(string? email) => ReceiverEmail = InvoiceEmailAddress.Normalize(email);
+
+    /// <summary>Where its CFDI go by WhatsApp from now on (a number in E.164), or nowhere (null).</summary>
+    public void SendWhatsAppTo(string? phone) => ReceiverWhatsApp = InvoiceWhatsApp.Normalize(phone);
 
     /// <summary>
     /// Another invoice of the same order replaces this stamped one, which then waits to be cancelled with motive 01. The

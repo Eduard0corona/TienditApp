@@ -1,13 +1,17 @@
 using System.Text.Json;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Fiscal.Entities;
+using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Orders.Entities;
 
 namespace FoodParkDigital.Domain.Messaging.Entities;
 
 /// <summary>
-/// One WhatsApp message of a campaign or a reminder, queued and sent by a background worker with retries.
-/// It keeps the text and parameters it was queued with, so editing the template later does not change it.
+/// One WhatsApp message of a campaign, a reminder, a notice or a CFDI (Fase 28M), queued and sent by a background worker with
+/// retries. It keeps the text and parameters it was queued with, so editing the template later does not change it.
 /// </summary>
 public class OutgoingMessage : AuditableEntity, ITenantScoped
 {
@@ -16,6 +20,14 @@ public class OutgoingMessage : AuditableEntity, ITenantScoped
     public const int MaxErrorLength = 500;
     public const int MaxDeduplicationKeyLength = 120;
     public const int MaxProviderMessageIdLength = 200;
+    public const int LinkTokenLength = Order.TrackingTokenLength;
+
+    /// <summary>How long the link of a CFDI's message downloads its XML and PDF (Fase 28M, ADR 0058).</summary>
+    public static readonly TimeSpan CfdiLinkLifetime = TimeSpan.FromDays(90);
+
+    public const string CfdiNotStampedMessage = "Solo se envía por WhatsApp un CFDI timbrado.";
+    public const string GlobalCreditNoteMessage =
+        "La nota de crédito de una venta de la factura global es para el público en general: no se envía por WhatsApp.";
 
     private OutgoingMessage() { }
 
@@ -78,6 +90,70 @@ public class OutgoingMessage : AuditableEntity, ITenantScoped
     public string? LastError { get; private set; }
     /// <summary>Unique per business when set: the same reminder or campaign recipient is never queued twice.</summary>
     public string? DeduplicationKey { get; private set; }
+
+    /// <summary>Which CFDI of an order's invoice it carries (Fase 28M); null for any other purpose.</summary>
+    public CfdiEmailDocument? CfdiDocument { get; private set; }
+    /// <summary>The invoice, payment complement or credit note whose PDF it carries.</summary>
+    public Guid? CfdiId { get; private set; }
+    /// <summary>The invoice of the order the CFDI belongs to (the CFDI itself, when it is the invoice).</summary>
+    public Guid? OrderInvoiceId { get; private set; }
+    /// <summary>Who asked for a CFDI's message with «Enviar por WhatsApp»; null when TienditApp queued it on its own.</summary>
+    public Guid? RequestedByUserId { get; private set; }
+    /// <summary>
+    /// The link of a CFDI's message to download its XML and its PDF (<see cref="CfdiLinkLifetime"/> after it was queued),
+    /// unique: whoever has it gets those two files, nothing else.
+    /// </summary>
+    public string? LinkToken { get; private set; }
+
+    /// <summary>
+    /// The message that carries the PDF of the stamped <paramref name="cfdi"/> to <paramref name="phone"/> (Fase 28M, ADR 0058),
+    /// with its text (the template's, or TienditApp's) and the link to its XML. Only the invoice of an order and its payment
+    /// complements and credit notes go to a customer: a global invoice, and the credit notes of its sales, have nobody to go
+    /// to.
+    /// </summary>
+    public static OutgoingMessage ForCfdi(
+        Cfdi cfdi,
+        string? phone,
+        string? recipientName,
+        string body,
+        string? providerTemplateName,
+        string languageCode,
+        IReadOnlyCollection<string> parameters,
+        string linkToken,
+        Guid? requestedByUserId,
+        DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(cfdi);
+        var (document, orderInvoiceId) = cfdi switch
+        {
+            OrderInvoice invoice => (CfdiEmailDocument.Invoice, invoice.Id),
+            PaymentComplement complement => (CfdiEmailDocument.PaymentComplement, complement.OrderInvoiceId),
+            CreditNote { OrderInvoiceId: { } invoiceId } => (CfdiEmailDocument.CreditNote, invoiceId),
+            CreditNote => throw new DomainException(GlobalCreditNoteMessage),
+            _ => throw new DomainException("Solo la factura de un pedido, sus complementos y sus notas de crédito se envían por WhatsApp.")
+        };
+        if (cfdi.Status != OrderInvoiceStatus.Stamped)
+            throw new DomainException(CfdiNotStampedMessage);
+        if (!InvoiceWhatsApp.IsPhone(phone))
+            throw new DomainException(InvoiceWhatsApp.InvalidMessage);
+        if (!Order.IsTrackingToken(linkToken))
+            throw new DomainException("El enlace del CFDI no es válido.");
+        if (requestedByUserId == Guid.Empty)
+            throw new DomainException("El envío necesita quién lo pide.");
+
+        return new OutgoingMessage(
+            cfdi.TenantId, MessagePurpose.CfdiDocument, phone, recipientName, body, providerTemplateName, languageCode, parameters, now)
+        {
+            CfdiDocument = document,
+            CfdiId = cfdi.Id,
+            OrderInvoiceId = orderInvoiceId,
+            RequestedByUserId = requestedByUserId,
+            LinkToken = linkToken
+        };
+    }
+
+    /// <summary>Whether the link of this CFDI's message still downloads its files at <paramref name="now"/>.</summary>
+    public bool LinkWorksAt(DateTimeOffset now) => LinkToken is not null && CreatedAt > now - CfdiLinkLifetime;
 
     public IReadOnlyList<string> GetParameters()
         => JsonSerializer.Deserialize<string[]>(ParametersJson) ?? [];

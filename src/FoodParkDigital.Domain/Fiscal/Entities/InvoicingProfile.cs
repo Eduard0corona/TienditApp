@@ -53,6 +53,13 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
     /// </summary>
     public byte[]? SelfInvoiceKey { get; private set; }
 
+    /// <summary>
+    /// The message template its CFDI go by WhatsApp with (Fase 28M, ADR 0058): one approved in Meta with a document header,
+    /// which carries the PDF. Null, or one no longer there, active or for invoices, sends TienditApp's text, which WhatsApp
+    /// only delivers within 24 hours of the customer's last message.
+    /// </summary>
+    public Guid? WhatsAppTemplateId { get; private set; }
+
     public byte[] Version { get; private set; } = null!;
 
     public bool HasCertificate => CertificateNumber is not null;
@@ -129,6 +136,14 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
 
     /// <summary>Only the business invoices again; the key stays, and so do the invoices its customers already have.</summary>
     public void TurnOffSelfInvoicing() => SelfInvoicing = false;
+
+    /// <summary>The template the next CFDI go by WhatsApp with, or TienditApp's text (null).</summary>
+    public void UseWhatsAppTemplate(Guid? templateId)
+    {
+        if (templateId == Guid.Empty)
+            throw new DomainException("Elige una plantilla o el texto de TienditApp.");
+        WhatsAppTemplateId = templateId;
+    }
 
     /// <summary>The code the ticket of an order prints while self-invoicing is on; null when it is off.</summary>
     public string? SelfInvoiceCodeFor(Guid orderId)

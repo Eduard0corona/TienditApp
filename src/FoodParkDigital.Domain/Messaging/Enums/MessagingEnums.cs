@@ -19,7 +19,13 @@ public enum MessagePurpose
     /// What a customer who is up to date owes that comes due in a few days (Fase 26E, ADR 0043), queued by the system once per
     /// last day to pay. An opt-out stops it, as every reminder.
     /// </summary>
-    CreditDueSoon = 4
+    CreditDueSoon = 4,
+    /// <summary>
+    /// The PDF of a stamped CFDI of an order's invoice, with a link to its XML (Fase 28M, ADR 0058): queued when it is stamped
+    /// and its invoice has a WhatsApp, or with «Enviar por WhatsApp». An opt-out does not stop it: it is the receipt of a
+    /// purchase the customer asked to invoice.
+    /// </summary>
+    CfdiDocument = 5
 }
 
 public enum OutgoingMessageStatus
