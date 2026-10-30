@@ -147,7 +147,7 @@ export default function OrderInvoiceList({
               </p>
             )}
             <CfdiEmailStatus emails={invoice.emails} />
-            <CfdiWhatsAppStatus messages={invoice.whatsApps} />
+            <CfdiWhatsAppStatus messages={invoice.whatsApps} cancelled={invoice.status === OrderInvoiceStatus.Cancelled} />
             <div className="d-flex flex-wrap gap-2 mt-2">
               {invoice.hasXml && (
                 <>

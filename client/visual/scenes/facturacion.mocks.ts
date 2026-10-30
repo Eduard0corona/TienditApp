@@ -10,7 +10,8 @@ type PrepareData = NonNullable<SceneOptions['prepareData']>;
 // 28C, ADR 0047) invoiced in installments, with the payment complements of its payments, or (Fase 28D, ADR 0048) with
 // what was given back and the credit notes of each refund. Since the Fase 28E (ADR 0049), each CFDI says how its latest
 // email to the customer went; since the Fase 28F (ADR 0050), whether the customer asked for it online; since the Fase
-// 28M (ADR 0058), how its latest WhatsApp went, with the business's WhatsApp connected.
+// 28M (ADR 0058), how its latest WhatsApp went, with the business's WhatsApp connected; since the Fase 28N (ADR 0059),
+// the notice of a cancellation as its latest email.
 
 // OrderInvoiceStatus and CfdiCancellationMotive as the contract numbers them.
 const STAMPING = 0;

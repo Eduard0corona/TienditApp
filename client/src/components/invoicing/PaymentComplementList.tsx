@@ -175,7 +175,7 @@ export default function PaymentComplementList({
                         </p>
                       )}
                       <CfdiEmailStatus emails={complement.emails} />
-                      <CfdiWhatsAppStatus messages={complement.whatsApps} />
+                      <CfdiWhatsAppStatus messages={complement.whatsApps} cancelled={complement.status === OrderInvoiceStatus.Cancelled} />
                       <div className="d-flex flex-wrap gap-2 mt-2">
                         {complement.hasXml && (
                           <>

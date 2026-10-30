@@ -46,6 +46,7 @@ import {
 // 0055) its discount with its own. Since the Fase 28L (ADR 0057), the logo that goes on the PDF, or where to upload it.
 // Since the Fase 28M (ADR 0058), the invoice by WhatsApp: the card of Configuración › Facturación with the template, the
 // WhatsApp of the customer when invoicing, how the latest message went (read, or not delivered) and «Enviar por WhatsApp».
+// Since the Fase 28N (ADR 0059), the invoice cancelled with the notice TienditApp sent by email.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },

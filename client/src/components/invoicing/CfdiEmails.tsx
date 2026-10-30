@@ -16,10 +16,10 @@ const FAILURES: Record<CfdiEmailFailure, string> = {
 
 // The notice that the SAT cancelled it (Fase 28N) is not sent again by hand: the customer hears it another way.
 const NOTICE_FAILURES: Record<CfdiEmailFailure, string> = {
-  [CfdiEmailFailure.Rejected]: 'el servidor de correo lo rechazó. Avísale al cliente por otro medio.',
+  [CfdiEmailFailure.Rejected]: 'el servidor de correo rechazó el aviso. Avísale al cliente por otro medio.',
   [CfdiEmailFailure.NotConfigured]: 'TienditApp no tiene el envío de correos configurado. Avísale al cliente por otro medio.',
-  [CfdiEmailFailure.NoLongerStamped]: 'no se pudo enviar. Avísale al cliente por otro medio.',
-  [CfdiEmailFailure.NotDelivered]: 'el servidor de correo no lo tomó después de varios intentos. Avísale al cliente por otro medio.',
+  [CfdiEmailFailure.NoLongerStamped]: 'TienditApp no pudo mandar el aviso. Avísale al cliente por otro medio.',
+  [CfdiEmailFailure.NotDelivered]: 'el servidor de correo no tomó el aviso después de varios intentos. Avísale al cliente por otro medio.',
 };
 
 interface CfdiEmailStatusProps {
@@ -29,12 +29,12 @@ interface CfdiEmailStatusProps {
 
 /**
  * How the latest email of a CFDI to the customer went: sent (maybe without the PDF), on its way, or not sent and why. Once
- * the SAT cancels it, the latest is the notice of that (Fase 28N).
+ * the SAT cancels it, and its invoice had an email, the latest is the notice of that (Fase 28N).
  */
 export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
   const latest = emails[0];
   if (!latest) return null;
-  if (latest.kind === CfdiEmailKind.Cancellation) return <CancellationNoticeStatus notice={latest} />;
+  if (latest.kind === CfdiEmailKind.Cancellation) return <CancellationNoticeStatus notice={latest} earlier={emails.slice(1)} />;
 
   if (latest.sentAt) {
     return (
@@ -65,23 +65,40 @@ export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
   );
 }
 
-/** How the notice that the SAT cancelled the CFDI went; TienditApp sends it on its own, without files. */
-function CancellationNoticeStatus({ notice }: { notice: CfdiEmail }) {
+interface CancellationNoticeStatusProps {
+  notice: CfdiEmail;
+  /** The CFDI's earlier emails shown, the newest first. */
+  earlier: CfdiEmail[];
+}
+
+/**
+ * How the notice that the SAT cancelled the CFDI went; TienditApp sends it on its own, without files, to the invoice's
+ * email. Its three states share one live region, so the outcome is announced when it replaces «Avisando…».
+ */
+function CancellationNoticeStatus({ notice, earlier }: CancellationNoticeStatusProps) {
+  // Whoever got its files at another address hears nothing from TienditApp.
+  const others = [...new Set(earlier
+    .filter((email) => email.kind === CfdiEmailKind.Documents && email.sentAt && email.to.toLowerCase() !== notice.to.toLowerCase())
+    .map((email) => email.to))];
+  const alsoTo = others.length > 0 && ` Los archivos también llegaron a ${others.join(' y ')}: avísale por otro medio.`;
+
   if (notice.sentAt) {
     // «p.m.» already ends the sentence.
     const when = formatDateTime(notice.sentAt);
     return (
-      <p className="small text-muted mb-0 mt-1">
+      <p className="small text-muted mb-0 mt-1" role="status">
         <i className="ri-mail-check-line me-1" aria-hidden="true"></i>
         Se avisó la cancelación por correo a {notice.to} el {when}{when.endsWith('.') ? '' : '.'}
+        {alsoTo}
       </p>
     );
   }
   if (notice.failedAt) {
     return (
-      <p className="small text-danger mb-0 mt-1">
+      <p className="small text-danger mb-0 mt-1" role="status">
         <i className="ri-mail-close-line me-1" aria-hidden="true"></i>
         No se avisó la cancelación a {notice.to}: {NOTICE_FAILURES[notice.failure ?? CfdiEmailFailure.NoLongerStamped]}
+        {alsoTo}
       </p>
     );
   }
@@ -89,7 +106,8 @@ function CancellationNoticeStatus({ notice }: { notice: CfdiEmail }) {
     <p className="small text-muted mb-0 mt-1" role="status">
       <i className="ri-mail-send-line me-1" aria-hidden="true"></i>
       Avisando la cancelación por correo a {notice.to}…
-      {notice.failedAttempts > 0 && ' El servidor de correo no lo ha tomado; TienditApp lo vuelve a intentar.'}
+      {notice.failedAttempts > 0 && ' El servidor de correo no ha tomado el aviso; TienditApp lo vuelve a intentar.'}
+      {alsoTo}
     </p>
   );
 }
