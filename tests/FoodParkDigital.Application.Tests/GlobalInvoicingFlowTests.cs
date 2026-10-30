@@ -465,6 +465,26 @@ public class GlobalInvoicingFlowTests
     }
 
     [Fact]
+    public async Task GlobalThatTheSatCancelsLater_ShouldTellNobody_ThroughTheWorkerEither()
+    {
+        await using var book = await Book.OpenAsync();
+        await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        book.Clock.UtcNow = NextMorning;
+        var first = (await book.IssueAsync(1, 100m)).Value;
+        Assert.Equal(OrderInvoiceStatus.Cancelling, (await book.CancelAsync(first.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).Value.Status);
+        book.Gateway.SatStatus = new CfdiSatStatus(CfdiSatState.Cancelled, false);
+
+        var settled = await new CheckInvoiceCancellationsCommandHandler(
+                book.Context, book.Gateway, book.Storage, book.Clock, NullLogger<CheckInvoiceCancellationsCommandHandler>.Instance)
+            .Handle(new CheckInvoiceCancellationsCommand(), CancellationToken.None);
+
+        Assert.Equal(1, settled.Value);
+        Assert.Equal(OrderInvoiceStatus.Cancelled, (await book.Context.GlobalInvoices.AsNoTracking().SingleAsync()).Status);
+        // Nobody to tell (Fase 28N): it was for the general public.
+        Assert.Empty(await book.Context.CfdiEmails.ToListAsync());
+    }
+
+    [Fact]
     public async Task SaleInvoicedOnItsOwnAfterTheGlobalWasCancelled_ShouldNotComeBack_OnceRefundedAndItsInvoiceCancelled()
     {
         await using var book = await Book.OpenAsync();

@@ -42,6 +42,15 @@ public class CfdiEmailFlowTests
     private const string CustomerPhone = "+525512345678";
     private const string Karla = "karla@ejemplo.mx";
 
+    private static readonly CfdiReceiverInput OtherCustomer = new()
+    {
+        Rfc = "URE180429TM6",
+        Name = "UNIVERSIDAD ROBOTICA ESPAÑOLA",
+        PostalCode = "86991",
+        FiscalRegime = "601",
+        CfdiUse = "G03"
+    };
+
     private static readonly CfdiReceiverInput Receiver = new()
     {
         Rfc = "xiqb891116qe4",
@@ -583,6 +592,110 @@ public class CfdiEmailFlowTests
     }
 
     [Fact]
+    public async Task Substitution_ForAnotherRfc_ShouldNotNameTheReplacement_InTheNoticeOfTheOldOne()
+    {
+        await using var book = await Book.OpenAsync();
+        var original = (await book.IssueAsync((await book.PaidSaleAsync()).Id, Karla)).Value;
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+
+        // F-1 was for the wrong customer: F-2 is somebody else's CFDI.
+        var replacement = (await book.SubstituteAsync(original.Id, "compras@robotica.mx", OtherCustomer)).Value;
+
+        var notice = Assert.Single(await book.NoticesAsync());
+        Assert.Equal((original.Id, Karla), (notice.CfdiId, notice.To));
+        await book.DeliverAsync(notice.Id);
+        var stamped = await book.Context.OrderInvoices.AsNoTracking().SingleAsync(i => i.Id == replacement.Id);
+        var sent = book.Email.Documents[^1];
+        Assert.Contains("Motivo: tenía errores y se emitió otra en su lugar.", sent.HtmlBody);
+        Assert.DoesNotContain("La sustituye", sent.HtmlBody);
+        Assert.DoesNotContain(stamped.Uuid!, sent.HtmlBody);
+    }
+
+    [Fact]
+    public async Task Cancellation_ThatTheWorkerConfirmedMeanwhile_ShouldLeaveOnlyItsNotice()
+    {
+        var meanwhile = new CancelledMeanwhile();
+        await using var book = await Book.OpenAsync(meanwhile);
+        var invoice = (await book.IssueAsync((await book.PaidSaleAsync()).Id, Karla)).Value;
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        meanwhile.Tenant = book.Fixture.TenantService;
+        meanwhile.Armed = true;
+
+        // The request saves after the worker cancelled it with its own notice: the request tries again and asks for none.
+        Assert.Equal(OrderInvoiceStatus.Cancelled, (await book.CancelInvoiceAsync(invoice.Id)).Value.Status);
+
+        Assert.Equal(meanwhile.TheirsId, Assert.Single(await book.NoticesAsync()).Id);
+    }
+
+    [Fact]
+    public async Task Cancellation_WithAnAddressThatNoLongerPasses_ShouldStillCancel_WithoutANotice()
+    {
+        await using var book = await Book.OpenAsync();
+        var invoice = (await book.IssueAsync((await book.PaidSaleAsync()).Id, Karla)).Value;
+        // Kept before a rule was tightened.
+        var kept = await book.Context.OrderInvoices.SingleAsync();
+        book.Context.Entry(kept).Property(i => i.ReceiverEmail).CurrentValue = "ñandú@ejemplo.mx";
+        await book.Context.SaveChangesAsync();
+        book.Context.ChangeTracker.Clear();
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+
+        Assert.Equal(OrderInvoiceStatus.Cancelled, (await book.CancelInvoiceAsync(invoice.Id)).Value.Status);
+
+        Assert.Empty(await book.NoticesAsync());
+    }
+
+    [Fact]
+    public async Task ComplementsAndCreditNotes_ThatTheSatCancelsLater_ShouldBeToldByTheWorker()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id, Karla);
+        Assert.Equal(1, (await book.IssuePendingComplementsAsync()).Value);
+        await book.WriteOffAsync(sale.Id, 50m);
+        Assert.Equal(1, (await book.IssuePendingCreditNotesAsync()).Value);
+        var complement = await book.Context.PaymentComplements.AsNoTracking().SingleAsync();
+        var note = await book.Context.CreditNotes.AsNoTracking().SingleAsync();
+
+        Assert.Equal(OrderInvoiceStatus.Cancelling, (await book.CancelCreditNoteAsync(note.Id)).Value.Status);
+        Assert.Equal(OrderInvoiceStatus.Cancelling, (await book.CancelComplementAsync(complement.Id)).Value.Status);
+        Assert.Empty(await book.NoticesAsync());
+        book.Gateway.SatStatus = new CfdiSatStatus(CfdiSatState.Cancelled, false);
+
+        Assert.Equal(2, await book.CheckCancellationsAsync());
+
+        Assert.Equal(
+            [(CfdiEmailDocument.PaymentComplement, complement.Id), (CfdiEmailDocument.CreditNote, note.Id)],
+            (await book.NoticesAsync()).OrderBy(e => e.Document).Select(e => (e.Document, e.CfdiId)));
+    }
+
+    [Fact]
+    public async Task Queue_ShouldEndANotice_AsAnyEmail_WithoutAProvider_OrAfterTheLastAttempt()
+    {
+        await using var book = await Book.OpenAsync();
+        book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
+        foreach (var sale in new[] { await book.PaidSaleAsync(), await book.PaidSaleAsync() })
+        {
+            var invoice = (await book.IssueAsync(sale.Id, Karla)).Value;
+            await book.CancelInvoiceAsync(invoice.Id);
+            book.Clock.UtcNow = book.Clock.UtcNow.AddMinutes(1);
+        }
+        var notices = (await book.NoticesAsync()).OrderBy(e => e.RequestedAt).ToList();
+
+        book.Email.DocumentsOutcome = EmailSendOutcome.NotConfigured;
+        await book.DeliverAsync(notices[0].Id);
+        book.Email.DocumentsFailure = new IOException("The SMTP server could not be reached.");
+        await Assert.ThrowsAsync<IOException>(() => book.DeliverAsync(notices[1].Id, attempt: 7, maxAttempts: 8));
+        Assert.Equal((1, true), await book.Context.CfdiEmails.AsNoTracking().Where(e => e.Id == notices[1].Id)
+            .Select(e => new ValueTuple<int, bool>(e.FailedAttempts, e.SentAt == null && e.FailedAt == null)).SingleAsync());
+        await book.DeliverAsync(notices[1].Id, attempt: 8, maxAttempts: 8);
+
+        Assert.Equal(
+            [(CfdiEmailFailure?)CfdiEmailFailure.NotConfigured, CfdiEmailFailure.NotDelivered],
+            await book.Context.CfdiEmails.AsNoTracking().Where(e => e.Kind == CfdiEmailKind.Cancellation)
+                .OrderBy(e => e.RequestedAt).Select(e => e.Failure).ToListAsync());
+    }
+
+    [Fact]
     public async Task Queue_ShouldNotSendANotice_OfACfdiThatIsNotCancelled()
     {
         await using var book = await Book.OpenAsync();
@@ -665,6 +778,38 @@ public class CfdiEmailFlowTests
             await other.SaveChangesAsync(cancellationToken);
             TheirsId = email.Id;
             throw new DbUpdateConcurrencyException("The invoice was stamped meanwhile.");
+        }
+    }
+
+    /// <summary>
+    /// The save of a cancellation finds that the invoicing worker (with its own context) heard the SAT cancel the same
+    /// invoice and asked for its notice first: the database refuses this one as stale.
+    /// </summary>
+    private sealed class CancelledMeanwhile : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+        public ICurrentTenantService? Tenant { get; set; }
+        public Guid TheirsId { get; private set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var cancelling = eventData.Context!.ChangeTracker.Entries<OrderInvoice>()
+                .FirstOrDefault(entry => entry.State == EntityState.Modified && entry.Entity.Status == OrderInvoiceStatus.Cancelled)?.Entity;
+            if (!Armed || cancelling is null)
+                return result;
+            Armed = false;
+
+            await using var other = new SalesDbContext(
+                (DbContextOptions<ApplicationDbContext>)eventData.Context.GetService<IDbContextOptions>(), Tenant!);
+            var theirs = await other.OrderInvoices.SingleAsync(i => i.Id == cancelling.Id, cancellationToken);
+            theirs.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, Guid.NewGuid(), cancelling.CancelledAt!.Value);
+            theirs.Cancel(cancelling.CancelledAt.Value);
+            var notice = CfdiEmail.RequestCancellationNotice(theirs, theirs.ReceiverEmail, cancelling.CancelledAt.Value);
+            other.CfdiEmails.Add(notice);
+            await other.SaveChangesAsync(cancellationToken);
+            TheirsId = notice.Id;
+            throw new DbUpdateConcurrencyException("The invoice was cancelled meanwhile.");
         }
     }
 
@@ -780,11 +925,11 @@ public class CfdiEmailFlowTests
             return cancelled;
         }
 
-        public async Task<Result<OrderInvoiceDto>> SubstituteAsync(Guid invoiceId, string? email)
+        public async Task<Result<OrderInvoiceDto>> SubstituteAsync(Guid invoiceId, string? email, CfdiReceiverInput? receiver = null)
         {
             var substituted = await new SubstituteOrderInvoiceCommandHandler(
                     this, Context, Fixture.CurrentUser, Gateway, Storage, Clock, NullLogger<OrderInvoiceStamper>.Instance)
-                .Handle(new SubstituteOrderInvoiceCommand(invoiceId, Receiver, false, email), CancellationToken.None);
+                .Handle(new SubstituteOrderInvoiceCommand(invoiceId, receiver ?? Receiver, false, email), CancellationToken.None);
             Context.ChangeTracker.Clear();
             return substituted;
         }

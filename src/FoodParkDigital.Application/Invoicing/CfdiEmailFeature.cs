@@ -383,13 +383,7 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
             .Where(s => s.TenantId == cfdi.TenantId)
             .Select(s => s.TimeZone)
             .FirstOrDefaultAsync(cancellationToken);
-        // Motive 01 names the invoice that replaces it, stamped before it was cancelled (Fase 28G).
-        var replacement = cfdi is OrderInvoice { CancellationMotive: CfdiCancellationMotive.ErrorsWithReplacement, ReplacedByInvoiceId: { } replacementId }
-            ? await _context.OrderInvoices.AsNoTracking()
-                .Where(i => i.Id == replacementId && i.Status == OrderInvoiceStatus.Stamped && i.Uuid != null)
-                .Select(i => new CfdiReplacement(i.Serie + "-" + i.Folio, i.Uuid!))
-                .FirstOrDefaultAsync(cancellationToken)
-            : null;
+        var replacement = await ReplacementAsync(cfdi, cancellationToken);
         var message = new DocumentEmail(
             email.To,
             CancellationSubject(email.Document, cfdi.Number, business.Name),
@@ -402,6 +396,24 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
 
     /// <summary>The invoice that replaces a cancelled one, as its notice names it.</summary>
     public sealed record CfdiReplacement(string Number, string Uuid);
+
+    /// <summary>
+    /// Motive 01 names the invoice that replaces it, stamped before it was cancelled (Fase 28G), only when it is for the same
+    /// RFC: a substitution that fixed who the invoice was for is somebody else's CFDI, and the notice goes where the old one
+    /// went.
+    /// </summary>
+    private async Task<CfdiReplacement?> ReplacementAsync(Cfdi cfdi, CancellationToken cancellationToken)
+    {
+        if (cfdi is not OrderInvoice { CancellationMotive: CfdiCancellationMotive.ErrorsWithReplacement, ReplacedByInvoiceId: { } replacementId } cancelled)
+            return null;
+        var replacement = await _context.OrderInvoices.AsNoTracking()
+            .Where(i => i.Id == replacementId && i.Status == OrderInvoiceStatus.Stamped && i.Uuid != null)
+            .Select(i => new { Number = i.Serie + "-" + i.Folio, Uuid = i.Uuid!, i.Receiver.Rfc })
+            .FirstOrDefaultAsync(cancellationToken);
+        return replacement is not null && string.Equals(replacement.Rfc, cancelled.Receiver.Rfc, StringComparison.OrdinalIgnoreCase)
+            ? new CfdiReplacement(replacement.Number, replacement.Uuid)
+            : null;
+    }
 
     private async Task<(string Name, string? ContactEmail)> BusinessAsync(Guid tenantId, CancellationToken cancellationToken)
     {
