@@ -548,7 +548,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - en los cuatro tipos de CFDI, al timbrar, al descargar uno que no tenía PDF y en su correo;
   - sin logo, si no se puede leer o si el PAC no lo toma, el PDF sale sin él: nunca falla por eso;
   - los PDF que ya se guardaron no cambian: un logo nuevo solo sale en los que se arman después. Configuración › Facturación dice si el PDF lleva logo, o dónde subirlo.
-- **Sin** envío por WhatsApp, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D, el envío por correo en la 28E, la autofactura del cliente en la 28F, la sustitución con motivo 01 en la 28G (siguientes secciones de facturas) y el logo en el PDF en la 28L.
+- **Sin** otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D, el envío por correo en la 28E, la autofactura del cliente en la 28F, la sustitución con motivo 01 en la 28G (siguientes secciones de facturas), el logo en el PDF en la 28L y el envío por WhatsApp en la 28M.
 
 ## La factura global (Fase 28B)
 
@@ -645,7 +645,22 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cómo sale:** de la dirección de la plataforma, con el nombre «{Negocio} vía TienditApp» y las respuestas al correo de contacto del negocio; asunto con el tipo, el folio y el negocio; adjuntos `{Serie}-{Folio}_{UUID}`.
 - **«Enviar por correo»:** quien gestiona los pedidos (`ManageOrders`) manda otra vez un CFDI timbrado a la dirección que escriba; con «Usar este correo para lo que siga de esta factura», cambia el de la factura. Hasta 5 por CFDI y 300 por negocio en 24 horas, contando los automáticos y bajo el candado de facturación del negocio. Otro negocio recibe 404.
 - **El historial** de cada correo (a quién, quién lo pidió, cuándo y cómo terminó) no se borra; Pedidos muestra el último de cada CFDI.
-- **Sin** WhatsApp, aviso de cancelación, envío desde el dominio del negocio ni saber si el correo rebotó después de que el servidor lo tomó.
+- **Sin** aviso de cancelación, envío desde el dominio del negocio ni saber si el correo rebotó después de que el servidor lo tomó. El WhatsApp llegó en la 28M (siguiente sección).
+
+## La factura por WhatsApp (Fase 28M)
+
+[ADR 0058](../adr/0058-cfdi-whatsapp.md):
+
+- **Qué se manda:** el PDF de cada CFDI timbrado de la factura de un pedido (la factura, sus complementos de pago y sus notas de crédito) como documento, con un texto que lleva un enlace para descargar el XML y el PDF. La global y sus notas no; las cancelaciones no se avisan.
+- **Solo con el WhatsApp del negocio conectado:** sin la conexión no se factura con un número ni se ofrece «Enviar por WhatsApp».
+- **A dónde:** al WhatsApp de la factura (`ReceiverWhatsApp`, opcional, en E.164), escrito como en el registro: 10 dígitos si es de México, o con su lada internacional. Sus complementos y notas van al número que la factura tenga cuando se timbran. Al facturar se propone el último WhatsApp de una factura del pedido o el teléfono del pedido.
+- **Cuándo:** en cuanto el CFDI queda timbrado, una vez por timbre (se pide en el mismo guardado, como el correo). Sale de la cola de mensajes de WhatsApp: el mensaje de TienditApp espera un intento al PDF que el timbre guarda; después el PAC lo arma desde el XML; sin PDF se reintenta (6 intentos). Un CFDI que ya no está vigente no se manda. La baja (BAJA) no lo detiene: es un documento que el cliente pidió.
+- **El texto:** la plantilla del negocio para sus facturas (uso «Factura por WhatsApp» en Campañas › Plantillas, elegida en Configuración › Facturación) o el de TienditApp, con `{nombre}`, `{negocio}`, `{comprobante}`, `{monto}`, `{fecha}` y `{enlace}`. Con plantilla aprobada en Meta, el PDF va en su encabezado de documento; sin ella, como documento con el texto de pie, y WhatsApp solo lo entrega en las 24 horas desde el último mensaje del cliente.
+- **El enlace** (`/factura#…`, 43 caracteres imposibles de adivinar, único) funciona 90 días desde que se encoló. La página, sin cuenta, dice el negocio, el CFDI, el emisor, el receptor, el folio fiscal y si sigue vigente, y descarga el XML y el PDF. Uno desconocido, vencido o de un negocio que ya no está activo no se encuentra; uno de un CFDI que se pidió cancelar se ve, pero no se descarga. Comparte el límite de peticiones del menú público.
+- **Cómo termina:** enviado, entregado o leído (por los avisos de Meta), o no se envió con el motivo que dio Meta o TienditApp. Pedidos sigue leyendo la facturación mientras un mensaje está en la cola.
+- **«Enviar por WhatsApp»:** quien gestiona los pedidos (`ManageOrders`) manda otra vez un CFDI timbrado al número que escriba; con «Usar este WhatsApp para lo que siga de esta factura», cambia el de la factura. Hasta 5 por CFDI y 300 por negocio en 24 horas, contando los automáticos y bajo el candado de facturación del negocio. Otro negocio recibe 404.
+- **El historial** de cada mensaje (a quién, quién lo pidió, cuándo y cómo terminó) no se borra; Pedidos muestra el último de cada CFDI.
+- **Sin** aviso de cancelación, el XML como documento (WhatsApp no lo acepta), revocar un enlace ni el WhatsApp para facturas en la ficha del cliente.
 
 ## La autofactura (Fase 28F)
 

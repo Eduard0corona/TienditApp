@@ -11,6 +11,7 @@ import {
   FACTURACION_PRUEBAS_POR_VENCER,
   FACTURACION_ROUTES,
   FACTURACION_SIN_CSD,
+  FACTURACION_WHATSAPP,
   ORDER_NUMBER,
   PEDIDO_AUTOFACTURADO,
   PEDIDO_CANCELANDOSE,
@@ -20,11 +21,14 @@ import {
   PEDIDO_EN_FACTURA_GLOBAL,
   PEDIDO_EN_PARCIALIDADES,
   PEDIDO_FACTURA_POR_CORREO,
+  PEDIDO_FACTURA_POR_WHATSAPP,
   PEDIDO_FACTURADO,
   PEDIDO_POR_FACTURAR,
+  PEDIDO_POR_FACTURAR_CON_WHATSAPP,
   PEDIDO_SUSTITUIBLE,
   PEDIDO_SUSTITUIDO,
   PEDIDO_SUSTITUIDO_CANCELADO,
+  PEDIDO_WHATSAPP_NO_ENTREGADO,
 } from './facturacion.mocks';
 
 // The invoice of an order (Fase 28A, ADR 0045): Configuración › Facturación (ready, without the CSD, in the PAC's test
@@ -39,6 +43,8 @@ import {
 // relation, the dialog to cancel it without relation, and the replaced one once cancelled; since the Fase 28I (ADR 0054),
 // the refunds of a sale of a global invoice with their credit notes of that global invoice, and since the Fase 28J (ADR
 // 0055) its discount with its own. Since the Fase 28L (ADR 0057), the logo that goes on the PDF, or where to upload it.
+// Since the Fase 28M (ADR 0058), the invoice by WhatsApp: the card of Configuración › Facturación with the template, the
+// WhatsApp of the customer when invoicing, how the latest message went (read, or not delivered) and «Enviar por WhatsApp».
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -121,6 +127,23 @@ test.describe('Configuración › Facturación', () => {
           await open(page, '/settings/invoicing');
           await expect(page.getByText('El de tu negocio')).toBeVisible();
           await snap(page, `facturacion-con-logo-${look.suffix}`);
+        });
+      });
+    }
+  });
+
+  test.describe('factura por whatsapp', () => {
+    test.use({ prepareData: FACTURACION_WHATSAPP });
+
+    for (const look of LOOKS) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`facturación con la factura por whatsapp ${look.suffix}`, async ({ page }) => {
+          await open(page, '/settings/invoicing');
+          await expect(page.getByLabel('Mensaje')).toHaveValue(/.+/);
+          await expect(page.getByText(/Descárgala aquí: \{enlace\}/)).toBeVisible();
+          await snap(page, `facturacion-whatsapp-${look.suffix}`);
         });
       });
     }
@@ -267,6 +290,63 @@ test.describe('Pedidos › Factura por correo', () => {
       const invoice = await openInvoice(page);
       await expect(invoice.getByText(/No se envió a facturas@altavsita\.mx: el servidor de correo lo rechazó/)).toBeVisible();
       await snapScreen(page, 'pedidos-factura-correo-rechazado');
+    });
+  });
+});
+
+test.describe('Pedidos › Factura por WhatsApp', () => {
+  /** The order's invoice, with how its latest WhatsApp went. */
+  async function openInvoice(page: Page) {
+    await open(page, '/orders');
+    await page.getByRole('button', { name: ORDER_NUMBER, exact: true }).click();
+    const detail = await dialog(page, `Pedido ${ORDER_NUMBER}`);
+    await detail.getByRole('button', { name: 'Factura' }).click();
+    return dialog(page, `Facturar ${ORDER_NUMBER}`);
+  }
+
+  test.describe('por facturar', () => {
+    test.use({ prepareData: PEDIDO_POR_FACTURAR_CON_WHATSAPP });
+
+    test('factura lista para timbrar con whatsapp', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await expect(invoice.getByLabel('WhatsApp del cliente (opcional)')).toHaveValue('5512345678');
+      await expect(invoice.getByRole('button', { name: 'Timbrar factura' })).toBeEnabled();
+      await snapScreen(page, 'pedidos-factura-por-timbrar-con-whatsapp');
+    });
+  });
+
+  test.describe('enviada', () => {
+    test.use({ prepareData: PEDIDO_FACTURA_POR_WHATSAPP });
+
+    for (const look of LOOKS) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`factura enviada por whatsapp ${look.suffix}`, async ({ page }) => {
+          const invoice = await openInvoice(page);
+          await expect(invoice.getByText(/Se leyó por WhatsApp \(5512345678\)/)).toBeVisible();
+          await snapScreen(page, `pedidos-factura-enviada-por-whatsapp-${look.suffix}`);
+        });
+      });
+    }
+
+    test('enviar la factura por whatsapp', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await invoice.getByRole('button', { name: 'Enviar por WhatsApp la factura F-3' }).click();
+      const sending = await dialog(page, 'Enviar por WhatsApp la factura F-3');
+      await sending.getByLabel('WhatsApp').fill('55 9876 5432');
+      await expect(sending.getByRole('checkbox', { name: /Usar este WhatsApp para lo que siga de esta factura/ })).not.toBeChecked();
+      await snapScreen(page, 'pedidos-factura-enviar-por-whatsapp');
+    });
+  });
+
+  test.describe('no entregada', () => {
+    test.use({ prepareData: PEDIDO_WHATSAPP_NO_ENTREGADO });
+
+    test('whatsapp de la factura no entregado', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await expect(invoice.getByText(/No se envió por WhatsApp a 5512345678\. WhatsApp no lo entregó/)).toBeVisible();
+      await snapScreen(page, 'pedidos-factura-whatsapp-no-entregado');
     });
   });
 });
