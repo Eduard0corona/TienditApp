@@ -3,7 +3,7 @@ import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
 import { useSendCfdiByEmail, type CfdiEmail } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
-import { CfdiEmailDocument, CfdiEmailFailure } from '../../types';
+import { CfdiEmailDocument, CfdiEmailFailure, CfdiEmailKind } from '../../types';
 import { cfdiEmailLabel, isPlainEmail } from '../../utils/cfdi';
 import { formatDateTime } from '../../utils/dates';
 
@@ -14,15 +14,27 @@ const FAILURES: Record<CfdiEmailFailure, string> = {
   [CfdiEmailFailure.NotDelivered]: 'el servidor de correo no lo tomó después de varios intentos. Envíalo otra vez.',
 };
 
+// The notice that the SAT cancelled it (Fase 28N) is not sent again by hand: the customer hears it another way.
+const NOTICE_FAILURES: Record<CfdiEmailFailure, string> = {
+  [CfdiEmailFailure.Rejected]: 'el servidor de correo lo rechazó. Avísale al cliente por otro medio.',
+  [CfdiEmailFailure.NotConfigured]: 'TienditApp no tiene el envío de correos configurado. Avísale al cliente por otro medio.',
+  [CfdiEmailFailure.NoLongerStamped]: 'no se pudo enviar. Avísale al cliente por otro medio.',
+  [CfdiEmailFailure.NotDelivered]: 'el servidor de correo no lo tomó después de varios intentos. Avísale al cliente por otro medio.',
+};
+
 interface CfdiEmailStatusProps {
   /** The CFDI's latest emails, the newest first. */
   emails: CfdiEmail[];
 }
 
-/** How the latest email of a CFDI to the customer went: sent (maybe without the PDF), on its way, or not sent and why. */
+/**
+ * How the latest email of a CFDI to the customer went: sent (maybe without the PDF), on its way, or not sent and why. Once
+ * the SAT cancels it, the latest is the notice of that (Fase 28N).
+ */
 export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
   const latest = emails[0];
   if (!latest) return null;
+  if (latest.kind === CfdiEmailKind.Cancellation) return <CancellationNoticeStatus notice={latest} />;
 
   if (latest.sentAt) {
     return (
@@ -49,6 +61,33 @@ export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
       Enviándose por correo a {latest.to}…
       {latest.failedAttempts > 0 && ' El servidor de correo no lo ha tomado; TienditApp lo vuelve a intentar.'}
       {latest.byCustomer && ' Lo pidió el cliente en línea.'}
+    </p>
+  );
+}
+
+/** How the notice that the SAT cancelled the CFDI went; TienditApp sends it on its own, without files. */
+function CancellationNoticeStatus({ notice }: { notice: CfdiEmail }) {
+  if (notice.sentAt) {
+    return (
+      <p className="small text-muted mb-0 mt-1">
+        <i className="ri-mail-check-line me-1" aria-hidden="true"></i>
+        Se avisó la cancelación por correo a {notice.to} el {formatDateTime(notice.sentAt)}.
+      </p>
+    );
+  }
+  if (notice.failedAt) {
+    return (
+      <p className="small text-danger mb-0 mt-1">
+        <i className="ri-mail-close-line me-1" aria-hidden="true"></i>
+        No se avisó la cancelación a {notice.to}: {NOTICE_FAILURES[notice.failure ?? CfdiEmailFailure.NoLongerStamped]}
+      </p>
+    );
+  }
+  return (
+    <p className="small text-muted mb-0 mt-1" role="status">
+      <i className="ri-mail-send-line me-1" aria-hidden="true"></i>
+      Avisando la cancelación por correo a {notice.to}…
+      {notice.failedAttempts > 0 && ' El servidor de correo no lo ha tomado; TienditApp lo vuelve a intentar.'}
     </p>
   );
 }
