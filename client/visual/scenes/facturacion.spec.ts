@@ -5,6 +5,7 @@ import {
   CLIENTE_CON_DATOS_FISCALES,
   CUSTOMER_NAME,
   FACTURACION_AUTOFACTURA,
+  FACTURACION_CON_LOGO,
   FACTURACION_LISTA,
   FACTURACION_NO_DISPONIBLE,
   FACTURACION_PRUEBAS_POR_VENCER,
@@ -37,7 +38,7 @@ import {
 // 28G (ADR 0051), the form to replace an invoice with errors, the replaced invoice waiting for its cancellation with
 // relation, the dialog to cancel it without relation, and the replaced one once cancelled; since the Fase 28I (ADR 0054),
 // the refunds of a sale of a global invoice with their credit notes of that global invoice, and since the Fase 28J (ADR
-// 0055) its discount with its own.
+// 0055) its discount with its own. Since the Fase 28L (ADR 0057), the logo that goes on the PDF, or where to upload it.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -104,6 +105,22 @@ test.describe('Configuración › Facturación', () => {
           await snap(page, `facturacion-autofactura-${look.suffix}`, {
             mask: [page.getByRole('link', { name: /\/m\/cafe-la-esquina\/facturar$/ })],
           });
+        });
+      });
+    }
+  });
+
+  test.describe('con logo en el PDF', () => {
+    test.use({ prepareData: FACTURACION_CON_LOGO });
+
+    for (const look of LOOKS.slice(0, 2)) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`facturación con el logo en el pdf ${look.suffix}`, async ({ page }) => {
+          await open(page, '/settings/invoicing');
+          await expect(page.getByText('El de tu negocio')).toBeVisible();
+          await snap(page, `facturacion-con-logo-${look.suffix}`);
         });
       });
     }

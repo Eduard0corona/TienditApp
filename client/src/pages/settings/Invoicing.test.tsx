@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest, type Schemas } from '../../api/typedClient';
+import { TenantContext } from '../../contexts/TenantContextDefinition';
+import type { TenantProfileDto } from '../../types';
 import Invoicing from './Invoicing';
 
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
@@ -37,12 +39,19 @@ function serve(settings: Settings, write: (method: string, path: string, body: u
   }) as unknown as typeof apiRequest);
 }
 
-function renderPage(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderPage(
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  tenant: Partial<TenantProfileDto> = { id: 'negocio', name: 'Café Luna' },
+) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <Invoicing />
-      </MemoryRouter>
+      <TenantContext.Provider
+        value={{ tenant: tenant as TenantProfileDto, capabilities: null, isLoading: false, refreshTenant: () => Promise.resolve() }}
+      >
+        <MemoryRouter>
+          <Invoicing />
+        </MemoryRouter>
+      </TenantContext.Provider>
     </QueryClientProvider>,
   );
 }
@@ -67,6 +76,25 @@ describe('Invoicing settings', () => {
 
     expect(await screen.findByText('El RFC del negocio.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Configuración › Negocio' })).toHaveAttribute('href', '/settings/business');
+  });
+
+  it('says the PDF goes without a logo until the business uploads one, and where', async () => {
+    serve(WITH_CERTIFICATE);
+    renderPage();
+
+    expect(await screen.findByText('Logo en el PDF')).toBeInTheDocument();
+    expect(screen.getByText(/Sin logo\./)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sube el logo de tu negocio' })).toHaveAttribute('href', '/settings/business');
+  });
+
+  it('shows the logo of the business that goes on the PDF', async () => {
+    serve(WITH_CERTIFICATE);
+    const logoImages = { original: '/l_original.webp', large: '/l_lg.webp', medium: '/l_md.webp', small: '/l_sm.webp', thumbnail: '/l_xs.webp' };
+    const { container } = renderPage(undefined, { id: 'negocio', name: 'Café Luna', logoImages });
+
+    expect(await screen.findByText('El de tu negocio')).toBeInTheDocument();
+    expect(container.querySelector('img')).toHaveAttribute('src', '/l_xs.webp');
+    expect(screen.queryByRole('link', { name: 'Sube el logo de tu negocio' })).not.toBeInTheDocument();
   });
 
   it('sends the CSD files in base64 with the password, and forgets the password', async () => {
