@@ -8,5 +8,5 @@
 }
 
 img.inv-pdf-logo {
-  background: #fff;
+  background: var(--ct-white);
 }
