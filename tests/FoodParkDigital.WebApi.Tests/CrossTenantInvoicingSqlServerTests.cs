@@ -891,6 +891,28 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Equal("+525598765432", mineInvoice.GetProperty("receiverWhatsApp").GetString());
         Assert.Equal(2, mineInvoice.GetProperty("whatsApps").GetArrayLength());
 
+        // With 4 today, two people send it at once: the invoicing lock of the business counts them one after the other.
+        for (var i = 0; i < 2; i++)
+            await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(url, body));
+        var answers = await _api.QueryAsync(mine.TenantId, async db =>
+        {
+            await using var held = await db.Database.BeginTransactionAsync();
+            var resource = $"invoicing:{mine.TenantId:N}";
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"EXEC sp_getapplock @Resource = {resource}, @LockMode = 'Exclusive', @LockOwner = 'Transaction'");
+            var both = Enumerable.Range(0, 2).Select(_ => mine.Client.PostAsJsonAsync(url, body)).ToList();
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await held.CommitAsync();
+            return await Task.WhenAll(both);
+        });
+        Assert.Single(answers, answer => answer.StatusCode == HttpStatusCode.OK);
+        var refused = Assert.Single(answers, answer => answer.StatusCode != HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(CfdiWhatsApps.TooManyForCfdiMessage("F-1"),
+            JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+        Assert.Equal(CfdiWhatsApps.MaxPerCfdiPerDay,
+            await _api.QueryAsync(mine.TenantId, db => db.OutgoingMessages.CountAsync(m => m.CfdiId == invoiceId)));
+
         // Its link, without an account and whatever header comes along, opens that CFDI and downloads its XML.
         var anonymous = _api.AnonymousClient();
         var page = await TwoBusinessesApi.ReadAsync(await anonymous.PostAsJsonAsync("/api/v1/public/cfdi", new { token = queued.LinkToken }));

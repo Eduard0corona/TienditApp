@@ -24,6 +24,8 @@ using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
@@ -113,6 +115,21 @@ public class CfdiWhatsAppFlowTests
         var next = await book.Context.OutgoingMessages.SingleAsync(m => m.ProviderTemplateName == null);
         Assert.Null(next.ProviderTemplateName);
         Assert.StartsWith("Hola KARLA FUENTE NOLASCO: Negocio demo te envía la factura F-2", next.Body);
+    }
+
+    [Fact]
+    public async Task Stamp_ThatAnotherAttemptSavedFirst_ShouldLeaveOnlyThatAttemptsMessage()
+    {
+        var meanwhile = new StampedMeanwhile();
+        await using var book = await Book.OpenAsync(interceptor: meanwhile);
+        meanwhile.Tenant = book.Fixture.TenantService;
+        meanwhile.Armed = true;
+
+        var invoice = (await book.IssueAsync((await book.PaidSaleAsync()).Id, whatsApp: Karla)).Value;
+
+        Assert.Equal(OrderInvoiceStatus.Stamped, invoice.Status);
+        var message = Assert.Single(await book.Context.OutgoingMessages.ToListAsync());
+        Assert.Equal(meanwhile.TheirsId, message.Id);
     }
 
     [Fact]
@@ -409,6 +426,38 @@ public class CfdiWhatsAppFlowTests
 
     private static (OutgoingSendDecision, string?) Decision(OutgoingSendOutcome outcome) => (outcome.Decision, outcome.Reason);
 
+    /// <summary>
+    /// The next save of a stamp finds that another attempt (the worker, with its own context) stamped the same invoice and
+    /// queued its WhatsApp first: the database refuses this one as stale, with its message.
+    /// </summary>
+    private sealed class StampedMeanwhile : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+        public ICurrentTenantService? Tenant { get; set; }
+        public Guid TheirsId { get; private set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var stamping = eventData.Context!.ChangeTracker.Entries<OrderInvoice>()
+                .FirstOrDefault(entry => entry.State == EntityState.Modified && entry.Entity.Status == OrderInvoiceStatus.Stamped)?.Entity;
+            if (!Armed || stamping is null)
+                return result;
+            Armed = false;
+
+            await using var other = new SalesDbContext(
+                (DbContextOptions<ApplicationDbContext>)eventData.Context.GetService<IDbContextOptions>(), Tenant!);
+            var theirs = await other.OrderInvoices.SingleAsync(i => i.Id == stamping.Id, cancellationToken);
+            theirs.Stamp(stamping.Uuid!, stamping.Uuid!, stamping.StampedAt!.Value, stamping.XmlFileKey!);
+            var message = OutgoingMessage.ForCfdi(
+                theirs, theirs.ReceiverWhatsApp, null, "Hola", null, "es_MX", [], OrderTracking.NewToken(), null, stamping.StampedAt.Value);
+            other.OutgoingMessages.Add(message);
+            await other.SaveChangesAsync(cancellationToken);
+            TheirsId = message.Id;
+            throw new DbUpdateConcurrencyException("The invoice was stamped meanwhile.");
+        }
+    }
+
     private sealed class RecordingDocuments : IWhatsAppDocumentSender
     {
         public List<(Guid TenantId, string Phone, WhatsAppDocument Document, string Caption, string? TemplateName, string LanguageCode, string[] Parameters)> Sent { get; } = [];
@@ -459,9 +508,9 @@ public class CfdiWhatsAppFlowTests
         public SalesDbContext Context => Fixture.Context;
         public SalesClock Clock => Fixture.Clock;
 
-        public static async Task<Book> OpenAsync(bool connected = true)
+        public static async Task<Book> OpenAsync(bool connected = true, IInterceptor? interceptor = null)
         {
-            var fixture = SalesTestFixture.Create();
+            var fixture = interceptor is null ? SalesTestFixture.Create() : SalesTestFixture.Create(null, interceptor);
             var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
             await fixture.OpenCashSessionAsync(tenant);
             var customer = new Customer(tenant.Id, "Karla", CustomerPhone, null);
