@@ -68,10 +68,12 @@ export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
 /** How the notice that the SAT cancelled the CFDI went; TienditApp sends it on its own, without files. */
 function CancellationNoticeStatus({ notice }: { notice: CfdiEmail }) {
   if (notice.sentAt) {
+    // «p.m.» already ends the sentence.
+    const when = formatDateTime(notice.sentAt);
     return (
       <p className="small text-muted mb-0 mt-1">
         <i className="ri-mail-check-line me-1" aria-hidden="true"></i>
-        Se avisó la cancelación por correo a {notice.to} el {formatDateTime(notice.sentAt)}.
+        Se avisó la cancelación por correo a {notice.to} el {when}{when.endsWith('.') ? '' : '.'}
       </p>
     );
   }

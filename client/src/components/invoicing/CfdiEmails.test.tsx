@@ -113,7 +113,7 @@ describe('CfdiEmailStatus', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/El servidor de correo no lo ha tomado; TienditApp lo vuelve a intentar\.$/);
 
     rerender(<CfdiEmailStatus emails={[notice({ sentAt: '2026-10-26T17:58:00Z' }), stamped]} />);
-    expect(screen.getByText(/^Se avisó la cancelación por correo a karla@ejemplo\.mx el .+\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Se avisó la cancelación por correo a karla@ejemplo\.mx el .+[^.]\.$/)).toBeInTheDocument();
 
     // It is not sent again by hand: the business tells the customer another way.
     rerender(<CfdiEmailStatus emails={[notice({ failedAt: '2026-10-26T17:58:00Z', failure: CfdiEmailFailure.Rejected }), stamped]} />);

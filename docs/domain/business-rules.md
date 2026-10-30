@@ -637,7 +637,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 
 [ADR 0049](../adr/0049-cfdi-email.md):
 
-- **Qué se manda:** el XML y el PDF de cada CFDI timbrado de la factura de un pedido (la factura, sus complementos de pago y sus notas de crédito). La global no; las cancelaciones no se avisan (el SAT las avisa en su buzón).
+- **Qué se manda:** el XML y el PDF de cada CFDI timbrado de la factura de un pedido (la factura, sus complementos de pago y sus notas de crédito). La global no. Cuando el SAT cancela uno, el aviso desde la 28N (más abajo).
 - **A dónde:** al correo de la factura (`ReceiverEmail`, opcional, una sola dirección en ASCII: el SMTP de la plataforma no manda «peña@…»). Sus complementos y notas van al correo que la factura tenga cuando se timbran.
 - **Qué se propone al facturar:** el «Correo para facturas» del cliente (se guarda con sus datos fiscales, `ManageCustomers`, y se audita sin guardar la dirección), el de la última factura del pedido o el correo del cliente. «Guardar estos datos en el cliente» guarda también el correo escrito; sin correo, el cliente conserva el suyo. En Clientes, el correo vacío lo quita. Quitar los datos fiscales quita el correo.
 - **Cuándo:** en cuanto el CFDI queda timbrado, una vez por timbre (se pide en el mismo guardado; un intento que perdió el timbre no lo pide). Sale del outbox: sin PDF espera dos intentos (sin contarlos como fallidos) y después manda solo el XML y lo dice; un servidor que no lo toma o no contesta en 60 segundos se reintenta, hasta el último intento del outbox (unas 4.7 horas).
@@ -645,13 +645,13 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cómo sale:** de la dirección de la plataforma, con el nombre «{Negocio} vía TienditApp» y las respuestas al correo de contacto del negocio; asunto con el tipo, el folio y el negocio; adjuntos `{Serie}-{Folio}_{UUID}`.
 - **«Enviar por correo»:** quien gestiona los pedidos (`ManageOrders`) manda otra vez un CFDI timbrado a la dirección que escriba; con «Usar este correo para lo que siga de esta factura», cambia el de la factura. Hasta 5 por CFDI y 300 por negocio en 24 horas, contando los automáticos y bajo el candado de facturación del negocio. Otro negocio recibe 404.
 - **El historial** de cada correo (a quién, quién lo pidió, cuándo y cómo terminó) no se borra; Pedidos muestra el último de cada CFDI.
-- **Sin** aviso de cancelación, envío desde el dominio del negocio ni saber si el correo rebotó después de que el servidor lo tomó. El WhatsApp llegó en la 28M (siguiente sección).
+- **Sin** envío desde el dominio del negocio ni saber si el correo rebotó después de que el servidor lo tomó. El WhatsApp llegó en la 28M y el aviso de cancelación en la 28N (siguientes secciones).
 
 ## La factura por WhatsApp (Fase 28M)
 
 [ADR 0058](../adr/0058-cfdi-whatsapp.md):
 
-- **Qué se manda:** el PDF de cada CFDI timbrado de la factura de un pedido (la factura, sus complementos de pago y sus notas de crédito) como documento, con un texto que lleva un enlace para descargar el XML y el PDF. La global y sus notas no; las cancelaciones no se avisan.
+- **Qué se manda:** el PDF de cada CFDI timbrado de la factura de un pedido (la factura, sus complementos de pago y sus notas de crédito) como documento, con un texto que lleva un enlace para descargar el XML y el PDF. La global y sus notas no; las cancelaciones no se avisan por WhatsApp (por correo sí, desde la 28N).
 - **Solo con el WhatsApp del negocio conectado:** sin la conexión no se factura con un número ni se ofrece «Enviar por WhatsApp», y un CFDI que se timbra mientras está desconectado no se encola.
 - **A dónde:** al WhatsApp de la factura (`ReceiverWhatsApp`, opcional, en E.164), escrito como en el registro: 10 dígitos si es de México, o con su lada internacional. Sus complementos y notas van al número que la factura tenga cuando se timbran. Al facturar se propone el último WhatsApp de una factura del pedido o el teléfono del pedido.
 - **Cuándo:** en cuanto el CFDI queda timbrado, una vez por timbre (se pide en el mismo guardado, como el correo). Sale de la cola de mensajes de WhatsApp: el mensaje de TienditApp espera hasta 2 minutos el PDF que el timbre guarda, sin contarlo como intento fallido; después el PAC lo arma desde el XML; sin PDF se reintenta (6 intentos). Un CFDI que ya no está vigente no se manda. La baja (BAJA) no lo detiene: es un documento que el cliente pidió.
@@ -660,7 +660,19 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cómo termina:** enviado, entregado o leído (por los avisos de Meta), o no se envió con el motivo que dio Meta o TienditApp. Pedidos sigue leyendo la facturación mientras un mensaje está en la cola. Se ven solo en el pedido: Campañas › Mensajes no los lista (llevan el enlace) e Inicio no los cuenta entre los mensajes que no se enviaron.
 - **«Enviar por WhatsApp»:** quien gestiona los pedidos (`ManageOrders`) manda otra vez un CFDI timbrado al número que escriba; con «Usar este WhatsApp para lo que siga de esta factura», cambia el de la factura. Hasta 5 por CFDI y 300 por negocio en 24 horas, contando los automáticos y bajo el candado de facturación del negocio. Otro negocio recibe 404.
 - **El historial** de cada mensaje (a quién, quién lo pidió, cuándo y cómo terminó) no se borra; Pedidos muestra el último de cada CFDI.
-- **Sin** aviso de cancelación, el XML como documento (WhatsApp no lo acepta), revocar un enlace ni el WhatsApp para facturas en la ficha del cliente.
+- **Sin** aviso de cancelación por WhatsApp, el XML como documento (WhatsApp no lo acepta), revocar un enlace ni el WhatsApp para facturas en la ficha del cliente.
+
+## El aviso de cancelación por correo (Fase 28N)
+
+[ADR 0059](../adr/0059-cfdi-cancellation-notice.md):
+
+- **Cuándo:** cuando el SAT confirma la cancelación de un CFDI de la factura de un pedido (la factura, un complemento de pago o una nota de crédito) y la factura tiene correo: al instante al pedirla o cuando el worker ve que el cliente la aceptó o dejó pasar el plazo. No al pedirla, no si se rechaza y nunca de la global ni de las notas de sus ventas.
+- **Uno por cancelación:** se pide en el mismo guardado que la deja «Cancelada», en un solo lugar para las seis rutas que la confirman; si la petición y el worker la confirman a la vez, solo uno guarda.
+- **A dónde:** al correo que la factura tenga en ese momento, también para sus complementos y notas. En una sustitución, el aviso de la anterior va al correo de la anterior.
+- **Qué dice:** «Cancelación de la factura F-1 de {Negocio}» (o del complemento de pago, o de la nota de crédito), sin archivos: qué se canceló, que ya no tiene validez fiscal, el motivo en palabras, con el motivo 01 la factura que la sustituye y su folio fiscal, el emisor, el receptor, el folio fiscal, la fecha de cancelación en la zona horaria del negocio y el enlace para verificarlo en el SAT. Sale como los demás correos: «{Negocio} vía TienditApp», con las respuestas al correo del negocio.
+- **Cómo termina:** como los demás correos (enviado, rechazado, sin proveedor o no entregado después del último intento del outbox). Pedidos lo muestra como el último correo del CFDI: «Se avisó la cancelación por correo a …», «Avisando la cancelación…» o «No se avisó la cancelación a …: {motivo}. Avísale al cliente por otro medio.».
+- **El historial** no se borra: el aviso es un correo más del CFDI (`Kind = Cancellation`), lo pide TienditApp y nunca lleva archivos.
+- **Sin** aviso por WhatsApp, aviso al pedir la cancelación, reenvío a mano ni el acuse de cancelación adjunto.
 
 ## La autofactura (Fase 28F)
 

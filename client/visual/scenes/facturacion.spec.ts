@@ -17,6 +17,7 @@ import {
   PEDIDO_CANCELANDOSE,
   PEDIDO_TIMBRANDO_SIN_TIMBRE,
   PEDIDO_CON_NOTAS_DE_CREDITO,
+  PEDIDO_CANCELACION_AVISADA,
   PEDIDO_CORREO_RECHAZADO,
   PEDIDO_EN_FACTURA_GLOBAL,
   PEDIDO_EN_PARCIALIDADES,
@@ -280,6 +281,16 @@ test.describe('Pedidos › Factura por correo', () => {
       await expect(invoice.getByText('La pidió el cliente en línea con su ticket.')).toBeVisible();
       await expect(invoice.getByText(/Lo pidió el cliente en línea\./)).toBeVisible();
       await snapScreen(page, 'pedidos-factura-pedida-por-el-cliente');
+    });
+  });
+
+  test.describe('cancelación avisada', () => {
+    test.use({ prepareData: PEDIDO_CANCELACION_AVISADA });
+
+    test('aviso de la cancelación por correo', async ({ page }) => {
+      const invoice = await openInvoice(page);
+      await expect(invoice.getByText(/Se avisó la cancelación por correo a facturas@altavista\.mx/)).toBeVisible();
+      await snapScreen(page, 'pedidos-factura-cancelacion-avisada');
     });
   });
 
