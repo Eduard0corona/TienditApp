@@ -1570,8 +1570,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la miniatura usa `PhotoOrInitial` (la inicial si no carga), sobre blanco como en el PDF;
     - la escena con logo también en modo oscuro, con el `logoUrl` que manda la API;
     - el typecheck de las escenas, que CI corre.
-  - **Total:** `dotnet test` con SQL Server 2022 y Azurite, 4,091 pruebas sin fallos ni omitidas (Domain 1,190, Application 1,825, Infrastructure 611, WebApi 465), sobre `master` en `eeeaa67`.
+  - **Total:** `dotnet test` con SQL Server 2022 y Azurite, 4,097 pruebas sin fallos ni omitidas (Domain 1,190, Application 1,825, Infrastructure 617, WebApi 465), sobre `master` en `eeeaa67`.
   - **Cliente en total:** 175 archivos y 1,246 pruebas.
+  - **Primera visita:** 180,565 B de 180,600 B (`master` en `eeeaa67`: 180,533 B). Son +32 B porque el mapa de precarga del primer chunk nombra la hoja nueva de Configuración › Facturación (`Invoicing.css`); la página y su hoja se cargan aparte. El presupuesto no cambia.
+  - **Escenas visuales:** contra la línea base de `master` en `eeeaa67`, 716 de las 724 escenas que ya existían salen iguales.
+    - Cambian 8, todas de Configuración › Facturación de un negocio sin logo, por la fila «Logo en el PDF» («Sin logo.» y su enlace) y el punto nuevo de «Cómo funciona»: «facturación lista» y «facturación con autofactura» en escritorio, teléfono y oscuro, «facturación sin certificado» y «facturación en pruebas con el certificado por vencer».
+    - Hay 3 nuevas: «facturación con el logo en el pdf» en escritorio, teléfono y oscuro, con la miniatura sobre blanco.
+    - El archivo de escenas de Facturación (44) pasó dos corridas seguidas contra el mismo build.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
