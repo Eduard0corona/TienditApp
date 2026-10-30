@@ -116,6 +116,37 @@ public class CfdiWhatsAppFlowTests
     }
 
     [Fact]
+    public async Task Template_ThatComesOutTooLongForWhatsApp_ShouldGiveWayToTienditAppsText()
+    {
+        await using var book = await Book.OpenAsync();
+        // Short enough to be saved; with the customer's name and the link, past what WhatsApp takes with the app's address.
+        var template = new MessageTemplate(book.Tenant.Id, "Factura", MessagePurpose.CfdiDocument,
+            new string('x', CfdiWhatsApps.MaxTextLength - 60) + " {nombre} {enlace}", "factura_pdf");
+        book.Context.MessageTemplates.Add(template);
+        await book.Context.SaveChangesAsync();
+        Assert.True((await book.SetTemplateAsync(template.Id)).IsSuccess);
+
+        await book.IssueAsync((await book.PaidSaleAsync()).Id, whatsApp: Karla);
+
+        var message = await book.Context.OutgoingMessages.SingleAsync();
+        Assert.Null(message.ProviderTemplateName);
+        Assert.StartsWith("Hola KARLA FUENTE NOLASCO: Negocio demo te envía la factura F-1", message.Body);
+    }
+
+    [Fact]
+    public async Task Stamp_ShouldQueueNothing_OnceTheBusinessesWhatsAppIsDisconnected()
+    {
+        await using var book = await Book.OpenAsync();
+        var sale = await book.CreditSaleAsync(downPayment: 50m);
+        await book.IssueAsync(sale.Id, whatsApp: Karla);
+        await book.DisconnectWhatsAppAsync();
+
+        // The complement is stamped all the same; its message would only fail, and count against the day's limit.
+        Assert.Equal(1, (await book.IssuePendingComplementsAsync()).Value);
+        Assert.Equal([CfdiEmailDocument.Invoice], await book.Context.OutgoingMessages.Select(m => m.CfdiDocument!.Value).ToListAsync());
+    }
+
+    [Fact]
     public async Task ComplementsAndCreditNotes_ShouldGoToTheWhatsAppTheirInvoiceHas_WhenTheyAreStamped()
     {
         await using var book = await Book.OpenAsync();
@@ -269,13 +300,17 @@ public class CfdiWhatsAppFlowTests
         var message = await book.Context.OutgoingMessages.SingleAsync();
         Assert.Null((await book.Context.OrderInvoices.SingleAsync()).PdfFileKey);
 
-        // Stamped a moment ago: the first try waits for the PDF the stamp keeps, without asking the PAC.
+        // Stamped a moment ago: each try waits for the PDF the stamp keeps, without asking the PAC nor counting as a failed try.
         var renders = book.Gateway.PdfRequests;
-        Assert.Equal((OutgoingSendDecision.TransientFailure, CfdiWhatsAppSender.PdfPendingReason), Decision(await book.SendQueuedAsync(message.Id)));
+        var waiting = await book.SendQueuedAsync(message.Id);
+        Assert.Equal((OutgoingSendDecision.Postponed, CfdiWhatsAppSender.PdfPendingReason), Decision(waiting));
+        Assert.InRange(waiting.RetryAfter!.Value, TimeSpan.FromSeconds(1), CfdiWhatsAppSender.PdfWait);
+        book.Clock.UtcNow = book.Clock.UtcNow.Add(CfdiWhatsAppSender.PdfWait - TimeSpan.FromSeconds(1));
+        Assert.Equal(OutgoingSendDecision.Postponed, (await book.SendQueuedAsync(message.Id)).Decision);
         Assert.Equal(renders, book.Gateway.PdfRequests);
-        await book.FailedTryAsync(message.Id);
 
-        // Then the PAC renders it; without it, the queue tries again.
+        // Two minutes after it was queued the PAC renders it; without it, the queue tries again.
+        book.Clock.UtcNow = book.Clock.UtcNow.AddSeconds(1);
         Assert.Equal((OutgoingSendDecision.TransientFailure, CfdiWhatsAppSender.PdfUnavailableReason), Decision(await book.SendQueuedAsync(message.Id)));
         book.Gateway.PdfUnavailable = false;
         book.WhatsApp.Next = MessageSendResult.Failed("Error al enviar mensaje de WhatsApp: TooManyRequests", isTransient: true);
@@ -349,10 +384,10 @@ public class CfdiWhatsAppFlowTests
         await using var book = await Book.OpenAsync();
         var mine = new MessageTemplate(book.Tenant.Id, "Factura", MessagePurpose.CfdiDocument, "Hola {nombre}: {enlace}", "factura_pdf");
         var campaign = new MessageTemplate(book.Tenant.Id, "Promo", MessagePurpose.Campaign, "Hola {nombre}");
-        var inactive = new MessageTemplate(book.Tenant.Id, "Vieja", MessagePurpose.CfdiDocument, "Hola {nombre}");
+        var inactive = new MessageTemplate(book.Tenant.Id, "Vieja", MessagePurpose.CfdiDocument, "Hola {nombre}: {enlace}");
         inactive.SetActive(false);
         var theirTenant = await book.Fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, slug: "otro");
-        var theirs = new MessageTemplate(theirTenant.Id, "Factura de otro", MessagePurpose.CfdiDocument, "Hola {nombre}");
+        var theirs = new MessageTemplate(theirTenant.Id, "Factura de otro", MessagePurpose.CfdiDocument, "Hola {nombre}: {enlace}");
         book.Fixture.TenantService.SetTenant(book.Tenant.Id);
         book.Context.MessageTemplates.AddRange(mine, campaign, inactive, theirs);
         await book.Context.SaveChangesAsync();
@@ -553,19 +588,10 @@ public class CfdiWhatsAppFlowTests
         {
             Context.ChangeTracker.Clear();
             var message = await Context.OutgoingMessages.AsNoTracking().SingleAsync(m => m.Id == messageId);
-            var cfdi = new CfdiWhatsAppSender(Context, Storage, Gateway, WhatsApp, new Links(), NullLogger<CfdiWhatsAppSender>.Instance);
+            var cfdi = new CfdiWhatsAppSender(Context, Storage, Gateway, WhatsApp, new Links(), Clock, NullLogger<CfdiWhatsAppSender>.Instance);
             var sender = new OutgoingMessageSender(
                 Context, new NoWhatsApp(), new MessagingConsentService(Context, Fixture.TenantService, Clock), Clock, cfdi);
             return await sender.SendAsync(message, CancellationToken.None);
-        }
-
-        /// <summary>The worker records a failed try that will be retried.</summary>
-        public async Task FailedTryAsync(Guid messageId)
-        {
-            var message = await Context.OutgoingMessages.SingleAsync(m => m.Id == messageId);
-            message.RetryAt(Clock.UtcNow.AddSeconds(10), "Reintento");
-            await Context.SaveChangesAsync();
-            Context.ChangeTracker.Clear();
         }
 
         public Task<Result<InvoicingSettingsDto>> SetTemplateAsync(Guid? templateId)

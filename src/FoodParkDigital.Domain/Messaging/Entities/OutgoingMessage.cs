@@ -190,6 +190,13 @@ public class OutgoingMessage : AuditableEntity, ITenantScoped
         LockedUntil = null;
     }
 
+    /// <summary>Not tried yet on purpose (the PDF of a CFDI still being kept, Fase 28M): no attempt nor error is counted.</summary>
+    public void Postpone(DateTimeOffset nextAttemptAt)
+    {
+        NextAttemptAt = nextAttemptAt;
+        LockedUntil = null;
+    }
+
     public void RetryAt(DateTimeOffset nextAttemptAt, string error)
     {
         Attempts++;

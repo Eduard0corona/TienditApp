@@ -46,14 +46,20 @@ public static class MessageTemplateLimits
     public const string CreditReminderManagersOnlyMessage =
         "Solo el dueño o un administrador escribe los recordatorios del fiado.";
 
+    public const string InvoiceManagersOnlyMessage =
+        "Solo el dueño o un administrador escribe las plantillas de facturas.";
+
     /// <summary>
     /// What a reminder of the fiado (Fase 26C, ADR 0035) or the notice before it comes due (Fase 26E) says to the customers
-    /// who owe is the owner's decision, like turning them on: managing campaigns is not enough to write or change one.
+    /// who owe is the owner's decision, like turning them on: managing campaigns is not enough to write or change one. So is
+    /// the text that goes with the business's CFDI (Fase 28M), like choosing it in Configuración › Facturación.
     /// </summary>
     public static async Task EnsureCanWriteAsync(MessagePurpose purpose, CurrentAccessContext access, CancellationToken cancellationToken)
     {
         if (purpose is (MessagePurpose.CreditReminder or MessagePurpose.CreditDueSoon) && !await access.IsTenantManagerAsync(cancellationToken))
             throw new ForbiddenAccessException(CreditReminderManagersOnlyMessage);
+        if (purpose == MessagePurpose.CfdiDocument && !await access.IsTenantManagerAsync(cancellationToken))
+            throw new ForbiddenAccessException(InvoiceManagersOnlyMessage);
     }
 }
 
@@ -74,7 +80,7 @@ public class CreateMessageTemplateCommandValidator : AbstractValidator<CreateMes
         RuleFor(x => x.Name).NotEmpty().MaximumLength(MessageTemplate.MaxNameLength);
         RuleFor(x => x.Purpose)
             .Must(purpose => purpose is MessagePurpose.Campaign or MessagePurpose.AppointmentReminder or MessagePurpose.CreditReminder
-                or MessagePurpose.CreditDueSoon)
+                or MessagePurpose.CreditDueSoon or MessagePurpose.CfdiDocument)
             .WithMessage(MessageTemplate.TemplatePurposeError);
         RuleFor(x => x.Body).NotEmpty().MaximumLength(MessageTemplate.MaxBodyLength);
         RuleFor(x => x.ProviderTemplateName).MaximumLength(MessageTemplate.MaxProviderTemplateNameLength);

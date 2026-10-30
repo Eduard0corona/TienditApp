@@ -18,7 +18,9 @@ describe('isTypedPhone', () => {
       expect(isTypedPhone(phone)).toBe(true);
     }
     // Another length without the prefix is a mistyped number, never one of another country.
-    for (const phone of ['', '551234567', '55123456789', '14155550123', '+1234567', '+1234567890123456', 'cinco cinco', '55 1234 567x']) {
+    for (const phone of ['', '551234567', '55123456789', '14155550123', '+1234567', '+1234567890123456', 'cinco cinco', '55 1234 567x',
+      // No country code starts with 0.
+      '+05512345678', '+00 52 55 1234 5678', '00 0 415 555 0123']) {
       expect(isTypedPhone(phone)).toBe(false);
     }
   });
@@ -29,6 +31,8 @@ describe('isSamePhone', () => {
     expect(isSamePhone('55 1234 5678', '+525512345678')).toBe(true);
     expect(isSamePhone('+52 1 55 1234 5678', '5512345678')).toBe(true);
     expect(isSamePhone('0014155550123', '+14155550123')).toBe(true);
+    expect(isSamePhone('52 55 1234 5678', '+525512345678')).toBe(true);
+    expect(isSamePhone('5212345678', '+525212345678')).toBe(true);
     expect(isSamePhone('5512345678', '+525512345679')).toBe(false);
     expect(isSamePhone('', null)).toBe(false);
   });

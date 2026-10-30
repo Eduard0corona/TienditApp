@@ -74,6 +74,11 @@ public static partial class CfdiWhatsApps
     public const int MaxPerBusinessPerDay = 300;
     /// <summary>How many of the latest messages of each CFDI the order's invoicing shows.</summary>
     public const int Shown = 3;
+    /// <summary>
+    /// The longest text of a CFDI's message, written: WhatsApp takes 1,024 characters for a caption or a template's body, and
+    /// the app's address before the link is added when it goes out. A longer one goes with TienditApp's text.
+    /// </summary>
+    public const int MaxTextLength = 900;
 
     /// <summary>
     /// The page that downloads the XML and the PDF: the link travels in the fragment, which never reaches a server log. The
@@ -101,9 +106,9 @@ public static partial class CfdiWhatsApps
     private static partial Regex Whitespace();
 
     /// <summary>
-    /// The message of a CFDI of an order's invoice that was just stamped, when its invoice has a WhatsApp: added to be saved
-    /// with the stamp, so another attempt that stamped it first (and asked for its own) leaves this one unsaved. It never
-    /// throws: a number that no longer passes skips the message, never the stamp.
+    /// The message of a CFDI of an order's invoice that was just stamped, when its invoice has a WhatsApp and the business's
+    /// WhatsApp is connected: added to be saved with the stamp, so another attempt that stamped it first (and asked for its
+    /// own) leaves this one unsaved. It never throws: a number that no longer passes skips the message, never the stamp.
     /// </summary>
     public static async Task QueueOnStampAsync(IApplicationDbContext context, Cfdi cfdi, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -116,6 +121,9 @@ public static partial class CfdiWhatsApps
             _ => null
         };
         if (phone is null || cfdi.Status != OrderInvoiceStatus.Stamped || !InvoiceWhatsApp.IsPhone(phone))
+            return;
+        // Disconnected since: it would only fail, and count against the day's limit.
+        if (!await CampaignRules.IsWhatsAppConnectedAsync(context, cfdi.TenantId, cancellationToken))
             return;
         try
         {
@@ -130,7 +138,8 @@ public static partial class CfdiWhatsApps
     /// <summary>
     /// The message that carries the stamped <paramref name="cfdi"/> to <paramref name="phone"/>: the business's template for
     /// its invoices (an active one, approved in Meta with a document header) or TienditApp's text, written now with the
-    /// CFDI's data and a new link.
+    /// CFDI's data and a new link. A template that comes out longer than <see cref="MaxTextLength"/> would lose the link at
+    /// the end: TienditApp's text goes instead.
     /// </summary>
     public static async Task<OutgoingMessage> BuildAsync(
         IApplicationDbContext context, Cfdi cfdi, string phone, Guid? requestedByUserId, DateTimeOffset now, CancellationToken cancellationToken)
@@ -142,6 +151,8 @@ public static partial class CfdiWhatsApps
         var template = await TemplateAsync(context, cancellationToken);
         var token = OrderTracking.NewToken();
         var values = Values(cfdi, business, LinkPath + token);
+        if (template is not null && MessageTemplateText.Render(template.Body, values).Length > MaxTextLength)
+            template = null;
         var text = template?.Body ?? DefaultText;
         var parameters = template?.ProviderTemplateName is null ? [] : MessageTemplateText.Parameters(text, values);
         return OutgoingMessage.ForCfdi(
@@ -330,12 +341,16 @@ public sealed class CfdiWhatsAppSender
     public const string NoLongerStampedReason = "El CFDI ya no está vigente.";
     public const string PdfPendingReason = "El PDF del CFDI se está guardando.";
     public const string PdfUnavailableReason = "El PAC no dio el PDF del CFDI: envíalo otra vez más tarde.";
+    /// <summary>How long the message TienditApp asks for with the stamp waits for the PDF the stamp keeps right after.</summary>
+    public static readonly TimeSpan PdfWait = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan PdfPoll = TimeSpan.FromSeconds(20);
 
     private readonly IApplicationDbContext _context;
     private readonly IPrivateFileStorage _storage;
     private readonly IInvoicingGateway _gateway;
     private readonly IWhatsAppDocumentSender _whatsApp;
     private readonly IAppLinks _links;
+    private readonly IDateTimeProvider _clock;
     private readonly ILogger<CfdiWhatsAppSender> _logger;
 
     public CfdiWhatsAppSender(
@@ -344,6 +359,7 @@ public sealed class CfdiWhatsAppSender
         IInvoicingGateway gateway,
         IWhatsAppDocumentSender whatsApp,
         IAppLinks links,
+        IDateTimeProvider clock,
         ILogger<CfdiWhatsAppSender> logger)
     {
         _context = context;
@@ -351,6 +367,7 @@ public sealed class CfdiWhatsAppSender
         _gateway = gateway;
         _whatsApp = whatsApp;
         _links = links;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -363,10 +380,10 @@ public sealed class CfdiWhatsAppSender
             return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: NoLongerStampedReason);
 
         var pdf = cfdi.PdfFileKey is null ? null : await ReadAsync(cfdi.PdfFileKey, cancellationToken);
-        if (pdf is null && message.RequestedByUserId is null && message.Attempts == 0)
-            // Stamped a moment ago: the stamp keeps its PDF right after, and the next try takes it instead of asking the PAC
-            // for it twice.
-            return new OutgoingSendOutcome(OutgoingSendDecision.TransientFailure, Reason: PdfPendingReason);
+        if (pdf is null && message.RequestedByUserId is null && message.CreatedAt > _clock.UtcNow - PdfWait)
+            // Stamped a moment ago: the stamp keeps its PDF right after, and a later try takes it instead of asking the PAC
+            // for it twice. Waiting is not a failed try.
+            return new OutgoingSendOutcome(OutgoingSendDecision.Postponed, Reason: PdfPendingReason, RetryAfter: PdfPoll);
         pdf ??= await RenderPdfAsync(cfdi, cancellationToken);
         if (pdf is null)
             return new OutgoingSendOutcome(OutgoingSendDecision.TransientFailure, Reason: PdfUnavailableReason);

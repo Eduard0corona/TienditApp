@@ -147,6 +147,21 @@ public class CfdiWhatsAppTests
         Assert.Contains("{enlace}", unknown.Message);
         // A campaign does not get a CFDI's link.
         Assert.Throws<DomainException>(() => new MessageTemplate(TenantId, "Promo", MessagePurpose.Campaign, "Mira {enlace}"));
+        // Without it, the customer would get the PDF alone: the XML is only downloaded with the link.
+        Assert.Equal(MessageTemplateText.MissingLinkMessage, Assert.Throws<DomainException>(() =>
+            new MessageTemplate(TenantId, "Factura", MessagePurpose.CfdiDocument, "Hola {nombre}: {negocio} te envía {comprobante}")).Message);
+        Assert.Throws<DomainException>(() => template.Update("Factura", "Hola {nombre}: tu factura", "factura_pdf", "es_MX"));
+    }
+
+    [Fact]
+    public void Postpone_ShouldWaitForTheNextTry_WithoutCountingOne()
+    {
+        var message = Message(StampedInvoice(), null);
+
+        message.Postpone(Now.AddSeconds(20));
+
+        Assert.Equal((OutgoingMessageStatus.Pending, 0, (string?)null, Now.AddSeconds(20), (DateTimeOffset?)null),
+            (message.Status, message.Attempts, message.LastError, message.NextAttemptAt, message.LockedUntil));
     }
 
     private static OutgoingMessage Message(Cfdi cfdi, Guid? requestedBy)

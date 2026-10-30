@@ -133,7 +133,7 @@ export default function PublicCfdiPage() {
               </>
             ) : (
               <div className="alert alert-warning small mb-0" role="alert">
-                Este CFDI ya no está vigente: el negocio pidió cancelarlo. Pídele el que lo sustituye.
+                Este CFDI ya no está vigente: el negocio pidió cancelarlo. Si lo sustituyó por otro, pídeselo.
               </div>
             )}
           </div>

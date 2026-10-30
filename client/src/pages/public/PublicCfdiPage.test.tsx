@@ -119,7 +119,7 @@ describe('PublicCfdiPage', () => {
     vi.mocked(apiRequest).mockResolvedValue(cfdi() as never);
     const headers = new AxiosHeaders();
     const refused = new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
-      status: 400, data: new Blob([JSON.stringify({ detail: 'Este CFDI ya no está vigente: el negocio pidió cancelarlo. Pídele el que lo sustituye.' })]),
+      status: 400, data: new Blob([JSON.stringify({ detail: 'Este CFDI ya no está vigente: el negocio pidió cancelarlo. Si lo sustituyó por otro, pídeselo.' })]),
       statusText: '', headers, config: { headers },
     } as AxiosResponse);
     vi.mocked(api.post).mockRejectedValue(refused);

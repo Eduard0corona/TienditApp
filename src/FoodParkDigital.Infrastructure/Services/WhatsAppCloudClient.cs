@@ -150,7 +150,8 @@ public sealed class WhatsAppCloudClient
                 LogRedaction.GetProviderErrorCode(responseBody));
             return MessageSendResult.Failed(
                 $"WhatsApp no recibió el documento: {response.StatusCode}",
-                isTransient: !response.IsSuccessStatusCode && IsTransientStatus((int)response.StatusCode));
+                // Accepted without its media id: Meta may answer it whole on the next try.
+                isTransient: response.IsSuccessStatusCode || IsTransientStatus((int)response.StatusCode));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -71,7 +71,7 @@ describe('CfdiWhatsAppStatus', () => {
     const { rerender } = render(<CfdiWhatsAppStatus messages={[message()]} />);
     expect(screen.getByRole('status')).toHaveTextContent(/^Enviándose por WhatsApp a 5512345678…$/);
 
-    rerender(<CfdiWhatsAppStatus messages={[message({ attempts: 2, error: 'El PDF del CFDI se está guardando.' })]} />);
+    rerender(<CfdiWhatsAppStatus messages={[message({ attempts: 2, error: 'Error al enviar mensaje de WhatsApp: TooManyRequests' })]} />);
     expect(screen.getByRole('status')).toHaveTextContent(
       'Enviándose por WhatsApp a 5512345678… No ha salido todavía; TienditApp lo vuelve a intentar.');
 

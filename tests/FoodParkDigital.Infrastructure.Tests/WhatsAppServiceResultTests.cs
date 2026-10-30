@@ -127,6 +127,8 @@ public class WhatsAppServiceResultTests
     [Theory]
     [InlineData(HttpStatusCode.ServiceUnavailable, true)]
     [InlineData(HttpStatusCode.BadRequest, false)]
+    // Taken without the media id it answers with.
+    [InlineData(HttpStatusCode.OK, true)]
     public async Task FailedUpload_ShouldSendNoMessage_AndBeRetriedOnlyWhenMetaMayTakeItLater(HttpStatusCode status, bool transient)
     {
         var http = new StubHttpMessageHandler(status, """{"error":{"code":131053}}""");

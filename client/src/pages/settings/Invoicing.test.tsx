@@ -245,7 +245,9 @@ describe('Invoicing settings: the invoice by WhatsApp (Fase 28M)', () => {
     const select = await screen.findByLabelText('Mensaje');
     expect(select).toHaveValue('');
     expect(screen.getByText(settings.whatsAppDefaultText)).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('Sin una plantilla aprobada en Meta, WhatsApp solo entrega la factura en las 24 horas');
+    // Advice that stays, not an alert announced on every visit.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText(/^Sin una plantilla aprobada en Meta, WhatsApp solo entrega la factura en las 24 horas/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Campañas › Plantillas' })).toHaveAttribute('href', '/campaigns?tab=templates');
 
     await userEvent.selectOptions(select, 't-1');
@@ -262,7 +264,7 @@ describe('Invoicing settings: the invoice by WhatsApp (Fase 28M)', () => {
     });
     renderPage();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Esta plantilla no está aprobada en Meta: WhatsApp solo la entrega en las 24 horas desde el último mensaje del cliente.');
+    expect(await screen.findByText(
+      'Esta plantilla no está aprobada en Meta: WhatsApp solo la entrega en las 24 horas desde el último mensaje del cliente.')).toBeInTheDocument();
   });
 });

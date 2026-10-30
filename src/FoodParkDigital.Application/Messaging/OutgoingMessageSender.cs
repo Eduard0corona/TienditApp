@@ -19,10 +19,13 @@ public enum OutgoingSendDecision
     Cancelled = 2,
     /// <summary>May be accepted later: the worker retries it.</summary>
     TransientFailure = 3,
-    Rejected = 4
+    Rejected = 4,
+    /// <summary>Not tried yet on purpose: the worker sends it after <see cref="OutgoingSendOutcome.RetryAfter"/>, without counting an attempt.</summary>
+    Postponed = 5
 }
 
-public sealed record OutgoingSendOutcome(OutgoingSendDecision Decision, string? ProviderMessageId = null, string? Reason = null);
+public sealed record OutgoingSendOutcome(
+    OutgoingSendDecision Decision, string? ProviderMessageId = null, string? Reason = null, TimeSpan? RetryAfter = null);
 
 /// <summary>
 /// Sends one queued message in its business's context, checking first that it still applies: the customer has

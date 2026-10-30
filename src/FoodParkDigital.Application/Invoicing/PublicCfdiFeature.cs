@@ -125,7 +125,7 @@ public class GetPublicCfdiFileQueryValidator : AbstractValidator<GetPublicCfdiFi
 
 public class GetPublicCfdiFileQueryHandler : IRequestHandler<GetPublicCfdiFileQuery, Result<PrivateFileDownload>>
 {
-    public const string NotStandingMessage = "Este CFDI ya no está vigente: el negocio pidió cancelarlo. Pídele el que lo sustituye.";
+    public const string NotStandingMessage = "Este CFDI ya no está vigente: el negocio pidió cancelarlo. Si lo sustituyó por otro, pídeselo.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;

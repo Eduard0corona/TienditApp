@@ -266,8 +266,9 @@ export default function TemplatesTab() {
               </div>
               {draft.purpose === MessagePurpose.CfdiDocument && (
                 <div className="form-text">
-                  El PDF va en el encabezado: en Meta, la plantilla necesita un encabezado de tipo documento. Sin plantilla aprobada,
-                  WhatsApp solo la entrega en las 24 horas desde el último mensaje del cliente.
+                  Lleva {'{enlace}'}: con él tu cliente descarga el XML. El PDF va en el encabezado: en Meta, la plantilla necesita un
+                  encabezado de tipo documento. Sin plantilla aprobada, WhatsApp solo la entrega en las 24 horas desde el último mensaje
+                  del cliente.
                 </div>
               )}
               {order.length > 0 && (

@@ -62,7 +62,14 @@ public static partial class MessageTemplateText
             throw new DomainException(
                 $"Variables no disponibles: {string.Join(", ", unknown.Select(p => $"{{{p}}}"))}. "
                 + $"Usa {string.Join(", ", allowed.Select(p => $"{{{p}}}"))}.");
+        // The XML of a CFDI is downloaded only with its link (Fase 28M): a template of invoices that leaves it out would
+        // deliver the PDF alone.
+        if (purpose == MessagePurpose.CfdiDocument && !GetPlaceholders(body).Contains(Link))
+            throw new DomainException(MissingLinkMessage);
     }
+
+    public const string MissingLinkMessage =
+        "El mensaje de una factura lleva {enlace}: con él tu cliente descarga el XML, que WhatsApp no manda como documento.";
 
     public static string Render(string body, IReadOnlyDictionary<string, string> values)
         => PlaceholderPattern().Replace(body, match =>

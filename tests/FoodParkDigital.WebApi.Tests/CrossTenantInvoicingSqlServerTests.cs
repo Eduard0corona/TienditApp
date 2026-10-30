@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
+using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using static FoodParkDigital.WebApi.Tests.CrossTenantManagementSqlServerTests;
@@ -859,6 +860,21 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Equal("+525512345678", invoice.GetProperty("receiverWhatsApp").GetString());
         var queued = await _api.QueryAsync(mine.TenantId, db => db.OutgoingMessages.SingleAsync(m => m.CfdiId == invoiceId));
         Assert.Equal(("+525512345678", (Guid?)null), (queued.Phone, queued.RequestedByUserId));
+        // Campañas › Mensajes does not list it: it carries the link that downloads the CFDI, seen only in the order.
+        foreach (var listed in new[] { "/api/v1/messaging/messages", $"/api/v1/messaging/messages?purpose={(int)MessagePurpose.CfdiDocument}" })
+            Assert.Empty((await mine.Client.GetFromJsonAsync<JsonElement>(listed)).GetProperty("items").EnumerateArray());
+
+        // The text of my invoices is the owner's, like choosing it: running campaigns is not enough. It carries the link.
+        const string templates = "/api/v1/messaging/templates";
+        var campaigns = await EmployeeAsync(mine, "ManageCampaigns");
+        Assert.Equal(HttpStatusCode.Forbidden, (await campaigns.PostAsJsonAsync(
+            templates, new { name = "Factura", purpose = (int)MessagePurpose.CfdiDocument, body = "Hola {nombre}: {enlace}" })).StatusCode);
+        var withoutLink = await mine.Client.PostAsJsonAsync(
+            templates, new { name = "Factura", purpose = (int)MessagePurpose.CfdiDocument, body = "Hola {nombre}: va tu factura." });
+        Assert.Equal(HttpStatusCode.BadRequest, withoutLink.StatusCode);
+        Assert.Contains("{enlace}", await withoutLink.Content.ReadAsStringAsync());
+        await TwoBusinessesApi.IdAsync(
+            mine.Client, templates, new { name = "Factura", purpose = (int)MessagePurpose.CfdiDocument, body = "Hola {nombre}: {enlace}" });
 
         // The other owner, even with the header of my business, cannot send it.
         var url = $"/api/v1/invoicing/invoices/{invoiceId}/whatsapp";
@@ -897,6 +913,15 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.False(page.GetProperty("stands").GetBoolean());
         Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync(
             "/api/v1/public/cfdi/files", new { token = queued.LinkToken, kind = (int)OrderInvoiceFileKind.Pdf })).StatusCode);
+
+        // One that WhatsApp did not deliver is seen in the order: Inicio does not count it with the campaigns' that failed.
+        await _api.QueryAsync(mine.TenantId, async db =>
+        {
+            (await db.OutgoingMessages.SingleAsync(m => m.Id == queued.Id)).Fail("WhatsApp rechazó el mensaje.");
+            return await db.SaveChangesAsync();
+        });
+        var attention = await mine.Client.GetFromJsonAsync<JsonElement>("/api/v1/dashboard/attention");
+        Assert.DoesNotContain(attention.GetProperty("items").EnumerateArray(), item => item.GetProperty("key").GetString() == "failedMessages");
     }
 
     /// <summary>The business's fiscal data in Mi negocio and a CSD of its RFC in force, as if uploaded.</summary>

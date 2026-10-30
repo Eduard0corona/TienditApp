@@ -373,7 +373,7 @@ function WhatsAppCard({ data }: { data: InvoicingSettings }) {
             </select>
             <p className="small text-muted mt-2 mb-2">{chosen?.body ?? data.whatsAppDefaultText}</p>
             {!chosen?.providerTemplateName && (
-              <div className="alert alert-warning small py-2 mb-2" role="alert">
+              <div className="alert alert-warning small py-2 mb-2">
                 {chosen
                   ? 'Esta plantilla no está aprobada en Meta: WhatsApp solo la entrega en las 24 horas desde el último mensaje del cliente.'
                   : 'Sin una plantilla aprobada en Meta, WhatsApp solo entrega la factura en las 24 horas desde el último mensaje del cliente.'}

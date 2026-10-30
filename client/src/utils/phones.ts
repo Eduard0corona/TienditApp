@@ -15,13 +15,15 @@ export function isTypedPhone(phone: string): boolean {
   const value = phone.trim();
   if (!/^[+\d(][\d\s().-]*$/.test(value)) return false;
   const digits = value.replace(/\D/g, '');
-  if (value.startsWith('+')) return digits.length >= 8 && digits.length <= 15;
-  if (value.startsWith('00')) return digits.length >= 10 && digits.length <= 17;
+  // A country code never starts with 0.
+  if (value.startsWith('+')) return /^[1-9]/.test(digits) && digits.length >= 8 && digits.length <= 15;
+  if (value.startsWith('00')) return /^00[1-9]/.test(digits) && digits.length >= 10 && digits.length <= 17;
   return digits.length === 10 || (digits.length === 12 && digits.startsWith('52'));
 }
 
 /** Whether two phones are the same number as a person in Mexico writes them, spaces and dashes apart. */
 export function isSamePhone(a: string | null | undefined, b: string | null | undefined): boolean {
-  const plain = (phone: string | null | undefined) => localPhone((phone ?? '').replace(/[\s().-]/g, '').replace(/^00/, '+'));
+  const plain = (phone: string | null | undefined) =>
+    localPhone((phone ?? '').replace(/[\s().-]/g, '').replace(/^00/, '+').replace(/^52(?=1?\d{10}$)/, '+52'));
   return plain(a) !== '' && plain(a) === plain(b);
 }

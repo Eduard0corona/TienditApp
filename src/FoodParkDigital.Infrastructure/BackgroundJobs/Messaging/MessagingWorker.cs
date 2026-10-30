@@ -372,6 +372,9 @@ public sealed class MessagingWorker
             case OutgoingSendDecision.Cancelled:
                 message.Cancel();
                 break;
+            case OutgoingSendDecision.Postponed:
+                message.Postpone(now.Add(outcome.RetryAfter ?? RetrySchedule.DelayAfter(1)));
+                break;
             case OutgoingSendDecision.Rejected:
                 message.Fail(outcome.Reason ?? "WhatsApp rechazó el mensaje.");
                 break;

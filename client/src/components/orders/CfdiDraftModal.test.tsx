@@ -472,18 +472,36 @@ describe('CfdiDraftModal', () => {
       expect(screen.getByRole('heading', { name: 'Facturas de este pedido' })).toHaveFocus();
     });
 
-    it('takes the replaced invoice\'s WhatsApp to correct it, and the order\'s again once it is left (Fase 28M)', async () => {
-      serve({
-        ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, whatsAppConnected: true, proposedWhatsApp: '+525598765432',
-        invoices: [{ ...STAMPED, canSubstitute: true, receiverWhatsApp: '+14155550123' }],
-      });
+    it.each([
+      ['5512345679', '5512345679', 'Factura F-2 timbrada en lugar de la F-1: se está enviando por WhatsApp a 5512345679.'],
+      ['', null, 'Factura F-2 timbrada en lugar de la F-1.'],
+    ])('takes the replaced invoice\'s WhatsApp to correct it, and the new one goes with «%s» (Fase 28M)', async (typed, sent, said) => {
+      let substituted: unknown;
+      const replacement: Invoice = { ...STAMPED, id: 'inv-2', number: 'F-2', replacesInvoiceId: 'inv-1', replacesNumber: 'F-1' };
+      serve(
+        {
+          ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, whatsAppConnected: true, proposedWhatsApp: '+525598765432',
+          invoices: [{ ...STAMPED, canSubstitute: true, receiverWhatsApp: '+14155550123' }],
+        },
+        (_method, _path, body) => {
+          substituted = body;
+          return Promise.resolve(replacement);
+        },
+      );
       renderModal(true);
 
       await userEvent.click(await screen.findByRole('button', { name: 'Sustituir factura F-1' }));
-      expect(screen.getByLabelText('WhatsApp del cliente (opcional)')).toHaveValue('+14155550123');
-      await userEvent.click(screen.getByRole('button', { name: 'No sustituir' }));
-      // Without an invoice to stamp now, the field is not there; it would come back with the order's number.
-      expect(screen.queryByLabelText('WhatsApp del cliente (opcional)')).not.toBeInTheDocument();
+      const whatsApp = screen.getByLabelText('WhatsApp del cliente (opcional)');
+      expect(whatsApp).toHaveValue('+14155550123');
+      await userEvent.clear(whatsApp);
+      if (typed) await userEvent.type(whatsApp, typed);
+      const replace = screen.getByRole('button', { name: 'Timbrar y sustituir la F-1' });
+      await userEvent.click(screen.getByRole('button', { name: 'Ver con estos datos' }));
+      await waitFor(() => expect(replace).toBeEnabled());
+      await userEvent.click(replace);
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith(said));
+      expect(substituted).toMatchObject({ receiverWhatsApp: sent });
     });
 
     it('gives the focus back to «Sustituir factura» when it is left', async () => {
