@@ -76,6 +76,35 @@ public class MessagingWorkerTests
     }
 
     [Fact]
+    public async Task SlowProvider_ShouldKeepTheLeaseOfTheBatch_SoNoMessageIsSentTwice()
+    {
+        await using var host = CreateHost(out var whatsApp, leaseSeconds: 1);
+        whatsApp.Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await SeedCampaignAsync(host, "a", ("+525511111111", "Ana"), ("+525522222222", "Beto"));
+        var worker = host.Get<MessagingWorker>();
+        await worker.StartDueCampaignsAsync(CancellationToken.None);
+        var patience = TimeSpan.FromSeconds(15);
+
+        var first = worker.DispatchDueAsync(CancellationToken.None);
+        await whatsApp.Started.Task.WaitAsync(patience);
+        // Far past the lease they were claimed with: only renewing it keeps another worker away from both.
+        host.Clock.Advance(TimeSpan.FromMinutes(5));
+        var deadline = DateTime.UtcNow + patience;
+        while ((await AllAsync(host, c => c.OutgoingMessages)).Any(m => m.LockedUntil is null || m.LockedUntil <= host.Clock.UtcNow))
+        {
+            Assert.True(DateTime.UtcNow < deadline, "The leases were never renewed.");
+            await Task.Delay(50);
+        }
+
+        Assert.Equal(0, await worker.DispatchDueAsync(CancellationToken.None).WaitAsync(patience));
+        whatsApp.Gate.SetResult();
+        Assert.Equal(2, await first.WaitAsync(patience));
+
+        Assert.Equal(["+525511111111", "+525522222222"], whatsApp.Sent.Select(s => s.Phone).Order());
+        Assert.All(await AllAsync(host, c => c.OutgoingMessages), m => Assert.Equal(OutgoingMessageStatus.Sent, m.Status));
+    }
+
+    [Fact]
     public async Task CancelledCampaign_ShouldCancelItsPendingMessagesWithoutSending()
     {
         await using var host = CreateHost(out var whatsApp);
@@ -152,7 +181,7 @@ public class MessagingWorkerTests
             messages.Select(m => (m.TenantId, m.Purpose, m.Phone)).OrderBy(m => m.Phone));
     }
 
-    private static OutboxTestHost CreateHost(out FakeWhatsApp whatsApp, int maxAttempts = 6)
+    private static OutboxTestHost CreateHost(out FakeWhatsApp whatsApp, int maxAttempts = 6, int leaseSeconds = 120)
     {
         var fake = new FakeWhatsApp();
         whatsApp = fake;
@@ -162,6 +191,7 @@ public class MessagingWorkerTests
             {
                 options.Messaging.MaxAttempts = maxAttempts;
                 options.Messaging.SendIntervalMilliseconds = 0;
+                options.Messaging.LeaseSeconds = leaseSeconds;
             });
             services.AddSingleton<IWhatsAppService>(fake);
             services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
@@ -262,15 +292,24 @@ public class MessagingWorkerTests
         public List<(Guid TenantId, string Phone)> Sent { get; } = [];
         public bool Transient { get; set; }
 
+        /// <summary>When set, each send waits for it: a provider that takes its time.</summary>
+        public TaskCompletionSource? Gate { get; set; }
+
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public Task<MessageSendResult> SendTemplateMessageAsync(Guid tenantId, string phoneNumber, string templateName, string languageCode, string[] parameters, CancellationToken cancellationToken = default)
             => SendTextMessageAsync(tenantId, phoneNumber, templateName, cancellationToken);
 
-        public Task<MessageSendResult> SendTextMessageAsync(Guid tenantId, string phoneNumber, string message, CancellationToken cancellationToken = default)
+        public async Task<MessageSendResult> SendTextMessageAsync(Guid tenantId, string phoneNumber, string message, CancellationToken cancellationToken = default)
         {
-            Sent.Add((tenantId, phoneNumber));
-            return Task.FromResult(Transient
+            lock (Sent)
+                Sent.Add((tenantId, phoneNumber));
+            Started.TrySetResult();
+            if (Gate is not null)
+                await Gate.Task.WaitAsync(cancellationToken);
+            return Transient
                 ? MessageSendResult.Failed("Timeout", isTransient: true)
-                : MessageSendResult.Sent($"wamid.{Sent.Count}"));
+                : MessageSendResult.Sent($"wamid.{Sent.Count}");
         }
     }
 }

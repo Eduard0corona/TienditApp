@@ -8968,6 +8968,159 @@
         }
       }
     },
+    "/api/v1/invoicing/issued-cfdis/to-review": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IssuedCfdiDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IssuedCfdiDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IssuedCfdiDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/issued-cfdis/{kind}/{cfdiId}/stamped": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/IssuedCfdiKind"
+            }
+          },
+          {
+            "name": "cfdiId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmStuckCfdiStampedRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmStuckCfdiStampedRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmStuckCfdiStampedRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCfdiDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCfdiDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCfdiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/issued-cfdis/{kind}/{cfdiId}/not-stamped": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/IssuedCfdiKind"
+            }
+          },
+          {
+            "name": "cfdiId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCfdiDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCfdiDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCfdiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/kitchen/orders": {
       "get": {
         "tags": [
@@ -19671,6 +19824,18 @@
         },
         "additionalProperties": false
       },
+      "ConfirmStuckCfdiStampedRequest": {
+        "required": [
+          "uuid"
+        ],
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ConversationDto": {
         "required": [
           "customerPhone",
@@ -21536,6 +21701,11 @@
           "requestedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "stampWindowEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           },
           "issuedAutomatically": {
             "type": "boolean"
@@ -23659,6 +23829,11 @@
             "type": "string",
             "format": "date-time"
           },
+          "stampWindowEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "uuid": {
             "type": "string",
             "nullable": true
@@ -23891,6 +24066,11 @@
           "requestedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "stampWindowEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           },
           "uuid": {
             "type": "string",
@@ -26185,6 +26365,16 @@
           },
           "hasXml": {
             "type": "boolean"
+          },
+          "stampWindowEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "notStampedFrom": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -28535,6 +28725,11 @@
             "type": "string",
             "format": "date-time"
           },
+          "stampWindowEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "uuid": {
             "type": "string",
             "nullable": true
@@ -29693,6 +29888,11 @@
           "requestedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "stampWindowEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           },
           "issuedAutomatically": {
             "type": "boolean"

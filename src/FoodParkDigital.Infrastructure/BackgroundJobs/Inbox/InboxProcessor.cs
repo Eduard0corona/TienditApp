@@ -12,7 +12,8 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
 
 /// <summary>
 /// Processes stored webhook deliveries. A delivery with a message that could not be stored is retried as a
-/// whole: messages already stored are recognized by their provider id and skipped.
+/// whole: messages already stored are recognized by their provider id and skipped. The lease of each claimed delivery is
+/// renewed while the batch is worked on (<see cref="LeaseKeeper{TItem}"/>, Fase 28K).
 /// </summary>
 public sealed class InboxProcessor
 {
@@ -39,8 +40,11 @@ public sealed class InboxProcessor
     public async Task<int> ProcessDueAsync(CancellationToken cancellationToken)
     {
         var claimed = await ClaimDueAsync(cancellationToken);
+        await using var leases = new LeaseKeeper<InboxMessage>(
+            _scopeFactory, _clock, TimeSpan.FromSeconds(_options.LeaseSeconds), claimed,
+            (message, now, lease) => message.RenewLease(now, lease), message => message.Id, _logger, cancellationToken);
         foreach (var message in claimed)
-            await ProcessAsync(message, cancellationToken);
+            await ProcessAsync(message, leases, cancellationToken);
 
         return claimed.Count;
     }
@@ -101,9 +105,10 @@ public sealed class InboxProcessor
     private static string? Describe(WhatsAppWebhookOutcome outcome)
         => outcome.FailedItems > 0 ? $"{outcome.FailedItems} message(s) or status batches could not be stored." : null;
 
-    private async Task ProcessAsync(InboxMessage message, CancellationToken cancellationToken)
+    private async Task ProcessAsync(InboxMessage message, LeaseKeeper<InboxMessage> leases, CancellationToken cancellationToken)
     {
         string? failure;
+        var itemToken = leases.TokenFor(message);
         try
         {
             // No business yet: the processor finds it from the delivery and works in that business's scope.
@@ -112,11 +117,16 @@ public sealed class InboxProcessor
             failure = message.Source switch
             {
                 WebhookSources.WhatsApp => Describe(await services.GetRequiredService<WhatsAppWebhookProcessor>()
-                    .ProcessAsync(message.Payload, cancellationToken)),
+                    .ProcessAsync(message.Payload, itemToken)),
                 WebhookSources.MercadoPago => await services.GetRequiredService<MercadoPagoWebhookProcessor>()
-                    .ProcessAsync(message.Payload, cancellationToken),
+                    .ProcessAsync(message.Payload, itemToken),
                 _ => throw new InvalidOperationException($"Unknown webhook source '{message.Source}'.")
             };
+        }
+        catch (OperationCanceledException) when (leases.IsLost(message) && !cancellationToken.IsCancellationRequested)
+        {
+            // Another instance holds it now and processes it again: what was stored here is recognized and skipped.
+            return;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -131,6 +141,12 @@ public sealed class InboxProcessor
             failure = FailureDescription.Describe(ex);
         }
 
+        if (!await leases.CompleteAsync(message, () => CompleteAsync(message, failure, cancellationToken), cancellationToken))
+            _logger.LogWarning("Webhook delivery {InboxMessageId} was claimed by another worker before it finished", message.Id);
+    }
+
+    private async Task CompleteAsync(InboxMessage message, string? failure, CancellationToken cancellationToken)
+    {
         await using var completionScope = _scopeFactory.CreateAsyncScope();
         var context = completionScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         context.Attach(message);

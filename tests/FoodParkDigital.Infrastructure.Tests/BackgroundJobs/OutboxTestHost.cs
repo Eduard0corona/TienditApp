@@ -42,7 +42,9 @@ internal sealed class OutboxTestHost : IAsyncDisposable
         where T : notnull
         => _provider.GetRequiredService<T>();
 
-    public static OutboxTestHost Create(int maxAttempts = 3, Action<IServiceCollection>? configure = null)
+    /// <param name="interceptor">One more interceptor of every context, such as one that fails some saves.</param>
+    public static OutboxTestHost Create(
+        int maxAttempts = 3, Action<IServiceCollection>? configure = null, Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor? interceptor = null)
     {
         var databaseName = Guid.NewGuid().ToString();
         var databaseRoot = new InMemoryDatabaseRoot();
@@ -64,9 +66,11 @@ internal sealed class OutboxTestHost : IAsyncDisposable
         services.AddScoped<ApplicationDbContext>(sp => new TestDbContext(
             new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase(databaseName, databaseRoot)
-                .AddInterceptors(
+                .AddInterceptors(new Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[]
+                {
                     sp.GetRequiredService<TenantSaveChangesInterceptor>(),
-                    sp.GetRequiredService<OutboxSaveChangesInterceptor>())
+                    sp.GetRequiredService<OutboxSaveChangesInterceptor>()
+                }.Concat(interceptor is null ? [] : [interceptor]))
                 .Options,
             sp.GetRequiredService<ICurrentTenantService>(),
             sp.GetRequiredService<IMediator>()));
@@ -163,6 +167,15 @@ internal sealed class HandlerLog
 
     /// <summary>Whether each run of <see cref="FlakyHandler"/> was the outbox's last attempt for its message.</summary>
     public List<bool> FlakyLastAttempts { get; } = [];
+
+    /// <summary>Set when <see cref="SlowHandler"/> starts its first run.</summary>
+    public TaskCompletionSource SlowStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>What <see cref="SlowHandler"/> waits for before it finishes.</summary>
+    public TaskCompletionSource SlowRelease { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Whether a run of <see cref="SlowHandler"/> was stopped by its token.</summary>
+    public bool SlowCancelled { get; set; }
 }
 
 /// <summary>Audits the order through the scoped context without saving, as real outbox handlers do.</summary>
@@ -211,5 +224,65 @@ internal sealed class FlakyHandler : IOutboxEventHandler<OrderCreatedEvent>
         }
 
         return Task.CompletedTask;
+    }
+}
+
+/// <summary>Takes as long as the test wants: an email whose PDF and mail server take minutes.</summary>
+/// <summary>
+/// Fails the first renewals of a lease (an update of <c>LockedUntil</c> that keeps the <c>LockToken</c>), as a database that
+/// does not answer for a moment (Fase 28K).
+/// </summary>
+internal sealed class FailingRenewals(int failures) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+{
+    private int _left = failures;
+
+    public int Failed { get; private set; }
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+        Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        var tracker = eventData.Context!.ChangeTracker;
+        tracker.DetectChanges();
+        var renewal = tracker.Entries<OutboxMessage>().Any(e => e.State == EntityState.Modified
+            && e.Property(m => m.LockedUntil).IsModified
+            && e.Property(m => m.LockToken).CurrentValue == e.Property(m => m.LockToken).OriginalValue
+            && e.Entity.ProcessedAt is null);
+        if (renewal && _left > 0)
+        {
+            _left--;
+            Failed++;
+            throw new InvalidOperationException("La base no responde.");
+        }
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+}
+
+internal sealed class SlowHandler : IOutboxEventHandler<OrderCreatedEvent>
+{
+    private readonly HandlerLog _log;
+    private readonly ICurrentTenantService _tenant;
+
+    public SlowHandler(HandlerLog log, ICurrentTenantService tenant)
+    {
+        _log = log;
+        _tenant = tenant;
+    }
+
+    public async Task HandleAsync(OrderCreatedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
+    {
+        lock (_log.Runs)
+            _log.Runs.Add((nameof(SlowHandler), _tenant.TenantId, null, context.Attempt));
+        _log.SlowStarted.TrySetResult();
+        try
+        {
+            await _log.SlowRelease.Task.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _log.SlowCancelled = true;
+            throw;
+        }
     }
 }

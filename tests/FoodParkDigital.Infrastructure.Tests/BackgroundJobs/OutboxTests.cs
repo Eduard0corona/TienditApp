@@ -19,6 +19,9 @@ public class OutboxTests
     private static readonly Guid TenantA = Guid.NewGuid();
     private static readonly Guid TenantB = Guid.NewGuid();
 
+    /// <summary>How long a test waits for work that runs in the background.</summary>
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
+
     [Fact]
     public async Task Saving_ShouldStoreTheEventInTheSameSave_WithTenantAndActor()
     {
@@ -162,6 +165,80 @@ public class OutboxTests
         host.Clock.Advance(TimeSpan.FromMinutes(3));
         Assert.Equal(1, await host.Dispatcher.DispatchDueAsync(CancellationToken.None));
         Assert.Single(host.Log.Runs);
+    }
+
+    [Fact]
+    public async Task SlowHandler_ShouldKeepTheLeaseOfItsBatch_SoAnotherWorkerRunsNothingTwice()
+    {
+        await using var host = OutboxTestHost.Create(configure: services =>
+        {
+            services.Configure<BackgroundJobOptions>(options => options.Outbox.LeaseSeconds = 1);
+            services.AddScoped<IOutboxEventHandler<OrderCreatedEvent>, SlowHandler>();
+        });
+        await host.CreateOrderAsync(TenantA);
+        host.Clock.Advance(TimeSpan.FromSeconds(1));
+        // Claimed with the first one, it waits its turn in the batch.
+        await host.CreateOrderAsync(TenantB);
+
+        var first = host.Dispatcher.DispatchDueAsync(CancellationToken.None);
+        await host.Log.SlowStarted.Task.WaitAsync(Patience);
+        // Far past the lease they were claimed with: only renewing it keeps another worker away.
+        host.Clock.Advance(TimeSpan.FromMinutes(5));
+        await EventuallyAsync(async () => (await host.MessagesAsync()).All(m => m.LockedUntil > host.Clock.UtcNow));
+
+        Assert.Equal(0, await host.Dispatcher.DispatchDueAsync(CancellationToken.None).WaitAsync(Patience));
+        host.Log.SlowRelease.SetResult();
+        Assert.Equal(2, await first.WaitAsync(Patience));
+
+        Assert.Equal([TenantA, TenantB], host.Log.Runs.Select(r => r.TenantId));
+        Assert.All(await host.MessagesAsync(), m => Assert.NotNull(m.ProcessedAt));
+    }
+
+    [Fact]
+    public async Task RenewalThatFails_ShouldBeTriedAgain_WithoutLosingTheMessage()
+    {
+        var failing = new FailingRenewals(failures: 2);
+        await using var host = OutboxTestHost.Create(interceptor: failing, configure: services =>
+        {
+            services.Configure<BackgroundJobOptions>(options => options.Outbox.LeaseSeconds = 1);
+            services.AddScoped<IOutboxEventHandler<OrderCreatedEvent>, SlowHandler>();
+        });
+        await host.CreateOrderAsync(TenantA);
+
+        var first = host.Dispatcher.DispatchDueAsync(CancellationToken.None);
+        await host.Log.SlowStarted.Task.WaitAsync(Patience);
+        host.Clock.Advance(TimeSpan.FromMinutes(5));
+        // The database does not answer twice; the next renewal still holds the message, as nobody else took it.
+        await EventuallyAsync(async () =>
+            failing.Failed == 2 && (await host.MessagesAsync()).All(m => m.LockedUntil > host.Clock.UtcNow));
+
+        host.Log.SlowRelease.SetResult();
+        Assert.Equal(1, await first.WaitAsync(Patience));
+        Assert.False(host.Log.SlowCancelled);
+        Assert.NotNull(Assert.Single(await host.MessagesAsync()).ProcessedAt);
+    }
+
+    [Fact]
+    public async Task MessageAnotherWorkerTook_ShouldStopItsHandler_AndBeLeftToThatWorker()
+    {
+        await using var host = OutboxTestHost.Create(configure: services =>
+        {
+            services.Configure<BackgroundJobOptions>(options => options.Outbox.LeaseSeconds = 1);
+            services.AddScoped<IOutboxEventHandler<OrderCreatedEvent>, SlowHandler>();
+        });
+        await host.CreateOrderAsync(TenantA);
+
+        var first = host.Dispatcher.DispatchDueAsync(CancellationToken.None);
+        await host.Log.SlowStarted.Task.WaitAsync(Patience);
+        // This instance stalled past its lease, and another one claimed the message.
+        var takenUntil = await TakeAsAnotherWorkerAsync(host);
+
+        Assert.Equal(1, await first.WaitAsync(Patience));
+        Assert.True(host.Log.SlowCancelled);
+        // Neither processed nor failed here: the worker that holds it finishes it.
+        var message = Assert.Single(await host.MessagesAsync());
+        Assert.Equal(((DateTimeOffset?)null, 0, (DateTimeOffset?)takenUntil), (message.ProcessedAt, message.Attempts, message.LockedUntil));
+        Assert.Empty(await host.ConsumersAsync());
     }
 
     [Fact]
@@ -355,6 +432,40 @@ public class OutboxTests
         {
             received.Events.Add(domainEvent);
             return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Waits, a little at a time, until the condition holds.</summary>
+    private static async Task EventuallyAsync(Func<Task<bool>> condition)
+    {
+        var deadline = DateTime.UtcNow + Patience;
+        while (!await condition())
+        {
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException("The condition never held.");
+            await Task.Delay(50);
+        }
+    }
+
+    /// <summary>Claims the only message as another instance would, retrying while this one renews it.</summary>
+    private static async Task<DateTimeOffset> TakeAsAnotherWorkerAsync(OutboxTestHost host)
+    {
+        while (true)
+        {
+            try
+            {
+                return await host.InScopeAsync(async services =>
+                {
+                    var context = services.GetRequiredService<ApplicationDbContext>();
+                    var message = await context.OutboxMessages.SingleAsync();
+                    message.Claim(host.Clock.UtcNow, TimeSpan.FromMinutes(2));
+                    await context.SaveChangesAsync();
+                    return message.LockedUntil!.Value;
+                });
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+            }
         }
     }
 }

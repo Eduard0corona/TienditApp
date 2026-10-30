@@ -15,8 +15,9 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// period to the general public (Fase 28B, ADR 0046), for owners and admins; the payment complements of the payments of an
 /// invoice in installments (Fase 28C, ADR 0047); the credit notes of the refunds and write-offs of an invoiced order
 /// (Fase 28D, ADR 0048); the emails of those CFDI to the customer (Fase 28E, ADR 0049); self-invoicing, turned on here and
-/// printed on each ticket (Fase 28F, ADR 0050); and the CFDI issued in a month, with their XML for the accountant
-/// (Fase 28H, ADR 0052), for owners and admins.
+/// printed on each ticket (Fase 28F, ADR 0050); the CFDI issued in a month, with their XML for the accountant
+/// (Fase 28H, ADR 0052), for owners and admins; and the ones that stayed «Timbrando» past the PAC's window, checked in its
+/// portal (Fase 28K, ADR 0056).
 /// </summary>
 [ApiController]
 [Route("api/v1/invoicing")]
@@ -348,6 +349,38 @@ public class InvoicingController : ControllerBase
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Download(result.Value!);
     }
 
+    /// <summary>
+    /// Every CFDI of the business still «Timbrando» past the PAC's window, the oldest first, whatever their month: they are
+    /// checked in the SAT's portal (Fase 28K, ADR 0056). Owners and admins.
+    /// </summary>
+    [HttpGet("issued-cfdis/to-review")]
+    public async Task<ActionResult<List<IssuedCfdiDto>>> GetCfdisToReview(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetCfdisToReviewQuery(), cancellationToken));
+
+    /// <summary>
+    /// A CFDI still «Timbrando» past the window was stamped: its folio fiscal, found in the SAT's portal, brings its XML back
+    /// once TienditApp checks it is this CFDI. Owners and admins.
+    /// </summary>
+    [HttpPost("issued-cfdis/{kind}/{cfdiId:guid}/stamped")]
+    public async Task<ActionResult<IssuedCfdiDto>> ConfirmStuckCfdiStamped(
+        IssuedCfdiKind kind, Guid cfdiId, [FromBody] ConfirmStuckCfdiStampedRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ConfirmStuckCfdiStampedCommand(kind, cfdiId, request.Uuid), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    /// <summary>
+    /// A CFDI still «Timbrando» past the window was not stamped, as the SAT's portal shows: it becomes «Rechazada» and what it
+    /// covered can be invoiced again. Owners and admins.
+    /// </summary>
+    [HttpPost("issued-cfdis/{kind}/{cfdiId:guid}/not-stamped")]
+    public async Task<ActionResult<IssuedCfdiDto>> ConfirmStuckCfdiNotStamped(
+        IssuedCfdiKind kind, Guid cfdiId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ConfirmStuckCfdiNotStampedCommand(kind, cfdiId), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
     private async Task<ActionResult<CreditNoteDto>> IssueCreditNoteAsync(
         CreditNoteAdjustment adjustment, Guid adjustmentId, CancellationToken cancellationToken)
     {
@@ -437,4 +470,10 @@ public class SendCfdiByEmailRequest
     public string Email { get; init; } = string.Empty;
     /// <summary>What comes next of its invoice (its complements and credit notes) goes to this email too.</summary>
     public bool UseForInvoice { get; init; }
+}
+
+public class ConfirmStuckCfdiStampedRequest
+{
+    /// <summary>The folio fiscal (UUID) the SAT's portal shows for the CFDI.</summary>
+    public string Uuid { get; init; } = string.Empty;
 }

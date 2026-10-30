@@ -67,7 +67,7 @@ Tomé las decisiones de la Fase 28E con la autorización permanente del dueño d
   - El cliente recibe su factura, sus complementos y sus notas sin que el negocio los descargue y los mande, y el negocio ve en Pedidos si salió.
   - Un CFDI se manda una vez por timbre aunque dos intentos lo timbren a la vez, y el outbox reintenta lo que el servidor de correo no tomó.
 - **Lo que limita:**
-  - La entrega es **al menos una vez**: si el servidor tomó el correo y la base no pudo guardar el resultado, el outbox lo manda otra vez. Es preferible a perderlo. Lo mismo si un envío tarda más que el apartado del outbox (120 segundos, sin renovarse: hasta 60 del SMTP más el PDF del PAC) y otro dispatcher lo toma; queda en la deuda técnica.
+  - La entrega es **al menos una vez**: si el servidor tomó el correo y la base no pudo guardar el resultado, el outbox lo manda otra vez. Es preferible a perderlo. Lo mismo pasaba si un envío tardaba más que el apartado del outbox (120 segundos: hasta 60 del SMTP más el PDF del PAC) y otro dispatcher lo tomaba; desde la Fase 28K el apartado se renueva mientras el envío trabaja ([ADR 0056](0056-stamping-robustness.md)).
   - «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó a la bandeja: un rebote posterior no regresa a TienditApp.
   - Un correo que el servidor nunca tomó tarda unas 4.7 horas en decir «No se envió»: mientras, dice «Enviándose…» y que el servidor no lo ha tomado, y se puede mandar otra vez.
   - Sin proveedor de correo configurado, cada CFDI timbrado con correo queda «No se envió: TienditApp no tiene el envío de correos configurado».

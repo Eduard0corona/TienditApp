@@ -40,9 +40,14 @@ public sealed class TestInvoicingGateway : IInvoicingGateway
             return new StampedCfdi(
                 uuid,
                 $"<cfdi:Comprobante xmlns:cfdi=\"http://www.sat.gob.mx/cfd/4\" Serie=\"{document.Serie}\" Folio=\"{document.Folio}\" "
-                + $"Sello=\"AAAABBBBSELLO123\"><cfdi:Complemento UUID=\"{uuid}\" /></cfdi:Comprobante>",
+                + $"Fecha=\"{document.Date}\" Total=\"{document.Total.ToString(System.Globalization.CultureInfo.InvariantCulture)}\" TipoDeComprobante=\"{document.VoucherType}\" "
+                + $"Sello=\"AAAABBBBSELLO123\"><cfdi:Emisor Rfc=\"{document.Issuer.Rfc}\" /><cfdi:Receptor Rfc=\"{document.Receiver.Rfc}\" />"
+                + $"<cfdi:Complemento UUID=\"{uuid}\" /></cfdi:Comprobante>",
                 DateTimeOffset.UtcNow);
         }));
+
+    public Task<StampedCfdi?> FindStampedAsync(string uuid, CancellationToken cancellationToken)
+        => Task.FromResult(_stamped.Values.FirstOrDefault(s => string.Equals(s.Uuid, uuid, StringComparison.OrdinalIgnoreCase)));
 
     public Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken)
         => Task.FromResult(Encoding.ASCII.GetBytes("%PDF-1.7"));

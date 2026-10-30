@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { apiRequest, type Schemas } from '../../api/typedClient';
 import { CfdiCancellationMotive, OrderInvoiceStatus } from '../../types';
@@ -30,6 +31,36 @@ function renderList(invoices: Invoice[]) {
 }
 
 describe('OrderInvoiceList', () => {
+  it('stops offering to ask the PAC again past its window, and says where it is checked instead (Fase 28K)', () => {
+    const stuck: Invoice = {
+      ...F7, status: OrderInvoiceStatus.Stamping, uuid: null, stampedAt: null, hasXml: false, hasPdf: false,
+      stampWindowEndsAt: '2020-01-04T17:00:00Z', failureMessage: null,
+    };
+    const waiting: Invoice = { ...stuck, id: 'inv-8', number: 'F-8', stampWindowEndsAt: '2999-01-01T00:00:00Z' };
+    const view = (canCancel: boolean) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <OrderInvoiceList orderId="o-1" invoices={[waiting, stuck]} canCancel={canCancel} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(true));
+
+    expect(screen.getByRole('button', { name: 'Volver a pedir el timbre de la factura F-8' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Volver a pedir el timbre de la factura F-7' })).not.toBeInTheDocument();
+    // TienditApp keeps asking only for the one still within the window.
+    expect(screen.getAllByText(/TienditApp lo vuelve a intentar/)).toHaveLength(1);
+    expect(screen.getByText(/Se pidió hace más de 71 horas y el PAC ya no devuelve su timbre/)).toHaveTextContent(
+      'Revisa en el portal del SAT si se timbró y dilo en CFDI emitidos.');
+    expect(screen.getByRole('link', { name: 'CFDI emitidos' })).toHaveAttribute('href', '/reports/issued-cfdis');
+
+    // Whoever does not open CFDI emitidos is told who checks it.
+    rerender(view(false));
+    expect(screen.getByText(/Se pidió hace más de 71 horas/)).toHaveTextContent(
+      'El dueño o un administrador revisa en el portal del SAT si se timbró.');
+    expect(screen.queryByRole('link', { name: 'CFDI emitidos' })).not.toBeInTheDocument();
+  });
+
   it('says an invoice was requested by the customer online with the ticket (Fase 28F)', () => {
     renderList([{ ...F7, requestedByCustomer: true }, { ...F7, id: 'inv-6', number: 'F-6', status: OrderInvoiceStatus.Cancelled }]);
 

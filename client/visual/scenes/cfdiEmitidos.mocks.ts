@@ -2,16 +2,20 @@ import { asOption, type SceneOptions } from '../fixtures';
 import { uuid } from '../mocks/data.mjs';
 
 type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
+type PrepareData = NonNullable<SceneOptions['prepareData']>;
 
 // Reportes › CFDI emitidos (Fase 28H, ADR 0052) of Café La Esquina on Sunday 2026-10-04: what it stamped in October (an
 // invoice in installments and its payment's complement, an invoice replaced by another one and the credit note of the new
 // one, one refused by the PAC, yesterday's global invoice and today's invoice) and what they add up to. September has none.
+// Since the Fase 28K (ADR 0056), the CFDI still «Timbrando» past the PAC's window (`data.cfdisToReview`): none, unless a
+// scene asks for them.
 
 // IssuedCfdiKind, OrderInvoiceStatus and GlobalInvoicePeriodicity as the contract numbers them.
 const INVOICE = 0;
 const GLOBAL = 1;
 const COMPLEMENT = 2;
 const CREDIT_NOTE = 3;
+const STAMPING = 0;
 const STAMPED = 1;
 const REFUSED = 2;
 const CANCELLED = 4;
@@ -76,10 +80,33 @@ function summaryFor(query: URLSearchParams) {
   };
 }
 
-const issuedCfdiRoutes: ExtraRoutes = (_data, helpers) => [
+const issuedCfdiRoutes: ExtraRoutes = (data, helpers) => [
   ['GET', /^\/invoicing\/issued-cfdis$/, (_match, query) =>
     helpers.ok(helpers.paginate(Number(query.get('month')) === 10 ? OCTOBER : [], query, 20))],
   ['GET', /^\/invoicing\/issued-cfdis\/summary$/, (_match, query) => helpers.ok(summaryFor(query))],
+  ['GET', /^\/invoicing\/issued-cfdis\/to-review$/, () => helpers.ok(data.cfdisToReview ?? [])],
 ];
 
 export const CFDI_EMITIDOS_ROUTES = asOption(issuedCfdiRoutes);
+
+/**
+ * Two CFDI stayed «Timbrando» past the PAC's window, the oldest first: September's invoice of an order, asked for while the
+ * PAC did not answer, and a payment complement of two days later. The SAT already shows whatever was stamped for the
+ * invoice («No se timbró» is offered); for the complement, it says from when.
+ */
+const porRevisar: PrepareData = (data) => {
+  data.cfdisToReview = [
+    cfdi(INVOICE, 'F-52', '2026-09-28T17:40:00Z', {
+      status: STAMPING, uuid: null, stampedAt: null, hasXml: false, total: 980, orderNumber: 'ORD-000219',
+      receiverRfc: 'GAL1203157T2', receiverName: 'GRUPO ALTAVISTA',
+      stampWindowEndsAt: '2026-10-01T16:40:00Z', notStampedFrom: '2026-10-04T16:40:00Z',
+    }),
+    cfdi(COMPLEMENT, 'P-2', '2026-09-30T16:10:00Z', {
+      status: STAMPING, uuid: null, stampedAt: null, hasXml: false, total: null, paidAmount: 250, paymentForm: '03',
+      relatedNumber: 'F-49', orderNumber: 'ORD-000204',
+      stampWindowEndsAt: '2026-10-03T15:10:00Z', notStampedFrom: '2026-10-06T15:10:00Z',
+    }),
+  ];
+};
+
+export const CFDI_POR_REVISAR = asOption(porRevisar);

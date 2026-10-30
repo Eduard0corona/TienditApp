@@ -21,6 +21,15 @@ describe('attention', () => {
     expect(describeAttention({ key: 'appointmentRequests', count: 1, urgentCount: 0 })?.text).toBe('1 solicitud de cita por confirmar');
   });
 
+  it('leads the CFDI that stayed «Timbrando» past the PAC\'s window to CFDI emitidos, as urgent (Fase 28K)', () => {
+    expect(describeAttention({ key: 'cfdisToReview', count: 2, urgentCount: 2 })).toMatchObject({
+      text: '2 CFDI por revisar en el portal del SAT',
+      path: '/reports/issued-cfdis',
+      tone: 'danger',
+    });
+    expect(describeAttention({ key: 'cfdisToReview', count: 1, urgentCount: 1 })?.text).toBe('1 CFDI por revisar en el portal del SAT');
+  });
+
   it('marks stock as urgent when something ran out', () => {
     expect(describeAttention({ key: 'lowStock', count: 3, urgentCount: 1 })).toMatchObject({
       text: '3 insumos por reabastecer (1 agotado o crítico)',

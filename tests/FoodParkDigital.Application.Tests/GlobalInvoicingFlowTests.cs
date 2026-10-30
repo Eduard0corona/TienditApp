@@ -201,6 +201,47 @@ public class GlobalInvoicingFlowTests
     }
 
     [Fact]
+    public async Task GlobalInvoiceStuckPastThePacsWindow_CheckedInThePortal_ShouldStampWithItsFolioFiscal_OrFreeItsSales()
+    {
+        await using var book = await Book.OpenAsync();
+        await book.PaidOrderAsync(2, OrderPaymentMethod.Card);
+        book.Clock.UtcNow = NextMorning;
+        book.Gateway.LoseNextAnswer = true;
+        var pending = await book.IssueAsync(1, 200m);
+        var made = book.Gateway.Stamped.Values.Single();
+        book.Clock.UtcNow = NextMorning + StampPendingInvoicesCommandHandler.RetryWindow + TimeSpan.FromHours(1);
+
+        Assert.Equal(StuckStamps.PastWindowMessage, (await book.RetryAsync(pending.Value.Id)).Error);
+        var stamped = await new ConfirmStuckCfdiStampedCommandHandler(
+                book.Context, book.Gateway, book.Storage, book.Fixture.CurrentUser, book.Clock, NullLogger<OrderInvoiceStamper>.Instance)
+            .Handle(new ConfirmStuckCfdiStampedCommand(IssuedCfdiKind.GlobalInvoice, pending.Value.Id, made.Uuid), CancellationToken.None);
+        Assert.Equal((OrderInvoiceStatus.Stamped, made.Uuid), (stamped.Value.Status, stamped.Value.Uuid));
+
+        // Another one never stamped: once a person says so, its sales are free for the next global invoice.
+        await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        var day = DateOnly.FromDateTime(book.Clock.UtcNow.UtcDateTime.AddHours(-6));
+        // Its day is over the next morning.
+        book.Clock.UtcNow += TimeSpan.FromDays(1);
+        book.Gateway.Unavailable = true;
+        var stuck = await book.IssueAsync(1, 100m, day: day);
+        Assert.True(stuck.IsSuccess, stuck.Error);
+        book.Gateway.Unavailable = false;
+        book.Clock.UtcNow += StampPendingInvoicesCommandHandler.RetryWindow + TimeSpan.FromHours(1);
+        Assert.Equal(GlobalInvoiceDrafts.InGlobalReason(stuck.Value.Number), Assert.Single((await book.DraftAsync(day: day)).LeftOut).Reason);
+        // Once the SAT shows any stamp the PAC made.
+        book.Clock.UtcNow += StuckStamps.SatReceptionWindow;
+
+        var refused = await new ConfirmStuckCfdiNotStampedCommandHandler(
+                book.Context, book.Gateway, book.Storage, book.Fixture.CurrentUser, book.Clock, NullLogger<OrderInvoiceStamper>.Instance)
+            .Handle(new ConfirmStuckCfdiNotStampedCommand(IssuedCfdiKind.GlobalInvoice, stuck.Value.Id), CancellationToken.None);
+
+        Assert.Equal(OrderInvoiceStatus.Refused, refused.Value.Status);
+        var draft = await book.DraftAsync(day: day);
+        Assert.Equal((1, 100m), (draft.SaleCount, draft.Total));
+        Assert.Empty(draft.LeftOut);
+    }
+
+    [Fact]
     public async Task Concepts_OfASaleWithSeveralRates_ShouldBeOneConceptWithATransferPerRate_AndWhatIsNotSubjectAnother()
     {
         await using var book = await Book.OpenAsync();

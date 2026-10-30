@@ -4,6 +4,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import {
   downloadIssuedCfdiFile,
   downloadIssuedCfdis,
+  useCfdisToReview,
   useIssuedCfdiSummary,
   useIssuedCfdis,
   type IssuedCfdi,
@@ -12,11 +13,13 @@ import {
 import DataTable, { DataTableFilter, type DataTableColumn } from '../../components/common/DataTable';
 import PageTitle from '../../components/common/PageTitle';
 import { globalPeriodLabel } from '../../components/invoicing/globalPeriod';
+import { kindLabel, ofDocument } from '../../components/invoicing/issuedCfdiLabels';
 import { useToast } from '../../hooks/useToast';
 import { IssuedCfdiExportFormat, IssuedCfdiKind, OrderInvoiceStatus } from '../../types';
 import { complementStatusLabel, invoiceStatusChip, invoiceStatusLabel, saveBlob } from '../../utils/cfdi';
 import { formatDate, getBusinessToday } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
+import CfdisToReview from './CfdisToReview';
 
 const COLUMNS: DataTableColumn[] = [
   { header: 'CFDI' },
@@ -33,13 +36,6 @@ const MAX_SEARCH_LENGTH = 100;
 
 // CFDI 4.0 is from 2022: nothing is issued through TienditApp before (as the API).
 const FIRST_MONTH = { year: 2022, month: 1 };
-
-const KIND_LABELS: Record<IssuedCfdiKind, string> = {
-  [IssuedCfdiKind.OrderInvoice]: 'Factura',
-  [IssuedCfdiKind.GlobalInvoice]: 'Factura global',
-  [IssuedCfdiKind.PaymentComplement]: 'Complemento de pago',
-  [IssuedCfdiKind.CreditNote]: 'Nota de crédito',
-};
 
 const KIND_PLURALS: Record<IssuedCfdiKind, string> = {
   [IssuedCfdiKind.OrderInvoice]: 'Facturas',
@@ -92,18 +88,6 @@ function monthLabel({ year, month }: Month): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-/** «Factura», or «CFDI» for a kind this version does not know yet. */
-function kindLabel(kind: IssuedCfdiKind): string {
-  return KIND_LABELS[kind] ?? 'CFDI';
-}
-
-/** «de la factura F-1», «del complemento de pago P-1»: what a button of the row acts on. */
-function ofDocument(cfdi: IssuedCfdi): string {
-  if (!(cfdi.kind in KIND_LABELS)) return `del CFDI ${cfdi.number}`;
-  const article = cfdi.kind === IssuedCfdiKind.PaymentComplement ? 'del' : 'de la';
-  return `${article} ${kindLabel(cfdi.kind).toLowerCase()} ${cfdi.number}`;
-}
-
 function statusLabel(cfdi: IssuedCfdi): string {
   // «Complemento» asks for its states in masculine.
   return cfdi.kind === IssuedCfdiKind.PaymentComplement ? complementStatusLabel(cfdi.status) : invoiceStatusLabel(cfdi.status);
@@ -116,7 +100,8 @@ function count(n: number, one: string, many: string): string {
 /**
  * Reportes › CFDI emitidos: what the business stamped in a month, in its time zone (invoices of orders, global invoices,
  * payment complements and credit notes), what they add up to, and the download for the accountant: a ZIP with their XML
- * and the list as CSV. Owners and admins only, as the API.
+ * and the list as CSV. Above the month, the CFDI still «Timbrando» past the PAC's window, to check in the SAT's portal
+ * (Fase 28K). Owners and admins only, as the API.
  */
 export default function IssuedCfdis() {
   const toast = useToast();
@@ -132,7 +117,11 @@ export default function IssuedCfdis() {
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [exporting, setExporting] = useState<IssuedCfdiExportFormat | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
-  const summary = useIssuedCfdiSummary(period.year, period.month);
+  // Those stuck past the PAC's window are not asked again by the month's summary: only a person resolves them.
+  const toReview = useCfdisToReview();
+  const monthKey = `${period.year}-${String(period.month).padStart(2, '0')}`;
+  const stuck = toReview.data?.filter((cfdi) => getBusinessToday(new Date(cfdi.issuedAt)).startsWith(monthKey)).length ?? 0;
+  const summary = useIssuedCfdiSummary(period.year, period.month, stuck);
   const cfdis = useIssuedCfdis(period.year, period.month, { kind, status, search }, page, pageSize);
 
   const previous = shift(period, -1);
@@ -183,6 +172,8 @@ export default function IssuedCfdis() {
         Las facturas, facturas globales, complementos de pago y notas de crédito que el negocio timbró en el mes, por la fecha
         del CFDI. Descarga sus XML para tu contador.
       </p>
+
+      <CfdisToReview />
 
       <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
         <div className="d-flex align-items-center gap-2">

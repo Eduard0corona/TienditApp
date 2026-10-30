@@ -51,6 +51,15 @@ export function describeAttention(item: AttentionItem): AttentionNotice | null {
       };
     case 'appointmentsToConfirm':
       return { key, text: `${plural(count, 'cita', 'citas')} de hoy sin confirmar`, path: '/appointments', icon: 'ri-calendar-check-line', tone: 'info' };
+    case 'cfdisToReview':
+      // Nothing resolves them on its own (Fase 28K): until someone checks the SAT's portal, what they cover stays unsettled.
+      return {
+        key,
+        text: `${plural(count, 'CFDI', 'CFDI')} por revisar en el portal del SAT`,
+        path: '/reports/issued-cfdis',
+        icon: 'ri-file-warning-line',
+        tone: 'danger',
+      };
     default:
       return null;
   }

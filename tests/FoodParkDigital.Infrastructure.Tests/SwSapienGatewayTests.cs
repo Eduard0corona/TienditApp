@@ -322,6 +322,61 @@ public class SwSapienGatewayTests
     }
 
     [Fact]
+    public async Task FindStamped_ShouldReadTheXmlSwKeeps_AndAFolioFiscalItDoesNotHaveIsNone()
+    {
+        const string unknown = "0A0B0C0D-1E1F-4A2B-8C3D-4E5F6A7B8C9D";
+        var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/v2/security/authenticate" => Login(),
+            "/datawarehouse/v1/live/" + Uuid => Json(HttpStatusCode.OK,
+                """{"data":{"records":[{"status":"Vigente","urlXml":"https://swstorage.s3.amazonaws.com/xml/f-7.xml?signature=abc"}]},"status":"success"}"""),
+            "/datawarehouse/v1/live/" + unknown => Json(HttpStatusCode.OK, """{"data":{"records":[]},"status":"success"}"""),
+            "/xml/f-7.xml" => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(StampedXml) },
+            _ => throw new InvalidOperationException(request.RequestUri!.ToString())
+        });
+
+        var stamped = await gateway.FindStampedAsync(Uuid, CancellationToken.None);
+
+        Assert.Equal((Uuid, StampedXml), (stamped!.Uuid, stamped.Xml));
+        Assert.Equal(new DateTimeOffset(2026, 10, 23, 18, 0, 5, TimeSpan.Zero), stamped.StampedAt);
+        Assert.Null(await gateway.FindStampedAsync(unknown, CancellationToken.None));
+        Assert.DoesNotContain(http.Requests, request => request.Url.Contains("/issue/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FindStamped_WhenSwHandsAnotherCfdi_ShouldNotTakeIt()
+    {
+        const string other = "0A0B0C0D-1E1F-4A2B-8C3D-4E5F6A7B8C9D";
+        var (gateway, _) = Create(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/v2/security/authenticate" => Login(),
+            "/datawarehouse/v1/live/" + other => Json(HttpStatusCode.OK,
+                """{"data":{"records":[{"status":"Vigente","urlXml":"https://swstorage.s3.amazonaws.com/xml/f-7.xml?signature=abc"}]},"status":"success"}"""),
+            "/xml/f-7.xml" => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(StampedXml) },
+            _ => throw new InvalidOperationException(request.RequestUri!.ToString())
+        });
+
+        await Assert.ThrowsAsync<InvoicingGatewayUnavailableException>(() => gateway.FindStampedAsync(other, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FindStamped_OfAFolioFiscalTheSatHasCancelled_ShouldRefuseIt_WithoutReadingItsXml()
+    {
+        var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/v2/security/authenticate" => Login(),
+            "/datawarehouse/v1/live/" + Uuid => Json(HttpStatusCode.OK,
+                """{"data":{"records":[{"status":"Cancelado","urlXml":"https://swstorage.s3.amazonaws.com/xml/f-7.xml?signature=abc"}]},"status":"success"}"""),
+            _ => throw new InvalidOperationException(request.RequestUri!.ToString())
+        });
+
+        var refused = await Assert.ThrowsAsync<InvoicingGatewayRefusedException>(() => gateway.FindStampedAsync(Uuid, CancellationToken.None));
+
+        Assert.Contains("cancelado", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(http.Requests, request => request.Url.Contains("/xml/", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Stamp_OfTheSameCfdiAgain_ShouldGiveBackTheStampItAlreadyHad()
     {
         var (gateway, _) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"

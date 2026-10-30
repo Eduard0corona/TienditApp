@@ -40,7 +40,7 @@ public sealed class OrderInvoiceStamper
     }
 
     public const string LateRefusalNote =
-        "Se pidió hace más de 71 horas: antes de facturar otra vez lo que cubría, revisa en el portal del PAC que no se haya timbrado.";
+        "Se pidió hace más de 71 horas: antes de facturar otra vez lo que cubría, revisa en el portal del SAT que no se haya timbrado.";
 
     /// <summary>The private file of an invoice: «invoices/{business}/{yyyyMM}/{invoice}.xml».</summary>
     public static string FileKey(Cfdi invoice, string extension)
@@ -66,18 +66,12 @@ public sealed class OrderInvoiceStamper
         catch (InvoicingGatewayRefusedException ex)
         {
             _logger.LogWarning("The PAC refused invoice {InvoiceId}", invoice.Id);
-            var now = _clock.UtcNow;
             // Past the PAC's window it no longer gives back a stamp it made with this key, and the date it refuses may
             // belong to an invoice it did stamp: the person checks before invoicing the order again.
-            var reason = now - invoice.RequestedAt > StampPendingInvoicesCommandHandler.RetryWindow
+            var reason = _clock.UtcNow - invoice.RequestedAt > StampPendingInvoicesCommandHandler.RetryWindow
                 ? $"{LateRefusalNote} {ex.Message}"
                 : ex.Message;
-            // A refused replacement never stood: the invoice it was to replace is the order's invoice again (Fase 28G).
-            if (invoice is OrderInvoice
-                && await _context.OrderInvoices.AsNoTracking().AnyAsync(i => i.ReplacedByInvoiceId == invoice.Id, cancellationToken))
-                return await RefuseReplacementAsync(invoices, invoice.Id, reason, now, cancellationToken);
-            invoice.Refuse(reason, now);
-            return await SaveAsync(invoices, invoice, cancellationToken);
+            return await RefuseAsync(invoices, invoice, reason, cancellationToken);
         }
         catch (InvoicingGatewayUnavailableException)
         {
@@ -86,6 +80,19 @@ public sealed class OrderInvoiceStamper
             return invoice;
         }
 
+        return await KeepStampAsync(invoices, invoice, stamped, cancellationToken);
+    }
+
+    /// <summary>
+    /// Keeps the stamp of an invoice «Timbrando»: the one the PAC answered, or the one a person found in its portal (Fase 28K).
+    /// Its XML goes to the business's private files, its email to the customer is asked for with it, and its PDF is kept
+    /// when the PAC renders it.
+    /// </summary>
+    /// <returns>The invoice as it ends up (still tracked).</returns>
+    public async Task<TInvoice> KeepStampAsync<TInvoice>(
+        IQueryable<TInvoice> invoices, TInvoice invoice, StampedCfdi stamped, CancellationToken cancellationToken)
+        where TInvoice : Cfdi
+    {
         var xmlKey = FileKey(invoice, "xml");
         await SaveOnceAsync(xmlKey, Encoding.UTF8.GetBytes(stamped.Xml), "application/xml", cancellationToken);
         invoice.Stamp(stamped.Uuid, stamped.Uuid, stamped.StampedAt, xmlKey);
@@ -95,6 +102,39 @@ public sealed class OrderInvoiceStamper
         if (invoice.Status == OrderInvoiceStatus.Stamped && invoice.PdfFileKey is null)
             invoice = await AttachPdfAsync(invoices, invoice, stamped.Xml, cancellationToken);
         return invoice;
+    }
+
+    /// <summary>
+    /// Makes an invoice «Timbrando» «Rechazada»: the PAC refused it, or a person checked in its portal that it was not stamped
+    /// (Fase 28K). A refused replacement never stood: the invoice it was to replace is the order's invoice again (Fase 28G).
+    /// </summary>
+    /// <returns>The invoice as it ends up (still tracked).</returns>
+    public async Task<TInvoice> RefuseAsync<TInvoice>(
+        IQueryable<TInvoice> invoices, TInvoice invoice, string reason, CancellationToken cancellationToken)
+        where TInvoice : Cfdi
+    {
+        var now = _clock.UtcNow;
+        if (invoice is OrderInvoice
+            && await _context.OrderInvoices.AsNoTracking().AnyAsync(i => i.ReplacedByInvoiceId == invoice.Id, cancellationToken))
+            return await RefuseReplacementAsync(invoices, invoice.Id, reason, now, cancellationToken);
+        invoice.Refuse(reason, now);
+        return await SaveAsync(invoices, invoice, cancellationToken);
+    }
+
+    /// <summary>
+    /// Why a person may not ask the PAC again for an invoice's stamp, or null when they may: past the PAC's window it no
+    /// longer gives the stamp back and the CFDI's date is too old to stamp, so it is checked in the SAT's portal (Fase 28K).
+    /// </summary>
+    public async Task<string?> RetryRefusalAsync<TInvoice>(IQueryable<TInvoice> invoices, Guid invoiceId, CancellationToken cancellationToken)
+        where TInvoice : Cfdi
+    {
+        var asked = await invoices.AsNoTracking()
+            .Where(i => i.Id == invoiceId)
+            .Select(i => new { i.Status, i.RequestedAt })
+            .FirstOrDefaultAsync(cancellationToken);
+        return asked is not null && StuckStamps.IsStuck(asked.Status, asked.RequestedAt, _clock.UtcNow)
+            ? StuckStamps.PastWindowMessage
+            : null;
     }
 
     /// <summary>The text of a private file, or null when there is none.</summary>

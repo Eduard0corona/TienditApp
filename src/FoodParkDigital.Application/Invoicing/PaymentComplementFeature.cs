@@ -38,6 +38,12 @@ public class PaymentComplementDto
     public decimal PreviousBalance { get; set; }
     public decimal RemainingBalance { get; set; }
     public DateTimeOffset RequestedAt { get; set; }
+
+    /// <summary>
+    /// While it is «Timbrando», until when TienditApp asks the PAC for its stamp; after that it is checked in the SAT's portal
+    /// (Fase 28K).
+    /// </summary>
+    public DateTimeOffset? StampWindowEndsAt { get; set; }
     /// <summary>TienditApp issued it on its own once the payment was registered (nobody asked for it).</summary>
     public bool IssuedAutomatically { get; set; }
     public string? Uuid { get; set; }
@@ -66,6 +72,7 @@ public class PaymentComplementDto
         PreviousBalance = complement.PreviousBalance,
         RemainingBalance = complement.RemainingBalance,
         RequestedAt = complement.RequestedAt,
+        StampWindowEndsAt = complement.Status == OrderInvoiceStatus.Stamping ? StuckStamps.WindowEndsAt(complement.RequestedAt) : null,
         IssuedAutomatically = complement.RequestedByUserId is null,
         Uuid = complement.Uuid,
         StampedAt = complement.StampedAt,
@@ -259,6 +266,8 @@ public class RetryPaymentComplementCommandHandler : IRequestHandler<RetryPayment
         await PaymentComplements.EnsureVisibleComplementAsync(_context, request.ComplementId, cancellationToken);
         if (!_gateway.IsConfigured)
             return Result.Failure<PaymentComplementDto>(InvoicingSettings.NotAvailableMessage);
+        if (await _stamper.RetryRefusalAsync(_context.PaymentComplements, request.ComplementId, cancellationToken) is { } refusal)
+            return Result.Failure<PaymentComplementDto>(refusal);
 
         var complement = await _stamper.StampAsync(_context.PaymentComplements, request.ComplementId, cancellationToken);
         return Result.Success(PaymentComplementDto.From(complement));
