@@ -73,6 +73,7 @@ public class OrderInvoiceConfiguration : IEntityTypeConfiguration<OrderInvoice>
         builder.Property(x => x.FailureMessage).HasMaxLength(OrderInvoice.MaxFailureMessageLength);
         builder.Property(x => x.CancellationMotive).HasConversion<int?>();
         builder.Property(x => x.ReceiverEmail).HasMaxLength(InvoiceEmailAddress.MaxLength);
+        builder.Property(x => x.ReceiverWhatsApp).HasMaxLength(InvoiceWhatsApp.MaxLength).IsUnicode(false);
         builder.Property(x => x.Version).IsRowVersion();
         builder.Ignore(x => x.IsLive);
         builder.Ignore(x => x.Number);

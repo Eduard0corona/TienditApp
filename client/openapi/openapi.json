@@ -7575,6 +7575,54 @@
         }
       }
     },
+    "/api/v1/invoicing/settings/whatsapp-template": {
+      "put": {
+        "tags": [
+          "Invoicing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetInvoiceWhatsAppTemplateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetInvoiceWhatsAppTemplateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetInvoiceWhatsAppTemplateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicingSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicingSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicingSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/invoicing/orders/{orderId}/invoices": {
       "post": {
         "tags": [
@@ -7937,6 +7985,65 @@
         }
       }
     },
+    "/api/v1/invoicing/invoices/{invoiceId}/whatsapp": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByWhatsAppRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByWhatsAppRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByWhatsAppRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiWhatsAppDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiWhatsAppDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiWhatsAppDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/invoicing/payments/{paymentId}/complements": {
       "post": {
         "tags": [
@@ -8174,6 +8281,65 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/payment-complements/{complementId}/whatsapp": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "complementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByWhatsAppRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByWhatsAppRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByWhatsAppRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiWhatsAppDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiWhatsAppDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiWhatsAppDto"
                 }
               }
             }
@@ -8458,6 +8624,65 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CfdiEmailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/whatsapp": {
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "creditNoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByWhatsAppRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByWhatsAppRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCfdiByWhatsAppRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiWhatsAppDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiWhatsAppDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiWhatsAppDto"
                 }
               }
             }
@@ -13862,6 +14087,85 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/public/cfdi": {
+      "post": {
+        "tags": [
+          "PublicCfdi"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCfdiRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCfdiRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCfdiRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCfdiDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCfdiDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCfdiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/cfdi/files": {
+      "post": {
+        "tags": [
+          "PublicCfdi"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCfdiFileRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCfdiFileRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCfdiFileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -19505,6 +19809,69 @@
         },
         "additionalProperties": false
       },
+      "CfdiWhatsAppDto": {
+        "required": [
+          "attempts",
+          "byTienditApp",
+          "cfdiId",
+          "document",
+          "id",
+          "phone",
+          "requestedAt",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "document": {
+            "$ref": "#/components/schemas/CfdiEmailDocument"
+          },
+          "cfdiId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "byTienditApp": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OutgoingMessageStatus"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "deliveredAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "readAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ChangeInvoiceSerieRequest": {
         "required": [
           "serie"
@@ -21655,7 +22022,8 @@
           "status",
           "subTotal",
           "taxTotal",
-          "total"
+          "total",
+          "whatsApps"
         ],
         "type": "object",
         "properties": {
@@ -21751,6 +22119,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CfdiEmailDto"
+            }
+          },
+          "whatsApps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiWhatsAppDto"
             }
           }
         },
@@ -26079,6 +26453,31 @@
         },
         "additionalProperties": false
       },
+      "InvoiceWhatsAppTemplateDto": {
+        "required": [
+          "body",
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "providerTemplateName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "InvoicingCertificateDto": {
         "required": [
           "expired",
@@ -26136,7 +26535,10 @@
           "sandbox",
           "selfInvoicePath",
           "selfInvoicing",
-          "serie"
+          "serie",
+          "whatsAppConnected",
+          "whatsAppDefaultText",
+          "whatsAppTemplates"
         ],
         "type": "object",
         "properties": {
@@ -26188,6 +26590,23 @@
           },
           "selfInvoicePath": {
             "type": "string"
+          },
+          "whatsAppConnected": {
+            "type": "boolean"
+          },
+          "whatsAppTemplateId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "whatsAppTemplates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceWhatsAppTemplateDto"
+            }
+          },
+          "whatsAppDefaultText": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -26237,6 +26656,10 @@
             "type": "boolean"
           },
           "receiverEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "receiverWhatsApp": {
             "type": "string",
             "nullable": true
           }
@@ -26837,7 +27260,8 @@
           1,
           2,
           3,
-          4
+          4,
+          5
         ],
         "type": "integer",
         "format": "int32",
@@ -26846,7 +27270,8 @@
           "AppointmentReminder",
           "AppointmentNotice",
           "CreditReminder",
-          "CreditDueSoon"
+          "CreditDueSoon",
+          "CfdiDocument"
         ]
       },
       "MessageTemplateDto": {
@@ -28682,7 +29107,8 @@
           "status",
           "subTotal",
           "taxTotal",
-          "total"
+          "total",
+          "whatsApps"
         ],
         "type": "object",
         "properties": {
@@ -28777,6 +29203,16 @@
               "$ref": "#/components/schemas/CfdiEmailDto"
             }
           },
+          "receiverWhatsApp": {
+            "type": "string",
+            "nullable": true
+          },
+          "whatsApps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiWhatsAppDto"
+            }
+          },
           "requestedByCustomer": {
             "type": "boolean"
           },
@@ -28811,6 +29247,18 @@
         },
         "additionalProperties": false
       },
+      "OrderInvoiceFileKind": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Xml",
+          "Pdf"
+        ]
+      },
       "OrderInvoiceStatus": {
         "enum": [
           0,
@@ -28836,7 +29284,8 @@
           "canInvoice",
           "invoices",
           "payments",
-          "sandbox"
+          "sandbox",
+          "whatsAppConnected"
         ],
         "type": "object",
         "properties": {
@@ -28857,6 +29306,13 @@
             "$ref": "#/components/schemas/CfdiReceiverDto"
           },
           "proposedEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "whatsAppConnected": {
+            "type": "boolean"
+          },
+          "proposedWhatsApp": {
             "type": "string",
             "nullable": true
           },
@@ -29844,7 +30300,8 @@
           "previousBalance",
           "remainingBalance",
           "requestedAt",
-          "status"
+          "status",
+          "whatsApps"
         ],
         "type": "object",
         "properties": {
@@ -29938,6 +30395,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CfdiEmailDto"
+            }
+          },
+          "whatsApps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiWhatsAppDto"
             }
           }
         },
@@ -32310,6 +32773,96 @@
         },
         "additionalProperties": false
       },
+      "PublicCfdiDto": {
+        "required": [
+          "amount",
+          "businessName",
+          "document",
+          "issuerName",
+          "issuerRfc",
+          "linkExpiresAt",
+          "number",
+          "receiverName",
+          "receiverRfc",
+          "stands",
+          "uuid"
+        ],
+        "type": "object",
+        "properties": {
+          "businessName": {
+            "type": "string"
+          },
+          "businessLogoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "document": {
+            "$ref": "#/components/schemas/CfdiEmailDocument"
+          },
+          "number": {
+            "type": "string"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "issuedOn": {
+            "type": "string",
+            "nullable": true
+          },
+          "issuerName": {
+            "type": "string"
+          },
+          "issuerRfc": {
+            "type": "string"
+          },
+          "receiverName": {
+            "type": "string"
+          },
+          "receiverRfc": {
+            "type": "string"
+          },
+          "stands": {
+            "type": "boolean"
+          },
+          "linkExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicCfdiFileRequest": {
+        "required": [
+          "kind",
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OrderInvoiceFileKind"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicCfdiRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicDayHoursDto": {
         "required": [
           "closed",
@@ -34633,6 +35186,22 @@
         },
         "additionalProperties": false
       },
+      "SendCfdiByWhatsAppRequest": {
+        "required": [
+          "phone",
+          "useForInvoice"
+        ],
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "useForInvoice": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "SendChatMessageCommand": {
         "required": [
           "message",
@@ -35243,6 +35812,17 @@
         "properties": {
           "isActive": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetInvoiceWhatsAppTemplateRequest": {
+        "type": "object",
+        "properties": {
+          "templateId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false

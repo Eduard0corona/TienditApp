@@ -61,3 +61,13 @@ export const CREDIT_DUE_SOON_PLACEHOLDER_HELP: Record<string, string> = {
   porvencer: 'Lo que vence ese día',
   fecha: 'Último día para pagar que viene',
 };
+
+/** The same chips in the WhatsApp message of a CFDI (Fase 28M): its PDF goes in the header, the link downloads its XML. */
+export const CFDI_PLACEHOLDER_HELP: Record<string, string> = {
+  nombre: 'Nombre o razón social del cliente en el CFDI',
+  negocio: 'Nombre de tu negocio',
+  comprobante: '«la factura F-12», «el complemento de pago P-3» o «la nota de crédito NC-1»',
+  monto: 'Total del CFDI (en un complemento, el pago)',
+  fecha: 'Día en que se emitió',
+  enlace: 'Enlace para descargar el XML y el PDF (90 días)',
+};

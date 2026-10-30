@@ -37,18 +37,18 @@ public class IssuedCfdiDateIndexesMigrationSqlServerTests
         var (tenantId, invoiceId) = await SeedStampedInvoiceAsync(database);
 
         await MigrateAsync(database, Migration);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(
                 Indexes.Select(name => $"{name}: TenantId, IssuedAt, not unique, no filter"),
                 await IndexesAsync(context));
         }
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, tenantId))
             Assert.Equal(invoiceId, (await context.OrderInvoices.SingleAsync()).Id);
 
         await MigrateAsync(database, BeforeIndexesMigration);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database))
         {
             Assert.Equal(BeforeIndexesMigration, await LatestMigrationAsync(context));
             Assert.Empty(await IndexesAsync(context));
@@ -58,7 +58,7 @@ public class IssuedCfdiDateIndexesMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the indexes are back.
         await MigrateAsync(database, BeforeIndexesMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext();
+        await using var forward = BeforeCfdiWhatsApp.CreateContext(database);
         Assert.Equal(4, (await IndexesAsync(forward)).Count);
     }
 
@@ -76,7 +76,7 @@ public class IssuedCfdiDateIndexesMigrationSqlServerTests
             "01", "{}", 172.41m, 27.59m, 200m, Guid.NewGuid(), DateTimeOffset.UtcNow);
         invoice.Stamp(Guid.NewGuid().ToString(), "pac-1", DateTimeOffset.UtcNow, "invoices/1.xml");
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = BeforeCfdiWhatsApp.CreateContext(database, tenant.Id);
         context.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Retail), order, invoice);
         await context.SaveChangesAsync();
         return (tenant.Id, invoice.Id);

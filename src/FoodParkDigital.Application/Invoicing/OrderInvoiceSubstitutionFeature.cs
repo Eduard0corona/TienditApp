@@ -18,13 +18,14 @@ namespace FoodParkDigital.Application.Invoicing;
 
 /// <summary>
 /// The owner or an administrator replaces a stamped invoice with errors (Fase 28G, ADR 0051): a new invoice of the same
-/// order, with the fiscal data and the email written now and the CFDI Pedidos would stamp now, carries the old one's UUID
+/// order, with the fiscal data, the email and the WhatsApp (Fase 28M) written now and the CFDI Pedidos would stamp now, carries the old one's UUID
 /// with the relation «Sustitución de los CFDI previos» (04). Its folio and CFDI are saved first, with the old one no longer
 /// the order's invoice; the PAC stamps it after the commit; and once it is stamped the SAT is asked to cancel the old one
 /// with motive 01 and the new one's UUID. When the PAC or the SAT is not ready, the invoicing worker asks again.
 /// </summary>
 [RequiresTenantManager]
-public record SubstituteOrderInvoiceCommand(Guid InvoiceId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null)
+public record SubstituteOrderInvoiceCommand(
+    Guid InvoiceId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null, string? ReceiverWhatsApp = null)
     : IRequest<Result<OrderInvoiceDto>>, IRequiresContentPermissions
 {
     /// <summary>Keeping the fiscal data in the customer changes the customer: it needs ManageCustomers, as Clientes does.</summary>
@@ -39,6 +40,7 @@ public class SubstituteOrderInvoiceCommandValidator : AbstractValidator<Substitu
         RuleFor(x => x.Receiver).NotNull().WithMessage("Captura los datos fiscales del cliente.")
             .SetValidator(new CfdiReceiverInputValidator());
         RuleFor(x => x.ReceiverEmail).Must(OrderInvoicing.IsValidEmail).WithMessage(InvoiceEmailAddress.InvalidMessage);
+        RuleFor(x => x.ReceiverWhatsApp).MaximumLength(OrderInvoicing.MaxTypedPhoneLength).WithMessage(InvoiceWhatsApp.InvalidMessage);
     }
 }
 
@@ -76,7 +78,8 @@ public class SubstituteOrderInvoiceCommandHandler : IRequestHandler<SubstituteOr
             return Result.Failure<OrderInvoiceDto>(InvoicingSettings.NotAvailableMessage);
 
         var requested = await _sender.Send(
-            new RequestOrderInvoiceSubstitutionCommand(request.InvoiceId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail),
+            new RequestOrderInvoiceSubstitutionCommand(
+                request.InvoiceId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail, request.ReceiverWhatsApp),
             cancellationToken);
         if (requested.IsFailure)
             return Result.Failure<OrderInvoiceDto>(requested.Error!);
@@ -103,7 +106,7 @@ public class SubstituteOrderInvoiceCommandHandler : IRequestHandler<SubstituteOr
 /// </summary>
 [RequiresTenantManager]
 public record RequestOrderInvoiceSubstitutionCommand(
-    Guid InvoiceId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null)
+    Guid InvoiceId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null, string? ReceiverWhatsApp = null)
     : IRequest<Result<Guid>>, ITransactionalRequest, IRequiresContentPermissions
 {
     public IEnumerable<TenantPermission> RequiredPermissions() => OrderInvoicing.SavingToCustomer(SaveToCustomer);
@@ -116,6 +119,7 @@ public class RequestOrderInvoiceSubstitutionCommandValidator : AbstractValidator
         RuleFor(x => x.InvoiceId).NotEmpty();
         RuleFor(x => x.Receiver).NotNull().SetValidator(new CfdiReceiverInputValidator());
         RuleFor(x => x.ReceiverEmail).Must(OrderInvoicing.IsValidEmail).WithMessage(InvoiceEmailAddress.InvalidMessage);
+        RuleFor(x => x.ReceiverWhatsApp).MaximumLength(OrderInvoicing.MaxTypedPhoneLength).WithMessage(InvoiceWhatsApp.InvalidMessage);
     }
 }
 
@@ -153,12 +157,16 @@ public class RequestOrderInvoiceSubstitutionCommandHandler : IRequestHandler<Req
             throw new EntityNotFoundException(nameof(OrderInvoice), request.InvoiceId);
         if (!Guid.TryParse(_currentUser.UserId, out var userId))
             return Result.Failure<Guid>(InvoicingSettings.NotAvailableMessage);
+        var whatsApp = await OrderInvoicing.ReceiverWhatsAppAsync(_context, _phones, _tenant.TenantId, request.ReceiverWhatsApp, cancellationToken);
+        if (whatsApp.IsFailure)
+            return Result.Failure<Guid>(whatsApp.Error!);
 
         var requested = await _requester.RequestAsync(
             _tenant.TenantId,
             new OrderInvoiceRequest(orderId.Value, request.Receiver, request.ReceiverEmail, userId, _currentUser.UserName ?? "system")
             {
                 Replaces = request.InvoiceId,
+                ReceiverWhatsApp = whatsApp.Value,
                 BeforeSave = (order, invoice) => request.SaveToCustomer
                     ? OrderInvoicing.SaveToCustomerAsync(_context, _phones, _currentUser, request.Receiver, order, invoice, cancellationToken)
                     : Task.CompletedTask

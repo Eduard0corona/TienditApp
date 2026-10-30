@@ -267,6 +267,7 @@ export const MessagePurpose = {
   AppointmentNotice: 2,
   CreditReminder: 3,
   CreditDueSoon: 4,
+  CfdiDocument: 5,
 } as const;
 export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
 
@@ -339,6 +340,12 @@ export const OrderChannel = {
   DidiFood: 5,
 } as const;
 export type OrderChannel = (typeof OrderChannel)[keyof typeof OrderChannel];
+
+export const OrderInvoiceFileKind = {
+  Xml: 0,
+  Pdf: 1,
+} as const;
+export type OrderInvoiceFileKind = (typeof OrderInvoiceFileKind)[keyof typeof OrderInvoiceFileKind];
 
 export const OrderInvoiceStatus = {
   Stamping: 0,

@@ -39,7 +39,7 @@ public class CreditDueSoonMigrationSqlServerTests
         }
         var template = new MessageTemplate(tenant.Id, "Por vencer", MessagePurpose.CreditDueSoon,
             "Hola {nombre}, el {fecha} vence {porvencer}.", "por_vencer");
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, tenant.Id))
         {
             var settings = await context.TenantSettings.SingleAsync();
             Assert.Equal((false, 2, (Guid?)null, true, 5),
@@ -51,7 +51,7 @@ public class CreditDueSoonMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeCfdiWhatsApp.CreateContext(database, tenant.Id);
         var saved = await check.TenantSettings.SingleAsync();
         Assert.Equal((true, 3, (Guid?)template.Id), (saved.CreditDueSoonEnabled, saved.CreditDueSoonDaysBefore, saved.CreditDueSoonTemplateId));
         Assert.Equal(MessagePurpose.CreditDueSoon, (await check.MessageTemplates.SingleAsync()).Purpose);
@@ -64,7 +64,7 @@ public class CreditDueSoonMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         await SeedTenantAsync(database);
 
-        await using var check = database.CreateContext();
+        await using var check = BeforeCfdiWhatsApp.CreateContext(database);
         Assert.Equal(547, (await Assert.ThrowsAsync<SqlException>(() => check.Database.ExecuteSqlAsync(
             $"UPDATE [TenantSettings] SET [CreditDueSoonDaysBefore] = 8"))).Number);
         Assert.Equal(547, (await Assert.ThrowsAsync<SqlException>(() => check.Database.ExecuteSqlAsync(
@@ -99,14 +99,14 @@ public class CreditDueSoonMigrationSqlServerTests
         ];
         foreach (var trace in traces)
         {
-            await using (var context = database.CreateContext())
+            await using (var context = BeforeCfdiWhatsApp.CreateContext(database))
             {
                 Assert.Equal(Migration, await LatestMigrationAsync(context));
                 await context.Database.ExecuteSqlRawAsync(
                     "UPDATE [TenantSettings] SET [CreditDueSoonEnabled] = 0, [CreditDueSoonTemplateId] = NULL; " +
                     "DELETE FROM [MessageTemplates]; DELETE FROM [OutgoingMessages];");
             }
-            await using (var context = database.CreateContext(tenant.Id))
+            await using (var context = BeforeCfdiWhatsApp.CreateContext(database, tenant.Id))
             {
                 await trace(context);
                 await context.SaveChangesAsync();
@@ -118,7 +118,7 @@ public class CreditDueSoonMigrationSqlServerTests
         }
 
         // The overdue reminders of the Fase 26C are not this migration's: they do not stop it.
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [OutgoingMessages] WHERE [Purpose] = 4"));
@@ -127,7 +127,7 @@ public class CreditDueSoonMigrationSqlServerTests
         }
 
         await MigrateAsync(database, BeforeDueSoon);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database))
         {
             Assert.Equal(BeforeDueSoon, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 1), (
@@ -139,7 +139,7 @@ public class CreditDueSoonMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the notice is off.
         await MigrateAsync(database, BeforeDueSoon);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeCfdiWhatsApp.CreateContext(database, tenant.Id);
         var settings = await forward.TenantSettings.SingleAsync();
         Assert.Equal((false, 2), (settings.CreditDueSoonEnabled, settings.CreditDueSoonDaysBefore));
     }

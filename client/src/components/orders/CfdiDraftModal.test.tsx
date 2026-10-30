@@ -18,14 +18,14 @@ const KARLA = { rfc: 'XIQB891116QE4', name: 'KARLA FUENTE NOLASCO', postalCode: 
 
 const INVOICING: Invoicing = {
   available: true, sandbox: false, canInvoice: true, problem: null, proposedReceiver: KARLA,
-  customerId: 'c-1', customerName: 'Karla', invoices: [], payments: [], adjustments: [],
+  customerId: 'c-1', customerName: 'Karla', invoices: [], payments: [], adjustments: [], whatsAppConnected: false,
 };
 
 const STAMPED: Invoice = {
   id: 'inv-1', orderId: 'o-1', number: 'F-1', status: OrderInvoiceStatus.Stamped, receiver: KARLA, paymentForm: '04',
   paymentMethod: 'PUE', subTotal: 172.41, taxTotal: 27.59, total: 200, requestedAt: '2026-10-23T17:00:00Z',
   uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: '2026-10-23T17:00:05Z', hasXml: true, hasPdf: true,
-  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [], requestedByCustomer: false,
+  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [], whatsApps: [], requestedByCustomer: false,
   canSubstitute: false,
   awaitsReplacedCancellation: false,
 };
@@ -139,6 +139,51 @@ describe('CfdiDraftModal', () => {
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada: se está enviando a karla@ejemplo.mx.'));
     expect(issued).toEqual({ receiver: KARLA, saveToCustomer: true, receiverEmail: 'karla@ejemplo.mx' });
+  });
+
+  it('sends the stamped invoice by WhatsApp with the business connected, to the number it proposes (Fase 28M)', async () => {
+    let issued: unknown;
+    serve({ ...INVOICING, whatsAppConnected: true, proposedWhatsApp: '+525512345678', proposedEmail: 'karla@ejemplo.mx' }, (_method, _path, body) => {
+      issued = body;
+      return Promise.resolve(STAMPED);
+    });
+    renderModal();
+
+    const stamp = await screen.findByRole('button', { name: 'Timbrar factura' });
+    const whatsApp = screen.getByLabelText('WhatsApp del cliente (opcional)');
+    expect(whatsApp).toHaveValue('5512345678');
+    await waitFor(() => expect(stamp).toBeEnabled());
+
+    await userEvent.clear(whatsApp);
+    await userEvent.type(whatsApp, '551234567');
+    expect(stamp).toBeDisabled();
+    expect(whatsApp).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Escribe los 10 dígitos, o el número con lada internacional, o déjalo vacío.')).toBeInTheDocument();
+
+    await userEvent.type(whatsApp, '9');
+    await waitFor(() => expect(stamp).toBeEnabled());
+    await userEvent.click(stamp);
+
+    await waitFor(() => expect(toast.success)
+      .toHaveBeenCalledWith('Factura F-1 timbrada: se está enviando a karla@ejemplo.mx y por WhatsApp a 5512345679.'));
+    expect(issued).toEqual({ receiver: KARLA, saveToCustomer: true, receiverEmail: 'karla@ejemplo.mx', receiverWhatsApp: '5512345679' });
+  });
+
+  it('offers no WhatsApp while the business has it disconnected, and sends none', async () => {
+    let issued: unknown;
+    serve({ ...INVOICING, whatsAppConnected: false }, (_method, _path, body) => {
+      issued = body;
+      return Promise.resolve(STAMPED);
+    });
+    renderModal();
+
+    const stamp = await screen.findByRole('button', { name: 'Timbrar factura' });
+    expect(screen.queryByLabelText('WhatsApp del cliente (opcional)')).not.toBeInTheDocument();
+    await waitFor(() => expect(stamp).toBeEnabled());
+    await userEvent.click(stamp);
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Factura F-1 timbrada.'));
+    expect(issued).not.toHaveProperty('receiverWhatsApp', expect.anything());
   });
 
   it('keeps nothing in the customer once the data are hidden, with the box to keep them', async () => {
@@ -335,7 +380,7 @@ describe('CfdiDraftModal', () => {
       id: 'nc-1', orderInvoiceId: 'inv-1', number: 'NC-1', status: OrderInvoiceStatus.Stamped, paymentForm: '04', subTotal: 17.24,
       taxTotal: 2.76, total: 20, requestedAt: '2026-10-24T17:05:00Z', issuedAutomatically: true, uuid: null, stampedAt: null,
       hasXml: false, hasPdf: false, failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null,
-      cancelledAt: null, emails: [], requestedByCustomer: false,
+      cancelledAt: null, emails: [], whatsApps: [], requestedByCustomer: false,
     };
     serve({
       ...INVOICING,
@@ -425,6 +470,38 @@ describe('CfdiDraftModal', () => {
       // The form keeps what the new one went with, and the focus goes to the order's invoices.
       expect(screen.getByLabelText('Código postal fiscal')).toHaveValue('26015');
       expect(screen.getByRole('heading', { name: 'Facturas de este pedido' })).toHaveFocus();
+    });
+
+    it.each([
+      ['5512345679', '5512345679', 'Factura F-2 timbrada en lugar de la F-1: se está enviando por WhatsApp a 5512345679.'],
+      ['', null, 'Factura F-2 timbrada en lugar de la F-1.'],
+    ])('takes the replaced invoice\'s WhatsApp to correct it, and the new one goes with «%s» (Fase 28M)', async (typed, sent, said) => {
+      let substituted: unknown;
+      const replacement: Invoice = { ...STAMPED, id: 'inv-2', number: 'F-2', replacesInvoiceId: 'inv-1', replacesNumber: 'F-1' };
+      serve(
+        {
+          ...INVOICING, canInvoice: false, problem: LIVE_PROBLEM, whatsAppConnected: true, proposedWhatsApp: '+525598765432',
+          invoices: [{ ...STAMPED, canSubstitute: true, receiverWhatsApp: '+14155550123' }],
+        },
+        (_method, _path, body) => {
+          substituted = body;
+          return Promise.resolve(replacement);
+        },
+      );
+      renderModal(true);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Sustituir factura F-1' }));
+      const whatsApp = screen.getByLabelText('WhatsApp del cliente (opcional)');
+      expect(whatsApp).toHaveValue('+14155550123');
+      await userEvent.clear(whatsApp);
+      if (typed) await userEvent.type(whatsApp, typed);
+      const replace = screen.getByRole('button', { name: 'Timbrar y sustituir la F-1' });
+      await userEvent.click(screen.getByRole('button', { name: 'Ver con estos datos' }));
+      await waitFor(() => expect(replace).toBeEnabled());
+      await userEvent.click(replace);
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith(said));
+      expect(substituted).toMatchObject({ receiverWhatsApp: sent });
     });
 
     it('gives the focus back to «Sustituir factura» when it is left', async () => {

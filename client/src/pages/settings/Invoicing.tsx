@@ -7,6 +7,7 @@ import {
   useChangeInvoiceSerie,
   useInvoicingSettings,
   useRemoveInvoicingCertificate,
+  useSetInvoiceWhatsAppTemplate,
   useSetSelfInvoicing,
   useUploadInvoicingCertificate,
   type InvoicingSettings,
@@ -32,7 +33,8 @@ async function toBase64(file: File): Promise<string> {
 /**
  * Configuración › Facturación (Fase 28A, ADR 0045), for owners and admins: what the invoice of an order needs from the
  * business (its fiscal data in Mi negocio and its CSD, which the platform's PAC keeps), whether its customers invoice their
- * tickets online (Fase 28F, ADR 0050), the serie of its invoices and the one of its payment complements (Fase 28C, ADR 0047).
+ * tickets online (Fase 28F, ADR 0050), the message its CFDI go by WhatsApp with (Fase 28M, ADR 0058), the serie of its invoices
+ * and the one of its payment complements (Fase 28C, ADR 0047).
  */
 export default function Invoicing() {
   const settings = useInvoicingSettings();
@@ -61,6 +63,7 @@ export default function Invoicing() {
             <StatusCard data={data} />
             <CertificateCard data={data} />
             <SelfInvoicingCard data={data} />
+            <WhatsAppCard data={data} />
             <SerieCard data={data} />
           </div>
           <div className="col-lg-5">
@@ -95,6 +98,10 @@ export default function Invoicing() {
                   <li>
                     Con la autofactura activa, tus clientes facturan su compra en línea con el folio y el código de su ticket, hasta
                     el último día del mes en que la pagaron.
+                  </li>
+                  <li>
+                    Con el WhatsApp de tu negocio conectado, a tu cliente le llega por WhatsApp el PDF de su factura con un enlace
+                    para descargar el XML, que funciona 90 días.
                   </li>
                   <li>Las ventas a público en general van en la factura global (Reportes › Factura global).</li>
                   <li>Tu llave privada y su contraseña las guarda el PAC; TienditApp solo guarda el número y la vigencia del CSD.</li>
@@ -315,6 +322,69 @@ function SelfInvoicingCard({ data }: { data: InvoicingSettings }) {
         )}
         {data.selfInvoicing && (
           <p className="small mb-0">Dirección para facturar: <a href={url} target="_blank" rel="noreferrer">{url}</a></p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The message the CFDI go by WhatsApp with (Fase 28M): a template of the business for its invoices, or TienditApp's text. */
+function WhatsAppCard({ data }: { data: InvoicingSettings }) {
+  const toast = useToast();
+  const change = useSetInvoiceWhatsAppTemplate();
+  const chosen = data.whatsAppTemplates.find((template) => template.id === data.whatsAppTemplateId);
+
+  const choose = async (templateId: string) => {
+    try {
+      await change.mutateAsync(templateId || null);
+      toast.success(templateId ? 'Tus facturas van por WhatsApp con esa plantilla.' : 'Tus facturas van por WhatsApp con el texto de TienditApp.');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo cambiar el mensaje de las facturas por WhatsApp.'));
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-body">
+        <h2 className="h5">Factura por WhatsApp</h2>
+        {!data.whatsAppConnected ? (
+          <p className="small mb-0">
+            Conecta el WhatsApp de tu negocio para enviarle a tu cliente el PDF de su factura con un enlace para descargar el XML.{' '}
+            <Link to="/settings/whatsapp">Conectar WhatsApp</Link>
+          </p>
+        ) : (
+          <>
+            <p className="small mb-2">
+              Al facturar puedes escribir el WhatsApp de tu cliente: le llega el PDF con un enlace para descargar el XML, y después
+              los de sus complementos de pago y notas de crédito. También se envían desde el detalle del pedido.
+            </p>
+            <label className="form-label small mb-1" htmlFor="invoice-whatsapp-template">Mensaje</label>
+            <select
+              id="invoice-whatsapp-template"
+              className="form-select"
+              value={chosen?.id ?? ''}
+              disabled={change.isPending}
+              onChange={(event) => void choose(event.target.value)}
+            >
+              <option value="">Texto de TienditApp</option>
+              {data.whatsAppTemplates.map((template) => (
+                <option key={template.id} value={template.id}>{template.name}</option>
+              ))}
+            </select>
+            <p className="small text-muted mt-2 mb-2">{chosen?.body ?? data.whatsAppDefaultText}</p>
+            {!chosen?.providerTemplateName && (
+              <div className="alert alert-warning small py-2 mb-2">
+                {chosen
+                  ? 'Esta plantilla no está aprobada en Meta: WhatsApp solo la entrega en las 24 horas desde el último mensaje del cliente.'
+                  : 'Sin una plantilla aprobada en Meta, WhatsApp solo entrega la factura en las 24 horas desde el último mensaje del cliente.'}
+              </div>
+            )}
+            <p className="small mb-0">
+              Crea tu plantilla con el uso «Factura por WhatsApp» en{' '}
+              <Link to="/campaigns?tab=templates">Campañas › Plantillas</Link>. En Meta lleva un encabezado de tipo documento, donde
+              va el PDF.
+            </p>
+          </>
         )}
       </div>
     </div>

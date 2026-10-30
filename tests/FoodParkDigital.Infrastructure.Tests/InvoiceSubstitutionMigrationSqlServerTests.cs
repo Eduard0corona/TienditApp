@@ -53,7 +53,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
             Assert.True(refused is DbUpdateException { InnerException: SqlException { Number: 2601 } }, refused?.Message ?? "it was not refused");
         }
 
-        await using var context = database.CreateContext(seed.TenantId);
+        await using var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId);
         var invoices = await context.OrderInvoices.OrderBy(i => i.Folio).ToListAsync();
         Assert.Equal([1L, 2L], invoices.Select(i => i.Folio));
         Assert.All(invoices, invoice => Assert.True(invoice.IsCurrent));
@@ -67,7 +67,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
         var seed = await SeedAsync(database);
         var original = Stamped(seed, seed.OrderId, 1);
         var other = Stamped(seed, seed.OtherOrderId, 2);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             context.OrderInvoices.AddRange(original, other);
             await context.SaveChangesAsync();
@@ -75,7 +75,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
 
         // The replacement first: the original still counts as the order's live invoice.
         var replacement = Requested(seed, seed.OrderId, 3);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             context.OrderInvoices.Add(replacement);
             var refused = await Record.ExceptionAsync(() => context.SaveChangesAsync());
@@ -84,7 +84,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
 
         // The original stops counting first, and then its replacement is saved, in one transaction.
         replacement = Requested(seed, seed.OrderId, 3);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             await using var transaction = await context.Database.BeginTransactionAsync();
             var tracked = await context.OrderInvoices.SingleAsync(i => i.Id == original.Id);
@@ -94,7 +94,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
         }
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             var live = await context.OrderInvoices.Where(i => i.OrderId == seed.OrderId).OrderBy(i => i.Folio).ToListAsync();
             Assert.Equal([(1L, replacement.Id, false), (3L, (Guid?)null, true)],
@@ -107,7 +107,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
         }
 
         // Another business does not see them.
-        await using (var foreign = database.CreateContext(seed.OtherTenantId))
+        await using (var foreign = BeforeCfdiWhatsApp.CreateContext(database, seed.OtherTenantId))
             Assert.Empty(await foreign.OrderInvoices.ToListAsync());
 
         (FormattableString Sql, int Number)[] never =
@@ -132,7 +132,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
         }
 
         // The original is cancelled with relation once its replacement is stamped.
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             var tracked = await context.OrderInvoices.SingleAsync(i => i.Id == replacement.Id);
             tracked.Stamp("6f0b7c1e-2a3d-4e5f-8a9b-0c1d2e3f4a5c", "pac-3", DateTimeOffset.UtcNow, "invoices/3.xml");
@@ -141,7 +141,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
             replaced.Cancel(DateTimeOffset.UtcNow);
             await context.SaveChangesAsync();
         }
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             var cancelled = await context.OrderInvoices.SingleAsync(i => i.Id == original.Id);
             Assert.Equal((OrderInvoiceStatus.Cancelled, CfdiCancellationMotive.ErrorsWithReplacement, replacement.Id),
@@ -157,7 +157,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
         var seed = await SeedAsync(database);
         var original = Stamped(seed, seed.OrderId, 1);
         var replacement = Requested(seed, seed.OrderId, 2);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             context.OrderInvoices.Add(original);
             await context.SaveChangesAsync();
@@ -181,14 +181,14 @@ public class InvoiceSubstitutionMigrationSqlServerTests
             WHERE [Id] = {original.Id}
             """);
         await StopsAsync("Replaced and cancelled");
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database))
             Assert.Equal(Migration, await LatestMigrationAsync(context));
 
         await ExecuteAsync(database, $"""
             UPDATE [OrderInvoices] SET [ReplacedByInvoiceId] = NULL, [CancellationMotive] = 2 WHERE [Id] = {original.Id}
             """);
         await MigrateAsync(database, BeforeSubstitutionMigration);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database))
         {
             Assert.Equal(BeforeSubstitutionMigration, await LatestMigrationAsync(context));
             Assert.Equal((0, 0, 0, 2), (
@@ -211,7 +211,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
         // Rolling back again does nothing, and forward again no invoice is replaced.
         await MigrateAsync(database, BeforeSubstitutionMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId);
         Assert.All(await forward.OrderInvoices.ToListAsync(), invoice => Assert.Null(invoice.ReplacedByInvoiceId));
     }
 
@@ -261,7 +261,7 @@ public class InvoiceSubstitutionMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, FormattableString sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCfdiWhatsApp.CreateContext(database);
         await context.Database.ExecuteSqlInterpolatedAsync(sql);
     }
 

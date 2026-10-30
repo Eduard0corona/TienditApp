@@ -6162,6 +6162,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoicing/settings/whatsapp-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetInvoiceWhatsAppTemplateRequest"];
+                    "text/json": components["schemas"]["SetInvoiceWhatsAppTemplateRequest"];
+                    "application/*+json": components["schemas"]["SetInvoiceWhatsAppTemplateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InvoicingSettingsDto"];
+                        "application/json": components["schemas"]["InvoicingSettingsDto"];
+                        "text/json": components["schemas"]["InvoicingSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoicing/orders/{orderId}/invoices": {
         parameters: {
             query?: never;
@@ -6490,6 +6533,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoicing/invoices/{invoiceId}/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    invoiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SendCfdiByWhatsAppRequest"];
+                    "text/json": components["schemas"]["SendCfdiByWhatsAppRequest"];
+                    "application/*+json": components["schemas"]["SendCfdiByWhatsAppRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CfdiWhatsAppDto"];
+                        "application/json": components["schemas"]["CfdiWhatsAppDto"];
+                        "text/json": components["schemas"]["CfdiWhatsAppDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoicing/payments/{paymentId}/complements": {
         parameters: {
             query?: never;
@@ -6718,6 +6806,51 @@ export interface paths {
                         "text/plain": components["schemas"]["CfdiEmailDto"];
                         "application/json": components["schemas"]["CfdiEmailDto"];
                         "text/json": components["schemas"]["CfdiEmailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/payment-complements/{complementId}/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    complementId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SendCfdiByWhatsAppRequest"];
+                    "text/json": components["schemas"]["SendCfdiByWhatsAppRequest"];
+                    "application/*+json": components["schemas"]["SendCfdiByWhatsAppRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CfdiWhatsAppDto"];
+                        "application/json": components["schemas"]["CfdiWhatsAppDto"];
+                        "text/json": components["schemas"]["CfdiWhatsAppDto"];
                     };
                 };
             };
@@ -6995,6 +7128,51 @@ export interface paths {
                         "text/plain": components["schemas"]["CfdiEmailDto"];
                         "application/json": components["schemas"]["CfdiEmailDto"];
                         "text/json": components["schemas"]["CfdiEmailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/credit-notes/{creditNoteId}/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    creditNoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SendCfdiByWhatsAppRequest"];
+                    "text/json": components["schemas"]["SendCfdiByWhatsAppRequest"];
+                    "application/*+json": components["schemas"]["SendCfdiByWhatsAppRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CfdiWhatsAppDto"];
+                        "application/json": components["schemas"]["CfdiWhatsAppDto"];
+                        "text/json": components["schemas"]["CfdiWhatsAppDto"];
                     };
                 };
             };
@@ -11569,6 +11747,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/cfdi": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PublicCfdiRequest"];
+                    "text/json": components["schemas"]["PublicCfdiRequest"];
+                    "application/*+json": components["schemas"]["PublicCfdiRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicCfdiDto"];
+                        "application/json": components["schemas"]["PublicCfdiDto"];
+                        "text/json": components["schemas"]["PublicCfdiDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/cfdi/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PublicCfdiFileRequest"];
+                    "text/json": components["schemas"]["PublicCfdiFileRequest"];
+                    "application/*+json": components["schemas"]["PublicCfdiFileRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/directory": {
         parameters: {
             query?: never;
@@ -14955,6 +15215,27 @@ export interface components {
             /** Format: double */
             amount?: number | null;
         };
+        CfdiWhatsAppDto: {
+            /** Format: uuid */
+            id: string;
+            document: components["schemas"]["CfdiEmailDocument"];
+            /** Format: uuid */
+            cfdiId: string;
+            phone: string;
+            /** Format: date-time */
+            requestedAt: string;
+            byTienditApp: boolean;
+            status: components["schemas"]["OutgoingMessageStatus"];
+            /** Format: date-time */
+            sentAt?: string | null;
+            /** Format: date-time */
+            deliveredAt?: string | null;
+            /** Format: date-time */
+            readAt?: string | null;
+            /** Format: int32 */
+            attempts: number;
+            error?: string | null;
+        };
         ChangeInvoiceSerieRequest: {
             serie: string;
             paymentSerie?: string | null;
@@ -15613,6 +15894,7 @@ export interface components {
             /** Format: date-time */
             cancelledAt?: string | null;
             emails: components["schemas"]["CfdiEmailDto"][];
+            whatsApps: components["schemas"]["CfdiWhatsAppDto"][];
         };
         CreditReminderTemplateDto: {
             /** Format: uuid */
@@ -16931,6 +17213,13 @@ export interface components {
             firstName: string;
             businesses: string[];
         };
+        InvoiceWhatsAppTemplateDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            body: string;
+            providerTemplateName?: string | null;
+        };
         InvoicingCertificateDto: {
             number: string;
             rfc: string;
@@ -16960,6 +17249,11 @@ export interface components {
             ready: boolean;
             selfInvoicing: boolean;
             selfInvoicePath: string;
+            whatsAppConnected: boolean;
+            /** Format: uuid */
+            whatsAppTemplateId?: string | null;
+            whatsAppTemplates: components["schemas"]["InvoiceWhatsAppTemplateDto"][];
+            whatsAppDefaultText: string;
         };
         IssueGlobalInvoiceRequest: {
             periodicity: components["schemas"]["GlobalInvoicePeriodicity"];
@@ -16975,6 +17269,7 @@ export interface components {
             receiver: components["schemas"]["CfdiReceiverInput"];
             saveToCustomer: boolean;
             receiverEmail?: string | null;
+            receiverWhatsApp?: string | null;
         };
         IssuedCfdiDto: {
             /** Format: uuid */
@@ -17162,7 +17457,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        MessagePurpose: 0 | 1 | 2 | 3 | 4;
+        MessagePurpose: 0 | 1 | 2 | 3 | 4 | 5;
         MessageTemplateDto: {
             /** Format: uuid */
             id: string;
@@ -17724,6 +18019,8 @@ export interface components {
             cancelledAt?: string | null;
             receiverEmail?: string | null;
             emails: components["schemas"]["CfdiEmailDto"][];
+            receiverWhatsApp?: string | null;
+            whatsApps: components["schemas"]["CfdiWhatsAppDto"][];
             requestedByCustomer: boolean;
             /** Format: uuid */
             replacedByInvoiceId?: string | null;
@@ -17739,6 +18036,11 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
+        OrderInvoiceFileKind: 0 | 1;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
         OrderInvoiceStatus: 0 | 1 | 2 | 3 | 4;
         OrderInvoicingDto: {
             available: boolean;
@@ -17747,6 +18049,8 @@ export interface components {
             problem?: string | null;
             proposedReceiver?: components["schemas"]["CfdiReceiverDto"];
             proposedEmail?: string | null;
+            whatsAppConnected: boolean;
+            proposedWhatsApp?: string | null;
             /** Format: uuid */
             customerId?: string | null;
             customerName?: string | null;
@@ -18077,6 +18381,7 @@ export interface components {
             /** Format: date-time */
             cancelledAt?: string | null;
             emails: components["schemas"]["CfdiEmailDto"][];
+            whatsApps: components["schemas"]["CfdiWhatsAppDto"][];
         };
         PendingCourierOrdersDto: {
             owed: components["schemas"]["CourierOrderDto"][];
@@ -18798,6 +19103,30 @@ export interface components {
             id: string;
             name: string;
         };
+        PublicCfdiDto: {
+            businessName: string;
+            businessLogoUrl?: string | null;
+            document: components["schemas"]["CfdiEmailDocument"];
+            number: string;
+            uuid: string;
+            /** Format: double */
+            amount: number;
+            issuedOn?: string | null;
+            issuerName: string;
+            issuerRfc: string;
+            receiverName: string;
+            receiverRfc: string;
+            stands: boolean;
+            /** Format: date-time */
+            linkExpiresAt: string;
+        };
+        PublicCfdiFileRequest: {
+            token: string;
+            kind: components["schemas"]["OrderInvoiceFileKind"];
+        };
+        PublicCfdiRequest: {
+            token: string;
+        };
         PublicDayHoursDto: {
             /** Format: date */
             date: string;
@@ -19470,6 +19799,10 @@ export interface components {
             email: string;
             useForInvoice: boolean;
         };
+        SendCfdiByWhatsAppRequest: {
+            phone: string;
+            useForInvoice: boolean;
+        };
         SendChatMessageCommand: {
             phoneNumber: string;
             message: string;
@@ -19646,6 +19979,10 @@ export interface components {
         };
         SetEntityActiveRequest: {
             isActive: boolean;
+        };
+        SetInvoiceWhatsAppTemplateRequest: {
+            /** Format: uuid */
+            templateId?: string | null;
         };
         SetMessagingOptOutCommand: {
             phone: string;

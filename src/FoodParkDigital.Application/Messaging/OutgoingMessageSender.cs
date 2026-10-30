@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers;
+using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Messaging.Entities;
@@ -18,17 +19,20 @@ public enum OutgoingSendDecision
     Cancelled = 2,
     /// <summary>May be accepted later: the worker retries it.</summary>
     TransientFailure = 3,
-    Rejected = 4
+    Rejected = 4,
+    /// <summary>Not tried yet on purpose: the worker sends it after <see cref="OutgoingSendOutcome.RetryAfter"/>, without counting an attempt.</summary>
+    Postponed = 5
 }
 
-public sealed record OutgoingSendOutcome(OutgoingSendDecision Decision, string? ProviderMessageId = null, string? Reason = null);
+public sealed record OutgoingSendOutcome(
+    OutgoingSendDecision Decision, string? ProviderMessageId = null, string? Reason = null, TimeSpan? RetryAfter = null);
 
 /// <summary>
 /// Sends one queued message in its business's context, checking first that it still applies: the customer has
 /// not opted out (campaigns and reminders), the campaign was not cancelled, the appointment did not change, no
 /// newer notice of the same appointment is waiting, the customer still owes something overdue (Fase 26C), and still owes
-/// what comes due on the day of the notice before it does (Fase 26E). The worker records the outcome and retries transient
-/// failures.
+/// what comes due on the day of the notice before it does (Fase 26E). The PDF of a CFDI goes with
+/// <see cref="CfdiWhatsAppSender"/> (Fase 28M). The worker records the outcome and retries transient failures.
 /// </summary>
 public sealed class OutgoingMessageSender
 {
@@ -47,25 +51,36 @@ public sealed class OutgoingMessageSender
     /// <summary>A notice that could not go out in this time (the worker was stopped) is no longer news.</summary>
     public static readonly TimeSpan NoticeLifetime = TimeSpan.FromHours(24);
 
+    public const string CfdiNotSentReason = "TienditApp no puede enviar CFDI por WhatsApp aquí.";
+
     private readonly IApplicationDbContext _context;
     private readonly IWhatsAppService _whatsApp;
     private readonly MessagingConsentService _consent;
     private readonly IDateTimeProvider _clock;
+    private readonly CfdiWhatsAppSender? _cfdi;
 
     public OutgoingMessageSender(
         IApplicationDbContext context,
         IWhatsAppService whatsApp,
         MessagingConsentService consent,
-        IDateTimeProvider clock)
+        IDateTimeProvider clock,
+        CfdiWhatsAppSender? cfdi = null)
     {
         _context = context;
         _whatsApp = whatsApp;
         _consent = consent;
         _clock = clock;
+        _cfdi = cfdi;
     }
 
     public async Task<OutgoingSendOutcome> SendAsync(OutgoingMessage message, CancellationToken cancellationToken)
     {
+        // The PDF of a CFDI (Fase 28M) goes with its own checks; an opt-out does not stop it, it is the customer's receipt.
+        if (message.Purpose == MessagePurpose.CfdiDocument)
+            return _cfdi is null
+                ? new OutgoingSendOutcome(OutgoingSendDecision.Rejected, Reason: CfdiNotSentReason)
+                : await _cfdi.SendAsync(message, cancellationToken);
+
         if (message.CampaignId is { } campaignId)
         {
             var status = await _context.MessageCampaigns

@@ -20,6 +20,7 @@ import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
+import { CfdiWhatsAppStatus, SendCfdiWhatsAppButton } from './CfdiWhatsApps';
 import StuckStampNote from './StuckStampNote';
 
 interface CreditNoteListProps {
@@ -31,6 +32,10 @@ interface CreditNoteListProps {
   canCancel: boolean;
   /** The email the order's invoicing proposes, to send a note whose invoice has none (Fase 28E). */
   proposedEmail?: string | null;
+  /** The business's WhatsApp is connected (Fase 28M): the notes of its invoices can go by WhatsApp. */
+  whatsAppConnected?: boolean;
+  /** The WhatsApp the order's invoicing proposes, to send a note whose invoice has none. */
+  proposedWhatsApp?: string | null;
   /** The global invoice that covers the sale now, whose credit notes its refunds (Fase 28I) and write-offs (Fase 28J) take. */
   globalInvoiceNumber?: string | null;
 }
@@ -75,6 +80,8 @@ export default function CreditNoteList({
   invoices,
   canCancel,
   proposedEmail,
+  whatsAppConnected = false,
+  proposedWhatsApp,
   globalInvoiceNumber,
 }: CreditNoteListProps) {
   const toast = useToast();
@@ -117,6 +124,7 @@ export default function CreditNoteList({
   const stamped = invoices.find((invoice) => invoice.status === OrderInvoiceStatus.Stamped);
   const invoiceNumbers = new Map(invoices.map((invoice) => [invoice.id, invoice.number]));
   const invoiceEmails = new Map(invoices.map((invoice) => [invoice.id, invoice.receiverEmail]));
+  const invoiceWhatsApps = new Map(invoices.map((invoice) => [invoice.id, invoice.receiverWhatsApp]));
 
   return (
     <div className="mb-3">
@@ -197,6 +205,7 @@ export default function CreditNoteList({
                         </p>
                       )}
                       <CfdiEmailStatus emails={note.emails} />
+                      <CfdiWhatsAppStatus messages={note.whatsApps} />
                       <div className="d-flex flex-wrap gap-2 mt-2">
                         {note.hasXml && (
                           <>
@@ -229,6 +238,17 @@ export default function CreditNoteList({
                             invoiceEmail={invoiceEmails.get(note.orderInvoiceId)}
                             latestEmail={note.emails[0]}
                             proposedEmail={proposedEmail}
+                          />
+                        )}
+                        {whatsAppConnected && note.status === OrderInvoiceStatus.Stamped && note.orderInvoiceId != null && (
+                          <SendCfdiWhatsAppButton
+                            orderId={orderId}
+                            document={CfdiEmailDocument.CreditNote}
+                            cfdiId={note.id}
+                            number={note.number}
+                            invoiceWhatsApp={invoiceWhatsApps.get(note.orderInvoiceId)}
+                            latestWhatsApp={note.whatsApps[0]}
+                            proposedWhatsApp={proposedWhatsApp}
                           />
                         )}
                         {note.status === OrderInvoiceStatus.Stamping && !isStuckStamping(note) && (

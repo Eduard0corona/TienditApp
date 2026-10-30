@@ -111,7 +111,7 @@ function creditNote(folio: number, total: number, fields: Record<string, unknown
     number: `NC-${folio}`, status: STAMPED, paymentForm: '01', subTotal, taxTotal: r2(total - subTotal), total,
     requestedAt: '2026-10-04T16:20:00Z', issuedAutomatically: true, uuid: `0E5A7C3B-91D2-4F6A-8B3C-2D4E6F8A0B${String(folio).padStart(2, '0')}`,
     stampedAt: '2026-10-04T16:20:03Z', hasXml: true, hasPdf: true, failureMessage: null, refusedAt: null, cancellationRequestedAt: null,
-    cancelledAt: null, emails: [],
+    cancelledAt: null, emails: [], whatsApps: [],
     ...fields,
   };
 }

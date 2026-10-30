@@ -33,7 +33,7 @@ public class GlobalInvoiceWriteOffNotesMigrationSqlServerTests
         var seed = await SeedAsync(database);
 
         // Before: only a refund of a sale takes a credit note of a global invoice.
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             context.CreditNotes.Add(WriteOffNote(seed, 1));
             var refused = await Record.ExceptionAsync(() => context.SaveChangesAsync());
@@ -43,13 +43,13 @@ public class GlobalInvoiceWriteOffNotesMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var refundNote = RefundNote(seed, 2);
         var writeOffNote = WriteOffNote(seed, 3);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             context.CreditNotes.AddRange(refundNote, writeOffNote);
             await context.SaveChangesAsync();
         }
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             var saved = await context.CreditNotes.SingleAsync(n => n.Id == writeOffNote.Id);
             Assert.Equal(((Guid?)null, (Guid?)seed.Global.Id, seed.OwedOrderId, (Guid?)null, (Guid?)seed.WriteOffId, "15", 0), (
@@ -57,7 +57,7 @@ public class GlobalInvoiceWriteOffNotesMigrationSqlServerTests
                 saved.PaymentForm, saved.AfterInstallment));
         }
         // Another business does not see them.
-        await using (var foreign = database.CreateContext(seed.OtherTenantId))
+        await using (var foreign = BeforeCfdiWhatsApp.CreateContext(database, seed.OtherTenantId))
             Assert.Empty(await foreign.CreditNotes.ToListAsync());
 
         (FormattableString Sql, int Number)[] never =
@@ -89,7 +89,7 @@ public class GlobalInvoiceWriteOffNotesMigrationSqlServerTests
         var seed = await SeedAsync(database);
         var refundNote = RefundNote(seed, 1);
         var writeOffNote = WriteOffNote(seed, 2);
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId))
         {
             context.CreditNotes.AddRange(refundNote, writeOffNote);
             await context.SaveChangesAsync();
@@ -100,7 +100,7 @@ public class GlobalInvoiceWriteOffNotesMigrationSqlServerTests
 
         var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
         Assert.True(stopped is SqlException { Number: 50045 }, stopped?.Message ?? "it was not stopped");
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(2, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM [CreditNotes]"));
@@ -108,7 +108,7 @@ public class GlobalInvoiceWriteOffNotesMigrationSqlServerTests
 
         await ExecuteAsync(database, $"DELETE FROM [CreditNotes] WHERE [Id] = {writeOffNote.Id}");
         await MigrateAsync(database, BeforeMigration);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeCfdiWhatsApp.CreateContext(database))
         {
             Assert.Equal(BeforeMigration, await LatestMigrationAsync(context));
             // The refund's credit note of the global invoice stays.
@@ -122,7 +122,7 @@ public class GlobalInvoiceWriteOffNotesMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the write-off takes its credit note.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeCfdiWhatsApp.CreateContext(database, seed.TenantId);
         forward.CreditNotes.Add(WriteOffNote(seed, 3));
         await forward.SaveChangesAsync();
         Assert.Equal(2, await forward.CreditNotes.CountAsync(n => n.GlobalInvoiceId == seed.Global.Id));
@@ -144,7 +144,7 @@ public class GlobalInvoiceWriteOffNotesMigrationSqlServerTests
     /// </summary>
     private static async Task<Seed> SeedAsync(SqlServerTestDatabase database)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCfdiWhatsApp.CreateContext(database);
         var tenants = Enumerable.Range(0, 2).Select(_ =>
         {
             var slug = $"tienda-{Guid.NewGuid():N}"[..20];
@@ -215,7 +215,7 @@ public class GlobalInvoiceWriteOffNotesMigrationSqlServerTests
 
     private static async Task ExecuteAsync(SqlServerTestDatabase database, FormattableString sql)
     {
-        await using var context = database.CreateContext();
+        await using var context = BeforeCfdiWhatsApp.CreateContext(database);
         await context.Database.ExecuteSqlAsync(sql);
     }
 

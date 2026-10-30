@@ -19,7 +19,7 @@ const F7: Invoice = {
   paymentForm: '04', paymentMethod: 'PUE', subTotal: 100, taxTotal: 16, total: 116, requestedAt: '2026-10-26T18:00:00Z',
   uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: '2026-10-26T18:00:05Z', hasXml: true, hasPdf: true,
   failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null,
-  receiverEmail: 'karla@ejemplo.mx', emails: [], requestedByCustomer: false, canSubstitute: false, awaitsReplacedCancellation: false,
+  receiverEmail: 'karla@ejemplo.mx', emails: [], whatsApps: [], requestedByCustomer: false, canSubstitute: false, awaitsReplacedCancellation: false,
 };
 
 function renderList(invoices: Invoice[]) {
@@ -118,5 +118,36 @@ describe('OrderInvoiceList', () => {
       'post', '/api/v1/invoicing/invoices/{invoiceId}/cancel',
       { path: { invoiceId: 'inv-7' }, body: { motive: CfdiCancellationMotive.ErrorsWithoutReplacement } },
     ));
+  });
+});
+
+describe('OrderInvoiceList by WhatsApp (Fase 28M)', () => {
+  const sent = {
+    id: 'm-1', document: 0, cfdiId: 'inv-7', phone: '+525512345678', requestedAt: '2026-10-26T18:00:06Z', byTienditApp: true,
+    status: 1, sentAt: '2026-10-26T18:00:30Z', deliveredAt: '2026-10-26T18:00:35Z', readAt: null, attempts: 1, error: null,
+  } as Invoice['whatsApps'][number];
+
+  it('offers «Enviar por WhatsApp» only with the WhatsApp of the business connected, and says how the latest went', () => {
+    const view = (whatsAppConnected: boolean) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <OrderInvoiceList orderId="o-1" invoices={[{ ...F7, whatsApps: [sent] }]} canCancel whatsAppConnected={whatsAppConnected} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(false));
+    expect(screen.queryByRole('button', { name: /^Enviar por WhatsApp/ })).not.toBeInTheDocument();
+    // What was sent before it was disconnected still shows.
+    expect(screen.getByText(/^Se entregó por WhatsApp a 5512345678 el /)).toBeInTheDocument();
+
+    rerender(view(true));
+    expect(screen.getByRole('button', { name: 'Enviar por WhatsApp la factura F-7' })).toBeInTheDocument();
+  });
+
+  it('sends what replaces an invoice, never the replaced one', () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <OrderInvoiceList orderId="o-1" invoices={[{ ...F7, replacedByInvoiceId: 'inv-8', replacedByNumber: 'F-8' }]} canCancel whatsAppConnected />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole('button', { name: /^Enviar por WhatsApp/ })).not.toBeInTheDocument();
   });
 });

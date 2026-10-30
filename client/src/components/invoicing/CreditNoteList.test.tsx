@@ -19,7 +19,7 @@ const F3: Invoice = {
   receiver: { rfc: 'GAL1806043P5', name: 'GRUPO ALTAVISTA', postalCode: '11560', fiscalRegime: '601', cfdiUse: 'G03' },
   paymentForm: '03', paymentMethod: 'PUE', subTotal: 172.41, taxTotal: 27.59, total: 200, requestedAt: '2026-10-24T16:00:00Z',
   uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: '2026-10-24T16:00:05Z', hasXml: true, hasPdf: true,
-  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [], requestedByCustomer: false,
+  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [], whatsApps: [], requestedByCustomer: false,
   canSubstitute: false,
   awaitsReplacedCancellation: false,
 };
@@ -28,7 +28,7 @@ const NC1: Note = {
   id: 'nc-1', orderInvoiceId: 'inv-1', number: 'NC-1', status: OrderInvoiceStatus.Stamped, paymentForm: '04', subTotal: 17.24,
   taxTotal: 2.76, total: 20, requestedAt: '2026-10-24T17:05:00Z', issuedAutomatically: true,
   uuid: '7A1C2E3F-4B5D-4C6E-8F9A-0B1C2D3E4F5A', stampedAt: '2026-10-24T17:05:03Z', hasXml: true, hasPdf: true,
-  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [],
+  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [], whatsApps: [],
 };
 
 const REFUND: Adjustment = {
@@ -274,5 +274,35 @@ describe('CreditNoteList', () => {
     await userEvent.click(screen.getByRole('button', { name: /^Emitir ahora/ }));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('La nota de crédito NC-2 de esta condonación se está timbrando.'));
+  });
+});
+
+describe('CreditNoteList by WhatsApp (Fase 28M)', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('sends a credit note to its invoice WhatsApp, but never one of a global invoice', async () => {
+    vi.mocked(apiRequest).mockResolvedValue({} as never);
+    const globalNote: Note = { ...NC1, id: 'nc-2', number: 'NC-2', orderInvoiceId: null, globalInvoiceId: 'g-1', globalInvoiceNumber: 'F-9' };
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CreditNoteList
+          orderId="o-1"
+          adjustments={[REFUND, { ...REFUND, adjustmentId: 'ref-2', creditNotes: [globalNote] }]}
+          invoices={[{ ...F3, receiverWhatsApp: '+525512345678' }]}
+          canCancel={false}
+          whatsAppConnected
+          proposedWhatsApp="+525598765432"
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Enviar por WhatsApp la nota de crédito NC-2' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar por WhatsApp la nota de crédito NC-1' }));
+    expect(screen.getByLabelText('WhatsApp')).toHaveValue('5512345678');
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/whatsapp', {
+      path: { creditNoteId: 'nc-1' },
+      body: { phone: '5512345678', useForInvoice: false },
+    }));
   });
 });

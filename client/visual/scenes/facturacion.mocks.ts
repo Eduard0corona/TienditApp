@@ -9,7 +9,8 @@ type PrepareData = NonNullable<SceneOptions['prepareData']>;
 // customer in Clientes. The order is ORD-000343, the office of Grupo Altavista: delivered and paid by transfer, or (Fase
 // 28C, ADR 0047) invoiced in installments, with the payment complements of its payments, or (Fase 28D, ADR 0048) with
 // what was given back and the credit notes of each refund. Since the Fase 28E (ADR 0049), each CFDI says how its latest
-// email to the customer went; since the Fase 28F (ADR 0050), whether the customer asked for it online.
+// email to the customer went; since the Fase 28F (ADR 0050), whether the customer asked for it online; since the Fase
+// 28M (ADR 0058), how its latest WhatsApp went, with the business's WhatsApp connected.
 
 // OrderInvoiceStatus and CfdiCancellationMotive as the contract numbers them.
 const STAMPING = 0;
@@ -42,6 +43,9 @@ const READY = {
   available: true, sandbox: false, serie: 'F', paymentSerie: 'P', creditNoteSerie: 'NC', rfc: 'CLU201005AB1', legalName: 'CAFE LUNA', fiscalRegime: '626',
   postalCode: '06700', missingData: [] as string[], certificate: CERTIFICATE, ready: true, selfInvoicing: false,
   selfInvoicePath: '/m/cafe-la-esquina/facturar',
+  // The CFDI by WhatsApp (Fase 28M): without the business's WhatsApp connected, the card points to connecting it.
+  whatsAppConnected: false, whatsAppTemplateId: null, whatsAppTemplates: [] as unknown[],
+  whatsAppDefaultText: 'Hola {nombre}: {negocio} te envía {comprobante} por {monto}, del {fecha}. Descarga el XML y el PDF aquí: {enlace}',
 };
 
 const settings = (value: Record<string, unknown>): PrepareData => (data) => {
@@ -66,6 +70,17 @@ export const FACTURACION_CON_LOGO = asOption((data: DemoData) => {
   data.tenant.logoUrl = logo;
   data.tenant.logoImages = { original: logo, large: logo, medium: logo, small: logo, thumbnail: logo };
 });
+/** WhatsApp connected (Fase 28M): the CFDI go with the template approved in Meta with a document header. */
+export const FACTURACION_WHATSAPP = asOption(settings({
+  ...READY, whatsAppConnected: true, whatsAppTemplateId: uuid('template:factura'),
+  whatsAppTemplates: [
+    {
+      id: uuid('template:factura'), name: 'Factura con PDF', providerTemplateName: 'factura_pdf',
+      body: 'Hola {nombre}: {negocio} te envía {comprobante} por {monto}, del {fecha}. Descárgala aquí: {enlace}',
+    },
+    { id: uuid('template:factura-24h'), name: 'Factura sin aprobar', providerTemplateName: null, body: 'Hola {nombre}, tu factura: {enlace}' },
+  ],
+}));
 /** The platform has not set its PAC up. */
 export const FACTURACION_NO_DISPONIBLE = asOption(settings({ ...READY, available: false, certificate: undefined, ready: false }));
 
@@ -79,7 +94,7 @@ function invoice(data: DemoData, folio: number, fields: Record<string, unknown>)
     id: uuid(`invoice-${folio}`), orderId: order.id, number: `F-${folio}`, status: STAMPED, receiver: ALTAVISTA,
     paymentForm: '03', paymentMethod: 'PUE', subTotal, taxTotal: r2(order.total - subTotal), total: order.total,
     requestedAt: minutesFromNow(-50), uuid: null, stampedAt: null, hasXml: false, hasPdf: false, failureMessage: null,
-    refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, receiverEmail: null, emails: [], requestedByCustomer: false,
+    refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, receiverEmail: null, emails: [], whatsApps: [], requestedByCustomer: false,
     canSubstitute: false,
     awaitsReplacedCancellation: false,
     ...fields,
@@ -93,6 +108,7 @@ const orderInvoicing = (build: (data: DemoData) => Record<string, unknown>): Pre
     [order.id]: {
       available: true, sandbox: false, canInvoice: true, problem: null, proposedReceiver: ALTAVISTA, proposedEmail: INVOICE_EMAIL,
       customerId: uuid('cust:altavista'), customerName: CUSTOMER_NAME, invoices: [], payments: [], adjustments: [],
+      whatsAppConnected: false,
       ...build(data),
     },
   };
@@ -161,7 +177,7 @@ function complement(folio: number, paymentId: string, fields: Record<string, unk
     id: uuid(`complement-${folio}`), orderInvoiceId: uuid('invoice-3'), orderPaymentId: paymentId, number: `P-${folio}`,
     status: STAMPED, paymentForm: '01', amount: 0, installment: 1, previousBalance: 0, remainingBalance: 0,
     requestedAt: '2026-09-12T17:06:00.000Z', issuedAutomatically: true, uuid: null, stampedAt: null, hasXml: false, hasPdf: false,
-    failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, emails: [],
+    failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null, emails: [], whatsApps: [],
     ...fields,
   };
 }
@@ -245,7 +261,7 @@ function creditNote(folio: number, amount: number, fields: Record<string, unknow
     id: uuid(`credit-note-${folio}`), orderInvoiceId: uuid('invoice-3'), number: `NC-${folio}`, status: STAMPED, paymentForm: '03',
     subTotal, taxTotal: r2(amount - subTotal), total: amount, requestedAt: minutesFromNow(-34), issuedAutomatically: true,
     uuid: null, stampedAt: null, hasXml: false, hasPdf: false, failureMessage: null, refusedAt: null,
-    cancellationRequestedAt: null, cancelledAt: null, emails: [],
+    cancellationRequestedAt: null, cancelledAt: null, emails: [], whatsApps: [],
     ...fields,
   };
 }
@@ -409,6 +425,59 @@ export const PEDIDO_AUTOFACTURADO = asOption(orderInvoicing((data) => ({
         email('reenvio', { requestedAt: minutesFromNow(-3), byTienditApp: false, byCustomer: true, sentAt: minutesFromNow(-2) }),
         email('timbre', { sentAt: minutesFromNow(-11) }),
       ],
+    }),
+  ],
+})));
+
+// OutgoingMessageStatus as the contract numbers it.
+const MESSAGE_SENT = 1;
+const MESSAGE_FAILED = 2;
+/** The WhatsApp of Grupo Altavista's accountant (Fase 28M). */
+const INVOICE_WHATSAPP = '+525512345678';
+
+/** A WhatsApp message of F-3 to Grupo Altavista, sent by TienditApp when it was stamped unless the fields say otherwise. */
+function whatsApp(name: string, fields: Record<string, unknown>) {
+  return {
+    id: uuid(`whatsapp-${name}`), document: INVOICE_DOCUMENT, cfdiId: uuid('invoice-3'), phone: INVOICE_WHATSAPP, requestedAt: minutesFromNow(-12),
+    byTienditApp: true, status: MESSAGE_SENT, sentAt: minutesFromNow(-11), deliveredAt: null, readAt: null, attempts: 1, error: null,
+    ...fields,
+  };
+}
+
+/** Never invoiced, with the business's WhatsApp connected (Fase 28M): the order's phone is proposed for its PDF. */
+export const PEDIDO_POR_FACTURAR_CON_WHATSAPP = asOption(orderInvoicing(() => ({
+  whatsAppConnected: true, proposedWhatsApp: INVOICE_WHATSAPP,
+})));
+
+/** F-3 went by email and by WhatsApp when it was stamped: the accountant already read the WhatsApp. */
+export const PEDIDO_FACTURA_POR_WHATSAPP = asOption(orderInvoicing((data) => ({
+  canInvoice: false,
+  problem: 'Este pedido ya tiene la factura F-3: cancélala para facturarlo otra vez.',
+  whatsAppConnected: true,
+  proposedWhatsApp: INVOICE_WHATSAPP,
+  invoices: [
+    invoice(data, 3, {
+      requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
+      hasXml: true, hasPdf: true, receiverEmail: INVOICE_EMAIL, receiverWhatsApp: INVOICE_WHATSAPP,
+      emails: [email('timbre', { sentAt: minutesFromNow(-11) })],
+      whatsApps: [whatsApp('timbre', { deliveredAt: minutesFromNow(-11), readAt: minutesFromNow(-6) })],
+    }),
+  ],
+})));
+
+/** Sent without a template approved in Meta, out of the 24 hours: WhatsApp did not deliver it. */
+export const PEDIDO_WHATSAPP_NO_ENTREGADO = asOption(orderInvoicing((data) => ({
+  canInvoice: false,
+  problem: 'Este pedido ya tiene la factura F-3: cancélala para facturarlo otra vez.',
+  whatsAppConnected: true,
+  invoices: [
+    invoice(data, 3, {
+      requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
+      hasXml: true, hasPdf: true, receiverWhatsApp: INVOICE_WHATSAPP,
+      whatsApps: [whatsApp('timbre', {
+        status: MESSAGE_FAILED,
+        error: 'WhatsApp no lo entregó: el cliente no escribió en las últimas 24 horas. Usa una plantilla aprobada en Meta.',
+      })],
     }),
   ],
 })));

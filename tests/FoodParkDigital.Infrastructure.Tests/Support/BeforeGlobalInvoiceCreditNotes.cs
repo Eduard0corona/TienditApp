@@ -29,6 +29,7 @@ internal static class BeforeGlobalInvoiceCreditNotes
                      .ToList())
             note.Metadata.RemoveIndex(index);
         note.Ignore(n => n.GlobalInvoiceId);
+        BeforeCfdiWhatsApp.Ignore(modelBuilder);
     }
 
     private sealed class Context(

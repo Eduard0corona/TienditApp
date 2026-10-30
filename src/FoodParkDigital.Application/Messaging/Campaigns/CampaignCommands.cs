@@ -343,7 +343,9 @@ public class GetOutgoingMessagesQueryHandler : IRequestHandler<GetOutgoingMessag
 
     public Task<PaginatedList<OutgoingMessageDto>> Handle(GetOutgoingMessagesQuery request, CancellationToken cancellationToken)
     {
-        var query = _context.OutgoingMessages.AsNoTracking();
+        // The messages of the CFDI (Fase 28M) carry the link that downloads them: they are seen in the order's invoicing, by
+        // whoever sees the order, never here.
+        var query = _context.OutgoingMessages.AsNoTracking().Where(m => m.Purpose != MessagePurpose.CfdiDocument);
         if (request.CampaignId is { } campaignId)
             query = query.Where(m => m.CampaignId == campaignId);
         if (request.Purpose is { } purpose)

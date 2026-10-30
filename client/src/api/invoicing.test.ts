@@ -73,14 +73,14 @@ describe('isOrderInvoicingWaiting', () => {
     orderPaymentId: 'pay-1', paidAt: '2026-10-04T17:00:00Z', method: 0, amount: 50, dueBy: '2026-11-05', canIssue: false,
     problem: null, awaitsAutomaticIssue: false, complements: [], ...fields,
   });
-  const complement = (status: OrderInvoiceStatus) => ({ status, emails: [] }) as unknown as Payment['complements'][number];
-  const invoice = (status: OrderInvoiceStatus) => ({ status, emails: [] }) as unknown as OrderInvoicing['invoices'][number];
+  const complement = (status: OrderInvoiceStatus) => ({ status, emails: [], whatsApps: [] }) as unknown as Payment['complements'][number];
+  const invoice = (status: OrderInvoiceStatus) => ({ status, emails: [], whatsApps: [] }) as unknown as OrderInvoicing['invoices'][number];
   type Adjustment = OrderInvoicing['adjustments'][number];
   const adjustment = (fields: Partial<Adjustment>): Adjustment => ({
     kind: CreditNoteAdjustment.Refund, adjustmentId: 'ref-1', at: '2026-10-04T17:00:00Z', amount: 20, method: 1, writeOffReason: undefined,
     notes: null, reversed: false, canIssue: false, problem: null, awaitsAutomaticIssue: false, creditNotes: [], ...fields,
   });
-  const note = (status: OrderInvoiceStatus) => ({ status, emails: [] }) as unknown as Adjustment['creditNotes'][number];
+  const note = (status: OrderInvoiceStatus) => ({ status, emails: [], whatsApps: [] }) as unknown as Adjustment['creditNotes'][number];
 
   it('reads again while an invoice or a complement waits for the PAC or the SAT', () => {
     expect(isOrderInvoicingWaiting({ invoices: [invoice(OrderInvoiceStatus.Stamping)], payments: [], adjustments: [] })).toBe(true);
@@ -129,7 +129,7 @@ describe('isOrderInvoicingWaiting', () => {
   it('reads again while the API says TienditApp still asks to cancel a replaced invoice with relation, not once it no longer does (Fase 28G)', () => {
     // It no longer does once the invoice says why it did not go, or 72 hours after its replacement was stamped.
     const replaced = (awaitsReplacedCancellation: boolean) =>
-      ({ status: OrderInvoiceStatus.Stamped, emails: [], replacedByInvoiceId: 'inv-2', failureMessage: null, awaitsReplacedCancellation }) as unknown as OrderInvoicing['invoices'][number];
+      ({ status: OrderInvoiceStatus.Stamped, emails: [], whatsApps: [], replacedByInvoiceId: 'inv-2', failureMessage: null, awaitsReplacedCancellation }) as unknown as OrderInvoicing['invoices'][number];
     const replacement = invoice(OrderInvoiceStatus.Stamped);
 
     expect(isOrderInvoicingWaiting({ invoices: [replacement, replaced(true)], payments: [], adjustments: [] })).toBe(true);

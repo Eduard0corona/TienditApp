@@ -22,6 +22,7 @@ const OrderTrackingPage = lazy(() => import('./pages/public/OrderTrackingPage'))
 const MyAppointments = lazy(() => import('./pages/account/MyAppointments'));
 const AppointmentTrackingPage = lazy(() => import('./pages/public/AppointmentTrackingPage'));
 const SelfInvoicePage = lazy(() => import('./pages/public/SelfInvoicePage'));
+const PublicCfdiPage = lazy(() => import('./pages/public/PublicCfdiPage'));
 const AccountPage = lazy(() => import('./pages/account/AccountPage'));
 const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
 const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
@@ -119,6 +120,8 @@ export default function App() {
               <Route path="/cita" element={<AppointmentTrackingPage />} />
               {/* A business's page to invoice its tickets (Fase 28F): the ticket's QR brings its folio and code in the fragment. */}
               <Route path="/m/:slug/facturar" element={<SelfInvoicePage />} />
+              {/* The link of a CFDI a business sent by WhatsApp (/factura#link, Fase 28M), the same way. */}
+              <Route path="/factura" element={<PublicCfdiPage />} />
               <Route
                 path="/mis-citas"
                 element={(

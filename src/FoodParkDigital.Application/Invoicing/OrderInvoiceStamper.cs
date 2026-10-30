@@ -15,7 +15,8 @@ namespace FoodParkDigital.Application.Invoicing;
 /// and the key saved when it was requested, so a repeated attempt (the person, the worker, both at once) gets back the same
 /// stamp: its XML is kept in the business's private files and the invoice becomes «Timbrada»; a refusal for good makes it
 /// «Rechazada»; without an answer it stays «Timbrando». Its PDF is kept when the PAC gives it; if not, it is rendered when
-/// downloaded. The email of a stamped CFDI of an order's invoice to its customer is asked for with the stamp (Fase 28E).
+/// downloaded. The email of a stamped CFDI of an order's invoice to its customer is asked for with the stamp (Fase 28E), and
+/// its WhatsApp (Fase 28M).
 /// </summary>
 public sealed class OrderInvoiceStamper
 {
@@ -85,8 +86,8 @@ public sealed class OrderInvoiceStamper
 
     /// <summary>
     /// Keeps the stamp of an invoice «Timbrando»: the one the PAC answered, or the one a person found in its portal (Fase 28K).
-    /// Its XML goes to the business's private files, its email to the customer is asked for with it, and its PDF is kept
-    /// when the PAC renders it.
+    /// Its XML goes to the business's private files, its email and its WhatsApp to the customer are asked for with it, and its
+    /// PDF is kept when the PAC renders it.
     /// </summary>
     /// <returns>The invoice as it ends up (still tracked).</returns>
     public async Task<TInvoice> KeepStampAsync<TInvoice>(
@@ -96,8 +97,9 @@ public sealed class OrderInvoiceStamper
         var xmlKey = FileKey(invoice, "xml");
         await SaveOnceAsync(xmlKey, Encoding.UTF8.GetBytes(stamped.Xml), "application/xml", cancellationToken);
         invoice.Stamp(stamped.Uuid, stamped.Uuid, stamped.StampedAt, xmlKey);
-        // Its email to the customer is saved with the stamp, so only the attempt that stamped it sends it.
+        // Its email and its WhatsApp to the customer are saved with the stamp, so only the attempt that stamped it sends them.
         await CfdiEmails.QueueOnStampAsync(_context, invoice, _clock.UtcNow, cancellationToken);
+        await CfdiWhatsApps.QueueOnStampAsync(_context, invoice, _clock.UtcNow, cancellationToken);
         invoice = await SaveAsync(invoices, invoice, cancellationToken);
         if (invoice.Status == OrderInvoiceStatus.Stamped && invoice.PdfFileKey is null)
             invoice = await AttachPdfAsync(invoices, invoice, stamped.Xml, cancellationToken);
