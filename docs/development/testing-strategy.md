@@ -1592,6 +1592,8 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `Invoicing.test.tsx` (+3): sin WhatsApp, el enlace para conectarlo; con él, el texto de TienditApp y su aviso de las 24 horas (un consejo, no una alerta) hasta elegir una plantilla aprobada, y el aviso de una sin aprobar.
     - `CfdiDraftModal.test.tsx` (+4): «WhatsApp del cliente (opcional)» con la conexión, validado y en el toast; sin la conexión no se ofrece ni se manda; al sustituir toma el de la factura y la nueva sale con el número escrito o sin ninguno (`null`), con su toast.
     - `OrderInvoiceList.test.tsx` (+2), `PaymentComplementList.test.tsx` (+1), `CreditNoteList.test.tsx` (+1) y `phones.test.ts` (+2): el botón solo con la conexión y nunca para una factura sustituida ni una nota de la global; el número de la factura o el del pedido; la regla del número escrito (ninguna lada empieza con 0) y el mismo número escrito con 52 o con +52.
+  - **Cliente en total:** 177 archivos y 1,272 pruebas.
+  - **Primera visita:** 180,674 B de 180,700 B (`master` en `184db9e`: 180,565 B). Son +109 B por la ruta perezosa `/factura` en el primer chunk: su `import()`, el mapa de precarga que nombra su JS y su hoja (`PublicCfdiPage.css`) y la ruta; la página se carga aparte. El presupuesto sube de 180,600 B a 180,700 B.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
