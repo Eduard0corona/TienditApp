@@ -327,7 +327,7 @@ public class SendCfdiByWhatsAppCommandHandler : IRequestHandler<SendCfdiByWhatsA
 /// </summary>
 public sealed class CfdiWhatsAppSender
 {
-    public const string NoLongerStampedReason = "El CFDI ya no está vigente: no se envió.";
+    public const string NoLongerStampedReason = "El CFDI ya no está vigente.";
     public const string PdfPendingReason = "El PDF del CFDI se está guardando.";
     public const string PdfUnavailableReason = "El PAC no dio el PDF del CFDI: envíalo otra vez más tarde.";
 

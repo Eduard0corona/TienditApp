@@ -112,6 +112,7 @@ describe('GlobalInvoicePage', () => {
       requestedAt: '2026-10-20T17:00:00Z', issuedAutomatically: true, uuid: null, stampedAt: '2026-10-20T17:00:03Z',
       hasXml: true, hasPdf: true, failureMessage: null, refusedAt: null, cancellationRequestedAt: null, cancelledAt: null,
       emails: [],
+      whatsApps: [],
     };
     const withNotes = (status: OrderInvoiceStatus) => invoice({
       orders: [

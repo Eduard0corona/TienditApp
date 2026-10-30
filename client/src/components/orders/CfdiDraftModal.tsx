@@ -15,6 +15,7 @@ import { useToast } from '../../hooks/useToast';
 import { OrderInvoiceStatus } from '../../types';
 import { EMPTY_RECEIVER, isPlainEmail, normalizeReceiver, PAYMENT_FORMS, PAYMENT_METHODS } from '../../utils/cfdi';
 import { formatMoney } from '../../utils/money';
+import { isTypedPhone, localPhone } from '../../utils/phones';
 import CfdiReceiverFields from '../invoicing/CfdiReceiverFields';
 import OrderInvoiceList from '../invoicing/OrderInvoiceList';
 import CreditNoteList from '../invoicing/CreditNoteList';
@@ -44,6 +45,13 @@ function formatTransfer(transfer: Transfer | null | undefined): string {
 }
 
 const LIVE: OrderInvoiceStatus[] = [OrderInvoiceStatus.Stamping, OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Cancelling];
+
+/** «: se está enviando a karla@ejemplo.mx y por WhatsApp a 5512345678», where a stamped invoice goes; empty when nowhere. */
+function sendingTo(email: string, whatsApp: string): string {
+  if (email && whatsApp) return `: se está enviando a ${email} y por WhatsApp a ${whatsApp}`;
+  if (email) return `: se está enviando a ${email}`;
+  return whatsApp ? `: se está enviando por WhatsApp a ${whatsApp}` : '';
+}
 
 /**
  * The payment complements (Fase 28C) and credit notes (Fase 28D) in force of each invoice of the order, and the invoice an
@@ -146,6 +154,11 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
   const [email, setEmail] = useState(invoicing?.proposedEmail ?? '');
   const typedEmail = email.trim();
   const emailValid = !typedEmail || isPlainEmail(typedEmail);
+  // Its PDF and the link to its XML by WhatsApp (Fase 28M), with the business's WhatsApp connected: optional too.
+  const whatsAppConnected = invoicing?.whatsAppConnected ?? false;
+  const [whatsApp, setWhatsApp] = useState(localPhone(invoicing?.proposedWhatsApp));
+  const typedWhatsApp = whatsAppConnected ? whatsApp.trim() : '';
+  const whatsAppValid = !typedWhatsApp || isTypedPhone(typedWhatsApp);
   // Offered to who manages customers only: the API asks for ManageCustomers to keep it.
   const offerSaveToCustomer = canSaveToCustomer && !!invoicing?.customerId;
   const draft = useCfdiDraft(orderId, receiver, !orderCancelled);
@@ -182,11 +195,11 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
   const edited = receiver === undefined || JSON.stringify(normalizeReceiver(form)) !== JSON.stringify(receiver);
   // Only on this opening's preview: while it is read again, what is on screen may be old.
   const readyToStamp = available && !!receiver && !edited && !!cfdi?.isReadyToStamp && !cfdi.isGeneralPublic && !draft.isFetching
-    && !issue.isPending && !substitute.isPending && emailValid;
+    && !issue.isPending && !substitute.isPending && emailValid && whatsAppValid;
   const canStamp = readyToStamp && !substituting && !!invoicing?.canInvoice;
   const canReplace = readyToStamp && !!target?.canSubstitute;
 
-  /** The form takes the invoice's data and email, to correct them. */
+  /** The form takes the invoice's data, email and WhatsApp, to correct them. */
   const startSubstituting = (invoice: OrderInvoice) => {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setSubstituting(invoice);
@@ -194,16 +207,18 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
     setReceiver(normalizeReceiver(invoice.receiver));
     setShowReceiver(true);
     setEmail(invoice.receiverEmail ?? invoicing?.proposedEmail ?? '');
+    setWhatsApp(localPhone(invoice.receiverWhatsApp ?? invoicing?.proposedWhatsApp));
   };
 
   /** Back to what the order proposes, or, once replaced, to the data the new one went with. */
-  const stopSubstituting = (kept?: { receiver: CfdiReceiver; email: string }) => {
+  const stopSubstituting = (kept?: { receiver: CfdiReceiver; email: string; whatsApp: string }) => {
     focusAfter.current = kept ? 'invoices' : 'opener';
     setSubstituting(null);
     const next = kept?.receiver ?? proposed;
     setForm(next ?? EMPTY_RECEIVER);
     setReceiver(next ? normalizeReceiver(next) : undefined);
     setEmail(kept ? kept.email : invoicing?.proposedEmail ?? '');
+    setWhatsApp(kept ? kept.whatsApp : localPhone(invoicing?.proposedWhatsApp));
   };
 
   const applyReceiver = (event: React.FormEvent) => {
@@ -219,9 +234,11 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
         // Only what the person saw: the box shows with the receiver's data.
         saveToCustomer: offerSaveToCustomer && showReceiver && saveToCustomer,
         receiverEmail: typedEmail || null,
+        // Only with the WhatsApp of the business connected: the API refuses a number otherwise.
+        receiverWhatsApp: whatsAppConnected ? typedWhatsApp || null : undefined,
       });
       if (invoice.status === OrderInvoiceStatus.Stamped) {
-        toast.success(typedEmail ? `Factura ${invoice.number} timbrada: se está enviando a ${typedEmail}.` : `Factura ${invoice.number} timbrada.`);
+        toast.success(`Factura ${invoice.number} timbrada${sendingTo(typedEmail, typedWhatsApp)}.`);
       }
       else if (invoice.status === OrderInvoiceStatus.Refused) toast.error(invoice.failureMessage ?? 'El PAC rechazó la factura.');
       else toast.info(`El PAC no respondió: TienditApp sigue pidiendo el timbre de ${invoice.number}.`);
@@ -239,6 +256,7 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
         receiver,
         saveToCustomer: offerSaveToCustomer && showReceiver && saveToCustomer,
         receiverEmail: typedEmail || null,
+        receiverWhatsApp: whatsAppConnected ? typedWhatsApp || null : undefined,
       });
       // Refused, the old one is still the order's invoice: the form stays, to correct it again.
       if (invoice.status === OrderInvoiceStatus.Refused) {
@@ -246,13 +264,11 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
         return;
       }
       if (invoice.status === OrderInvoiceStatus.Stamped) {
-        toast.success(typedEmail
-          ? `Factura ${invoice.number} timbrada en lugar de la ${replaced}: se está enviando a ${typedEmail}.`
-          : `Factura ${invoice.number} timbrada en lugar de la ${replaced}.`);
+        toast.success(`Factura ${invoice.number} timbrada en lugar de la ${replaced}${sendingTo(typedEmail, typedWhatsApp)}.`);
       } else {
         toast.info(`El PAC no respondió: TienditApp sigue pidiendo el timbre de ${invoice.number} y después cancela la ${replaced}.`);
       }
-      stopSubstituting({ receiver, email: typedEmail });
+      stopSubstituting({ receiver, email: typedEmail, whatsApp: typedWhatsApp });
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo sustituir la factura.'));
     }
@@ -269,6 +285,8 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             canCancel={canCancel}
             liveRelated={liveRelated(invoicing)}
             proposedEmail={invoicing.proposedEmail}
+            whatsAppConnected={whatsAppConnected}
+            proposedWhatsApp={invoicing.proposedWhatsApp}
             onSubstitute={!orderCancelled && available ? startSubstituting : undefined}
             substitutingId={substitutingId}
             headingRef={invoicesHeading}
@@ -283,6 +301,9 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             canCancel={canCancel}
             invoiceEmails={Object.fromEntries(invoicing.invoices.map((invoice) => [invoice.id, invoice.receiverEmail]))}
             proposedEmail={invoicing.proposedEmail}
+            whatsAppConnected={whatsAppConnected}
+            invoiceWhatsApps={Object.fromEntries(invoicing.invoices.map((invoice) => [invoice.id, invoice.receiverWhatsApp]))}
+            proposedWhatsApp={invoicing.proposedWhatsApp}
           />
         )}
         {invoicing && (
@@ -292,6 +313,8 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
             invoices={invoicing.invoices}
             canCancel={canCancel}
             proposedEmail={invoicing.proposedEmail}
+            whatsAppConnected={whatsAppConnected}
+            proposedWhatsApp={invoicing.proposedWhatsApp}
             globalInvoiceNumber={invoicing.globalInvoiceNumber}
           />
         )}
@@ -402,6 +425,30 @@ function InvoiceBody({ orderId, invoicing, canCancel, canSaveToCustomer, orderCa
                 {emailValid
                   ? 'Al timbrarse le llegan el XML y el PDF, y después los de sus complementos de pago y notas de crédito.'
                   : 'Escribe un correo válido, como nombre@ejemplo.com, o déjalo vacío.'}
+              </div>
+            </div>
+          )}
+
+          {showEmail && whatsAppConnected && (
+            <div className="mb-3">
+              <label className="form-label small mb-1" htmlFor="cfdi-whatsapp">WhatsApp del cliente (opcional)</label>
+              <input
+                id="cfdi-whatsapp"
+                type="tel"
+                className={`form-control${whatsAppValid ? '' : ' is-invalid'}`}
+                maxLength={30}
+                autoComplete="off"
+                placeholder="10 dígitos"
+                value={whatsApp}
+                disabled={issue.isPending || substitute.isPending}
+                onChange={(event) => setWhatsApp(event.target.value)}
+                aria-invalid={whatsAppValid ? undefined : true}
+                aria-describedby="cfdi-whatsapp-help"
+              />
+              <div id="cfdi-whatsapp-help" className={whatsAppValid ? 'form-text' : 'invalid-feedback'}>
+                {whatsAppValid
+                  ? 'Al timbrarse le llega el PDF con un enlace para descargar el XML, y después los de sus complementos de pago y notas de crédito.'
+                  : 'Escribe los 10 dígitos, o el número con lada internacional, o déjalo vacío.'}
               </div>
             </div>
           )}

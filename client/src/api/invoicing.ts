@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
 import api from './axios';
+import { fileNameOf, readBlobError } from './blobDownloads';
 import { queryKeys } from './queries';
 import { apiRequest, type Schemas } from './typedClient';
 import {
@@ -12,6 +12,7 @@ import {
   IssuedCfdiKind,
   OrderInvoiceStatus,
   OrderStatus,
+  OutgoingMessageStatus,
   type OrderDto,
 } from '../types';
 import { isStuckStamping } from '../utils/cfdi';
@@ -22,8 +23,8 @@ import { isDeliveryPlatform } from '../utils/deliveryPlatforms';
 // ADR 0047); the credit notes of an invoiced order's refunds and write-offs (Fase 28D, ADR 0048); and the emails of those
 // CFDI to the customer (Fase 28E, ADR 0049); self-invoicing, turned on here and printed on each ticket (Fase 28F,
 // ADR 0050); and the CFDI issued in a month, with their XML for the accountant (Fase 28H, ADR 0052), in Reportes › CFDI
-// emitidos, with the ones still «Timbrando» past the PAC's window that a person checks (Fase 28K, ADR 0056). Kept out of
-// queries.ts, which the first visit loads.
+// emitidos, with the ones still «Timbrando» past the PAC's window that a person checks (Fase 28K, ADR 0056); and their PDF by
+// WhatsApp with the link to their XML (Fase 28M, ADR 0058). Kept out of queries.ts, which the first visit loads.
 
 export type InvoicingSettings = Schemas['InvoicingSettingsDto'];
 export type OrderInvoicing = Schemas['OrderInvoicingDto'];
@@ -33,6 +34,7 @@ export type PaymentComplement = Schemas['PaymentComplementDto'];
 export type OrderAdjustment = Schemas['OrderAdjustmentDto'];
 export type CreditNote = Schemas['CreditNoteDto'];
 export type CfdiEmail = Schemas['CfdiEmailDto'];
+export type CfdiWhatsApp = Schemas['CfdiWhatsAppDto'];
 export type GlobalInvoice = Schemas['GlobalInvoiceDto'];
 export type GlobalInvoiceDetail = Schemas['GlobalInvoiceDetailDto'];
 export type GlobalInvoiceDraft = Schemas['GlobalInvoiceDraftDto'];
@@ -105,6 +107,12 @@ export function useSetSelfInvoicing() {
   return useSettingsChange((on: boolean) => apiRequest('put', '/api/v1/invoicing/settings/self-invoicing', { body: { on } }));
 }
 
+/** The template the CFDI go by WhatsApp with (Fase 28M), or TienditApp's text (null). */
+export function useSetInvoiceWhatsAppTemplate() {
+  return useSettingsChange((templateId: string | null) =>
+    apiRequest('put', '/api/v1/invoicing/settings/whatsapp-template', { body: { templateId } }));
+}
+
 /**
  * Whether the order's ticket may carry «Factura en línea»: paid in full (nothing owed or written off), with an amount, not
  * cancelled and not of a delivery app. The API decides the same (and whether self-invoicing is on); this spares asking it
@@ -154,7 +162,8 @@ export function useOrderInvoicing(orderId: string) {
  * pass.
  */
 export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 'payments' | 'adjustments'>): boolean {
-  const waits = (cfdi: Pick<OrderInvoice, 'status' | 'stampWindowEndsAt' | 'emails'>) => isWaiting(cfdi) || isEmailOnItsWay(cfdi.emails[0]);
+  const waits = (cfdi: Pick<OrderInvoice, 'status' | 'stampWindowEndsAt' | 'emails' | 'whatsApps'>) =>
+    isWaiting(cfdi) || isEmailOnItsWay(cfdi.emails[0]) || isWhatsAppOnItsWay(cfdi.whatsApps[0]);
   return data.invoices.some((invoice) => waits(invoice) || invoice.awaitsReplacedCancellation)
     || data.payments.some((payment) => payment.awaitsAutomaticIssue || payment.complements.some(waits))
     || data.adjustments.some((adjustment) => adjustment.awaitsAutomaticIssue || adjustment.creditNotes.some(waits));
@@ -166,6 +175,11 @@ export function isOrderInvoicingWaiting(data: Pick<OrderInvoicing, 'invoices' | 
  */
 export function isEmailOnItsWay(email: Pick<CfdiEmail, 'sentAt' | 'failedAt'> | undefined): boolean {
   return !!email && !email.sentAt && !email.failedAt;
+}
+
+/** The CFDI's latest WhatsApp is still in the queue (Fase 28M): it goes out, or ends, on a later try. */
+export function isWhatsAppOnItsWay(message: Pick<CfdiWhatsApp, 'status'> | undefined): boolean {
+  return message?.status === OutgoingMessageStatus.Pending;
 }
 
 /** Preview of the invoice of an order, read again each time it opens; without a receiver it goes to the general public. */
@@ -208,7 +222,12 @@ function useInvoiceChange<TVariables, TResult = OrderInvoice>(orderId: string, c
 
 /** With an email, the customer gets its XML and PDF once it is stamped, and those of its complements and credit notes. */
 export function useIssueOrderInvoice(orderId: string) {
-  return useInvoiceChange(orderId, (body: { receiver: CfdiReceiver; saveToCustomer: boolean; receiverEmail?: string | null }) =>
+  return useInvoiceChange(orderId, (body: {
+    receiver: CfdiReceiver;
+    saveToCustomer: boolean;
+    receiverEmail?: string | null;
+    receiverWhatsApp?: string | null;
+  }) =>
     apiRequest('post', '/api/v1/invoicing/orders/{orderId}/invoices', { path: { orderId }, body }));
 }
 
@@ -232,6 +251,7 @@ export function useSubstituteOrderInvoice(orderId: string) {
     receiver: CfdiReceiver;
     saveToCustomer: boolean;
     receiverEmail?: string | null;
+    receiverWhatsApp?: string | null;
   }) => apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/substitute', { path: { invoiceId }, body }));
 }
 
@@ -301,6 +321,29 @@ export function useSendCfdiByEmail(orderId: string) {
         return apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/email', { path: { creditNoteId: cfdiId }, body });
       default:
         return apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/email', { path: { invoiceId: cfdiId }, body });
+    }
+  });
+}
+
+/**
+ * «Enviar por WhatsApp» a stamped CFDI of the order's invoice (Fase 28M): its PDF and the link to its XML, out from the
+ * queue of WhatsApp messages. Answers the message as it was queued.
+ */
+export function useSendCfdiByWhatsApp(orderId: string) {
+  return useInvoiceChange(orderId, ({ document, cfdiId, phone, useForInvoice }: {
+    document: CfdiEmailDocument;
+    cfdiId: string;
+    phone: string;
+    useForInvoice: boolean;
+  }) => {
+    const body = { phone, useForInvoice };
+    switch (document) {
+      case CfdiEmailDocument.PaymentComplement:
+        return apiRequest('post', '/api/v1/invoicing/payment-complements/{complementId}/whatsapp', { path: { complementId: cfdiId }, body });
+      case CfdiEmailDocument.CreditNote:
+        return apiRequest('post', '/api/v1/invoicing/credit-notes/{creditNoteId}/whatsapp', { path: { creditNoteId: cfdiId }, body });
+      default:
+        return apiRequest('post', '/api/v1/invoicing/invoices/{invoiceId}/whatsapp', { path: { invoiceId: cfdiId }, body });
     }
   });
 }
@@ -461,19 +504,10 @@ async function downloadNamed(
   try {
     response = await api.get<Blob>(path, params ? { responseType: 'blob', params } : { responseType: 'blob' });
   } catch (err: unknown) {
-    // The refusal comes as a blob too: read back, its message (the PDF not available, say) reaches the person.
-    if (isAxiosError(err) && err.response?.data instanceof Blob) {
-      try {
-        err.response.data = JSON.parse(await err.response.data.text()) as unknown;
-      } catch {
-        // Not JSON: the generic message stays.
-      }
-    }
+    await readBlobError(err);
     throw err;
   }
-  const disposition = String(response.headers['content-disposition'] ?? '');
-  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
-  return { blob: response.data, fileName: match ? decodeURIComponent(match[1]) : fallbackFileName };
+  return { blob: response.data, fileName: fileNameOf(response.headers['content-disposition'], fallbackFileName) };
 }
 
 /** The customer's fiscal data and the email for their invoices, for their next invoices; null forgets both. */

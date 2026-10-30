@@ -1,0 +1,11 @@
+/* The business's logo next to its name on the page of a CFDI sent by WhatsApp (Fase 28M): whole whatever its shape. */
+.pc-logo {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+img.pc-logo {
+  background: var(--ct-white);
+}

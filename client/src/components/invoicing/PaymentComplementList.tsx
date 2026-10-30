@@ -23,6 +23,7 @@ import { formatCalendarDate, formatDateTime, getBusinessToday } from '../../util
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
+import { CfdiWhatsAppStatus, SendCfdiWhatsAppButton } from './CfdiWhatsApps';
 import StuckStampNote from './StuckStampNote';
 
 interface PaymentComplementListProps {
@@ -36,6 +37,12 @@ interface PaymentComplementListProps {
   invoiceEmails?: Partial<Record<string, string | null>>;
   /** The email the order's invoicing proposes, to send a complement whose invoice has none. */
   proposedEmail?: string | null;
+  /** The business's WhatsApp is connected (Fase 28M): its complements can go by WhatsApp. */
+  whatsAppConnected?: boolean;
+  /** The WhatsApp the CFDI of each invoice go to, by its id. */
+  invoiceWhatsApps?: Partial<Record<string, string | null>>;
+  /** The WhatsApp the order's invoicing proposes, to send a complement whose invoice has none. */
+  proposedWhatsApp?: string | null;
 }
 
 /** The toast that says how issuing or asking again for a complement ended. */
@@ -54,7 +61,8 @@ function useComplementOutcome() {
  * before that («Emitir ahora»), again after a refused or cancelled one, asked again of the PAC, cancelled or downloaded.
  */
 export default function PaymentComplementList({
-  orderId, payments, inInstallments, canCancel, invoiceEmails = {}, proposedEmail,
+  orderId, payments, inInstallments, canCancel, invoiceEmails = {}, proposedEmail, whatsAppConnected = false, invoiceWhatsApps = {},
+  proposedWhatsApp,
 }: PaymentComplementListProps) {
   const toast = useToast();
   const outcome = useComplementOutcome();
@@ -167,6 +175,7 @@ export default function PaymentComplementList({
                         </p>
                       )}
                       <CfdiEmailStatus emails={complement.emails} />
+                      <CfdiWhatsAppStatus messages={complement.whatsApps} />
                       <div className="d-flex flex-wrap gap-2 mt-2">
                         {complement.hasXml && (
                           <>
@@ -199,6 +208,17 @@ export default function PaymentComplementList({
                             invoiceEmail={invoiceEmails[complement.orderInvoiceId]}
                             latestEmail={complement.emails[0]}
                             proposedEmail={proposedEmail}
+                          />
+                        )}
+                        {whatsAppConnected && complement.status === OrderInvoiceStatus.Stamped && (
+                          <SendCfdiWhatsAppButton
+                            orderId={orderId}
+                            document={CfdiEmailDocument.PaymentComplement}
+                            cfdiId={complement.id}
+                            number={complement.number}
+                            invoiceWhatsApp={invoiceWhatsApps[complement.orderInvoiceId]}
+                            latestWhatsApp={complement.whatsApps[0]}
+                            proposedWhatsApp={proposedWhatsApp}
                           />
                         )}
                         {complement.status === OrderInvoiceStatus.Stamping && !isStuckStamping(complement) && (

@@ -22,7 +22,8 @@ internal static class BeforeOrderInvoicing
     {
         modelBuilder.Entity<Customer>().Ignore(c => c.FiscalData);
         modelBuilder.Entity<Customer>().Ignore(c => c.InvoiceEmail);
-        // What came later (Fases 28C to 28E) points to the invoices: it goes first.
+        // What came later (Fases 28C to 28E, and the queue's CFDI of 28M) points to the invoices: it goes first.
+        BeforeCfdiWhatsApp.IgnoreMessages(modelBuilder);
         modelBuilder.Ignore<CfdiEmail>();
         modelBuilder.Ignore<CreditNote>();
         modelBuilder.Ignore<PaymentComplement>();

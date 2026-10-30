@@ -18,7 +18,7 @@ const P1: Complement = {
   id: 'pc-1', orderInvoiceId: 'inv-1', orderPaymentId: 'pay-1', number: 'P-1', status: OrderInvoiceStatus.Stamped, paymentForm: '01',
   amount: 50, installment: 1, previousBalance: 200, remainingBalance: 150, requestedAt: '2026-10-04T17:05:00Z',
   issuedAutomatically: true, uuid: '9F3C1E2A-0B1D-4C5E-8F70-1A2B3C4D5E6F', stampedAt: '2026-10-04T17:05:03Z', hasXml: true, hasPdf: true,
-  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [],
+  failureMessage: null, refusedAt: null, cancellationMotive: undefined, cancellationRequestedAt: null, cancelledAt: null, emails: [], whatsApps: [],
 };
 
 const FIRST: Payment = {
@@ -212,5 +212,33 @@ describe('PaymentComplementList', () => {
     await userEvent.click(screen.getByRole('button', { name: /^Emitir ahora/ }));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('El complemento P-2 de este cobro se está timbrando.'));
+  });
+});
+
+describe('PaymentComplementList by WhatsApp (Fase 28M)', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('proposes the WhatsApp of its invoice for a complement, and the order\'s when the invoice has none', async () => {
+    const view = (invoiceWhatsApps: Partial<Record<string, string | null>>) => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <PaymentComplementList
+          orderId="o-1"
+          payments={[FIRST]}
+          inInstallments
+          canCancel={false}
+          whatsAppConnected
+          invoiceWhatsApps={invoiceWhatsApps}
+          proposedWhatsApp="+525598765432"
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view({ 'inv-1': '+525512345678' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar por WhatsApp el complemento de pago P-1' }));
+    expect(screen.getByLabelText('WhatsApp')).toHaveValue('5512345678');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    rerender(view({ 'inv-1': null }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar por WhatsApp el complemento de pago P-1' }));
+    expect(screen.getByLabelText('WhatsApp')).toHaveValue('5598765432');
   });
 });

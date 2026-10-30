@@ -14,6 +14,7 @@ import { CANCELLATION_MOTIVES, invoiceStatusChip, invoiceStatusLabel, isStuckSta
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
+import { CfdiWhatsAppStatus, SendCfdiWhatsAppButton } from './CfdiWhatsApps';
 import StuckStampNote from './StuckStampNote';
 
 interface OrderInvoiceListProps {
@@ -28,6 +29,10 @@ interface OrderInvoiceListProps {
   liveRelated?: Partial<Record<string, string[]>>;
   /** The email the order's invoicing proposes, to send an invoice that has none (Fase 28E). */
   proposedEmail?: string | null;
+  /** The business's WhatsApp is connected (Fase 28M): its invoices can go by WhatsApp. */
+  whatsAppConnected?: boolean;
+  /** The WhatsApp the order's invoicing proposes, to send an invoice that has none. */
+  proposedWhatsApp?: string | null;
   /** «Sustituir factura» (Fase 28G): the order's screen opens the invoice's form to replace it. */
   onSubstitute?: (invoice: OrderInvoice) => void;
   /** The invoice being replaced on that form, if any. */
@@ -41,7 +46,8 @@ interface OrderInvoiceListProps {
  * one replaces which (Fase 28G) and what can be done with each one.
  */
 export default function OrderInvoiceList({
-  orderId, invoices, canCancel, liveRelated = {}, proposedEmail, onSubstitute, substitutingId, headingRef,
+  orderId, invoices, canCancel, liveRelated = {}, proposedEmail, whatsAppConnected = false, proposedWhatsApp, onSubstitute, substitutingId,
+  headingRef,
 }: OrderInvoiceListProps) {
   const toast = useToast();
   const retry = useRetryOrderInvoice(orderId);
@@ -141,6 +147,7 @@ export default function OrderInvoiceList({
               </p>
             )}
             <CfdiEmailStatus emails={invoice.emails} />
+            <CfdiWhatsAppStatus messages={invoice.whatsApps} />
             <div className="d-flex flex-wrap gap-2 mt-2">
               {invoice.hasXml && (
                 <>
@@ -174,6 +181,17 @@ export default function OrderInvoiceList({
                   invoiceEmail={invoice.receiverEmail}
                   latestEmail={invoice.emails[0]}
                   proposedEmail={proposedEmail}
+                />
+              )}
+              {whatsAppConnected && invoice.status === OrderInvoiceStatus.Stamped && !invoice.replacedByInvoiceId && (
+                <SendCfdiWhatsAppButton
+                  orderId={orderId}
+                  document={CfdiEmailDocument.Invoice}
+                  cfdiId={invoice.id}
+                  number={invoice.number}
+                  invoiceWhatsApp={invoice.receiverWhatsApp}
+                  latestWhatsApp={invoice.whatsApps[0]}
+                  proposedWhatsApp={proposedWhatsApp}
                 />
               )}
               {invoice.status === OrderInvoiceStatus.Stamping && !isStuckStamping(invoice) && (

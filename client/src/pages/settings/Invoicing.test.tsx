@@ -20,7 +20,7 @@ type Settings = Schemas['InvoicingSettingsDto'];
 const READY_TO_UPLOAD: Settings = {
   available: true, sandbox: false, serie: 'F', paymentSerie: 'P', creditNoteSerie: 'NC', rfc: 'EKU9003173C9', legalName: 'ESCUELA KEMPER URGATE', fiscalRegime: '601',
   postalCode: '06000', missingData: [], certificate: undefined, ready: false, selfInvoicing: false,
-  selfInvoicePath: '/m/demo/facturar',
+  selfInvoicePath: '/m/demo/facturar', whatsAppConnected: false, whatsAppTemplates: [], whatsAppDefaultText: 'Hola {nombre}: {negocio} te envía {comprobante} por {monto}, del {fecha}. Descarga el XML y el PDF aquí: {enlace}',
 };
 
 const WITH_CERTIFICATE: Settings = {
@@ -214,5 +214,55 @@ describe('Autofactura', () => {
 
     await waitFor(() => expect(write).toHaveBeenCalledWith('put', '/api/v1/invoicing/settings/self-invoicing', { on: false }));
     expect(await screen.findByRole('switch', { name: 'Autofactura activa' })).not.toBeChecked();
+  });
+});
+
+describe('Invoicing settings: the invoice by WhatsApp (Fase 28M)', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  const TEMPLATE = {
+    id: 't-1', name: 'Factura con PDF', body: 'Hola {nombre}: tu factura {comprobante} por {monto}. XML: {enlace}', providerTemplateName: 'factura_pdf',
+  };
+
+  it('points to connecting the WhatsApp of the business while it is not', async () => {
+    serve(WITH_CERTIFICATE);
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'Factura por WhatsApp' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Conectar WhatsApp' })).toHaveAttribute('href', '/settings/whatsapp');
+    expect(screen.queryByLabelText('Mensaje')).not.toBeInTheDocument();
+  });
+
+  it('goes with TienditApp\'s text, which only arrives within the 24 hours, until a template approved in Meta is chosen', async () => {
+    let settings: Settings = { ...WITH_CERTIFICATE, whatsAppConnected: true, whatsAppTemplates: [TEMPLATE, { ...TEMPLATE, id: 't-2', name: 'Sin Meta', providerTemplateName: null }] };
+    serve(settings, (method, path, body) => {
+      expect([method, path, body]).toEqual(['put', '/api/v1/invoicing/settings/whatsapp-template', { templateId: 't-1' }]);
+      settings = { ...settings, whatsAppTemplateId: 't-1' };
+      return Promise.resolve(settings);
+    });
+    renderPage();
+
+    const select = await screen.findByLabelText('Mensaje');
+    expect(select).toHaveValue('');
+    expect(screen.getByText(settings.whatsAppDefaultText)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Sin una plantilla aprobada en Meta, WhatsApp solo entrega la factura en las 24 horas');
+    expect(screen.getByRole('link', { name: 'Campañas › Plantillas' })).toHaveAttribute('href', '/campaigns?tab=templates');
+
+    await userEvent.selectOptions(select, 't-1');
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Tus facturas van por WhatsApp con esa plantilla.'));
+    await waitFor(() => expect(screen.getByLabelText('Mensaje')).toHaveValue('t-1'));
+    expect(screen.getByText(TEMPLATE.body)).toBeInTheDocument();
+    expect(screen.queryByText(/WhatsApp solo/)).not.toBeInTheDocument();
+  });
+
+  it('warns that a template not approved in Meta only arrives within the 24 hours', async () => {
+    serve({
+      ...WITH_CERTIFICATE, whatsAppConnected: true, whatsAppTemplateId: 't-2',
+      whatsAppTemplates: [{ ...TEMPLATE, id: 't-2', name: 'Sin Meta', providerTemplateName: null }],
+    });
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Esta plantilla no está aprobada en Meta: WhatsApp solo la entrega en las 24 horas desde el último mensaje del cliente.');
   });
 });

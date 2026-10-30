@@ -103,7 +103,7 @@ describe('CfdiEmailStatus', () => {
 
   it('keeps reading the invoicing while the latest email is on its way, until it ends', () => {
     const waiting = (latest: CfdiEmail) => isOrderInvoicingWaiting({
-      invoices: [{ status: OrderInvoiceStatus.Stamped, emails: [latest] }] as never, payments: [], adjustments: [],
+      invoices: [{ status: OrderInvoiceStatus.Stamped, emails: [latest], whatsApps: [] }] as never, payments: [], adjustments: [],
     });
     expect(waiting(email({ requestedAt: '2026-10-26T14:00:00Z', failedAttempts: 5 }))).toBe(true);
     expect(waiting(email({ sentAt: '2026-10-26T17:56:00Z' }))).toBe(false);
