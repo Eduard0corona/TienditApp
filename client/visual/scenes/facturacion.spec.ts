@@ -113,7 +113,7 @@ test.describe('Configuración › Facturación', () => {
   test.describe('con logo en el PDF', () => {
     test.use({ prepareData: FACTURACION_CON_LOGO });
 
-    for (const look of LOOKS.slice(0, 2)) {
+    for (const look of LOOKS) {
       test.describe(look.suffix, () => {
         test.use({ colorMode: look.colorMode, viewport: look.viewport });
 

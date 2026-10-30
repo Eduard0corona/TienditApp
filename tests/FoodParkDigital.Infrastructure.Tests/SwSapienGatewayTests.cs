@@ -579,6 +579,53 @@ public class SwSapienGatewayTests
     }
 
     [Theory]
+    [InlineData("I", true)]
+    [InlineData("P", false)]
+    [InlineData("P", true)]
+    public async Task Pdf_ThatSwRefusesWithTheLogoOrThePaymentsTemplate_ShouldComeAsBefore_WithoutThem(string type, bool withLogo)
+    {
+        var business = Guid.NewGuid();
+        var logos = new FakeLogos();
+        if (withLogo)
+            logos[business] = [0x89, 0x50, 0x4E, 0x47];
+        var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"
+            ? Login()
+            // SW takes only the request of before the Fase 28L: CFDI 4.0's template, without a logo.
+            : request.Content!.ReadAsStringAsync().Result is var body && (body.Contains("\"logo\"") || body.Contains("payment20"))
+                ? Json(HttpStatusCode.BadRequest, """{"message":"Plantilla no válida","status":"error"}""")
+                : Json(HttpStatusCode.OK, $$"""{"data":{"contentB64":"{{Convert.ToBase64String("%PDF"u8.ToArray())}}"},"status":"success"}"""),
+            logos: logos);
+
+        var pdf = await gateway.RenderPdfAsync(StampedXml.Replace("Version=\"4.0\"", $"Version=\"4.0\" TipoDeComprobante=\"{type}\""), business, CancellationToken.None);
+
+        Assert.Equal("%PDF"u8.ToArray(), pdf);
+        Assert.Equal(3, http.Requests.Count);
+        using var retried = JsonDocument.Parse(http.Requests[2].Body!);
+        Assert.Equal("cfdi40", retried.RootElement.Str("templateId"));
+        Assert.False(retried.RootElement.TryGetProperty("logo", out _));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable, true)]
+    [InlineData(HttpStatusCode.TooManyRequests, true)]
+    [InlineData(HttpStatusCode.BadRequest, false)]
+    public async Task Pdf_ThatSwFails_OrRefusesAsBefore_ShouldNotBeAskedTwice(HttpStatusCode status, bool withLogo)
+    {
+        var business = Guid.NewGuid();
+        var logos = new FakeLogos();
+        if (withLogo)
+            logos[business] = [0x89, 0x50, 0x4E, 0x47];
+        var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"
+            ? Login()
+            : Json(status, """{"message":"Error","status":"error"}"""), logos: logos);
+
+        await Assert.ThrowsAsync<InvoicingGatewayUnavailableException>(
+            () => gateway.RenderPdfAsync(StampedXml, business, CancellationToken.None));
+
+        Assert.Equal(2, http.Requests.Count);
+    }
+
+    [Theory]
     [InlineData("Cancelado", "Cancelado sin aceptación", CfdiSatState.Cancelled, false)]
     [InlineData("Vigente", "Solicitud rechazada", CfdiSatState.InForce, true)]
     [InlineData("Vigente", "En proceso", CfdiSatState.InForce, false)]

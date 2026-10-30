@@ -1,0 +1,12 @@
+/* The logo that goes on the PDF (Fase 28L): small next to its row, whole whatever its shape, on white as the PDF shows it. */
+.inv-pdf-logo {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 4px;
+  object-fit: contain;
+  font-size: 0.75rem;
+}
+
+img.inv-pdf-logo {
+  background: #fff;
+}

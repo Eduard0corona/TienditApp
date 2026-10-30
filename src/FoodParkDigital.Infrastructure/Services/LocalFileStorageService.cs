@@ -64,9 +64,17 @@ public class LocalFileStorageService : IFileStorageService
 
     public Task<Stream?> OpenReadAsync(string fileUrl, string folder, CancellationToken cancellationToken = default)
     {
-        if (!Resolve(fileUrl, folder, out var fullPath) || !File.Exists(fullPath))
+        if (!Resolve(fileUrl, folder, out var fullPath))
             return Task.FromResult<Stream?>(null);
-        return Task.FromResult<Stream?>(new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read));
+        try
+        {
+            // Replacing the file while it is read (a new logo deletes the old variants) neither fails nor waits for the read.
+            return Task.FromResult<Stream?>(new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete));
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return Task.FromResult<Stream?>(null);
+        }
     }
 
     private bool TryResolvePath(string fileUrl, string folder, out string fullPath)

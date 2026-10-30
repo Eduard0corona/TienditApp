@@ -140,15 +140,43 @@ public sealed class SwSapienGateway : IInvoicingGateway
 
     public async Task<byte[]> RenderPdfAsync(string stampedXml, Guid tenantId, CancellationToken cancellationToken)
     {
-        var body = new JsonObject { ["xmlContent"] = stampedXml, ["templateId"] = PdfTemplateFor(stampedXml) };
-        // The generic template takes the logo in base64; without one, it leaves its box empty.
-        if (await _logos.PngAsync(tenantId, cancellationToken) is { } logo)
-            body["logo"] = Convert.ToBase64String(logo);
-        using var response = await SendAsync(
-            HttpMethod.Post, $"{ApiUrl}/pdf/v1/api/GeneratePdf", "pdf", JsonContent.Create(body), cancellationToken: cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            throw Unavailable(response, default, "pdf");
+        var template = PdfTemplateFor(stampedXml);
+        var logo = await _logos.PngAsync(tenantId, cancellationToken);
+        using (var response = await RequestPdfAsync(stampedXml, template, logo, cancellationToken))
+        {
+            if (response.IsSuccessStatusCode)
+                return await PdfOfAsync(response, cancellationToken);
+            // SW refusing what the Fase 28L adds (the logo, the payments template) never leaves the CFDI without its PDF: the
+            // request of before goes once more. SW failing or not answering is not a refusal, and is not asked twice.
+            if (!IsRefusal(response.StatusCode) || (logo is null && template == PdfTemplate))
+                throw Unavailable(response, default, "pdf");
+            _logger.LogWarning("SW refused the PDF of business {TenantId} with its logo or its template ({Status}): it goes without them",
+                tenantId, (int)response.StatusCode);
+        }
 
+        using var plain = await RequestPdfAsync(stampedXml, PdfTemplate, null, cancellationToken);
+        if (!plain.IsSuccessStatusCode)
+            throw Unavailable(plain, default, "pdf");
+        return await PdfOfAsync(plain, cancellationToken);
+    }
+
+    private Task<HttpResponseMessage> RequestPdfAsync(string stampedXml, string template, byte[]? logo, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject { ["xmlContent"] = stampedXml, ["templateId"] = template };
+        // The generic template takes the logo in base64; without one, it leaves its box empty.
+        if (logo is not null)
+            body["logo"] = Convert.ToBase64String(logo);
+        return SendAsync(
+            HttpMethod.Post, $"{ApiUrl}/pdf/v1/api/GeneratePdf", "pdf", JsonContent.Create(body), cancellationToken: cancellationToken);
+    }
+
+    // What SW answers about the request itself (not the platform's account, a timeout nor too many requests).
+    private static bool IsRefusal(HttpStatusCode status) =>
+        (int)status is >= 400 and < 500
+        && status is not (HttpStatusCode.Unauthorized or HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests);
+
+    private static async Task<byte[]> PdfOfAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
         var data = await ReadDataAsync(response, cancellationToken);
         var pdf = Text(data?["contentB64"]);
         if (string.IsNullOrWhiteSpace(pdf))

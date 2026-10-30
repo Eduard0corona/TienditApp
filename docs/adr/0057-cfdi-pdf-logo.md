@@ -29,7 +29,9 @@ Tomé las decisiones de la Fase 28L con la autorización permanente del dueño d
    - los cuatro tipos de CFDI: la factura de un pedido, la global, el complemento de pago y la nota de crédito;
    - al timbrar (`OrderInvoiceStamper`), al descargar uno que no tenía PDF (`InvoiceFiles`) y en el correo que lo espera (`CfdiEmailRequestedHandler`).
 5. **El complemento de pago usa `payment20`**, la plantilla genérica de Pagos 2.0, que toma el logo. Los demás siguen con `cfdi40`. La plantilla se elige por el `TipoDeComprobante` del XML timbrado.
-6. **El logo nunca detiene el PDF.** Sin logo, con uno que ya no está o con uno que no se puede leer (otra carpeta, un archivo que no es imagen, el almacenamiento que falla), el PDF sale sin logo. Queda una advertencia en el log con el negocio y el tipo de error, nunca la dirección del archivo. Cancelar la solicitud sí la cancela.
+6. **El logo nunca detiene el PDF.**
+   - Sin logo, con uno que ya no está o con uno que no se puede leer (otra carpeta, un archivo que no es imagen, el almacenamiento que falla), el PDF sale sin logo. Queda una advertencia en el log con el negocio y el tipo de error, nunca la dirección del archivo. Cancelar la solicitud sí la cancela.
+   - Si SW Sapien rechaza la petición (un 4xx que no es de la cuenta, de tiempo ni de demasiadas peticiones) y llevaba el logo o la plantilla de Pagos, se manda una vez la petición de antes de esta fase: `cfdi40` y sin logo. Queda una advertencia con el negocio y el estado. Si SW falla (5xx) o no responde, no se repite: es el error de siempre, y el PDF se arma después (ADR 0049).
 7. **Los PDF que ya se guardaron no cambian.** El PDF se arma y se guarda al timbrar; un logo nuevo solo sale en los que se arman después (los timbrados después, o uno que no tenía PDF y se descarga o se manda).
 8. **Configuración › Facturación lo dice.** La tarjeta «Tu negocio» muestra «Logo en el PDF»: el logo, o «Sin logo» con «Sube el logo de tu negocio», que lleva a Configuración › Negocio. «Cómo funciona» dice que los PDF que ya se armaron se quedan como están.
 9. **Sin migración ni cambios en el contrato de la API.**
@@ -44,6 +46,6 @@ Tomé las decisiones de la Fase 28L con la autorización permanente del dueño d
 - **Lo que limita:**
   - Cada PDF lee el logo del almacenamiento y lo convierte (una variante de 512 px, una vez por PDF). Es poco: los PDF se arman al timbrar y, solo si faltan, al descargar o mandar.
   - Un logo muy alargado se ve chico en el recuadro de la plantilla, que fija SW Sapien.
-  - Si SW Sapien cambia lo que acepta en `logo`, el PDF podría salir sin él o fallar. Un PDF que falla ya deja el CFDI timbrado sin PDF, que se arma al descargarlo o en el correo (ADR 0049).
+  - Si SW Sapien deja de aceptar el logo o la plantilla de Pagos, el PDF sale como antes de esta fase, sin logo, y cada uno cuesta una petición más hasta que se corrija. La advertencia del log lo deja ver.
 - **Compatibilidad durante el despliegue:** no cambia el contrato. El cliente anterior no muestra la fila del logo; el nuevo con la API anterior la muestra, pero el PDF sale sin logo hasta que llegue la API nueva.
 - **Reversibilidad:** sin cambios en la base. Volver a la versión anterior quita el logo de los PDF que se armen desde entonces; los que ya lo llevan se quedan así.

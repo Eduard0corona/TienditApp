@@ -546,7 +546,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **El PDF** lo arma el PAC con su plantilla genérica de CFDI 4.0 (la de Pagos 2.0 para un complemento) y, desde la Fase 28L ([ADR 0057](../adr/0057-cfdi-pdf-logo.md)), con el logo de Configuración › Negocio:
   - el mediano, como PNG sin metadatos de hasta 400 × 200, y solo de la carpeta del negocio;
   - en los cuatro tipos de CFDI, al timbrar, al descargar uno que no tenía PDF y en su correo;
-  - sin logo, o si no se puede leer, el PDF sale sin él: nunca falla por eso;
+  - sin logo, si no se puede leer o si el PAC no lo toma, el PDF sale sin él: nunca falla por eso;
   - los PDF que ya se guardaron no cambian: un logo nuevo solo sale en los que se arman después. Configuración › Facturación dice si el PDF lleva logo, o dónde subirlo.
 - **Sin** envío por WhatsApp, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D, el envío por correo en la 28E, la autofactura del cliente en la 28F, la sustitución con motivo 01 en la 28G (siguientes secciones de facturas) y el logo en el PDF en la 28L.
 

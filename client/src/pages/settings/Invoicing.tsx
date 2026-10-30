@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
+import PhotoOrInitial from '../../components/common/PhotoOrInitial';
 import { getApiErrorMessage } from '../../api/errors';
 import {
   useChangeInvoiceSerie,
@@ -15,6 +16,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { formatDate } from '../../utils/dates';
+import './Invoicing.css';
 
 // The .cer and .key the SAT gives weigh a couple of kilobytes; the API refuses anything past 16 KB.
 const MAX_FILE_BYTES = 16 * 1024;
@@ -134,7 +136,7 @@ function StatusCard({ data }: { data: InvoicingSettings }) {
           <dd className="col-sm-7">
             {logo ? (
               <span className="d-inline-flex align-items-center gap-2">
-                <img src={logo} alt="" width={24} height={24} className="rounded object-fit-contain" />
+                <PhotoOrInitial src={logo} name={tenant?.name ?? ''} className="inv-pdf-logo" loading="eager" />
                 El de tu negocio
               </span>
             ) : (

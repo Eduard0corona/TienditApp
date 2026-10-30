@@ -18,7 +18,7 @@ public interface ICfdiPdfLogos
 }
 
 /// <summary>
-/// The logo of Configuración › Mi negocio, read from TienditApp's own storage: only from the business's folder (never an
+/// The logo of Configuración › Negocio, read from TienditApp's own storage: only from the business's folder (never an
 /// address the URL points elsewhere), its medium variant, as PNG without metadata and within the box of the PAC's template.
 /// </summary>
 internal sealed class TenantCfdiPdfLogos : ICfdiPdfLogos
@@ -62,7 +62,7 @@ internal sealed class TenantCfdiPdfLogos : ICfdiPdfLogos
             }
             return await _images.ToPngAsync(variant, MaxWidth, MaxHeight, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning("The logo of business {TenantId} could not be read ({Error}): its CFDI PDF goes without it",
                 tenantId, ex.GetType().Name);

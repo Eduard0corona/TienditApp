@@ -1559,10 +1559,17 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `AzureBlobFileStorageServiceTests` (+1) y `AzureBlobFileStorageServiceAzuriteTests` (2, nuevo): fuera de la carpeta o de otra cuenta da `null` antes de cualquier petición; contra Azurite lee lo que `UploadAsync` guardó y da `null` para un blob que no está y para el de otro negocio.
     - `ImageProcessingServicePngTests` (6, nuevo): el PNG cabe en 400 × 200 con su proporción y nunca se agranda, no lleva EXIF, conserva la transparencia y lo que no es imagen se rechaza.
   - **Infrastructure, el logo:** `CfdiPdfLogosTests` (6, nuevo), con el almacenamiento local y las variantes que genera la subida real: cada uno de dos negocios recibe su propio logo como PNG dentro del recuadro; sin logo (o un negocio que no existe) no lee el almacenamiento; un `LogoUrl` con la carpeta de otro negocio, tal cual o con un rodeo por la propia, no pone su logo y la advertencia no nombra esa carpeta; un logo que ya no está o que no es imagen deja el PDF sin él, con su advertencia; cancelar no se toma como un logo que no se pudo leer.
-  - **Infrastructure, SW Sapien:** `SwSapienGatewayTests` (+4): el PDF lleva el logo del negocio del CFDI en base64, y sin logo no manda el campo; el complemento usa `payment20` y la factura y la nota de crédito `cfdi40`.
+  - **Infrastructure, SW Sapien:** `SwSapienGatewayTests` (+10): el PDF lleva el logo del negocio del CFDI en base64, y sin logo no manda el campo; el complemento usa `payment20` y la factura y la nota de crédito `cfdi40`; si SW rechaza la petición con el logo o con `payment20`, el PDF sale de una segunda petición con `cfdi40` y sin logo; si SW falla (503), pide esperar (429) o rechaza la petición de antes, no se pide dos veces. Las tres del rechazo fallan sin la segunda petición.
   - **Application:** `OrderInvoicingFlowTests` (+1): con otro negocio en la misma base, el PDF se pide con el negocio de la factura al timbrar y al descargarla sin PDF. `GlobalInvoicingFlowTests`, `CreditNoteFlowTests`, `PaymentComplementFlowTests` y `CfdiEmailFlowTests` comprueban que el PDF de la global, de la nota, del complemento y el que arma el correo se piden con su negocio.
   - **WebApi:** `CrossTenantInvoicingSqlServerTests` (+1): un dueño sube su logo por la API y el lector que compone la API (en Development, con el contenedor validado al arrancar) lo entrega como PNG solo para su negocio, no para otro; al quitarlo, ya no hay logo.
   - **Cliente:** `Invoicing.test.tsx` (+2): sin logo, «Sin logo.» y el enlace a Configuración › Negocio; con logo, su miniatura y «El de tu negocio», sin el enlace.
+  - **Revisiones independientes** del servidor y del cliente, con sus correcciones:
+    - el PDF que SW rechaza con el logo o con `payment20` sale con la petición de antes;
+    - una cancelación que no pidió quien llama ya no escapa del lector del logo;
+    - leer un archivo local mientras se reemplaza da `null` y no impide borrarlo;
+    - la miniatura usa `PhotoOrInitial` (la inicial si no carga), sobre blanco como en el PDF;
+    - la escena con logo también en modo oscuro, con el `logoUrl` que manda la API;
+    - el typecheck de las escenas, que CI corre.
   - **Total:** `dotnet test` con SQL Server 2022 y Azurite, 4,091 pruebas sin fallos ni omitidas (Domain 1,190, Application 1,825, Infrastructure 611, WebApi 465), sobre `master` en `eeeaa67`.
   - **Cliente en total:** 175 archivos y 1,246 pruebas.
 
