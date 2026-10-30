@@ -121,6 +121,8 @@ public class GlobalInvoicingFlowTests
         Assert.Equal(OrderInvoiceStatus.Cancelled, cancelled.Value.Status);
         Assert.Equal((Rfc, first.Uuid, CfdiCancellationMotive.NominativeInGlobalInvoice), book.Gateway.Cancellations.Single());
         Assert.True(await book.Context.GlobalInvoiceOrders.AllAsync(order => order.Released));
+        // Nobody to tell (Fase 28N): it was for the general public.
+        Assert.Empty(await book.Context.CfdiEmails.ToListAsync());
 
         var own = await book.IssueOrderInvoiceAsync(card.Id);
         Assert.True(own.IsSuccess, own.Error);

@@ -143,6 +143,8 @@ public class GlobalInvoiceCreditNoteFlowTests
         book.Gateway.CancelOutcome = CfdiCancellationOutcome.Cancelled;
         Assert.Equal(OrderInvoiceStatus.Cancelled,
             (await book.CancelCreditNoteAsync(firstNote.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).Value.Status);
+        // Nobody to tell (Fase 28N): it was for the general public.
+        Assert.Empty(await book.Context.CfdiEmails.ToListAsync());
 
         // TienditApp does not issue it again on its own; a person does, within what the other refund left.
         Assert.Equal(0, (await book.IssuePendingAsync()).Value);

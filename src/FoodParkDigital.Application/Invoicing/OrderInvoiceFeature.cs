@@ -587,8 +587,8 @@ public class CancelOrderInvoiceCommandHandler : IRequestHandler<CancelOrderInvoi
             var now = _clock.UtcNow;
             if (tracked.Status == OrderInvoiceStatus.Stamped)
                 tracked.RequestCancellation(request.Motive, userId, now);
-            if (outcome == CfdiCancellationOutcome.Cancelled && tracked.Status == OrderInvoiceStatus.Cancelling)
-                tracked.Cancel(now);
+            if (outcome == CfdiCancellationOutcome.Cancelled)
+                await CfdiCancellations.ConfirmAsync(_context, tracked, now, cancellationToken);
             _context.AuditLogs.Add(new AuditLog(
                 tenantId: tracked.TenantId,
                 entityName: nameof(OrderInvoice),

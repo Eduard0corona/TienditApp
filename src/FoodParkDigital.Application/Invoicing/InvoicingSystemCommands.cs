@@ -188,7 +188,7 @@ public class CheckInvoiceCancellationsCommandHandler : IRequestHandler<CheckInvo
         if (tracked.Status != OrderInvoiceStatus.Cancelling)
             return false;
         if (status.State == CfdiSatState.Cancelled)
-            tracked.Cancel(_clock.UtcNow);
+            await CfdiCancellations.ConfirmAsync(_context, tracked, _clock.UtcNow, cancellationToken);
         else
             tracked.KeepAfterRefusedCancellation(RefusedByReceiverMessage);
         try
