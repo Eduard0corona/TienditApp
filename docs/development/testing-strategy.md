@@ -1576,7 +1576,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas visuales:** contra la línea base de `master` en `eeeaa67`, 716 de las 724 escenas que ya existían salen iguales.
     - Cambian 8, todas de Configuración › Facturación de un negocio sin logo, por la fila «Logo en el PDF» («Sin logo.» y su enlace) y el punto nuevo de «Cómo funciona»: «facturación lista» y «facturación con autofactura» en escritorio, teléfono y oscuro, «facturación sin certificado» y «facturación en pruebas con el certificado por vencer».
     - Hay 3 nuevas: «facturación con el logo en el pdf» en escritorio, teléfono y oscuro, con la miniatura sobre blanco.
-    - El archivo de escenas de Facturación (44) pasó dos corridas seguidas contra el mismo build.
+    - El archivo de escenas de Facturación (44) pasó dos corridas seguidas contra el mismo build, y la corrida completa (727), una más.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
