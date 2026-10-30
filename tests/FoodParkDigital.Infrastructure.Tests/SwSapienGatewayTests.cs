@@ -527,17 +527,55 @@ public class SwSapienGatewayTests
     }
 
     [Fact]
-    public async Task Pdf_ShouldComeFromTheStampedXml()
+    public async Task Pdf_ShouldComeFromTheStampedXml_WithoutALogoWhenTheBusinessHasNone()
     {
         var pdf = "%PDF-1.7"u8.ToArray();
         var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"
             ? Login()
             : Json(HttpStatusCode.OK, $$"""{"data":{"contentB64":"{{Convert.ToBase64String(pdf)}}","uuid":"{{Uuid}}"},"status":"success"}"""));
 
-        Assert.Equal(pdf, await gateway.RenderPdfAsync(StampedXml, CancellationToken.None));
+        Assert.Equal(pdf, await gateway.RenderPdfAsync(StampedXml, Guid.NewGuid(), CancellationToken.None));
         using var body = JsonDocument.Parse(http.Requests[1].Body!);
         Assert.Equal(("https://api.sw.com.mx/pdf/v1/api/GeneratePdf", StampedXml, "cfdi40"),
             (http.Requests[1].Url, body.RootElement.Str("xmlContent"), body.RootElement.Str("templateId")));
+        Assert.False(body.RootElement.TryGetProperty("logo", out _));
+    }
+
+    [Fact]
+    public async Task Pdf_ShouldCarryTheLogoOfItsBusiness_InBase64()
+    {
+        var business = Guid.NewGuid();
+        var logo = new byte[] { 0x89, 0x50, 0x4E, 0x47, 1, 2, 3 };
+        var logos = new FakeLogos { [business] = logo };
+        var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"
+            ? Login()
+            : Json(HttpStatusCode.OK, $$"""{"data":{"contentB64":"{{Convert.ToBase64String("%PDF"u8.ToArray())}}"},"status":"success"}"""), logos: logos);
+
+        await gateway.RenderPdfAsync(StampedXml, business, CancellationToken.None);
+        await gateway.RenderPdfAsync(StampedXml, Guid.NewGuid(), CancellationToken.None);
+
+        using var withLogo = JsonDocument.Parse(http.Requests[1].Body!);
+        Assert.Equal(Convert.ToBase64String(logo), withLogo.RootElement.Str("logo"));
+        // Another business's PDF never carries it.
+        using var withoutLogo = JsonDocument.Parse(http.Requests[2].Body!);
+        Assert.False(withoutLogo.RootElement.TryGetProperty("logo", out _));
+        Assert.Equal([business, logos.Asked[1]], logos.Asked);
+    }
+
+    [Theory]
+    [InlineData("P", "payment20")]
+    [InlineData("I", "cfdi40")]
+    [InlineData("E", "cfdi40")]
+    public async Task Pdf_ShouldUseTheTemplateOfItsKind_ThePaymentsOneForAComplement(string type, string template)
+    {
+        var (gateway, http) = Create(request => request.RequestUri!.AbsolutePath == "/v2/security/authenticate"
+            ? Login()
+            : Json(HttpStatusCode.OK, $$"""{"data":{"contentB64":"{{Convert.ToBase64String("%PDF"u8.ToArray())}}"},"status":"success"}"""));
+
+        await gateway.RenderPdfAsync(StampedXml.Replace("Version=\"4.0\"", $"Version=\"4.0\" TipoDeComprobante=\"{type}\""), Guid.NewGuid(), CancellationToken.None);
+
+        using var body = JsonDocument.Parse(http.Requests[1].Body!);
+        Assert.Equal(template, body.RootElement.Str("templateId"));
     }
 
     [Theory]
@@ -642,14 +680,30 @@ public class SwSapienGatewayTests
         $$"""{"data":{"token":"{{Token}}","expires_in":{{Now.AddHours(2).ToUnixTimeSeconds()}},"tokeny_type":"Bearer"},"status":"success"}""");
 
     private static (SwSapienGateway Gateway, RecordingHandler Http) Create(
-        Func<HttpRequestMessage, HttpResponseMessage> respond, Action<SwSapienOptions>? configure = null, TestClock? clock = null)
+        Func<HttpRequestMessage, HttpResponseMessage> respond,
+        Action<SwSapienOptions>? configure = null,
+        TestClock? clock = null,
+        ICfdiPdfLogos? logos = null)
     {
         var http = new RecordingHandler(respond);
         var options = new SwSapienOptions { User = "demo@negocio.mx", Password = "secreta" };
         configure?.Invoke(options);
         var gateway = new SwSapienGateway(
-            new SingleClientFactory(http), Options.Create(options), clock ?? new TestClock(Now), NullLogger<SwSapienGateway>.Instance);
+            new SingleClientFactory(http), Options.Create(options), clock ?? new TestClock(Now), logos ?? new FakeLogos(),
+            NullLogger<SwSapienGateway>.Instance);
         return (gateway, http);
+    }
+
+    /// <summary>The logo of each business, as the PAC takes it; the rest have none.</summary>
+    private sealed class FakeLogos : Dictionary<Guid, byte[]>, ICfdiPdfLogos
+    {
+        public List<Guid> Asked { get; } = [];
+
+        public Task<byte[]?> PngAsync(Guid tenantId, CancellationToken cancellationToken)
+        {
+            Asked.Add(tenantId);
+            return Task.FromResult(TryGetValue(tenantId, out var logo) ? logo : null);
+        }
     }
 
     private static HttpResponseMessage Json(HttpStatusCode status, string json) =>

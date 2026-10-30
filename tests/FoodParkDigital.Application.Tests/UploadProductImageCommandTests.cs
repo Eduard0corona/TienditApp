@@ -288,6 +288,9 @@ public class UploadProductImageCommandTests
 
         public bool IsStoredIn(string fileUrl, string folder) =>
             fileUrl.StartsWith($"https://storage.test/{folder}/", StringComparison.Ordinal);
+
+        public Task<Stream?> OpenReadAsync(string fileUrl, string folder, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Stream?>(null);
     }
 
     private sealed class FakeImageProcessingService : IImageProcessingService

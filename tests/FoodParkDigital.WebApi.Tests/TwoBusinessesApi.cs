@@ -12,6 +12,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
+using FoodParkDigital.Infrastructure.Invoicing;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Security;
@@ -240,6 +241,9 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     /// collection share it.
     /// </summary>
     public void ForgetDirectorySnapshot() => _factory!.Services.GetRequiredService<PublicDirectoryCache>().Invalidate();
+
+    /// <summary>The logo the API puts on the PDF of each business's CFDI (Fase 28L), as it is composed.</summary>
+    public ICfdiPdfLogos CfdiPdfLogos => _factory!.Services.GetRequiredService<ICfdiPdfLogos>();
 
     /// <summary>A client without a session: a customer on the public menu.</summary>
     public HttpClient AnonymousClient() => _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });

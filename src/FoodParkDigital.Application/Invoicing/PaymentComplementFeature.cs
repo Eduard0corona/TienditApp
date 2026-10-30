@@ -397,14 +397,14 @@ public class GetPaymentComplementFileQueryHandler : IRequestHandler<GetPaymentCo
     {
         var complement = await _context.PaymentComplements.AsNoTracking()
             .Where(c => c.Id == request.ComplementId)
-            .Select(c => new { c.OrderId, c.Serie, c.Folio, c.Uuid, c.XmlFileKey, c.PdfFileKey })
+            .Select(c => new { c.TenantId, c.OrderId, c.Serie, c.Folio, c.Uuid, c.XmlFileKey, c.PdfFileKey })
             .FirstOrDefaultAsync(cancellationToken);
         if (complement?.XmlFileKey is null || !await OrderInvoicing.SeesOrderAsync(_context, complement.OrderId, cancellationToken))
             return Result.Failure<PrivateFileDownload>(GetOrderInvoiceFileQueryHandler.NotFoundMessage);
 
         return await InvoiceFiles.DownloadAsync(
             _storage, _gateway, _logger, request.ComplementId, $"{complement.Serie}-{complement.Folio}_{complement.Uuid}",
-            complement.XmlFileKey, complement.PdfFileKey, request.Kind, cancellationToken);
+            complement.XmlFileKey, complement.PdfFileKey, request.Kind, complement.TenantId, cancellationToken);
     }
 }
 

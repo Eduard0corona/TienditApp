@@ -37,6 +37,7 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
 
     // Uploaded photos can carry the GPS position and camera data: metadata is never re-encoded.
     private static readonly WebpEncoder WebpEncoder = new() { Quality = 80, SkipMetadata = true };
+    private static readonly PngEncoder PngEncoder = new() { SkipMetadata = true };
 
     public async Task<IReadOnlyList<ImageVariantResult>> GenerateVariantsAsync(
         Stream originalStream,
@@ -93,6 +94,25 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
         await image.SaveAsync(output, WebpEncoder, cancellationToken);
         output.Position = 0;
         return output;
+    }
+
+    /// <summary>
+    /// The image as PNG within <paramref name="maxWidth"/> by <paramref name="maxHeight"/>, keeping its proportions and its
+    /// transparency, without metadata: how the PAC takes a logo for the PDF of a CFDI (Fase 28L).
+    /// </summary>
+    public async Task<byte[]> ToPngAsync(Stream imageStream, int maxWidth, int maxHeight, CancellationToken cancellationToken = default)
+    {
+        using var image = await LoadAsync(imageStream, cancellationToken);
+        image.Mutate(ctx =>
+        {
+            var size = ctx.GetCurrentSize();
+            if (size.Width > maxWidth || size.Height > maxHeight)
+                ctx.Resize(new ResizeOptions { Mode = ResizeMode.Max, Size = new Size(maxWidth, maxHeight) });
+        });
+
+        using var output = new MemoryStream();
+        await image.SaveAsync(output, PngEncoder, cancellationToken);
+        return output.ToArray();
     }
 
     private static async Task<Image> LoadAsync(Stream stream, CancellationToken cancellationToken)

@@ -149,6 +149,40 @@ public sealed class LocalFileStorageServiceTests : IDisposable
         Assert.True(_storage.IsStoredIn($"/uploads/{OwnFolder}/image", OwnFolder));
     }
 
+    [Theory]
+    [MemberData(nameof(UrlsOutsideOwnFolder))]
+    public async Task OpenReadAsync_ShouldRefuse_WhatDeletingRefuses_EvenWhenTheFileIsThere(
+        string urlTemplate,
+        string targetTemplate)
+    {
+        SeedFile(Resolve(targetTemplate));
+
+        await using var stream = await _storage.OpenReadAsync(Resolve(urlTemplate), OwnFolder);
+
+        Assert.Null(stream);
+    }
+
+    [Fact]
+    public async Task OpenReadAsync_ShouldRead_AFileOfTheFolder()
+    {
+        SeedFile($"{OwnFolder}/image_md.webp");
+
+        await using var stream = await _storage.OpenReadAsync($"/uploads/{OwnFolder}/image_md.webp", OwnFolder);
+
+        Assert.NotNull(stream);
+        using var copy = new MemoryStream();
+        await stream.CopyToAsync(copy);
+        Assert.Equal(new byte[] { 0x52, 0x49, 0x46, 0x46 }, copy.ToArray());
+    }
+
+    [Fact]
+    public async Task OpenReadAsync_ShouldGiveNull_WhenTheFileIsNotThere()
+    {
+        await using var stream = await _storage.OpenReadAsync($"/uploads/{OwnFolder}/image_md.webp", OwnFolder);
+
+        Assert.Null(stream);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_contentRoot))

@@ -62,6 +62,13 @@ public class LocalFileStorageService : IFileStorageService
 
     public bool IsStoredIn(string fileUrl, string folder) => Resolve(fileUrl, folder, out _);
 
+    public Task<Stream?> OpenReadAsync(string fileUrl, string folder, CancellationToken cancellationToken = default)
+    {
+        if (!Resolve(fileUrl, folder, out var fullPath) || !File.Exists(fullPath))
+            return Task.FromResult<Stream?>(null);
+        return Task.FromResult<Stream?>(new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read));
+    }
+
     private bool TryResolvePath(string fileUrl, string folder, out string fullPath)
     {
         if (Resolve(fileUrl, folder, out fullPath))

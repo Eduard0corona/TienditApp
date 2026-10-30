@@ -412,7 +412,7 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
             return null;
         try
         {
-            return await _gateway.RenderPdfAsync(Encoding.UTF8.GetString(stampedXml), cancellationToken);
+            return await _gateway.RenderPdfAsync(Encoding.UTF8.GetString(stampedXml), cfdi.TenantId, cancellationToken);
         }
         catch (Exception ex) when (ex is InvoicingGatewayUnavailableException or InvoicingGatewayRefusedException)
         {

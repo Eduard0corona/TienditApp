@@ -35,6 +35,9 @@ internal sealed class FakeInvoicingGateway : IInvoicingGateway
     public Dictionary<string, string> Replacements { get; } = [];
     public List<CfdiStatusQuery> StatusQueries { get; } = [];
     public int PdfRenders { get; private set; }
+
+    /// <summary>The business each PDF was asked for: its logo goes on it (Fase 28L).</summary>
+    public List<Guid> PdfTenants { get; } = [];
     /// <summary>Every time a PDF was asked for, given or not.</summary>
     public int PdfRequests { get; private set; }
 
@@ -89,9 +92,10 @@ internal sealed class FakeInvoicingGateway : IInvoicingGateway
         return Task.FromResult(Stamped.Values.FirstOrDefault(s => string.Equals(s.Uuid, uuid, StringComparison.OrdinalIgnoreCase)));
     }
 
-    public Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken)
+    public Task<byte[]> RenderPdfAsync(string stampedXml, Guid tenantId, CancellationToken cancellationToken)
     {
         PdfRequests++;
+        PdfTenants.Add(tenantId);
         ThrowIfUnavailable();
         if (PdfUnavailable)
             throw new InvoicingGatewayUnavailableException("El PDF no está listo.");

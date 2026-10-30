@@ -161,7 +161,7 @@ public sealed class OrderInvoiceStamper
         byte[] pdf;
         try
         {
-            pdf = await _gateway.RenderPdfAsync(stampedXml, cancellationToken);
+            pdf = await _gateway.RenderPdfAsync(stampedXml, invoice.TenantId, cancellationToken);
         }
         catch (Exception ex) when (ex is InvoicingGatewayUnavailableException or InvoicingGatewayRefusedException)
         {

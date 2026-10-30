@@ -49,7 +49,7 @@ public sealed class TestInvoicingGateway : IInvoicingGateway
     public Task<StampedCfdi?> FindStampedAsync(string uuid, CancellationToken cancellationToken)
         => Task.FromResult(_stamped.Values.FirstOrDefault(s => string.Equals(s.Uuid, uuid, StringComparison.OrdinalIgnoreCase)));
 
-    public Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken)
+    public Task<byte[]> RenderPdfAsync(string stampedXml, Guid tenantId, CancellationToken cancellationToken)
         => Task.FromResult(Encoding.ASCII.GetBytes("%PDF-1.7"));
 
     public Task<CfdiCancellationOutcome> CancelAsync(

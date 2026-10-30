@@ -587,6 +587,25 @@ public class OrderInvoicingFlowTests
     }
 
     [Fact]
+    public async Task Pdf_ShouldBeAskedForWithTheBusinessOfTheInvoice_WhoseLogoGoesOnIt()
+    {
+        await using var book = await Book.OpenAsync();
+        // Another business in the same database: its logo never goes on this one's PDFs.
+        var other = await book.Fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true, slug: "otro");
+        book.Fixture.TenantService.SetTenant(book.Tenant.Id);
+        var order = await book.PaidOrderAsync();
+        book.Gateway.PdfUnavailable = true;
+        var invoice = (await book.IssueAsync(order.Id)).Value;
+        book.Gateway.PdfUnavailable = false;
+
+        Assert.True((await book.DownloadAsync(invoice.Id, OrderInvoiceFileKind.Pdf)).IsSuccess);
+
+        // When it was stamped, and again when it was downloaded without one.
+        Assert.Equal([book.Tenant.Id, book.Tenant.Id], book.Gateway.PdfTenants);
+        Assert.DoesNotContain(other.Id, book.Gateway.PdfTenants);
+    }
+
+    [Fact]
     public async Task Invoices_OfAnOrderOfAModuleTheBusinessNoLongerHas_ShouldNotBeThere()
     {
         await using var book = await Book.OpenAsync();

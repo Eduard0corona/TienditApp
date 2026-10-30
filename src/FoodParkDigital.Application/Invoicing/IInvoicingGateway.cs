@@ -34,8 +34,11 @@ public interface IInvoicingGateway
     /// </summary>
     Task<StampedCfdi?> FindStampedAsync(string uuid, CancellationToken cancellationToken);
 
-    /// <summary>The PDF of a stamped CFDI.</summary>
-    Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken);
+    /// <summary>
+    /// The PDF of a stamped CFDI of the business, with its logo when it has one (Fase 28L): without it if the logo cannot be
+    /// read, never failing because of it.
+    /// </summary>
+    Task<byte[]> RenderPdfAsync(string stampedXml, Guid tenantId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Asks the SAT to cancel a CFDI of the business, with the stored CSD: with motive 01, with the UUID of the stamped CFDI

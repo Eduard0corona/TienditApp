@@ -459,7 +459,7 @@ public class InvoicingWorkerTests
         public Task<StampedCfdi> StampAsync(CfdiDocument document, Guid idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StampedCfdi?> FindStampedAsync(string uuid, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<byte[]> RenderPdfAsync(string stampedXml, Guid tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CfdiCancellationOutcome> CancelAsync(
             string issuerRfc, string uuid, CfdiCancellationMotive motive, string? replacementUuid, CancellationToken cancellationToken)
             => throw new NotSupportedException();

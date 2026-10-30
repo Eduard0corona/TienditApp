@@ -39,6 +39,37 @@ public sealed class CrossTenantInvoicingSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task PdfLogo_ShouldBeTheOneTheBusinessUploaded_AndNoneForOneWithout()
+    {
+        const string path = "/api/v1/auth/my-tenant/logo";
+        var mine = await _api.SignUpAsync("logo-pdf-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("logo-pdf-b", TwoBusinessesApi.FoodBusiness);
+        var logos = _api.CfdiPdfLogos;
+        try
+        {
+            using var form = new MultipartFormDataContent();
+            var png = new ByteArrayContent(TwoBusinessesApi.TinyPng);
+            png.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            form.Add(png, "file", "logo.png");
+            Assert.Equal(HttpStatusCode.OK, (await mine.Client.PostAsync(path, form)).StatusCode);
+
+            // The logo of Configuración › Mi negocio, read from the API's storage as PNG: only for its business.
+            var logo = await logos.PngAsync(mine.TenantId, CancellationToken.None);
+            Assert.NotNull(logo);
+            Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, logo[..4]);
+            Assert.Null(await logos.PngAsync(theirs.TenantId, CancellationToken.None));
+        }
+        finally
+        {
+            // The pictures go to the API's public folder: the suite leaves nothing behind.
+            Assert.Equal(HttpStatusCode.NoContent, (await mine.Client.DeleteAsync(path)).StatusCode);
+        }
+
+        // Without a logo, the PDF goes without one.
+        Assert.Null(await logos.PngAsync(mine.TenantId, CancellationToken.None));
+    }
+
+    [SqlServerFact]
     public async Task Invoices_OfAnotherBusiness_ShouldBeInvisible_AndUntouchable()
     {
         var mine = await _api.SignUpAsync("facturas-a", TwoBusinessesApi.FoodBusiness);

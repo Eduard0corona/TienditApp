@@ -101,6 +101,8 @@ public class GlobalInvoicingFlowTests
         var xml = await book.DownloadAsync(issued.Value.Id, OrderInvoiceFileKind.Xml);
         Assert.True(xml.IsSuccess, xml.Error);
         Assert.Equal($"F-1_{issued.Value.Uuid}.xml", xml.Value.FileName);
+        // Its PDF carries the logo of its business (Fase 28L).
+        Assert.Equal(book.Tenant.Id, Assert.Single(book.Gateway.PdfTenants.Distinct()));
     }
 
     [Fact]
