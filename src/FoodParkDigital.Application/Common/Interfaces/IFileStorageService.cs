@@ -32,4 +32,10 @@ public interface IFileStorageService
     /// rules as <see cref="DeleteAsync"/> and without touching the storage.
     /// </summary>
     bool IsStoredIn(string fileUrl, string folder);
+
+    /// <summary>
+    /// Opens a file this storage keeps inside <paramref name="folder"/>, by the same rules as <see cref="DeleteAsync"/>; null
+    /// when the URL resolves outside that folder or the file is not there.
+    /// </summary>
+    Task<Stream?> OpenReadAsync(string fileUrl, string folder, CancellationToken cancellationToken = default);
 }

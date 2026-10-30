@@ -421,6 +421,8 @@ public class PaymentComplementFlowTests
         Assert.Equal(("application/xml", $"P-1_{complement.Uuid}.xml"), (xml.Value.ContentType, xml.Value.FileName));
         Assert.Equal("application/pdf", pdf.Value.ContentType);
         Assert.StartsWith($"invoices/{book.Tenant.Id}/", complement.XmlFileKey);
+        // Its PDF carries the logo of its business (Fase 28L).
+        Assert.Equal(book.Tenant.Id, Assert.Single(book.Gateway.PdfTenants.Distinct()));
     }
 
     /// <summary>The base and the IVA a complement covers of its invoice.</summary>

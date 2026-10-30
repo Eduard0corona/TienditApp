@@ -1,4 +1,6 @@
+using Azure.Storage.Blobs;
 using FoodParkDigital.Infrastructure.Services;
+using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -116,15 +118,73 @@ public class AzureBlobFileStorageServiceTests
         Assert.False(storage.IsStoredIn($"{container}/{OwnFolder}/../{_otherTenantId}/image", OwnFolder));
     }
 
-    private static AzureBlobFileStorageService Storage() => new(
+    [Fact]
+    public async Task OpenReadAsync_ShouldFollowTheRulesOfDeleting_BeforeAnyRequest()
+    {
+        var storage = Storage();
+        var container = "http://127.0.0.1:10000/devstoreaccount1/uploads";
+
+        Assert.Null(await storage.OpenReadAsync($"{container}/products/{_otherTenantId}/image_md.webp", OwnFolder));
+        Assert.Null(await storage.OpenReadAsync($"{container}/{OwnFolder}/../{_otherTenantId}/image_md.webp", OwnFolder));
+        Assert.Null(await storage.OpenReadAsync($"https://otracuenta.blob.core.windows.net/uploads/{OwnFolder}/image_md.webp", OwnFolder));
+    }
+
+    internal static AzureBlobFileStorageService Storage(string connectionString = "UseDevelopmentStorage=true", string container = "uploads") => new(
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["FileStorage:AzureBlob:ConnectionString"] = "UseDevelopmentStorage=true",
-            ["FileStorage:AzureBlob:ContainerName"] = "uploads"
+            ["FileStorage:AzureBlob:ConnectionString"] = connectionString,
+            ["FileStorage:AzureBlob:ContainerName"] = container,
+            ["FileStorage:AzureBlob:AutoCreateContainer"] = "true"
         }).Build(),
         NullLogger<AzureBlobFileStorageService>.Instance);
 
     private string Resolve(string template) => template
         .Replace("{own}", _ownTenantId.ToString())
         .Replace("{other}", _otherTenantId.ToString());
+}
+
+/// <summary>Reading a file of the public container (the logo of the CFDI PDF) against a Blob Storage endpoint (Azurite in CI).</summary>
+public sealed class AzureBlobFileStorageServiceAzuriteTests : IAsyncLifetime
+{
+    private readonly Guid _ownTenantId = Guid.NewGuid();
+    private readonly Guid _otherTenantId = Guid.NewGuid();
+    private readonly string _containerName = $"uploads-{Guid.NewGuid():N}"[..20];
+
+    private string OwnFolder => $"logos/{_ownTenantId}";
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public async Task DisposeAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(AzureBlobTestAccount.ConnectionString))
+            await new BlobServiceClient(AzureBlobTestAccount.ConnectionString).GetBlobContainerClient(_containerName).DeleteIfExistsAsync();
+    }
+
+    [AzureBlobFact]
+    public async Task OpenReadAsync_ShouldRead_WhatUploadAsyncStoredInTheFolder()
+    {
+        var storage = Storage();
+        var url = await storage.UploadAsync(new MemoryStream([1, 2, 3]), "logo_md.webp", "image/webp", OwnFolder);
+
+        await using var content = await storage.OpenReadAsync(url, OwnFolder);
+
+        Assert.NotNull(content);
+        using var copy = new MemoryStream();
+        await content.CopyToAsync(copy);
+        Assert.Equal([1, 2, 3], copy.ToArray());
+    }
+
+    [AzureBlobFact]
+    public async Task OpenReadAsync_ShouldGiveNull_ForAMissingBlob_AndForOneOfAnotherBusiness()
+    {
+        var storage = Storage();
+        var otherUrl = await storage.UploadAsync(new MemoryStream([9]), "logo_md.webp", "image/webp", $"logos/{_otherTenantId}");
+        var missingUrl = otherUrl.Replace(_otherTenantId.ToString(), _ownTenantId.ToString());
+
+        Assert.Null(await storage.OpenReadAsync(missingUrl, OwnFolder));
+        Assert.Null(await storage.OpenReadAsync(otherUrl, OwnFolder));
+    }
+
+    private AzureBlobFileStorageService Storage() =>
+        AzureBlobFileStorageServiceTests.Storage(AzureBlobTestAccount.ConnectionString!, _containerName);
 }

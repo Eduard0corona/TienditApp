@@ -286,6 +286,8 @@ public class CfdiEmailFlowTests
         await book.DeliverAsync(again.Value.Id);
         Assert.Equal([".xml", ".pdf"], book.Email.Documents[^1].Attachments.Select(a => Path.GetExtension(a.FileName)));
         Assert.Equal(1, book.Gateway.PdfRenders);
+        // Rendered from the outbox, without a request of the business: with its logo all the same (Fase 28L).
+        Assert.Equal(book.Tenant.Id, Assert.Single(book.Gateway.PdfTenants.Distinct()));
     }
 
     [Fact]

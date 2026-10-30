@@ -610,14 +610,14 @@ public class GetOrderInvoiceFileQueryHandler : IRequestHandler<GetOrderInvoiceFi
     {
         var invoice = await _context.OrderInvoices.AsNoTracking()
             .Where(i => i.Id == request.InvoiceId)
-            .Select(i => new { i.OrderId, i.Serie, i.Folio, i.Uuid, i.XmlFileKey, i.PdfFileKey })
+            .Select(i => new { i.TenantId, i.OrderId, i.Serie, i.Folio, i.Uuid, i.XmlFileKey, i.PdfFileKey })
             .FirstOrDefaultAsync(cancellationToken);
         if (invoice?.XmlFileKey is null || !await OrderInvoicing.SeesOrderAsync(_context, invoice.OrderId, cancellationToken))
             return Result.Failure<PrivateFileDownload>(NotFoundMessage);
 
         return await InvoiceFiles.DownloadAsync(
             _storage, _gateway, _logger, request.InvoiceId, $"{invoice.Serie}-{invoice.Folio}_{invoice.Uuid}",
-            invoice.XmlFileKey, invoice.PdfFileKey, request.Kind, cancellationToken);
+            invoice.XmlFileKey, invoice.PdfFileKey, request.Kind, invoice.TenantId, cancellationToken);
     }
 }
 
@@ -633,6 +633,7 @@ internal static class InvoiceFiles
         string xmlFileKey,
         string? pdfFileKey,
         OrderInvoiceFileKind kind,
+        Guid tenantId,
         CancellationToken cancellationToken)
     {
         if (kind == OrderInvoiceFileKind.Xml)
@@ -654,7 +655,7 @@ internal static class InvoiceFiles
             return Result.Failure<PrivateFileDownload>(GetOrderInvoiceFileQueryHandler.NotFoundMessage);
         try
         {
-            var pdf = await gateway.RenderPdfAsync(stampedXml, cancellationToken);
+            var pdf = await gateway.RenderPdfAsync(stampedXml, tenantId, cancellationToken);
             return Result.Success(new PrivateFileDownload(new MemoryStream(pdf), "application/pdf", fileName + ".pdf"));
         }
         catch (Exception ex) when (ex is InvoicingGatewayUnavailableException or InvoicingGatewayRefusedException)

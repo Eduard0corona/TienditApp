@@ -59,6 +59,13 @@ export const FACTURACION_PRUEBAS_POR_VENCER = asOption(settings({
 }));
 /** Its customers invoice their tickets online (Fase 28F): the page's address shows under the switch. */
 export const FACTURACION_AUTOFACTURA = asOption(settings({ ...READY, selfInvoicing: true }));
+/** With the logo of Configuración › Negocio, which goes on the PDF of each CFDI (Fase 28L, ADR 0057). */
+export const FACTURACION_CON_LOGO = asOption((data: DemoData) => {
+  data.invoicing = READY;
+  const logo = '/visual-img/logo.svg';
+  data.tenant.logoUrl = logo;
+  data.tenant.logoImages = { original: logo, large: logo, medium: logo, small: logo, thumbnail: logo };
+});
 /** The platform has not set its PAC up. */
 export const FACTURACION_NO_DISPONIBLE = asOption(settings({ ...READY, available: false, certificate: undefined, ready: false }));
 

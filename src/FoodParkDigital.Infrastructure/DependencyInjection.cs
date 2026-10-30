@@ -217,6 +217,7 @@ public static class DependencyInjection
         services.AddSingleton<IOnlinePaymentGateway, MercadoPagoGateway>();
         // Invoicing (Fase 28A, ADR 0045): offered only when the SwSapien section has the platform's account.
         services.Configure<SwSapienOptions>(configuration.GetSection(SwSapienOptions.SectionName));
+        services.AddSingleton<ICfdiPdfLogos, TenantCfdiPdfLogos>();
         services.AddSingleton<IInvoicingGateway, SwSapienGateway>();
         services.AddScoped<IWhatsAppService, WhatsAppService>();
         services.AddSingleton<ITwoFactorService, TwoFactorService>();

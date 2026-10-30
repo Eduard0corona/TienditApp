@@ -425,14 +425,14 @@ public class GetCreditNoteFileQueryHandler : IRequestHandler<GetCreditNoteFileQu
     {
         var note = await _context.CreditNotes.AsNoTracking()
             .Where(n => n.Id == request.CreditNoteId)
-            .Select(n => new { n.OrderId, n.Serie, n.Folio, n.Uuid, n.XmlFileKey, n.PdfFileKey })
+            .Select(n => new { n.TenantId, n.OrderId, n.Serie, n.Folio, n.Uuid, n.XmlFileKey, n.PdfFileKey })
             .FirstOrDefaultAsync(cancellationToken);
         if (note?.XmlFileKey is null || !await OrderInvoicing.SeesOrderAsync(_context, note.OrderId, cancellationToken))
             return Result.Failure<PrivateFileDownload>(GetOrderInvoiceFileQueryHandler.NotFoundMessage);
 
         return await InvoiceFiles.DownloadAsync(
             _storage, _gateway, _logger, request.CreditNoteId, $"{note.Serie}-{note.Folio}_{note.Uuid}",
-            note.XmlFileKey, note.PdfFileKey, request.Kind, cancellationToken);
+            note.XmlFileKey, note.PdfFileKey, request.Kind, note.TenantId, cancellationToken);
     }
 }
 

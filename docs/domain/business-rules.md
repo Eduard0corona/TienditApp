@@ -543,7 +543,12 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **Cancelar** (dueños y administradores): con motivo 02 (errores sin relación) o 03 (la venta no se llevó a cabo); se pide primero al PAC y, si se niega, nada cambia. Si el SAT pide la aceptación del receptor, queda «Cancelándose» y el worker pregunta cada 30 minutos: cancelada, o «Timbrada» otra vez si el receptor la rechazó. Una cancelada deja facturar el pedido otra vez con factura y folio nuevos. Nunca se borra una factura.
 - **El CSD** (dueños y administradores, Configuración › Facturación): `.cer`, `.key` y la contraseña de la llave. TienditApp revisa que sea de sello, vigente, del RFC de Mi negocio y que la llave corresponda; el PAC lo guarda y TienditApp solo su número, RFC y vigencia. Los archivos y la contraseña nunca se guardan ni se registran. Avisa 30 días antes de vencer; reemplazarlo o quitarlo pide al PAC que olvide el anterior. Un CSD es de un solo negocio de TienditApp: si otro ya lo usa, se rechaza (dos negocios del mismo RFC tramitan uno cada uno).
 - **Acceso:** timbrar, volver a pedir, ver y descargar el XML y el PDF, quien gestiona los pedidos (`ManageOrders`); cancelar, el CSD y la serie, dueños y administradores. Otro negocio recibe 404.
-- **Sin** envío por WhatsApp, logo en el PDF, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D, el envío por correo en la 28E, la autofactura del cliente en la 28F y la sustitución con motivo 01 en la 28G (siguientes secciones de facturas).
+- **El PDF** lo arma el PAC con su plantilla genérica de CFDI 4.0 (la de Pagos 2.0 para un complemento) y, desde la Fase 28L ([ADR 0057](../adr/0057-cfdi-pdf-logo.md)), con el logo de Configuración › Negocio:
+  - el mediano, como PNG sin metadatos de hasta 400 × 200, y solo de la carpeta del negocio;
+  - en los cuatro tipos de CFDI, al timbrar, al descargar uno que no tenía PDF y en su correo;
+  - sin logo, si no se puede leer o si el PAC no lo toma, el PDF sale sin él: nunca falla por eso;
+  - los PDF que ya se guardaron no cambian: un logo nuevo solo sale en los que se arman después. Configuración › Facturación dice si el PDF lleva logo, o dónde subirlo.
+- **Sin** envío por WhatsApp, otras monedas ni retenciones. La factura en parcialidades y sus complementos de pago llegaron en la Fase 28C, las notas de crédito en la 28D, el envío por correo en la 28E, la autofactura del cliente en la 28F, la sustitución con motivo 01 en la 28G (siguientes secciones de facturas) y el logo en el PDF en la 28L.
 
 ## La factura global (Fase 28B)
 

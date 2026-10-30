@@ -596,14 +596,14 @@ public class GetGlobalInvoiceFileQueryHandler : IRequestHandler<GetGlobalInvoice
     {
         var invoice = await _context.GlobalInvoices.AsNoTracking()
             .Where(i => i.Id == request.InvoiceId)
-            .Select(i => new { i.Serie, i.Folio, i.Uuid, i.XmlFileKey, i.PdfFileKey })
+            .Select(i => new { i.TenantId, i.Serie, i.Folio, i.Uuid, i.XmlFileKey, i.PdfFileKey })
             .FirstOrDefaultAsync(cancellationToken);
         if (invoice?.XmlFileKey is null)
             return Result.Failure<PrivateFileDownload>(GetOrderInvoiceFileQueryHandler.NotFoundMessage);
 
         return await InvoiceFiles.DownloadAsync(
             _storage, _gateway, _logger, request.InvoiceId, $"{invoice.Serie}-{invoice.Folio}_{invoice.Uuid}",
-            invoice.XmlFileKey, invoice.PdfFileKey, request.Kind, cancellationToken);
+            invoice.XmlFileKey, invoice.PdfFileKey, request.Kind, invoice.TenantId, cancellationToken);
     }
 }
 

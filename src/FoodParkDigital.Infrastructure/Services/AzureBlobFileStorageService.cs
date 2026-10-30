@@ -1,3 +1,4 @@
+using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using FoodParkDigital.Application.Common.Interfaces;
@@ -92,6 +93,21 @@ public class AzureBlobFileStorageService : IFileStorageService
 
     public bool IsStoredIn(string fileUrl, string folder) =>
         TryResolveBlobName(_containerClient.Uri, fileUrl, folder, out _);
+
+    public async Task<Stream?> OpenReadAsync(string fileUrl, string folder, CancellationToken cancellationToken = default)
+    {
+        if (!TryResolveBlobName(_containerClient.Uri, fileUrl, folder, out var blobName))
+            return null;
+        try
+        {
+            var content = await _containerClient.GetBlobClient(blobName).DownloadContentAsync(cancellationToken);
+            return content.Value.Content.ToStream();
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
 
     private async Task DeleteBlobAsync(string blobName, CancellationToken cancellationToken)
     {

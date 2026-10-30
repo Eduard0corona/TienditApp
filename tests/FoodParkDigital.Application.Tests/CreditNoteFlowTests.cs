@@ -238,6 +238,8 @@ public class CreditNoteFlowTests
         var pdf = await book.DownloadCreditNoteAsync(note.Id, OrderInvoiceFileKind.Pdf);
         Assert.Equal(("application/xml", $"NC-1_{note.Uuid}.xml"), (xml.Value.ContentType, xml.Value.FileName));
         Assert.Equal("application/pdf", pdf.Value.ContentType);
+        // Its PDF, like its invoice's, carries the logo of its business (Fase 28L).
+        Assert.Equal(book.Tenant.Id, Assert.Single(book.Gateway.PdfTenants.Distinct()));
 
         var validator = new CancelCreditNoteCommandValidator();
         Assert.False(validator.Validate(new CancelCreditNoteCommand(note.Id, CfdiCancellationMotive.ErrorsWithReplacement)).IsValid);

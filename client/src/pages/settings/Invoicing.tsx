@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
+import PhotoOrInitial from '../../components/common/PhotoOrInitial';
 import { getApiErrorMessage } from '../../api/errors';
 import {
   useChangeInvoiceSerie,
@@ -12,8 +13,10 @@ import {
 } from '../../api/invoicing';
 import { selfInvoiceUrl } from '../../api/selfInvoiceApi';
 import { useConfirm } from '../../hooks/useConfirm';
+import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { formatDate } from '../../utils/dates';
+import './Invoicing.css';
 
 // The .cer and .key the SAT gives weigh a couple of kilobytes; the API refuses anything past 16 KB.
 const MAX_FILE_BYTES = 16 * 1024;
@@ -77,6 +80,9 @@ export default function Invoicing() {
                     TienditApp arma el CFDI 4.0 con los importes de la venta y un PAC autorizado por el SAT lo sella con tu CSD y
                     lo timbra. Descargas el XML (la factura) y el PDF.
                   </li>
+                  <li>
+                    El PDF lleva el logo que tenga tu negocio cuando se arma. Los PDF que ya se armaron se quedan como están.
+                  </li>
                   <li>Si el PAC no responde, TienditApp lo vuelve a pedir con la misma solicitud: nunca timbra dos veces.</li>
                   <li>
                     El dueño o un administrador cancela una factura con su motivo. Si el SAT pide que el cliente acepte, la factura
@@ -103,6 +109,10 @@ export default function Invoicing() {
 }
 
 function StatusCard({ data }: { data: InvoicingSettings }) {
+  // The logo of Configuración › Negocio goes on the PDF of each CFDI (Fase 28L, ADR 0057).
+  const { tenant } = useTenant();
+  const logo = tenant?.logoImages?.thumbnail || tenant?.logoImages?.small;
+
   return (
     <div className="card">
       <div className="card-body">
@@ -122,6 +132,17 @@ function StatusCard({ data }: { data: InvoicingSettings }) {
           <dd className="col-sm-7">{data.fiscalRegime || '—'}</dd>
           <dt className="col-sm-5">Código postal fiscal</dt>
           <dd className="col-sm-7">{data.postalCode || '—'}</dd>
+          <dt className="col-sm-5">Logo en el PDF</dt>
+          <dd className="col-sm-7">
+            {logo ? (
+              <span className="d-inline-flex align-items-center gap-2">
+                <PhotoOrInitial src={logo} name={tenant?.name ?? ''} className="inv-pdf-logo" loading="eager" />
+                El de tu negocio
+              </span>
+            ) : (
+              <>Sin logo. <Link to="/settings/business">Sube el logo de tu negocio</Link></>
+            )}
+          </dd>
         </dl>
         {data.missingData.length > 0 && (
           <div className="alert alert-warning small mb-0">

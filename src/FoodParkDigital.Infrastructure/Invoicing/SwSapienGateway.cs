@@ -28,7 +28,9 @@ public sealed class SwSapienGateway : IInvoicingGateway
     public const string HttpClientName = "SwSapien";
     /// <summary>The SAT's status service and the signed links to SW's storage, with a breaker of their own.</summary>
     public const string SatHttpClientName = "SatCfdiStatus";
+    // SW's generic templates of CFDI 4.0 (the only ones that take a logo): payments have their own (Fase 28L).
     private const string PdfTemplate = "cfdi40";
+    private const string PaymentPdfTemplate = "payment20";
     private const string ProductionStatusUrl = "https://consultaqr.facturaelectronica.sat.gob.mx/ConsultaCFDIService.svc";
     private const string TestStatusUrl = "https://api.test.sw.com.mx/ConsultaCFDIService.svc";
     private static readonly TimeSpan TokenMargin = TimeSpan.FromMinutes(5);
@@ -40,16 +42,22 @@ public sealed class SwSapienGateway : IInvoicingGateway
     private readonly SwSapienOptions _options;
     private readonly IDateTimeProvider _clock;
     private readonly ILogger<SwSapienGateway> _logger;
+    private readonly ICfdiPdfLogos _logos;
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
     private string? _token;
     private DateTimeOffset _tokenExpiresAt;
 
     public SwSapienGateway(
-        IHttpClientFactory httpClientFactory, IOptions<SwSapienOptions> options, IDateTimeProvider clock, ILogger<SwSapienGateway> logger)
+        IHttpClientFactory httpClientFactory,
+        IOptions<SwSapienOptions> options,
+        IDateTimeProvider clock,
+        ICfdiPdfLogos logos,
+        ILogger<SwSapienGateway> logger)
     {
         _httpClientFactory = httpClientFactory;
         _options = options.Value;
         _clock = clock;
+        _logos = logos;
         _logger = logger;
     }
 
@@ -130,19 +138,65 @@ public sealed class SwSapienGateway : IInvoicingGateway
         throw Unavailable(response, error, "stamp");
     }
 
-    public async Task<byte[]> RenderPdfAsync(string stampedXml, CancellationToken cancellationToken)
+    public async Task<byte[]> RenderPdfAsync(string stampedXml, Guid tenantId, CancellationToken cancellationToken)
     {
-        var body = new JsonObject { ["xmlContent"] = stampedXml, ["templateId"] = PdfTemplate };
-        using var response = await SendAsync(
-            HttpMethod.Post, $"{ApiUrl}/pdf/v1/api/GeneratePdf", "pdf", JsonContent.Create(body), cancellationToken: cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            throw Unavailable(response, default, "pdf");
+        var template = PdfTemplateFor(stampedXml);
+        var logo = await _logos.PngAsync(tenantId, cancellationToken);
+        using (var response = await RequestPdfAsync(stampedXml, template, logo, cancellationToken))
+        {
+            if (response.IsSuccessStatusCode)
+                return await PdfOfAsync(response, cancellationToken);
+            // SW refusing what the Fase 28L adds (the logo, the payments template) never leaves the CFDI without its PDF: the
+            // request of before goes once more. SW failing or not answering is not a refusal, and is not asked twice.
+            if (!IsRefusal(response.StatusCode) || (logo is null && template == PdfTemplate))
+                throw Unavailable(response, default, "pdf");
+            _logger.LogWarning("SW refused the PDF of business {TenantId} with its logo or its template ({Status}): it goes without them",
+                tenantId, (int)response.StatusCode);
+        }
 
+        using var plain = await RequestPdfAsync(stampedXml, PdfTemplate, null, cancellationToken);
+        if (!plain.IsSuccessStatusCode)
+            throw Unavailable(plain, default, "pdf");
+        return await PdfOfAsync(plain, cancellationToken);
+    }
+
+    private Task<HttpResponseMessage> RequestPdfAsync(string stampedXml, string template, byte[]? logo, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject { ["xmlContent"] = stampedXml, ["templateId"] = template };
+        // The generic template takes the logo in base64; without one, it leaves its box empty.
+        if (logo is not null)
+            body["logo"] = Convert.ToBase64String(logo);
+        return SendAsync(
+            HttpMethod.Post, $"{ApiUrl}/pdf/v1/api/GeneratePdf", "pdf", JsonContent.Create(body), cancellationToken: cancellationToken);
+    }
+
+    // What SW answers about the request itself (not the platform's account, a timeout nor too many requests).
+    private static bool IsRefusal(HttpStatusCode status) =>
+        (int)status is >= 400 and < 500
+        && status is not (HttpStatusCode.Unauthorized or HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests);
+
+    private static async Task<byte[]> PdfOfAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
         var data = await ReadDataAsync(response, cancellationToken);
         var pdf = Text(data?["contentB64"]);
         if (string.IsNullOrWhiteSpace(pdf))
             throw new InvoicingGatewayUnavailableException("El PAC no entregó el PDF de la factura.");
         return Convert.FromBase64String(pdf);
+    }
+
+    /// <summary>The template of a payment complement (TipoDeComprobante P) is SW's of Pagos 2.0; the rest, CFDI 4.0's.</summary>
+    internal static string PdfTemplateFor(string stampedXml)
+    {
+        try
+        {
+            return XDocument.Parse(stampedXml).Root?.Attribute("TipoDeComprobante")?.Value == CfdiDocument.PaymentVoucherType
+                ? PaymentPdfTemplate
+                : PdfTemplate;
+        }
+        catch (XmlException)
+        {
+            return PdfTemplate;
+        }
     }
 
     public const string ReplacementNotRelatedMessage =
