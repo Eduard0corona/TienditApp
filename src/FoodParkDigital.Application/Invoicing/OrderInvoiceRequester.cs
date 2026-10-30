@@ -28,6 +28,9 @@ internal sealed record OrderInvoiceRequest(
     /// <summary>Why this one cannot go on with the draft and the order it was built from, checked before the folio.</summary>
     public Func<CfdiDraftDto, Order, string?>? Check { get; init; }
 
+    /// <summary>The WhatsApp its CFDI go to (Fase 28M), already normalized and checked; none, nowhere.</summary>
+    public string? ReceiverWhatsApp { get; init; }
+
     /// <summary>What else is saved with the invoice (Pedidos keeps the fiscal data in the customer).</summary>
     public Func<Order, OrderInvoice, Task>? BeforeSave { get; init; }
 
@@ -124,6 +127,7 @@ internal sealed class OrderInvoiceRequester
             tenantId, order.Id, serie, folio, receiver, draft.PaymentForm, document.ToJson(),
             draft.SubTotal, draft.TotalTransferred, draft.Total, request.RequestedByUserId, now, draft.PaymentMethod);
         invoice.SendTo(request.ReceiverEmail);
+        invoice.SendWhatsAppTo(request.ReceiverWhatsApp);
 
         try
         {

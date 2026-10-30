@@ -144,6 +144,8 @@ public class OutgoingMessage : AuditableEntity, ITenantScoped
         return new OutgoingMessage(
             cfdi.TenantId, MessagePurpose.CfdiDocument, phone, recipientName, body, providerTemplateName, languageCode, parameters, now)
         {
+            // Its link works from now on: it does not wait for the save to say when it was queued.
+            CreatedAt = now,
             CfdiDocument = document,
             CfdiId = cfdi.Id,
             OrderInvoiceId = orderInvoiceId,

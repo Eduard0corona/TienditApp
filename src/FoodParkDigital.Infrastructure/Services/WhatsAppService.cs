@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace FoodParkDigital.Infrastructure.Services;
 
 /// <summary>Sends with the WhatsApp of the business in scope, through the single Meta client.</summary>
-public class WhatsAppService : IWhatsAppService
+public class WhatsAppService : IWhatsAppService, IWhatsAppDocumentSender
 {
     public const string NotConfiguredError = "WhatsApp no está configurado para este negocio.";
 
@@ -55,6 +55,34 @@ public class WhatsAppService : IWhatsAppService
             return MessageSendResult.Failed(NotConfiguredError, isTransient: false);
 
         return Record(tenantId, await _client.SendTextAsync(account, phoneNumber, message, cancellationToken));
+    }
+
+    /// <summary>
+    /// Uploads the document and sends it (Fase 28M): with the template, in its document header; without one, with its
+    /// caption. A failed upload is the message's outcome, transient or not.
+    /// </summary>
+    public async Task<MessageSendResult> SendDocumentAsync(
+        Guid tenantId,
+        string phoneNumber,
+        WhatsAppDocument document,
+        string caption,
+        string? templateName,
+        string languageCode,
+        string[] parameters,
+        CancellationToken cancellationToken = default)
+    {
+        var account = await GetAccountAsync(tenantId, cancellationToken);
+        if (account is null)
+            return MessageSendResult.Failed(NotConfiguredError, isTransient: false);
+
+        var upload = await _client.UploadMediaAsync(account, document, cancellationToken);
+        if (upload.IsFailure)
+            return Record(tenantId, upload);
+
+        var uploaded = new WhatsAppMediaDocument(upload.ProviderMessageId!, document.FileName);
+        return Record(tenantId, templateName is null
+            ? await _client.SendDocumentAsync(account, phoneNumber, uploaded, caption, cancellationToken)
+            : await _client.SendTemplateAsync(account, phoneNumber, templateName, languageCode, parameters, cancellationToken, uploaded));
     }
 
     /// <summary>

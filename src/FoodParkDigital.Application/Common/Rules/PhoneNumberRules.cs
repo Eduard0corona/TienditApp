@@ -32,4 +32,12 @@ public static class PhoneNumberRules
 
         return phones.TryNormalizeToE164(typed, "MX", out phoneNormalized);
     }
+
+    /// <summary>
+    /// A phone typed by a person of the business for someone else (the WhatsApp of an invoice, Fase 28M), in E.164, with the
+    /// rule of an account's phone: a Mexican number without its international prefix, any other with it.
+    /// </summary>
+    public static bool TryNormalizeTypedPhone(
+        IPhoneNormalizationService phones, string? rawPhone, [NotNullWhen(true)] out string? phoneNormalized)
+        => TryNormalizeSignUpPhone(phones, rawPhone, out phoneNormalized);
 }

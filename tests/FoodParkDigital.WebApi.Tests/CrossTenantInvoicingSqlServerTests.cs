@@ -826,6 +826,79 @@ public sealed class CrossTenantInvoicingSqlServerTests
         Assert.Empty((await theirs.Client.GetFromJsonAsync<JsonElement>("/api/v1/customers?search=Karla")).GetProperty("items").EnumerateArray());
     }
 
+    [SqlServerFact]
+    public async Task WhatsApp_ShouldSendOnlyMyCfdi_AndItsLinkShouldOpenOnlyThatCfdi()
+    {
+        var mine = await _api.SignUpAsync("whatsapp-factura-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("whatsapp-factura-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        // My WhatsApp is connected; theirs is not. The messaging worker is off in the suite: nothing reaches Meta.
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync("/api/v1/auth/my-tenant/whatsapp", new
+        {
+            isEnabled = true,
+            accessToken = "token-de-prueba",
+            phoneNumberId = $"9{Random.Shared.NextInt64(10_000_000_000L, 99_999_999_999L)}",
+            wabaId = "123456789012345"
+        }));
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "WhatsApp A"), phone: "5512345678", name: "Karla");
+        var (theirOrder, _) = await PaidOrderAsync(theirs.Client, await ProductAsync(theirs.Client, "WhatsApp B"), phone: "5512345678", name: "Karla");
+
+        // Without its WhatsApp connected, a business does not invoice to a WhatsApp.
+        var notConnected = await theirs.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{theirOrder}/invoices", new { receiver = Receiver, saveToCustomer = false, receiverWhatsApp = "5512345678" });
+        Assert.Equal(HttpStatusCode.BadRequest, notConnected.StatusCode);
+        Assert.Contains("Conecta el WhatsApp", await notConnected.Content.ReadAsStringAsync());
+
+        // Mine: the order's phone is proposed, and the stamp queues the PDF to it.
+        var invoicing = await mine.Client.GetFromJsonAsync<JsonElement>($"/api/v1/invoicing/orders/{order}");
+        Assert.Equal((true, "+525512345678"), (invoicing.GetProperty("whatsAppConnected").GetBoolean(), invoicing.GetProperty("proposedWhatsApp").GetString()));
+        var invoice = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false, receiverWhatsApp = "55 1234 5678" }));
+        var invoiceId = invoice.GetProperty("id").GetGuid();
+        Assert.Equal("+525512345678", invoice.GetProperty("receiverWhatsApp").GetString());
+        var queued = await _api.QueryAsync(mine.TenantId, db => db.OutgoingMessages.SingleAsync(m => m.CfdiId == invoiceId));
+        Assert.Equal(("+525512345678", (Guid?)null), (queued.Phone, queued.RequestedByUserId));
+
+        // The other owner, even with the header of my business, cannot send it.
+        var url = $"/api/v1/invoicing/invoices/{invoiceId}/whatsapp";
+        var body = new { phone = "5598765432", useForInvoice = true };
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsJsonAsync(url, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(mine, HttpMethod.Post, url, body))).StatusCode);
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.OutgoingMessages.Where(m => m.CfdiId != null).ToListAsync()));
+
+        // I send it again to another number, which is kept for what comes next of the invoice.
+        var sent = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(url, body));
+        Assert.Equal(("+525598765432", false), (sent.GetProperty("phone").GetString(), sent.GetProperty("byTienditApp").GetBoolean()));
+        invoicing = await mine.Client.GetFromJsonAsync<JsonElement>($"/api/v1/invoicing/orders/{order}");
+        var mineInvoice = invoicing.GetProperty("invoices")[0];
+        Assert.Equal("+525598765432", mineInvoice.GetProperty("receiverWhatsApp").GetString());
+        Assert.Equal(2, mineInvoice.GetProperty("whatsApps").GetArrayLength());
+
+        // Its link, without an account and whatever header comes along, opens that CFDI and downloads its XML.
+        var anonymous = _api.AnonymousClient();
+        var page = await TwoBusinessesApi.ReadAsync(await anonymous.PostAsJsonAsync("/api/v1/public/cfdi", new { token = queued.LinkToken }));
+        Assert.Equal(("F-1", true, invoice.GetProperty("uuid").GetString()), (
+            page.GetProperty("number").GetString(), page.GetProperty("stands").GetBoolean(), page.GetProperty("uuid").GetString()));
+        var xml = await anonymous.PostAsJsonAsync("/api/v1/public/cfdi/files", new { token = queued.LinkToken, kind = (int)OrderInvoiceFileKind.Xml });
+        Assert.Equal(HttpStatusCode.OK, xml.StatusCode);
+        Assert.Contains(invoice.GetProperty("uuid").GetString()!, await xml.Content.ReadAsStringAsync());
+        Assert.True(xml.Headers.CacheControl is { Private: true, NoStore: true });
+        Assert.Equal(HttpStatusCode.OK, (await theirs.Client.SendAsync(AsOther(theirs, HttpMethod.Post, "/api/v1/public/cfdi",
+            new { token = queued.LinkToken }))).StatusCode);
+        // Another link, one changed by a letter, or one of another shape finds nothing, the same for all.
+        foreach (var token in new[] { new string('A', 43), queued.LinkToken![..42] + (queued.LinkToken[42] == 'A' ? 'B' : 'A'), "corto" })
+            Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/v1/public/cfdi", new { token })).StatusCode);
+
+        // Once its cancellation is asked for, the link says so and no longer downloads it.
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/cancel", new { motive = (int)CfdiCancellationMotive.NotCarriedOut }));
+        page = await TwoBusinessesApi.ReadAsync(await anonymous.PostAsJsonAsync("/api/v1/public/cfdi", new { token = queued.LinkToken }));
+        Assert.False(page.GetProperty("stands").GetBoolean());
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync(
+            "/api/v1/public/cfdi/files", new { token = queued.LinkToken, kind = (int)OrderInvoiceFileKind.Pdf })).StatusCode);
+    }
+
     /// <summary>The business's fiscal data in Mi negocio and a CSD of its RFC in force, as if uploaded.</summary>
     private Task ReadyToInvoiceAsync(Guid tenantId, string rfc)
         => _api.QueryAsync(tenantId, async db =>

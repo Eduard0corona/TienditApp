@@ -100,6 +100,10 @@ public class TenantFilterBypassAllowlistTests
         // The tracking link of an online order names one order of the platform before any business is in context: only
         // its business and date are read, and the order itself inside that business (ADR 0023).
         ["src/FoodParkDigital.Application/Orders/Queries/GetPublicOrderTrackingQuery.cs"] = 1,
+        // The link of a CFDI's WhatsApp message names one message of the platform before any business is in context: only
+        // its business, its CFDI and when it was queued are read, and the CFDI itself inside that business (Fase 28M,
+        // ADR 0058).
+        ["src/FoodParkDigital.Application/Invoicing/PublicCfdiFeature.cs"] = 1,
         // A customer account's own appointments booked online, filtered by its user id (the list, and the business of
         // the one it cancels); and the link of one, which names its business before any is in context: only that business
         // and its time are read, and the appointment itself inside that business (Fase 24D, ADR 0025).

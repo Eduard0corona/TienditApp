@@ -14,7 +14,8 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// the CFDI 4.0 invoice of an order, stamped through the platform's PAC, downloaded and cancelled; the global invoice of a
 /// period to the general public (Fase 28B, ADR 0046), for owners and admins; the payment complements of the payments of an
 /// invoice in installments (Fase 28C, ADR 0047); the credit notes of the refunds and write-offs of an invoiced order
-/// (Fase 28D, ADR 0048); the emails of those CFDI to the customer (Fase 28E, ADR 0049); self-invoicing, turned on here and
+/// (Fase 28D, ADR 0048); the emails of those CFDI to the customer (Fase 28E, ADR 0049) and their WhatsApp messages (Fase 28M,
+/// ADR 0058); self-invoicing, turned on here and
 /// printed on each ticket (Fase 28F, ADR 0050); the CFDI issued in a month, with their XML for the accountant
 /// (Fase 28H, ADR 0052), for owners and admins; and the ones that stayed «Timbrando» past the PAC's window, checked in its
 /// portal (Fase 28K, ADR 0056).
@@ -88,6 +89,15 @@ public class InvoicingController : ControllerBase
     public async Task<ActionResult<OrderInvoicingDto>> GetOrderInvoicing(Guid orderId, CancellationToken cancellationToken)
         => Ok(await _mediator.Send(new GetOrderInvoicingQuery(orderId), cancellationToken));
 
+    /// <summary>The template the business's CFDI go by WhatsApp with (Fase 28M), or TienditApp's text (null).</summary>
+    [HttpPut("settings/whatsapp-template")]
+    public async Task<ActionResult<InvoicingSettingsDto>> SetWhatsAppTemplate(
+        [FromBody] SetInvoiceWhatsAppTemplateRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetInvoiceWhatsAppTemplateCommand(request.TemplateId), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
     /// <summary>
     /// Stamps the invoice of the order. It answers the invoice as it ended up: stamped, refused by the PAC (with its reason),
     /// or still stamping when the PAC did not answer (it is asked again).
@@ -97,7 +107,8 @@ public class InvoicingController : ControllerBase
         Guid orderId, [FromBody] IssueOrderInvoiceRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new IssueOrderInvoiceCommand(orderId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail), cancellationToken);
+            new IssueOrderInvoiceCommand(orderId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail, request.ReceiverWhatsApp),
+            cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
@@ -127,7 +138,9 @@ public class InvoicingController : ControllerBase
         Guid invoiceId, [FromBody] IssueOrderInvoiceRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new SubstituteOrderInvoiceCommand(invoiceId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail), cancellationToken);
+            new SubstituteOrderInvoiceCommand(
+                invoiceId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail, request.ReceiverWhatsApp),
+            cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
@@ -158,6 +171,15 @@ public class InvoicingController : ControllerBase
     public Task<ActionResult<CfdiEmailDto>> EmailInvoice(
         Guid invoiceId, [FromBody] SendCfdiByEmailRequest request, CancellationToken cancellationToken)
         => SendByEmailAsync(CfdiEmailDocument.Invoice, invoiceId, request, cancellationToken);
+
+    /// <summary>
+    /// Sends a stamped invoice's PDF, with the link to its XML, to the customer's WhatsApp or another one (Fase 28M): it goes
+    /// out from the queue of WhatsApp messages. It answers the message as it was queued.
+    /// </summary>
+    [HttpPost("invoices/{invoiceId:guid}/whatsapp")]
+    public Task<ActionResult<CfdiWhatsAppDto>> WhatsAppInvoice(
+        Guid invoiceId, [FromBody] SendCfdiByWhatsAppRequest request, CancellationToken cancellationToken)
+        => SendByWhatsAppAsync(CfdiEmailDocument.Invoice, invoiceId, request, cancellationToken);
 
     /// <summary>
     /// Issues the complement of a payment of an order whose invoice is in installments (Fase 28C): before TienditApp does it
@@ -200,6 +222,12 @@ public class InvoicingController : ControllerBase
     public Task<ActionResult<CfdiEmailDto>> EmailPaymentComplement(
         Guid complementId, [FromBody] SendCfdiByEmailRequest request, CancellationToken cancellationToken)
         => SendByEmailAsync(CfdiEmailDocument.PaymentComplement, complementId, request, cancellationToken);
+
+    /// <summary>Sends a stamped payment complement by WhatsApp (Fase 28M), as an invoice.</summary>
+    [HttpPost("payment-complements/{complementId:guid}/whatsapp")]
+    public Task<ActionResult<CfdiWhatsAppDto>> WhatsAppPaymentComplement(
+        Guid complementId, [FromBody] SendCfdiByWhatsAppRequest request, CancellationToken cancellationToken)
+        => SendByWhatsAppAsync(CfdiEmailDocument.PaymentComplement, complementId, request, cancellationToken);
 
     /// <summary>
     /// Issues the credit note of a refund of an order whose invoice is stamped (Fase 28D): before TienditApp does it on its
@@ -244,6 +272,12 @@ public class InvoicingController : ControllerBase
     public Task<ActionResult<CfdiEmailDto>> EmailCreditNote(
         Guid creditNoteId, [FromBody] SendCfdiByEmailRequest request, CancellationToken cancellationToken)
         => SendByEmailAsync(CfdiEmailDocument.CreditNote, creditNoteId, request, cancellationToken);
+
+    /// <summary>Sends a stamped credit note of an order's invoice by WhatsApp (Fase 28M), as an invoice.</summary>
+    [HttpPost("credit-notes/{creditNoteId:guid}/whatsapp")]
+    public Task<ActionResult<CfdiWhatsAppDto>> WhatsAppCreditNote(
+        Guid creditNoteId, [FromBody] SendCfdiByWhatsAppRequest request, CancellationToken cancellationToken)
+        => SendByWhatsAppAsync(CfdiEmailDocument.CreditNote, creditNoteId, request, cancellationToken);
 
     /// <summary>
     /// The business's global invoices, the newest period first; the search finds one by its folio, its UUID or the folio of
@@ -396,6 +430,14 @@ public class InvoicingController : ControllerBase
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
+    private async Task<ActionResult<CfdiWhatsAppDto>> SendByWhatsAppAsync(
+        CfdiEmailDocument document, Guid cfdiId, SendCfdiByWhatsAppRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SendCfdiByWhatsAppCommand(document, cfdiId, request.Phone, request.UseForInvoice), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
     private async Task<IActionResult> DownloadAsync(IRequest<Result<PrivateFileDownload>> query, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(query, cancellationToken);
@@ -435,6 +477,12 @@ public class SetSelfInvoicingRequest
     public bool On { get; init; }
 }
 
+public class SetInvoiceWhatsAppTemplateRequest
+{
+    /// <summary>One of the business's active templates for invoices; null, TienditApp's text.</summary>
+    public Guid? TemplateId { get; init; }
+}
+
 public class IssueOrderInvoiceRequest
 {
     public CfdiReceiverInput Receiver { get; init; } = new();
@@ -445,6 +493,11 @@ public class IssueOrderInvoiceRequest
     /// optional.
     /// </summary>
     public string? ReceiverEmail { get; init; }
+    /// <summary>
+    /// The WhatsApp the customer gets their PDF at, with the link to their XML, once each is stamped (Fase 28M); optional, and
+    /// only while the business's WhatsApp is connected.
+    /// </summary>
+    public string? ReceiverWhatsApp { get; init; }
 }
 
 public class IssueGlobalInvoiceRequest
@@ -469,6 +522,14 @@ public class SendCfdiByEmailRequest
 {
     public string Email { get; init; } = string.Empty;
     /// <summary>What comes next of its invoice (its complements and credit notes) goes to this email too.</summary>
+    public bool UseForInvoice { get; init; }
+}
+
+public class SendCfdiByWhatsAppRequest
+{
+    /// <summary>The number as typed: ten digits, or with its international prefix.</summary>
+    public string Phone { get; init; } = string.Empty;
+    /// <summary>What comes next of its invoice (its complements and credit notes) goes to this WhatsApp too.</summary>
     public bool UseForInvoice { get; init; }
 }
 

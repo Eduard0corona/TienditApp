@@ -2,10 +2,12 @@ using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Entities;
+using FoodParkDigital.Domain.Messaging.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -15,8 +17,8 @@ namespace FoodParkDigital.Application.Invoicing;
 
 /// <summary>
 /// Configuración › Facturación (Fase 28A, ADR 0045): whether the platform invoices, the business's fiscal data the invoice
-/// needs, its CSD, the series of its invoices and payment complements (Fase 28C), and whether its customers invoice their
-/// tickets online (Fase 28F).
+/// needs, its CSD, the series of its invoices and payment complements (Fase 28C), whether its customers invoice their
+/// tickets online (Fase 28F), and the template its CFDI go by WhatsApp with (Fase 28M).
 /// </summary>
 public class InvoicingSettingsDto
 {
@@ -43,6 +45,24 @@ public class InvoicingSettingsDto
     public bool SelfInvoicing { get; set; }
     /// <summary>The address of the page where they do, «/m/{slug}/facturar».</summary>
     public string SelfInvoicePath { get; set; } = null!;
+    /// <summary>Whether the business's WhatsApp is connected (Fase 28M): only then its CFDI go by WhatsApp.</summary>
+    public bool WhatsAppConnected { get; set; }
+    /// <summary>The template its CFDI go by WhatsApp with, while it is active and for invoices; null, TienditApp's text.</summary>
+    public Guid? WhatsAppTemplateId { get; set; }
+    /// <summary>Its active templates for invoices, to choose from.</summary>
+    public List<InvoiceWhatsAppTemplateDto> WhatsAppTemplates { get; set; } = [];
+    /// <summary>TienditApp's text, the one its CFDI go with without a template.</summary>
+    public string WhatsAppDefaultText { get; set; } = CfdiWhatsApps.DefaultText;
+}
+
+/// <summary>A message template for the CFDI by WhatsApp (Fase 28M).</summary>
+public class InvoiceWhatsAppTemplateDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = null!;
+    public string Body { get; set; } = null!;
+    /// <summary>The template approved in Meta; without it the text only goes within 24 hours of the customer's last message.</summary>
+    public string? ProviderTemplateName { get; set; }
 }
 
 public class InvoicingCertificateDto
@@ -404,6 +424,64 @@ public class SetSelfInvoicingCommandHandler : IRequestHandler<SetSelfInvoicingCo
     }
 }
 
+/// <summary>
+/// The template the business's CFDI go by WhatsApp with (owners and admins, Fase 28M): one of its active templates for
+/// invoices, approved in Meta with a document header, or TienditApp's text (null). The messages already queued keep theirs.
+/// </summary>
+[RequiresTenantManager]
+public record SetInvoiceWhatsAppTemplateCommand(Guid? TemplateId) : IRequest<Result<InvoicingSettingsDto>>;
+
+public class SetInvoiceWhatsAppTemplateCommandHandler : IRequestHandler<SetInvoiceWhatsAppTemplateCommand, Result<InvoicingSettingsDto>>
+{
+    public const string NotATemplateMessage = "Elige una plantilla activa de «Factura por WhatsApp», o el texto de TienditApp.";
+
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenant;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IInvoicingGateway _gateway;
+    private readonly IDateTimeProvider _clock;
+
+    public SetInvoiceWhatsAppTemplateCommandHandler(
+        IApplicationDbContext context, ICurrentTenantService tenant, ICurrentUserService currentUser, IInvoicingGateway gateway,
+        IDateTimeProvider clock)
+    {
+        _context = context;
+        _tenant = tenant;
+        _currentUser = currentUser;
+        _gateway = gateway;
+        _clock = clock;
+    }
+
+    public async Task<Result<InvoicingSettingsDto>> Handle(SetInvoiceWhatsAppTemplateCommand request, CancellationToken cancellationToken)
+    {
+        var tenantId = _tenant.TenantId;
+        // Another business's template is not there (the query filter keeps it out).
+        if (request.TemplateId is { } templateId
+            && !await _context.MessageTemplates.AnyAsync(
+                t => t.Id == templateId && t.IsActive && t.Purpose == MessagePurpose.CfdiDocument, cancellationToken))
+            return Result.Failure<InvoicingSettingsDto>(NotATemplateMessage);
+
+        var profile = await _context.InvoicingProfiles.FirstOrDefaultAsync(cancellationToken);
+        if (profile is null)
+        {
+            profile = InvoicingProfile.Create(tenantId);
+            _context.InvoicingProfiles.Add(profile);
+        }
+        try
+        {
+            profile.UseWhatsAppTemplate(request.TemplateId);
+        }
+        catch (DomainException ex)
+        {
+            return Result.Failure<InvoicingSettingsDto>(ex.Message);
+        }
+
+        InvoicingSettings.Audit(_context, tenantId, _currentUser, "InvoiceWhatsAppTemplateChanged", new { request.TemplateId });
+        await _context.SaveChangesAsync(cancellationToken);
+        return Result.Success(await InvoicingSettings.ReadAsync(_context, tenantId, _gateway, _clock.UtcNow, cancellationToken));
+    }
+}
+
 internal static class InvoicingSettings
 {
     public const string NotAvailableMessage = "La facturación no está disponible en TienditApp por ahora.";
@@ -501,8 +579,15 @@ internal static class InvoicingSettings
             PostalCode = tenant?.PostalCode?.Trim(),
             MissingData = missing,
             SelfInvoicing = profile?.SelfInvoicing ?? false,
-            SelfInvoicePath = Invoicing.SelfInvoicing.PagePath(tenant?.Slug ?? string.Empty)
+            SelfInvoicePath = Invoicing.SelfInvoicing.PagePath(tenant?.Slug ?? string.Empty),
+            WhatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(context, tenantId, cancellationToken),
+            WhatsAppTemplates = await context.MessageTemplates.AsNoTracking()
+                .Where(t => t.IsActive && t.Purpose == MessagePurpose.CfdiDocument)
+                .OrderBy(t => t.Name)
+                .Select(t => new InvoiceWhatsAppTemplateDto { Id = t.Id, Name = t.Name, Body = t.Body, ProviderTemplateName = t.ProviderTemplateName })
+                .ToListAsync(cancellationToken)
         };
+        settings.WhatsAppTemplateId = settings.WhatsAppTemplates.Any(t => t.Id == profile?.WhatsAppTemplateId) ? profile!.WhatsAppTemplateId : null;
         if (profile is { HasCertificate: true })
         {
             settings.Certificate = new InvoicingCertificateDto

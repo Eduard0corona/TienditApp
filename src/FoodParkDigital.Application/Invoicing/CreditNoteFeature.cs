@@ -65,6 +65,8 @@ public class CreditNoteDto
     public DateTimeOffset? CancelledAt { get; set; }
     /// <summary>Its latest emails to the customer, the newest first (Fase 28E).</summary>
     public List<CfdiEmailDto> Emails { get; set; } = [];
+    /// <summary>Its latest WhatsApp messages to the customer, the newest first (Fase 28M).</summary>
+    public List<CfdiWhatsAppDto> WhatsApps { get; set; } = [];
 
     public static CreditNoteDto From(CreditNote note) => new()
     {

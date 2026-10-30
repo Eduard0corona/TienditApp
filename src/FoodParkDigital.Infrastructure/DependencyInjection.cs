@@ -219,7 +219,9 @@ public static class DependencyInjection
         services.Configure<SwSapienOptions>(configuration.GetSection(SwSapienOptions.SectionName));
         services.AddSingleton<ICfdiPdfLogos, TenantCfdiPdfLogos>();
         services.AddSingleton<IInvoicingGateway, SwSapienGateway>();
-        services.AddScoped<IWhatsAppService, WhatsAppService>();
+        services.AddScoped<WhatsAppService>();
+        services.AddScoped<IWhatsAppService>(provider => provider.GetRequiredService<WhatsAppService>());
+        services.AddScoped<IWhatsAppDocumentSender>(provider => provider.GetRequiredService<WhatsAppService>());
         services.AddSingleton<ITwoFactorService, TwoFactorService>();
         var fileStorageProvider = configuration["FileStorage:Provider"];
         if (string.Equals(fileStorageProvider, "AzureBlob", StringComparison.OrdinalIgnoreCase))

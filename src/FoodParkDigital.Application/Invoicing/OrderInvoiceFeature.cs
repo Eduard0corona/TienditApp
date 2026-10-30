@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Customers.Commands;
+using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Exceptions;
@@ -60,6 +61,10 @@ public class OrderInvoiceDto
     public string? ReceiverEmail { get; set; }
     /// <summary>Its latest emails to the customer, the newest first.</summary>
     public List<CfdiEmailDto> Emails { get; set; } = [];
+    /// <summary>Where its CFDI go by WhatsApp (Fase 28M), a number in E.164; none, nowhere.</summary>
+    public string? ReceiverWhatsApp { get; set; }
+    /// <summary>Its latest WhatsApp messages to the customer, the newest first.</summary>
+    public List<CfdiWhatsAppDto> WhatsApps { get; set; } = [];
     /// <summary>The customer requested it online with the ticket (Fase 28F), not a person of the business.</summary>
     public bool RequestedByCustomer { get; set; }
     /// <summary>The invoice that replaces this one because it has errors (Fase 28G), and its number.</summary>
@@ -102,6 +107,7 @@ public class OrderInvoiceDto
         CancellationRequestedAt = invoice.CancellationRequestedAt,
         CancelledAt = invoice.CancelledAt,
         ReceiverEmail = invoice.ReceiverEmail,
+        ReceiverWhatsApp = invoice.ReceiverWhatsApp,
         RequestedByCustomer = invoice.RequestedByCustomer,
         ReplacedByInvoiceId = invoice.ReplacedByInvoiceId
     };
@@ -141,6 +147,15 @@ public class OrderInvoicingDto
     /// order's last invoice, or the customer's email.
     /// </summary>
     public string? ProposedEmail { get; set; }
+    /// <summary>
+    /// Whether the business's WhatsApp is connected (Fase 28M): only then its CFDI go by WhatsApp, and Facturar asks for the
+    /// number.
+    /// </summary>
+    public bool WhatsAppConnected { get; set; }
+    /// <summary>
+    /// The WhatsApp to propose for its CFDI while it is connected: the one of the order's last invoice, or the order's phone.
+    /// </summary>
+    public string? ProposedWhatsApp { get; set; }
     /// <summary>The customer with the order's phone, whose fiscal data the invoice can keep.</summary>
     public Guid? CustomerId { get; set; }
     public string? CustomerName { get; set; }
@@ -239,6 +254,14 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
             complement.Emails = emails.GetValueOrDefault(complement.Id) ?? [];
         foreach (var note in adjustments.SelectMany(a => a.CreditNotes))
             note.Emails = emails.GetValueOrDefault(note.Id) ?? [];
+        var whatsApps = await CfdiWhatsApps.LatestAsync(_context, invoices.Select(i => i.Id).ToList(), cancellationToken);
+        foreach (var invoice in invoiceDtos)
+            invoice.WhatsApps = whatsApps.GetValueOrDefault(invoice.Id) ?? [];
+        foreach (var complement in payments.SelectMany(p => p.Complements))
+            complement.WhatsApps = whatsApps.GetValueOrDefault(complement.Id) ?? [];
+        foreach (var note in adjustments.SelectMany(a => a.CreditNotes))
+            note.WhatsApps = whatsApps.GetValueOrDefault(note.Id) ?? [];
+        var whatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(_context, order.TenantId, cancellationToken);
         return new OrderInvoicingDto
         {
             Available = settings.Available,
@@ -251,6 +274,10 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
             ProposedEmail = customer?.InvoiceEmail
                 ?? last?.ReceiverEmail
                 ?? (InvoiceEmailAddress.IsValid(customer?.Email?.Trim() ?? string.Empty) ? customer!.Email!.Trim() : null),
+            WhatsAppConnected = whatsAppConnected,
+            ProposedWhatsApp = !whatsAppConnected ? null
+                : last?.ReceiverWhatsApp
+                    ?? (PhoneNumberRules.TryNormalizeTypedPhone(_phones, order.CustomerPhone, out var orderPhone) ? orderPhone : null),
             CustomerId = customer?.Id,
             CustomerName = customer?.Name,
             Invoices = invoiceDtos,
@@ -266,10 +293,12 @@ public class GetOrderInvoicingQueryHandler : IRequestHandler<GetOrderInvoicingQu
 /// in installments (PPD, Fase 28C) when it is not, and then each payment gets its complement. Its folio and CFDI are saved
 /// first (<see cref="RequestOrderInvoiceCommand"/>), and the PAC is asked after the commit, never inside the transaction.
 /// When the PAC does not answer, the invoice stays «Timbrando» and is asked again with the same key. With an email, the
-/// customer gets its XML and PDF once it is stamped, and those of its complements and credit notes (Fase 28E).
+/// customer gets its XML and PDF once it is stamped, and those of its complements and credit notes (Fase 28E); with a
+/// WhatsApp, their PDF and the link to their XML (Fase 28M).
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record IssueOrderInvoiceCommand(Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null)
+public record IssueOrderInvoiceCommand(
+    Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null, string? ReceiverWhatsApp = null)
     : IRequest<Result<OrderInvoiceDto>>, IRequiresContentPermissions
 {
     /// <summary>Keeping the fiscal data in the customer changes the customer: it needs ManageCustomers, as Clientes does.</summary>
@@ -284,6 +313,7 @@ public class IssueOrderInvoiceCommandValidator : AbstractValidator<IssueOrderInv
         RuleFor(x => x.Receiver).NotNull().WithMessage("Captura los datos fiscales del cliente.")
             .SetValidator(new CfdiReceiverInputValidator());
         RuleFor(x => x.ReceiverEmail).Must(OrderInvoicing.IsValidEmail).WithMessage(InvoiceEmailAddress.InvalidMessage);
+        RuleFor(x => x.ReceiverWhatsApp).MaximumLength(OrderInvoicing.MaxTypedPhoneLength).WithMessage(InvoiceWhatsApp.InvalidMessage);
     }
 }
 
@@ -312,7 +342,9 @@ public class IssueOrderInvoiceCommandHandler : IRequestHandler<IssueOrderInvoice
             return Result.Failure<OrderInvoiceDto>(InvoicingSettings.NotAvailableMessage);
 
         var requested = await _sender.Send(
-            new RequestOrderInvoiceCommand(request.OrderId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail), cancellationToken);
+            new RequestOrderInvoiceCommand(
+                request.OrderId, request.Receiver, request.SaveToCustomer, request.ReceiverEmail, request.ReceiverWhatsApp),
+            cancellationToken);
         if (requested.IsFailure)
             return Result.Failure<OrderInvoiceDto>(requested.Error!);
 
@@ -327,7 +359,8 @@ public class IssueOrderInvoiceCommandHandler : IRequestHandler<IssueOrderInvoice
 /// the new invoice's id.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record RequestOrderInvoiceCommand(Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null)
+public record RequestOrderInvoiceCommand(
+    Guid OrderId, CfdiReceiverInput Receiver, bool SaveToCustomer, string? ReceiverEmail = null, string? ReceiverWhatsApp = null)
     : IRequest<Result<Guid>>, ITransactionalRequest, IRequiresContentPermissions
 {
     public IEnumerable<TenantPermission> RequiredPermissions() => OrderInvoicing.SavingToCustomer(SaveToCustomer);
@@ -340,6 +373,7 @@ public class RequestOrderInvoiceCommandValidator : AbstractValidator<RequestOrde
         RuleFor(x => x.OrderId).NotEmpty();
         RuleFor(x => x.Receiver).NotNull().SetValidator(new CfdiReceiverInputValidator());
         RuleFor(x => x.ReceiverEmail).Must(OrderInvoicing.IsValidEmail).WithMessage(InvoiceEmailAddress.InvalidMessage);
+        RuleFor(x => x.ReceiverWhatsApp).MaximumLength(OrderInvoicing.MaxTypedPhoneLength).WithMessage(InvoiceWhatsApp.InvalidMessage);
     }
 }
 
@@ -371,11 +405,15 @@ public class RequestOrderInvoiceCommandHandler : IRequestHandler<RequestOrderInv
     {
         if (!Guid.TryParse(_currentUser.UserId, out var userId))
             return Result.Failure<Guid>(InvoicingSettings.NotAvailableMessage);
+        var whatsApp = await OrderInvoicing.ReceiverWhatsAppAsync(_context, _phones, _tenant.TenantId, request.ReceiverWhatsApp, cancellationToken);
+        if (whatsApp.IsFailure)
+            return Result.Failure<Guid>(whatsApp.Error!);
 
         var requested = await _requester.RequestAsync(
             _tenant.TenantId,
             new OrderInvoiceRequest(request.OrderId, request.Receiver, request.ReceiverEmail, userId, _currentUser.UserName ?? "system")
             {
+                ReceiverWhatsApp = whatsApp.Value,
                 BeforeSave = (order, invoice) => request.SaveToCustomer
                     ? OrderInvoicing.SaveToCustomerAsync(_context, _phones, _currentUser, request.Receiver, order, invoice, cancellationToken)
                     : Task.CompletedTask
@@ -788,6 +826,25 @@ internal static class OrderInvoicing
 
     public static CfdiReceiver Receiver(CfdiReceiverInput input)
         => CfdiReceiver.Create(input.Rfc, input.Name, input.PostalCode, input.FiscalRegime, input.CfdiUse);
+
+    /// <summary>The longest phone a person types (spaces and dashes included) before it is normalized.</summary>
+    public const int MaxTypedPhoneLength = 30;
+
+    /// <summary>
+    /// The WhatsApp written when invoicing (Fase 28M), in E.164, or none (null). Only while the business's WhatsApp is
+    /// connected: otherwise its CFDI could never go out.
+    /// </summary>
+    public static async Task<Result<string?>> ReceiverWhatsAppAsync(
+        IApplicationDbContext context, IPhoneNormalizationService phones, Guid tenantId, string? typed, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(typed))
+            return Result.Success<string?>(null);
+        if (!PhoneNumberRules.TryNormalizeTypedPhone(phones, typed, out var phone))
+            return Result.Failure<string?>(InvoiceWhatsApp.InvalidMessage);
+        return await CampaignRules.IsWhatsAppConnectedAsync(context, tenantId, cancellationToken)
+            ? Result.Success<string?>(phone)
+            : Result.Failure<string?>(CfdiWhatsApps.NotConnectedMessage);
+    }
 
     /// <summary>
     /// The invoice's fiscal data kept in the customer with the order's phone, if there is one, with its audit entry. An
