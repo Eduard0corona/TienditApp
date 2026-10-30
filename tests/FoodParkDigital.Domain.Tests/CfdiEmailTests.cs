@@ -12,7 +12,7 @@ namespace FoodParkDigital.Domain.Tests;
 /// <summary>
 /// The email of a stamped CFDI of an order's invoice to its customer (Fase 28E, ADR 0049): the invoice, a payment complement
 /// or a credit note, to one plain address, asked for by TienditApp or a person; only its outcome changes afterwards. And the
-/// address the invoice and the customer keep for it.
+/// address the invoice and the customer keep for it. Since Fase 28N (ADR 0059), the notice that the SAT cancelled one.
 /// </summary>
 public class CfdiEmailTests
 {
@@ -101,6 +101,57 @@ public class CfdiEmailTests
             (refused.FailedAt, refused.Failure, refused.SentAt));
     }
 
+    [Fact]
+    public void CancellationNotice_ShouldTellTheCustomer_ThatTheSatCancelledTheCfdi_WithoutFiles()
+    {
+        var invoice = StampedInvoice();
+        var note = CreditNote.ForRefund(invoice, Refund(10m), "NC", 1, 8.62m, 1.38m, 1, "{}", null, Now);
+        note.Stamp("8b2d3f4a-5c6e-4d7f-9a0b-1c2d3e4f5a6b", "pac-nc1", Now, "nc-1.xml");
+        foreach (var cfdi in new Cfdi[] { note, invoice })
+        {
+            cfdi.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, CashierId, Now);
+            cfdi.Cancel(Now);
+        }
+
+        var notice = CfdiEmail.RequestCancellationNotice(invoice, " karla@ejemplo.mx ", Now);
+        var ofNote = CfdiEmail.RequestCancellationNotice(note, "karla@ejemplo.mx", Now);
+
+        Assert.Equal((TenantId, invoice.Id, CfdiEmailDocument.Invoice, CfdiEmailKind.Cancellation, invoice.Id, "karla@ejemplo.mx", (Guid?)null, Now),
+            (notice.TenantId, notice.OrderInvoiceId, notice.Document, notice.Kind, notice.CfdiId, notice.To, notice.RequestedByUserId, notice.RequestedAt));
+        Assert.Equal((invoice.Id, CfdiEmailDocument.CreditNote, CfdiEmailKind.Cancellation), (ofNote.OrderInvoiceId, ofNote.Document, ofNote.Kind));
+        Assert.Equal(notice.Id, Assert.IsType<CfdiEmailRequestedEvent>(Assert.Single(notice.DomainEvents)).CfdiEmailId);
+        // The XML and the PDF go when it is stamped.
+        Assert.Equal(CfdiEmailKind.Documents, CfdiEmail.Request(StampedInvoice(), "karla@ejemplo.mx", null, Now).Kind);
+
+        // It carries no files, so it never went «without the PDF».
+        notice.Sent(withoutPdf: true, Now.AddMinutes(1));
+        Assert.Equal(((DateTimeOffset?)Now.AddMinutes(1), false), (notice.SentAt, notice.SentWithoutPdf));
+    }
+
+    [Fact]
+    public void CancellationNotice_ShouldOnlyBeOfACfdiTheSatCancelled_OfAnOrdersInvoice()
+    {
+        Assert.Equal(CfdiEmail.NotCancelledMessage,
+            Assert.Throws<DomainException>(() => CfdiEmail.RequestCancellationNotice(StampedInvoice(), "karla@ejemplo.mx", Now)).Message);
+        // Asked for, not cancelled yet: the SAT may still refuse it.
+        var cancelling = StampedInvoice();
+        cancelling.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, CashierId, Now);
+        Assert.Equal(CfdiEmail.NotCancelledMessage,
+            Assert.Throws<DomainException>(() => CfdiEmail.RequestCancellationNotice(cancelling, "karla@ejemplo.mx", Now)).Message);
+
+        // A global invoice, and the credit notes of its sales, have nobody to tell.
+        var global = GlobalInvoice.Request(TenantId, GlobalInvoicePeriod.Containing(GlobalInvoicePeriodicity.Monthly, new DateOnly(2026, 10, 1)),
+            "F", 12, "01", "{}", 100m, 16m, 116m, [new GlobalInvoiceSale(Guid.NewGuid(), "ORD-000001", 116m)], CashierId, Now);
+        global.Stamp("9c3e4a5b-6d7f-4e8a-8b1c-2d3e4f5a6b7c", "pac-g", Now, "g.xml");
+        global.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, CashierId, Now);
+        global.Cancel(Now);
+        Assert.Throws<DomainException>(() => CfdiEmail.RequestCancellationNotice(global, "karla@ejemplo.mx", Now));
+
+        Assert.Throws<DomainException>(() => CfdiEmail.RequestCancellationNotice(CancelledInvoice(), null, Now));
+        Assert.Equal(InvoiceEmailAddress.InvalidMessage,
+            Assert.Throws<DomainException>(() => CfdiEmail.RequestCancellationNotice(CancelledInvoice(), "karla", Now)).Message);
+    }
+
     [Theory]
     [InlineData("karla@ejemplo.mx")]
     [InlineData("karla.fuente+facturas@sub.ejemplo.com.mx")]
@@ -184,6 +235,14 @@ public class CfdiEmailTests
     {
         var invoice = Invoice();
         invoice.Stamp("5f0b7c1e-2a3d-4e5f-8a9b-0c1d2e3f4a5b", "pac-7", Now.AddDays(-3), "f-7.xml");
+        return invoice;
+    }
+
+    private static OrderInvoice CancelledInvoice()
+    {
+        var invoice = StampedInvoice();
+        invoice.RequestCancellation(CfdiCancellationMotive.ErrorsWithoutReplacement, CashierId, Now);
+        invoice.Cancel(Now);
         return invoice;
     }
 }

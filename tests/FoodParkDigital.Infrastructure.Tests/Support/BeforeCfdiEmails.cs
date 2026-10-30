@@ -20,10 +20,11 @@ internal static class BeforeCfdiEmails
     /// <summary>For the context of an earlier version, which does not know it either.</summary>
     public static void Ignore(ModelBuilder modelBuilder)
     {
+        // What came after first: it would bring the emails back.
+        BeforeSelfInvoicing.Ignore(modelBuilder);
         modelBuilder.Ignore<CfdiEmail>();
         modelBuilder.Entity<OrderInvoice>().Ignore(i => i.ReceiverEmail);
         modelBuilder.Entity<Customer>().Ignore(c => c.InvoiceEmail);
-        BeforeSelfInvoicing.Ignore(modelBuilder);
     }
 
     private sealed class Context(

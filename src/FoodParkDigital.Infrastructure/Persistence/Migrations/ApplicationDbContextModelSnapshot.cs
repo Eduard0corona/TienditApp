@@ -1728,6 +1728,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int?>("Failure")
                         .HasColumnType("int");
 
+                    b.Property<int>("Kind")
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<DateTimeOffset?>("LastFailedAttemptAt")
                         .HasColumnType("datetimeoffset");
 
@@ -1769,6 +1773,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_CfdiEmails_Document", "[Document] IN (0, 1, 2)");
 
                             t.HasCheckConstraint("CK_CfdiEmails_Invoice", "[Document] <> 0 OR [CfdiId] = [OrderInvoiceId]");
+
+                            t.HasCheckConstraint("CK_CfdiEmails_Kind", "[Kind] IN (0, 1) AND ([Kind] = 0 OR ([SentWithoutPdf] = 0 AND [RequestedByUserId] IS NULL))");
 
                             t.HasCheckConstraint("CK_CfdiEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3))) AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)");
                         });
