@@ -5,7 +5,9 @@ import {
   businessDayEnd,
   businessDayStart,
   calendarDaysBetween,
+  endSentence,
   formatCalendarDate,
+  formatDateTime,
   formatLongCalendarDay,
   formatShortCalendarDay,
   formatTime,
@@ -27,6 +29,17 @@ describe('dates in the business time zone', () => {
 
     setBusinessTimeZone('America/Tijuana');
     expect(plain(formatTime('2026-10-04T19:25:00Z'))).toMatch(/^12:25 p\.\s?m\.$/);
+  });
+
+  it('ends a sentence with one period after an hour or an abbreviated month', () => {
+    setBusinessTimeZone('America/Mexico_City');
+    const when = formatDateTime('2026-10-04T19:13:00Z');
+    expect(plain(when)).toMatch(/, 1:13 p\.\s?m\.$/);
+    expect(endSentence(`Se envió el ${when}`)).toBe(`Se envió el ${when}`);
+    expect(endSentence('Liquidado hasta el 12 oct.')).toBe('Liquidado hasta el 12 oct.');
+    expect(endSentence(`Salió a las ${formatTime('2026-10-04T19:13:00Z')} (cajero)`))
+      .toBe(`Salió a las ${formatTime('2026-10-04T19:13:00Z')} (cajero).`);
+    expect(endSentence('Se envió por WhatsApp a 5512345678')).toBe('Se envió por WhatsApp a 5512345678.');
   });
 
   it('knows which day it is for the business around midnight', () => {

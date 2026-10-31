@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import type { CustomerAppointment } from '../../api/publicMenuApi';
 import ReviewButton from '../reviews/ReviewButton';
 import { AppointmentStatus } from '../../types';
+import { endSentence } from '../../utils/dates';
 import { addressMapUrl, bookingPath, customerAppointmentChip, upperFirst } from '../../utils/onlineBooking';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 
@@ -27,7 +28,7 @@ export default function CustomerAppointmentCard({
 }: CustomerAppointmentCardProps) {
   const contact = businessWhatsAppUrl(
     appointment.businessContactPhone,
-    `Hola, les escribo por mi cita de ${appointment.serviceName} del ${appointment.dateLabel} a las ${appointment.timeLabel}.`,
+    endSentence(`Hola, les escribo por mi cita de ${appointment.serviceName} del ${appointment.dateLabel} a las ${appointment.timeLabel}`),
   );
 
   return (

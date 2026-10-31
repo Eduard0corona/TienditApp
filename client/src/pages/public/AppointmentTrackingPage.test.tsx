@@ -73,8 +73,11 @@ describe('AppointmentTrackingPage', () => {
     expect(screen.getByText('Te atiende Ana L.')).toBeInTheDocument();
     expect(screen.getByText('Barbería Luis te confirma por WhatsApp.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Agendar otra cita en Barbería Luis' })).toHaveAttribute('href', '/m/barberia-luis/agendar');
-    expect(screen.getByRole('link', { name: 'Escribir a Barbería Luis por WhatsApp' }))
-      .toHaveAttribute('href', expect.stringContaining('https://wa.me/522221234567'));
+    const write = screen.getByRole('link', { name: 'Escribir a Barbería Luis por WhatsApp' });
+    expect(write).toHaveAttribute('href', expect.stringContaining('https://wa.me/522221234567'));
+    // «a. m.» already ends what the customer writes: it takes no second period.
+    expect(new URL(write.getAttribute('href') ?? '').searchParams.get('text'))
+      .toBe('Hola, les escribo por mi cita de Corte de cabello del lunes 5 de octubre a las 10:00 a. m.');
 
     await user.click(screen.getByRole('button', { name: 'Cancelar la cita de Corte de cabello del lunes 5 de octubre' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Cancelar cita' }));

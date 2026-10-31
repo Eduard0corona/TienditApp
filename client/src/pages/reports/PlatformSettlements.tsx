@@ -16,6 +16,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { PlatformSettlementStatus } from '../../types';
 import { getAccess, type Access } from '../../utils/access';
+import { endSentence } from '../../utils/dates';
 import { getPlatformName, isDeliveryPlatform, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
 import { DELIVERY_PLATFORM_CHANNELS } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
@@ -40,11 +41,6 @@ const STATUSES = [PlatformSettlementStatus.Open, PlatformSettlementStatus.Closed
 /** "12 oct.": a date of the business in a short line, written as the periods are. */
 function shortDay(date: string): string {
   return describePeriod(date, date);
-}
-
-/** A sentence that ends in an abbreviation («oct.») takes no second period. */
-function sentence(text: string): string {
-  return text.endsWith('.') ? text : `${text}.`;
 }
 
 function platformOf(settlement: PlatformSettlement): string {
@@ -224,10 +220,10 @@ function ReceivableCard({ receivable, access }: { receivable: PlatformReceivable
         <div className="small text-muted">
           {receivable.pendingOrders === 0
             ? 'Sin pedidos pendientes.'
-            : sentence(`${receivable.pendingOrders === 1 ? '1 pedido pendiente' : `${receivable.pendingOrders} pedidos pendientes`}${receivable.oldestPendingOn ? ` desde el ${shortDay(receivable.oldestPendingOn)}` : ''}`)}
+            : endSentence(`${receivable.pendingOrders === 1 ? '1 pedido pendiente' : `${receivable.pendingOrders} pedidos pendientes`}${receivable.oldestPendingOn ? ` desde el ${shortDay(receivable.oldestPendingOn)}` : ''}`)}
         </div>
         <div className="small text-muted">
-          {receivable.settledThrough ? sentence(`Liquidado hasta el ${shortDay(receivable.settledThrough)}`) : 'Todavía sin liquidaciones cerradas.'}
+          {receivable.settledThrough ? endSentence(`Liquidado hasta el ${shortDay(receivable.settledThrough)}`) : 'Todavía sin liquidaciones cerradas.'}
         </div>
         <div className="mt-2">
           {openId ? (
