@@ -60,8 +60,13 @@ public sealed class CrossTenantHomeVisitRequestsSqlServerTests
         Assert.Equal((true, 250m), (cards[mySlug].GetProperty("visitsPostalCode").GetBoolean(),
             cards[mySlug].GetProperty("visitPrice").GetProperty("amount").GetDecimal()));
         Assert.False(cards[theirSlug].GetProperty("visitsPostalCode").GetBoolean());
-        // The one that goes there first.
-        Assert.Equal([mySlug, theirSlug], listed.Select(card => card.GetProperty("slug").GetString()).Where(slug => slug == mySlug || slug == theirSlug));
+        // At 72001 only the other one goes, and comes first although its name comes after: Explorar moved it.
+        var at72001 = (await TwoBusinessesApi.ReadAsync(await stranger.GetAsync("/api/v1/public/directory?q=visitas&postalCode=72001")))
+            .GetProperty("businesses").GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal([theirSlug, mySlug], at72001.Select(card => card.GetProperty("slug").GetString()).Where(slug => slug == mySlug || slug == theirSlug));
+        var theirCard = at72001.Single(card => card.GetProperty("slug").GetString() == theirSlug);
+        Assert.Equal((true, 80m), (theirCard.GetProperty("visitsPostalCode").GetBoolean(),
+            theirCard.GetProperty("visitPrice").GetProperty("amount").GetDecimal()));
 
         // Without a street the store shows no address: nothing to warn about.
         Assert.False(theirSettings.GetProperty("addressNotice").GetBoolean());

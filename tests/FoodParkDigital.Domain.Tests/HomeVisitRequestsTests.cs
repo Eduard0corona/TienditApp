@@ -17,8 +17,9 @@ public class HomeVisitRequestsTests
         Assert.Equal((false, (Guid?)null, HomeVisitChargePolicy.Charged, (DateTimeOffset?)null),
             (settings.HomeVisitRequestsEnabled, settings.HomeVisitServiceId, settings.HomeVisitChargePolicy,
                 settings.HomeVisitAddressNoticeDismissedAt));
-        // The database keeps the number.
-        Assert.Equal(new[] { 0, 1, 2 }, Enum.GetValues<HomeVisitChargePolicy>().Select(p => (int)p));
+        // The database and the API keep the number: each option keeps its own.
+        Assert.Equal(new[] { "Charged", "Free", "CreditedIfHired" }, Enumerable.Range(0, 3).Select(v => ((HomeVisitChargePolicy)v).ToString()));
+        Assert.Equal(3, Enum.GetValues<HomeVisitChargePolicy>().Length);
     }
 
     [Fact]

@@ -95,9 +95,13 @@ public class HomeVisitRequestsFeatureTests
         var tenant = await TradeAsync(fixture, "plomero");
         var product = await fixture.AddProductAsync(tenant, "Llave de paso", 120m, unit: UnitType.Unit);
         var visit = await ServiceAsync(fixture, tenant, "Visita y diagnóstico", 350m, 60);
+        // A service of its own that cannot be booked now is no visit either.
+        var paused = await ServiceAsync(fixture, tenant, "Visita nocturna", 500m, 60);
+        paused.SetAvailability(false);
+        await fixture.Context.SaveChangesAsync();
         var handler = Handler(fixture);
 
-        foreach (var serviceId in new[] { foreign.Id, product.Id, Guid.NewGuid() })
+        foreach (var serviceId in new[] { foreign.Id, product.Id, Guid.NewGuid(), paused.Id })
         {
             var refused = await handler.Handle(
                 new UpdateHomeVisitRequestsSettingsCommand(true, serviceId, HomeVisitChargePolicy.Charged), CancellationToken.None);
@@ -119,6 +123,14 @@ public class HomeVisitRequestsFeatureTests
         Assert.True(metadata.RootElement.GetProperty("Previous").GetProperty("Enabled").GetBoolean());
         var settings = await fixture.Context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
         Assert.Equal((false, (Guid?)visit.Id), (settings.HomeVisitRequestsEnabled, settings.HomeVisitServiceId));
+
+        // Its visit stops being bookable: changing only how it is charged keeps it until the owner picks another.
+        visit.SetAvailability(false);
+        await fixture.Context.SaveChangesAsync();
+        var kept = await handler.Handle(
+            new UpdateHomeVisitRequestsSettingsCommand(false, visit.Id, HomeVisitChargePolicy.Free), CancellationToken.None);
+        Assert.True(kept.IsSuccess, kept.Error);
+        Assert.Equal(((Guid?)visit.Id, HomeVisitChargePolicy.Free), (settings.HomeVisitServiceId, settings.HomeVisitChargePolicy));
         // The other business keeps its own setting, read in its own scope.
         fixture.TenantService.SetTenant(other.Id);
         var theirs = await fixture.Context.TenantSettings.SingleAsync();
