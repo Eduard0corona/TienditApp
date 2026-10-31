@@ -53,15 +53,15 @@ IF EXISTS (
 )
 BEGIN
 
-    UPDATE t SET [DirectoryCategory] = CASE
+    EXEC(N'UPDATE t SET [DirectoryCategory] = CASE
         WHEN LTRIM(RTRIM(t.[Industry])) COLLATE Latin1_General_CI_AI IN (
-            N'Carpinteria', N'Herreria y soldadura', N'Electricista', N'Plomeria', N'Aire acondicionado') THEN 9
+            N''Carpinteria'', N''Herreria y soldadura'', N''Electricista'', N''Plomeria'', N''Aire acondicionado'') THEN 9
         WHEN t.[BusinessType] = 0 THEN 0
         WHEN t.[BusinessType] = 2 THEN 9
         ELSE 10
     END
     FROM [Tenants] AS t
-    WHERE t.[DirectoryCategory] = 11;
+    WHERE t.[DirectoryCategory] = 11;');
 
 END;
 

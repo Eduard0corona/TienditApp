@@ -104,10 +104,12 @@ EXEC(N'IF EXISTS (
     THROW 50049, N''Owners already decided their visits to quote or picked Hogar y reparaciones in Explorar; rolling back would lose it. Roll forward instead.'', 1;');
 ");
 
+            // Through EXEC too: rolling back every migration after this one's base drops [DirectoryCategory]
+            // (AddBusinessDirectory), and a second run would not compile a batch that names it.
             migrationBuilder.Sql($@"
-UPDATE t SET [DirectoryCategory] = {PreviousCategory}
+EXEC(N'UPDATE t SET [DirectoryCategory] = {PreviousCategory.Replace("'", "''")}
 FROM [Tenants] AS t
-WHERE t.[DirectoryCategory] = 11;
+WHERE t.[DirectoryCategory] = 11;');
 ");
 
             migrationBuilder.DropCheckConstraint(
