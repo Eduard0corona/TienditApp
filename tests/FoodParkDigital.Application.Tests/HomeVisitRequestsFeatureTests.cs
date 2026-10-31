@@ -113,8 +113,9 @@ public class HomeVisitRequestsFeatureTests
             new UpdateHomeVisitRequestsSettingsCommand(false, visit.Id, HomeVisitChargePolicy.CreditedIfHired), CancellationToken.None);
         Assert.True(saved.IsSuccess, saved.Error);
         // The same again changes nothing, and records nothing.
-        await handler.Handle(
+        var again = await handler.Handle(
             new UpdateHomeVisitRequestsSettingsCommand(false, visit.Id, HomeVisitChargePolicy.CreditedIfHired), CancellationToken.None);
+        Assert.True(again.IsSuccess, again.Error);
 
         var audit = Assert.Single(await fixture.Context.AuditLogs.ToListAsync());
         Assert.Equal((HomeVisitRequestsHandler.AuditAction, tenant.Id, "cajero"), (audit.Action, audit.TenantId, audit.PerformedBy));
@@ -157,7 +158,8 @@ public class HomeVisitRequestsFeatureTests
         var dismiss = new DismissHomeVisitAddressNoticeCommandHandler(fixture.Context, fixture.TenantService, fixture.Clock);
         Assert.True((await dismiss.Handle(new DismissHomeVisitAddressNoticeCommand(), CancellationToken.None)).IsSuccess);
         fixture.Clock.UtcNow = SalesTestFixture.Now.AddDays(1);
-        await dismiss.Handle(new DismissHomeVisitAddressNoticeCommand(), CancellationToken.None);
+        // Dismissed again: it answers fine and keeps the first time.
+        Assert.True((await dismiss.Handle(new DismissHomeVisitAddressNoticeCommand(), CancellationToken.None)).IsSuccess);
 
         var settings = await fixture.Context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
         Assert.Equal(SalesTestFixture.Now, settings.HomeVisitAddressNoticeDismissedAt);
@@ -344,8 +346,11 @@ public class HomeVisitRequestsFeatureTests
         var mine = Guid.NewGuid();
         (await SettingsAsync(other, picked)).UpdateHomeVisitRequests(true, mine, HomeVisitChargePolicy.Charged);
         await other.Context.SaveChangesAsync();
-        await new InstallStarterCatalogCommandHandler(other.Context, other.TenantService)
+        var installed = await new InstallStarterCatalogCommandHandler(other.Context, other.TenantService)
             .Handle(new InstallStarterCatalogCommand { TemplateId = "cerrajeria" }, CancellationToken.None);
+        // The catalog went in with the visit of its template, which did not replace the owner's.
+        Assert.True(installed.IsSuccess, installed.Error);
+        Assert.True(await other.Context.Products.AnyAsync(p => p.TenantId == picked.Id && p.Name == "Visita y diagnóstico"));
         Assert.Equal(mine, (await SettingsAsync(other, picked)).HomeVisitServiceId);
     }
 
