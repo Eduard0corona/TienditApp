@@ -205,7 +205,7 @@ export default function CreditNoteList({
                         </p>
                       )}
                       <CfdiEmailStatus emails={note.emails} />
-                      <CfdiWhatsAppStatus messages={note.whatsApps} />
+                      <CfdiWhatsAppStatus messages={note.whatsApps} cancelled={note.status === OrderInvoiceStatus.Cancelled} />
                       <div className="d-flex flex-wrap gap-2 mt-2">
                         {note.hasXml && (
                           <>

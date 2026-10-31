@@ -121,6 +121,8 @@ public class GlobalInvoicingFlowTests
         Assert.Equal(OrderInvoiceStatus.Cancelled, cancelled.Value.Status);
         Assert.Equal((Rfc, first.Uuid, CfdiCancellationMotive.NominativeInGlobalInvoice), book.Gateway.Cancellations.Single());
         Assert.True(await book.Context.GlobalInvoiceOrders.AllAsync(order => order.Released));
+        // Nobody to tell (Fase 28N): it was for the general public.
+        Assert.Empty(await book.Context.CfdiEmails.ToListAsync());
 
         var own = await book.IssueOrderInvoiceAsync(card.Id);
         Assert.True(own.IsSuccess, own.Error);
@@ -460,6 +462,26 @@ public class GlobalInvoicingFlowTests
         Assert.Equal([sale.OrderNumber], draft.Sales.Select(s => s.OrderNumber));
         Assert.Equal(100m, draft.Total);
         Assert.Contains(GlobalInvoiceDrafts.RefundsWarning(1), draft.Warnings);
+    }
+
+    [Fact]
+    public async Task GlobalThatTheSatCancelsLater_ShouldTellNobody_ThroughTheWorkerEither()
+    {
+        await using var book = await Book.OpenAsync();
+        await book.PaidOrderAsync(1, OrderPaymentMethod.Cash);
+        book.Clock.UtcNow = NextMorning;
+        var first = (await book.IssueAsync(1, 100m)).Value;
+        Assert.Equal(OrderInvoiceStatus.Cancelling, (await book.CancelAsync(first.Id, CfdiCancellationMotive.ErrorsWithoutReplacement)).Value.Status);
+        book.Gateway.SatStatus = new CfdiSatStatus(CfdiSatState.Cancelled, false);
+
+        var settled = await new CheckInvoiceCancellationsCommandHandler(
+                book.Context, book.Gateway, book.Storage, book.Clock, NullLogger<CheckInvoiceCancellationsCommandHandler>.Instance)
+            .Handle(new CheckInvoiceCancellationsCommand(), CancellationToken.None);
+
+        Assert.Equal(1, settled.Value);
+        Assert.Equal(OrderInvoiceStatus.Cancelled, (await book.Context.GlobalInvoices.AsNoTracking().SingleAsync()).Status);
+        // Nobody to tell (Fase 28N): it was for the general public.
+        Assert.Empty(await book.Context.CfdiEmails.ToListAsync());
     }
 
     [Fact]

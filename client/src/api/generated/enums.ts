@@ -124,6 +124,12 @@ export const CfdiEmailFailure = {
 } as const;
 export type CfdiEmailFailure = (typeof CfdiEmailFailure)[keyof typeof CfdiEmailFailure];
 
+export const CfdiEmailKind = {
+  Documents: 0,
+  Cancellation: 1,
+} as const;
+export type CfdiEmailKind = (typeof CfdiEmailKind)[keyof typeof CfdiEmailKind];
+
 export const CfdiTaxObject = {
   NotSubject: 1,
   Subject: 2,

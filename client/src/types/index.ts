@@ -406,11 +406,11 @@ export { InsufficientStockPolicy } from '../api/generated/enums';
 /** CFDI 4.0 ObjetoImp of a product: 02 subject to tax (also exempt), 01 outside IVA. */
 export { CfdiTaxObject } from '../api/generated/enums';
 // The invoice of an order stamped through the PAC (Fase 28A), the global invoice of a period (Fase 28B), what a credit
-// note credits (Fase 28D), the kinds of CFDI of Reportes › CFDI emitidos (Fase 28H) and which file of a CFDI its WhatsApp
-// link downloads (Fase 28M).
+// note credits (Fase 28D), the kinds of CFDI of Reportes › CFDI emitidos (Fase 28H), which file of a CFDI its WhatsApp
+// link downloads (Fase 28M) and whether an email carries a CFDI's files or the notice that the SAT cancelled it (Fase 28N).
 export {
-  CfdiCancellationMotive, CfdiEmailDocument, CfdiEmailFailure, CreditNoteAdjustment, GlobalInvoicePeriodicity, IssuedCfdiExportFormat,
-  IssuedCfdiKind, OrderInvoiceFileKind, OrderInvoiceStatus,
+  CfdiCancellationMotive, CfdiEmailDocument, CfdiEmailFailure, CfdiEmailKind, CreditNoteAdjustment, GlobalInvoicePeriodicity,
+  IssuedCfdiExportFormat, IssuedCfdiKind, OrderInvoiceFileKind, OrderInvoiceStatus,
 } from '../api/generated/enums';
 
 /** RFC, name, fiscal postal code, regime and CFDI use, as the customer's constancia says (Fase 28A). */

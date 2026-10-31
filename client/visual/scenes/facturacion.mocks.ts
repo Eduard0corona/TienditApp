@@ -10,7 +10,8 @@ type PrepareData = NonNullable<SceneOptions['prepareData']>;
 // 28C, ADR 0047) invoiced in installments, with the payment complements of its payments, or (Fase 28D, ADR 0048) with
 // what was given back and the credit notes of each refund. Since the Fase 28E (ADR 0049), each CFDI says how its latest
 // email to the customer went; since the Fase 28F (ADR 0050), whether the customer asked for it online; since the Fase
-// 28M (ADR 0058), how its latest WhatsApp went, with the business's WhatsApp connected.
+// 28M (ADR 0058), how its latest WhatsApp went, with the business's WhatsApp connected; since the Fase 28N (ADR 0059),
+// the notice of a cancellation as its latest email.
 
 // OrderInvoiceStatus and CfdiCancellationMotive as the contract numbers them.
 const STAMPING = 0;
@@ -371,14 +372,16 @@ export const CLIENTE_CON_DATOS_FISCALES = asOption(((data) => {
   customer.invoiceEmail = INVOICE_EMAIL;
 }) as PrepareData);
 
-// CfdiEmailDocument and CfdiEmailFailure as the contract numbers them.
+// CfdiEmailDocument, CfdiEmailKind and CfdiEmailFailure as the contract numbers them.
 const INVOICE_DOCUMENT = 0;
+const DOCUMENTS = 0;
+const CANCELLATION = 1;
 const REJECTED = 0;
 
 /** An email of F-3 to Grupo Altavista, sent by TienditApp when it was stamped unless the fields say otherwise. */
 function email(name: string, fields: Record<string, unknown>) {
   return {
-    id: uuid(`email-${name}`), document: INVOICE_DOCUMENT, cfdiId: uuid('invoice-3'), to: INVOICE_EMAIL, requestedAt: minutesFromNow(-12),
+    id: uuid(`email-${name}`), document: INVOICE_DOCUMENT, kind: DOCUMENTS, cfdiId: uuid('invoice-3'), to: INVOICE_EMAIL, requestedAt: minutesFromNow(-12),
     byTienditApp: true, byCustomer: false, sentAt: null, sentWithoutPdf: false, failedAt: null, failure: null, failedAttempts: 0, lastFailedAttemptAt: null,
     ...fields,
   };
@@ -406,6 +409,24 @@ export const PEDIDO_CORREO_RECHAZADO = asOption(orderInvoicing((data) => ({
       requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
       hasXml: true, hasPdf: true, receiverEmail: 'facturas@altavsita.mx',
       emails: [email('timbre', { to: 'facturas@altavsita.mx', failedAt: minutesFromNow(-11), failure: REJECTED })],
+    }),
+  ],
+})));
+
+/**
+ * F-3 cancelled because it had errors (Fase 28N): TienditApp told Grupo Altavista by email, after the email of its files,
+ * and the order can be invoiced again.
+ */
+export const PEDIDO_CANCELACION_AVISADA = asOption(orderInvoicing((data) => ({
+  invoices: [
+    invoice(data, 3, {
+      status: CANCELLED, requestedAt: minutesFromNow(-12), uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF', stampedAt: minutesFromNow(-12),
+      hasXml: true, hasPdf: true, receiverEmail: INVOICE_EMAIL,
+      cancellationMotive: ERRORS_WITHOUT_REPLACEMENT, cancellationRequestedAt: minutesFromNow(-5), cancelledAt: minutesFromNow(-5),
+      emails: [
+        email('aviso', { kind: CANCELLATION, requestedAt: minutesFromNow(-5), sentAt: minutesFromNow(-4) }),
+        email('timbre', { sentAt: minutesFromNow(-11) }),
+      ],
     }),
   ],
 })));

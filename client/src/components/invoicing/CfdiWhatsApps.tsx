@@ -11,10 +11,12 @@ import { isSamePhone, isTypedPhone, localPhone } from '../../utils/phones';
 interface CfdiWhatsAppStatusProps {
   /** The CFDI's latest WhatsApp messages, the newest first. */
   messages: CfdiWhatsApp[];
+  /** The SAT cancelled the CFDI: the email may tell the customer (Fase 28N), WhatsApp does not. */
+  cancelled?: boolean;
 }
 
 /** How the latest WhatsApp of a CFDI to the customer went (Fase 28M): read, delivered, sent, on its way, or not sent and why. */
-export function CfdiWhatsAppStatus({ messages }: CfdiWhatsAppStatusProps) {
+export function CfdiWhatsAppStatus({ messages, cancelled = false }: CfdiWhatsAppStatusProps) {
   const latest = messages[0];
   if (!latest) return null;
   const phone = localPhone(latest.phone);
@@ -29,6 +31,7 @@ export function CfdiWhatsAppStatus({ messages }: CfdiWhatsAppStatusProps) {
             : latest.deliveredAt
               ? `Se entregó por WhatsApp a ${phone} el ${formatDateTime(latest.deliveredAt)}`
               : `Se envió por WhatsApp a ${phone}${latest.sentAt ? ` el ${formatDateTime(latest.sentAt)}` : ''}`)}
+          {cancelled && ' Por WhatsApp no se avisa la cancelación: avísale por otro medio.'}
         </p>
       );
     case OutgoingMessageStatus.Pending:

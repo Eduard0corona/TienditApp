@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Fiscal.Entities;
+using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -25,6 +26,10 @@ public class CfdiEmailConfiguration : IEntityTypeConfiguration<CfdiEmail>
                 "([SentAt] IS NULL OR [FailedAt] IS NULL)"
                 + " AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3)))"
                 + " AND ([SentWithoutPdf] = 0 OR [SentAt] IS NOT NULL)");
+            // The notice of a cancellation (Fase 28N) carries no files, and only TienditApp asks for it.
+            table.HasCheckConstraint(
+                "CK_CfdiEmails_Kind",
+                "[Kind] IN (0, 1) AND ([Kind] = 0 OR ([SentWithoutPdf] = 0 AND [RequestedByUserId] IS NULL))");
             table.HasCheckConstraint(
                 "CK_CfdiEmails_Attempts",
                 "([FailedAttempts] = 0 AND [LastFailedAttemptAt] IS NULL) OR ([FailedAttempts] > 0 AND [LastFailedAttemptAt] IS NOT NULL)");
@@ -34,6 +39,13 @@ public class CfdiEmailConfiguration : IEntityTypeConfiguration<CfdiEmail>
         builder.Property(x => x.TenantId).IsRequired();
         builder.Property(x => x.OrderInvoiceId).IsRequired();
         builder.Property(x => x.Document).HasConversion<int>();
+        // Fase 28N: the database default fills the emails that exist and those the previous version saves while this one is
+        // published (all of them with the CFDI's files); EF always writes the value.
+        builder.Property(x => x.Kind)
+            .HasConversion<int>()
+            .HasDefaultValue(CfdiEmailKind.Documents)
+            .ValueGeneratedNever()
+            .IsRequired();
         builder.Property(x => x.CfdiId).IsRequired();
         builder.Property(x => x.To).HasMaxLength(InvoiceEmailAddress.MaxLength).IsRequired();
         builder.Property(x => x.Failure).HasConversion<int?>();

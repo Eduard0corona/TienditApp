@@ -79,6 +79,16 @@ describe('CfdiWhatsAppStatus', () => {
     expect(status(/^Se leyó por WhatsApp/)).toBe(`Se leyó por WhatsApp (+14155550123) el ${when('2026-10-30T18:10:00Z')}`);
   });
 
+  it('says, once the SAT cancelled the CFDI, that WhatsApp does not tell the customer (Fase 28N)', () => {
+    const read = message({ status: OutgoingMessageStatus.Sent, sentAt: '2026-10-30T17:56:00Z', readAt: '2026-10-30T18:01:00Z' });
+    const { rerender } = render(<CfdiWhatsAppStatus messages={[read]} cancelled />);
+    expect(screen.getByText(/^Se leyó por WhatsApp \(5512345678\) el .+ Por WhatsApp no se avisa la cancelación: avísale por otro medio\.$/))
+      .toBeInTheDocument();
+
+    rerender(<CfdiWhatsAppStatus messages={[read]} />);
+    expect(screen.queryByText(/no se avisa la cancelación/)).not.toBeInTheDocument();
+  });
+
   it('shows one on its way, the tries WhatsApp did not take, and why one was not sent', () => {
     const { rerender } = render(<CfdiWhatsAppStatus messages={[message()]} />);
     expect(screen.getByRole('status')).toHaveTextContent(/^Enviándose por WhatsApp a 5512345678…$/);

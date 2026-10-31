@@ -338,6 +338,42 @@ public sealed class CrossTenantInvoicingSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task CancellationNotice_ShouldReachOnlyMyCustomer_WhenTheSatCancelsMyInvoice()
+    {
+        var mine = await _api.SignUpAsync("aviso-cfdi-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("aviso-cfdi-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Aviso A"), phone: "5512345678", name: "Karla");
+        var karla = $"karla.{Guid.NewGuid():N}@ejemplo.mx";
+        var invoice = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false, receiverEmail = karla }));
+        var invoiceId = invoice.GetProperty("id").GetGuid();
+        _api.Invoicing.CancelledAtOnce[invoice.GetProperty("uuid").GetString()!] = true;
+        await _api.DispatchOutboxAsync();
+
+        // The other owner, even with the header of my business, cannot cancel it: nothing reaches my customer.
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.SendAsync(AsOther(
+            mine, HttpMethod.Post, $"/api/v1/invoicing/invoices/{invoiceId}/cancel", new { motive = (int)CfdiCancellationMotive.ErrorsWithoutReplacement }))).StatusCode);
+        await _api.DispatchOutboxAsync();
+        Assert.Single(_api.DocumentsTo(karla));
+
+        // The SAT cancels it at once: the notice goes from the outbox, without files, and Pedidos shows it.
+        var cancelled = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/invoices/{invoiceId}/cancel", new { motive = (int)CfdiCancellationMotive.ErrorsWithoutReplacement }));
+        Assert.Equal((int)OrderInvoiceStatus.Cancelled, cancelled.GetProperty("status").GetInt32());
+        await _api.DispatchOutboxAsync();
+        var notice = _api.DocumentsTo(karla)[^1];
+        Assert.StartsWith("Cancelación de la factura F-1", notice.Subject, StringComparison.Ordinal);
+        Assert.Empty(notice.Attachments);
+        var emails = (await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/invoicing/orders/{order}")))
+            .GetProperty("invoices")[0].GetProperty("emails");
+        Assert.Equal(((int)CfdiEmailKind.Cancellation, true), (emails[0].GetProperty("kind").GetInt32(), emails[0].GetProperty("byTienditApp").GetBoolean()));
+        Assert.Empty(await _api.QueryAsync(theirs.TenantId, db => db.CfdiEmails.ToListAsync()));
+        Assert.Equal(1, await _api.QueryAsync(mine.TenantId, db => db.CfdiEmails.CountAsync(e => e.Kind == CfdiEmailKind.Cancellation)));
+    }
+
+    [SqlServerFact]
     public async Task PaymentComplements_OfAnotherBusiness_ShouldBeInvisible_AndUntouchable()
     {
         var mine = await _api.SignUpAsync("complementos-a", TwoBusinessesApi.FoodBusiness);

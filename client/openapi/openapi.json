@@ -19612,6 +19612,7 @@
           "document",
           "failedAttempts",
           "id",
+          "kind",
           "requestedAt",
           "sentWithoutPdf",
           "to"
@@ -19624,6 +19625,9 @@
           },
           "document": {
             "$ref": "#/components/schemas/CfdiEmailDocument"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CfdiEmailKind"
           },
           "cfdiId": {
             "type": "string",
@@ -19684,6 +19688,18 @@
           "NotConfigured",
           "NoLongerStamped",
           "NotDelivered"
+        ]
+      },
+      "CfdiEmailKind": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Documents",
+          "Cancellation"
         ]
       },
       "CfdiPartyDto": {

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { isOrderInvoicingWaiting, type CfdiEmail } from '../../api/invoicing';
 import { apiRequest } from '../../api/typedClient';
-import { CfdiEmailDocument, CfdiEmailFailure, OrderInvoiceStatus } from '../../types';
+import { CfdiEmailDocument, CfdiEmailFailure, CfdiEmailKind, OrderInvoiceStatus } from '../../types';
 import { isPlainEmail } from '../../utils/cfdi';
 import { formatDateTime } from '../../utils/dates';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
@@ -19,7 +19,8 @@ const TOO_MANY = 'F-1 ya se envió 5 veces hoy: revisa el correo con el cliente 
 
 function email(overrides: Partial<CfdiEmail> = {}): CfdiEmail {
   return {
-    id: 'e-1', document: CfdiEmailDocument.Invoice, cfdiId: 'inv-1', to: 'karla@ejemplo.mx', requestedAt: '2026-10-26T17:55:00Z',
+    id: 'e-1', document: CfdiEmailDocument.Invoice, kind: CfdiEmailKind.Documents, cfdiId: 'inv-1', to: 'karla@ejemplo.mx',
+    requestedAt: '2026-10-26T17:55:00Z',
     byTienditApp: true, byCustomer: false, sentAt: null, sentWithoutPdf: false, failedAt: null, failure: undefined, failedAttempts: 0,
     lastFailedAttemptAt: null, ...overrides,
   };
@@ -106,6 +107,53 @@ describe('CfdiEmailStatus', () => {
       'Enviándose por correo a karla@ejemplo.mx… El servidor de correo no lo ha tomado; TienditApp lo vuelve a intentar.');
   });
 
+  it('says how the notice of the cancellation went, which TienditApp sends on its own (Fase 28N)', () => {
+    const notice = (overrides: Partial<CfdiEmail> = {}) => email({ id: 'e-2', kind: CfdiEmailKind.Cancellation, ...overrides });
+    const stamped = email({ sentAt: '2026-10-26T17:56:00Z' });
+    const { rerender } = render(<CfdiEmailStatus emails={[notice(), stamped]} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/^Avisando la cancelación por correo a karla@ejemplo\.mx…$/);
+    expect(screen.queryByText(/Se envió por correo/)).not.toBeInTheDocument();
+
+    rerender(<CfdiEmailStatus emails={[notice({ failedAttempts: 2 }), stamped]} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/El servidor de correo no ha tomado el aviso; TienditApp lo vuelve a intentar\.$/);
+
+    rerender(<CfdiEmailStatus emails={[notice({ sentAt: '2026-10-26T17:58:00Z' }), stamped]} />);
+    expect(screen.getByText(/^Se avisó la cancelación por correo a karla@ejemplo\.mx el .+[^.]\.$/)).toBeInTheDocument();
+
+    // It is not sent again by hand: the business tells the customer another way. Each outcome replaces «Avisando…» in the
+    // same live region, so it is announced.
+    const failed = (failure?: CfdiEmailFailure) => notice({ failedAt: '2026-10-26T17:58:00Z', failure });
+    rerender(<CfdiEmailStatus emails={[failed(CfdiEmailFailure.Rejected), stamped]} />);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No se avisó la cancelación a karla@ejemplo.mx: el servidor de correo rechazó el aviso. Avísale al cliente por otro medio.');
+    rerender(<CfdiEmailStatus emails={[failed(CfdiEmailFailure.NotConfigured), stamped]} />);
+    expect(screen.getByText(/TienditApp no tiene el envío de correos configurado\. Avísale al cliente por otro medio\.$/)).toBeInTheDocument();
+    rerender(<CfdiEmailStatus emails={[failed(CfdiEmailFailure.NotDelivered), stamped]} />);
+    expect(screen.getByText(
+      'No se avisó la cancelación a karla@ejemplo.mx: el servidor de correo no tomó el aviso después de varios intentos. '
+      + 'Avísale al cliente por otro medio.')).toBeInTheDocument();
+    // The previous version ends a notice it takes as no longer standing (ADR 0059); one without its failure reads the same.
+    for (const failure of [CfdiEmailFailure.NoLongerStamped, undefined]) {
+      rerender(<CfdiEmailStatus emails={[failed(failure), stamped]} />);
+      expect(screen.getByText('No se avisó la cancelación a karla@ejemplo.mx: TienditApp no pudo mandar el aviso. Avísale al cliente por otro medio.'))
+        .toBeInTheDocument();
+    }
+    expect(screen.queryByText(/Descarga el XML|Envíalo otra vez|Revisa la dirección|ya no está vigente/)).not.toBeInTheDocument();
+  });
+
+  it('says who got the files of a cancelled CFDI at another address, and hears nothing from TienditApp', () => {
+    const notice = email({ id: 'e-3', kind: CfdiEmailKind.Cancellation, sentAt: '2026-10-26T17:58:00Z' });
+    const toAccounting = email({ id: 'e-2', to: 'Contabilidad@ejemplo.mx', byTienditApp: false, sentAt: '2026-10-26T17:57:00Z' });
+    const { rerender } = render(<CfdiEmailStatus emails={[notice, toAccounting, email({ sentAt: '2026-10-26T17:56:00Z' })]} />);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /^Se avisó la cancelación por correo a karla@ejemplo\.mx el .+\. Los archivos también llegaron a Contabilidad@ejemplo\.mx: avísale por otro medio\.$/);
+
+    // Not when it went to the same address in other letters, nor when it never went out.
+    rerender(<CfdiEmailStatus emails={[notice, email({ id: 'e-2', to: 'KARLA@ejemplo.mx', sentAt: '2026-10-26T17:57:00Z' }),
+      email({ id: 'e-4', to: 'otra@ejemplo.mx', failedAt: '2026-10-26T17:57:00Z', failure: CfdiEmailFailure.Rejected })]} />);
+    expect(screen.queryByText(/Los archivos también llegaron/)).not.toBeInTheDocument();
+  });
+
   it('keeps reading the invoicing while the latest email is on its way, until it ends', () => {
     const waiting = (latest: CfdiEmail) => isOrderInvoicingWaiting({
       invoices: [{ status: OrderInvoiceStatus.Stamped, emails: [latest], whatsApps: [] }] as never, payments: [], adjustments: [],
@@ -113,6 +161,20 @@ describe('CfdiEmailStatus', () => {
     expect(waiting(email({ requestedAt: '2026-10-26T14:00:00Z', failedAttempts: 5 }))).toBe(true);
     expect(waiting(email({ sentAt: '2026-10-26T17:56:00Z' }))).toBe(false);
     expect(waiting(email({ failedAt: '2026-10-26T17:56:00Z', failure: CfdiEmailFailure.NotDelivered }))).toBe(false);
+    // Also the notice of a cancelled invoice, or of a cancelled payment complement, until it ends.
+    const cancelled = (latest: CfdiEmail) => isOrderInvoicingWaiting({
+      invoices: [{ status: OrderInvoiceStatus.Cancelled, emails: [latest], whatsApps: [] }] as never, payments: [], adjustments: [],
+    });
+    const cancelledComplement = (latest: CfdiEmail) => isOrderInvoicingWaiting({
+      invoices: [],
+      payments: [{ awaitsAutomaticIssue: false, complements: [{ status: OrderInvoiceStatus.Cancelled, emails: [latest], whatsApps: [] }] }] as never,
+      adjustments: [],
+    });
+    const pendingNotice = email({ kind: CfdiEmailKind.Cancellation, document: CfdiEmailDocument.PaymentComplement });
+    expect(cancelled(email({ kind: CfdiEmailKind.Cancellation }))).toBe(true);
+    expect(cancelledComplement(pendingNotice)).toBe(true);
+    expect(cancelled(email({ kind: CfdiEmailKind.Cancellation, sentAt: '2026-10-26T17:56:00Z' }))).toBe(false);
+    expect(cancelledComplement({ ...pendingNotice, failedAt: '2026-10-26T17:56:00Z', failure: CfdiEmailFailure.NotDelivered })).toBe(false);
   });
 });
 

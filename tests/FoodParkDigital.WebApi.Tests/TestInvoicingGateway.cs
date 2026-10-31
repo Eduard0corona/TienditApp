@@ -7,7 +7,8 @@ namespace FoodParkDigital.WebApi.Tests;
 
 /// <summary>
 /// The PAC for the API in process (Fase 28A): it keeps each CSD, stamps each key once (the same stamp for a repeated key),
-/// renders a PDF and takes every cancellation. It can refuse the next stamp (Fase 28G).
+/// renders a PDF and takes every cancellation. It can refuse the next stamp (Fase 28G), and the SAT cancels at once the
+/// CFDI a test names (Fase 28N).
 /// </summary>
 public sealed class TestInvoicingGateway : IInvoicingGateway
 {
@@ -25,6 +26,9 @@ public sealed class TestInvoicingGateway : IInvoicingGateway
     public bool Sandbox => false;
 
     public ConcurrentQueue<(string IssuerRfc, string Uuid)> Cancellations { get; } = new();
+
+    /// <summary>The UUIDs the SAT cancels as soon as they are asked to; the others wait for the customer.</summary>
+    public ConcurrentDictionary<string, bool> CancelledAtOnce { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public Task SaveCertificateAsync(byte[] certificate, byte[] privateKey, string password, CancellationToken cancellationToken)
         => Task.CompletedTask;
@@ -56,7 +60,7 @@ public sealed class TestInvoicingGateway : IInvoicingGateway
         string issuerRfc, string uuid, CfdiCancellationMotive motive, string? replacementUuid, CancellationToken cancellationToken)
     {
         Cancellations.Enqueue((issuerRfc, uuid));
-        return Task.FromResult(CfdiCancellationOutcome.Requested);
+        return Task.FromResult(CancelledAtOnce.ContainsKey(uuid) ? CfdiCancellationOutcome.Cancelled : CfdiCancellationOutcome.Requested);
     }
 
     public Task<CfdiSatStatus> GetSatStatusAsync(CfdiStatusQuery query, CancellationToken cancellationToken)

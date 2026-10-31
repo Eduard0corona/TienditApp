@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
@@ -24,6 +25,8 @@ public class CfdiEmailDto
 {
     public Guid Id { get; set; }
     public CfdiEmailDocument Document { get; set; }
+    /// <summary>Its XML and PDF, or the notice that the SAT cancelled it (Fase 28N), which TienditApp sends on its own.</summary>
+    public CfdiEmailKind Kind { get; set; }
     public Guid CfdiId { get; set; }
     public string To { get; set; } = null!;
     public DateTimeOffset RequestedAt { get; set; }
@@ -44,6 +47,7 @@ public class CfdiEmailDto
     {
         Id = email.Id,
         Document = email.Document,
+        Kind = email.Kind,
         CfdiId = email.CfdiId,
         To = email.To,
         RequestedAt = email.RequestedAt,
@@ -60,7 +64,7 @@ public class CfdiEmailDto
 
 /// <summary>
 /// The emails of the CFDI of an order's invoice to its customer (Fase 28E, ADR 0049): the invoice, its payment complements
-/// and its credit notes, with their XML and PDF.
+/// and its credit notes, with their XML and PDF; and since Fase 28N (ADR 0059) the notice that the SAT cancelled one.
 /// </summary>
 public static class CfdiEmails
 {
@@ -86,16 +90,21 @@ public static class CfdiEmails
     /// </summary>
     public static async Task QueueOnStampAsync(IApplicationDbContext context, Cfdi cfdi, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var address = cfdi switch
-        {
-            OrderInvoice invoice => invoice.ReceiverEmail,
-            PaymentComplement complement => await EmailOfAsync(context, complement.OrderInvoiceId, cancellationToken),
-            // A global invoice's credit note is to the general public (Fase 28I): nobody to send it to.
-            CreditNote { OrderInvoiceId: { } invoiceId } => await EmailOfAsync(context, invoiceId, cancellationToken),
-            _ => null
-        };
-        if (address is not null && cfdi.Status == OrderInvoiceStatus.Stamped && InvoiceEmailAddress.IsValid(address))
+        var address = await AddressOfAsync(context, cfdi, cancellationToken);
+        if (address is not null && cfdi.Status == OrderInvoiceStatus.Stamped)
             context.CfdiEmails.Add(CfdiEmail.Request(cfdi, address, null, now));
+    }
+
+    /// <summary>
+    /// The notice that the SAT cancelled a CFDI of an order's invoice (Fase 28N), when its invoice has an email: added to be
+    /// saved with the cancellation, like the email of the stamp. It never throws, so it never holds the cancellation up.
+    /// </summary>
+    public static async Task QueueCancellationNoticeAsync(
+        IApplicationDbContext context, Cfdi cfdi, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var address = await AddressOfAsync(context, cfdi, cancellationToken);
+        if (address is not null && cfdi.Status == OrderInvoiceStatus.Cancelled)
+            context.CfdiEmails.Add(CfdiEmail.RequestCancellationNotice(cfdi, address, now));
     }
 
     /// <summary>The latest emails of each CFDI of these invoices of an order, the newest first.</summary>
@@ -134,11 +143,46 @@ public static class CfdiEmails
         _ => throw new ArgumentException("Only the CFDI of an order's invoice go by email.", nameof(cfdi))
     };
 
+    /// <summary>
+    /// Where TienditApp sends what happens to a CFDI of an order's invoice: the email its invoice keeps, if it still passes
+    /// (a rule tightened later skips the email, never what asked for it).
+    /// </summary>
+    private static async Task<string?> AddressOfAsync(IApplicationDbContext context, Cfdi cfdi, CancellationToken cancellationToken)
+    {
+        var address = cfdi switch
+        {
+            OrderInvoice invoice => invoice.ReceiverEmail,
+            PaymentComplement complement => await EmailOfAsync(context, complement.OrderInvoiceId, cancellationToken),
+            // A global invoice's credit note is to the general public (Fase 28I): nobody to send it to.
+            CreditNote { OrderInvoiceId: { } invoiceId } => await EmailOfAsync(context, invoiceId, cancellationToken),
+            _ => null
+        };
+        return address is not null && InvoiceEmailAddress.IsValid(address) ? address : null;
+    }
+
     private static Task<string?> EmailOfAsync(IApplicationDbContext context, Guid invoiceId, CancellationToken cancellationToken)
         => context.OrderInvoices.AsNoTracking()
             .Where(i => i.Id == invoiceId)
             .Select(i => i.ReceiverEmail)
             .FirstOrDefaultAsync(cancellationToken);
+}
+
+/// <summary>What the SAT settles about a cancellation that was asked for.</summary>
+public static class CfdiCancellations
+{
+    /// <summary>
+    /// The SAT cancelled <paramref name="cfdi"/>: when its cancellation was waiting for that, it ends cancelled and the notice
+    /// to the customer (Fase 28N, ADR 0059) is added to be saved with it. Every path that hears it (the request itself and the
+    /// invoicing worker) comes through here, and only the one that changes it asks for the notice: the CFDI's version keeps
+    /// two at once from both saving.
+    /// </summary>
+    public static async Task ConfirmAsync(IApplicationDbContext context, Cfdi cfdi, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (cfdi.Status != OrderInvoiceStatus.Cancelling)
+            return;
+        cfdi.Cancel(now);
+        await CfdiEmails.QueueCancellationNoticeAsync(context, cfdi, now, cancellationToken);
+    }
 }
 
 /// <summary>
@@ -223,7 +267,8 @@ public class SendCfdiByEmailCommandHandler : IRequestHandler<SendCfdiByEmailComm
 
 /// <summary>
 /// Sends an email of a CFDI from the outbox, after the change that asked for it: reads its XML and PDF and sends them with
-/// what the customer needs to recognize it. A CFDI no longer stamped is not sent.
+/// what the customer needs to recognize it. A CFDI no longer stamped is not sent. The notice that the SAT cancelled one
+/// (Fase 28N) goes without files, with why and, with motive 01, the invoice that replaces it.
 /// <list type="bullet">
 /// <item>The PDF is the one kept when it was stamped. The email TienditApp asks for with the stamp waits one attempt for
 /// it (the stamp keeps it right after); otherwise the PAC renders it from the stamped XML, as downloading it does. Without
@@ -285,6 +330,11 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
     private async Task SendAsync(CfdiEmail email, OutboxEventContext context, CancellationToken cancellationToken)
     {
         var cfdi = await CfdiEmails.FindAsync(_context, email.Document, email.CfdiId, cancellationToken);
+        if (email.Kind == CfdiEmailKind.Cancellation)
+        {
+            await SendCancellationNoticeAsync(email, cfdi, cancellationToken);
+            return;
+        }
         if (cfdi is null || cfdi.Status != OrderInvoiceStatus.Stamped || cfdi.XmlFileKey is null || cfdi.Uuid is null)
         {
             _logger.LogInformation("The email {CfdiEmailId} was not sent: its CFDI no longer stands.", email.Id);
@@ -303,10 +353,7 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
         if (pdf is null && context.Attempt <= AttemptsWaitingForPdf && !context.IsLastAttempt)
             throw new InvalidOperationException($"The PAC did not give the PDF of CFDI {cfdi.Id}: the email waits for it.");
 
-        var business = await _context.Tenants.AsNoTracking()
-            .Where(t => t.Id == cfdi.TenantId)
-            .Select(t => new { t.Name, t.ContactEmail })
-            .FirstAsync(cancellationToken);
+        var business = await BusinessAsync(cfdi.TenantId, cancellationToken);
         var fileName = $"{cfdi.Serie}-{cfdi.Folio}_{cfdi.Uuid}";
         var attachments = new List<EmailAttachment> { new($"{fileName}.xml", "application/xml", xml) };
         if (pdf is not null)
@@ -318,7 +365,67 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
             $"{business.Name} vía TienditApp",
             business.ContactEmail,
             attachments);
+        await DeliverAsync(email, message, withoutPdf: pdf is null, cancellationToken);
+    }
 
+    private async Task SendCancellationNoticeAsync(CfdiEmail email, Cfdi? cfdi, CancellationToken cancellationToken)
+    {
+        // A cancelled CFDI stays cancelled: this only keeps a notice nobody should have asked for from going out.
+        if (cfdi is null || cfdi.Status != OrderInvoiceStatus.Cancelled || cfdi.Uuid is null)
+        {
+            _logger.LogWarning("The notice {CfdiEmailId} was not sent: its CFDI is not cancelled.", email.Id);
+            email.Fail(CfdiEmailFailure.NoLongerStamped, _clock.UtcNow);
+            return;
+        }
+
+        var business = await BusinessAsync(cfdi.TenantId, cancellationToken);
+        var timeZone = await _context.TenantSettings.AsNoTracking()
+            .Where(s => s.TenantId == cfdi.TenantId)
+            .Select(s => s.TimeZone)
+            .FirstOrDefaultAsync(cancellationToken);
+        var replacement = await ReplacementAsync(cfdi, cancellationToken);
+        var message = new DocumentEmail(
+            email.To,
+            CancellationSubject(email.Document, cfdi.Number, business.Name),
+            CancellationBody(email.Document, cfdi, business.Name, replacement, TenantDateTimeResolver.Resolve(timeZone)),
+            $"{business.Name} vía TienditApp",
+            business.ContactEmail,
+            []);
+        await DeliverAsync(email, message, withoutPdf: false, cancellationToken);
+    }
+
+    /// <summary>The invoice that replaces a cancelled one, as its notice names it.</summary>
+    public sealed record CfdiReplacement(string Number, string Uuid);
+
+    /// <summary>
+    /// Motive 01 names the invoice that replaces it, stamped before it was cancelled (Fase 28G), only when it is for the same
+    /// RFC: a substitution that fixed who the invoice was for is somebody else's CFDI, and the notice goes where the old one
+    /// went.
+    /// </summary>
+    private async Task<CfdiReplacement?> ReplacementAsync(Cfdi cfdi, CancellationToken cancellationToken)
+    {
+        if (cfdi is not OrderInvoice { CancellationMotive: CfdiCancellationMotive.ErrorsWithReplacement, ReplacedByInvoiceId: { } replacementId } cancelled)
+            return null;
+        var replacement = await _context.OrderInvoices.AsNoTracking()
+            .Where(i => i.Id == replacementId && i.Status == OrderInvoiceStatus.Stamped && i.Uuid != null)
+            .Select(i => new { Number = i.Serie + "-" + i.Folio, Uuid = i.Uuid!, i.Receiver.Rfc })
+            .FirstOrDefaultAsync(cancellationToken);
+        return replacement is not null && string.Equals(replacement.Rfc, cancelled.Receiver.Rfc, StringComparison.OrdinalIgnoreCase)
+            ? new CfdiReplacement(replacement.Number, replacement.Uuid)
+            : null;
+    }
+
+    private async Task<(string Name, string? ContactEmail)> BusinessAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var business = await _context.Tenants.AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => new { t.Name, t.ContactEmail })
+            .FirstAsync(cancellationToken);
+        return (business.Name, business.ContactEmail);
+    }
+
+    private async Task DeliverAsync(CfdiEmail email, DocumentEmail message, bool withoutPdf, CancellationToken cancellationToken)
+    {
         EmailSendOutcome outcome;
         try
         {
@@ -335,7 +442,7 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
         switch (outcome)
         {
             case EmailSendOutcome.Sent:
-                email.Sent(withoutPdf: pdf is null, now);
+                email.Sent(withoutPdf, now);
                 break;
             case EmailSendOutcome.NotConfigured:
                 email.Fail(CfdiEmailFailure.NotConfigured, now);
@@ -380,6 +487,67 @@ public sealed class CfdiEmailRequestedHandler : IOutboxEventHandler<CfdiEmailReq
             <p>Si no esperabas este correo, respóndelo para avisarle a {business}.</p>
             """;
     }
+
+    public static string CancellationSubject(CfdiEmailDocument document, string number, string businessName)
+        => $"Cancelación {Of(document)} {number} de {businessName.ReplaceLineEndings(" ").Trim()}";
+
+    /// <summary>
+    /// The notice that the SAT cancelled it: which CFDI, why in plain words, the invoice that replaces it (motive 01) and how
+    /// to check it with the SAT; the business's text is encoded.
+    /// </summary>
+    public static string CancellationBody(
+        CfdiEmailDocument document, Cfdi cfdi, string businessName, CfdiReplacement? replacement, TimeZoneInfo zone)
+    {
+        var parsed = CfdiDocument.FromJson(cfdi.Document);
+        var business = WebUtility.HtmlEncode(businessName.ReplaceLineEndings(" ").Trim());
+        var amount = cfdi switch
+        {
+            PaymentComplement complement => $" por el pago de {OrderStatusLabels.FormatMoney(complement.Amount)}",
+            CfdiInvoice invoice => $" por {OrderStatusLabels.FormatMoney(invoice.Total)}",
+            CreditNote note => $" por {OrderStatusLabels.FormatMoney(note.Total)}",
+            _ => string.Empty
+        };
+        var date = DateTime.TryParseExact(parsed.Date, CfdiDocument.DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var issued)
+            ? $", del {issued.ToString("d 'de' MMMM 'de' yyyy", Spanish)}"
+            : string.Empty;
+        var cancelledOn = cfdi.CancelledAt is { } cancelledAt
+            ? $"<li>Fecha de cancelación: {TimeZoneInfo.ConvertTime(cancelledAt, zone).ToString("d 'de' MMMM 'de' yyyy", Spanish)}</li>"
+            : string.Empty;
+        var why = Motive(cfdi.CancellationMotive) is { } motive ? $"<p>Motivo: {motive}.</p>" : string.Empty;
+        var next = replacement is not null
+            ? $"<p>La sustituye la factura {WebUtility.HtmlEncode(replacement.Number)}, con folio fiscal {WebUtility.HtmlEncode(replacement.Uuid)}: usa esa en su lugar.</p>"
+            : string.Empty;
+        return $"""
+            <p>Hola:</p>
+            <p>{business} canceló ante el SAT {Article(document)} {WebUtility.HtmlEncode(cfdi.Number)}{amount}{date}: ya no tiene validez fiscal.</p>
+            {why}
+            {next}
+            <ul>
+              <li>Emisor: {WebUtility.HtmlEncode(parsed.Issuer.Name)} (RFC {WebUtility.HtmlEncode(parsed.Issuer.Rfc)})</li>
+              <li>Receptor: {WebUtility.HtmlEncode(parsed.Receiver.Name)} (RFC {WebUtility.HtmlEncode(parsed.Receiver.Rfc)})</li>
+              <li>Folio fiscal: {WebUtility.HtmlEncode(cfdi.Uuid ?? string.Empty)}</li>
+              {cancelledOn}
+            </ul>
+            <p>Puedes verificarlo en el portal del SAT: <a href="https://verificacfdi.facturaelectronica.sat.gob.mx">verificacfdi.facturaelectronica.sat.gob.mx</a>.</p>
+            <p>Si tienes dudas, responde este correo para escribirle a {business}.</p>
+            """;
+    }
+
+    /// <summary>Why the SAT cancelled it, as the customer reads it.</summary>
+    private static string? Motive(CfdiCancellationMotive? motive) => motive switch
+    {
+        CfdiCancellationMotive.ErrorsWithReplacement => "tenía errores y se emitió otra en su lugar",
+        CfdiCancellationMotive.ErrorsWithoutReplacement => "tenía errores",
+        CfdiCancellationMotive.NotCarriedOut => "la operación no se llevó a cabo",
+        _ => null
+    };
+
+    private static string Of(CfdiEmailDocument document) => document switch
+    {
+        CfdiEmailDocument.PaymentComplement => "del complemento de pago",
+        CfdiEmailDocument.CreditNote => "de la nota de crédito",
+        _ => "de la factura"
+    };
 
     private static string Kind(CfdiEmailDocument document) => document switch
     {

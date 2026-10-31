@@ -29,6 +29,7 @@ internal static class BeforeCfdiWhatsApp
         IgnoreMessages(modelBuilder);
         modelBuilder.Entity<OrderInvoice>().Ignore(i => i.ReceiverWhatsApp);
         modelBuilder.Entity<InvoicingProfile>().Ignore(p => p.WhatsAppTemplateId);
+        BeforeCfdiCancellationNotices.Ignore(modelBuilder);
     }
 
     /// <summary>Only the queue's columns, for a version that does not know the invoices at all.</summary>

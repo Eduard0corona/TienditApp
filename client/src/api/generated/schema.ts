@@ -15156,6 +15156,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             document: components["schemas"]["CfdiEmailDocument"];
+            kind: components["schemas"]["CfdiEmailKind"];
             /** Format: uuid */
             cfdiId: string;
             to: string;
@@ -15179,6 +15180,11 @@ export interface components {
          * @enum {integer}
          */
         CfdiEmailFailure: 0 | 1 | 2 | 3;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        CfdiEmailKind: 0 | 1;
         CfdiPartyDto: {
             rfc?: string | null;
             name?: string | null;
