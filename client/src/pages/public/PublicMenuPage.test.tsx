@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
+import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import { publicMenuApi, type PublicMenu } from '../../api/publicMenuApi';
 import { reviewsApi } from '../../api/reviewsApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
@@ -345,6 +346,35 @@ describe('PublicMenuPage', () => {
     renderPage('/m/cafe-luna?mesa=Mesa%204');
     await screen.findByText('Latte');
     expect(screen.queryByRole('link', { name: 'Agenda tu cita' })).not.toBeInTheDocument();
+  });
+
+  it('shows the visits to quote of a trade instead of an empty menu, but not to a customer at a table (Fase 29A)', async () => {
+    api.getMenu.mockResolvedValue(menu({
+      businessName: 'Plomería Hernández',
+      acceptsOrders: false,
+      contactPhone: '2221234567',
+      categories: [],
+      homeVisits: {
+        chargePolicy: HomeVisitChargePolicy.Charged,
+        price: { amount: 300, isStarting: false },
+        visitServiceName: 'Visita y diagnóstico',
+        postalCodes: ['72000'],
+        postalCodeCount: 1,
+        services: [{ name: 'Destapar drenaje', price: 600, durationMinutes: 60 }],
+      },
+    }));
+
+    const { unmount } = renderPage();
+
+    const visits = await screen.findByRole('region', { name: 'Visitas a domicilio' });
+    expect(within(visits).getByText('Visita $300.00')).toBeInTheDocument();
+    expect(within(visits).getByRole('link', { name: 'Solicitar visita' })).toBeInTheDocument();
+    expect(screen.queryByText('El menú todavía no tiene productos.')).not.toBeInTheDocument();
+    unmount();
+
+    renderPage('/m/cafe-luna?mesa=Mesa%204');
+    await screen.findAllByText('Plomería Hernández');
+    expect(screen.queryByRole('region', { name: 'Visitas a domicilio' })).not.toBeInTheDocument();
   });
 
   it('shows the menu without taking orders while they are paused (no drawer open)', async () => {

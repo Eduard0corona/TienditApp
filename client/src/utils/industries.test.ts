@@ -35,6 +35,12 @@ describe('industries', () => {
     }
   });
 
+  it('offers every trade that goes to homes, written as the server reads them (HomeTrades)', () => {
+    for (const giro of ['Fumigación', 'Refrigeración y línea blanca', 'Cerrajería', 'Jardinería', 'Limpieza del hogar', 'Pintura e impermeabilización']) {
+      expect(INDUSTRY_OPTIONS).toContain(giro);
+    }
+  });
+
   it('offers the giro of a kitchen that only delivers, written as the server reads it', () => {
     expect(HOME_DELIVERY_INDUSTRY).toBe('Comida a domicilio');
     expect(INDUSTRY_OPTIONS).toContain(HOME_DELIVERY_INDUSTRY);

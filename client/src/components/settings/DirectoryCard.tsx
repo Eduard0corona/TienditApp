@@ -5,6 +5,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { publicDirectoryApi, type DirectoryProfile } from '../../api/publicDirectoryApi';
 import { DirectoryVisibility, type BusinessCategory } from '../../api/generated/enums';
 import DirectoryBusinessCard from '../explore/DirectoryBusinessCard';
+import HomeVisitAddressNotice from './HomeVisitAddressNotice';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OnlineMenuMode } from '../../types';
@@ -78,6 +79,7 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
   return (
     <>
       <VisibilityNotice visibility={profile.visibility} category={profile.category} />
+      {profile.homeVisitAddressNotice && <HomeVisitAddressNotice />}
 
       <div className="form-check form-switch mb-3">
         <input

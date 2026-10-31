@@ -12,6 +12,7 @@ import FavoriteButton from '../../components/explore/FavoriteButton';
 import StoreReviews, { STORE_REVIEWS_ID } from '../../components/reviews/StoreReviews';
 import ProductSheet from '../../components/store/ProductSheet';
 import StoreHero from '../../components/store/StoreHero';
+import HomeVisitsSection from '../../components/store/HomeVisitsSection';
 import StoreInfoModal from '../../components/store/StoreInfoModal';
 import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useActiveSection } from '../../hooks/useActiveSection';
@@ -603,6 +604,15 @@ export default function PublicMenuPage() {
           </div>
         )}
 
+        {data.homeVisits && !atTable && (
+          <HomeVisitsSection
+            visits={data.homeVisits}
+            businessName={data.businessName}
+            contactPhone={data.contactPhone}
+            pricesIncludeTax={data.pricesIncludeTax}
+          />
+        )}
+
         {categories.length > 0 && (
           <div className="pm-search">
             <i className="ri-search-line" aria-hidden="true"></i>
@@ -662,7 +672,9 @@ export default function PublicMenuPage() {
                     <div className="pm-items">{item.products.map(productRow)}</div>
                   </section>
                 ))}
-                {categories.length === 0 && <p className="text-muted text-center py-5">El menú todavía no tiene productos.</p>}
+                {categories.length === 0 && !data.homeVisits && (
+                  <p className="text-muted text-center py-5">El menú todavía no tiene productos.</p>
+                )}
               </main>
             </div>
             <StoreReviews business={{ slug: data.slug, name: data.businessName }} summary={data.rating} customer={!!customer} />

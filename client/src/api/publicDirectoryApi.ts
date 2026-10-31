@@ -28,4 +28,7 @@ export const publicDirectoryApi = {
   getProfile: () => apiRequest('get', '/api/v1/auth/my-tenant/directory'),
 
   updateProfile: (body: UpdateDirectoryProfile) => apiRequest('put', '/api/v1/auth/my-tenant/directory', { body }),
+
+  /** «Ya lo revisé»: the notice of the published address of a business that goes to homes stops showing (Fase 29A). */
+  dismissHomeVisitAddressNotice: () => apiRequest('post', '/api/v1/auth/my-tenant/directory/home-visit-address-notice/dismiss'),
 };

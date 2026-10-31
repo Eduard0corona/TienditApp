@@ -1,5 +1,6 @@
 import api from './axios';
 import { apiRequest, type Schemas } from './typedClient';
+import type { HomeVisitChargePolicy } from './generated/enums';
 import type {
   AppointmentDto,
   AppointmentStatus,
@@ -11,6 +12,8 @@ export type OnlineBookingSettings = Schemas['OnlineBookingSettingsDto'];
 export type OnlineBookingStaffSettings = Schemas['OnlineBookingStaffSettingsDto'];
 export type OnlineBookingStaffMember = Schemas['OnlineBookingStaffMemberDto'];
 export type UpdateOnlineBookingStaff = Schemas['UpdateOnlineBookingStaffRequest'];
+export type HomeVisitRequestsSettings = Schemas['HomeVisitRequestsSettingsDto'];
+export type HomeVisitPrice = Schemas['HomeVisitPriceDto'];
 
 export const appointmentsApi = {
   getAll: (params?: {
@@ -55,4 +58,11 @@ export const appointmentsApi = {
   /** Sets what customers see of a team member and when they book them online. */
   updateOnlineBookingStaff: (userId: string, body: UpdateOnlineBookingStaff) =>
     apiRequest('put', '/api/v1/appointments/online-booking/staff/{userId}', { path: { userId }, body }),
+
+  /** Whether the business receives visits to quote, its visit service, how it charges it and what is missing (Fase 29A). */
+  getHomeVisitRequests: (signal?: AbortSignal) => apiRequest('get', '/api/v1/appointments/home-visit-requests', { signal }),
+
+  /** Turns visits to quote on or off and picks the visit service and how it is charged (owners and admins). */
+  updateHomeVisitRequests: (body: { enabled: boolean; serviceId: string | null; chargePolicy: HomeVisitChargePolicy }) =>
+    apiRequest('put', '/api/v1/appointments/home-visit-requests', { body }),
 };
