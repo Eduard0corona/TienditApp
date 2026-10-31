@@ -30,6 +30,14 @@ describe('attention', () => {
     expect(describeAttention({ key: 'cfdisToReview', count: 1, urgentCount: 1 })?.text).toBe('1 CFDI por revisar en el portal del SAT');
   });
 
+  it('leads a business that goes to homes and publishes an address to «Cómo te ven» (Fase 29A)', () => {
+    expect(describeAttention({ key: 'homeVisitAddress', count: 1, urgentCount: 0 })).toMatchObject({
+      text: 'Tu tienda muestra la dirección de un local: revisa si atiendes ahí',
+      path: '/settings/business',
+      tone: 'info',
+    });
+  });
+
   it('marks stock as urgent when something ran out', () => {
     expect(describeAttention({ key: 'lowStock', count: 3, urgentCount: 1 })).toMatchObject({
       text: '3 insumos por reabastecer (1 agotado o crítico)',

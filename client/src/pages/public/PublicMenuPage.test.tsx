@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
+import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import { publicMenuApi, type PublicMenu } from '../../api/publicMenuApi';
 import { reviewsApi } from '../../api/reviewsApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
@@ -345,6 +346,89 @@ describe('PublicMenuPage', () => {
     renderPage('/m/cafe-luna?mesa=Mesa%204');
     await screen.findByText('Latte');
     expect(screen.queryByRole('link', { name: 'Agenda tu cita' })).not.toBeInTheDocument();
+  });
+
+  it('shows the visits to quote of a trade instead of an empty menu, but not to a customer at a table (Fase 29A)', async () => {
+    api.getMenu.mockResolvedValue(menu({
+      businessName: 'Plomería Hernández',
+      acceptsOrders: false,
+      contactPhone: '2221234567',
+      categories: [],
+      homeVisits: {
+        chargePolicy: HomeVisitChargePolicy.Charged,
+        price: { amount: 300, isStarting: false },
+        visitServiceName: 'Visita y diagnóstico',
+        postalCodes: ['72000'],
+        postalCodeCount: 1,
+        services: [{ name: 'Destapar drenaje', price: 600, durationMinutes: 60 }],
+      },
+    }));
+
+    const { unmount } = renderPage();
+
+    const visits = await screen.findByRole('region', { name: 'Visitas a domicilio' });
+    expect(within(visits).getByText('Visita $300.00')).toBeInTheDocument();
+    expect(within(visits).getByRole('link', { name: 'Solicitar visita' })).toBeInTheDocument();
+    expect(screen.queryByText('El menú todavía no tiene productos.')).not.toBeInTheDocument();
+    unmount();
+
+    renderPage('/m/cafe-luna?mesa=Mesa%204');
+    await screen.findAllByText('Plomería Hernández');
+    expect(screen.queryByRole('region', { name: 'Visitas a domicilio' })).not.toBeInTheDocument();
+    // At a table there are no visits: the empty menu says so, instead of a blank page.
+    expect(screen.getByText('El menú todavía no tiene productos.')).toBeInTheDocument();
+  });
+
+  it('never tells of paused orders or a menu to look at above the visits of a trade with nothing on its menu (Fase 29A)', async () => {
+    const trade = {
+      businessName: 'Plomería Hernández',
+      // Its menu takes orders, but without its cash register open and without products nothing can be ordered.
+      acceptsOrders: false,
+      ordersPaused: true,
+      categories: [],
+      homeVisits: {
+        chargePolicy: HomeVisitChargePolicy.Charged,
+        price: { amount: 300, isStarting: false },
+        visitServiceName: null,
+        postalCodes: ['72000'],
+        postalCodeCount: 1,
+        services: [],
+      },
+    };
+    api.getMenu.mockResolvedValue(menu(trade));
+    const { unmount } = renderPage();
+
+    expect(await screen.findByRole('region', { name: 'Visitas a domicilio' })).toBeInTheDocument();
+    expect(screen.queryByText(/no estamos recibiendo pedidos/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/puedes ver el menú/i)).not.toBeInTheDocument();
+    unmount();
+
+    // Closed today: its hours say so in the header, never «Mientras, puedes ver el menú».
+    api.getMenu.mockResolvedValue(menu({ ...trade, hours: christmasDay } as Partial<PublicMenu>));
+    renderPage();
+    expect(await screen.findByRole('region', { name: 'Visitas a domicilio' })).toBeInTheDocument();
+    expect(screen.queryByText(/puedes ver el menú/i)).not.toBeInTheDocument();
+  });
+
+  it('leaves the visit as the one main action of a trade that also books appointments online (Fase 29A)', async () => {
+    api.getMenu.mockResolvedValue(menu({
+      acceptsOrders: false,
+      booksOnline: true,
+      contactPhone: '2221234567',
+      homeVisits: {
+        chargePolicy: HomeVisitChargePolicy.Charged,
+        price: { amount: 300, isStarting: false },
+        visitServiceName: null,
+        postalCodes: ['72000'],
+        postalCodeCount: 1,
+        services: [],
+      },
+    }));
+
+    renderPage();
+
+    expect(await screen.findByRole('link', { name: 'Agenda tu cita' })).toHaveClass('btn-light');
+    expect(screen.getByRole('link', { name: 'Solicitar visita' })).toHaveClass('btn-primary');
   });
 
   it('shows the menu without taking orders while they are paused (no drawer open)', async () => {

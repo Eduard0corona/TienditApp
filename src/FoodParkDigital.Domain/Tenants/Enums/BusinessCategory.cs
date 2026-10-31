@@ -17,5 +17,8 @@ public enum BusinessCategory
     Beauty = 7,
     Automotive = 8,
     Services = 9,
-    Other = 10
+    Other = 10,
+
+    /// <summary>«Hogar y reparaciones»: the trades that go to the customer's home (ADR 0053).</summary>
+    HomeRepairs = 11
 }

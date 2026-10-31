@@ -15,13 +15,13 @@ const NOPAL = 0;
 const TALAVERA = 1;
 const SHOWN = 0;
 const MENU_OFF = 2;
-const CATEGORIES = 11;
+const CATEGORIES = 12;
 
 /** A card of Explorar: only what the menu of the business already shows. */
 const card = (name, slug, category, overrides = {}) => ({
   name, slug, logoUrl: null, coverImageUrl: null, category, description: null, theme: NOPAL, city: 'Ciudad de México',
   deliveryOnly: false, deliveryAvailable: false, acceptsOrders: false, ordersPaused: false, statusLabel: null,
-  statusDetail: null, closed: false, pricesIncludeTax: true, booksOnline: false,
+  statusDetail: null, closed: false, pricesIncludeTax: true, booksOnline: false, receivesVisits: false,
   ...overrides,
 });
 
@@ -113,16 +113,31 @@ export function demoDirectoryProducts() {
 /** Lowercase and without accents, as the API compares a search. */
 const comparable = (text) => (text ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
-/** Each card says whether its business delivers to the postal code, as the API does for a business that delivers. */
+/**
+ * Each card says whether its business delivers to the postal code, as the API does for a business that delivers; one
+ * that receives visits to quote (Fase 29A) whether it goes there and what the visit there costs, those that do not go
+ * after the others (`data.directoryVisits`, by slug and postal code).
+ */
 export const withDeliveryTo = (data, businesses, postalCode) => (postalCode
   ? businesses.map((business) => {
-    if (!business.deliveryAvailable) return business;
-    const zone = data.directoryZones[business.slug]?.[postalCode];
-    return {
-      ...business, deliversToPostalCode: !!zone, deliveryFee: zone?.fee ?? null,
-      minimumOrder: zone?.minimumOrder ?? null, freeDeliveryFrom: zone?.freeDeliveryFrom ?? null,
-    };
+    let card = business;
+    if (business.deliveryAvailable) {
+      const zone = data.directoryZones[business.slug]?.[postalCode];
+      card = {
+        ...card, deliversToPostalCode: !!zone, deliveryFee: zone?.fee ?? null,
+        minimumOrder: zone?.minimumOrder ?? null, freeDeliveryFrom: zone?.freeDeliveryFrom ?? null,
+      };
+    }
+    if (business.receivesVisits) {
+      // What the visit costs there, or nothing where it does not go.
+      const visit = data.directoryVisits?.[business.slug]?.[postalCode];
+      card = { ...card, visitsPostalCode: !!visit, visitPrice: visit ?? null };
+    }
+    return card;
   })
+    .map((business, index) => ({ business, index, last: business.visitsPostalCode === false ? 1 : 0 }))
+    .sort((a, b) => a.last - b.last || a.index - b.index)
+    .map(({ business }) => business)
   : businesses);
 
 /**

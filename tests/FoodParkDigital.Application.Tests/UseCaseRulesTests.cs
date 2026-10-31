@@ -17,6 +17,7 @@ using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Application.Messaging.OptOuts;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Reports.Queries;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.Queries;
@@ -115,6 +116,11 @@ public class UseCaseRulesTests
         { typeof(GetVisitRouteQuery), "Permission(ManageAppointments) Module(Appointments)" },
         { typeof(GetHomeVisitSettingsQuery), "Member Module(Appointments)" },
         { typeof(UpdateHomeVisitSettingsCommand), "Manager Module(Appointments)" },
+        // Visits to quote (Fase 29A): whoever books appointments reads the setting, the owner or an admin changes it, and
+        // the notice of the published address is dismissed by them too, with or without the agenda.
+        { typeof(GetHomeVisitRequestsSettingsQuery), "Permission(ManageAppointments) Module(Appointments)" },
+        { typeof(UpdateHomeVisitRequestsSettingsCommand), "Manager Module(Appointments)" },
+        { typeof(DismissHomeVisitAddressNoticeCommand), "Manager" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UploadTenantCoverCommand), "Manager" },

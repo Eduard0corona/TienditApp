@@ -413,6 +413,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appointments/home-visit-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["HomeVisitRequestsSettingsDto"];
+                        "application/json": components["schemas"]["HomeVisitRequestsSettingsDto"];
+                        "text/json": components["schemas"]["HomeVisitRequestsSettingsDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateHomeVisitRequestsSettingsCommand"];
+                    "text/json": components["schemas"]["UpdateHomeVisitRequestsSettingsCommand"];
+                    "application/*+json": components["schemas"]["UpdateHomeVisitRequestsSettingsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["HomeVisitRequestsSettingsDto"];
+                        "application/json": components["schemas"]["HomeVisitRequestsSettingsDto"];
+                        "text/json": components["schemas"]["HomeVisitRequestsSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/appointments/online-booking/staff": {
         parameters: {
             query?: never;
@@ -14003,6 +14067,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/my-tenant/directory/home-visit-address-notice/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/my-tenant/opening-hours": {
         parameters: {
             query?: never;
@@ -14918,7 +15015,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        BusinessCategory: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+        BusinessCategory: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
         BusinessReviewDto: {
             /** Format: uuid */
             id: string;
@@ -16567,6 +16664,7 @@ export interface components {
             description?: string | null;
             listed: boolean;
             visibility: components["schemas"]["DirectoryVisibility"];
+            homeVisitAddressNotice: boolean;
         };
         /**
          * Format: int32
@@ -16809,6 +16907,39 @@ export interface components {
             statutory: boolean;
             kind: components["schemas"]["SpecialDayKind"];
             openings: components["schemas"]["SpecialOpeningDto"][];
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        HomeVisitChargePolicy: 0 | 1 | 2;
+        HomeVisitPriceDto: {
+            /** Format: double */
+            amount: number;
+            isStarting: boolean;
+        };
+        HomeVisitRequestsSettingsDto: {
+            enabled: boolean;
+            /** Format: uuid */
+            serviceId?: string | null;
+            service?: components["schemas"]["HomeVisitServiceOptionDto"];
+            chargePolicy: components["schemas"]["HomeVisitChargePolicy"];
+            price?: components["schemas"]["HomeVisitPriceDto"];
+            pricesIncludeTax: boolean;
+            receivesVisits: boolean;
+            missing: string[];
+            services: components["schemas"]["HomeVisitServiceOptionDto"][];
+            addressNotice: boolean;
+            slug: string;
+        };
+        HomeVisitServiceOptionDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: double */
+            price: number;
+            /** Format: int32 */
+            durationMinutes?: number | null;
         };
         HomeVisitSettingsDto: {
             /** Format: int32 */
@@ -19319,6 +19450,10 @@ export interface components {
             /** Format: double */
             distanceKm?: number | null;
             rating?: components["schemas"]["RatingSummaryDto"];
+            receivesVisits: boolean;
+            visitChargePolicy?: components["schemas"]["HomeVisitChargePolicy"];
+            visitPrice?: components["schemas"]["HomeVisitPriceDto"];
+            visitsPostalCode?: boolean | null;
         };
         PublicDirectoryBusinessDtoPaginatedList: {
             items: components["schemas"]["PublicDirectoryBusinessDto"][];
@@ -19359,6 +19494,22 @@ export interface components {
             /** Format: double */
             distanceKm?: number | null;
         };
+        PublicHomeVisitServiceDto: {
+            name: string;
+            /** Format: double */
+            price: number;
+            /** Format: int32 */
+            durationMinutes?: number | null;
+        };
+        PublicHomeVisitsDto: {
+            chargePolicy: components["schemas"]["HomeVisitChargePolicy"];
+            price: components["schemas"]["HomeVisitPriceDto"];
+            visitServiceName?: string | null;
+            postalCodes: string[];
+            /** Format: int32 */
+            postalCodeCount: number;
+            services: components["schemas"]["PublicHomeVisitServiceDto"][];
+        };
         PublicMenuCategoryDto: {
             /** Format: uuid */
             id: string;
@@ -19388,6 +19539,7 @@ export interface components {
             deliveryAvailable: boolean;
             openingHours?: components["schemas"]["PublicOpeningHoursDto"];
             booksOnline: boolean;
+            homeVisits?: components["schemas"]["PublicHomeVisitsDto"];
             rating?: components["schemas"]["RatingSummaryDto"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
@@ -20634,6 +20786,12 @@ export interface components {
             appRole: components["schemas"]["UserRole"];
             tenantRole: components["schemas"]["TenantUserRole"];
             permissions?: string[] | null;
+        };
+        UpdateHomeVisitRequestsSettingsCommand: {
+            enabled: boolean;
+            /** Format: uuid */
+            serviceId?: string | null;
+            chargePolicy: components["schemas"]["HomeVisitChargePolicy"];
         };
         UpdateHomeVisitSettingsCommand: {
             /** Format: int32 */

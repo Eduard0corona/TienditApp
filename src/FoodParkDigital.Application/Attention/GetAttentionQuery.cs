@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
@@ -44,6 +45,11 @@ public static class AttentionKeys
     public const string AppointmentRequests = "appointmentRequests";
     /// <summary>CFDI still «Timbrando» past the PAC's window, checked in the SAT's portal from Reportes › CFDI emitidos (Fase 28K).</summary>
     public const string CfdisToReview = "cfdisToReview";
+    /// <summary>
+    /// The store publishes the main branch's address while the business goes to its customers' homes (Fase 29A,
+    /// <see cref="HomeVisitAddressNotice"/>): 1 until the owner marks the branch «Solo a domicilio» or dismisses it.
+    /// </summary>
+    public const string HomeVisitAddress = "homeVisitAddress";
 }
 
 public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, AttentionDto>
@@ -173,6 +179,12 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
                 + await _context.CreditNotes.AsNoTracking()
                     .CountAsync(n => n.Status == OrderInvoiceStatus.Stamping && n.RequestedAt < oldestInWindow, cancellationToken);
             Add(AttentionKeys.CfdisToReview, toReview, toReview);
+
+            // Only who can mark the branch «Solo a domicilio» or dismiss the notice sees it.
+            var tenant = await _context.Tenants.AsNoTracking().Include(t => t.Settings)
+                .FirstOrDefaultAsync(t => t.Id == _access.TenantId, cancellationToken);
+            if (tenant is not null && await HomeVisitAddressNotice.ShowsAsync(_context, tenant, tenant.Settings, cancellationToken))
+                Add(AttentionKeys.HomeVisitAddress, 1);
         }
 
         return new AttentionDto { Items = items };

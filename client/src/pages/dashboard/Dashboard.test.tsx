@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dashboardApi } from '../../api/dashboardApi';
+import { tenantApi } from '../../api/tenantApi';
 import { useAttention } from '../../api/queries';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -13,6 +14,7 @@ vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../api/queries', () => ({ useAttention: vi.fn(), queryKeys: { attention: ['attention'] } }));
 vi.mock('../../api/dashboardApi', () => ({ dashboardApi: { getMetrics: vi.fn() } }));
+vi.mock('../../api/tenantApi', () => ({ tenantApi: { getSetup: vi.fn() } }));
 vi.mock('../../hooks/useOrderSignalR', () => {
   const subscribe = () => () => undefined;
   return { useOrderSignalR: () => ({ onOrderCreated: subscribe, onOrderStatusChanged: subscribe, onOrderCancelled: subscribe }) };
@@ -55,6 +57,27 @@ describe('Dashboard', () => {
     vi.mocked(useTenant).mockReturnValue({ capabilities: TenantCapability.Food | TenantCapability.Retail } as unknown as ReturnType<typeof useTenant>);
     vi.mocked(useAttention).mockReturnValue({ data: { items: [] }, isLoading: false, isError: false, isSuccess: true } as unknown as ReturnType<typeof useAttention>);
     vi.mocked(dashboardApi.getMetrics).mockResolvedValue({ data: metrics() } as Awaited<ReturnType<typeof dashboardApi.getMetrics>>);
+  });
+
+  it('asks a trade with visits on to prepare them among its first steps, and counts only the steps it has (Fase 29A)', async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'TENANT_ADMIN', permissions: ['ViewDashboard', 'ManageSettings'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    vi.mocked(useTenant).mockReturnValue({ capabilities: TenantCapability.Service | TenantCapability.Appointments } as unknown as ReturnType<typeof useTenant>);
+    const steps = (keys: string[], done: string[]) => keys.map((key) => ({ key, done: done.includes(key) }));
+    const all = ['salesPolicy', 'catalog', 'homeVisits', 'cash', 'firstSale', 'team', 'logo'];
+    vi.mocked(tenantApi.getSetup).mockResolvedValue({ data: { steps: steps(all, ['salesPolicy', 'catalog']) } } as never);
+    const { unmount } = renderDashboard();
+
+    expect(await screen.findByRole('link', { name: /Prepara tus visitas a domicilio/ })).toHaveAttribute('href', '/settings/business');
+    expect(screen.getByText('2 de 7 listos')).toBeInTheDocument();
+    unmount();
+
+    // A business without visits: six steps, none about visits.
+    vi.mocked(tenantApi.getSetup).mockResolvedValue({ data: { steps: steps(all.filter((key) => key !== 'homeVisits'), ['salesPolicy']) } } as never);
+    renderDashboard();
+    expect(await screen.findByText('1 de 6 listos')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /visitas a domicilio/ })).not.toBeInTheDocument();
   });
 
   it('leaves starting a sale to the top bar and the tab bar, without a second "Nueva venta"', async () => {

@@ -1,10 +1,12 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
+import { useHomeVisitRequests } from '../../api/homeVisitRequests';
 import { publicDirectoryApi, type DirectoryProfile } from '../../api/publicDirectoryApi';
 import { DirectoryVisibility, type BusinessCategory } from '../../api/generated/enums';
 import DirectoryBusinessCard from '../explore/DirectoryBusinessCard';
+import HomeVisitAddressNotice from './HomeVisitAddressNotice';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OnlineMenuMode } from '../../types';
@@ -44,8 +46,11 @@ function VisibilityNotice({ visibility, category }: { visibility: DirectoryVisib
   }
 }
 
-function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
+function DirectoryForm({ profile, onNoticeDismissed }: { profile: DirectoryProfile; onNoticeDismissed: () => void }) {
   const { tenant } = useTenant();
+  // A business that receives visits to quote (Fase 29A) shows them on its card, as Explorar does.
+  const visits = useHomeVisitRequests().data;
+  const receivesVisits = visits?.receivesVisits ?? false;
   const toast = useToast();
   const queryClient = useQueryClient();
   const ids = useId();
@@ -78,6 +83,7 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
   return (
     <>
       <VisibilityNotice visibility={profile.visibility} category={profile.category} />
+      {profile.homeVisitAddressNotice && <HomeVisitAddressNotice onDismissed={onNoticeDismissed} />}
 
       <div className="form-check form-switch mb-3">
         <input
@@ -142,8 +148,11 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
             city: null,
             deliveryOnly: false,
             deliveryAvailable: false,
-            pricesIncludeTax: true,
+            pricesIncludeTax: receivesVisits ? visits?.pricesIncludeTax ?? true : true,
             booksOnline: false,
+            receivesVisits,
+            visitChargePolicy: receivesVisits ? visits?.chargePolicy : undefined,
+            visitPrice: receivesVisits ? visits?.price : undefined,
             acceptsOrders: tenant.onlineMenuMode === OnlineMenuMode.Orders,
             ordersPaused: false,
             statusLabel: null,
@@ -183,19 +192,22 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
 export default function DirectoryCard() {
   const { tenant } = useTenant();
   const titleId = useId();
+  const titleRef = useRef<HTMLHeadingElement>(null);
   // Publishing or turning off the menu changes whether it appears, and a new giro may move the category (while the
   // owner has not picked another): asked again with each, so saving never sends back a category already replaced.
   const profile = useQuery({
     queryKey: ['directory-profile', tenant?.onlineMenuMode, tenant?.industry ?? null],
     queryFn: () => publicDirectoryApi.getProfile(),
     enabled: !!tenant,
+    // Its notice of the address also changes in Sucursales, and its products in the catalog: read again on each visit.
+    staleTime: 0,
   });
   if (!tenant) return null;
 
   return (
     <section className="card" aria-labelledby={titleId}>
       <div className="card-body">
-        <h4 id={titleId} className="header-title mt-0 mb-1">Cómo te ven en TienditApp</h4>
+        <h4 id={titleId} ref={titleRef} tabIndex={-1} className="header-title mt-0 mb-1">Cómo te ven en TienditApp</h4>
         <p className="text-muted small mb-3">
           En Explorar los clientes encuentran negocios por categoría, abren tu menú y piden cuando lo recibes en línea.
         </p>
@@ -207,6 +219,7 @@ export default function DirectoryCard() {
           <DirectoryForm
             key={`${profile.data.category}|${profile.data.description ?? ''}|${profile.data.listed}|${profile.data.visibility}`}
             profile={profile.data}
+            onNoticeDismissed={() => titleRef.current?.focus()}
           />
         )}
       </div>

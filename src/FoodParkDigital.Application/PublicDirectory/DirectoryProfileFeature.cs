@@ -1,4 +1,6 @@
 using System.Text.Json;
+using FoodParkDigital.Application.Appointments.HomeVisits;
+using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -21,7 +23,10 @@ public enum DirectoryVisibility
     HiddenByOwner = 1,
     /// <summary>Its menu is not published.</summary>
     MenuOff = 2,
-    /// <summary>Its menu shows no product: none available in an active category, or only services.</summary>
+    /// <summary>
+    /// It has nothing to show: its menu shows no product (none available in an active category, or only services), and
+    /// it neither books appointments online nor receives visits to quote (Fase 29A).
+    /// </summary>
     NoProducts = 3,
     /// <summary>The business is not active.</summary>
     Inactive = 4
@@ -37,6 +42,11 @@ public class DirectoryProfileDto
     /// <summary>The owner's choice: appear in Explorar while the menu is published.</summary>
     public bool Listed { get; set; }
     public DirectoryVisibility Visibility { get; set; }
+    /// <summary>
+    /// Its store publishes the address of its main branch while it goes to its customers' homes (Fase 29A): the notice
+    /// says where to mark it «Solo a domicilio».
+    /// </summary>
+    public bool HomeVisitAddressNotice { get; set; }
 }
 
 /// <summary>How the signed-in user's business shows in Explorar (owners and admins).</summary>
@@ -152,6 +162,45 @@ public class UpdateDirectoryProfileCommandHandler : IRequestHandler<UpdateDirect
     }
 }
 
+/// <summary>
+/// Dismisses the notice of the published address (owners and admins, Fase 29A): it does not come back. The address stays
+/// as it is; only Sucursales changes it. Without the agenda module too: the notice is also for a trade that has not turned
+/// on its visits.
+/// </summary>
+[RequiresTenantManager]
+public record DismissHomeVisitAddressNoticeCommand : IRequest<Result>;
+
+public class DismissHomeVisitAddressNoticeCommandHandler : IRequestHandler<DismissHomeVisitAddressNoticeCommand, Result>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenantService;
+    private readonly IDateTimeProvider _dateTimeProvider;
+
+    public DismissHomeVisitAddressNoticeCommandHandler(
+        IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider dateTimeProvider)
+    {
+        _context = context;
+        _tenantService = tenantService;
+        _dateTimeProvider = dateTimeProvider;
+    }
+
+    public async Task<Result> Handle(DismissHomeVisitAddressNoticeCommand request, CancellationToken cancellationToken)
+    {
+        var settings = await _context.TenantSettings
+            .FirstOrDefaultAsync(s => s.TenantId == _tenantService.TenantId, cancellationToken);
+        if (settings is null)
+            return Result.Failure("Configura primero tu negocio.");
+
+        if (settings.HomeVisitAddressNoticeDismissedAt is null)
+        {
+            settings.DismissHomeVisitAddressNotice(_dateTimeProvider.UtcNow);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        return Result.Success();
+    }
+}
+
 internal static class DirectoryProfile
 {
     /// <summary>The profile and why Explorar lists the business or not, in the order its owner would fix it.</summary>
@@ -162,16 +211,47 @@ internal static class DirectoryProfile
         var visibility = tenant.Status != TenantStatus.Active ? DirectoryVisibility.Inactive
             : settings is null || settings.OnlineMenuMode == OnlineMenuMode.Off ? DirectoryVisibility.MenuOff
             : !listed ? DirectoryVisibility.HiddenByOwner
-            : !await PublicDirectorySnapshot.MenuProducts(context).AnyAsync(p => p.TenantId == tenant.Id, cancellationToken)
-                ? DirectoryVisibility.NoProducts
-                : DirectoryVisibility.Shown;
+            : !await ShowsSomethingAsync(context, tenant, settings, cancellationToken) ? DirectoryVisibility.NoProducts
+            : DirectoryVisibility.Shown;
         return new DirectoryProfileDto
         {
             Category = tenant.DirectoryCategory,
             SuggestedCategory = BusinessCategoryDefaults.Suggest(tenant.Industry, tenant.BusinessType),
             Description = tenant.PublicDescription,
             Listed = listed,
-            Visibility = visibility
+            Visibility = visibility,
+            HomeVisitAddressNotice = await HomeVisitAddressNotice.ShowsAsync(context, tenant, settings, cancellationToken)
         };
+    }
+
+    /// <summary>
+    /// What gets a published business into Explorar (PublicDirectorySnapshot): a product its menu shows, the online
+    /// appointments it books now (Fase 24D) or the visits to quote it receives (Fase 29A).
+    /// </summary>
+    private static async Task<bool> ShowsSomethingAsync(
+        IApplicationDbContext context, Tenant tenant, TenantSettings settings, CancellationToken cancellationToken)
+    {
+        if (await PublicDirectorySnapshot.MenuProducts(context).AnyAsync(p => p.TenantId == tenant.Id, cancellationToken))
+            return true;
+
+        var capabilities = TenantCapabilityRules.NormalizeCapabilities(settings.Capabilities, tenant.BusinessType);
+        var hasWeeklyHours = settings.OpeningHours is not null;
+        if (settings.OnlineBookingEnabled
+            && OnlineBookingAvailability.BooksOnline(
+                enabled: true,
+                capabilities,
+                settings.OnlineMenuMode,
+                await OnlineBookingAvailability.MainBranchModeAsync(context, tenant.Id, cancellationToken),
+                hasWeeklyHours)
+            && await OnlineBookingCalendar.OfferedServices(context).AnyAsync(p => p.TenantId == tenant.Id, cancellationToken))
+            return true;
+
+        return settings.HomeVisitRequestsEnabled
+            && HomeVisitRequestAvailability.ReceivesVisits(
+                enabled: true,
+                capabilities,
+                settings.OnlineMenuMode,
+                await context.DeliveryZones.AnyAsync(zone => zone.TenantId == tenant.Id && zone.IsActive, cancellationToken),
+                hasWeeklyHours);
     }
 }

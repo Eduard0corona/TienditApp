@@ -284,7 +284,7 @@ public class PublicDirectoryTests
     {
         var validator = new UpdateDirectoryProfileCommandValidator();
 
-        Assert.False(validator.Validate(new UpdateDirectoryProfileCommand((BusinessCategory)11, null, true)).IsValid);
+        Assert.False(validator.Validate(new UpdateDirectoryProfileCommand((BusinessCategory)12, null, true)).IsValid);
         Assert.False(validator.Validate(new UpdateDirectoryProfileCommand(
             BusinessCategory.Food, new string('a', Tenant.MaxPublicDescriptionLength + 1), true)).IsValid);
         Assert.True(validator.Validate(new UpdateDirectoryProfileCommand(

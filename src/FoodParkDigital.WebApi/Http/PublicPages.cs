@@ -136,6 +136,9 @@ public static class PublicPages
 
         var (title, fallback) = store switch
         {
+            // A trade that goes to homes speaks of its visits, as its card in Explorar (Fase 29A).
+            { ReceivesVisits: true } => ("visitas a domicilio",
+                $"Mira los servicios de {store.BusinessName}, a qué códigos postales va y cuánto cuesta la visita."),
             { TakesOrders: true } => ("pide en línea", $"Mira el menú de {store.BusinessName} y haz tu pedido en línea."),
             { BooksOnline: true } => ("agenda tu cita", $"Mira los servicios de {store.BusinessName} y agenda tu cita en línea."),
             _ => ("menú en línea", $"Mira el menú de {store.BusinessName} en línea.")
@@ -455,6 +458,7 @@ public static class PublicPages
         BusinessCategory.Health or BusinessCategory.Stationery => "Store",
         BusinessCategory.Beauty => "HealthAndBeautyBusiness",
         BusinessCategory.Automotive => "AutomotiveBusiness",
+        BusinessCategory.HomeRepairs => "HomeAndConstructionBusiness",
         _ => "LocalBusiness"
     };
 
@@ -518,6 +522,7 @@ public static class ExploreCategories
         new(BusinessCategory.Stationery, "Papelería", "papeleria"),
         new(BusinessCategory.Beauty, "Belleza y bienestar", "belleza"),
         new(BusinessCategory.Automotive, "Autos", "autos"),
+        new(BusinessCategory.HomeRepairs, "Hogar y reparaciones", "hogar-y-reparaciones"),
         new(BusinessCategory.Services, "Servicios", "servicios"),
         new(BusinessCategory.Other, "Otros", "otros")
     ];

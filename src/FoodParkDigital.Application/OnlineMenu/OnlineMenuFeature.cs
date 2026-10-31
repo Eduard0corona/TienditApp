@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
@@ -168,6 +169,11 @@ public class PublicMenuDto
     public PublicOpeningHoursDto? OpeningHours { get; set; }
     /// <summary>Customers book appointments online with the business now (Fase 24D): /m/{slug}/agendar.</summary>
     public bool BooksOnline { get; set; }
+    /// <summary>
+    /// Its visits to quote while it receives them (Fase 29A, ADR 0053): how it charges the visit and what it costs, where
+    /// it goes and its services as reference prices. Null when it does not; its menu, if it sells products, stays as it is.
+    /// </summary>
+    public PublicHomeVisitsDto? HomeVisits { get; set; }
     /// <summary>How its customers rate it (Fase 24H): its published reviews and their average; null without reviews.</summary>
     public RatingSummaryDto? Rating { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
@@ -446,6 +452,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             DeliveryAvailable = ordersOn && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken),
             OpeningHours = hours is null ? null : PublicOpeningHoursDto.From(hours, seatedOverride: acceptsOrders && closed),
             BooksOnline = booksOnline,
+            HomeVisits = await PublicHomeVisits.ReadAsync(_context, tenant, settings, cancellationToken),
             Rating = await ReviewRules.SummaryAsync(_context, cancellationToken),
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))

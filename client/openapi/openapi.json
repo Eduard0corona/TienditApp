@@ -551,6 +551,81 @@
         }
       }
     },
+    "/api/v1/appointments/home-visit-requests": {
+      "get": {
+        "tags": [
+          "Appointments"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitRequestsSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitRequestsSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitRequestsSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Appointments"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHomeVisitRequestsSettingsCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHomeVisitRequestsSettingsCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHomeVisitRequestsSettingsCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitRequestsSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitRequestsSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitRequestsSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/appointments/online-booking/staff": {
       "get": {
         "tags": [
@@ -16945,6 +17020,18 @@
         }
       }
     },
+    "/api/v1/auth/my-tenant/directory/home-visit-address-notice/dismiss": {
+      "post": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/auth/my-tenant/opening-hours": {
       "put": {
         "tags": [
@@ -18593,7 +18680,8 @@
           7,
           8,
           9,
-          10
+          10,
+          11
         ],
         "type": "integer",
         "format": "int32",
@@ -18608,7 +18696,8 @@
           "Beauty",
           "Automotive",
           "Services",
-          "Other"
+          "Other",
+          "HomeRepairs"
         ]
       },
       "BusinessReviewDto": {
@@ -24054,6 +24143,7 @@
       "DirectoryProfileDto": {
         "required": [
           "category",
+          "homeVisitAddressNotice",
           "listed",
           "suggestedCategory",
           "visibility"
@@ -24075,6 +24165,9 @@
           },
           "visibility": {
             "$ref": "#/components/schemas/DirectoryVisibility"
+          },
+          "homeVisitAddressNotice": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -24916,6 +25009,121 @@
             "items": {
               "$ref": "#/components/schemas/SpecialOpeningDto"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "HomeVisitChargePolicy": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Charged",
+          "Free",
+          "CreditedIfHired"
+        ]
+      },
+      "HomeVisitPriceDto": {
+        "required": [
+          "amount",
+          "isStarting"
+        ],
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "isStarting": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HomeVisitRequestsSettingsDto": {
+        "required": [
+          "addressNotice",
+          "chargePolicy",
+          "enabled",
+          "missing",
+          "pricesIncludeTax",
+          "receivesVisits",
+          "services",
+          "slug"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "serviceId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "service": {
+            "$ref": "#/components/schemas/HomeVisitServiceOptionDto"
+          },
+          "chargePolicy": {
+            "$ref": "#/components/schemas/HomeVisitChargePolicy"
+          },
+          "price": {
+            "$ref": "#/components/schemas/HomeVisitPriceDto"
+          },
+          "pricesIncludeTax": {
+            "type": "boolean"
+          },
+          "receivesVisits": {
+            "type": "boolean"
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomeVisitServiceOptionDto"
+            }
+          },
+          "addressNotice": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HomeVisitServiceOptionDto": {
+        "required": [
+          "id",
+          "name",
+          "price"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -33193,6 +33401,7 @@
           "name",
           "ordersPaused",
           "pricesIncludeTax",
+          "receivesVisits",
           "slug",
           "theme"
         ],
@@ -33281,6 +33490,19 @@
           },
           "rating": {
             "$ref": "#/components/schemas/RatingSummaryDto"
+          },
+          "receivesVisits": {
+            "type": "boolean"
+          },
+          "visitChargePolicy": {
+            "$ref": "#/components/schemas/HomeVisitChargePolicy"
+          },
+          "visitPrice": {
+            "$ref": "#/components/schemas/HomeVisitPriceDto"
+          },
+          "visitsPostalCode": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -33430,6 +33652,67 @@
         },
         "additionalProperties": false
       },
+      "PublicHomeVisitServiceDto": {
+        "required": [
+          "name",
+          "price"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicHomeVisitsDto": {
+        "required": [
+          "chargePolicy",
+          "postalCodeCount",
+          "postalCodes",
+          "price",
+          "services"
+        ],
+        "type": "object",
+        "properties": {
+          "chargePolicy": {
+            "$ref": "#/components/schemas/HomeVisitChargePolicy"
+          },
+          "price": {
+            "$ref": "#/components/schemas/HomeVisitPriceDto"
+          },
+          "visitServiceName": {
+            "type": "string",
+            "nullable": true
+          },
+          "postalCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "postalCodeCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicHomeVisitServiceDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicMenuCategoryDto": {
         "required": [
           "id",
@@ -33542,6 +33825,9 @@
           },
           "booksOnline": {
             "type": "boolean"
+          },
+          "homeVisits": {
+            "$ref": "#/components/schemas/PublicHomeVisitsDto"
           },
           "rating": {
             "$ref": "#/components/schemas/RatingSummaryDto"
@@ -37856,6 +38142,27 @@
               "type": "string"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateHomeVisitRequestsSettingsCommand": {
+        "required": [
+          "chargePolicy",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "serviceId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "chargePolicy": {
+            "$ref": "#/components/schemas/HomeVisitChargePolicy"
           }
         },
         "additionalProperties": false

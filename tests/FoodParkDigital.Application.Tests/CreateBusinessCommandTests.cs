@@ -94,6 +94,42 @@ public class CreateBusinessCommandTests
         Assert.Equal(expected, main.ServiceMode);
     }
 
+    [Theory]
+    [InlineData("Plomería", BranchServiceMode.DeliveryOnly, true)]
+    [InlineData("  fumigacion ", BranchServiceMode.DeliveryOnly, true)]
+    [InlineData("Limpieza del hogar", BranchServiceMode.DeliveryOnly, true)]
+    [InlineData("Carpintería", BranchServiceMode.Premises, true)]
+    [InlineData("Herrería y soldadura", BranchServiceMode.Premises, true)]
+    [InlineData("Servicios profesionales", BranchServiceMode.Premises, false)]
+    public async Task SignUp_OfATrade_ShouldReceiveVisits_AndOnlyGoToHomes_UnlessItHasAWorkshop(
+        string industry, BranchServiceMode expected, bool receivesVisits)
+    {
+        await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
+
+        var registration = await host.HandleAsync<RegisterBusinessCommandHandler, Result<Guid>>(handler => handler.Handle(new RegisterBusinessCommand
+        {
+            Email = "oficio@demo.com",
+            Password = "Secreto1",
+            FirstName = "Luis",
+            LastName = "Dueño",
+            PhoneNumber = "5511113333",
+            BusinessName = "Oficios de Luis",
+            BusinessType = BusinessType.Service,
+            Industry = industry
+        }, CancellationToken.None));
+
+        Assert.True(registration.IsSuccess, registration.Error);
+        var (main, settings, tenant) = await host.QueryAsync(async db => (
+            await db.Branches.IgnoreQueryFilters().SingleAsync(),
+            await db.TenantSettings.IgnoreQueryFilters().SingleAsync(),
+            await db.Tenants.IgnoreQueryFilters().SingleAsync()));
+        Assert.Equal(expected, main.ServiceMode);
+        // Without zones or hours it receives nothing yet: its settings say what is missing (ADR 0053).
+        Assert.Equal(receivesVisits, settings.HomeVisitRequestsEnabled);
+        Assert.Equal((Guid?)null, settings.HomeVisitServiceId);
+        Assert.Equal(receivesVisits ? BusinessCategory.HomeRepairs : BusinessCategory.Services, tenant.DirectoryCategory);
+    }
+
     [Fact]
     public async Task CustomerAccount_ShouldNotOpenABusiness()
     {

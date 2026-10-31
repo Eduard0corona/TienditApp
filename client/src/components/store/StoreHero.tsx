@@ -185,7 +185,7 @@ export default function StoreHero({
         {menu.acceptsOrders && delivery.offered && delivery.hint && <p className="pm-delivery-hint" role="status">{delivery.hint}</p>}
 
         {bookingPath && (
-          <Link className={`btn btn-touch w-100 pm-booking ${menu.acceptsOrders ? 'btn-light' : 'btn-primary'}`} to={bookingPath}>
+          <Link className={`btn btn-touch w-100 pm-booking ${menu.acceptsOrders || menu.homeVisits ? 'btn-light' : 'btn-primary'}`} to={bookingPath}>
             <i className="ri-calendar-event-line me-1" aria-hidden="true"></i>Agenda tu cita
           </Link>
         )}

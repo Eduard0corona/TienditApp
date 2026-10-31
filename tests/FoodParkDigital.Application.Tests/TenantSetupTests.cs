@@ -135,6 +135,12 @@ public class TenantSetupTests
     [InlineData("electricista", false)]
     [InlineData("plomeria", false)]
     [InlineData("aire-acondicionado", false)]
+    [InlineData("fumigacion", false)]
+    [InlineData("refrigeracion-linea-blanca", false)]
+    [InlineData("cerrajeria", false)]
+    [InlineData("jardineria", false)]
+    [InlineData("limpieza-hogar", false)]
+    [InlineData("pintura-impermeabilizacion", false)]
     public async Task InstallStarterCatalog_ShouldCreateTheServicesOfEachServiceGiro_WithOnlyTheServicesModule(
         string templateId,
         bool exempt)
@@ -166,6 +172,12 @@ public class TenantSetupTests
     [InlineData("electricista")]
     [InlineData("plomeria")]
     [InlineData("aire-acondicionado")]
+    [InlineData("fumigacion")]
+    [InlineData("refrigeracion-linea-blanca")]
+    [InlineData("cerrajeria")]
+    [InlineData("jardineria")]
+    [InlineData("limpieza-hogar")]
+    [InlineData("pintura-impermeabilizacion")]
     public async Task InstallStarterCatalog_ForWorkDoneByAppointment_ShouldGiveEachServiceItsLengthAndNoTracking(string templateId)
     {
         await using var fixture = SalesTestFixture.Create();
@@ -214,6 +226,12 @@ public class TenantSetupTests
     [InlineData("Electricista", "electricista")]
     [InlineData("Plomeria", "plomeria")]
     [InlineData("Aire acondicionado", "aire-acondicionado")]
+    [InlineData("Fumigación", "fumigacion")]
+    [InlineData("Refrigeracion y linea blanca", "refrigeracion-linea-blanca")]
+    [InlineData("Cerrajería", "cerrajeria")]
+    [InlineData("Jardinería", "jardineria")]
+    [InlineData("Limpieza del hogar", "limpieza-hogar")]
+    [InlineData("Pintura e impermeabilización", "pintura-impermeabilizacion")]
     [InlineData("Lavandería", "lavanderia")]
     [InlineData("Abarrotes", "abarrotes")]
     [InlineData("Papelería", "papeleria")]

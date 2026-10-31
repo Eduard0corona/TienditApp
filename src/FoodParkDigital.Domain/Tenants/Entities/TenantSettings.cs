@@ -253,6 +253,54 @@ public class TenantSettings : BaseEntity, ITenantScoped
         OnlineBookingCapacity = capacity;
     }
 
+    /// <summary>
+    /// Whether the business receives visits to quote at its customers' homes (Fase 29A, ADR 0053): a trade starts with it on,
+    /// any other business off. It works while the agenda module is on, the menu is published, the business has an active
+    /// delivery zone and weekly hours; it never asks for premises nor an open cash drawer. This only says the owner wants it.
+    /// </summary>
+    public bool HomeVisitRequestsEnabled { get; private set; }
+
+    /// <summary>The catalog service that is the visit («Visita y diagnóstico»); null for none, and the visit costs its zone.</summary>
+    public Guid? HomeVisitServiceId { get; private set; }
+
+    /// <summary>How the visit is charged: its service plus the charge of its zone until the owner picks otherwise.</summary>
+    public HomeVisitChargePolicy HomeVisitChargePolicy { get; private set; } = HomeVisitChargePolicy.Charged;
+
+    /// <summary>
+    /// When the business dismissed the notice that its store shows the address of its main branch; null while it shows
+    /// (only to a business that receives visits or is a trade, and whose main branch has premises).
+    /// </summary>
+    public DateTimeOffset? HomeVisitAddressNoticeDismissedAt { get; private set; }
+
+    /// <summary>
+    /// The visits to quote, its visit service and how it is charged. The caller checks that the service is a service of
+    /// the business; a policy that does not exist is refused.
+    /// </summary>
+    public void UpdateHomeVisitRequests(bool enabled, Guid? visitServiceId, HomeVisitChargePolicy chargePolicy)
+    {
+        if (!Enum.IsDefined(chargePolicy))
+            throw new DomainException(HomeVisitRules.ChargePolicyMessage);
+        if (visitServiceId == Guid.Empty)
+            throw new DomainException(HomeVisitRules.VisitServiceMessage);
+        HomeVisitRequestsEnabled = enabled;
+        HomeVisitServiceId = visitServiceId;
+        HomeVisitChargePolicy = chargePolicy;
+    }
+
+    /// <summary>A trade starts receiving visits to quote when it signs up (ADR 0053), with or without its zones and hours yet.</summary>
+    public void StartReceivingHomeVisits() => HomeVisitRequestsEnabled = true;
+
+    /// <summary>The visit service of a starter template, unless the business already has one.</summary>
+    public void SuggestHomeVisitService(Guid visitServiceId)
+    {
+        if (visitServiceId == Guid.Empty)
+            throw new DomainException(HomeVisitRules.VisitServiceMessage);
+        HomeVisitServiceId ??= visitServiceId;
+    }
+
+    /// <summary>Dismisses the notice of the published address once; dismissing it again keeps the first time.</summary>
+    public void DismissHomeVisitAddressNotice(DateTimeOffset now) => HomeVisitAddressNoticeDismissedAt ??= now;
+
     /// <summary>The colors of the business in its team's app and its public menu: TienditApp's until the owner picks one.</summary>
     public BusinessTheme Theme { get; private set; } = BusinessTheme.Nopal;
 

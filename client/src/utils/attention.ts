@@ -60,6 +60,10 @@ export function describeAttention(item: AttentionItem): AttentionNotice | null {
         icon: 'ri-file-warning-line',
         tone: 'danger',
       };
+    case 'homeVisitAddress':
+      // A business that goes to homes (Fase 29A) whose store publishes the address of a local: only its owner knows
+      // whether customers go there, so the notice waits in «Cómo te ven» until they check it.
+      return { key, text: 'Tu tienda muestra la dirección de un local: revisa si atiendes ahí', path: '/settings/business', icon: 'ri-map-pin-user-line', tone: 'info' };
     default:
       return null;
   }

@@ -31,6 +31,8 @@ internal static class BeforeOrderInvoicing
         modelBuilder.Ignore<PaymentComplement>();
         modelBuilder.Ignore<OrderInvoice>();
         modelBuilder.Ignore<InvoicingProfile>();
+        // What came after the invoices and does not point to them (the visits to quote of Fase 29A).
+        BeforeHomeVisitRequests.Ignore(modelBuilder);
     }
 
     private sealed class Context(

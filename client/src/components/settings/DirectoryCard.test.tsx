@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -11,7 +11,7 @@ import { OnlineMenuMode, type TenantProfileDto } from '../../types';
 import DirectoryCard from './DirectoryCard';
 
 vi.mock('../../api/publicDirectoryApi', () => ({
-  publicDirectoryApi: { getDirectory: vi.fn(), getProfile: vi.fn(), updateProfile: vi.fn() },
+  publicDirectoryApi: { getDirectory: vi.fn(), getProfile: vi.fn(), updateProfile: vi.fn(), dismissHomeVisitAddressNotice: vi.fn() },
 }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
@@ -26,6 +26,7 @@ function profile(overrides: Partial<DirectoryProfile> = {}): DirectoryProfile {
     description: null,
     listed: true,
     visibility: DirectoryVisibility.Shown,
+    homeVisitAddressNotice: false,
     ...overrides,
   };
 }
@@ -84,6 +85,49 @@ describe('DirectoryCard', () => {
     renderCard();
 
     expect(await screen.findByText(words)).toBeInTheDocument();
+  });
+
+  it('tells a business that goes to homes that its store shows its address, until its owner checks it (Fase 29A)', async () => {
+    api.getProfile.mockResolvedValueOnce(profile({ homeVisitAddressNotice: true })).mockResolvedValue(profile());
+    api.dismissHomeVisitAddressNotice.mockResolvedValue(undefined as never);
+    const user = userEvent.setup();
+    renderCard();
+
+    expect(await screen.findByText(/Tu tienda muestra la dirección de tu sucursal principal/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sucursales' })).toHaveAttribute('href', '/branches');
+    await user.click(screen.getByRole('button', { name: 'Ya lo revisé' }));
+
+    expect(api.dismissHomeVisitAddressNotice).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByText(/Tu tienda muestra la dirección/)).not.toBeInTheDocument());
+    // Its button went away: the keyboard goes to the card's heading, not to the top of the page.
+    expect(screen.getByRole('heading', { name: 'Cómo te ven en TienditApp' })).toHaveFocus();
+    expect(api.updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('puts the notice away once it is saved, even if reading the card again fails', async () => {
+    api.getProfile.mockResolvedValueOnce(profile({ homeVisitAddressNotice: true })).mockRejectedValue(new Error('network'));
+    api.dismissHomeVisitAddressNotice.mockResolvedValue(undefined as never);
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: 'Ya lo revisé' }));
+
+    // Saved: never stuck on «Guardando…» waiting for a read that did not come back.
+    await waitFor(() => expect(screen.queryByText(/Tu tienda muestra la dirección/)).not.toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'Cómo te ven en TienditApp' })).toHaveFocus();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the notice and says why when checking it fails', async () => {
+    api.getProfile.mockResolvedValue(profile({ homeVisitAddressNotice: true }));
+    api.dismissHomeVisitAddressNotice.mockRejectedValue(new Error('network'));
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: 'Ya lo revisé' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'Ya lo revisé' })).toBeEnabled();
   });
 
   it('keeps the description on one line', async () => {

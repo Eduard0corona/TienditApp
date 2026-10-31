@@ -5,6 +5,7 @@ using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -29,10 +30,10 @@ public static class BusinessProvisioning
     }
 
     /// <summary>
-    /// Adds the business with its settings (prices with IVA included and the modules of its type), the general
-    /// public customer, the default branch with its warehouse (delivery only for a kitchen without premises, see
-    /// <see cref="BusinessIndustries"/>) and, when the platform has a plan for new businesses, its trial. The caller
-    /// saves, inside its transaction.
+    /// Adds the business with its settings (prices with IVA included and the modules of its type; a trade receives visits
+    /// to quote, ADR 0053), the general public customer, the default branch with its warehouse (delivery only for a
+    /// kitchen without premises or a trade without a workshop, see <see cref="BusinessIndustries"/>) and, when the
+    /// platform has a plan for new businesses, its trial. The caller saves, inside its transaction.
     /// </summary>
     public static async Task<TenantSettings> AddAsync(
         IApplicationDbContext context,
@@ -46,6 +47,9 @@ public static class BusinessProvisioning
             tenant.Id,
             TenantCapabilityDefaults.FromBusinessType(tenant.BusinessType),
             pricesIncludeTax: true);
+        // A trade starts receiving visits to quote: without zones and hours it receives none, and its settings say why.
+        if (HomeTrades.IsHomeTrade(tenant.Industry))
+            settings.StartReceivingHomeVisits();
         var defaultBranch = Branch.CreateDefault(
             tenant.Id,
             BusinessIndustries.OnlyDelivers(tenant.Industry) ? BranchServiceMode.DeliveryOnly : BranchServiceMode.Premises);

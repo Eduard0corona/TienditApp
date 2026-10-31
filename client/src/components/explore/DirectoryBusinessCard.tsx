@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
-import { categoryInfo, deliveryToPostalCode, orderStatus } from '../../utils/businessCategories';
+import { categoryInfo, deliveryToPostalCode, orderStatus, visitToPostalCode } from '../../utils/businessCategories';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import { formatDistance } from '../../utils/geo';
 import { formatAverage, ratingDescription } from '../../utils/reviews';
@@ -20,8 +20,10 @@ interface DirectoryBusinessCardProps {
  * A business in Explorar: its cover across the top (its colors without one, Fase 24F), its logo (or its initial in its
  * colors), name, what it sells, its category and city, and whether it takes orders now. With the customer's postal code
  * (Fase 24B) it says whether it delivers there and what it costs, and a business that books appointments online says so
- * (Fase 24D), with the customer's position how far it is (Fase 24G), and its rating from three reviews (Fase 24H). The whole card opens its menu; an action (the
- * heart) sits over its corner, outside the link.
+ * (Fase 24D), with the customer's position how far it is (Fase 24G), and its rating from three reviews (Fase 24H). One
+ * that receives visits to quote (Fase 29A) says so instead of speaking of orders, with what the visit costs and, with the
+ * postal code, whether it goes there. The whole card opens its menu; an action (the heart) sits over its corner, outside
+ * the link.
  */
 export default function DirectoryBusinessCard({ business, preview = false, action }: DirectoryBusinessCardProps) {
   const theme = getBusinessTheme(business.theme);
@@ -34,6 +36,7 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
   const status = orderStatus(business);
   const average = business.rating?.average;
   const delivery = deliveryToPostalCode(business);
+  const visit = visitToPostalCode(business);
   const place = [
     categoryInfo(business.category)?.label,
     business.deliveryOnly ? 'Solo a domicilio' : business.city,
@@ -61,13 +64,25 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
                 <span className="visually-hidden">{ratingDescription(business.rating)}</span>
               </span>
             )}
-            <span className={`dc-badge dc-badge-${status.tone}`}>
-              {status.tone === 'taking' && <i className="ri-shopping-bag-3-line" aria-hidden="true"></i>}
-              {status.text}
-            </span>
+            {business.receivesVisits && (
+              <span className="dc-badge dc-badge-taking">
+                <i className="ri-home-gear-line" aria-hidden="true"></i>Visitas a domicilio
+              </span>
+            )}
+            {status.text && (
+              <span className={`dc-badge dc-badge-${status.tone}`}>
+                {status.tone === 'taking' && <i className="ri-shopping-bag-3-line" aria-hidden="true"></i>}
+                {status.text}
+              </span>
+            )}
             {business.booksOnline && (
               <span className="dc-badge dc-badge-info">
                 <i className="ri-calendar-event-line" aria-hidden="true"></i>Agenda en línea
+              </span>
+            )}
+            {visit && (
+              <span className={`dc-badge ${visit.reaches ? 'dc-badge-info' : 'dc-badge-menu'}`}>
+                <i className={visit.reaches ? 'ri-price-tag-3-line' : 'ri-map-pin-line'} aria-hidden="true"></i>{visit.text}
               </span>
             )}
             {delivery && (

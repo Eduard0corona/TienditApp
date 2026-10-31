@@ -725,6 +725,48 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **El historial** de cada envío (a quién, quién lo pidió, cuándo y cómo terminó) no se borra.
 - **Sin** PDF ni acuses en el archivo, varios destinatarios, otro día del mes, el mes por WhatsApp ni los CFDI recibidos.
 
+## Oficios a domicilio: la visita para cotizar (Fase 29A)
+
+[ADR 0053](../adr/0053-home-visit-quotes.md), etapa 1:
+
+- **Recibe visitas** el negocio que cumple todo esto (`HomeVisitRequestAvailability`):
+  - prendió «Visitas a domicilio para cotizar»;
+  - tiene el módulo de agenda y su menú en línea publicado;
+  - tiene al menos una zona de entrega activa: a dónde va y cuánto cuesta ir;
+  - tiene horario semanal.
+
+  No pide local ni caja abierta. La tarjeta de Configuración dice qué falta.
+- **El interruptor, el servicio de la visita y cómo se cobra** los cambian dueños y administradores, con el módulo de agenda. Cada cambio queda en la actividad.
+  - El servicio debe poder agendarse cuando se elige.
+  - Uno que deja de agendarse se conserva y no suma nada a la visita.
+- **Lo que cuesta la visita** lo calcula el servidor:
+  - «Se cobra» y «Se descuenta si contratas»: el precio del servicio más el cargo de la zona;
+  - «Sin costo»: cero;
+  - antes del código postal, desde la zona más barata («desde» si las zonas cobran distinto);
+  - con «más IVA» si los precios del negocio no lo incluyen.
+
+  Descontar lo pagado de la cotización llega con la cotización (etapa 3).
+- **Explorar:**
+  - Un negocio que recibe visitas aparece aunque su menú no tenga productos, en el grupo de los que atienden en línea, sin depender de la caja.
+  - Su tarjeta dice «Visitas a domicilio», lo que cuesta la visita y su horario, nunca pedidos en pausa ni «Solo menú».
+  - Con el código postal del cliente dice si va ahí y cuánto cuesta la visita en él; los que no van, al final de la página.
+- **La tienda** muestra sus visitas:
+  - lo que cuesta la visita y su política;
+  - hasta 300 códigos postales (sin el nombre de la zona);
+  - hasta 50 servicios como precios de referencia, sin carrito.
+
+  «Solicitar visita» abre un WhatsApp con el negocio hasta la Fase 29B. Desde una mesa no se muestra.
+- **«Hogar y reparaciones»** (categoría 11) la sugieren los giros de oficio. La migración movió ahí a los oficios cuya categoría seguía su giro; uno cuyo dueño la eligió la conserva. Los que se registren entre la migración y el despliegue los mueve el script de reparación posterior, con la misma regla.
+- **El registro con un giro de oficio:**
+  - prende el interruptor;
+  - empieza con la sucursal principal «Solo a domicilio», salvo Carpintería y Herrería y soldadura;
+  - la plantilla deja su servicio de visita como la visita del negocio.
+- **El aviso de la dirección:** un negocio con el interruptor prendido o con giro de oficio, cuya sucursal principal tiene local y publica una calle o un punto en el mapa, ve en «Cómo te ven en TienditApp» que su tienda publica esa dirección. Lo ve también en Inicio.
+  - Nada cambia sin el dueño.
+  - «Ya lo revisé» (dueños y administradores) lo quita para siempre.
+- **La guía de inicio** pide «Prepara tus visitas a domicilio» al negocio con el interruptor y el módulo de agenda, hasta que recibe visitas.
+- **Sin** solicitud de la visita en línea (29B) ni cotización (29C).
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

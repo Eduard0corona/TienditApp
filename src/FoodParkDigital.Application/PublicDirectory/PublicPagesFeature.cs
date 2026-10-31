@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -29,7 +30,8 @@ public class StorePreviewDto
     /// <summary>Its cover across the menu, 1024 px wide: the preview of a shared link.</summary>
     public string? CoverImageUrl { get; set; }
     /// <summary>
-    /// Explorar lists it, by the rule of Explorar: its owner shows it there, and its menu has a product or it books online.
+    /// Explorar lists it, by the rule of Explorar: its owner shows it there, and its menu has a product, it books online or
+    /// it receives visits to quote.
     /// Search engines may list its pages. One that only shares its link (a QR, its WhatsApp) keeps the preview of the
     /// link, but stays out of search engines and the sitemap.
     /// </summary>
@@ -38,6 +40,8 @@ public class StorePreviewDto
     public bool TakesOrders { get; set; }
     /// <summary>Customers book appointments with it online now: its booking page is /m/{slug}/agendar.</summary>
     public bool BooksOnline { get; set; }
+    /// <summary>It receives visits to quote now (Fase 29A): its store says where it goes and what the visit costs.</summary>
+    public bool ReceivesVisits { get; set; }
     /// <summary>Where it sells, as its menu shows it; none for a kitchen that only delivers.</summary>
     public StoreAddressDto? Address { get; set; }
     /// <summary>
@@ -102,16 +106,26 @@ public class GetStorePreviewQueryHandler : IRequestHandler<GetStorePreviewQuery,
             .AsNoTracking()
             .FirstOrDefaultAsync(b => b.TenantId == tenant.Id && b.IsDefault, cancellationToken);
         // The rule of its booking page and its menu (Fase 24D), and a service to book.
+        var capabilities = TenantCapabilityRules.NormalizeCapabilities(settings.Capabilities, tenant.BusinessType);
         var booksOnline = OnlineBookingAvailability.BooksOnline(
                 settings.OnlineBookingEnabled,
-                TenantCapabilityRules.NormalizeCapabilities(settings.Capabilities, tenant.BusinessType),
+                capabilities,
                 settings.OnlineMenuMode,
                 mainBranch?.ServiceMode,
                 settings.OpeningHours is not null)
             && await OnlineBookingCalendar.OfferedServices(_context).AnyAsync(cancellationToken);
-        // Listed as Explorar lists it (PublicDirectorySnapshot): shown there by its owner, with something to order or book.
+        // The rule of its visits to quote (Fase 29A).
+        var receivesVisits = settings.HomeVisitRequestsEnabled
+            && HomeVisitRequestAvailability.ReceivesVisits(
+                enabled: true,
+                capabilities,
+                settings.OnlineMenuMode,
+                await _context.DeliveryZones.AnyAsync(zone => zone.IsActive, cancellationToken),
+                settings.OpeningHours is not null);
+        // Listed as Explorar lists it (PublicDirectorySnapshot): shown there by its owner, with something to order, book
+        // or a visit to ask for.
         var listed = settings.ListedInDirectory
-            && (booksOnline || await PublicDirectorySnapshot.MenuProducts(_context).AnyAsync(cancellationToken));
+            && (booksOnline || receivesVisits || await PublicDirectorySnapshot.MenuProducts(_context).AnyAsync(cancellationToken));
 
         return new StorePreviewDto
         {
@@ -124,6 +138,7 @@ public class GetStorePreviewQueryHandler : IRequestHandler<GetStorePreviewQuery,
             ListedInDirectory = listed,
             TakesOrders = settings.OnlineMenuMode == OnlineMenuMode.Orders,
             BooksOnline = booksOnline,
+            ReceivesVisits = receivesVisits,
             // The address its menu shows (AddressText.ForCustomers): never the one of a branch that only delivers.
             Address = mainBranch is null || mainBranch.KeepsAddressPrivate || string.IsNullOrWhiteSpace(mainBranch.AddressLine1)
                 ? null

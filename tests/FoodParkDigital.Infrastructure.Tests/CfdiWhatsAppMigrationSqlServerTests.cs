@@ -167,7 +167,8 @@ public class CfdiWhatsAppMigrationSqlServerTests
     /// <summary>Two businesses; the first with a stamped invoice of an order.</summary>
     private static async Task<Seed> SeedAsync(SqlServerTestDatabase database)
     {
-        await using var context = database.CreateContext();
+        // The settings without the columns of a later migration (Fase 29A), which this database does not have yet.
+        await using var context = BeforeHomeVisitRequests.CreateContext(database);
         var tenants = Enumerable.Range(0, 2).Select(_ =>
         {
             var slug = $"tienda-{Guid.NewGuid():N}"[..20];

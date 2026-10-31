@@ -395,6 +395,77 @@ button.pm-pill:hover {
   padding: 0 1rem;
 }
 
+/* The visits to quote of a trade (Fase 29A): what a visit costs, where it goes and its reference prices. */
+.pm-visits {
+  margin: 0 1rem 1rem;
+  padding: 1rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: var(--ta-radius);
+  background: var(--ta-surface);
+}
+
+.pm-visits-price {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+  font-size: 1.05rem;
+}
+
+.pm-visits-service {
+  color: var(--ct-secondary-color);
+  font-size: 0.95rem;
+}
+
+.pm-visits-note {
+  margin: 0 0 0.75rem;
+  color: var(--ct-secondary-color);
+  font-size: 0.9rem;
+}
+
+.pm-visits-subtitle {
+  margin: 1rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.pm-visits-codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.pm-visits-codes li {
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.pm-visits-services {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.pm-visits-services li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--ct-border-color);
+}
+
+.pm-visits-request {
+  margin-top: 0.5rem;
+  min-height: var(--ta-touch);
+}
+
 /* A section starts below the sticky tabs when a tab takes there. */
 .pm-section {
   padding-top: 1rem;
@@ -1070,7 +1141,8 @@ button.pm-pill:hover {
     margin-left: 0;
   }
 
-  .pm-notice {
+  .pm-notice,
+  .pm-visits {
     margin-right: 0;
     margin-left: 0;
   }

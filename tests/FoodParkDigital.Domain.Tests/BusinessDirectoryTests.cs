@@ -15,10 +15,10 @@ public class BusinessDirectoryTests
             new[]
             {
                 "Food", "Groceries", "Health", "Apparel", "Electronics", "Hardware", "Stationery", "Beauty", "Automotive",
-                "Services", "Other"
+                "Services", "Other", "HomeRepairs"
             },
-            Enumerable.Range(0, 11).Select(value => ((BusinessCategory)value).ToString()));
-        Assert.Equal(11, Enum.GetValues<BusinessCategory>().Length);
+            Enumerable.Range(0, 12).Select(value => ((BusinessCategory)value).ToString()));
+        Assert.Equal(12, Enum.GetValues<BusinessCategory>().Length);
     }
 
     [Theory]
@@ -35,11 +35,17 @@ public class BusinessDirectoryTests
     [InlineData("Estética y spa", BusinessCategory.Beauty)]
     [InlineData("Gimnasio", BusinessCategory.Beauty)]
     [InlineData("Taller mecánico", BusinessCategory.Automotive)]
-    [InlineData("Carpintería", BusinessCategory.Services)]
-    [InlineData("Herrería y soldadura", BusinessCategory.Services)]
-    [InlineData("Electricista", BusinessCategory.Services)]
-    [InlineData("Plomería", BusinessCategory.Services)]
-    [InlineData("Aire acondicionado", BusinessCategory.Services)]
+    [InlineData("Carpintería", BusinessCategory.HomeRepairs)]
+    [InlineData("Herrería y soldadura", BusinessCategory.HomeRepairs)]
+    [InlineData("Electricista", BusinessCategory.HomeRepairs)]
+    [InlineData("Plomería", BusinessCategory.HomeRepairs)]
+    [InlineData("Aire acondicionado", BusinessCategory.HomeRepairs)]
+    [InlineData("Fumigación", BusinessCategory.HomeRepairs)]
+    [InlineData("Refrigeración y línea blanca", BusinessCategory.HomeRepairs)]
+    [InlineData("Cerrajería", BusinessCategory.HomeRepairs)]
+    [InlineData("Jardinería", BusinessCategory.HomeRepairs)]
+    [InlineData("Limpieza del hogar", BusinessCategory.HomeRepairs)]
+    [InlineData("Pintura e impermeabilización", BusinessCategory.HomeRepairs)]
     [InlineData("Servicios profesionales", BusinessCategory.Services)]
     [InlineData("Educación", BusinessCategory.Services)]
     [InlineData("Lavandería", BusinessCategory.Services)]
@@ -154,7 +160,7 @@ public class BusinessDirectoryTests
 
         Assert.Throws<DomainException>(() => tenant.SetDirectoryProfile(
             BusinessCategory.Food, new string('a', Tenant.MaxPublicDescriptionLength + 1)));
-        Assert.Throws<DomainException>(() => tenant.SetDirectoryProfile((BusinessCategory)11, null));
+        Assert.Throws<DomainException>(() => tenant.SetDirectoryProfile((BusinessCategory)12, null));
         Assert.Equal(BusinessCategory.Food, tenant.DirectoryCategory);
         Assert.Null(tenant.PublicDescription);
     }
