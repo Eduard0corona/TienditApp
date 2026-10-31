@@ -54,7 +54,7 @@ public class AuthorizationBehaviorTests
             "GetStorePreviewQuery",
             "IssuePendingCreditNotesCommand", "IssuePendingPaymentComplementsCommand", "Login2FACommand", "LoginCommand", "LogoutCommand", "LookUpSelfInvoiceTicketQuery",
             "PlacePublicOrderCommand",
-            "ProcessInboundMessageCommand", "ReconcileOnlinePaymentCommand", "RefreshTokenCommand",
+            "ProcessInboundMessageCommand", "QueueMonthlyAccountantEmailCommand", "ReconcileOnlinePaymentCommand", "RefreshTokenCommand",
             "RegisterBusinessCommand", "RegisterCustomerCommand", "RequestAutomaticCreditNoteCommand", "RequestAutomaticPaymentComplementCommand",
             "RequestPublicAppointmentCommand", "RequestSelfInvoiceCommand", "ResendConfirmationEmailCommand",
             "ResendPhoneConfirmationCommand", "ResendSelfInvoiceCommand", "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand",
