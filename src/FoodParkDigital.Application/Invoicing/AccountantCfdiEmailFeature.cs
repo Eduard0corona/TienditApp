@@ -155,7 +155,8 @@ public static class AccountantCfdiEmails
 
 /// <summary>
 /// «Mandar al contador» in Reportes › CFDI emitidos (owners and admins, Fase 28O): the month's file goes by email to that
-/// address, which is kept as the accountant's for the next time. A month that already started, with at least one CFDI; up to
+/// address, which is kept as the accountant's for the next time (and for the month that goes on its own; audited when it
+/// changes). A month that already started, with at least one CFDI; up to
 /// <see cref="AccountantCfdiEmails.MaxPerBusinessPerDay"/> a day, counted under the business's invoicing lock so two requests
 /// at once do not both pass the last one. It goes out from the queue.
 /// </summary>
@@ -223,6 +224,7 @@ public class SendIssuedCfdisToAccountantCommandHandler
             _context.InvoicingProfiles.Add(profile);
         }
         CfdiMonthEmail email;
+        var before = profile.AccountantEmail;
         try
         {
             email = CfdiMonthEmail.Request(tenantId, request.Year, request.Month, request.Email, userId, now);
@@ -233,6 +235,14 @@ public class SendIssuedCfdisToAccountantCommandHandler
             return Result.Failure<CfdiMonthEmailDto>(ex.Message);
         }
 
+        // Where the month goes on its own moves with it: audited as in Configuración › Facturación, without the address.
+        if (profile.AccountantEmail != before)
+            InvoicingSettings.Audit(_context, tenantId, _currentUser, "AccountantChanged", new
+            {
+                HasEmail = true,
+                EmailChanged = true,
+                Monthly = profile.SendsMonthToAccountant
+            });
         _context.CfdiMonthEmails.Add(email);
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(CfdiMonthEmailDto.From(email));

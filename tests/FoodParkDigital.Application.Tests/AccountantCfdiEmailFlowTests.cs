@@ -124,6 +124,10 @@ public class AccountantCfdiEmailFlowTests
         Assert.Equal((Guid.Parse(book.Fixture.CurrentUser.UserId!), true), (email.RequestedByUserId, email.IsPending));
         var settings = await book.SettingsAsync();
         Assert.Equal((Accountant, false), (settings.AccountantEmail, settings.SendsMonthToAccountant));
+        // The address changed: audited as in Configuración › Facturación, never with it; the same one again is not.
+        Assert.True((await book.SendAsync(2026, 10, Accountant)).IsSuccess);
+        var audited = Assert.Single(await book.Context.AuditLogs.AsNoTracking().Where(a => a.Action == "AccountantChanged").ToListAsync());
+        Assert.DoesNotContain("despacho", audited.Metadata);
     }
 
     [Fact]

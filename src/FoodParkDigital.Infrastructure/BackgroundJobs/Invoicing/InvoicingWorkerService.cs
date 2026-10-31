@@ -247,7 +247,9 @@ public sealed class InvoicingWorkerService : BackgroundService
                     .Select(p => new Waiting(p.TenantId, null))
                     .ToListAsync(cancellationToken);
                 accountants = Fairly(owed, _accountantsWithoutProgress, max);
-                _accountantsCheckedAt = now;
+                // More than a pass takes: the next pass looks again instead of waiting the hour, so none is left out.
+                if (owed.Count <= max)
+                    _accountantsCheckedAt = now;
             }
         }
 

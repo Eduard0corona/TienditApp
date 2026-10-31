@@ -393,6 +393,30 @@ public class InvoicingWorkerTests
         Assert.Empty(sent.Stamps);
     }
 
+    [Fact]
+    public async Task Pass_ShouldLookForTheAccountantsAgainOnTheNextPass_WhileMoreThanAPassTakesAreOwed()
+    {
+        var sent = new SentCommands();
+        await using var host = Host(sent, maxBusinessesPerPass: 2);
+        host.Clock.UtcNow = new DateTimeOffset(2026, 11, 1, 15, 0, 0, TimeSpan.Zero);
+        var owed = new[]
+        {
+            await AddAccountantAsync(host, "contador-uno"),
+            await AddAccountantAsync(host, "contador-dos"),
+            await AddAccountantAsync(host, "contador-tres")
+        };
+        var worker = host.Get<InvoicingWorkerService>();
+
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(2, sent.Accountants.Count);
+        // A minute later, not an hour: the one left out goes first (the others queued nothing).
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await worker.RunPassAsync(CancellationToken.None);
+
+        Assert.Equal(4, sent.Accountants.Count);
+        Assert.Equal(owed.Order(), sent.Accountants.Distinct().Order());
+    }
+
     /// <summary>A business with its accountant's email; when it sends them each month, and the month TienditApp queued last.</summary>
     private static Task<Guid> AddAccountantAsync(
         OutboxTestHost host, string slug, bool monthly = true, DateTimeOffset? queuedAt = null, TenantStatus status = TenantStatus.Active)
