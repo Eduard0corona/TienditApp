@@ -22,6 +22,7 @@ export const BUSINESS_CATEGORIES: BusinessCategoryInfo[] = [
   { value: BusinessCategory.Stationery, label: 'Papelería', slug: 'papeleria', icon: 'ri-pencil-ruler-2-line' },
   { value: BusinessCategory.Beauty, label: 'Belleza y bienestar', slug: 'belleza', icon: 'ri-scissors-cut-line' },
   { value: BusinessCategory.Automotive, label: 'Autos', slug: 'autos', icon: 'ri-car-line' },
+  { value: BusinessCategory.HomeRepairs, label: 'Hogar y reparaciones', slug: 'hogar-y-reparaciones', icon: 'ri-tools-line' },
   { value: BusinessCategory.Services, label: 'Servicios', slug: 'servicios', icon: 'ri-service-line' },
   { value: BusinessCategory.Other, label: 'Otros', slug: 'otros', icon: 'ri-store-2-line' },
 ];

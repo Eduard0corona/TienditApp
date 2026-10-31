@@ -85,6 +85,25 @@ public class AppointmentsController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Whether the business receives visits to quote, the service that is its visit, how it charges it and what is missing
+    /// (Fase 29A).
+    /// </summary>
+    [HttpGet("home-visit-requests")]
+    public async Task<ActionResult<HomeVisitRequestsSettingsDto>> GetHomeVisitRequests(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetHomeVisitRequestsSettingsQuery(), cancellationToken));
+
+    /// <summary>Turns visits to quote on or off, picks the visit service and how it is charged (owners and admins).</summary>
+    [HttpPut("home-visit-requests")]
+    public async Task<ActionResult<HomeVisitRequestsSettingsDto>> UpdateHomeVisitRequests(
+        [FromBody] UpdateHomeVisitRequestsSettingsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
     /// <summary>The business's active team, with who customers book online and their services and hours (Fase 24J).</summary>
     [HttpGet("online-booking/staff")]
     public async Task<ActionResult<OnlineBookingStaffSettingsDto>> GetOnlineBookingStaff(CancellationToken cancellationToken)

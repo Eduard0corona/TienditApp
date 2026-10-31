@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Application.Catalog.Templates;
@@ -30,6 +31,10 @@ public sealed class StarterCategoryDefinition
 /// <param name="TaxRate">IVA in percent; null uses the business default (16 % unless changed).</param>
 /// <param name="PreparationTimeMinutes">For a service, how long it takes: the length of its appointments.</param>
 /// <param name="IsTaxExempt">Exempt from IVA ("exento", not 0 %), so it takes no rate.</param>
+/// <param name="IsHomeVisit">
+/// The visit to check and quote of a trade (Fase 29A, ADR 0053): installed, it becomes the visit of the business unless
+/// it already picked one.
+/// </param>
 public sealed record StarterProductDefinition(
     string Name,
     decimal Price,
@@ -38,7 +43,8 @@ public sealed record StarterProductDefinition(
     bool IsTrackable = false,
     bool IsFeatured = false,
     int? PreparationTimeMinutes = null,
-    bool IsTaxExempt = false);
+    bool IsTaxExempt = false,
+    bool IsHomeVisit = false);
 
 /// <summary>
 /// Sample catalogs offered by the guided setup so a new business reaches its first sale in minutes.
@@ -465,7 +471,7 @@ public static class StarterCatalogTemplates
                     SortOrder = 30,
                     Products =
                     [
-                        new("Visita para medir y cotizar", 250m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Visita para medir y cotizar", 250m, UnitType.Service, PreparationTimeMinutes: 60, IsHomeVisit: true),
                         new("Instalación de puerta", 900m, UnitType.Service, PreparationTimeMinutes: 120),
                         new("Mano de obra por hora", 250m, UnitType.Hour, PreparationTimeMinutes: 60)
                     ]
@@ -508,7 +514,7 @@ public static class StarterCatalogTemplates
                     SortOrder = 30,
                     Products =
                     [
-                        new("Visita para medir y cotizar", 250m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Visita para medir y cotizar", 250m, UnitType.Service, PreparationTimeMinutes: 60, IsHomeVisit: true),
                         new("Reparación de reja o portón", 800m, UnitType.Service, PreparationTimeMinutes: 120),
                         new("Mano de obra por hora", 300m, UnitType.Hour, PreparationTimeMinutes: 60)
                     ]
@@ -530,7 +536,7 @@ public static class StarterCatalogTemplates
                     SortOrder = 10,
                     Products =
                     [
-                        new("Visita y diagnóstico", 350m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60)
+                        new("Visita y diagnóstico", 350m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60, IsHomeVisit: true)
                     ]
                 },
                 new StarterCategoryDefinition
@@ -572,7 +578,7 @@ public static class StarterCatalogTemplates
                     SortOrder = 10,
                     Products =
                     [
-                        new("Visita y diagnóstico", 350m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60)
+                        new("Visita y diagnóstico", 350m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60, IsHomeVisit: true)
                     ]
                 },
                 new StarterCategoryDefinition
@@ -635,9 +641,259 @@ public static class StarterCatalogTemplates
                     SortOrder = 30,
                     Products =
                     [
-                        new("Visita y diagnóstico", 400m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Visita y diagnóstico", 400m, UnitType.Service, PreparationTimeMinutes: 60, IsHomeVisit: true),
                         new("Carga de gas refrigerante", 1200m, UnitType.Service, PreparationTimeMinutes: 60),
                         new("Reparación de fuga de gas", 1500m, UnitType.Service, PreparationTimeMinutes: 120)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "fumigacion",
+            Name = "Fumigación",
+            Description = "Inspección, fumigación y control de plagas en casas y negocios, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.PestControl],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Visitas",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Visita de inspección y cotización", 300m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60, IsHomeVisit: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Fumigación",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Fumigación de casa", 1200m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 120),
+                        new("Fumigación de departamento", 900m, UnitType.Service, PreparationTimeMinutes: 90),
+                        new("Fumigación de negocio", 1500m, UnitType.Service, PreparationTimeMinutes: 150)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Control de plagas",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Control de cucarachas", 800m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Control de roedores", 1000m, UnitType.Service, PreparationTimeMinutes: 90),
+                        new("Tratamiento contra termitas", 2500m, UnitType.Service, PreparationTimeMinutes: 180)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "refrigeracion-linea-blanca",
+            Name = "Refrigeración y línea blanca",
+            Description = "Visitas y reparación de refrigeradores, lavadoras, secadoras y estufas, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.Refrigeration],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Visitas",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Visita y diagnóstico", 350m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60, IsHomeVisit: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Refrigeración",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Reparación de refrigerador", 1200m, UnitType.Service, PreparationTimeMinutes: 120),
+                        new("Carga de gas a refrigerador", 900m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Cambio de termostato", 650m, UnitType.Service, PreparationTimeMinutes: 60)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Lavado y cocina",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Reparación de lavadora", 900m, UnitType.Service, PreparationTimeMinutes: 90),
+                        new("Reparación de secadora", 900m, UnitType.Service, PreparationTimeMinutes: 90),
+                        new("Reparación de estufa", 700m, UnitType.Service, PreparationTimeMinutes: 60)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "cerrajeria",
+            Name = "Cerrajería",
+            Description = "Aperturas, cambio de chapas y cerraduras a domicilio, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.Locksmith],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Visitas",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Visita y diagnóstico", 250m, UnitType.Service, PreparationTimeMinutes: 30, IsHomeVisit: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Aperturas",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Apertura de puerta", 450m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 30),
+                        new("Apertura de auto", 600m, UnitType.Service, PreparationTimeMinutes: 45)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Chapas y cerraduras",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Cambio de chapa", 550m, UnitType.Service, PreparationTimeMinutes: 45),
+                        new("Instalación de cerradura", 700m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Cambio de combinación", 400m, UnitType.Service, PreparationTimeMinutes: 30)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "jardineria",
+            Name = "Jardinería",
+            Description = "Corte de pasto, mantenimiento, poda y riego de jardines, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.Gardening],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Visitas",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Visita para cotizar", 200m, UnitType.Service, PreparationTimeMinutes: 45, IsHomeVisit: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Mantenimiento",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Corte de pasto", 350m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60),
+                        new("Mantenimiento de jardín", 600m, UnitType.Service, PreparationTimeMinutes: 120),
+                        new("Poda de árbol", 900m, UnitType.Service, PreparationTimeMinutes: 120),
+                        new("Mano de obra por hora", 200m, UnitType.Hour, PreparationTimeMinutes: 60)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Instalación",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Siembra de plantas", 400m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Instalación de riego", 2500m, UnitType.Service, PreparationTimeMinutes: 240)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "limpieza-hogar",
+            Name = "Limpieza del hogar",
+            Description = "Limpieza de casas y departamentos, profunda y de muebles, con su duración para la agenda.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.HomeCleaning],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Visitas",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Visita para cotizar", 150m, UnitType.Service, PreparationTimeMinutes: 30, IsHomeVisit: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Limpieza",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Limpieza de casa", 700m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 240),
+                        new("Limpieza de departamento", 550m, UnitType.Service, PreparationTimeMinutes: 180),
+                        new("Limpieza profunda", 1200m, UnitType.Service, PreparationTimeMinutes: 360)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Muebles y alfombras",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Lavado de sala", 900m, UnitType.Service, PreparationTimeMinutes: 120),
+                        new("Lavado de colchón", 500m, UnitType.Service, PreparationTimeMinutes: 60),
+                        new("Lavado de alfombra", 600m, UnitType.Service, PreparationTimeMinutes: 90)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
+            Id = "pintura-impermeabilizacion",
+            Name = "Pintura e impermeabilización",
+            Description = "Pintura de interiores y fachadas e impermeabilización, con la visita para medir y cotizar.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.Painting],
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Visitas",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Visita para medir y cotizar", 250m, UnitType.Service, IsFeatured: true, PreparationTimeMinutes: 60, IsHomeVisit: true)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Pintura",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Pintura de recámara", 1800m, UnitType.Service, PreparationTimeMinutes: 360),
+                        new("Pintura de fachada", 4500m, UnitType.Service, PreparationTimeMinutes: 480),
+                        new("Mano de obra por hora", 250m, UnitType.Hour, PreparationTimeMinutes: 60)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Impermeabilización",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Impermeabilización de azotea", 3500m, UnitType.Service, PreparationTimeMinutes: 360),
+                        new("Reparación de goteras", 900m, UnitType.Service, PreparationTimeMinutes: 120)
                     ]
                 }
             ]

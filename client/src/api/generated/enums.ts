@@ -36,6 +36,7 @@ export const BusinessCategory = {
   Automotive: 8,
   Services: 9,
   Other: 10,
+  HomeRepairs: 11,
 } as const;
 export type BusinessCategory = (typeof BusinessCategory)[keyof typeof BusinessCategory];
 
@@ -200,6 +201,13 @@ export const GlobalInvoicePeriodicity = {
   Bimonthly: 5,
 } as const;
 export type GlobalInvoicePeriodicity = (typeof GlobalInvoicePeriodicity)[keyof typeof GlobalInvoicePeriodicity];
+
+export const HomeVisitChargePolicy = {
+  Charged: 0,
+  Free: 1,
+  CreditedIfHired: 2,
+} as const;
+export type HomeVisitChargePolicy = (typeof HomeVisitChargePolicy)[keyof typeof HomeVisitChargePolicy];
 
 export const InsufficientStockPolicy = {
   Block: 0,

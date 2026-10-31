@@ -18,6 +18,12 @@ public class CategoryTemplatesTests
     [InlineData("Electricista", "electrical")]
     [InlineData("Plomería", "plumbing")]
     [InlineData("Aire acondicionado", "air-conditioning")]
+    [InlineData("Fumigación", "pest-control")]
+    [InlineData("Refrigeración y línea blanca", "refrigeration")]
+    [InlineData("cerrajeria", "locksmith")]
+    [InlineData("Jardinería", "gardening")]
+    [InlineData("Limpieza del hogar", "home-cleaning")]
+    [InlineData("Pintura e impermeabilización", "painting")]
     // The older ones keep finding a word of the giro, or the type.
     [InlineData("Lavandería", "laundry")]
     [InlineData("Barbería Don Pepe", "barber")]

@@ -104,6 +104,19 @@ public class TenantSetupController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Dismisses the notice that its store publishes the main branch's address while it goes to homes (Fase 29A): it does
+    /// not come back, and the address stays as it is.
+    /// </summary>
+    [HttpPost("directory/home-visit-address-notice/dismiss")]
+    public async Task<IActionResult> DismissHomeVisitAddressNotice(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DismissHomeVisitAddressNoticeCommand(), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return NoContent();
+    }
+
     /// <summary>When the business attends: the public menu says whether it is open and when it opens or closes.</summary>
     [HttpPut("opening-hours")]
     public async Task<ActionResult<OpeningHoursDto>> UpdateOpeningHours([FromBody] UpdateOpeningHoursRequest request, CancellationToken cancellationToken)

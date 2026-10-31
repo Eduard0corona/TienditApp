@@ -26,6 +26,7 @@ function profile(overrides: Partial<DirectoryProfile> = {}): DirectoryProfile {
     description: null,
     listed: true,
     visibility: DirectoryVisibility.Shown,
+    homeVisitAddressNotice: false,
     ...overrides,
   };
 }

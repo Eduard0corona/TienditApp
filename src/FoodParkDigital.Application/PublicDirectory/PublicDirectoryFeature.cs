@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -10,6 +11,7 @@ using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
@@ -111,12 +113,32 @@ public class PublicDirectoryBusinessDto
     /// <summary>How its customers rate it (Fase 24H): its published reviews and their average; null without reviews.</summary>
     public RatingSummaryDto? Rating { get; set; }
 
+    /// <summary>
+    /// It receives visits to quote now (Fase 29A, ADR 0053): its card speaks of visits, never of orders or the drawer,
+    /// and it goes with those taking orders whatever its drawer or its hours (the customer picks a free time).
+    /// </summary>
+    public bool ReceivesVisits { get; set; }
+    /// <summary>How it charges the visit; null when it does not receive visits.</summary>
+    public HomeVisitChargePolicy? VisitChargePolicy { get; set; }
+    /// <summary>
+    /// What a visit costs, written like its prices: with the customer's postal code, the visit there (null when it does
+    /// not go there); without it, from the zone that charges least («desde» when another charges more). Null when it does
+    /// not receive visits.
+    /// </summary>
+    public HomeVisitPriceDto? VisitPrice { get; set; }
+    /// <summary>
+    /// With the customer's postal code: whether one of its zones goes there, so it visits. Null without a postal code, or
+    /// when it does not receive visits.
+    /// </summary>
+    public bool? VisitsPostalCode { get; set; }
+
     internal PublicDirectoryBusinessDto Copy() => (PublicDirectoryBusinessDto)MemberwiseClone();
 }
 
 /// <summary>
 /// Explorar (Fase 24A, ADR 0021): the active businesses whose menu is published (to be seen or with orders), that show
-/// in Explorar and have at least one product their menu shows, with the categories and how many each has. Whether each
+/// in Explorar and have at least one product their menu shows, book appointments online or receive visits to quote (Fase
+/// 29A), with the categories and how many each has. Whether each
 /// takes orders now is the rule of its menu (<see cref="OnlineOrderAvailability"/>). Read from a snapshot of every
 /// business, rebuilt at most every <see cref="PublicDirectoryCache.Lifetime"/>: the menu confirms it when opened.
 /// </summary>
@@ -124,7 +146,8 @@ public class PublicDirectoryBusinessDto
 /// <param name="Search">Words of the name, the description or the city, without accents or capitals.</param>
 /// <param name="PostalCode">
 /// The customer's postal code (Fase 24B): each card of the page says whether the business delivers there and what it
-/// costs, as its menu would. The order of the list does not change.
+/// costs, as its menu would, or whether it visits there and what the visit costs (Fase 29A). The businesses that receive
+/// visits and do not go there come last; the rest of the order does not change.
 /// </param>
 /// <param name="Latitude">
 /// The customer's position, with <paramref name="Longitude"/> (Fase 24G, «Cerca de mí»): the businesses open now come
@@ -218,11 +241,16 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
         var found = (near?.Entries ?? inCategory)
             .Where(entry => words.All(entry.SearchText.Contains))
             .ToList();
+        var postalCode = DeliveryZone.NormalizePostalCode(request.PostalCode);
+        // The zones of every business found that reach the postal code: a trade that does not go there is no use to the
+        // customer, so it goes after the rest (a stable order: «Cerca de mí» and the order of Explorar stay within each part).
+        var zones = await PublicDirectoryCards.ZonesAtAsync(_context, found, postalCode, cancellationToken);
+        if (zones is not null)
+            found = found.OrderBy(entry => entry.Business.ReceivesVisits && !zones.ContainsKey(entry.TenantId) ? 1 : 0).ToList();
         var pageSize = Math.Clamp(request.PageSize, 1, GetPublicDirectoryQuery.MaxPageSize);
         var pageNumber = Math.Max(1, request.PageNumber);
         var page = found.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
-        var postalCode = DeliveryZone.NormalizePostalCode(request.PostalCode);
-        var businesses = await PublicDirectoryCards.WithDeliveryToAsync(_context, page, postalCode, cancellationToken, near?.DistanceKm);
+        var businesses = PublicDirectoryCards.WithDeliveryTo(page, zones, near?.DistanceKm);
         // The products of a search come with its first page; the index of the snapshot is read only when there is one.
         var products = words.Length == 0 || pageNumber > 1 ? [] : await SearchProductsAsync(snapshot, words, request.Category, near, cancellationToken);
 
@@ -253,14 +281,16 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
     }
 }
 
-/// <summary>The cards of Explorar as a customer reads them: with the delivery to their postal code (Fase 24B).</summary>
+/// <summary>
+/// The cards of Explorar as a customer reads them: with the delivery to their postal code (Fase 24B), or the visit there
+/// (Fase 29A), and how far each business is.
+/// </summary>
 internal static class PublicDirectoryCards
 {
     /// <summary>
     /// The cards of <paramref name="page"/>, each saying whether the business delivers to <paramref name="postalCode"/>
-    /// and what it costs, and how far it is (<paramref name="distanceKm"/>, Fase 24G): copies, because the snapshot is
-    /// shared by every request. A business without delivery says nothing about it; without a postal code or a position,
-    /// the cards of the snapshot as they are.
+    /// and what it costs, or visits it and what the visit costs, and how far it is (<paramref name="distanceKm"/>): copies,
+    /// because the snapshot is shared by every request.
     /// </summary>
     public static async Task<List<PublicDirectoryBusinessDto>> WithDeliveryToAsync(
         IApplicationDbContext context,
@@ -268,50 +298,100 @@ internal static class PublicDirectoryCards
         string? postalCode,
         CancellationToken cancellationToken,
         IReadOnlyDictionary<Guid, decimal>? distanceKm = null)
-    {
-        if (postalCode is null && distanceKm is null)
-            return page.Select(entry => entry.Business).ToList();
+        => WithDeliveryTo(page, await ZonesAtAsync(context, page, postalCode, cancellationToken), distanceKm);
 
-        // Only the businesses of the page that deliver ask; a page without one reads nothing.
-        var delivering = postalCode is null
-            ? []
-            : page.Where(entry => entry.Business.DeliveryAvailable).Select(entry => entry.TenantId).ToList();
-        if (delivering.Count == 0)
-            return page.Select(entry => Measured(entry, distanceKm)).ToList();
+    /// <summary>
+    /// The active zone that reaches <paramref name="postalCode"/> of each business of <paramref name="entries"/> that
+    /// delivers or receives visits, by business; one that is not there does not go. Null without a postal code: nothing
+    /// is read.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<Guid, ZoneAt>?> ZonesAtAsync(
+        IApplicationDbContext context,
+        IReadOnlyList<PublicDirectorySnapshot.Entry> entries,
+        string? postalCode,
+        CancellationToken cancellationToken)
+    {
+        if (postalCode is null)
+            return null;
+
+        // Only the businesses that deliver or visit ask; a list without one reads nothing.
+        var asking = entries
+            .Where(entry => entry.Business.DeliveryAvailable || entry.Business.ReceivesVisits)
+            .Select(entry => entry.TenantId)
+            .ToList();
+        if (asking.Count == 0)
+            return new Dictionary<Guid, ZoneAt>();
 
         // A public request has no business: the active zones of those businesses that reach the postal code, in one read
         // (each zone with its own business, IX_DeliveryZonePostalCodes_PostalCode); a business has one at most.
         var zones = await context.DeliveryZonePostalCodes
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(code => code.PostalCode == postalCode && delivering.Contains(code.TenantId))
+            .Where(code => code.PostalCode == postalCode && asking.Contains(code.TenantId))
             .Join(context.DeliveryZones, code => code.DeliveryZoneId, zone => zone.Id, (code, zone) => new { code.TenantId, Zone = zone })
             .Where(row => row.Zone.IsActive && row.Zone.TenantId == row.TenantId)
             .Select(row => new { row.TenantId, row.Zone.Fee, row.Zone.MinimumOrder, row.Zone.FreeDeliveryFrom })
             .ToListAsync(cancellationToken);
-        var byBusiness = zones.ToDictionary(zone => zone.TenantId);
+        return zones
+            .GroupBy(zone => zone.TenantId)
+            .ToDictionary(group => group.Key, group =>
+            {
+                var zone = group.First();
+                return new ZoneAt(zone.Fee, zone.MinimumOrder, zone.FreeDeliveryFrom);
+            });
+    }
+
+    /// <summary>
+    /// The cards of <paramref name="page"/> with what the zones that reach the customer's postal code say
+    /// (<paramref name="zones"/>, null without a postal code) and how far each business is: copies. Without a postal code
+    /// or a position, the cards of the snapshot as they are.
+    /// </summary>
+    public static List<PublicDirectoryBusinessDto> WithDeliveryTo(
+        IReadOnlyList<PublicDirectorySnapshot.Entry> page,
+        IReadOnlyDictionary<Guid, ZoneAt>? zones,
+        IReadOnlyDictionary<Guid, decimal>? distanceKm = null)
+    {
+        if (zones is null && distanceKm is null)
+            return page.Select(entry => entry.Business).ToList();
 
         return page.Select(entry =>
         {
             var card = Measured(entry, distanceKm);
-            if (!card.DeliveryAvailable)
+            if (zones is null)
                 return card;
-            var zone = byBusiness.GetValueOrDefault(entry.TenantId);
-            card.DeliversToPostalCode = zone is not null;
-            card.DeliveryFee = zone?.Fee;
-            card.MinimumOrder = zone?.MinimumOrder;
-            card.FreeDeliveryFrom = zone?.FreeDeliveryFrom;
+            var zone = zones.GetValueOrDefault(entry.TenantId);
+            if (card.DeliveryAvailable)
+            {
+                card.DeliversToPostalCode = zone is not null;
+                card.DeliveryFee = zone?.Fee;
+                card.MinimumOrder = zone?.MinimumOrder;
+                card.FreeDeliveryFrom = zone?.FreeDeliveryFrom;
+            }
+            if (card.ReceivesVisits)
+            {
+                // The visit there, as the store and the request say: never the zone, only what going there costs.
+                card.VisitsPostalCode = zone is not null;
+                card.VisitPrice = zone is null
+                    ? null
+                    : new HomeVisitPriceDto
+                    {
+                        Amount = HomeVisitCharge.To(card.VisitChargePolicy ?? HomeVisitChargePolicy.Charged, entry.VisitServicePrice, zone.Fee)
+                    };
+            }
             return card;
         }).ToList();
     }
 
-    /// <summary>A copy of the card with its distance, when there is one to tell; the card itself otherwise.</summary>
+    /// <summary>A copy of the card with its distance, when there is one to tell.</summary>
     private static PublicDirectoryBusinessDto Measured(PublicDirectorySnapshot.Entry entry, IReadOnlyDictionary<Guid, decimal>? distanceKm)
     {
         var card = entry.Business.Copy();
         card.DistanceKm = distanceKm is not null && distanceKm.TryGetValue(entry.TenantId, out var km) ? km : null;
         return card;
     }
+
+    /// <summary>What the zone of a business that reaches the customer's postal code charges: never its name.</summary>
+    internal sealed record ZoneAt(decimal Fee, decimal MinimumOrder, decimal? FreeDeliveryFrom);
 }
 
 /// <summary>
@@ -329,7 +409,7 @@ public sealed class PublicDirectoryNearby
     }
 
     /// <summary>
-    /// The businesses open now first (they take orders, book online or show their menu while open), nearest first; then
+    /// The businesses open now first (they take orders, book online, receive visits or show their menu while open), nearest first; then
     /// the closed ones, nearest first. In each group, those not on the map follow in the order of Explorar.
     /// </summary>
     internal IReadOnlyList<PublicDirectorySnapshot.Entry> Entries { get; }
@@ -394,11 +474,24 @@ public sealed class PublicDirectorySnapshot
 
     /// <param name="TenantId">Its business, to look up its delivery to a postal code; never in the card.</param>
     /// <param name="SearchText">Its name, description and city as a search compares them.</param>
-    /// <param name="Rank">0 while it takes orders, 1 open (its menu, or its orders paused), 2 closed.</param>
+    /// <param name="Rank">
+    /// 0 while it takes orders, books online or receives visits (Fase 29A), 1 open (its menu, or its orders paused), 2
+    /// closed.
+    /// </param>
     /// <param name="Location">
     /// Where its main branch is on the map while customers come to it (Fase 24G); never in the card, only how far it is.
     /// </param>
-    internal sealed record Entry(Guid TenantId, PublicDirectoryBusinessDto Business, string SearchText, int Rank, GeoPoint? Location = null);
+    /// <param name="VisitServicePrice">
+    /// The price of the service it picked as its visit while it is bookable (Fase 29A), to say what the visit to a postal
+    /// code costs; never in the card.
+    /// </param>
+    internal sealed record Entry(
+        Guid TenantId,
+        PublicDirectoryBusinessDto Business,
+        string SearchText,
+        int Rank,
+        GeoPoint? Location = null,
+        decimal? VisitServicePrice = null);
 
     /// <summary>
     /// Reads every business Explorar lists: a public request has no business, so these reads span all of them, each
@@ -411,7 +504,9 @@ public sealed class PublicDirectorySnapshot
         // Explorar lists an active business whose menu is published and shows in Explorar, with a product its menu shows.
         var menuProducts = MenuProducts(context);
         var bookableServices = OnlineBookingCalendar.OfferedServices(context);
-        // A business that only sells services shows while it books them online (Fase 24D): its menu has nothing to order.
+        var visitServices = OnlineBookingCalendar.BookableServices(context);
+        // A business that only sells services shows while it books them online (Fase 24D) or receives visits to quote (Fase
+        // 29A, it goes somewhere: an active zone): its menu has nothing to order.
         var listed = context.Tenants
             .IgnoreQueryFilters()
             .AsNoTracking()
@@ -420,7 +515,8 @@ public sealed class PublicDirectorySnapshot
                 && t.Settings.OnlineMenuMode != OnlineMenuMode.Off
                 && t.Settings.ListedInDirectory
                 && (menuProducts.Any(p => p.TenantId == t.Id)
-                    || (t.Settings.OnlineBookingEnabled && bookableServices.Any(p => p.TenantId == t.Id))));
+                    || (t.Settings.OnlineBookingEnabled && bookableServices.Any(p => p.TenantId == t.Id))
+                    || (t.Settings.HomeVisitRequestsEnabled && context.DeliveryZones.Any(z => z.TenantId == t.Id && z.IsActive))));
         var rows = await listed
             .OrderBy(t => t.Name).ThenBy(t => t.Id)
             .Take(MaxBusinesses + 1)
@@ -452,7 +548,16 @@ public sealed class PublicDirectorySnapshot
                 menuProducts.Any(p => p.TenantId == t.Id),
                 t.Settings.OnlineBookingEnabled && bookableServices.Any(p => p.TenantId == t.Id),
                 t.Settings.Capabilities,
-                t.BusinessType))
+                t.BusinessType,
+                t.Settings.HomeVisitRequestsEnabled,
+                t.Settings.HomeVisitChargePolicy,
+                visitServices
+                    .Where(p => p.TenantId == t.Id && p.Id == t.Settings.HomeVisitServiceId)
+                    .Select(p => (decimal?)p.PriceAmount)
+                    .FirstOrDefault(),
+                // What going costs: from the cheapest active zone, «desde» when another charges more.
+                context.DeliveryZones.Where(z => z.TenantId == t.Id && z.IsActive).Min(z => (decimal?)z.Fee),
+                context.DeliveryZones.Where(z => z.TenantId == t.Id && z.IsActive).Max(z => (decimal?)z.Fee)))
             .ToListAsync(cancellationToken);
         if (rows.Count > MaxBusinesses)
         {
@@ -514,7 +619,10 @@ public sealed class PublicDirectorySnapshot
     internal static IOrderedQueryable<Product> ThenInMenuOrder(IOrderedQueryable<Product> products)
         => products.ThenByDescending(p => p.IsFeatured).ThenBy(p => p.SortOrder).ThenBy(p => p.Name).ThenBy(p => p.Id);
 
-    /// <summary>The card of a business; null for one listed for its services that does not book them online after all.</summary>
+    /// <summary>
+    /// The card of a business; null for one listed for its services that neither books them online nor receives visits
+    /// after all.
+    /// </summary>
     private static Entry? ToEntry(Row row, IEnumerable<SpecialDay> specialDays, DateTimeOffset utcNow)
     {
         var (since, until) = BusinessHours.SpecialDaysWindow(row.TimeZone, utcNow);
@@ -534,7 +642,14 @@ public sealed class PublicDirectorySnapshot
             row.Mode,
             row.MainBranch?.ServiceMode,
             row.OpeningHours is not null);
-        if (!row.HasMenu && !booksOnline)
+        // The rule of its visits (HomeVisitRequestAvailability): its premises and its drawer do not count.
+        var receivesVisits = HomeVisitRequestAvailability.ReceivesVisits(
+            row.VisitsEnabled,
+            TenantCapabilityRules.NormalizeCapabilities(row.Capabilities, row.BusinessType),
+            row.Mode,
+            hasActiveZones: row.Delivers,
+            hasWeeklyHours: row.OpeningHours is not null);
+        if (!row.HasMenu && !booksOnline && !receivesVisits)
             return null;
         var business = new PublicDirectoryBusinessDto
         {
@@ -554,13 +669,25 @@ public sealed class PublicDirectorySnapshot
             StatusDetail = hours is null ? null : BusinessHoursText.StatusDetail(hours, seatedOverride: false),
             Closed = hours is { Status.IsOpen: false },
             PricesIncludeTax = row.PricesIncludeTax,
-            BooksOnline = booksOnline
+            BooksOnline = booksOnline,
+            ReceivesVisits = receivesVisits,
+            VisitChargePolicy = receivesVisits ? row.VisitPolicy : null,
+            VisitPrice = receivesVisits && row.MinZoneFee is { } cheapest
+                ? HomeVisitPriceDto.From(HomeVisitCharge.Starting(
+                    row.VisitPolicy, row.VisitServicePrice, row.MaxZoneFee is { } dearest && dearest != cheapest ? [cheapest, dearest] : [cheapest]))
+                : null
         };
-        var rank = acceptsOrders || booksOnline ? 0 : business.Closed ? ClosedRank : 1;
+        var rank = acceptsOrders || booksOnline || receivesVisits ? 0 : business.Closed ? ClosedRank : 1;
         // Measured only while customers come to it: the point of a kitchen that only delivers stays with its team.
         var location = deliveryOnly ? null : GeoPoint.FromStored(row.MainBranch?.Latitude, row.MainBranch?.Longitude);
         // Its city too, when the card shows it: never the one of a kitchen that only delivers.
-        return new Entry(row.Id, business, Comparable($"{row.Name} {row.Description} {business.City}"), rank, location);
+        return new Entry(
+            row.Id,
+            business,
+            Comparable($"{row.Name} {row.Description} {business.City}"),
+            rank,
+            location,
+            receivesVisits ? row.VisitServicePrice : null);
     }
 
     /// <summary>Lowercase, without accents and with single spaces: «Taquería  EL Güero» and «taqueria el guero» match.</summary>
@@ -594,7 +721,12 @@ public sealed class PublicDirectorySnapshot
         bool HasMenu,
         bool BooksServices,
         TenantCapability Capabilities,
-        BusinessType BusinessType);
+        BusinessType BusinessType,
+        bool VisitsEnabled,
+        HomeVisitChargePolicy VisitPolicy,
+        decimal? VisitServicePrice,
+        decimal? MinZoneFee,
+        decimal? MaxZoneFee);
 }
 
 /// <summary>

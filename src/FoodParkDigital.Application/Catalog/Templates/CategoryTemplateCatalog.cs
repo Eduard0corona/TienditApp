@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Tenants;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Application.Catalog.Templates;
@@ -220,6 +221,102 @@ public static class CategoryTemplateCatalog
                 new CategoryTemplateItemDefinition { Name = "Reparación", SortOrder = 30 },
                 new CategoryTemplateItemDefinition { Name = "Carga de gas", SortOrder = 40 },
                 new CategoryTemplateItemDefinition { Name = "Visitas y diagnóstico", SortOrder = 50 }
+            ]
+        },
+        new CategoryTemplateDefinition
+        {
+            Id = "pest-control",
+            Name = "Fumigación",
+            Description = "Categorías para fumigación y control de plagas a domicilio.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.PestControl],
+            Categories =
+            [
+                new CategoryTemplateItemDefinition { Name = "Visitas e inspección", SortOrder = 10 },
+                new CategoryTemplateItemDefinition { Name = "Fumigación", SortOrder = 20 },
+                new CategoryTemplateItemDefinition { Name = "Control de plagas", SortOrder = 30 },
+                new CategoryTemplateItemDefinition { Name = "Termitas", SortOrder = 40 },
+                new CategoryTemplateItemDefinition { Name = "Mantenimiento", SortOrder = 50 }
+            ]
+        },
+        new CategoryTemplateDefinition
+        {
+            Id = "refrigeration",
+            Name = "Refrigeración y línea blanca",
+            Description = "Categorías para la reparación de refrigeradores y línea blanca a domicilio.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.Refrigeration],
+            Categories =
+            [
+                new CategoryTemplateItemDefinition { Name = "Visitas y diagnóstico", SortOrder = 10 },
+                new CategoryTemplateItemDefinition { Name = "Refrigeradores", SortOrder = 20 },
+                new CategoryTemplateItemDefinition { Name = "Lavadoras y secadoras", SortOrder = 30 },
+                new CategoryTemplateItemDefinition { Name = "Estufas", SortOrder = 40 },
+                new CategoryTemplateItemDefinition { Name = "Refacciones", SortOrder = 50 }
+            ]
+        },
+        new CategoryTemplateDefinition
+        {
+            Id = "locksmith",
+            Name = "Cerrajería",
+            Description = "Categorías para cerrajería a domicilio.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.Locksmith],
+            Categories =
+            [
+                new CategoryTemplateItemDefinition { Name = "Visitas y diagnóstico", SortOrder = 10 },
+                new CategoryTemplateItemDefinition { Name = "Aperturas", SortOrder = 20 },
+                new CategoryTemplateItemDefinition { Name = "Chapas y cerraduras", SortOrder = 30 },
+                new CategoryTemplateItemDefinition { Name = "Llaves", SortOrder = 40 },
+                new CategoryTemplateItemDefinition { Name = "Cajas fuertes", SortOrder = 50 }
+            ]
+        },
+        new CategoryTemplateDefinition
+        {
+            Id = "gardening",
+            Name = "Jardinería",
+            Description = "Categorías para jardinería y mantenimiento de jardines.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.Gardening],
+            Categories =
+            [
+                new CategoryTemplateItemDefinition { Name = "Visitas", SortOrder = 10 },
+                new CategoryTemplateItemDefinition { Name = "Mantenimiento", SortOrder = 20 },
+                new CategoryTemplateItemDefinition { Name = "Poda", SortOrder = 30 },
+                new CategoryTemplateItemDefinition { Name = "Riego", SortOrder = 40 },
+                new CategoryTemplateItemDefinition { Name = "Plantas y siembra", SortOrder = 50 }
+            ]
+        },
+        new CategoryTemplateDefinition
+        {
+            Id = "home-cleaning",
+            Name = "Limpieza del hogar",
+            Description = "Categorías para limpieza de casas y departamentos.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.HomeCleaning],
+            Categories =
+            [
+                new CategoryTemplateItemDefinition { Name = "Visitas", SortOrder = 10 },
+                new CategoryTemplateItemDefinition { Name = "Limpieza", SortOrder = 20 },
+                new CategoryTemplateItemDefinition { Name = "Limpieza profunda", SortOrder = 30 },
+                new CategoryTemplateItemDefinition { Name = "Muebles y alfombras", SortOrder = 40 },
+                new CategoryTemplateItemDefinition { Name = "Ventanas", SortOrder = 50 }
+            ]
+        },
+        new CategoryTemplateDefinition
+        {
+            Id = "painting",
+            Name = "Pintura e impermeabilización",
+            Description = "Categorías para pintura e impermeabilización.",
+            BusinessType = BusinessType.Service,
+            Industries = [HomeTrades.Painting],
+            Categories =
+            [
+                new CategoryTemplateItemDefinition { Name = "Visitas para medir y cotizar", SortOrder = 10 },
+                new CategoryTemplateItemDefinition { Name = "Pintura de interiores", SortOrder = 20 },
+                new CategoryTemplateItemDefinition { Name = "Fachadas", SortOrder = 30 },
+                new CategoryTemplateItemDefinition { Name = "Impermeabilización", SortOrder = 40 },
+                new CategoryTemplateItemDefinition { Name = "Mano de obra", SortOrder = 50 }
             ]
         }
     ];

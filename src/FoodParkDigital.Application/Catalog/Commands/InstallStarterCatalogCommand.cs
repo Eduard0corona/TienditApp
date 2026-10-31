@@ -12,7 +12,8 @@ namespace FoodParkDigital.Application.Catalog.Commands;
 
 /// <summary>
 /// Fills an empty catalog with a sample one (categories and products) chosen in the guided setup. It is
-/// refused once the business has products, so it can never duplicate or overwrite a real catalog.
+/// refused once the business has products, so it can never duplicate or overwrite a real catalog. The visit of a trade's
+/// catalog becomes the visit of the business while it has none (Fase 29A).
 /// </summary>
 [RequiresTenantManager]
 public record InstallStarterCatalogCommand : IRequest<Result<InstallStarterCatalogResultDto>>
@@ -79,6 +80,7 @@ public class InstallStarterCatalogCommandHandler
         var categoriesByName = await _context.Categories
             .ToDictionaryAsync(category => category.Name.Trim().ToLowerInvariant(), cancellationToken);
 
+        Product? homeVisit = null;
         var categoriesCreated = 0;
         foreach (var categoryDefinition in template.Categories.OrderBy(category => category.SortOrder))
         {
@@ -99,7 +101,7 @@ public class InstallStarterCatalogCommandHandler
             foreach (var productDefinition in categoryDefinition.Products)
             {
                 sortOrder += 10;
-                _context.Products.Add(new Product(
+                var product = new Product(
                     tenantId: tenantId,
                     categoryId: category.Id,
                     name: productDefinition.Name,
@@ -112,9 +114,17 @@ public class InstallStarterCatalogCommandHandler
                     taxRate: productDefinition.TaxRate,
                     unit: productDefinition.Unit,
                     isTrackable: productDefinition.IsTrackable,
-                    isTaxExempt: productDefinition.IsTaxExempt));
+                    isTaxExempt: productDefinition.IsTaxExempt);
+                _context.Products.Add(product);
+                if (productDefinition.IsHomeVisit)
+                    homeVisit ??= product;
             }
         }
+
+        // A visit the owner already picked stays: the template only suggests its own.
+        if (homeVisit is not null
+            && await _context.TenantSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken) is { } settings)
+            settings.SuggestHomeVisitService(homeVisit.Id);
 
         await _context.SaveChangesAsync(cancellationToken);
 
