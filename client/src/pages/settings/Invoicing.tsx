@@ -412,7 +412,8 @@ function AccountantCard({ data }: { data: InvoicingSettings }) {
   const valid = typed === '' || isPlainEmail(typed);
   // Without the email nothing goes on its own.
   const sendsMonthly = monthly && typed !== '';
-  const unchanged = typed.toLowerCase() === (data.accountantEmail ?? '').toLowerCase() && sendsMonthly === data.sendsMonthToAccountant;
+  // The API keeps the address as typed (spaces around aside): fixing its capitals is a change too.
+  const unchanged = typed === (data.accountantEmail ?? '') && sendsMonthly === data.sendsMonthToAccountant;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -424,7 +425,7 @@ function AccountantCard({ data }: { data: InvoicingSettings }) {
       toast.success(updated.sendsMonthToAccountant
         ? `El día 1 de cada mes, ${updated.accountantEmail} recibe los CFDI del mes anterior.`
         : updated.accountantEmail
-          ? 'Guardamos el correo de tu contador. Mándale los CFDI desde Reportes › CFDI emitidos.'
+          ? `TienditApp no le manda solo los CFDI de cada mes a ${updated.accountantEmail}. Mándaselos desde Reportes › CFDI emitidos.`
           : 'Quitaste el correo de tu contador.');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo guardar el correo de tu contador.'));
@@ -454,12 +455,17 @@ function AccountantCard({ data }: { data: InvoicingSettings }) {
           )}
           <div className="form-check form-switch mt-2">
             <input id="accountant-monthly" className="form-check-input" type="checkbox" role="switch" checked={sendsMonthly}
-              disabled={change.isPending || typed === ''} onChange={(event) => setMonthly(event.target.checked)} />
+              disabled={change.isPending || typed === ''} onChange={(event) => setMonthly(event.target.checked)}
+              aria-describedby={typed === '' ? 'accountant-monthly-needs-email' : undefined} />
             <label className="form-check-label" htmlFor="accountant-monthly">Mandarle cada mes los CFDI del mes anterior</label>
+            {typed === '' && (
+              <div id="accountant-monthly-needs-email" className="form-text">Escribe el correo del contador para activarlo.</div>
+            )}
           </div>
           <p className="small mt-2 mb-2">
-            El día 1 de cada mes, desde las 8:00, TienditApp le manda el XML de cada CFDI del mes anterior con la lista de todos.
-            Si ese día no sale, lo intenta hasta el día 7. Las respuestas llegan al correo de tu negocio.
+            El día 1 de cada mes, desde las 8:00, TienditApp le manda el XML de cada CFDI del mes anterior con la lista de todos;
+            si ese día no pudo, lo hace hasta el día 7. Un mes sin CFDI no se manda. Cómo salió lo ves en Reportes › CFDI emitidos,
+            y de ahí lo mandas otra vez. Las respuestas llegan al correo de tu negocio.
           </p>
           <button type="submit" className="btn btn-outline-secondary" disabled={change.isPending || unchanged || !valid}>
             Guardar contador

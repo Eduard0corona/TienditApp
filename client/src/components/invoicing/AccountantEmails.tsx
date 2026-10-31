@@ -27,7 +27,7 @@ interface AccountantEmailStatusProps {
 export function AccountantEmailStatus({ emails }: AccountantEmailStatusProps) {
   const latest = emails[0];
   if (!latest) return null;
-  const byTienditApp = latest.byTienditApp && ' TienditApp los mandó solo, al empezar el mes.';
+  const byTienditApp = latest.byTienditApp && ' Es el envío de cada mes.';
 
   if (latest.sentAt) {
     return (
@@ -64,12 +64,19 @@ interface SendToAccountantButtonProps {
   monthLabel: string;
   /** The address the dialog proposes: the accountant's, or the last one the month went to. */
   proposedEmail?: string | null;
-  /** The month has nothing to send. */
+  /** The accountant's email the business keeps, and whether the month goes to it on its own. */
+  accountantEmail?: string | null;
+  sendsMonthToAccountant: boolean;
+  /** The month has not ended yet where the business is: its file carries what was stamped so far. */
+  current: boolean;
+  /** The month has nothing to send, or what to propose is still being read. */
   disabled: boolean;
 }
 
 /** «Mandar al contador»: the month's file by email to the address typed, which stays as the accountant's. */
-export function SendToAccountantButton({ year, month, monthLabel, proposedEmail, disabled }: SendToAccountantButtonProps) {
+export function SendToAccountantButton({
+  year, month, monthLabel, proposedEmail, accountantEmail, sendsMonthToAccountant, current, disabled,
+}: SendToAccountantButtonProps) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -83,6 +90,9 @@ export function SendToAccountantButton({ year, month, monthLabel, proposedEmail,
           month={month}
           monthLabel={monthLabel}
           initialEmail={proposedEmail ?? ''}
+          accountantEmail={accountantEmail ?? null}
+          sendsMonthToAccountant={sendsMonthToAccountant}
+          current={current}
           onClose={() => setOpen(false)}
         />
       )}
@@ -95,16 +105,23 @@ interface SendToAccountantModalProps {
   month: number;
   monthLabel: string;
   initialEmail: string;
+  accountantEmail: string | null;
+  sendsMonthToAccountant: boolean;
+  current: boolean;
   onClose: () => void;
 }
 
-function SendToAccountantModal({ year, month, monthLabel, initialEmail, onClose }: SendToAccountantModalProps) {
+function SendToAccountantModal({
+  year, month, monthLabel, initialEmail, accountantEmail, sendsMonthToAccountant, current, onClose,
+}: SendToAccountantModalProps) {
   const titleId = useId();
   const toast = useToast();
   const send = useSendIssuedCfdisToAccountant();
   const [email, setEmail] = useState(initialEmail);
   const typed = email.trim();
   const valid = isPlainEmail(typed);
+  // Another address takes the accountant's place, also for the month that goes on its own.
+  const movesMonthly = sendsMonthToAccountant && typed !== '' && typed !== accountantEmail;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -129,6 +146,7 @@ function SendToAccountantModal({ year, month, monthLabel, initialEmail, onClose 
             Le llega el archivo del mes: el XML de cada CFDI timbrado, por tipo, y la lista de todos en CSV. Si responde el correo,
             la respuesta llega al correo de tu negocio.
           </p>
+          {current && <p className="small">El mes no ha terminado: el archivo lleva lo timbrado hasta ahora.</p>}
           <label className="form-label small mb-1" htmlFor={`${titleId}-email`}>Correo del contador</label>
           <input
             id={`${titleId}-email`}
@@ -147,7 +165,8 @@ function SendToAccountantModal({ year, month, monthLabel, initialEmail, onClose 
             <div id={`${titleId}-invalid`} className="invalid-feedback">Escribe un correo válido, como nombre@ejemplo.com.</div>
           )}
           <p id={`${titleId}-kept`} className="small text-muted mt-2 mb-0">
-            Lo guardamos como el correo de tu contador en Configuración › Facturación.
+            Lo guardamos como el correo de tu contador en Configuración › Facturación
+            {movesMonthly ? ', y ahí le llegan también los CFDI de cada mes.' : '.'}
           </p>
         </Modal.Body>
         <Modal.Footer>

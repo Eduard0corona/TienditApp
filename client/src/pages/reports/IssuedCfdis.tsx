@@ -229,7 +229,11 @@ export default function IssuedCfdis() {
             month={period.month}
             monthLabel={monthLabel(period).toLowerCase()}
             proposedEmail={settings.data?.accountantEmail ?? accountantEmails.data?.[0]?.to}
-            disabled={monthCount === 0}
+            accountantEmail={settings.data?.accountantEmail}
+            sendsMonthToAccountant={settings.data?.sendsMonthToAccountant ?? false}
+            current={!isBefore(period, today)}
+            // The dialog proposes the accountant's address: it opens once that is read (or could not be).
+            disabled={monthCount === 0 || settings.isPending || accountantEmails.isPending}
           />
         </div>
       </div>
@@ -238,7 +242,14 @@ export default function IssuedCfdis() {
         cancelados) y la lista de todos en CSV. Los PDF se descargan uno por uno. «Mandar al contador» le manda el mismo ZIP por
         correo.
       </p>
-      <AccountantEmailStatus emails={accountantEmails.data ?? []} />
+      {accountantEmails.isError ? (
+        <p className="small text-danger d-flex flex-wrap align-items-center gap-2">
+          <span>{getApiErrorMessage(accountantEmails.error, 'No se pudo leer cómo salió el envío al contador.')}</span>
+          <button type="button" className="btn btn-sm btn-light" onClick={() => void accountantEmails.refetch()}>Reintentar</button>
+        </p>
+      ) : (
+        <AccountantEmailStatus emails={accountantEmails.data ?? []} />
+      )}
 
       <MonthSummary
         label={monthLabel(period).toLowerCase()}

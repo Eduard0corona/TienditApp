@@ -111,11 +111,17 @@ public static class AccountantCfdiEmails
     public static string Subject(int year, int month, string businessName)
         => $"CFDI de {MonthName(year, month)} de {businessName.ReplaceLineEndings(" ").Trim()}";
 
-    /// <summary>What the accountant needs to know of the file: whose and which month, how many of each kind, and what it holds.</summary>
-    internal static string Body(IssuedCfdiFile file, int year, int month, string businessName)
+    /// <summary>
+    /// What the accountant needs to know of the file: whose and which month (up to today, at <paramref name="now"/>, while the
+    /// month has not ended where the business is), how many of each kind, and what it holds.
+    /// </summary>
+    internal static string Body(IssuedCfdiFile file, int year, int month, string businessName, DateTimeOffset now)
     {
         var business = WebUtility.HtmlEncode(businessName.ReplaceLineEndings(" ").Trim());
-        var days = $"del {file.Month.FirstDay.Day} al {file.Month.LastDay.ToString("d 'de' MMMM 'de' yyyy", Spanish)}";
+        var ended = now >= file.Month.End;
+        var lastDay = ended ? file.Month.LastDay : DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, file.Month.Zone).DateTime);
+        var days = $"del {file.Month.FirstDay.Day} al {lastDay.ToString("d 'de' MMMM 'de' yyyy", Spanish)}";
+        var soFar = ended ? string.Empty : "<p>El mes todavía no termina: el archivo lleva lo timbrado hasta hoy.</p>";
         var kinds = string.Join("\n", file.Counts.Select(count => $"  <li>{KindLine(count)}</li>"));
         return $"""
             <p>Hola:</p>
@@ -123,6 +129,7 @@ public static class AccountantCfdiEmails
             <ul>
             {kinds}
             </ul>
+            {soFar}
             <p>El archivo adjunto trae el XML timbrado de cada uno, por tipo (los cancelados, en su carpeta «cancelados»), y la lista de todos en CSV, con su estado ante el SAT.</p>
             <p>Si tienes dudas, responde este correo para escribirle a {business}.</p>
             """;
@@ -417,7 +424,7 @@ public sealed class CfdiMonthEmailRequestedHandler : IOutboxEventHandler<CfdiMon
         var message = new DocumentEmail(
             email.To,
             AccountantCfdiEmails.Subject(email.Year, email.Month, business.Name),
-            AccountantCfdiEmails.Body(file, email.Year, email.Month, business.Name),
+            AccountantCfdiEmails.Body(file, email.Year, email.Month, business.Name, _clock.UtcNow),
             $"{business.Name} vía TienditApp",
             business.ContactEmail,
             [new EmailAttachment(file.Download.FileName, file.Download.ContentType, content)]);

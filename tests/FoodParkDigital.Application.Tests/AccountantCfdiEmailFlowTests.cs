@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
@@ -192,7 +193,9 @@ public class AccountantCfdiEmailFlowTests
         var message = Assert.Single(book.Email.Documents);
         Assert.Equal((Accountant, "CFDI de octubre de 2026 de Negocio demo", "Negocio demo vía TienditApp", book.Tenant.ContactEmail),
             (message.To, message.Subject, message.SenderName, message.ReplyTo));
-        Assert.Contains("del 1 al 31 de octubre de 2026", message.HtmlBody);
+        // It is the 4th of October where the business is: the month goes up to today, and says so.
+        Assert.Contains("del 1 al 4 de octubre de 2026", message.HtmlBody);
+        Assert.Contains("El mes todavía no termina", message.HtmlBody);
         Assert.Contains("<li>Facturas: 1 vigente.</li>", message.HtmlBody);
         Assert.Contains("<li>Notas de crédito: 1 vigente.</li>", message.HtmlBody);
         var attachment = Assert.Single(message.Attachments);
@@ -219,14 +222,19 @@ public class AccountantCfdiEmailFlowTests
                 new IssuedCfdiCount(IssuedCfdiKind.PaymentComplement, 0, 2, 0),
                 new IssuedCfdiCount(IssuedCfdiKind.GlobalInvoice, 1, 0, 0)
             ],
-            new IssuedCfdiMonth(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31), default, default, TimeZoneInfo.Utc));
+            new IssuedCfdiMonth(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31),
+                new DateTimeOffset(2026, 10, 1, 6, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 1, 6, 0, 0, TimeSpan.Zero),
+                TenantDateTimeResolver.Resolve("America/Mexico_City")));
 
-        var body = AccountantCfdiEmails.Body(file, 2026, 10, "Café <Luna>\n& Co");
+        var body = AccountantCfdiEmails.Body(file, 2026, 10, "Café <Luna>\n& Co", NovemberFirstAtEight);
 
         Assert.Contains("<li>Facturas: 3 vigentes, 1 cancelada, 1 sin timbre (solo en la lista).</li>", body);
         Assert.Contains("<li>Complementos de pago: 0 vigentes, 2 cancelados.</li>", body);
         Assert.Contains("<li>Facturas globales: 1 vigente.</li>", body);
         Assert.Contains("Caf&#233; &lt;Luna&gt; &amp; Co te envía", body);
+        // A month that ended goes whole.
+        Assert.Contains("del 1 al 31 de octubre de 2026", body);
+        Assert.DoesNotContain("todavía no termina", body);
         Assert.Equal("CFDI de octubre de 2026 de Café <Luna> & Co", AccountantCfdiEmails.Subject(2026, 10, "Café <Luna>\n& Co"));
     }
 

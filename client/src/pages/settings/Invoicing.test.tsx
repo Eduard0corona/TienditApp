@@ -304,4 +304,42 @@ describe('Invoicing settings: the invoice by WhatsApp (Fase 28M)', () => {
     await waitFor(() => expect(write).toHaveBeenLastCalledWith('put', '/api/v1/invoicing/settings/accountant', { email: null, monthly: false }));
     expect(toast.success).toHaveBeenLastCalledWith('Quitaste el correo de tu contador.');
   });
+
+  it('turns the monthly email off keeping the address, and saves a fix of its capitals', async () => {
+    const user = userEvent.setup();
+    const write = vi.fn((_method: string, _path: string, body: unknown) => {
+      const { email, monthly } = body as { email: string | null; monthly: boolean };
+      return Promise.resolve({ ...WITH_CERTIFICATE, accountantEmail: email, sendsMonthToAccountant: monthly });
+    });
+    serve({ ...WITH_CERTIFICATE, accountantEmail: 'Contador@Despacho.mx', sendsMonthToAccountant: true }, write);
+    renderPage();
+
+    const monthly = await screen.findByRole('switch', { name: 'Mandarle cada mes los CFDI del mes anterior' });
+    const save = screen.getByRole('button', { name: 'Guardar contador' });
+    expect(monthly).toBeChecked();
+    expect(save).toBeDisabled();
+
+    await user.click(monthly);
+    await user.click(save);
+    await waitFor(() => expect(write).toHaveBeenCalledWith('put', '/api/v1/invoicing/settings/accountant',
+      { email: 'Contador@Despacho.mx', monthly: false }));
+    expect(toast.success).toHaveBeenCalledWith(
+      'TienditApp no le manda solo los CFDI de cada mes a Contador@Despacho.mx. Mándaselos desde Reportes › CFDI emitidos.');
+
+    const address = screen.getByLabelText('Correo del contador');
+    await user.clear(address);
+    await user.type(address, 'contador@despacho.mx');
+    await user.click(save);
+    await waitFor(() => expect(write).toHaveBeenLastCalledWith('put', '/api/v1/invoicing/settings/accountant',
+      { email: 'contador@despacho.mx', monthly: false }));
+  });
+
+  it('says why the monthly email cannot be turned on without the address', async () => {
+    serve(WITH_CERTIFICATE);
+    renderPage();
+
+    const monthly = await screen.findByRole('switch', { name: 'Mandarle cada mes los CFDI del mes anterior' });
+    expect(monthly).toBeDisabled();
+    expect(monthly).toHaveAccessibleDescription('Escribe el correo del contador para activarlo.');
+  });
 });

@@ -90,8 +90,8 @@ const issuedCfdiRoutes: ExtraRoutes = (data, helpers) => [
   ['GET', /^\/invoicing\/issued-cfdis\/to-review$/, () => helpers.ok(data.cfdisToReview ?? [])],
   ['GET', /^\/invoicing\/issued-cfdis\/accountant-emails$/, (_match, query) =>
     helpers.ok(Number(query.get('month')) === 10 ? data.accountantEmails ?? [] : [])],
-  // Only the accountant's email: the screen proposes it to «Mandar al contador».
-  ['GET', /^\/invoicing\/settings$/, () => helpers.ok({ accountantEmail: ACCOUNTANT })],
+  // Only what «Mandar al contador» reads: the accountant's email, who gets each month on its own.
+  ['GET', /^\/invoicing\/settings$/, () => helpers.ok({ accountantEmail: ACCOUNTANT, sendsMonthToAccountant: true })],
 ];
 
 export const CFDI_EMITIDOS_ROUTES = asOption(issuedCfdiRoutes);
@@ -118,10 +118,7 @@ const porRevisar: PrepareData = (data) => {
 
 export const CFDI_POR_REVISAR = asOption(porRevisar);
 
-/**
- * TienditApp sent September's CFDI on its own on the 1st, and today the owner sent October's so far by hand: the latest
- * went out with the 8 CFDI of the list (Fase 28O).
- */
+/** Today the owner sent October's CFDI so far to the accountant by hand: it went out with the 8 of the list (Fase 28O). */
 const mandadosAlContador: PrepareData = (data) => {
   data.accountantEmails = [
     {

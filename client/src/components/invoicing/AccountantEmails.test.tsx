@@ -19,14 +19,14 @@ describe('AccountantEmailStatus', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('says how many CFDI the latest one carried, and that TienditApp sent it on its own', () => {
+  it('says how many CFDI the latest one carried, and that it is the one of each month', () => {
     render(<AccountantEmailStatus emails={[
       monthEmail({ sentAt: '2026-11-01T14:01:00Z', cfdiCount: 128, byTienditApp: true }),
       monthEmail({ id: 'm-0', failedAt: '2026-10-30T10:00:00Z', failure: CfdiMonthEmailFailure.Rejected }),
     ]} />);
 
     const status = screen.getByRole('status');
-    expect(status).toHaveTextContent(/^Se mandaron a contador@despacho\.mx el .+, con 128 CFDI\. TienditApp los mandó solo, al empezar el mes\.$/);
+    expect(status).toHaveTextContent(/^Se mandaron a contador@despacho\.mx el .+, con 128 CFDI\. Es el envío de cada mes\.$/);
   });
 
   it('says it is on its way, and that TienditApp tries again when the mail server did not take it', () => {
