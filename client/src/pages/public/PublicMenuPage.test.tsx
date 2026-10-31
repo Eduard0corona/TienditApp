@@ -379,6 +379,37 @@ describe('PublicMenuPage', () => {
     expect(screen.getByText('El menú todavía no tiene productos.')).toBeInTheDocument();
   });
 
+  it('never tells of paused orders or a menu to look at above the visits of a trade with nothing on its menu (Fase 29A)', async () => {
+    const trade = {
+      businessName: 'Plomería Hernández',
+      // Its menu takes orders, but without its cash register open and without products nothing can be ordered.
+      acceptsOrders: false,
+      ordersPaused: true,
+      categories: [],
+      homeVisits: {
+        chargePolicy: HomeVisitChargePolicy.Charged,
+        price: { amount: 300, isStarting: false },
+        visitServiceName: null,
+        postalCodes: ['72000'],
+        postalCodeCount: 1,
+        services: [],
+      },
+    };
+    api.getMenu.mockResolvedValue(menu(trade));
+    const { unmount } = renderPage();
+
+    expect(await screen.findByRole('region', { name: 'Visitas a domicilio' })).toBeInTheDocument();
+    expect(screen.queryByText(/no estamos recibiendo pedidos/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/puedes ver el menú/i)).not.toBeInTheDocument();
+    unmount();
+
+    // Closed today: its hours say so in the header, never «Mientras, puedes ver el menú».
+    api.getMenu.mockResolvedValue(menu({ ...trade, hours: christmasDay } as Partial<PublicMenu>));
+    renderPage();
+    expect(await screen.findByRole('region', { name: 'Visitas a domicilio' })).toBeInTheDocument();
+    expect(screen.queryByText(/puedes ver el menú/i)).not.toBeInTheDocument();
+  });
+
   it('leaves the visit as the one main action of a trade that also books appointments online (Fase 29A)', async () => {
     api.getMenu.mockResolvedValue(menu({
       acceptsOrders: false,

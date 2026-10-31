@@ -491,6 +491,8 @@ export default function PublicMenuPage() {
   // Paused while it is closed: its hours say when to come back (at one of its tables the API takes the order outside
   // its hours, but not on a special day it closes).
   const closedByHours = data.ordersPaused && hours?.isOpen === false;
+  // The store of a trade that receives visits and has nothing on its menu (Fase 29A): it is about its visits only.
+  const visitsOnly = !!data.homeVisits && !atTable && categories.length === 0;
   const closedNotice = hours && fromServer
     ? hours.closedNotice
     : `Fuera de horario no recibimos pedidos en línea${legacyStatus?.when ? `: vuelve ${legacyStatus.when}` : ''}. Mientras, puedes ver el menú.`;
@@ -596,7 +598,9 @@ export default function PublicMenuPage() {
           </div>
         )}
 
-        {closedByHours && closedNotice ? (
+        {/* A trade with nothing on its menu only shows its visits: no pause of orders nor a menu to look at while
+            it is closed (its hours are in the header). */}
+        {visitsOnly ? null : closedByHours && closedNotice ? (
           <div className="alert alert-info pm-notice" role="status">{closedNotice}</div>
         ) : data.ordersPaused && (
           <div className="alert alert-warning pm-notice" role="status">
