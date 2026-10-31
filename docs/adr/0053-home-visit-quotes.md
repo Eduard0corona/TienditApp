@@ -1,6 +1,6 @@
 # ADR 0053: Oficios a domicilio, la visita para cotizar
 
-- Estado: Propuesta (sin implementar)
+- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31); la solicitud en línea (etapa 2) y la cotización (etapa 3) siguen propuestas.
 - Fecha: 2026-10-27
 - Continúa: [ADR 0020](0020-home-visits.md) (servicios a domicilio), [ADR 0021](0021-business-directory.md) (Explorar) y [ADR 0025](0025-online-booking.md) (citas en línea).
 
@@ -35,7 +35,7 @@ Las decisiones del dueño del producto (2026-10-27):
 5. El negocio decide cómo cobra la visita.
 6. La cotización le llega al cliente por WhatsApp y por correo.
 
-## Decisión (propuesta)
+## Decisión
 
 Un tercer modo de atender en línea, junto a los pedidos (la tienda) y las citas en el local: **la visita para cotizar**. Lo deciden la cobertura y el horario del negocio, nunca la caja. La caja solo entra al cobrar, como hoy.
 
@@ -63,6 +63,44 @@ Un tercer modo de atender en línea, junto a los pedidos (la tienda) y las citas
 7. **Su lugar en Explorar no depende de la caja.** Va con los que reciben pedidos y los que agendan en línea: el cliente pide la visita para una hora libre aunque el negocio esté cerrado ahora. «Cerca de mí» no lo mide, porque no publica su punto. Con el código postal del cliente, primero los que van a él.
 8. **Aparece aunque su menú no tenga productos**, como un negocio que agenda en línea: la regla de `PublicDirectorySnapshot` suma «recibe visitas».
 9. **Su tienda (`/m/{slug}`)** no pone sus servicios en un carrito: muestra «Solicitar visita», sus servicios como precios de referencia («desde $500»), los códigos postales a los que va (sin el nombre de la zona) y su política de la visita. Si además vende productos, su menú sigue como hoy.
+
+### Lo que hizo la Fase 29A
+
+La etapa 1 completa y, de la etapa 2, la política de la visita (punto 10), porque la tarjeta y la tienda ya dicen cuánto cuesta. La migración es `20261031085333_AddHomeVisitRequests`, con sus scripts en `database/production/20261031085333_AddHomeVisitRequests/`.
+
+- **La regla del servidor** (`HomeVisitRequestAvailability`) decide si un negocio recibe visitas: el interruptor prendido, el módulo de agenda, el menú publicado, al menos una zona activa y horario semanal. La usan la tarjeta del dueño, Explorar, la tienda, «Cómo te ven» y la guía de inicio.
+- **Configuración › «Visitas a domicilio»** (dueños y administradores, con el módulo de agenda):
+  - el interruptor, el servicio que es la visita, cómo se cobra, lo que lee el cliente y lo que falta, en las palabras del servidor;
+  - `GET` y `PUT /api/v1/appointments/home-visit-requests`;
+  - el servicio debe poder agendarse (disponible y en una categoría activa). Uno que ya no se agenda se conserva hasta que el dueño elige otro, y no suma nada a la visita;
+  - cada cambio queda en la actividad (`HomeVisitRequestsUpdated`).
+- **Lo que cuesta la visita lo calcula el servidor** (`HomeVisitCharge`):
+  - el precio del servicio más el cargo de la zona;
+  - sin servicio, solo el cargo de la zona;
+  - «Sin costo» deja la visita en cero;
+  - antes de saber el código postal, desde la zona que cobra menos: «desde» cuando las zonas cobran distinto;
+  - se escribe como los precios del negocio: «más IVA» cuando no lo incluyen.
+- **La categoría «Hogar y reparaciones»** (11) tiene su página en `/explorar/hogar-y-reparaciones`. Para los buscadores es `HomeAndConstructionBusiness`.
+  - La migración mueve a ella los oficios cuya categoría sigue su giro: la que el giro sugería antes de la migración, sin un cambio del dueño en la actividad (`DirectoryProfileUpdated`). Los cinco de antes estaban en Servicios; los nuevos, en la de su tipo.
+  - El rollback los regresa a esa categoría y se detiene (50049) si alguno la eligió después.
+- **El registro:**
+  - Un giro de oficio empieza con el interruptor prendido.
+  - Todos menos Carpintería y Herrería y soldadura empiezan con la sucursal principal «Solo a domicilio».
+  - Cada plantilla marca su servicio de visita, que queda como la visita del negocio si no tenía una.
+- **El aviso de la dirección publicada** sale una vez en Configuración:
+  - En «Cómo te ven en TienditApp», y no en la tarjeta del interruptor: las dos están en la misma pantalla, y «Cómo te ven» la ve también un oficio sin el módulo de agenda.
+  - En Inicio, una línea de «Requiere atención» (`homeVisitAddress`, solo para dueños y administradores) lleva ahí.
+  - «Ya lo revisé» lo quita para siempre: `POST /api/v1/auth/my-tenant/directory/home-visit-address-notice/dismiss`, sin pedir el módulo de agenda.
+- **La guía de inicio** de un negocio con el interruptor y el módulo de agenda tiene un paso más: «Prepara tus visitas a domicilio», listo cuando ya recibe visitas.
+- **En Explorar:**
+  - la tarjeta dice «Visitas a domicilio», el costo de la visita y, con el código postal, si va ahí y cuánto cuesta la visita en él;
+  - su horario sigue, pero nunca «Pedidos en línea en pausa» ni «Solo menú»;
+  - con el código postal, los negocios que reciben visitas y no van a él pasan al final de la página. El orden de los demás, incluido el envío, no cambia.
+- **La tienda** muestra «Visitas a domicilio»:
+  - el costo y la política de la visita;
+  - los códigos postales a los que va: hasta 300, con cuántos son en total, nunca el nombre de la zona;
+  - hasta 50 servicios como precios de referencia, «desde», sin carrito;
+  - «Solicitar visita», que abre un WhatsApp con el negocio hasta que la solicitud en línea llegue en la Fase 29B. Desde una mesa no sale.
 
 ### Etapa 2: la solicitud de la visita
 
@@ -121,7 +159,7 @@ Un tercer modo de atender en línea, junto a los pedidos (la tienda) y las citas
   - «Cerca de mí» no ordena a estos negocios: no publican su punto, y las zonas son por código postal, no por distancia.
   - La búsqueda de Explorar no encuentra por su ciudad a uno «Solo a domicilio», porque no la muestra.
   - Una categoría más necesita migración, enum, cliente y la lista del registro ([ADR 0021](0021-business-directory.md)).
-- **Decisión por omisión** (sin preferencia expresa del dueño; se confirma al implementar):
+- **Decisión por omisión** (sin preferencia expresa del dueño). La Fase 29A aplicó la primera, la segunda y la cuarta; la vigencia de la cotización se confirma en la etapa 3:
   - el interruptor empieza prendido para los giros de oficio y apagado para los demás;
   - Carpintería y Herrería y soldadura conservan el local al registrarse, y los demás oficios empiezan «Solo a domicilio»;
   - la cotización vence a los 15 días;
