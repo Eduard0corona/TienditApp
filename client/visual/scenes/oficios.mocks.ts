@@ -1,8 +1,9 @@
 import { asOption, type DemoData, type SceneOptions } from '../fixtures';
 import { demoDirectory } from '../mocks/routes-p9.mjs';
 
-// BusinessCategory, BusinessTheme and HomeVisitChargePolicy as the contract numbers them.
+// BusinessCategory, BusinessTheme, OnlineMenuMode and HomeVisitChargePolicy as the contract numbers them.
 const HOME_REPAIRS = 11;
+const MENU_ONLY = 1;
 const TALAVERA = 1;
 const CHARGED = 0;
 const FREE = 1;
@@ -62,6 +63,8 @@ const PLUMBER_SERVICES = [
 function plumberSettings(data: DemoData) {
   data.tenant.name = 'Plomería Hernández';
   data.tenant.industry = 'Plomería';
+  // Receiving visits needs the menu published (HomeVisitRequestAvailability): without products, it is still in Explorar.
+  data.tenant.onlineMenuMode = MENU_ONLY;
   data.homeVisitRequests = {
     enabled: true,
     serviceId: 'svc-visita',
