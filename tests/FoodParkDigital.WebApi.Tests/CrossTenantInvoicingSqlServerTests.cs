@@ -750,6 +750,55 @@ public sealed class CrossTenantInvoicingSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task AccountantEmails_OfAnotherBusiness_ShouldBeOutOfItsList_ItsMonthUnsendable_AndOnlyOwnersSendThem()
+    {
+        var mine = await _api.SignUpAsync("contador-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("contador-b", TwoBusinessesApi.FoodBusiness);
+        await ReadyToInvoiceAsync(mine.TenantId, "EKU9003173C9");
+        await ReadyToInvoiceAsync(theirs.TenantId, "IIA040805DZ4");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Contador A"), phone: "5512345678", name: "Karla");
+        var invoice = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync(
+            $"/api/v1/invoicing/orders/{order}/invoices", new { receiver = Receiver, saveToCustomer = false }));
+        var dated = TimeZoneInfo.ConvertTime(invoice.GetProperty("requestedAt").GetDateTimeOffset(), TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City"));
+        var month = new { year = dated.Year, month = dated.Month, email = "contador@despacho.mx" };
+        var emails = $"/api/v1/invoicing/issued-cfdis/accountant-emails?year={dated.Year}&month={dated.Month}";
+
+        var set = await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync(
+            "/api/v1/invoicing/settings/accountant", new { email = "contador@despacho.mx", monthly = true }));
+        Assert.Equal(("contador@despacho.mx", true), (set.GetProperty("accountantEmail").GetString(), set.GetProperty("sendsMonthToAccountant").GetBoolean()));
+        var sent = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/invoicing/issued-cfdis/accountant-emails", month));
+        Assert.Equal(("contador@despacho.mx", false), (sent.GetProperty("to").GetString(), sent.GetProperty("byTienditApp").GetBoolean()));
+        Assert.Single((await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(emails))).EnumerateArray());
+
+        // The other owner, even with the header of my business, sees none of my emails, has no CFDI of mine to send, and
+        // changes only its own accountant.
+        foreach (var send in new Func<HttpMethod, string, object?, Task<HttpResponseMessage>>[]
+        {
+            (method, url, body) => theirs.Client.SendAsync(new HttpRequestMessage(method, url) { Content = body is null ? null : JsonContent.Create(body) }),
+            (method, url, body) => theirs.Client.SendAsync(AsOther(mine, method, url, body))
+        })
+        {
+            Assert.Empty((await TwoBusinessesApi.ReadAsync(await send(HttpMethod.Get, emails, null))).EnumerateArray());
+            var refused = await send(HttpMethod.Post, "/api/v1/invoicing/issued-cfdis/accountant-emails", month);
+            Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+            Assert.Contains(AccountantCfdiEmails.NoCfdiMessage, await refused.Content.ReadAsStringAsync());
+            var theirSettings = await TwoBusinessesApi.ReadAsync(await send(
+                HttpMethod.Put, "/api/v1/invoicing/settings/accountant", new { email = "otro@despacho.mx", monthly = false }));
+            Assert.Equal("otro@despacho.mx", theirSettings.GetProperty("accountantEmail").GetString());
+        }
+        var mineNow = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync("/api/v1/invoicing/settings"));
+        Assert.Equal(("contador@despacho.mx", true), (mineNow.GetProperty("accountantEmail").GetString(), mineNow.GetProperty("sendsMonthToAccountant").GetBoolean()));
+        Assert.Equal(1, await _api.QueryAsync(mine.TenantId, db => db.CfdiMonthEmails.CountAsync()));
+
+        // The month's fiscal file goes out of the business: owners and admins only.
+        var cashier = await EmployeeAsync(mine, "ManageOrders", "ChargeOrders", "ManageCash", "ViewReports");
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync(emails)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync("/api/v1/invoicing/issued-cfdis/accountant-emails", month)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PutAsJsonAsync(
+            "/api/v1/invoicing/settings/accountant", new { email = "yo@ejemplo.mx", monthly = true })).StatusCode);
+    }
+
+    [SqlServerFact]
     public async Task CfdisToReview_OfAnotherBusiness_ShouldBeOutOfItsList_AndUnresolvable_AndOnlyOwnersResolveThem()
     {
         var mine = await _api.SignUpAsync("revisar-a", TwoBusinessesApi.FoodBusiness);

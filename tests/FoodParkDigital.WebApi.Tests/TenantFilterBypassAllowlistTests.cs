@@ -69,8 +69,9 @@ public class TenantFilterBypassAllowlistTests
         // a credit note (each with its invoice and CFDI, of the same business by their order) of the businesses whose CSD
         // seals now (only which ones), (Fase 28G) the replaced invoices whose replacement of the same business is stamped,
         // and (Fase 28I) the refunds, and (Fase 28J) the write-offs, of sales a stamped global invoice of the same business
-        // covers that never had a credit note of it; each one is then handled in its business's scope.
-        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Invoicing/InvoicingWorkerService.cs"] = 25,
+        // covers that never had a credit note of it, and (Fase 28O) the active businesses that send their accountant the
+        // month before on their own and have not queued it these days; each one is then handled in its business's scope.
+        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Invoicing/InvoicingWorkerService.cs"] = 27,
         // Whether another business holds the CSD's number (the PAC keeps each one once); nothing of it is read.
         ["src/FoodParkDigital.Application/Invoicing/InvoicingSettingsFeature.cs"] = 1,
         // Verification codes by WhatsApp: the platform's account, owned by an active platform admin.

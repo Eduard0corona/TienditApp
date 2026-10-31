@@ -290,13 +290,10 @@ public class ExportIssuedCfdisQueryValidator : AbstractValidator<ExportIssuedCfd
 public class ExportIssuedCfdisQueryHandler : IRequestHandler<ExportIssuedCfdisQuery, Result<PrivateFileDownload>>
 {
     /// <summary>The CFDI one download holds: their XML and documents are read into memory.</summary>
-    public const int MaxCount = 5_000;
+    public const int MaxCount = IssuedCfdiFiles.MaxCount;
 
     /// <summary>What the list says of a stamped CFDI whose XML is not in the private files.</summary>
-    public const string MissingXml = "No se encontró";
-
-    // How many XML files are read from the private files at a time.
-    private const int ReadBatchSize = 8;
+    public const string MissingXml = IssuedCfdiFiles.MissingXml;
 
     public static string TooManyMessage(int limit = MaxCount) =>
         $"El mes tiene más de {limit:N0} CFDI, los que junta una descarga: pide los XML del mes con la descarga masiva del portal del SAT.";
@@ -323,21 +320,70 @@ public class ExportIssuedCfdisQueryHandler : IRequestHandler<ExportIssuedCfdisQu
 
     public async Task<Result<PrivateFileDownload>> Handle(ExportIssuedCfdisQuery request, CancellationToken cancellationToken)
     {
-        var month = await IssuedCfdis.MonthAsync(_context, _tenant.TenantId, request.Year, request.Month, cancellationToken);
-        // In the order the accountant reads a month: by date, then by folio. One more than the limit says it is past it.
-        var ordered = await IssuedCfdis.Rows(_context, month, kind: null, status: null)
-            .OrderBy(r => r.IssuedAt).ThenBy(r => r.Serie).ThenBy(r => r.Folio).ThenBy(r => r.Id)
-            .Take(Limit + 1)
-            .ToListAsync(cancellationToken);
-        if (ordered.Count > Limit)
-            return Result.Failure<PrivateFileDownload>(TooManyMessage(Limit));
-        var documents = await IssuedCfdis.DocumentsAsync(_context, month, cancellationToken);
-        var name = $"CFDI_{request.Year:0000}-{request.Month:00}";
+        var file = await IssuedCfdiFiles.BuildAsync(
+            _context, _storage, _logger, _tenant.TenantId, request.Year, request.Month, request.Format, Limit, cancellationToken);
+        return file is null
+            ? Result.Failure<PrivateFileDownload>(TooManyMessage(Limit))
+            : Result.Success(file.Download);
+    }
+}
 
-        if (request.Format == IssuedCfdiExportFormat.Csv)
+/// <summary>A month's file: how many CFDI its list carries, of each kind, and the month in the business's time zone.</summary>
+internal sealed record IssuedCfdiFile(
+    PrivateFileDownload Download, int CfdiCount, IReadOnlyList<IssuedCfdiCount> Counts, IssuedCfdiMonth Month);
+
+/// <summary>
+/// The CFDI of a kind in a month's list: in force (stamped, or cancelling while the customer answers), cancelled, and those
+/// without a stamp (stamping or refused by the PAC), which the list carries without XML.
+/// </summary>
+internal sealed record IssuedCfdiCount(IssuedCfdiKind Kind, int InForce, int Cancelled, int WithoutStamp);
+
+/// <summary>
+/// The file of a month's CFDI (Fase 28H): a ZIP with the stamped XML of each one that was stamped (in force, cancelling or
+/// cancelled), by kind, and the list of all of them as CSV; or the list alone. The download of Reportes › CFDI emitidos and
+/// the email to the accountant (Fase 28O) carry the same one.
+/// </summary>
+internal static class IssuedCfdiFiles
+{
+    /// <summary>The CFDI one file holds: their XML and documents are read into memory.</summary>
+    public const int MaxCount = 5_000;
+
+    /// <summary>What the list says of a stamped CFDI whose XML is not in the private files.</summary>
+    public const string MissingXml = "No se encontró";
+
+    // How many XML files are read from the private files at a time.
+    private const int ReadBatchSize = 8;
+
+    public static string FileName(int year, int month) => $"CFDI_{year:0000}-{month:00}";
+
+    /// <returns>The month's file, or null when the month has more than <paramref name="limit"/> CFDI.</returns>
+    public static async Task<IssuedCfdiFile?> BuildAsync(
+        IApplicationDbContext context,
+        IPrivateFileStorage storage,
+        ILogger logger,
+        Guid tenantId,
+        int year,
+        int month,
+        IssuedCfdiExportFormat format,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var range = await IssuedCfdis.MonthAsync(context, tenantId, year, month, cancellationToken);
+        // In the order the accountant reads a month: by date, then by folio. One more than the limit says it is past it.
+        var ordered = await IssuedCfdis.Rows(context, range, kind: null, status: null)
+            .OrderBy(r => r.IssuedAt).ThenBy(r => r.Serie).ThenBy(r => r.Folio).ThenBy(r => r.Id)
+            .Take(limit + 1)
+            .ToListAsync(cancellationToken);
+        if (ordered.Count > limit)
+            return null;
+        var documents = await IssuedCfdis.DocumentsAsync(context, range, cancellationToken);
+        var name = FileName(year, month);
+
+        if (format == IssuedCfdiExportFormat.Csv)
         {
-            var csv = IssuedCfdiCsv.Write(ordered, documents, month.Zone, xmlPaths: null);
-            return Result.Success(new PrivateFileDownload(new MemoryStream(csv), "text/csv; charset=utf-8", name + ".csv"));
+            var csv = IssuedCfdiCsv.Write(ordered, documents, range.Zone, xmlPaths: null);
+            return new IssuedCfdiFile(
+                new PrivateFileDownload(new MemoryStream(csv), "text/csv; charset=utf-8", name + ".csv"), ordered.Count, Count(ordered), range);
         }
 
         var zipped = new MemoryStream();
@@ -346,7 +392,7 @@ public class ExportIssuedCfdisQueryHandler : IRequestHandler<ExportIssuedCfdisQu
             var paths = new Dictionary<Guid, string?>();
             foreach (var batch in ordered.Where(r => r.XmlFileKey is not null).Chunk(ReadBatchSize))
             {
-                var files = await Task.WhenAll(batch.Select(async row => (Row: row, Xml: await ReadAsync(row, cancellationToken))));
+                var files = await Task.WhenAll(batch.Select(async row => (Row: row, Xml: await ReadAsync(storage, logger, row, cancellationToken))));
                 foreach (var (row, xml) in files)
                 {
                     if (xml is null)
@@ -366,19 +412,29 @@ public class ExportIssuedCfdisQueryHandler : IRequestHandler<ExportIssuedCfdisQu
             // The list goes last: it says which XML is in the file and which was not found.
             var csvEntry = zip.CreateEntry(name + ".csv", CompressionLevel.Optimal);
             await using var csvStream = csvEntry.Open();
-            await csvStream.WriteAsync(IssuedCfdiCsv.Write(ordered, documents, month.Zone, paths), cancellationToken);
+            await csvStream.WriteAsync(IssuedCfdiCsv.Write(ordered, documents, range.Zone, paths), cancellationToken);
         }
 
         zipped.Position = 0;
-        return Result.Success(new PrivateFileDownload(zipped, "application/zip", name + ".zip"));
+        return new IssuedCfdiFile(new PrivateFileDownload(zipped, "application/zip", name + ".zip"), ordered.Count, Count(ordered), range);
     }
 
-    private async Task<byte[]?> ReadAsync(IssuedCfdiRow row, CancellationToken cancellationToken)
+    private static List<IssuedCfdiCount> Count(IReadOnlyCollection<IssuedCfdiRow> rows)
+        => rows.GroupBy(r => r.Kind)
+            .OrderBy(g => g.Key)
+            .Select(g => new IssuedCfdiCount(
+                g.Key,
+                g.Count(r => r.Status is OrderInvoiceStatus.Stamped or OrderInvoiceStatus.Cancelling),
+                g.Count(r => r.Status == OrderInvoiceStatus.Cancelled),
+                g.Count(r => r.Status is OrderInvoiceStatus.Stamping or OrderInvoiceStatus.Refused)))
+            .ToList();
+
+    private static async Task<byte[]?> ReadAsync(IPrivateFileStorage storage, ILogger logger, IssuedCfdiRow row, CancellationToken cancellationToken)
     {
-        await using var stream = await _storage.OpenReadAsync(row.XmlFileKey!, cancellationToken);
+        await using var stream = await storage.OpenReadAsync(row.XmlFileKey!, cancellationToken);
         if (stream is null)
         {
-            _logger.LogWarning("The stamped XML of {Kind} {CfdiId} is not in the private files", row.Kind, row.Id);
+            logger.LogWarning("The stamped XML of {Kind} {CfdiId} is not in the private files", row.Kind, row.Id);
             return null;
         }
 

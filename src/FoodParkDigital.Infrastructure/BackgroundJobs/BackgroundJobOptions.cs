@@ -28,6 +28,12 @@ public sealed class BackgroundJobOptions
         /// <summary>How often the SAT is asked about the cancellations that wait for the customer.</summary>
         public int CancellationIntervalMinutes { get; set; } = 30;
 
+        /// <summary>
+        /// How often, in the first days of each month, the businesses that send their accountant the month before on their own
+        /// are looked up (Fase 28O).
+        /// </summary>
+        public int AccountantIntervalMinutes { get; set; } = 60;
+
         /// <summary>Businesses handled on each pass.</summary>
         public int MaxBusinessesPerPass { get; set; } = 100;
     }

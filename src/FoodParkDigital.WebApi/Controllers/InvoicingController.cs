@@ -17,8 +17,8 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// (Fase 28D, ADR 0048); the emails of those CFDI to the customer (Fase 28E, ADR 0049) and their WhatsApp messages (Fase 28M,
 /// ADR 0058); self-invoicing, turned on here and
 /// printed on each ticket (Fase 28F, ADR 0050); the CFDI issued in a month, with their XML for the accountant
-/// (Fase 28H, ADR 0052), for owners and admins; and the ones that stayed «Timbrando» past the PAC's window, checked in its
-/// portal (Fase 28K, ADR 0056).
+/// (Fase 28H, ADR 0052), for owners and admins, and their email to the accountant (Fase 28O, ADR 0060); and the ones that
+/// stayed «Timbrando» past the PAC's window, checked in its portal (Fase 28K, ADR 0056).
 /// </summary>
 [ApiController]
 [Route("api/v1/invoicing")]
@@ -95,6 +95,18 @@ public class InvoicingController : ControllerBase
         [FromBody] SetInvoiceWhatsAppTemplateRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new SetInvoiceWhatsAppTemplateCommand(request.TemplateId), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
+    /// <summary>
+    /// The accountant's email (Fase 28O), and whether TienditApp sends them the month before's CFDI at the start of each
+    /// month, which needs the email.
+    /// </summary>
+    [HttpPut("settings/accountant")]
+    public async Task<ActionResult<InvoicingSettingsDto>> SetAccountant(
+        [FromBody] SetAccountantRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetAccountantCommand(request.Email, request.Monthly), cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
@@ -383,6 +395,25 @@ public class InvoicingController : ControllerBase
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Download(result.Value!);
     }
 
+    /// <summary>The latest emails of that month's CFDI to the accountant, the newest first (Fase 28O).</summary>
+    [HttpGet("issued-cfdis/accountant-emails")]
+    public async Task<ActionResult<List<CfdiMonthEmailDto>>> GetCfdiMonthEmails(
+        [FromQuery] int year, [FromQuery] int month, CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetCfdiMonthEmailsQuery(year, month), cancellationToken));
+
+    /// <summary>
+    /// Sends that month's file to the accountant by email, and keeps the address as theirs (Fase 28O): a month that already
+    /// started, with CFDI, up to 5 a day. It goes out from the queue.
+    /// </summary>
+    [HttpPost("issued-cfdis/accountant-emails")]
+    public async Task<ActionResult<CfdiMonthEmailDto>> SendIssuedCfdisToAccountant(
+        [FromBody] SendIssuedCfdisToAccountantRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SendIssuedCfdisToAccountantCommand(request.Year, request.Month, request.Email), cancellationToken);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
+    }
+
     /// <summary>
     /// Every CFDI of the business still «Timbrando» past the PAC's window, the oldest first, whatever their month: they are
     /// checked in the SAT's portal (Fase 28K, ADR 0056). Owners and admins.
@@ -481,6 +512,22 @@ public class SetInvoiceWhatsAppTemplateRequest
 {
     /// <summary>One of the business's active templates for invoices; null, TienditApp's text.</summary>
     public Guid? TemplateId { get; init; }
+}
+
+public class SetAccountantRequest
+{
+    /// <summary>The accountant's email; empty, none.</summary>
+    public string? Email { get; init; }
+    /// <summary>TienditApp sends them the month before's CFDI at the start of each month; it needs the email.</summary>
+    public bool Monthly { get; init; }
+}
+
+public class SendIssuedCfdisToAccountantRequest
+{
+    public int Year { get; init; }
+    public int Month { get; init; }
+    /// <summary>Where the file goes; it is kept as the accountant's email.</summary>
+    public string Email { get; init; } = string.Empty;
 }
 
 public class IssueOrderInvoiceRequest
