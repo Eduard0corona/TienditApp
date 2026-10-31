@@ -30,6 +30,9 @@ public static class HomeVisitRules
     public const string BeforeAnyPaymentMessage = "El cargo por visita se agrega antes de cobrar.";
     public const string FeeMessage = "El cargo por visita va de $0.01 a $10,000.";
 
+    public const string ChargePolicyMessage = "Elige cómo cobras la visita: se cobra, sin costo o se descuenta si contratan.";
+    public const string VisitServiceMessage = "Elige un servicio de tu catálogo como la visita.";
+
     /// <summary>«Por ahora no hacemos visitas en el 72000.»</summary>
     public static string NotCoveredMessage(string postalCode)
         => string.Create(CultureInfo.InvariantCulture, $"Por ahora no hacemos visitas en el {postalCode}.");

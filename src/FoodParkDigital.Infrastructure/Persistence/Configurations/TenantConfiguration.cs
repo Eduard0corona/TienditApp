@@ -11,7 +11,7 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
     {
         builder.ToTable("Tenants", table =>
         {
-            table.HasCheckConstraint("CK_Tenants_DirectoryCategory", "[DirectoryCategory] >= 0 AND [DirectoryCategory] <= 10");
+            table.HasCheckConstraint("CK_Tenants_DirectoryCategory", "[DirectoryCategory] >= 0 AND [DirectoryCategory] <= 11");
             table.HasCheckConstraint("CK_Tenants_PublicDescription", "[PublicDescription] IS NULL OR LEN([PublicDescription]) > 0");
         });
         builder.HasKey(t => t.Id);

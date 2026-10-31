@@ -27,6 +27,8 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             table.HasCheckConstraint(
                 "CK_TenantSettings_OnlineBookingCapacity",
                 $"[OnlineBookingCapacity] >= 1 AND [OnlineBookingCapacity] <= {OnlineBookingRules.MaxCapacity}");
+            table.HasCheckConstraint(
+                "CK_TenantSettings_HomeVisitChargePolicy", "[HomeVisitChargePolicy] >= 0 AND [HomeVisitChargePolicy] <= 2");
         });
         builder.HasKey(s => s.Id);
 
@@ -66,6 +68,19 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             .IsRequired();
         builder.Property(s => s.OnlineBookingCapacity)
             .HasDefaultValue(OnlineBookingRules.DefaultCapacity)
+            .ValueGeneratedNever()
+            .IsRequired();
+        // Fase 29A (ADR 0053): visits to quote start off, charged; the database defaults fill the rows that exist and those
+        // the previous version saves while this one is published. EF always writes the values. The visit service has no
+        // foreign key: the command checks it is a service of the business, and a service deleted or turned off since stops
+        // counting where it is read.
+        builder.Property(s => s.HomeVisitRequestsEnabled)
+            .HasDefaultValue(false)
+            .ValueGeneratedNever()
+            .IsRequired();
+        builder.Property(s => s.HomeVisitChargePolicy)
+            .HasConversion<int>()
+            .HasDefaultValue(HomeVisitChargePolicy.Charged)
             .ValueGeneratedNever()
             .IsRequired();
         // Fase 26C (ADR 0035): credit reminders start off, every 7 days; the database defaults fill the rows that exist and

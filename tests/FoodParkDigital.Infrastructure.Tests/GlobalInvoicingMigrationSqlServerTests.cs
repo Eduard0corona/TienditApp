@@ -113,7 +113,8 @@ public class GlobalInvoicingMigrationSqlServerTests
     /// <summary>A business with two paid sales of $116.</summary>
     private static async Task<Seed> SeedAsync(SqlServerTestDatabase database)
     {
-        await using var context = database.CreateContext();
+        // The settings without the columns of a later migration (Fase 29A), which this database does not have yet.
+        await using var context = BeforeHomeVisitRequests.CreateContext(database);
         var slug = $"tienda-{Guid.NewGuid():N}"[..20];
         var tenant = new Tenant("Tienda Luna", slug, BusinessType.Retail, $"{slug}@demo.com");
         context.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Retail));

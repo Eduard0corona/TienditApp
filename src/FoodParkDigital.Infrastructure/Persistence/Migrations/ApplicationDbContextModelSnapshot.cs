@@ -6483,7 +6483,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Tenants", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Tenants_DirectoryCategory", "[DirectoryCategory] >= 0 AND [DirectoryCategory] <= 10");
+                            t.HasCheckConstraint("CK_Tenants_DirectoryCategory", "[DirectoryCategory] >= 0 AND [DirectoryCategory] <= 11");
 
                             t.HasCheckConstraint("CK_Tenants_PublicDescription", "[PublicDescription] IS NULL OR LEN([PublicDescription]) > 0");
                         });
@@ -6544,6 +6544,20 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<decimal>("DefaultTaxRate")
                         .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTimeOffset?>("HomeVisitAddressNoticeDismissedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("HomeVisitChargePolicy")
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("HomeVisitRequestsEnabled")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid?>("HomeVisitServiceId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("HomeVisitTravelMinutes")
                         .HasColumnType("int")
@@ -6610,6 +6624,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_TenantSettings_CreditReminderEveryDays", "[CreditReminderEveryDays] >= 1 AND [CreditReminderEveryDays] <= 30");
 
                             t.HasCheckConstraint("CK_TenantSettings_CreditTermDays", "[CreditTermDays] IS NULL OR ([CreditTermDays] >= 1 AND [CreditTermDays] <= 120)");
+
+                            t.HasCheckConstraint("CK_TenantSettings_HomeVisitChargePolicy", "[HomeVisitChargePolicy] >= 0 AND [HomeVisitChargePolicy] <= 2");
 
                             t.HasCheckConstraint("CK_TenantSettings_HomeVisitTravelMinutes", "[HomeVisitTravelMinutes] >= 0 AND [HomeVisitTravelMinutes] <= 240");
 

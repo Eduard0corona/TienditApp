@@ -23,6 +23,7 @@ internal static class BeforeAccountantCfdiEmails
         var profile = modelBuilder.Entity<InvoicingProfile>();
         profile.Ignore(p => p.AccountantEmail);
         profile.Ignore(p => p.SendsMonthToAccountant);
+        BeforeHomeVisitRequests.Ignore(modelBuilder);
     }
 
     private sealed class Context(
