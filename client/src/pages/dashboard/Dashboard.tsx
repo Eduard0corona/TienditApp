@@ -24,6 +24,8 @@ const countOf = (amount: number, one: string, many: string) => `${amount} ${amou
 const SETUP_STEPS: Array<{ key: TenantSetupStepKey; label: string; path: string }> = [
   { key: 'salesPolicy', label: 'Define si tus precios incluyen IVA', path: '/setup' },
   { key: 'catalog', label: 'Agrega tus productos', path: '/products/new' },
+  // A trade with visits to quote on (Fase 29A): what it needs to receive them is said in Configuración › Visitas a domicilio.
+  { key: 'homeVisits', label: 'Prepara tus visitas a domicilio', path: '/settings/business' },
   { key: 'cash', label: 'Abre la caja', path: '/cash' },
   { key: 'firstSale', label: 'Haz tu primera venta', path: '/sell' },
   { key: 'team', label: 'Invita a tu equipo', path: '/employees' },
@@ -98,8 +100,10 @@ export default function Dashboard() {
     };
   }, [loadMetrics, onOrderCancelled, onOrderCreated, onOrderStatusChanged, queryClient]);
 
-  const pendingSetupSteps = setup ? SETUP_STEPS.filter((step) => !setup.steps.find((item) => item.key === step.key)?.done) : [];
-  const doneSetupSteps = SETUP_STEPS.length - pendingSetupSteps.length;
+  // Only the steps the server asks of this business: visits are a step only for one that has them on.
+  const setupSteps = setup ? SETUP_STEPS.filter((step) => setup.steps.some((item) => item.key === step.key)) : [];
+  const pendingSetupSteps = setupSteps.filter((step) => !setup?.steps.find((item) => item.key === step.key)?.done);
+  const doneSetupSteps = setupSteps.length - pendingSetupSteps.length;
   const value = (amount: number | undefined) => (loading ? '—' : formatMoney(amount ?? 0));
   const platformCollected = metrics?.platformCollected ?? 0;
   const onlineCollected = metrics?.onlineCollected ?? 0;
@@ -189,10 +193,10 @@ export default function Dashboard() {
           <div className="card-body">
             <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
               <h3 className="h5 mb-0">Primeros pasos</h3>
-              <span className="text-muted small">{doneSetupSteps} de {SETUP_STEPS.length} listos</span>
+              <span className="text-muted small">{doneSetupSteps} de {setupSteps.length} listos</span>
             </div>
             <div className="progress mb-3" style={{ height: 6 }} aria-hidden="true">
-              <div className="progress-bar" style={{ width: `${(doneSetupSteps / SETUP_STEPS.length) * 100}%` }}></div>
+              <div className="progress-bar" style={{ width: `${(doneSetupSteps / setupSteps.length) * 100}%` }}></div>
             </div>
             <div className="d-flex flex-wrap gap-2">
               {pendingSetupSteps.map((step) => (

@@ -222,7 +222,8 @@ export interface TenantSalesPolicyDto {
   insufficientStockPolicy?: InsufficientStockPolicy;
 }
 
-export type TenantSetupStepKey = 'salesPolicy' | 'catalog' | 'cash' | 'firstSale' | 'team' | 'logo';
+/** The first steps of a business; homeVisits only for one with visits to quote on and the agenda (Fase 29A). */
+export type TenantSetupStepKey = 'salesPolicy' | 'catalog' | 'homeVisits' | 'cash' | 'firstSale' | 'team' | 'logo';
 
 export interface TenantSetupStepDto {
   key: TenantSetupStepKey;

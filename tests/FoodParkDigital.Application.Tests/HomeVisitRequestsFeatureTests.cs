@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.PublicDirectory;
+using FoodParkDigital.Application.Tenants.Queries;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Branches.Entities;
@@ -302,6 +303,43 @@ public class HomeVisitRequestsFeatureTests
         await new InstallStarterCatalogCommandHandler(other.Context, other.TenantService)
             .Handle(new InstallStarterCatalogCommand { TemplateId = "cerrajeria" }, CancellationToken.None);
         Assert.Equal(mine, (await SettingsAsync(other, picked)).HomeVisitServiceId);
+    }
+
+    [Fact]
+    public async Task Setup_ShouldAskForWhatIsMissingToReceiveVisits_ByItsOwnZones()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        // The other business has its zones: they never count for this one.
+        await TradeAsync(fixture, "plomeria-otra");
+        var mine = await TradeAsync(fixture, "plomeria-mia", zones: []);
+        var query = new GetTenantSetupQueryHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService);
+
+        var withoutZones = await query.Handle(new GetTenantSetupQuery(), CancellationToken.None);
+        fixture.Context.DeliveryZones.Add(new DeliveryZone(mine.Id, new DeliveryZoneFields("Centro", 50m, 0m, null, ["72100"])));
+        await fixture.Context.SaveChangesAsync();
+        var receiving = await query.Handle(new GetTenantSetupQuery(), CancellationToken.None);
+        await SetVisitAsync(fixture, mine, null, enabled: false);
+        var off = await query.Handle(new GetTenantSetupQuery(), CancellationToken.None);
+
+        Assert.True(withoutZones.IsSuccess, withoutZones.Error);
+        Assert.Equal(["salesPolicy", "catalog", "homeVisits", "cash", "firstSale", "team", "logo"], withoutZones.Value.Steps.Select(s => s.Key));
+        Assert.False(withoutZones.Value.Steps.Single(s => s.Key == "homeVisits").Done);
+        Assert.True(receiving.Value.Steps.Single(s => s.Key == "homeVisits").Done);
+        // Turned off, it is not a step: nothing is missing for something the business does not do.
+        Assert.DoesNotContain(off.Value.Steps, s => s.Key == "homeVisits");
+    }
+
+    [Fact]
+    public async Task Setup_ShouldNotAskForVisits_WithoutTheAgendaModule()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await TradeAsync(fixture, "plomeria-sin-agenda", capabilities: TenantCapability.Service);
+        var query = new GetTenantSetupQueryHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService);
+
+        var result = await query.Handle(new GetTenantSetupQuery(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.DoesNotContain(result.Value.Steps, s => s.Key == "homeVisits");
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Catalog.Templates;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -48,7 +49,16 @@ public class GetTenantSetupQueryHandler : IRequestHandler<GetTenantSetupQuery, R
         var settings = await _context.TenantSettings
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId.Value)
-            .Select(x => new { x.Capabilities, x.PricesIncludeTax, x.DefaultTaxRate, x.OnboardingCompletedAt })
+            .Select(x => new
+            {
+                x.Capabilities,
+                x.PricesIncludeTax,
+                x.DefaultTaxRate,
+                x.OnboardingCompletedAt,
+                x.HomeVisitRequestsEnabled,
+                x.OnlineMenuMode,
+                HasWeeklyHours = x.OpeningHours != null
+            })
             .FirstOrDefaultAsync(cancellationToken);
         var capabilities = TenantCapabilityRules.NormalizeCapabilities(
             settings?.Capabilities ?? TenantCapability.None,
@@ -60,6 +70,20 @@ public class GetTenantSetupQueryHandler : IRequestHandler<GetTenantSetupQuery, R
         var hasOrder = await _context.Orders.AnyAsync(cancellationToken);
         var activeMembers = await _context.TenantUsers
             .CountAsync(member => member.Status == TenantUserStatus.Active, cancellationToken);
+        // A business that has visits to quote on (a trade starts with them on, Fase 29A) has one step more: receiving
+        // them, which waits for its zones and its hours. Without the agenda module its settings card is not there either.
+        var homeVisitsStep = settings is { HomeVisitRequestsEnabled: true } && TenantCapabilityRules.CanAccessAppointments(capabilities)
+            ? new TenantSetupStepDto
+            {
+                Key = "homeVisits",
+                Done = HomeVisitRequestAvailability.ReceivesVisits(
+                    enabled: true,
+                    capabilities,
+                    settings.OnlineMenuMode,
+                    hasActiveZones: await _context.DeliveryZones.AnyAsync(zone => zone.IsActive, cancellationToken),
+                    settings.HasWeeklyHours)
+            }
+            : null;
 
         return Result.Success(new TenantSetupDto
         {
@@ -73,6 +97,7 @@ public class GetTenantSetupQueryHandler : IRequestHandler<GetTenantSetupQuery, R
             [
                 new TenantSetupStepDto { Key = "salesPolicy", Done = settings?.OnboardingCompletedAt is not null },
                 new TenantSetupStepDto { Key = "catalog", Done = hasProducts },
+                .. (homeVisitsStep is null ? [] : new[] { homeVisitsStep }),
                 new TenantSetupStepDto { Key = "cash", Done = hasCashSession },
                 new TenantSetupStepDto { Key = "firstSale", Done = hasOrder },
                 new TenantSetupStepDto { Key = "team", Done = activeMembers > 1 },

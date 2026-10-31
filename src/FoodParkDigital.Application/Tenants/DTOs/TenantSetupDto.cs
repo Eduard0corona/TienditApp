@@ -17,7 +17,10 @@ public class TenantSetupDto
 
 public class TenantSetupStepDto
 {
-    /// <summary>salesPolicy, catalog, cash, firstSale, team or logo.</summary>
+    /// <summary>
+    /// salesPolicy, catalog, homeVisits (only with visits to quote on and the agenda module, Fase 29A), cash, firstSale,
+    /// team or logo.
+    /// </summary>
     public string Key { get; set; } = null!;
     public bool Done { get; set; }
 }
