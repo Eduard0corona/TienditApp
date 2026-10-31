@@ -6,6 +6,7 @@ import {
   downloadInvoiceFile,
   downloadPaymentComplementFile,
   isGlobalInvoiceWaiting,
+  isMonthEmailOnItsWay,
   isOrderInvoicingWaiting,
   isWaiting,
   mayPrintSelfInvoice,
@@ -174,6 +175,15 @@ describe('isGlobalInvoiceWaiting', () => {
     expect(isGlobalInvoiceWaiting(detail(
       OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Stamped, OrderInvoiceStatus.Cancelled, OrderInvoiceStatus.Refused,
     ))).toBe(false);
+  });
+});
+
+describe('isMonthEmailOnItsWay', () => {
+  it('waits for the latest email to the accountant only while it is neither sent nor refused', () => {
+    expect(isMonthEmailOnItsWay(undefined)).toBe(false);
+    expect(isMonthEmailOnItsWay({ sentAt: null, failedAt: null })).toBe(true);
+    expect(isMonthEmailOnItsWay({ sentAt: '2026-11-01T14:01:00Z', failedAt: null })).toBe(false);
+    expect(isMonthEmailOnItsWay({ sentAt: null, failedAt: '2026-11-01T14:01:00Z' })).toBe(false);
   });
 });
 

@@ -17,9 +17,10 @@ namespace FoodParkDigital.Infrastructure.Tests.BackgroundJobs;
 /// <summary>
 /// The invoicing worker (Fase 28A; global invoices too, Fase 28B, and payment complements, Fase 28C) finds the businesses with
 /// invoices still stamping within the PAC's window, the ones whose payments owe a complement, and every half hour the ones
-/// with cancellations waiting for the SAT (and, Fase 28G, with replaced invoices to cancel with motive 01), and sends each one
-/// its command in its own scope. <see cref="InvoiceSubstitutionWorkerSqlServerTests"/> runs its replaced invoices' queries on
-/// SQL Server.
+/// with cancellations waiting for the SAT (and, Fase 28G, with replaced invoices to cancel with motive 01), in the first days of
+/// each month every hour the ones that send their accountant the month before (Fase 28O), and sends each one its command in
+/// its own scope. <see cref="InvoiceSubstitutionWorkerSqlServerTests"/> runs its replaced invoices' queries on SQL Server, and
+/// <see cref="AccountantCfdiEmailsSqlServerTests"/> its accountants' one.
 /// </summary>
 public class InvoicingWorkerTests
 {
@@ -360,6 +361,102 @@ public class InvoicingWorkerTests
             return id;
         });
 
+    [Fact]
+    public async Task Pass_ShouldFindTheActiveBusinessesThatSendTheirAccountantTheMonth_InTheFirstDays_EveryHour()
+    {
+        var sent = new SentCommands();
+        await using var host = Host(sent);
+        host.Clock.UtcNow = new DateTimeOffset(2026, 11, 1, 15, 0, 0, TimeSpan.Zero);
+        var monthly = await AddAccountantAsync(host, "contador-mensual");
+        // The one TienditApp queued last month does not hold this one up.
+        var lastMonth = await AddAccountantAsync(host, "encolado-octubre", queuedAt: host.Clock.UtcNow.AddDays(-28));
+        // Nor does the month the owner sent by hand an hour ago: only the one TienditApp queues counts.
+        var byHand = await AddAccountantAsync(host, "mandado-a-mano", queuedAt: host.Clock.UtcNow.AddHours(-1), byHand: true);
+        await AddAccountantAsync(host, "sin-mensual", monthly: false);
+        await AddAccountantAsync(host, "ya-encolado", queuedAt: host.Clock.UtcNow.AddHours(-1));
+        await AddAccountantAsync(host, "suspendido", status: TenantStatus.Suspended);
+        var worker = host.Get<InvoicingWorkerService>();
+
+        Assert.Equal(3, await worker.RunPassAsync(CancellationToken.None));
+        Assert.Equal(new[] { monthly, lastMonth, byHand }.Order(), sent.Accountants.Order());
+
+        // Within the hour it does not look again; at the hour it does (none queued anything here).
+        host.Clock.Advance(TimeSpan.FromMinutes(59));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(3, sent.Accountants.Count);
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(6, sent.Accountants.Count);
+
+        // Past the first days of the month, in every time zone, it does not look.
+        host.Clock.UtcNow = new DateTimeOffset(2026, 11, 9, 15, 0, 0, TimeSpan.Zero);
+        Assert.Equal(0, await worker.RunPassAsync(CancellationToken.None));
+        Assert.Equal(6, sent.Accountants.Count);
+        Assert.Empty(sent.Stamps);
+    }
+
+    [Fact]
+    public async Task Pass_ShouldLookForTheAccountantsAgainOnTheNextPass_WhileMoreThanAPassTakesAreOwed()
+    {
+        var sent = new SentCommands();
+        await using var host = Host(sent, maxBusinessesPerPass: 2);
+        host.Clock.UtcNow = new DateTimeOffset(2026, 11, 1, 15, 0, 0, TimeSpan.Zero);
+        var owed = new[]
+        {
+            await AddAccountantAsync(host, "contador-uno"),
+            await AddAccountantAsync(host, "contador-dos"),
+            await AddAccountantAsync(host, "contador-tres")
+        };
+        var worker = host.Get<InvoicingWorkerService>();
+
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(2, sent.Accountants.Count);
+        // A minute later, not an hour: the one left out goes, and only it (the others queued nothing a minute ago).
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(owed.Order(), sent.Accountants.Order());
+
+        // None queued anything (it is not yet 8:00 where they are, or the month before has no CFDI): each goes again an
+        // hour after it last went, in the passes it takes, not on every pass until the seventh day.
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await worker.RunPassAsync(CancellationToken.None);
+        host.Clock.Advance(TimeSpan.FromMinutes(57));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(3, sent.Accountants.Count);
+        host.Clock.Advance(TimeSpan.FromMinutes(2));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(5, sent.Accountants.Count);
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await worker.RunPassAsync(CancellationToken.None);
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(owed.Concat(owed).Order(), sent.Accountants.Order());
+    }
+
+    /// <summary>
+    /// A business with its accountant's email; when it sends them each month, and the month TienditApp queued last (or a
+    /// person sent, <paramref name="byHand"/>).
+    /// </summary>
+    private static Task<Guid> AddAccountantAsync(
+        OutboxTestHost host, string slug, bool monthly = true, DateTimeOffset? queuedAt = null, TenantStatus status = TenantStatus.Active,
+        bool byHand = false)
+        => host.InScopeAsync(async services =>
+        {
+            var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
+            tenant.SetStatus(status);
+            services.GetRequiredService<ICurrentTenantService>().SetTenant(tenant.Id);
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            var profile = InvoicingProfile.Create(tenant.Id);
+            profile.UseAccountant("contador@despacho.mx", monthly);
+            context.Tenants.Add(tenant);
+            context.InvoicingProfiles.Add(profile);
+            if (queuedAt is { } at)
+                context.CfdiMonthEmails.Add(
+                    CfdiMonthEmail.Request(tenant.Id, at.Year, at.Month, "contador@despacho.mx", byHand ? Guid.NewGuid() : null, at));
+            await context.SaveChangesAsync();
+            return tenant.Id;
+        });
+
     private static OutboxTestHost Host(SentCommands sent, int? maxBusinessesPerPass = null)
         => OutboxTestHost.Create(configure: services =>
         {
@@ -422,6 +519,7 @@ public class InvoicingWorkerTests
         public List<Guid> Checks { get; } = [];
         public List<Guid> Complements { get; } = [];
         public List<Guid> CreditNotes { get; } = [];
+        public List<Guid> Accountants { get; } = [];
         /// <summary>The businesses whose complements pass stamps one.</summary>
         public HashSet<Guid> Stamping { get; } = [];
     }
@@ -437,6 +535,7 @@ public class InvoicingWorkerTests
                 CheckInvoiceCancellationsCommand => sent.Checks,
                 IssuePendingPaymentComplementsCommand => sent.Complements,
                 IssuePendingCreditNotesCommand => sent.CreditNotes,
+                QueueMonthlyAccountantEmailCommand => sent.Accountants,
                 _ => throw new NotSupportedException(request.GetType().Name)
             };
             list.Add(tenant.TenantId);

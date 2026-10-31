@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Fiscal.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using MediatR;
@@ -18,7 +19,9 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs.Invoicing;
 /// «Timbrando» (<see cref="StampPendingInvoicesCommand"/>), issues the payment complements (Fase 28C) and the credit notes
 /// (Fase 28D) the businesses owe, and every half hour it asks the SAT about the cancellations that wait for the customer and
 /// to cancel the invoices whose replacement is stamped (<see cref="CheckInvoiceCancellationsCommand"/>, Fase 28G), each in
-/// its business's scope. Without the PAC configured it does nothing.
+/// its business's scope. In the first days of each month, every hour, it queues the email of the month before's CFDI to the
+/// accountant of the businesses that asked for it (<see cref="QueueMonthlyAccountantEmailCommand"/>, Fase 28O). Without the
+/// PAC configured it does nothing.
 /// </summary>
 public sealed class InvoicingWorkerService : BackgroundService
 {
@@ -30,6 +33,7 @@ public sealed class InvoicingWorkerService : BackgroundService
     private readonly BackgroundJobOptions.InvoicingOptions _options;
     private readonly ILogger<InvoicingWorkerService> _logger;
     private DateTimeOffset? _cancellationsCheckedAt;
+    private DateTimeOffset? _accountantsCheckedAt;
 
     /// <summary>
     /// The businesses whose last complements pass stamped none (Fase 28C), and when it ran. They go after the others, the
@@ -41,6 +45,12 @@ public sealed class InvoicingWorkerService : BackgroundService
 
     /// <summary>The same for the credit notes (Fase 28D): the businesses whose last pass stamped none go after the others.</summary>
     private readonly Dictionary<Guid, DateTimeOffset> _creditNotesWithoutProgress = [];
+
+    /// <summary>
+    /// The same for the month to the accountant (Fase 28O): the businesses whose last pass queued nothing (the month has no
+    /// CFDI, or it is not yet 8:00 of the first day where they are) go after the others.
+    /// </summary>
+    private readonly Dictionary<Guid, DateTimeOffset> _accountantsWithoutProgress = [];
 
     public InvoicingWorkerService(
         IServiceScopeFactory scopeFactory,
@@ -98,6 +108,10 @@ public sealed class InvoicingWorkerService : BackgroundService
         List<Guid> complementing;
         List<Guid> crediting;
         List<Guid> cancelling = [];
+        List<Guid> accountants = [];
+        var accountantInterval = TimeSpan.FromMinutes(Math.Max(1, _options.AccountantIntervalMinutes));
+        var checkAccountants = AccountantCfdiEmails.InMonthlyDaysSomewhere(now)
+            && (_accountantsCheckedAt is null || now - _accountantsCheckedAt >= accountantInterval);
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -219,6 +233,29 @@ public sealed class InvoicingWorkerService : BackgroundService
                         .ToListAsync(cancellationToken));
                 _cancellationsCheckedAt = now;
             }
+            if (checkAccountants)
+            {
+                // The active businesses that send their accountant the month before on their own and have not queued it in
+                // these days: the window of the month before ended more than three weeks ago.
+                var recent = now - TimeSpan.FromDays(AccountantCfdiEmails.MonthlyLastDay + 3);
+                var owed = await context.InvoicingProfiles
+                    .IgnoreQueryFilters()
+                    .Where(p => p.SendsMonthToAccountant && p.AccountantEmail != null
+                        && context.Tenants.Any(t => t.Id == p.TenantId && t.Status == TenantStatus.Active)
+                        && !context.CfdiMonthEmails.IgnoreQueryFilters()
+                            .Any(e => e.TenantId == p.TenantId && e.RequestedByUserId == null && e.RequestedAt > recent))
+                    .Select(p => new Waiting(p.TenantId, null))
+                    .ToListAsync(cancellationToken);
+                // One whose last pass queued nothing goes again an hour after it: before 8:00 of the first day where it is,
+                // or without CFDI in the month before, it would take a pass's places every few minutes for nothing.
+                var due = Fairly(owed, _accountantsWithoutProgress, owed.Count)
+                    .Where(tenantId => !_accountantsWithoutProgress.TryGetValue(tenantId, out var tried) || now - tried >= accountantInterval)
+                    .ToList();
+                accountants = due.Take(max).ToList();
+                // More due than a pass takes: the next pass looks again for the rest instead of waiting the hour.
+                if (due.Count <= max)
+                    _accountantsCheckedAt = now;
+            }
         }
 
         foreach (var tenantId in stamping)
@@ -239,8 +276,15 @@ public sealed class InvoicingWorkerService : BackgroundService
         }
         foreach (var tenantId in cancelling)
             await SendAsync(tenantId, new CheckInvoiceCancellationsCommand(), "with their cancellation settled", cancellationToken);
+        foreach (var tenantId in accountants)
+        {
+            if (await SendAsync(tenantId, new QueueMonthlyAccountantEmailCommand(), "months queued to the accountant", cancellationToken) > 0)
+                _accountantsWithoutProgress.Remove(tenantId);
+            else
+                _accountantsWithoutProgress[tenantId] = now;
+        }
 
-        return stamping.Union(complementing).Union(crediting).Union(cancelling).Count();
+        return stamping.Union(complementing).Union(crediting).Union(cancelling).Union(accountants).Count();
     }
 
     private sealed record Waiting(Guid TenantId, DateTimeOffset? Since);

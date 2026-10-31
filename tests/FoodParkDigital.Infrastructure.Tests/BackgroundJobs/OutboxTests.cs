@@ -353,7 +353,8 @@ public class OutboxTests
             new AccountEmailRequestedEvent(AccountEmailPurpose.SignUpWithExistingEmail, Email: "ana@demo.com"),
             new AccountEmailRequestedEvent(AccountEmailPurpose.TeamInvitation, UserId: Guid.NewGuid()),
             new OnlinePaymentRefundRequestedEvent(Guid.NewGuid(), TenantA),
-            new CfdiEmailRequestedEvent(Guid.NewGuid())
+            new CfdiEmailRequestedEvent(Guid.NewGuid()),
+            new CfdiMonthEmailRequestedEvent(Guid.NewGuid())
         };
 
         foreach (var domainEvent in events)

@@ -1780,6 +1780,70 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.CfdiMonthEmail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("CfdiCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Failure")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("LastFailedAttemptAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("RequestedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("To")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "RequestedAt");
+
+                    b.HasIndex("TenantId", "Year", "Month")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CfdiMonthEmails_Monthly")
+                        .HasFilter("[RequestedByUserId] IS NULL");
+
+                    b.HasIndex("TenantId", "Year", "Month", "RequestedAt");
+
+                    b.ToTable("CfdiMonthEmails", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CfdiMonthEmails_Attempts", "([FailedAttempts] = 0 AND [LastFailedAttemptAt] IS NULL) OR ([FailedAttempts] > 0 AND [LastFailedAttemptAt] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_CfdiMonthEmails_Month", "[Year] >= 2022 AND [Month] BETWEEN 1 AND 12");
+
+                            t.HasCheckConstraint("CK_CfdiMonthEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([SentAt] IS NULL AND [CfdiCount] IS NULL) OR ([SentAt] IS NOT NULL AND [CfdiCount] IS NOT NULL AND [CfdiCount] >= 0)) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3, 4)))");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.CreditNote", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2193,6 +2257,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("AccountantEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
                     b.Property<string>("CertificateNumber")
                         .HasMaxLength(20)
                         .IsUnicode(false)
@@ -2245,6 +2313,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("SendsMonthToAccountant")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Serie")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -2280,6 +2353,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("InvoicingProfiles", null, t =>
                         {
+                            t.HasCheckConstraint("CK_InvoicingProfiles_Accountant", "[SendsMonthToAccountant] = 0 OR [AccountantEmail] IS NOT NULL");
+
                             t.HasCheckConstraint("CK_InvoicingProfiles_Certificate", "([CertificateNumber] IS NULL AND [CertificateRfc] IS NULL AND [CertificateValidFrom] IS NULL AND [CertificateValidTo] IS NULL AND [CertificateUploadedAt] IS NULL AND [CertificateUploadedByUserId] IS NULL) OR ([CertificateNumber] IS NOT NULL AND [CertificateRfc] IS NOT NULL AND [CertificateValidFrom] IS NOT NULL AND [CertificateValidTo] > [CertificateValidFrom] AND [CertificateUploadedAt] IS NOT NULL AND [CertificateUploadedByUserId] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_InvoicingProfiles_SelfInvoicing", "([SelfInvoicing] = 0 OR [SelfInvoiceKey] IS NOT NULL) AND ([SelfInvoiceKey] IS NULL OR DATALENGTH([SelfInvoiceKey]) = 32)");
@@ -7280,6 +7355,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Fiscal.Entities.CfdiMonthEmail", b =>
+                {
                     b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")

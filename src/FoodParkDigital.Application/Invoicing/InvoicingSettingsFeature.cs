@@ -18,7 +18,7 @@ namespace FoodParkDigital.Application.Invoicing;
 /// <summary>
 /// Configuración › Facturación (Fase 28A, ADR 0045): whether the platform invoices, the business's fiscal data the invoice
 /// needs, its CSD, the series of its invoices and payment complements (Fase 28C), whether its customers invoice their
-/// tickets online (Fase 28F), and the template its CFDI go by WhatsApp with (Fase 28M).
+/// tickets online (Fase 28F), the template its CFDI go by WhatsApp with (Fase 28M), and its accountant's email (Fase 28O).
 /// </summary>
 public class InvoicingSettingsDto
 {
@@ -53,6 +53,10 @@ public class InvoicingSettingsDto
     public List<InvoiceWhatsAppTemplateDto> WhatsAppTemplates { get; set; } = [];
     /// <summary>TienditApp's text, the one its CFDI go with without a template.</summary>
     public string WhatsAppDefaultText { get; set; } = CfdiWhatsApps.DefaultText;
+    /// <summary>The accountant's email (Fase 28O, ADR 0060): where «Mandar al contador» sends the month's CFDI.</summary>
+    public string? AccountantEmail { get; set; }
+    /// <summary>Whether TienditApp sends the accountant the month before's CFDI on its own, at the start of each month.</summary>
+    public bool SendsMonthToAccountant { get; set; }
 }
 
 /// <summary>A message template for the CFDI by WhatsApp (Fase 28M).</summary>
@@ -482,6 +486,77 @@ public class SetInvoiceWhatsAppTemplateCommandHandler : IRequestHandler<SetInvoi
     }
 }
 
+/// <summary>
+/// The business's accountant (owners and admins, Fase 28O, ADR 0060): their email, and whether TienditApp sends them the
+/// month before's CFDI on its own at the start of each month, which needs the email. Without an email nothing goes on its
+/// own; the emails already asked for keep theirs. The audit keeps what changed, never the address.
+/// </summary>
+[RequiresTenantManager]
+public record SetAccountantCommand(string? Email, bool Monthly) : IRequest<Result<InvoicingSettingsDto>>;
+
+public class SetAccountantCommandValidator : AbstractValidator<SetAccountantCommand>
+{
+    public SetAccountantCommandValidator()
+    {
+        RuleFor(x => x.Email)
+            .Must(email => InvoiceEmailAddress.IsValid(email!.Trim())).WithMessage(InvoiceEmailAddress.InvalidMessage)
+            .When(x => !string.IsNullOrWhiteSpace(x.Email));
+        RuleFor(x => x.Email).NotEmpty().WithMessage(InvoicingProfile.MonthlyNeedsAccountantMessage).When(x => x.Monthly);
+    }
+}
+
+public class SetAccountantCommandHandler : IRequestHandler<SetAccountantCommand, Result<InvoicingSettingsDto>>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenant;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IInvoicingGateway _gateway;
+    private readonly IDateTimeProvider _clock;
+
+    public SetAccountantCommandHandler(
+        IApplicationDbContext context, ICurrentTenantService tenant, ICurrentUserService currentUser, IInvoicingGateway gateway,
+        IDateTimeProvider clock)
+    {
+        _context = context;
+        _tenant = tenant;
+        _currentUser = currentUser;
+        _gateway = gateway;
+        _clock = clock;
+    }
+
+    public async Task<Result<InvoicingSettingsDto>> Handle(SetAccountantCommand request, CancellationToken cancellationToken)
+    {
+        var tenantId = _tenant.TenantId;
+        var profile = await _context.InvoicingProfiles.FirstOrDefaultAsync(cancellationToken);
+        if (profile is null)
+        {
+            profile = InvoicingProfile.Create(tenantId);
+            _context.InvoicingProfiles.Add(profile);
+        }
+        var before = (profile.AccountantEmail, profile.SendsMonthToAccountant);
+        try
+        {
+            profile.UseAccountant(request.Email, request.Monthly);
+        }
+        catch (DomainException ex)
+        {
+            return Result.Failure<InvoicingSettingsDto>(ex.Message);
+        }
+
+        if ((profile.AccountantEmail, profile.SendsMonthToAccountant) != before)
+        {
+            InvoicingSettings.Audit(_context, tenantId, _currentUser, "AccountantChanged", new
+            {
+                HasEmail = profile.AccountantEmail is not null,
+                EmailChanged = profile.AccountantEmail != before.AccountantEmail,
+                Monthly = profile.SendsMonthToAccountant
+            });
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        return Result.Success(await InvoicingSettings.ReadAsync(_context, tenantId, _gateway, _clock.UtcNow, cancellationToken));
+    }
+}
+
 internal static class InvoicingSettings
 {
     public const string NotAvailableMessage = "La facturación no está disponible en TienditApp por ahora.";
@@ -580,6 +655,8 @@ internal static class InvoicingSettings
             MissingData = missing,
             SelfInvoicing = profile?.SelfInvoicing ?? false,
             SelfInvoicePath = Invoicing.SelfInvoicing.PagePath(tenant?.Slug ?? string.Empty),
+            AccountantEmail = profile?.AccountantEmail,
+            SendsMonthToAccountant = profile?.SendsMonthToAccountant ?? false,
             WhatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(context, tenantId, cancellationToken),
             WhatsAppTemplates = await context.MessageTemplates.AsNoTracking()
                 .Where(t => t.IsActive && t.Purpose == MessagePurpose.CfdiDocument)

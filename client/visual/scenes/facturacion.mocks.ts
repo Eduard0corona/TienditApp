@@ -47,6 +47,8 @@ const READY = {
   // The CFDI by WhatsApp (Fase 28M): without the business's WhatsApp connected, the card points to connecting it.
   whatsAppConnected: false, whatsAppTemplateId: null, whatsAppTemplates: [] as unknown[],
   whatsAppDefaultText: 'Hola {nombre}: {negocio} te envía {comprobante} por {monto}, del {fecha}. Descarga el XML y el PDF aquí: {enlace}',
+  // The accountant (Fase 28O): none yet.
+  accountantEmail: null, sendsMonthToAccountant: false,
 };
 
 const settings = (value: Record<string, unknown>): PrepareData => (data) => {
@@ -81,6 +83,10 @@ export const FACTURACION_WHATSAPP = asOption(settings({
     },
     { id: uuid('template:factura-24h'), name: 'Factura sin aprobar', providerTemplateName: null, body: 'Hola {nombre}, tu factura: {enlace}' },
   ],
+}));
+/** The accountant gets the month before's CFDI on the first of each month (Fase 28O). */
+export const FACTURACION_CONTADOR = asOption(settings({
+  ...READY, accountantEmail: 'contabilidad@despachoruiz.mx', sendsMonthToAccountant: true,
 }));
 /** The platform has not set its PAC up. */
 export const FACTURACION_NO_DISPONIBLE = asOption(settings({ ...READY, available: false, certificate: undefined, ready: false }));

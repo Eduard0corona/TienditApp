@@ -7623,6 +7623,54 @@
         }
       }
     },
+    "/api/v1/invoicing/settings/accountant": {
+      "put": {
+        "tags": [
+          "Invoicing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAccountantRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAccountantRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAccountantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicingSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicingSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicingSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/invoicing/orders/{orderId}/invoices": {
       "post": {
         "tags": [
@@ -9189,6 +9237,108 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/invoicing/issued-cfdis/accountant-emails": {
+      "get": {
+        "tags": [
+          "Invoicing"
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CfdiMonthEmailDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CfdiMonthEmailDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CfdiMonthEmailDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Invoicing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendIssuedCfdisToAccountantRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendIssuedCfdisToAccountantRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendIssuedCfdisToAccountantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiMonthEmailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiMonthEmailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiMonthEmailDto"
+                }
+              }
+            }
           }
         }
       }
@@ -19702,6 +19852,88 @@
           "Cancellation"
         ]
       },
+      "CfdiMonthEmailDto": {
+        "required": [
+          "byTienditApp",
+          "failedAttempts",
+          "id",
+          "month",
+          "requestedAt",
+          "to",
+          "year"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "to": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "byTienditApp": {
+            "type": "boolean"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cfdiCount": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "failedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "failure": {
+            "$ref": "#/components/schemas/CfdiMonthEmailFailure"
+          },
+          "failedAttempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastFailedAttemptAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CfdiMonthEmailFailure": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Rejected",
+          "NotConfigured",
+          "NotDelivered",
+          "TooLarge",
+          "TooMany"
+        ]
+      },
       "CfdiPartyDto": {
         "type": "object",
         "properties": {
@@ -26551,6 +26783,7 @@
           "sandbox",
           "selfInvoicePath",
           "selfInvoicing",
+          "sendsMonthToAccountant",
           "serie",
           "whatsAppConnected",
           "whatsAppDefaultText",
@@ -26623,6 +26856,13 @@
           },
           "whatsAppDefaultText": {
             "type": "string"
+          },
+          "accountantEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "sendsMonthToAccountant": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -35239,6 +35479,28 @@
         },
         "additionalProperties": false
       },
+      "SendIssuedCfdisToAccountantRequest": {
+        "required": [
+          "email",
+          "month",
+          "year"
+        ],
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "SendPromotionalMessageCommand": {
         "required": [
           "message",
@@ -35748,6 +36010,22 @@
           "Before",
           "After"
         ]
+      },
+      "SetAccountantRequest": {
+        "required": [
+          "monthly"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "monthly": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       },
       "SetAiAgentActiveRequest": {
         "required": [

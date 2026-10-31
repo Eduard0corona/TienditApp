@@ -8,7 +8,8 @@ namespace FoodParkDigital.Domain.Fiscal.Entities;
 /// How a business invoices (Fase 28A, ADR 0045): the serie of its invoices, of its payment complements (Fase 28C) and of its
 /// credit notes (Fase 28D), and the CSD (certificado de sello digital) its CFDI are sealed with. TienditApp checks the CSD and
 /// hands it to the PAC, which keeps it: here only what identifies it is kept (number, RFC, validity, who uploaded it), never
-/// its private key or password. And whether its customers invoice their tickets online (Fase 28F, ADR 0050).
+/// its private key or password. And whether its customers invoice their tickets online (Fase 28F, ADR 0050), and where its
+/// accountant gets the month's CFDI (Fase 28O, ADR 0060).
 /// </summary>
 public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenantScoped
 {
@@ -59,6 +60,15 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
     /// only delivers within 24 hours of the customer's last message.
     /// </summary>
     public Guid? WhatsAppTemplateId { get; private set; }
+
+    /// <summary>
+    /// The email of its accountant (Fase 28O, ADR 0060): «Mandar al contador» in Reportes › CFDI emitidos sends the month's
+    /// CFDI there, and keeps the last address it sent to.
+    /// </summary>
+    public string? AccountantEmail { get; private set; }
+
+    /// <summary>Whether TienditApp sends the accountant, at the start of each month, the CFDI of the month before.</summary>
+    public bool SendsMonthToAccountant { get; private set; }
 
     public byte[] Version { get; private set; } = null!;
 
@@ -143,6 +153,27 @@ public partial class InvoicingProfile : AuditableEntity, IAggregateRoot, ITenant
         if (templateId == Guid.Empty)
             throw new DomainException("Elige una plantilla o el texto de TienditApp.");
         WhatsAppTemplateId = templateId;
+    }
+
+    public const string MonthlyNeedsAccountantMessage = "Escribe el correo del contador para mandarle cada mes los CFDI.";
+
+    /// <summary>
+    /// Where the month's CFDI go and whether TienditApp sends them at the start of each month; without an email nothing
+    /// goes on its own.
+    /// </summary>
+    public void UseAccountant(string? email, bool monthly)
+    {
+        var address = InvoiceEmailAddress.Normalize(email);
+        if (monthly && address is null)
+            throw new DomainException(MonthlyNeedsAccountantMessage);
+        AccountantEmail = address;
+        SendsMonthToAccountant = monthly;
+    }
+
+    /// <summary>The address «Mandar al contador» sent to, kept for the next time; sending each month stays as it was.</summary>
+    public void RememberAccountant(string email)
+    {
+        AccountantEmail = InvoiceEmailAddress.Normalize(email) ?? throw new DomainException(CfdiMonthEmail.MissingEmailMessage);
     }
 
     /// <summary>The code the ticket of an order prints while self-invoicing is on; null when it is off.</summary>

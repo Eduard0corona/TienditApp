@@ -47,7 +47,7 @@ public class CfdiWhatsAppMigrationSqlServerTests
         await ExecuteAsync(database, $"UPDATE [OutgoingMessages] SET [TenantId] = {seed.TenantId} WHERE [Id] = {queuedId}");
         var message = CfdiMessage(seed.Invoice, "+525598765432", null);
         var byHand = CfdiMessage(seed.Invoice, "+525598765432", Guid.NewGuid());
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiCancellationNotices.CreateContext(database, seed.TenantId))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             var queued = await context.OutgoingMessages.SingleAsync(m => m.Id == queuedId);
@@ -61,7 +61,7 @@ public class CfdiWhatsAppMigrationSqlServerTests
             context.InvoicingProfiles.Add(profile);
             await context.SaveChangesAsync();
         }
-        await using (var context = database.CreateContext(seed.TenantId))
+        await using (var context = BeforeCfdiCancellationNotices.CreateContext(database, seed.TenantId))
         {
             var saved = await context.OutgoingMessages.SingleAsync(m => m.Id == message.Id);
             Assert.Equal(
@@ -73,7 +73,7 @@ public class CfdiWhatsAppMigrationSqlServerTests
             Assert.NotNull((await context.InvoicingProfiles.SingleAsync()).WhatsAppTemplateId);
         }
         // Another business does not see them.
-        await using (var foreign = database.CreateContext(seed.OtherTenantId))
+        await using (var foreign = BeforeCfdiCancellationNotices.CreateContext(database, seed.OtherTenantId))
         {
             Assert.Empty(await foreign.OutgoingMessages.ToListAsync());
             Assert.Empty(await foreign.InvoicingProfiles.ToListAsync());

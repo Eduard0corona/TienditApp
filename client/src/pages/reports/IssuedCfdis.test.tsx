@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import api from '../../api/axios';
-import type { IssuedCfdi, IssuedCfdiSummary } from '../../api/invoicing';
+import type { CfdiMonthEmail, IssuedCfdi, IssuedCfdiSummary } from '../../api/invoicing';
 import { apiRequest } from '../../api/typedClient';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -55,6 +55,23 @@ interface Answers {
   client?: QueryClient;
   /** The CFDI still «Timbrando» past the PAC's window (Fase 28K); none by default. */
   toReview?: IssuedCfdi[];
+  /** The month's emails to the accountant (Fase 28O), the newest first; none by default. */
+  accountantEmails?: CfdiMonthEmail[];
+  /** The accountant's email the business keeps, and whether the month goes to it on its own. */
+  accountantEmail?: string | null;
+  sendsMonthToAccountant?: boolean;
+  /** The month's emails to the accountant could not be read. */
+  accountantEmailsFail?: () => boolean;
+  /** What «Mandar al contador» answers. */
+  send?: (body: { year: number; month: number; email: string }) => Promise<CfdiMonthEmail>;
+}
+
+function monthEmail(patch: Partial<CfdiMonthEmail> = {}): CfdiMonthEmail {
+  return {
+    id: 'm-1', year: 2026, month: 10, to: 'contador@despacho.mx', requestedAt: '2026-10-21T16:00:00Z', byTienditApp: false,
+    sentAt: null, cfdiCount: null, failedAt: null, failure: undefined, failedAttempts: 0, lastFailedAttemptAt: null,
+    ...patch,
+  };
 }
 
 function renderPage(list: (query: Query) => IssuedCfdi[], answers: Answers = {}) {
@@ -71,6 +88,15 @@ function renderPage(list: (query: Query) => IssuedCfdi[], answers: Answers = {})
       return answers.summary ? answers.summary(options!.query) : Promise.resolve({ ...SUMMARY, ...options!.query });
     }
     if (path === '/api/v1/invoicing/issued-cfdis/to-review') return Promise.resolve(answers.toReview ?? []);
+    if (path === '/api/v1/invoicing/issued-cfdis/accountant-emails' && method === 'get') {
+      return answers.accountantEmailsFail?.() ? Promise.reject(new Error('caído')) : Promise.resolve(answers.accountantEmails ?? []);
+    }
+    if (path === '/api/v1/invoicing/issued-cfdis/accountant-emails' && method === 'post' && answers.send) {
+      return answers.send((options as unknown as { body: { year: number; month: number; email: string } }).body);
+    }
+    if (path === '/api/v1/invoicing/settings') {
+      return Promise.resolve({ accountantEmail: answers.accountantEmail ?? null, sendsMonthToAccountant: answers.sendsMonthToAccountant ?? false });
+    }
     return Promise.reject(new Error(`Sin respuesta para ${method} ${path}`));
   }) as unknown as typeof apiRequest);
   const client = answers.client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -322,6 +348,85 @@ describe('IssuedCfdis', () => {
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(await screen.findByRole('region', { name: 'Resumen de octubre de 2026' })).toBeInTheDocument();
+  });
+
+  it("sends the month's file to the accountant at the address the business keeps, and says how it went (Fase 28O)", async () => {
+    const user = userEvent.setup();
+    let emails: CfdiMonthEmail[] = [monthEmail({ sentAt: '2026-10-21T16:01:00Z', cfdiCount: 6 })];
+    const send = vi.fn((body: { year: number; month: number; email: string }) => {
+      emails = [monthEmail({ id: 'm-2', to: body.email, requestedAt: '2026-10-21T17:00:00Z' }), ...emails];
+      return Promise.resolve(emails[0]);
+    });
+    renderPage(() => [cfdi()], { accountantEmail: 'contador@despacho.mx', send, get accountantEmails() { return emails; } });
+
+    expect(await screen.findByText(/Se mandaron a contador@despacho\.mx el .*, con 6 CFDI\./)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Mandar al contador' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mandar al contador los CFDI de octubre de 2026' });
+    const address = within(dialog).getByLabelText('Correo del contador');
+    expect(address).toHaveValue('contador@despacho.mx');
+    await user.clear(address);
+    await user.type(address, ' otra@despacho.mx ');
+    await user.click(within(dialog).getByRole('button', { name: 'Mandar' }));
+
+    await waitFor(() => expect(send).toHaveBeenCalledWith({ year: 2026, month: 10, email: 'otra@despacho.mx' }));
+    expect(toast.success).toHaveBeenCalledWith('Se están mandando los CFDI de octubre de 2026 a otra@despacho.mx.');
+    expect(await screen.findByText('Mandando los CFDI a otra@despacho.mx…')).toBeInTheDocument();
+  });
+
+  it('says the current month is not over, and that the month on its own moves to the address typed', async () => {
+    const user = userEvent.setup();
+    renderPage(() => [cfdi()], { accountantEmail: 'contador@despacho.mx', sendsMonthToAccountant: true });
+
+    await user.click(await screen.findByRole('button', { name: 'Mandar al contador' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mandar al contador los CFDI de octubre de 2026' });
+    expect(within(dialog).getByText('El mes no ha terminado: el archivo lleva lo timbrado hasta ahora.')).toBeInTheDocument();
+    const address = within(dialog).getByLabelText('Correo del contador');
+    expect(address).toHaveAccessibleDescription('Lo guardamos como el correo de tu contador en Configuración › Facturación.');
+    await user.clear(address);
+    await user.type(address, 'otra@despacho.mx');
+    expect(address).toHaveAccessibleDescription(
+      'Lo guardamos como el correo de tu contador en Configuración › Facturación, y ahí le llegan también los CFDI de cada mes.');
+  });
+
+  it("proposes where the month went last when the business keeps no accountant's email, and keeps the dialog open when refused", async () => {
+    const user = userEvent.setup();
+    const send = vi.fn(() => Promise.reject(Object.assign(new Error('refused'), {
+      isAxiosError: true, response: { status: 400, data: { detail: 'Hoy ya se mandaron 5 veces los CFDI al contador.' } },
+    })));
+    renderPage(() => [cfdi()], {
+      route: '/reports/issued-cfdis?year=2026&month=9', send,
+      accountantEmails: [monthEmail({ month: 9, to: 'antes@despacho.mx', failedAt: '2026-10-01T15:00:00Z', failure: 0 })],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Mandar al contador' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mandar al contador los CFDI de septiembre de 2026' });
+    expect(within(dialog).getByLabelText('Correo del contador')).toHaveValue('antes@despacho.mx');
+    expect(within(dialog).queryByText(/El mes no ha terminado/)).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Mandar' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.getByRole('dialog', { name: 'Mandar al contador los CFDI de septiembre de 2026' })).toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('says when it could not read how the email to the accountant went, and reads it again', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    renderPage(() => [cfdi()], {
+      accountantEmailsFail: () => fail, accountantEmails: [monthEmail({ sentAt: '2026-10-21T16:01:00Z', cfdiCount: 3 })],
+    });
+
+    expect(await screen.findByText('No se pudo leer cómo salió el envío al contador.')).toBeInTheDocument();
+    fail = false;
+    await user.click(screen.getAllByRole('button', { name: 'Reintentar' })[0]);
+    expect(await screen.findByText(/Se mandaron a contador@despacho\.mx el .*, con 3 CFDI\./)).toBeInTheDocument();
+  });
+
+  it('offers no email to the accountant of a month without CFDI', async () => {
+    renderPage(() => [], { summary: (query) => Promise.resolve({ ...SUMMARY, ...query, kinds: SUMMARY.kinds.map((k) => ({ ...k, inForce: 0, cancelled: 0, cancelling: 0, refused: 0 })) }) });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Descargar XML' })).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Mandar al contador' })).toBeDisabled();
   });
 
   it('puts the CFDI to check in the SAT\'s portal above the month, whatever month they are of (Fase 28K)', async () => {
