@@ -65,6 +65,11 @@ export function formatTime(value?: string | number | Date | null): string {
   return formatInBusinessZone(value, { timeStyle: 'short' });
 }
 
+/** A sentence that ends in an hour («p.m.») or an abbreviated month («oct.») takes no second period. */
+export function endSentence(text: string): string {
+  return text.endsWith('.') ? text : `${text}.`;
+}
+
 /** A calendar date typed in a date input ("2026-10-05") shown as words; it has no time, so no zone shifts it. */
 export function formatCalendarDate(date: string, options: Intl.DateTimeFormatOptions = { dateStyle: 'long' }): string {
   const parsed = new Date(`${date}T12:00:00Z`);

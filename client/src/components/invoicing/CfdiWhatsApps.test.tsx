@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { isOrderInvoicingWaiting, type CfdiWhatsApp } from '../../api/invoicing';
 import { apiRequest } from '../../api/typedClient';
 import { CfdiEmailDocument, OrderInvoiceStatus, OutgoingMessageStatus } from '../../types';
+import { formatDateTime } from '../../utils/dates';
 import { CfdiWhatsAppStatus, SendCfdiWhatsAppButton } from './CfdiWhatsApps';
 
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
@@ -49,22 +50,33 @@ describe('CfdiWhatsAppStatus', () => {
     const { rerender, container } = render(<CfdiWhatsAppStatus messages={[]} />);
     expect(container).toBeEmptyDOMElement();
 
+    // «a.m.» or «p.m.» already ends the sentence: it takes no second period.
+    const when = (at: string) => {
+      const text = formatDateTime(at);
+      expect(text).toMatch(/m\.$/);
+      return text;
+    };
+    const status = (start: RegExp) => screen.getByText(start).textContent;
+
     rerender(<CfdiWhatsAppStatus messages={[
       message({ status: OutgoingMessageStatus.Sent, sentAt: '2026-10-30T17:56:00Z' }), message({ phone: '+525598765432' }),
     ]} />);
-    expect(screen.getByText(/^Se envió por WhatsApp a 5512345678 el .+\.$/)).toBeInTheDocument();
+    expect(status(/^Se envió por WhatsApp/)).toBe(`Se envió por WhatsApp a 5512345678 el ${when('2026-10-30T17:56:00Z')}`);
     expect(screen.queryByText(/5598765432/)).not.toBeInTheDocument();
+
+    rerender(<CfdiWhatsAppStatus messages={[message({ status: OutgoingMessageStatus.Sent })]} />);
+    expect(status(/^Se envió por WhatsApp/)).toBe('Se envió por WhatsApp a 5512345678.');
 
     rerender(<CfdiWhatsAppStatus messages={[message({
       status: OutgoingMessageStatus.Sent, sentAt: '2026-10-30T17:56:00Z', deliveredAt: '2026-10-30T17:57:00Z',
     })]} />);
-    expect(screen.getByText(/^Se entregó por WhatsApp a 5512345678 el .+\.$/)).toBeInTheDocument();
+    expect(status(/^Se entregó por WhatsApp/)).toBe(`Se entregó por WhatsApp a 5512345678 el ${when('2026-10-30T17:57:00Z')}`);
 
     rerender(<CfdiWhatsAppStatus messages={[message({
       phone: '+14155550123', status: OutgoingMessageStatus.Sent, sentAt: '2026-10-30T17:56:00Z', deliveredAt: '2026-10-30T17:57:00Z',
       readAt: '2026-10-30T18:10:00Z',
     })]} />);
-    expect(screen.getByText(/^Se leyó por WhatsApp \(\+14155550123\) el .+\.$/)).toBeInTheDocument();
+    expect(status(/^Se leyó por WhatsApp/)).toBe(`Se leyó por WhatsApp (+14155550123) el ${when('2026-10-30T18:10:00Z')}`);
   });
 
   it('shows one on its way, the tries WhatsApp did not take, and why one was not sent', () => {

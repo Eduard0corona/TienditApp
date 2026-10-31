@@ -5,7 +5,7 @@ import { useSendCfdiByEmail, type CfdiEmail } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
 import { CfdiEmailDocument, CfdiEmailFailure } from '../../types';
 import { cfdiEmailLabel, isPlainEmail } from '../../utils/cfdi';
-import { formatDateTime } from '../../utils/dates';
+import { endSentence, formatDateTime } from '../../utils/dates';
 
 const FAILURES: Record<CfdiEmailFailure, string> = {
   [CfdiEmailFailure.Rejected]: 'el servidor de correo lo rechazó. Revisa la dirección con el cliente.',
@@ -25,11 +25,12 @@ export function CfdiEmailStatus({ emails }: CfdiEmailStatusProps) {
   if (!latest) return null;
 
   if (latest.sentAt) {
+    const when = formatDateTime(latest.sentAt);
     return (
       <p className="small text-muted mb-0 mt-1">
         <i className="ri-mail-check-line me-1" aria-hidden="true"></i>
-        Se envió por correo a {latest.to} el {formatDateTime(latest.sentAt)}
-        {latest.sentWithoutPdf ? ', solo con el XML: el PDF no estuvo disponible.' : '.'}
+        Se envió por correo a {latest.to} el {latest.sentWithoutPdf ? when : endSentence(when)}
+        {latest.sentWithoutPdf && ', solo con el XML: el PDF no estuvo disponible.'}
         {latest.byCustomer && ' Lo pidió el cliente en línea.'}
       </p>
     );

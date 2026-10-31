@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ordersApi } from '../../api/ordersApi';
 import { DeliveryCourier, OrderStatus, OrderType, type OrderDto } from '../../types';
+import { formatTime } from '../../utils/dates';
 import OrderDeliveryPanel from './OrderDeliveryPanel';
 
 vi.mock('../../api/ordersApi', () => ({
@@ -178,7 +179,7 @@ describe('OrderDeliveryPanel', () => {
     render(<OrderDeliveryPanel order={onTheWay} canManage onSaved={vi.fn()} />);
 
     expect(screen.getByText('En camino')).toBeInTheDocument();
-    expect(screen.getByText(/Salió a las/)).toHaveTextContent('(cajero)');
+    expect(screen.getByText(/Salió a las/).textContent).toMatch(/^Salió a las .+ \(cajero\)\. Cobra /);
     expect(screen.getByText(/Cobra \$275.00/)).toHaveTextContent('Cobra $275.00 · paga con $500.00 · cambio $225.00');
     // On its way, the bill shows with what it collects; the trip is corrected with the way out.
     expect(screen.queryByText(/^Paga con/)).not.toBeInTheDocument();
@@ -199,7 +200,10 @@ describe('OrderDeliveryPanel', () => {
     expect(screen.getByText(/Cobra \$75.00/)).toHaveTextContent('Cobra $75.00 · paga con $500.00 · cambio $425.00');
 
     rerender(<OrderDeliveryPanel order={{ ...onTheWay, paidAmount: 275, balance: 0 }} canManage onSaved={vi.fn()} />);
-    expect(screen.getByText(/Salió a las/)).toHaveTextContent('Ya está pagado: el repartidor no cobra nada.');
+    // Without who dispatched it, «p.m.» ends the sentence: it takes no second period.
+    const dispatchedAt = formatTime('2026-10-13T19:05:00Z');
+    expect(dispatchedAt).toMatch(/m\.$/);
+    expect(screen.getByText(/Salió a las/).textContent).toBe(`Salió a las ${dispatchedAt} Ya está pagado: el repartidor no cobra nada.`);
     expect(screen.queryByText(/Cobra \$/)).not.toBeInTheDocument();
   });
 
