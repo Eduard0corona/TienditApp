@@ -6205,6 +6205,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoicing/settings/accountant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetAccountantRequest"];
+                    "text/json": components["schemas"]["SetAccountantRequest"];
+                    "application/*+json": components["schemas"]["SetAccountantRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InvoicingSettingsDto"];
+                        "application/json": components["schemas"]["InvoicingSettingsDto"];
+                        "text/json": components["schemas"]["InvoicingSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoicing/orders/{orderId}/invoices": {
         parameters: {
             query?: never;
@@ -7600,6 +7643,73 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoicing/issued-cfdis/accountant-emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    year?: number;
+                    month?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CfdiMonthEmailDto"][];
+                        "application/json": components["schemas"]["CfdiMonthEmailDto"][];
+                        "text/json": components["schemas"]["CfdiMonthEmailDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SendIssuedCfdisToAccountantRequest"];
+                    "text/json": components["schemas"]["SendIssuedCfdisToAccountantRequest"];
+                    "application/*+json": components["schemas"]["SendIssuedCfdisToAccountantRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CfdiMonthEmailDto"];
+                        "application/json": components["schemas"]["CfdiMonthEmailDto"];
+                        "text/json": components["schemas"]["CfdiMonthEmailDto"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -15185,6 +15295,34 @@ export interface components {
          * @enum {integer}
          */
         CfdiEmailKind: 0 | 1;
+        CfdiMonthEmailDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            year: number;
+            /** Format: int32 */
+            month: number;
+            to: string;
+            /** Format: date-time */
+            requestedAt: string;
+            byTienditApp: boolean;
+            /** Format: date-time */
+            sentAt?: string | null;
+            /** Format: int32 */
+            cfdiCount?: number | null;
+            /** Format: date-time */
+            failedAt?: string | null;
+            failure?: components["schemas"]["CfdiMonthEmailFailure"];
+            /** Format: int32 */
+            failedAttempts: number;
+            /** Format: date-time */
+            lastFailedAttemptAt?: string | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        CfdiMonthEmailFailure: 0 | 1 | 2 | 3 | 4;
         CfdiPartyDto: {
             rfc?: string | null;
             name?: string | null;
@@ -17260,6 +17398,8 @@ export interface components {
             whatsAppTemplateId?: string | null;
             whatsAppTemplates: components["schemas"]["InvoiceWhatsAppTemplateDto"][];
             whatsAppDefaultText: string;
+            accountantEmail?: string | null;
+            sendsMonthToAccountant: boolean;
         };
         IssueGlobalInvoiceRequest: {
             periodicity: components["schemas"]["GlobalInvoicePeriodicity"];
@@ -19815,6 +19955,13 @@ export interface components {
             /** Format: uuid */
             conversationId?: string | null;
         };
+        SendIssuedCfdisToAccountantRequest: {
+            /** Format: int32 */
+            year: number;
+            /** Format: int32 */
+            month: number;
+            email: string;
+        };
         SendPromotionalMessageCommand: {
             message: string;
             /** Format: int32 */
@@ -19964,6 +20111,10 @@ export interface components {
          * @enum {integer}
          */
         ServicePhotoStage: 0 | 1;
+        SetAccountantRequest: {
+            email?: string | null;
+            monthly: boolean;
+        };
         SetAiAgentActiveRequest: {
             isActive: boolean;
         };

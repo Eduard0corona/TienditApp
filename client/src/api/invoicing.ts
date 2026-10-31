@@ -23,8 +23,9 @@ import { isDeliveryPlatform } from '../utils/deliveryPlatforms';
 // ADR 0047); the credit notes of an invoiced order's refunds and write-offs (Fase 28D, ADR 0048); and the emails of those
 // CFDI to the customer (Fase 28E, ADR 0049); self-invoicing, turned on here and printed on each ticket (Fase 28F,
 // ADR 0050); and the CFDI issued in a month, with their XML for the accountant (Fase 28H, ADR 0052), in Reportes › CFDI
-// emitidos, with the ones still «Timbrando» past the PAC's window that a person checks (Fase 28K, ADR 0056); and their PDF by
-// WhatsApp with the link to their XML (Fase 28M, ADR 0058). Kept out of queries.ts, which the first visit loads.
+// emitidos, with the ones still «Timbrando» past the PAC's window that a person checks (Fase 28K, ADR 0056); their PDF by
+// WhatsApp with the link to their XML (Fase 28M, ADR 0058); and the month's file to the accountant by email (Fase 28O,
+// ADR 0060). Kept out of queries.ts, which the first visit loads.
 
 export type InvoicingSettings = Schemas['InvoicingSettingsDto'];
 export type OrderInvoicing = Schemas['OrderInvoicingDto'];
@@ -41,6 +42,7 @@ export type GlobalInvoiceDraft = Schemas['GlobalInvoiceDraftDto'];
 export type OrderSelfInvoice = Schemas['OrderSelfInvoiceDto'];
 export type IssuedCfdi = Schemas['IssuedCfdiDto'];
 export type IssuedCfdiSummary = Schemas['IssuedCfdiSummaryDto'];
+export type CfdiMonthEmail = Schemas['CfdiMonthEmailDto'];
 
 export const invoicingSettingsKey = ['invoicing', 'settings'] as const;
 export const orderInvoicingKey = (orderId: string) => ['invoicing', 'orders', orderId] as const;
@@ -111,6 +113,12 @@ export function useSetSelfInvoicing() {
 export function useSetInvoiceWhatsAppTemplate() {
   return useSettingsChange((templateId: string | null) =>
     apiRequest('put', '/api/v1/invoicing/settings/whatsapp-template', { body: { templateId } }));
+}
+
+/** The accountant's email and whether TienditApp sends them the month before's CFDI at the start of each month (Fase 28O). */
+export function useSetAccountant() {
+  return useSettingsChange((body: { email: string | null; monthly: boolean }) =>
+    apiRequest('put', '/api/v1/invoicing/settings/accountant', { body }));
 }
 
 /**
@@ -447,6 +455,37 @@ export function useConfirmStuckCfdiNotStamped() {
     apiRequest('post', '/api/v1/invoicing/issued-cfdis/{kind}/{cfdiId}/not-stamped', {
       path: { kind: cfdi.kind, cfdiId: cfdi.id },
     }));
+}
+
+/** Whether an email to the accountant is still on its way: neither sent nor refused for good. */
+export function isMonthEmailOnItsWay(email: Pick<CfdiMonthEmail, 'sentAt' | 'failedAt'> | undefined): boolean {
+  return !!email && !email.sentAt && !email.failedAt;
+}
+
+/** The latest emails of the month's CFDI to the accountant (Fase 28O), the newest first; while one is on its way, asked again. */
+export function useCfdiMonthEmails(year: number, month: number) {
+  return useQuery({
+    queryKey: [...issuedCfdisKey, 'accountant-emails', year, month],
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/invoicing/issued-cfdis/accountant-emails', { query: { year, month }, signal }),
+    refetchOnMount: 'always',
+    refetchInterval: (query) => isMonthEmailOnItsWay(query.state.data?.[0]) ? PENDING_REFRESH_MS : false,
+  });
+}
+
+/**
+ * «Mandar al contador»: the month's file goes by email to that address, which stays as the accountant's. It goes out from
+ * the queue: the month's latest email says how it ended.
+ */
+export function useSendIssuedCfdisToAccountant() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { year: number; month: number; email: string }) =>
+      apiRequest('post', '/api/v1/invoicing/issued-cfdis/accountant-emails', { body }),
+    onSettled: () => Promise.all([
+      client.invalidateQueries({ queryKey: [...issuedCfdisKey, 'accountant-emails'] }),
+      client.invalidateQueries({ queryKey: invoicingSettingsKey }),
+    ]),
+  });
 }
 
 /** The month's CFDI for the accountant: a ZIP with their XML and the list, or the list alone (CSV). */

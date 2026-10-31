@@ -1,10 +1,11 @@
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, settle, snap } from '../helpers';
-import { CFDI_EMITIDOS_ROUTES, CFDI_POR_REVISAR } from './cfdiEmitidos.mocks';
+import { CFDI_EMITIDOS_ROUTES, CFDI_MANDADOS_AL_CONTADOR, CFDI_POR_REVISAR } from './cfdiEmitidos.mocks';
 
 // Reportes › CFDI emitidos (Fase 28H, ADR 0052): October's CFDI with what they add up to, on a desktop, a phone and in
 // dark mode, and a month without any. Since the Fase 28K (ADR 0056), the CFDI to check in the SAT's portal above the month,
-// on a desktop and a phone, and the folio fiscal one of them asks for.
+// on a desktop and a phone, and the folio fiscal one of them asks for. Since the Fase 28O (ADR 0060), the month's file sent
+// to the accountant by email, on a desktop and a phone, and the dialog of «Mandar al contador».
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -55,6 +56,33 @@ test.describe('Reportes › CFDI emitidos', () => {
       await settle(page);
       await snap(page, 'cfdi-por-revisar-folio-fiscal');
     });
+  });
+
+  test.describe('mandados al contador', () => {
+    test.use({ prepareData: CFDI_MANDADOS_AL_CONTADOR });
+
+    for (const look of LOOKS.slice(0, 2)) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`cfdi mandados al contador ${look.suffix}`, async ({ page }) => {
+          await open(page, '/reports/issued-cfdis');
+          await expect(page.getByRole('status').filter({ hasText: 'Se mandaron a contabilidad@despachoruiz.mx' })).toBeVisible();
+          await expect(page.getByRole('button', { name: 'Descargar XML de la factura F-60' })).toBeVisible();
+          await snap(page, `cfdi-mandados-al-contador-${look.suffix}`);
+        });
+      });
+    }
+  });
+
+  test('cfdi emitidos: mandar al contador', async ({ page }) => {
+    await open(page, '/reports/issued-cfdis');
+    await expect(page.getByRole('button', { name: 'Descargar XML de la factura F-60' })).toBeVisible();
+    await page.getByRole('button', { name: 'Mandar al contador' }).click();
+    const send = await dialog(page, 'Mandar al contador los CFDI de octubre de 2026');
+    await expect(send.getByLabel('Correo del contador')).toHaveValue('contabilidad@despachoruiz.mx');
+    await settle(page);
+    await snap(page, 'cfdi-emitidos-mandar-al-contador', { fullPage: false });
   });
 
   test('cfdi emitidos de un mes sin CFDI', async ({ page }) => {

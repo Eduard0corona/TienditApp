@@ -710,6 +710,20 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **El resumen:** por tipo, cuántos están vigentes (timbrados o esperando que el cliente acepte su cancelación) y lo que suman, y cuántos se cancelaron, esperan, se timbran o fueron rechazados. Lo de un complemento es lo que declara pagado. No calcula un neto: lo decide el contador.
 - **La descarga:** un ZIP con el XML de cada CFDI que se timbró, por tipo (los cancelados aparte, en `cancelados/`), y la lista de todos en CSV; o la lista sola. Hasta 5,000 CFDI por mes. La lista dice el receptor y la fecha tal como los lleva cada CFDI; una celda que una hoja de cálculo correría como fórmula va como texto.
 - **No cambia nada:** es de solo lectura; cada CFDI se cancela o se sustituye donde nació (Pedidos o Factura global).
+- **Al contador por correo:** desde la 28O (siguiente sección).
+
+## Los CFDI del mes al contador (Fase 28O)
+
+[ADR 0060](../adr/0060-accountant-cfdi-emails.md):
+
+- **El correo del contador:** uno, en Configuración › Facturación › «Contador» (dueños y administradores), con la regla del correo de una factura, y si TienditApp le manda solo cada mes los CFDI del mes anterior, que necesita el correo (la base lo exige). La auditoría guarda qué cambió, no la dirección.
+- **«Mandar al contador»** en Reportes › CFDI emitidos: el mismo ZIP de la descarga del mes, a la dirección que se escriba, que queda como la del contador. Un mes desde enero de 2022 que ya empezó en la zona del negocio y con al menos un CFDI; hasta 5 al día por negocio, bajo el candado de facturación (el de cada mes no cuenta).
+- **Cada mes, solo:** desde el día 1 a las 8:00 hasta el final del día 7 en la zona del negocio, el worker de facturación encola el mes anterior de los negocios activos que lo pidieron, una vez por mes (la base deja uno), solo si ese mes tiene CFDI. Después del día 7 ya no.
+- **Qué lleva:** asunto «CFDI de octubre de 2026 de {Negocio}», «{Negocio} vía TienditApp», respuestas al correo del negocio; el cuerpo dice los días del mes y cuántos de cada tipo van vigentes, cancelados y sin timbre. El archivo es el del momento en que sale.
+- **Lo que no cabe:** más de 5,000 CFDI («demasiados») o un ZIP de más de 7 MB («demasiado grande») no salen: se descargan y se mandan por otro medio.
+- **Cómo termina:** como los demás correos (enviado con cuántos CFDI llevó, rechazado, sin proveedor o no entregado después del último intento del outbox). Reportes › CFDI emitidos muestra el último del mes, y si lo mandó TienditApp solo.
+- **El historial** de cada envío (a quién, quién lo pidió, cuándo y cómo terminó) no se borra.
+- **Sin** PDF ni acuses en el archivo, varios destinatarios, otro día del mes, el mes por WhatsApp ni los CFDI recibidos.
 
 ## Cancelación y trazabilidad
 

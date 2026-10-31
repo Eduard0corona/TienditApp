@@ -6,6 +6,7 @@ import {
   CUSTOMER_NAME,
   FACTURACION_AUTOFACTURA,
   FACTURACION_CON_LOGO,
+  FACTURACION_CONTADOR,
   FACTURACION_LISTA,
   FACTURACION_NO_DISPONIBLE,
   FACTURACION_PRUEBAS_POR_VENCER,
@@ -46,7 +47,8 @@ import {
 // 0055) its discount with its own. Since the Fase 28L (ADR 0057), the logo that goes on the PDF, or where to upload it.
 // Since the Fase 28M (ADR 0058), the invoice by WhatsApp: the card of Configuración › Facturación with the template, the
 // WhatsApp of the customer when invoicing, how the latest message went (read, or not delivered) and «Enviar por WhatsApp».
-// Since the Fase 28N (ADR 0059), the invoice cancelled with the notice TienditApp sent by email.
+// Since the Fase 28N (ADR 0059), the invoice cancelled with the notice TienditApp sent by email. Since the Fase 28O (ADR
+// 0060), the accountant who gets the month's CFDI on the first of each month.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -146,6 +148,23 @@ test.describe('Configuración › Facturación', () => {
           await expect(page.getByLabel('Mensaje')).toHaveValue(/.+/);
           await expect(page.getByText(/Descárgala aquí: \{enlace\}/)).toBeVisible();
           await snap(page, `facturacion-whatsapp-${look.suffix}`);
+        });
+      });
+    }
+  });
+
+  test.describe('contador', () => {
+    test.use({ prepareData: FACTURACION_CONTADOR });
+
+    for (const look of LOOKS.slice(0, 2)) {
+      test.describe(look.suffix, () => {
+        test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+        test(`facturación con el contador ${look.suffix}`, async ({ page }) => {
+          await open(page, '/settings/invoicing');
+          await expect(page.getByLabel('Correo del contador')).toHaveValue('contabilidad@despachoruiz.mx');
+          await expect(page.getByRole('switch', { name: 'Mandarle cada mes los CFDI del mes anterior' })).toBeChecked();
+          await snap(page, `facturacion-contador-${look.suffix}`);
         });
       });
     }

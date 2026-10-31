@@ -8,7 +8,8 @@ type PrepareData = NonNullable<SceneOptions['prepareData']>;
 // invoice in installments and its payment's complement, an invoice replaced by another one and the credit note of the new
 // one, one refused by the PAC, yesterday's global invoice and today's invoice) and what they add up to. September has none.
 // Since the Fase 28K (ADR 0056), the CFDI still «Timbrando» past the PAC's window (`data.cfdisToReview`): none, unless a
-// scene asks for them.
+// scene asks for them. Since the Fase 28O (ADR 0060), October's emails to the accountant (`data.accountantEmails`): none
+// unless a scene asks for them, to the accountant the business keeps.
 
 // IssuedCfdiKind, OrderInvoiceStatus and GlobalInvoicePeriodicity as the contract numbers them.
 const INVOICE = 0;
@@ -22,6 +23,8 @@ const CANCELLED = 4;
 const DAILY = 1;
 
 const r2 = (amount: number) => Math.round(amount * 100) / 100;
+
+const ACCOUNTANT = 'contabilidad@despachoruiz.mx';
 
 function cfdi(kind: number, number: string, issuedAt: string, fields: Record<string, unknown>) {
   const total = fields.total === null ? null : Number(fields.total ?? 450);
@@ -85,6 +88,10 @@ const issuedCfdiRoutes: ExtraRoutes = (data, helpers) => [
     helpers.ok(helpers.paginate(Number(query.get('month')) === 10 ? OCTOBER : [], query, 20))],
   ['GET', /^\/invoicing\/issued-cfdis\/summary$/, (_match, query) => helpers.ok(summaryFor(query))],
   ['GET', /^\/invoicing\/issued-cfdis\/to-review$/, () => helpers.ok(data.cfdisToReview ?? [])],
+  ['GET', /^\/invoicing\/issued-cfdis\/accountant-emails$/, (_match, query) =>
+    helpers.ok(Number(query.get('month')) === 10 ? data.accountantEmails ?? [] : [])],
+  // Only the accountant's email: the screen proposes it to «Mandar al contador».
+  ['GET', /^\/invoicing\/settings$/, () => helpers.ok({ accountantEmail: ACCOUNTANT })],
 ];
 
 export const CFDI_EMITIDOS_ROUTES = asOption(issuedCfdiRoutes);
@@ -110,3 +117,18 @@ const porRevisar: PrepareData = (data) => {
 };
 
 export const CFDI_POR_REVISAR = asOption(porRevisar);
+
+/**
+ * TienditApp sent September's CFDI on its own on the 1st, and today the owner sent October's so far by hand: the latest
+ * went out with the 8 CFDI of the list (Fase 28O).
+ */
+const mandadosAlContador: PrepareData = (data) => {
+  data.accountantEmails = [
+    {
+      id: uuid('month-email-2'), year: 2026, month: 10, to: ACCOUNTANT, requestedAt: '2026-10-04T16:30:00Z', byTienditApp: false,
+      sentAt: '2026-10-04T16:31:00Z', cfdiCount: 8, failedAt: null, failure: null, failedAttempts: 0, lastFailedAttemptAt: null,
+    },
+  ];
+};
+
+export const CFDI_MANDADOS_AL_CONTADOR = asOption(mandadosAlContador);

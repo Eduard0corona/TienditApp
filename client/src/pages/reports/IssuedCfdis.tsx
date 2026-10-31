@@ -4,7 +4,9 @@ import { getApiErrorMessage } from '../../api/errors';
 import {
   downloadIssuedCfdiFile,
   downloadIssuedCfdis,
+  useCfdiMonthEmails,
   useCfdisToReview,
+  useInvoicingSettings,
   useIssuedCfdiSummary,
   useIssuedCfdis,
   type IssuedCfdi,
@@ -12,6 +14,7 @@ import {
 } from '../../api/invoicing';
 import DataTable, { DataTableFilter, type DataTableColumn } from '../../components/common/DataTable';
 import PageTitle from '../../components/common/PageTitle';
+import { AccountantEmailStatus, SendToAccountantButton } from '../../components/invoicing/AccountantEmails';
 import { globalPeriodLabel } from '../../components/invoicing/globalPeriod';
 import { kindLabel, ofDocument } from '../../components/invoicing/issuedCfdiLabels';
 import { useToast } from '../../hooks/useToast';
@@ -100,8 +103,9 @@ function count(n: number, one: string, many: string): string {
 /**
  * Reportes › CFDI emitidos: what the business stamped in a month, in its time zone (invoices of orders, global invoices,
  * payment complements and credit notes), what they add up to, and the download for the accountant: a ZIP with their XML
- * and the list as CSV. Above the month, the CFDI still «Timbrando» past the PAC's window, to check in the SAT's portal
- * (Fase 28K). Owners and admins only, as the API.
+ * and the list as CSV, which also goes to the accountant by email (Fase 28O) with how the month's latest email went. Above
+ * the month, the CFDI still «Timbrando» past the PAC's window, to check in the SAT's portal (Fase 28K). Owners and admins
+ * only, as the API.
  */
 export default function IssuedCfdis() {
   const toast = useToast();
@@ -123,6 +127,8 @@ export default function IssuedCfdis() {
   const stuck = toReview.data?.filter((cfdi) => getBusinessToday(new Date(cfdi.issuedAt)).startsWith(monthKey)).length ?? 0;
   const summary = useIssuedCfdiSummary(period.year, period.month, stuck);
   const cfdis = useIssuedCfdis(period.year, period.month, { kind, status, search }, page, pageSize);
+  const accountantEmails = useCfdiMonthEmails(period.year, period.month);
+  const settings = useInvoicingSettings();
 
   const previous = shift(period, -1);
   const next = shift(period, 1);
@@ -218,12 +224,21 @@ export default function IssuedCfdis() {
             <i className="ri-file-list-3-line me-1" aria-hidden="true"></i>
             {exporting === IssuedCfdiExportFormat.Csv ? 'Descargando…' : 'Descargar lista'}
           </button>
+          <SendToAccountantButton
+            year={period.year}
+            month={period.month}
+            monthLabel={monthLabel(period).toLowerCase()}
+            proposedEmail={settings.data?.accountantEmail ?? accountantEmails.data?.[0]?.to}
+            disabled={monthCount === 0}
+          />
         </div>
       </div>
       <p className="small text-muted">
         Las descargas llevan todo el mes, sin los filtros de la lista: el ZIP, el XML de cada CFDI timbrado (también los
-        cancelados) y la lista de todos en CSV. Los PDF se descargan uno por uno.
+        cancelados) y la lista de todos en CSV. Los PDF se descargan uno por uno. «Mandar al contador» le manda el mismo ZIP por
+        correo.
       </p>
+      <AccountantEmailStatus emails={accountantEmails.data ?? []} />
 
       <MonthSummary
         label={monthLabel(period).toLowerCase()}

@@ -7,6 +7,7 @@ import {
   useChangeInvoiceSerie,
   useInvoicingSettings,
   useRemoveInvoicingCertificate,
+  useSetAccountant,
   useSetInvoiceWhatsAppTemplate,
   useSetSelfInvoicing,
   useUploadInvoicingCertificate,
@@ -17,6 +18,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { formatDate } from '../../utils/dates';
+import { isPlainEmail } from '../../utils/cfdi';
 import './Invoicing.css';
 
 // The .cer and .key the SAT gives weigh a couple of kilobytes; the API refuses anything past 16 KB.
@@ -33,8 +35,9 @@ async function toBase64(file: File): Promise<string> {
 /**
  * Configuración › Facturación (Fase 28A, ADR 0045), for owners and admins: what the invoice of an order needs from the
  * business (its fiscal data in Mi negocio and its CSD, which the platform's PAC keeps), whether its customers invoice their
- * tickets online (Fase 28F, ADR 0050), the message its CFDI go by WhatsApp with (Fase 28M, ADR 0058), the serie of its invoices
- * and the one of its payment complements (Fase 28C, ADR 0047).
+ * tickets online (Fase 28F, ADR 0050), the message its CFDI go by WhatsApp with (Fase 28M, ADR 0058), its accountant's email
+ * and whether the month's CFDI go to them on their own (Fase 28O, ADR 0060), the serie of its invoices and the one of its
+ * payment complements (Fase 28C, ADR 0047).
  */
 export default function Invoicing() {
   const settings = useInvoicingSettings();
@@ -64,6 +67,7 @@ export default function Invoicing() {
             <CertificateCard data={data} />
             <SelfInvoicingCard data={data} />
             <WhatsAppCard data={data} />
+            <AccountantCard data={data} />
             <SerieCard data={data} />
           </div>
           <div className="col-lg-5">
@@ -102,6 +106,10 @@ export default function Invoicing() {
                   <li>
                     Con el WhatsApp de tu negocio conectado, a tu cliente le llega por WhatsApp el PDF de su factura con un enlace
                     para descargar el XML, que funciona 90 días.
+                  </li>
+                  <li>
+                    A tu contador le llegan por correo los CFDI del mes anterior el día 1, si lo activas en «Contador», o cuando
+                    quieras desde Reportes › CFDI emitidos.
                   </li>
                   <li>Las ventas a público en general van en la factura global (Reportes › Factura global).</li>
                   <li>Tu llave privada y su contraseña las guarda el PAC; TienditApp solo guarda el número y la vigencia del CSD.</li>
@@ -386,6 +394,77 @@ function WhatsAppCard({ data }: { data: InvoicingSettings }) {
             </p>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The accountant's email and whether TienditApp sends them the month before's CFDI at the start of each month (Fase 28O):
+ * that needs the email. «Mandar al contador» in Reportes › CFDI emitidos keeps the address it sends to here too.
+ */
+function AccountantCard({ data }: { data: InvoicingSettings }) {
+  const toast = useToast();
+  const change = useSetAccountant();
+  const [email, setEmail] = useState(data.accountantEmail ?? '');
+  const [monthly, setMonthly] = useState(data.sendsMonthToAccountant);
+  const typed = email.trim();
+  const valid = typed === '' || isPlainEmail(typed);
+  // Without the email nothing goes on its own.
+  const sendsMonthly = monthly && typed !== '';
+  const unchanged = typed.toLowerCase() === (data.accountantEmail ?? '').toLowerCase() && sendsMonthly === data.sendsMonthToAccountant;
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!valid) return;
+    try {
+      const updated = await change.mutateAsync({ email: typed || null, monthly: sendsMonthly });
+      setEmail(updated.accountantEmail ?? '');
+      setMonthly(updated.sendsMonthToAccountant);
+      toast.success(updated.sendsMonthToAccountant
+        ? `El día 1 de cada mes, ${updated.accountantEmail} recibe los CFDI del mes anterior.`
+        : updated.accountantEmail
+          ? 'Guardamos el correo de tu contador. Mándale los CFDI desde Reportes › CFDI emitidos.'
+          : 'Quitaste el correo de tu contador.');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo guardar el correo de tu contador.'));
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-body">
+        <h2 className="h5">Contador</h2>
+        <form onSubmit={submit} noValidate>
+          <label className="form-label small mb-1" htmlFor="accountant-email">Correo del contador</label>
+          <input
+            id="accountant-email"
+            type="email"
+            className={`form-control${valid ? '' : ' is-invalid'}`}
+            maxLength={254}
+            autoComplete="off"
+            value={email}
+            disabled={change.isPending}
+            onChange={(event) => setEmail(event.target.value)}
+            aria-invalid={valid ? undefined : true}
+            aria-describedby={valid ? undefined : 'accountant-email-invalid'}
+          />
+          {!valid && (
+            <div id="accountant-email-invalid" className="invalid-feedback">Escribe un correo válido, como nombre@ejemplo.com.</div>
+          )}
+          <div className="form-check form-switch mt-2">
+            <input id="accountant-monthly" className="form-check-input" type="checkbox" role="switch" checked={sendsMonthly}
+              disabled={change.isPending || typed === ''} onChange={(event) => setMonthly(event.target.checked)} />
+            <label className="form-check-label" htmlFor="accountant-monthly">Mandarle cada mes los CFDI del mes anterior</label>
+          </div>
+          <p className="small mt-2 mb-2">
+            El día 1 de cada mes, desde las 8:00, TienditApp le manda el XML de cada CFDI del mes anterior con la lista de todos.
+            Si ese día no sale, lo intenta hasta el día 7. Las respuestas llegan al correo de tu negocio.
+          </p>
+          <button type="submit" className="btn btn-outline-secondary" disabled={change.isPending || unchanged || !valid}>
+            Guardar contador
+          </button>
+        </form>
       </div>
     </div>
   );

@@ -130,6 +130,15 @@ export const CfdiEmailKind = {
 } as const;
 export type CfdiEmailKind = (typeof CfdiEmailKind)[keyof typeof CfdiEmailKind];
 
+export const CfdiMonthEmailFailure = {
+  Rejected: 0,
+  NotConfigured: 1,
+  NotDelivered: 2,
+  TooLarge: 3,
+  TooMany: 4,
+} as const;
+export type CfdiMonthEmailFailure = (typeof CfdiMonthEmailFailure)[keyof typeof CfdiMonthEmailFailure];
+
 export const CfdiTaxObject = {
   NotSubject: 1,
   Subject: 2,
