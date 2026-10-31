@@ -3,7 +3,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { ordersApi } from '../../api/ordersApi';
 import { DeliveryCourier, OrderStatus, type OrderDto } from '../../types';
 import { changeFor, describeCollection, stillToCollect } from '../../utils/courierCash';
-import { formatTime } from '../../utils/dates';
+import { endSentence, formatTime } from '../../utils/dates';
 import { DELIVERY_COURIER_LABELS } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { formatDeliveryFee } from '../../utils/ticket';
@@ -108,7 +108,7 @@ export default function OrderDeliveryPanel({ order, canManage, onSaved }: OrderD
 
       {dispatched && editing === null && (
         <p className="mb-2 small">
-          Salió a las {formatTime(delivery.dispatchedAt)}{delivery.dispatchedBy ? ` (${delivery.dispatchedBy})` : ''}.{' '}
+          Salió a las {endSentence(`${formatTime(delivery.dispatchedAt)}${delivery.dispatchedBy ? ` (${delivery.dispatchedBy})` : ''}`)}{' '}
           {toCollect == null ? 'El repartidor no cobra nada.'
             : toCollect === 0 ? 'Ya está pagado: el repartidor no cobra nada.'
               : <span className="ta-money">{describeCollection(toCollect, delivery.paysWith)}</span>}

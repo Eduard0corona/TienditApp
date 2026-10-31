@@ -7,6 +7,7 @@ import { isOrderInvoicingWaiting, type CfdiEmail } from '../../api/invoicing';
 import { apiRequest } from '../../api/typedClient';
 import { CfdiEmailDocument, CfdiEmailFailure, CfdiEmailKind, OrderInvoiceStatus } from '../../types';
 import { isPlainEmail } from '../../utils/cfdi';
+import { formatDateTime } from '../../utils/dates';
 import { CfdiEmailStatus, SendCfdiEmailButton } from './CfdiEmails';
 
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
@@ -55,15 +56,19 @@ describe('CfdiEmailStatus', () => {
 
   it('says where and when the latest email went, and when it went without the PDF', () => {
     const { rerender } = render(<CfdiEmailStatus emails={[email({ sentAt: '2026-10-26T17:56:00Z' }), email({ to: 'vieja@ejemplo.mx' })]} />);
-    expect(screen.getByText(/Se envió por correo a karla@ejemplo\.mx el .+\.$/)).toBeInTheDocument();
+    // «a.m.» or «p.m.» already ends the sentence: it takes no second period.
+    const when = formatDateTime('2026-10-26T17:56:00Z');
+    expect(when).toMatch(/m\.$/);
+    const sent = () => screen.getByText(/^Se envió por correo a karla@ejemplo\.mx el /).textContent;
+    expect(sent()).toBe(`Se envió por correo a karla@ejemplo.mx el ${when}`);
     expect(screen.queryByText(/vieja@ejemplo\.mx/)).not.toBeInTheDocument();
 
     rerender(<CfdiEmailStatus emails={[email({ sentAt: '2026-10-26T17:56:00Z', sentWithoutPdf: true })]} />);
-    expect(screen.getByText(/solo con el XML: el PDF no estuvo disponible\./)).toBeInTheDocument();
+    expect(sent()).toBe(`Se envió por correo a karla@ejemplo.mx el ${when}, solo con el XML: el PDF no estuvo disponible.`);
 
     // The customer asked for it on the page of the ticket (Fase 28F).
     rerender(<CfdiEmailStatus emails={[email({ sentAt: '2026-10-26T17:56:00Z', byTienditApp: false, byCustomer: true })]} />);
-    expect(screen.getByText(/Lo pidió el cliente en línea\.$/)).toBeInTheDocument();
+    expect(sent()).toBe(`Se envió por correo a karla@ejemplo.mx el ${when} Lo pidió el cliente en línea.`);
     // Also while it goes, and when it did not (an address the customer typed wrong).
     rerender(<CfdiEmailStatus emails={[email({ byTienditApp: false, byCustomer: true })]} />);
     expect(screen.getByRole('status')).toHaveTextContent(/Enviándose por correo a karla@ejemplo\.mx… Lo pidió el cliente en línea\.$/);

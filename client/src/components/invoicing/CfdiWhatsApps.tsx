@@ -5,7 +5,7 @@ import { useSendCfdiByWhatsApp, type CfdiWhatsApp } from '../../api/invoicing';
 import { useToast } from '../../hooks/useToast';
 import { CfdiEmailDocument, OutgoingMessageStatus } from '../../types';
 import { cfdiEmailLabel } from '../../utils/cfdi';
-import { formatDateTime } from '../../utils/dates';
+import { endSentence, formatDateTime } from '../../utils/dates';
 import { isSamePhone, isTypedPhone, localPhone } from '../../utils/phones';
 
 interface CfdiWhatsAppStatusProps {
@@ -26,11 +26,11 @@ export function CfdiWhatsAppStatus({ messages, cancelled = false }: CfdiWhatsApp
       return (
         <p className="small text-muted mb-0 mt-1">
           <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>
-          {latest.readAt
-            ? `Se leyó por WhatsApp (${phone}) el ${formatDateTime(latest.readAt)}.`
+          {endSentence(latest.readAt
+            ? `Se leyó por WhatsApp (${phone}) el ${formatDateTime(latest.readAt)}`
             : latest.deliveredAt
-              ? `Se entregó por WhatsApp a ${phone} el ${formatDateTime(latest.deliveredAt)}.`
-              : `Se envió por WhatsApp a ${phone}${latest.sentAt ? ` el ${formatDateTime(latest.sentAt)}` : ''}.`}
+              ? `Se entregó por WhatsApp a ${phone} el ${formatDateTime(latest.deliveredAt)}`
+              : `Se envió por WhatsApp a ${phone}${latest.sentAt ? ` el ${formatDateTime(latest.sentAt)}` : ''}`)}
           {cancelled && ' Por WhatsApp no se avisa la cancelación: avísale por otro medio.'}
         </p>
       );
