@@ -99,6 +99,8 @@ describe('DirectoryCard', () => {
 
     expect(api.dismissHomeVisitAddressNotice).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByText(/Tu tienda muestra la dirección/)).not.toBeInTheDocument());
+    // Its button went away: the keyboard goes to the card's heading, not to the top of the page.
+    expect(screen.getByRole('heading', { name: 'Cómo te ven en TienditApp' })).toHaveFocus();
     expect(api.updateProfile).not.toHaveBeenCalled();
   });
 

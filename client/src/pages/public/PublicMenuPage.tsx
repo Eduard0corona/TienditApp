@@ -672,7 +672,7 @@ export default function PublicMenuPage() {
                     <div className="pm-items">{item.products.map(productRow)}</div>
                   </section>
                 ))}
-                {categories.length === 0 && !data.homeVisits && (
+                {categories.length === 0 && !(data.homeVisits && !atTable) && (
                   <p className="text-muted text-center py-5">El menú todavía no tiene productos.</p>
                 )}
               </main>

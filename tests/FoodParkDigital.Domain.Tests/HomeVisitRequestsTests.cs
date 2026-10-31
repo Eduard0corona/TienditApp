@@ -131,4 +131,25 @@ public class HomeVisitRequestsTests
         tenant.SetBusinessInfo(null, null, "Electricista", null, null, keepDirectoryCategory: true);
         Assert.Equal(BusinessCategory.Hardware, tenant.DirectoryCategory);
     }
+
+    [Theory]
+    [InlineData(HomeVisitChargePolicy.Charged, 200, 50, 250)]
+    [InlineData(HomeVisitChargePolicy.CreditedIfHired, 200, 50, 250)]
+    [InlineData(HomeVisitChargePolicy.Free, 200, 50, 0)]
+    [InlineData(HomeVisitChargePolicy.Charged, null, 50, 50)]
+    [InlineData(HomeVisitChargePolicy.Charged, null, 0, 0)]
+    public void Charge_ShouldBeTheServicePlusTheZone_OrNothingFree(HomeVisitChargePolicy policy, int? service, int zone, int expected)
+        => Assert.Equal((decimal)expected, HomeVisitCharge.To(policy, service, zone));
+
+    [Fact]
+    public void Starting_ShouldBeTheCheapestZone_AndSayDesdeOnlyWhenAnotherCostsMore()
+    {
+        Assert.Null(HomeVisitCharge.Starting(HomeVisitChargePolicy.Charged, 200m, []));
+        Assert.Equal(new HomeVisitPrice(250m, IsStarting: false), HomeVisitCharge.Starting(HomeVisitChargePolicy.Charged, 200m, [50m]));
+        Assert.Equal(new HomeVisitPrice(250m, IsStarting: false), HomeVisitCharge.Starting(HomeVisitChargePolicy.Charged, 200m, [50m, 50m]));
+        Assert.Equal(new HomeVisitPrice(200m, IsStarting: true), HomeVisitCharge.Starting(HomeVisitChargePolicy.CreditedIfHired, 200m, [80m, 0m]));
+        // A zone without fee and no visit service: nothing in some postal codes, but not free everywhere.
+        Assert.Equal(new HomeVisitPrice(0m, IsStarting: true), HomeVisitCharge.Starting(HomeVisitChargePolicy.Charged, null, [0m, 80m]));
+        Assert.Equal(new HomeVisitPrice(0m, IsStarting: false), HomeVisitCharge.Starting(HomeVisitChargePolicy.Free, 200m, [0m, 80m]));
+    }
 }

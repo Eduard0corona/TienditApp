@@ -756,12 +756,12 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - hasta 50 servicios como precios de referencia, sin carrito.
 
   «Solicitar visita» abre un WhatsApp con el negocio hasta la Fase 29B. Desde una mesa no se muestra.
-- **«Hogar y reparaciones»** (categoría 11) la sugieren los giros de oficio. La migración movió ahí a los oficios cuya categoría seguía su giro; uno cuyo dueño la eligió la conserva.
+- **«Hogar y reparaciones»** (categoría 11) la sugieren los giros de oficio. La migración movió ahí a los oficios cuya categoría seguía su giro; uno cuyo dueño la eligió la conserva. Los que se registren entre la migración y el despliegue los mueve el script de reparación posterior, con la misma regla.
 - **El registro con un giro de oficio:**
   - prende el interruptor;
   - empieza con la sucursal principal «Solo a domicilio», salvo Carpintería y Herrería y soldadura;
   - la plantilla deja su servicio de visita como la visita del negocio.
-- **El aviso de la dirección:** un negocio con el interruptor prendido o con giro de oficio, cuya sucursal principal tiene local, ve en «Cómo te ven en TienditApp» que su tienda publica esa dirección. Lo ve también en Inicio.
+- **El aviso de la dirección:** un negocio con el interruptor prendido o con giro de oficio, cuya sucursal principal tiene local y publica una calle o un punto en el mapa, ve en «Cómo te ven en TienditApp» que su tienda publica esa dirección. Lo ve también en Inicio.
   - Nada cambia sin el dueño.
   - «Ya lo revisé» (dueños y administradores) lo quita para siempre.
 - **La guía de inicio** pide «Prepara tus visitas a domicilio» al negocio con el interruptor y el módulo de agenda, hasta que recibe visitas.

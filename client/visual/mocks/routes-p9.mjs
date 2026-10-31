@@ -120,16 +120,20 @@ const comparable = (text) => (text ?? '').normalize('NFD').replace(/\p{Diacritic
  */
 export const withDeliveryTo = (data, businesses, postalCode) => (postalCode
   ? businesses.map((business) => {
-    if (business.receivesVisits) {
-      const visit = data.directoryVisits?.[business.slug]?.[postalCode];
-      return { ...business, visitsPostalCode: !!visit, visitPrice: visit ?? business.visitPrice };
+    let card = business;
+    if (business.deliveryAvailable) {
+      const zone = data.directoryZones[business.slug]?.[postalCode];
+      card = {
+        ...card, deliversToPostalCode: !!zone, deliveryFee: zone?.fee ?? null,
+        minimumOrder: zone?.minimumOrder ?? null, freeDeliveryFrom: zone?.freeDeliveryFrom ?? null,
+      };
     }
-    if (!business.deliveryAvailable) return business;
-    const zone = data.directoryZones[business.slug]?.[postalCode];
-    return {
-      ...business, deliversToPostalCode: !!zone, deliveryFee: zone?.fee ?? null,
-      minimumOrder: zone?.minimumOrder ?? null, freeDeliveryFrom: zone?.freeDeliveryFrom ?? null,
-    };
+    if (business.receivesVisits) {
+      // What the visit costs there, or nothing where it does not go.
+      const visit = data.directoryVisits?.[business.slug]?.[postalCode];
+      card = { ...card, visitsPostalCode: !!visit, visitPrice: visit ?? null };
+    }
+    return card;
   })
     .map((business, index) => ({ business, index, last: business.visitsPostalCode === false ? 1 : 0 }))
     .sort((a, b) => a.last - b.last || a.index - b.index)

@@ -84,6 +84,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - No hay cotización: lo que el negocio propone después de la visita no se guarda, ni si el cliente lo aceptó (Fase 29C). «Se descuenta si contratas» hoy solo se dice; descontarlo llega con la cotización.
   - Las citas en línea no son a domicilio (`OnlineBookingBlocker.NoPremises`), aunque el negocio haga visitas.
   - El aviso de la dirección es por negocio, no por sucursal; descartado no vuelve aunque después prenda el interruptor. Un negocio que lo descartó y sigue con local publica su dirección.
+  - Después del despliegue hay que correr `database/production/data-repair/20261031_HomeRepairsAfterDeploy/`: mueve a «Hogar y reparaciones» los oficios registrados entre `apply.sql` y el despliegue. Su segunda consulta de verificación lista, para revisarlos a mano, los negocios en esa categoría que no son oficios.
   - «Cerca de mí» no ordena a estos negocios, y la búsqueda de Explorar no encuentra sus servicios (solo los productos del menú).
   - La tarjeta de Configuración no calcula lo que costaría la visita con cambios sin guardar: dice lo de hoy y pide guardar.
   - La lista de servicios a elegir como visita trae los primeros 100 por nombre (el elegido siempre sale); la tienda, hasta 300 códigos postales y 50 servicios.

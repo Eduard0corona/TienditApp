@@ -57,6 +57,34 @@ describe('HomeVisitsSection', () => {
     expect(screen.queryByRole('link', { name: 'Solicitar visita' })).not.toBeInTheDocument();
   });
 
+  it('says what the visit costs where it costs nothing only in some postal codes, without calling it free', () => {
+    render(
+      <HomeVisitsSection
+        visits={visits({ chargePolicy: HomeVisitChargePolicy.Charged, price: { amount: 0, isStarting: true } })}
+        businessName="Plomería Hernández"
+        pricesIncludeTax
+      />,
+    );
+
+    expect(screen.getByText('Visita desde $0.00')).toBeInTheDocument();
+    expect(screen.getByText('Pagas la visita aunque no contrates el trabajo.')).toBeInTheDocument();
+    expect(screen.queryByText(/sin costo/)).not.toBeInTheDocument();
+  });
+
+  it('words a visit that costs nothing anywhere as free, whatever the policy', () => {
+    render(
+      <HomeVisitsSection
+        visits={visits({ chargePolicy: HomeVisitChargePolicy.CreditedIfHired, price: { amount: 0, isStarting: false } })}
+        businessName="Plomería Hernández"
+        pricesIncludeTax
+      />,
+    );
+
+    expect(screen.getByText('Visita sin costo')).toBeInTheDocument();
+    expect(screen.getByText('Revisamos y te decimos cuánto cuesta, sin costo.')).toBeInTheDocument();
+    expect(screen.queryByText(/se descuenta/)).not.toBeInTheDocument();
+  });
+
   it('shows the first postal codes of a large zone, all of them on request, and says how many more it did not send', async () => {
     const codes = Array.from({ length: 300 }, (_, index) => String(72000 + index));
     render(
@@ -68,6 +96,8 @@ describe('HomeVisitsSection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Ver todos los códigos postales' }));
 
     expect(within(list).getAllByRole('listitem')).toHaveLength(300);
+    // The button went away: the keyboard is on the list it opened.
+    expect(list).toHaveFocus();
     expect(screen.getByText('Y 40 más: pregúntanos por el tuyo.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Ver todos los códigos postales' })).not.toBeInTheDocument();
   });

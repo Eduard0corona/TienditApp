@@ -242,15 +242,20 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
             .Where(entry => words.All(entry.SearchText.Contains))
             .ToList();
         var postalCode = DeliveryZone.NormalizePostalCode(request.PostalCode);
-        // The zones of every business found that reach the postal code: a trade that does not go there is no use to the
-        // customer, so it goes after the rest (a stable order: «Cerca de mí» and the order of Explorar stay within each part).
-        var zones = await PublicDirectoryCards.ZonesAtAsync(_context, found, postalCode, cancellationToken);
-        if (zones is not null)
-            found = found.OrderBy(entry => entry.Business.ReceivesVisits && !zones.ContainsKey(entry.TenantId) ? 1 : 0).ToList();
+        // A trade that does not go to the postal code is no use to the customer, so it goes after the rest (a stable order:
+        // «Cerca de mí» and the order of Explorar stay within each part). Only the businesses found that receive visits are
+        // asked for their zones here; nothing is read when none does.
+        var visiting = postalCode is null ? [] : found.Where(entry => entry.Business.ReceivesVisits).ToList();
+        if (visiting.Count > 0)
+        {
+            var visitZones = (await PublicDirectoryCards.ZonesAtAsync(_context, visiting, postalCode, cancellationToken))!;
+            found = found.OrderBy(entry => entry.Business.ReceivesVisits && !visitZones.ContainsKey(entry.TenantId) ? 1 : 0).ToList();
+        }
         var pageSize = Math.Clamp(request.PageSize, 1, GetPublicDirectoryQuery.MaxPageSize);
         var pageNumber = Math.Max(1, request.PageNumber);
         var page = found.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
-        var businesses = PublicDirectoryCards.WithDeliveryTo(page, zones, near?.DistanceKm);
+        // What each card of the page says about delivering and visiting there: the zones of the page only.
+        var businesses = await PublicDirectoryCards.WithDeliveryToAsync(_context, page, postalCode, cancellationToken, near?.DistanceKm);
         // The products of a search come with its first page; the index of the snapshot is read only when there is one.
         var products = words.Length == 0 || pageNumber > 1 ? [] : await SearchProductsAsync(snapshot, words, request.Category, near, cancellationToken);
 

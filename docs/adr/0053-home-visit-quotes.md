@@ -83,11 +83,12 @@ La etapa 1 completa y, de la etapa 2, la política de la visita (punto 10), porq
 - **La categoría «Hogar y reparaciones»** (11) tiene su página en `/explorar/hogar-y-reparaciones`. Para los buscadores es `HomeAndConstructionBusiness`.
   - La migración mueve a ella los oficios cuya categoría sigue su giro: la que el giro sugería antes de la migración, sin un cambio del dueño en la actividad (`DirectoryProfileUpdated`). Los cinco de antes estaban en Servicios; los nuevos, en la de su tipo.
   - El rollback los regresa a esa categoría y se detiene (50049) si alguno la eligió después.
+  - Un oficio que se registra entre `apply.sql` y el despliegue toma la categoría que sugería el código anterior. `database/production/data-repair/20261031_HomeRepairsAfterDeploy/` lo mueve después del despliegue, con la misma regla; se puede correr más de una vez.
 - **El registro:**
   - Un giro de oficio empieza con el interruptor prendido.
   - Todos menos Carpintería y Herrería y soldadura empiezan con la sucursal principal «Solo a domicilio».
   - Cada plantilla marca su servicio de visita, que queda como la visita del negocio si no tenía una.
-- **El aviso de la dirección publicada** sale una vez en Configuración:
+- **El aviso de la dirección publicada** sale una vez en Configuración, solo si la sucursal principal tiene local y publica una calle o un punto en el mapa:
   - En «Cómo te ven en TienditApp», y no en la tarjeta del interruptor: las dos están en la misma pantalla, y «Cómo te ven» la ve también un oficio sin el módulo de agenda.
   - En Inicio, una línea de «Requiere atención» (`homeVisitAddress`, solo para dueños y administradores) lleva ahí.
   - «Ya lo revisé» lo quita para siempre: `POST /api/v1/auth/my-tenant/directory/home-visit-address-notice/dismiss`, sin pedir el módulo de agenda.
@@ -95,7 +96,7 @@ La etapa 1 completa y, de la etapa 2, la política de la visita (punto 10), porq
 - **En Explorar:**
   - la tarjeta dice «Visitas a domicilio», el costo de la visita y, con el código postal, si va ahí y cuánto cuesta la visita en él;
   - su horario sigue, pero nunca «Pedidos en línea en pausa» ni «Solo menú»;
-  - con el código postal, los negocios que reciben visitas y no van a él pasan al final de la página. El orden de los demás, incluido el envío, no cambia.
+  - con el código postal, los negocios que reciben visitas y no van a él pasan al final de la página. El orden de los demás, incluido el envío, no cambia. Para ordenar se leen solo las zonas de los que reciben visitas; cada página dice el envío y la visita con las zonas de sus negocios.
 - **La tienda** muestra «Visitas a domicilio»:
   - el costo y la política de la visita;
   - los códigos postales a los que va: hasta 300, con cuántos son en total, nunca el nombre de la zona;

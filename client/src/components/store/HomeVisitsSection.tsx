@@ -1,7 +1,7 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import type { Schemas } from '../../api/typedClient';
-import { visitPriceText } from '../../utils/businessCategories';
+import { isFreeVisit, visitPriceText } from '../../utils/businessCategories';
 import { formatMoney } from '../../utils/money';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 
@@ -33,6 +33,11 @@ export default function HomeVisitsSection({ visits, businessName, contactPhone, 
   const titleId = useId();
   const codesId = useId();
   const [allCodes, setAllCodes] = useState(false);
+  const codesRef = useRef<HTMLUListElement>(null);
+  // «Ver todos» goes away once pressed: the keyboard lands on the list it opened, not at the top of the page.
+  useEffect(() => {
+    if (allCodes) codesRef.current?.focus();
+  }, [allCodes]);
   const price = visitPriceText(visits.price, visits.chargePolicy, pricesIncludeTax);
   const request = businessWhatsAppUrl(
     contactPhone,
@@ -51,10 +56,10 @@ export default function HomeVisitsSection({ visits, businessName, contactPhone, 
         {visits.visitServiceName && <span className="pm-visits-service">{visits.visitServiceName}</span>}
         {price && <strong>{price}</strong>}
       </p>
-      <p className="pm-visits-note">{POLICY_NOTE[visits.chargePolicy]}</p>
+      <p className="pm-visits-note">{POLICY_NOTE[isFreeVisit(visits.price, visits.chargePolicy) ? HomeVisitChargePolicy.Free : visits.chargePolicy]}</p>
 
       <h3 className="pm-visits-subtitle" id={codesId}>Vamos a estos códigos postales</h3>
-      <ul className="pm-visits-codes" aria-labelledby={codesId}>
+      <ul ref={codesRef} className="pm-visits-codes" aria-labelledby={codesId} tabIndex={-1}>
         {codes.map((code) => <li key={code} className="ta-money">{code}</li>)}
       </ul>
       {hidden > 0 && (

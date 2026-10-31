@@ -1,22 +1,15 @@
 import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { appointmentsApi, type HomeVisitRequestsSettings } from '../../api/appointmentsApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { HomeVisitChargePolicy } from '../../api/generated/enums';
+import { homeVisitRequestsKey, useHomeVisitRequests } from '../../api/homeVisitRequests';
+import { queryKeys } from '../../api/queries';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
-import { TenantCapability, type TenantProfileDto } from '../../types';
 import { visitPriceText } from '../../utils/businessCategories';
 import { formatMoney } from '../../utils/money';
-import { hasCapability } from '../../utils/tenantCapabilities';
-
-/**
- * Publishing or turning off the menu, or giving the business its hours, changes whether it receives visits: asked again
- * with each. Its zones live in another screen, which this one is never open at the same time as.
- */
-const settingsKey = (tenant: TenantProfileDto | null | undefined) =>
-  ['home-visit-requests', tenant?.onlineMenuMode, (tenant?.openingHours?.length ?? 0) > 0];
 
 /** How the visit is charged, in the owner's words, in the order the radios show them. */
 const POLICIES: { value: HomeVisitChargePolicy; label: string; help: string }[] = [
@@ -77,9 +70,11 @@ function HomeVisitRequestsForm({ settings }: { settings: HomeVisitRequestsSettin
     setSaving(true);
     try {
       const saved = await appointmentsApi.updateHomeVisitRequests({ enabled, serviceId: serviceId || null, chargePolicy: policy });
-      queryClient.setQueryData(settingsKey(tenant), saved);
-      // Receiving visits is something its card in Explorar shows: «Cómo te ven» is asked again.
+      queryClient.setQueryData(homeVisitRequestsKey(tenant), saved);
+      // Receiving visits is something its card in Explorar shows, and turning them on can bring the notice of its
+      // address to Inicio: «Cómo te ven» and the notices are asked again.
       void queryClient.invalidateQueries({ queryKey: ['directory-profile'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       toast.success(saved.receivesVisits ? 'Guardado: tus clientes ya ven tus visitas a domicilio.' : 'Guardado.');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudieron guardar las visitas a domicilio.'));
@@ -153,7 +148,8 @@ function HomeVisitRequestsForm({ settings }: { settings: HomeVisitRequestsSettin
       {price && (
         <p className="small mb-3">
           <i className="ri-price-tag-3-line me-1" aria-hidden="true"></i>
-          {dirty ? 'Hoy tus clientes leen' : 'Tus clientes leen'}: <strong>{price}</strong>
+          {!settings.receivesVisits ? 'Cuando recibas visitas, tus clientes leerán' : dirty ? 'Hoy tus clientes leen' : 'Tus clientes leen'}:{' '}
+          <strong>{price}</strong>
           {settings.price?.isStarting && ' (depende de la zona)'}.{dirty && ' Guarda para ver cómo queda.'}
         </p>
       )}
@@ -188,15 +184,10 @@ function HomeVisitRequestsForm({ settings }: { settings: HomeVisitRequestsSettin
  * delivery zones.
  */
 export default function HomeVisitRequestsCard() {
-  const { tenant, capabilities } = useTenant();
+  const { tenant } = useTenant();
   const titleId = useId();
-  const withAgenda = hasCapability(capabilities, TenantCapability.Appointments);
-  const settings = useQuery({
-    queryKey: settingsKey(tenant),
-    queryFn: ({ signal }) => appointmentsApi.getHomeVisitRequests(signal),
-    enabled: !!tenant && withAgenda,
-  });
-  if (!tenant || !withAgenda) return null;
+  const settings = useHomeVisitRequests();
+  if (!tenant || !settings.withAgenda) return null;
 
   return (
     <section className="card" aria-labelledby={titleId}>

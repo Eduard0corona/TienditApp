@@ -9,9 +9,10 @@ import { useToast } from '../../hooks/useToast';
 /**
  * The notice to a business that goes to its customers' homes while its store publishes the address of its main branch
  * (Fase 29A, ADR 0053 point 5). Nothing changes on its own: only the owner knows whether customers go there, so it says
- * where to mark the branch «Solo a domicilio», and «Ya lo revisé» puts it away for good, its line in Inicio with it.
+ * where to mark the branch «Solo a domicilio», and «Ya lo revisé» puts it away for good, its line in Inicio with it,
+ * and gives the keyboard back to `onDismissed`.
  */
-export default function HomeVisitAddressNotice() {
+export default function HomeVisitAddressNotice({ onDismissed }: { onDismissed?: () => void }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -25,6 +26,8 @@ export default function HomeVisitAddressNotice() {
         queryClient.invalidateQueries({ queryKey: ['home-visit-requests'] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
       ]);
+      // The notice and its button go away: the keyboard goes where its owner says.
+      onDismissed?.();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo guardar que ya lo revisaste.'));
       setSaving(false);
@@ -32,7 +35,7 @@ export default function HomeVisitAddressNotice() {
   };
 
   return (
-    <div className="alert alert-info py-2 small d-flex flex-wrap align-items-center gap-2" role="status">
+    <div className="alert alert-info py-2 small d-flex flex-wrap align-items-center gap-2">
       <span className="flex-grow-1">
         <i className="ri-map-pin-user-line me-1" aria-hidden="true"></i>
         Tu tienda muestra la dirección de tu sucursal principal. Si no atiendes en un local, márcala «Solo a domicilio» en{' '}

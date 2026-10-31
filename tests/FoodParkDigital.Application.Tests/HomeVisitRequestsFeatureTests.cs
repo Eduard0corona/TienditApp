@@ -14,6 +14,7 @@ using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -154,19 +155,26 @@ public class HomeVisitRequestsFeatureTests
     }
 
     [Theory]
-    [InlineData("Plomería", false, BranchServiceMode.Premises, true)]
-    [InlineData("Plomería", false, BranchServiceMode.DeliveryOnly, false)]
-    [InlineData("Abarrotes", true, BranchServiceMode.Premises, true)]
-    [InlineData("Abarrotes", false, BranchServiceMode.Premises, false)]
-    public void AddressNotice_ShouldBeForWhoGoesToHomes_WithAMainBranchThatHasPremises(
-        string industry, bool receivesVisits, BranchServiceMode mainBranch, bool shows)
+    [InlineData("Plomería", false, BranchServiceMode.Premises, "Calle 5 de Mayo 10", false, true)]
+    [InlineData("Plomería", false, BranchServiceMode.DeliveryOnly, "Calle 5 de Mayo 10", false, false)]
+    [InlineData("Abarrotes", true, BranchServiceMode.Premises, "Calle 5 de Mayo 10", false, true)]
+    [InlineData("Abarrotes", false, BranchServiceMode.Premises, "Calle 5 de Mayo 10", false, false)]
+    // A workshop that kept its premises at sign-up publishes nothing until it has a street or a point on the map.
+    [InlineData("Carpintería", true, BranchServiceMode.Premises, null, false, false)]
+    [InlineData("Carpintería", true, BranchServiceMode.Premises, null, true, true)]
+    public void AddressNotice_ShouldBeForWhoGoesToHomes_WhileItsStoreShowsWhereItsMainBranchIs(
+        string industry, bool receivesVisits, BranchServiceMode mode, string? street, bool onTheMap, bool shows)
     {
         var tenant = new Tenant("Negocio", "negocio", BusinessType.Service, "negocio@demo.com");
         tenant.SetBusinessInfo(null, null, industry, null, null);
         var settings = new TenantSettings(tenant.Id, TenantCapability.Service);
         settings.UpdateHomeVisitRequests(receivesVisits, null, HomeVisitChargePolicy.Charged);
+        var main = new Branch(tenant.Id, "Matriz", "MATRIZ", isDefault: true);
+        main.Update(main.Name, main.Code, new BranchContact(AddressLine1: street, City: "Puebla"), mode);
+        if (onTheMap)
+            main.SetLocation(new GeoPoint(19.0414m, -98.2063m));
 
-        Assert.Equal(shows, HomeVisitAddressNotice.Shows(tenant, settings, mainBranch));
+        Assert.Equal(shows, HomeVisitAddressNotice.Shows(tenant, settings, main));
         Assert.False(HomeVisitAddressNotice.Shows(tenant, settings, null));
     }
 
@@ -225,6 +233,30 @@ public class HomeVisitRequestsFeatureTests
         await SetVisitAsync(fixture, near, null, HomeVisitChargePolicy.Free);
         var free = (await Handler(fixture, postalCode: "72002")).Businesses.Items;
         Assert.Equal((true, 0m), (free[0].VisitsPostalCode, free[0].VisitPrice!.Amount));
+    }
+
+    [Fact]
+    public async Task Explorar_WithAPostalCode_ShouldMoveOnlyWhoVisitsElsewhere_AndAnswerEachPageForItsOwnZones()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await TradeAsync(fixture, "a-lejos", zones: [("Sur", 40m, ["72000"])]);
+        // A menu without a drawer, after those that receive visits: no zone of its own, and it keeps its place.
+        var cafe = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "b-cafe");
+        (await SettingsAsync(fixture, cafe)).UpdateOnlineMenu(OnlineMenuMode.Orders);
+        await fixture.Context.SaveChangesAsync();
+        await fixture.AddProductAsync(cafe, "Café", 35m, unit: UnitType.Unit);
+        await TradeAsync(fixture, "c-cerca", zones: [("Centro", 80m, ["72001"])]);
+
+        Assert.Equal(["a-lejos", "c-cerca", "b-cafe"], (await DirectoryAsync(fixture)).Businesses.Items.Select(b => b.Slug));
+        var pages = new List<PublicDirectoryBusinessDto>();
+        for (var page = 1; page <= 3; page++)
+            pages.AddRange((await Handler(fixture, postalCode: "72001", pageNumber: page, pageSize: 1)).Businesses.Items);
+
+        // Only the trade that does not go there moves, behind the menu; each page says it for its own business.
+        Assert.Equal(["c-cerca", "b-cafe", "a-lejos"], pages.Select(b => b.Slug));
+        Assert.Equal(((bool?)true, (bool?)null, (bool?)false), (pages[0].VisitsPostalCode, pages[1].VisitsPostalCode, pages[2].VisitsPostalCode));
+        Assert.Equal(80m, pages[0].VisitPrice!.Amount);
+        Assert.Null(pages[2].VisitPrice);
     }
 
     [Fact]
@@ -422,11 +454,12 @@ public class HomeVisitRequestsFeatureTests
 
     private static Task<PublicDirectoryDto> DirectoryAsync(SalesTestFixture fixture) => Handler(fixture, postalCode: null);
 
-    private static Task<PublicDirectoryDto> Handler(SalesTestFixture fixture, string? postalCode)
+    private static Task<PublicDirectoryDto> Handler(
+        SalesTestFixture fixture, string? postalCode, int pageNumber = 1, int pageSize = GetPublicDirectoryQuery.DefaultPageSize)
         => new GetPublicDirectoryQueryHandler(
                 fixture.Context, fixture.Clock, new PublicDirectoryCache(), new PublicProductIndexCache(),
                 NullLogger<GetPublicDirectoryQueryHandler>.Instance)
-            .Handle(new GetPublicDirectoryQuery(PostalCode: postalCode), CancellationToken.None);
+            .Handle(new GetPublicDirectoryQuery(PostalCode: postalCode, PageNumber: pageNumber, PageSize: pageSize), CancellationToken.None);
 
     private static async Task<PublicMenuDto> StoreAsync(SalesTestFixture fixture, string slug)
         => (await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off)

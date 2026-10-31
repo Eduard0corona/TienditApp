@@ -69,18 +69,28 @@ export function orderStatus(business: DirectoryBusiness): { tone: 'taking' | 'pa
   return { tone: closed ? 'closed' : 'menu', text: hours ? `Solo menú · ${hours}` : 'Solo menú' };
 }
 
+type VisitPrice = { amount: number; isStarting: boolean };
+
+/**
+ * A visit the customer does not pay: the business does not charge it, or it costs nothing wherever it goes. One that
+ * costs nothing only in some postal codes («desde $0») is not free.
+ */
+export function isFreeVisit(price: VisitPrice | null | undefined, policy: HomeVisitChargePolicy | null | undefined): boolean {
+  return policy === HomeVisitChargePolicy.Free || (!!price && price.amount <= 0 && !price.isStarting);
+}
+
 /**
  * What a visit to quote costs (Fase 29A), in the words of the card and the store: «Visita $350», «Visita desde $350» when
  * it depends on the postal code, or «Visita sin costo»; written like the prices of the business («más IVA» when they do
  * not include it) and «, se descuenta si contratas» when the quote takes it off. Null without a price.
  */
 export function visitPriceText(
-  price: { amount: number; isStarting: boolean } | null | undefined,
+  price: VisitPrice | null | undefined,
   policy: HomeVisitChargePolicy | null | undefined,
   pricesIncludeTax: boolean,
 ): string | null {
   if (!price) return null;
-  if (price.amount <= 0) return 'Visita sin costo';
+  if (isFreeVisit(price, policy)) return 'Visita sin costo';
   const amount = `${price.isStarting ? 'desde ' : ''}${formatMoney(price.amount)}${pricesIncludeTax ? '' : ' más IVA'}`;
   return `Visita ${amount}${policy === HomeVisitChargePolicy.CreditedIfHired ? ', se descuenta si contratas' : ''}`;
 }

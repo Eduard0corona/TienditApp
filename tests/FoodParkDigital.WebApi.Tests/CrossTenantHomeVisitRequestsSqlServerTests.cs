@@ -63,12 +63,26 @@ public sealed class CrossTenantHomeVisitRequestsSqlServerTests
         // The one that goes there first.
         Assert.Equal([mySlug, theirSlug], listed.Select(card => card.GetProperty("slug").GetString()).Where(slug => slug == mySlug || slug == theirSlug));
 
+        // Without a street the store shows no address: nothing to warn about.
+        Assert.False(theirSettings.GetProperty("addressNotice").GetBoolean());
         // Both publish the address of a main branch with premises; dismissing the notice changes only one's own.
-        Assert.True(theirSettings.GetProperty("addressNotice").GetBoolean());
+        await PublishAddressAsync(mine.Client);
+        await PublishAddressAsync(theirs.Client);
+        Assert.True((await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync(Settings))).GetProperty("addressNotice").GetBoolean());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(Settings))).GetProperty("addressNotice").GetBoolean());
         Assert.Equal(HttpStatusCode.NoContent, (await mine.Client.PostAsync(DismissNotice, null)).StatusCode);
         Assert.False((await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(Settings))).GetProperty("addressNotice").GetBoolean());
         Assert.True((await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync(Settings))).GetProperty("addressNotice").GetBoolean());
         Assert.Equal(HttpStatusCode.Unauthorized, (await stranger.PostAsync(DismissNotice, null)).StatusCode);
+    }
+
+    /// <summary>The main branch keeps its premises and gets a street: its store publishes the address.</summary>
+    private static async Task PublishAddressAsync(HttpClient owner)
+    {
+        var main = (await owner.GetFromJsonAsync<JsonElement>("/api/v1/branches"))
+            .EnumerateArray().Single(b => b.GetProperty("isDefault").GetBoolean()).GetProperty("id").GetGuid();
+        await TwoBusinessesApi.ReadAsync(await owner.PutAsJsonAsync($"/api/v1/branches/{main}",
+            new { id = main, name = "Taller", code = "TALLER", addressLine1 = "Calle 5 de Mayo 10", city = "Puebla" }));
     }
 
     /// <returns>The slug of the business's menu and a service it can pick as its visit.</returns>

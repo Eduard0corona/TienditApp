@@ -90,6 +90,14 @@ describe('businessCategories', () => {
     expect(visitPriceText({ amount: 350, isStarting: false }, HomeVisitChargePolicy.CreditedIfHired, true))
       .toBe('Visita $350.00, se descuenta si contratas');
     expect(visitPriceText({ amount: 0, isStarting: false }, HomeVisitChargePolicy.Free, false)).toBe('Visita sin costo');
+    // Free wherever it goes, even when the business charges its visits: a zone without fee and no visit service.
+    expect(visitPriceText({ amount: 0, isStarting: false }, HomeVisitChargePolicy.Charged, true)).toBe('Visita sin costo');
+  });
+
+  it('never calls free a visit that costs nothing only in some postal codes', () => {
+    expect(visitPriceText({ amount: 0, isStarting: true }, HomeVisitChargePolicy.Charged, true)).toBe('Visita desde $0.00');
+    expect(visitPriceText({ amount: 0, isStarting: true }, HomeVisitChargePolicy.CreditedIfHired, false))
+      .toBe('Visita desde $0.00 más IVA, se descuenta si contratas');
   });
 
   it('says whether a visit goes to the customer\'s postal code and what it costs there', () => {

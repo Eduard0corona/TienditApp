@@ -40,6 +40,8 @@ function answer(settings) {
 
 export function phase29aRoutes(data, { ok }) {
   data.homeVisitRequests ??= demoHomeVisitRequests(data);
+  // What the visit costs while it is charged, to come back to after «Sin costo» (the API computes it again each time).
+  const charged = data.homeVisitRequests.chargePolicy === FREE ? null : data.homeVisitRequests.price;
 
   return [
     ['GET', /^\/appointments\/home-visit-requests$/, () => ok(answer(data.homeVisitRequests))],
@@ -50,7 +52,7 @@ export function phase29aRoutes(data, { ok }) {
         enabled: !!body?.enabled,
         serviceId: body?.serviceId ?? null,
         chargePolicy: body?.chargePolicy ?? CHARGED,
-        price: free && data.homeVisitRequests.price ? { amount: 0, isStarting: false } : data.homeVisitRequests.price,
+        price: free && data.homeVisitRequests.price ? { amount: 0, isStarting: false } : charged,
       };
       return ok(answer(data.homeVisitRequests));
     }],

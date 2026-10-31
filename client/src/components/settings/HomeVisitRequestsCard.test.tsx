@@ -52,13 +52,17 @@ function withCapabilities(capabilities: number) {
 
 function renderCard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <HomeVisitRequestsCard />
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
+  const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+  return {
+    invalidate,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <HomeVisitRequestsCard />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 describe('HomeVisitRequestsCard', () => {
@@ -71,10 +75,11 @@ describe('HomeVisitRequestsCard', () => {
   it('turns visits on with the visit service and how it is charged, and says what is still missing', async () => {
     const user = userEvent.setup();
     api.getHomeVisitRequests.mockResolvedValue(settings({ missing: [NO_ZONES] }) as never);
+    // The server answers with what it saved: the form shows that, not what was picked (here, another policy).
     api.updateHomeVisitRequests.mockResolvedValue(settings({
-      enabled: true, serviceId: 's1', service: visit, chargePolicy: HomeVisitChargePolicy.CreditedIfHired, missing: [NO_ZONES],
+      enabled: true, serviceId: 's1', service: visit, chargePolicy: HomeVisitChargePolicy.Free, missing: [NO_ZONES],
     }) as never);
-    renderCard();
+    const { invalidate } = renderCard();
 
     expect(await screen.findByText(NO_ZONES)).toBeInTheDocument();
     expect(screen.getByText(/Para recibir visitas a domicilio, falta también/)).toBeInTheDocument();
@@ -89,7 +94,27 @@ describe('HomeVisitRequestsCard', () => {
     }));
     expect(toast.success).toHaveBeenCalledWith('Guardado.');
     expect(await screen.findByText(/Tus clientes todavía no ven tus visitas a domicilio/)).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Se descuenta si contrata' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Sin costo' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+    // «Cómo te ven» and the notices of Inicio are asked again: receiving visits changes both.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['directory-profile'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['attention'] });
+  });
+
+  it('says what customers would read before they see the visits, and what they read today while something changes', async () => {
+    const user = userEvent.setup();
+    api.getHomeVisitRequests.mockResolvedValue(settings({ price: { amount: 300, isStarting: false }, missing: [NO_ZONES] }) as never);
+    renderCard();
+
+    expect(await screen.findByText(/Cuando recibas visitas, tus clientes leerán/)).toHaveTextContent('Visita $300.00');
+    await user.click(screen.getByRole('radio', { name: 'Sin costo' }));
+    expect(screen.getByText(/Guarda para ver cómo queda/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Descartar' }));
+    expect(screen.getByRole('radio', { name: 'Se cobra siempre' })).toBeChecked();
+    expect(screen.queryByRole('button', { name: 'Descartar' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Guarda para ver cómo queda/)).not.toBeInTheDocument();
+    expect(api.updateHomeVisitRequests).not.toHaveBeenCalled();
   });
 
   it('says what customers read of a visit while they see them, and links the store', async () => {

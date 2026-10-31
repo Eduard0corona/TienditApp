@@ -375,6 +375,29 @@ describe('PublicMenuPage', () => {
     renderPage('/m/cafe-luna?mesa=Mesa%204');
     await screen.findAllByText('Plomería Hernández');
     expect(screen.queryByRole('region', { name: 'Visitas a domicilio' })).not.toBeInTheDocument();
+    // At a table there are no visits: the empty menu says so, instead of a blank page.
+    expect(screen.getByText('El menú todavía no tiene productos.')).toBeInTheDocument();
+  });
+
+  it('leaves the visit as the one main action of a trade that also books appointments online (Fase 29A)', async () => {
+    api.getMenu.mockResolvedValue(menu({
+      acceptsOrders: false,
+      booksOnline: true,
+      contactPhone: '2221234567',
+      homeVisits: {
+        chargePolicy: HomeVisitChargePolicy.Charged,
+        price: { amount: 300, isStarting: false },
+        visitServiceName: null,
+        postalCodes: ['72000'],
+        postalCodeCount: 1,
+        services: [],
+      },
+    }));
+
+    renderPage();
+
+    expect(await screen.findByRole('link', { name: 'Agenda tu cita' })).toHaveClass('btn-light');
+    expect(screen.getByRole('link', { name: 'Solicitar visita' })).toHaveClass('btn-primary');
   });
 
   it('shows the menu without taking orders while they are paused (no drawer open)', async () => {

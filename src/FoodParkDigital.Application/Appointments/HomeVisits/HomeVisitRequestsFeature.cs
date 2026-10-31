@@ -4,8 +4,10 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -70,23 +72,28 @@ public static class HomeVisitRequestAvailability
 
 /// <summary>
 /// The notice to a business that publishes its address while it goes to its customers' homes (Fase 29A, ADR 0053 point 5):
-/// it receives visits or its giro is a trade, its main branch has premises, and nobody dismissed it. Nothing changes
-/// without the owner: the notice only says where to mark the branch «Solo a domicilio».
+/// it receives visits or its giro is a trade, its store shows where its main branch is (a branch with premises and its
+/// street or its point on the map, as the store does), and nobody dismissed it. A trade that kept its premises but has no
+/// address yet publishes nothing: nothing to warn about. Nothing changes without the owner: the notice only says where to
+/// mark the branch «Solo a domicilio».
 /// </summary>
 public static class HomeVisitAddressNotice
 {
     public const string Message =
         "Tu tienda muestra la dirección de tu sucursal principal. Si no atiendes en un local, márcala «Solo a domicilio» en Sucursales.";
 
-    public static bool Shows(Tenant tenant, TenantSettings? settings, BranchServiceMode? mainBranchMode)
+    public static bool Shows(Tenant tenant, TenantSettings? settings, Branch? mainBranch)
         => settings is { HomeVisitAddressNoticeDismissedAt: null }
             && (settings.HomeVisitRequestsEnabled || HomeTrades.IsHomeTrade(tenant.Industry))
-            && mainBranchMode == BranchServiceMode.Premises;
+            && mainBranch is { ServiceMode: BranchServiceMode.Premises }
+            && (AddressText.ForCustomers(mainBranch) is not null || mainBranch.PublicLocation is not null);
 
     public static async Task<bool> ShowsAsync(
         IApplicationDbContext context, Tenant tenant, TenantSettings? settings, CancellationToken cancellationToken)
         => settings is { HomeVisitAddressNoticeDismissedAt: null }
-            && Shows(tenant, settings, await OnlineBookingAvailability.MainBranchModeAsync(context, tenant.Id, cancellationToken));
+            && Shows(tenant, settings, await context.Branches
+                .AsNoTracking()
+                .FirstOrDefaultAsync(branch => branch.TenantId == tenant.Id && branch.IsDefault, cancellationToken));
 }
 
 /// <summary>A service of the catalog a business can pick as its visit: bookable now, with its price as written.</summary>
