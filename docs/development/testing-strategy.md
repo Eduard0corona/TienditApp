@@ -1627,6 +1627,9 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `invoicing.test.ts` (+1): la lista se vuelve a leer solo mientras el último envío no sale ni se rechaza.
   - **.NET en total:** 4,192 pruebas (Domain 1,216; Application 1,872; WebApi 470; Infrastructure 634). **Cliente en total:** 178 archivos y 1,293 pruebas.
   - **Primera visita:** 180,710 B (`master` en `d93a6cc`: 180,682 B). Son +28 B del enum `CfdiMonthEmailFailure` en el primer chunk; el presupuesto sube de 180,700 B a 180,800 B.
+  - **Escenas:** contra la línea base de `master` en `d93a6cc`, de 748 escenas 722 salen iguales.
+    - Cambian 21, todas por lo que agrega la fase: 7 de Reportes › CFDI emitidos (escritorio, teléfono y oscuro, los tres de «por revisar en el portal del SAT» y el mes sin CFDI), por «Mandar al contador» y la nota de las descargas, que baja el resto; y 14 de Configuración › Facturación (lista, sin certificado, en pruebas y por vencer, con autofactura, con el logo en el PDF y con la factura por WhatsApp, en escritorio, teléfono y oscuro donde las hay), por la tarjeta «Contador» y el punto nuevo de «Cómo funciona».
+    - Las 5 nuevas («facturación con el contador» en escritorio y teléfono, «cfdi mandados al contador» en escritorio y teléfono y el diálogo «cfdi emitidos: mandar al contador») pasaron dos corridas seguidas contra el mismo build.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
