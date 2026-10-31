@@ -28,6 +28,9 @@ public class InvoicingProfileConfiguration : IEntityTypeConfiguration<InvoicingP
             table.HasCheckConstraint(
                 "CK_InvoicingProfiles_SelfInvoicing",
                 $"([SelfInvoicing] = 0 OR [SelfInvoiceKey] IS NOT NULL) AND ([SelfInvoiceKey] IS NULL OR DATALENGTH([SelfInvoiceKey]) = {SelfInvoiceCode.KeyLength})");
+            // The month's CFDI go to the accountant on their own only with the accountant's email (Fase 28O).
+            table.HasCheckConstraint(
+                "CK_InvoicingProfiles_Accountant", "[SendsMonthToAccountant] = 0 OR [AccountantEmail] IS NOT NULL");
         });
         builder.HasKey(x => x.Id);
 
@@ -50,6 +53,9 @@ public class InvoicingProfileConfiguration : IEntityTypeConfiguration<InvoicingP
         // The profiles that were there before self-invoicing (Fase 28F) have it off and no key.
         builder.Property(x => x.SelfInvoicing).IsRequired().HasDefaultValue(false);
         builder.Property(x => x.SelfInvoiceKey).HasMaxLength(SelfInvoiceCode.KeyLength);
+        // Fase 28O: the profiles that were there before have no accountant, and nothing goes on its own.
+        builder.Property(x => x.AccountantEmail).HasMaxLength(InvoiceEmailAddress.MaxLength);
+        builder.Property(x => x.SendsMonthToAccountant).IsRequired().HasDefaultValue(false);
         builder.Property(x => x.Version).IsRowVersion();
         builder.Ignore(x => x.HasCertificate);
 

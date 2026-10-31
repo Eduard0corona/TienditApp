@@ -57,6 +57,7 @@ public interface IApplicationDbContext
     DbSet<PaymentComplement> PaymentComplements { get; }
     DbSet<CreditNote> CreditNotes { get; }
     DbSet<CfdiEmail> CfdiEmails { get; }
+    DbSet<CfdiMonthEmail> CfdiMonthEmails { get; }
     DbSet<TemporaryCustomer> TemporaryCustomers { get; }
     DbSet<Order> Orders { get; }
     DbSet<OrderItem> OrderItems { get; }
