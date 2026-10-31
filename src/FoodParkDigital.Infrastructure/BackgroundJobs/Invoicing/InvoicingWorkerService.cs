@@ -109,9 +109,9 @@ public sealed class InvoicingWorkerService : BackgroundService
         List<Guid> crediting;
         List<Guid> cancelling = [];
         List<Guid> accountants = [];
+        var accountantInterval = TimeSpan.FromMinutes(Math.Max(1, _options.AccountantIntervalMinutes));
         var checkAccountants = AccountantCfdiEmails.InMonthlyDaysSomewhere(now)
-            && (_accountantsCheckedAt is null
-                || now - _accountantsCheckedAt >= TimeSpan.FromMinutes(Math.Max(1, _options.AccountantIntervalMinutes)));
+            && (_accountantsCheckedAt is null || now - _accountantsCheckedAt >= accountantInterval);
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -246,9 +246,14 @@ public sealed class InvoicingWorkerService : BackgroundService
                             .Any(e => e.TenantId == p.TenantId && e.RequestedByUserId == null && e.RequestedAt > recent))
                     .Select(p => new Waiting(p.TenantId, null))
                     .ToListAsync(cancellationToken);
-                accountants = Fairly(owed, _accountantsWithoutProgress, max);
-                // More than a pass takes: the next pass looks again instead of waiting the hour, so none is left out.
-                if (owed.Count <= max)
+                // One whose last pass queued nothing goes again an hour after it: before 8:00 of the first day where it is,
+                // or without CFDI in the month before, it would take a pass's places every few minutes for nothing.
+                var due = Fairly(owed, _accountantsWithoutProgress, owed.Count)
+                    .Where(tenantId => !_accountantsWithoutProgress.TryGetValue(tenantId, out var tried) || now - tried >= accountantInterval)
+                    .ToList();
+                accountants = due.Take(max).ToList();
+                // More due than a pass takes: the next pass looks again for the rest instead of waiting the hour.
+                if (due.Count <= max)
                     _accountantsCheckedAt = now;
             }
         }

@@ -165,7 +165,6 @@ public class AccountantCfdiEmailFlowTests
     public async Task Latest_ShouldBeTheMonthsLastFive_NewestFirst_OfTheBusinessOnly()
     {
         await using var book = await Book.OpenAsync();
-        await book.AddEmailsOfAnotherBusinessAsync(1);
         var ids = new List<Guid>();
         for (var i = 0; i < 6; i++)
         {
@@ -176,6 +175,9 @@ public class AccountantCfdiEmailFlowTests
         }
         book.Context.CfdiMonthEmails.Add(CfdiMonthEmail.Request(book.Tenant.Id, 2026, 9, Accountant, null, book.Clock.UtcNow));
         await book.Context.SaveChangesAsync();
+        // Another business's email of the month, newer than all of mine: only the business filter keeps it out.
+        book.Clock.UtcNow = book.Clock.UtcNow.AddMinutes(1);
+        await book.AddEmailsOfAnotherBusinessAsync(1);
 
         var latest = await book.LatestAsync(2026, 10);
 
@@ -298,6 +300,9 @@ public class AccountantCfdiEmailFlowTests
         await using var book = await Book.OpenAsync();
         await book.InvoicedSaleAsync();
         Assert.True((await book.SetAccountantAsync(Accountant, monthly: true)).IsSuccess);
+        // The owner sent October by hand the day before: the one of each month goes all the same.
+        book.Clock.UtcNow = NovemberFirstAtEight.AddDays(-1);
+        Assert.True((await book.SendAsync(2026, 10, Accountant)).IsSuccess);
 
         book.Clock.UtcNow = NovemberFirstAtEight.AddMinutes(-1);
         Assert.Equal(0, await book.QueueMonthlyAsync());
@@ -307,13 +312,13 @@ public class AccountantCfdiEmailFlowTests
         book.Clock.UtcNow = NovemberFirstAtEight.AddDays(3);
         Assert.Equal(0, await book.QueueMonthlyAsync());
 
-        var email = await book.Context.CfdiMonthEmails.AsNoTracking().SingleAsync();
+        var email = await book.Context.CfdiMonthEmails.AsNoTracking().SingleAsync(e => e.RequestedByUserId == null);
         Assert.Equal((2026, 10, Accountant, (Guid?)null, NovemberFirstAtEight),
             (email.Year, email.Month, email.To, email.RequestedByUserId, email.RequestedAt));
     }
 
     [Fact]
-    public async Task Monthly_ShouldWaitForDaySevenToEnd_AndGoByTheBusinessesTimeZone()
+    public async Task Monthly_ShouldWaitForDaySevenToEnd_WhereTheBusinessIs()
     {
         await using var book = await Book.OpenAsync();
         await book.InvoicedSaleAsync();
@@ -322,6 +327,18 @@ public class AccountantCfdiEmailFlowTests
         // Midnight of the 8th in Mexico City: too late, it waits for a person.
         book.Clock.UtcNow = new DateTimeOffset(2026, 11, 8, 6, 0, 0, TimeSpan.Zero);
         Assert.Equal(0, await book.QueueMonthlyAsync());
+        // The last minute of the 7th still goes.
+        book.Clock.UtcNow = new DateTimeOffset(2026, 11, 8, 5, 59, 0, TimeSpan.Zero);
+        Assert.Equal(1, await book.QueueMonthlyAsync());
+    }
+
+    [Fact]
+    public async Task Monthly_ShouldGoByTheBusinessesTimeZone()
+    {
+        await using var book = await Book.OpenAsync();
+        await book.InvoicedSaleAsync();
+        Assert.True((await book.SetAccountantAsync(Accountant, monthly: true)).IsSuccess);
+
         // In Cancún (UTC-5) it is 8:00 of the first an hour before Mexico City.
         book.Clock.UtcNow = NovemberFirstAtEight.AddHours(-1);
         Assert.Equal(0, await book.QueueMonthlyAsync());

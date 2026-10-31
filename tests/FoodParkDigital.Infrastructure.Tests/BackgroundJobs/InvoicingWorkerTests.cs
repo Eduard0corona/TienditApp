@@ -370,26 +370,28 @@ public class InvoicingWorkerTests
         var monthly = await AddAccountantAsync(host, "contador-mensual");
         // The one TienditApp queued last month does not hold this one up.
         var lastMonth = await AddAccountantAsync(host, "encolado-octubre", queuedAt: host.Clock.UtcNow.AddDays(-28));
+        // Nor does the month the owner sent by hand an hour ago: only the one TienditApp queues counts.
+        var byHand = await AddAccountantAsync(host, "mandado-a-mano", queuedAt: host.Clock.UtcNow.AddHours(-1), byHand: true);
         await AddAccountantAsync(host, "sin-mensual", monthly: false);
         await AddAccountantAsync(host, "ya-encolado", queuedAt: host.Clock.UtcNow.AddHours(-1));
         await AddAccountantAsync(host, "suspendido", status: TenantStatus.Suspended);
         var worker = host.Get<InvoicingWorkerService>();
 
-        Assert.Equal(2, await worker.RunPassAsync(CancellationToken.None));
-        Assert.Equal(new[] { monthly, lastMonth }.Order(), sent.Accountants.Order());
+        Assert.Equal(3, await worker.RunPassAsync(CancellationToken.None));
+        Assert.Equal(new[] { monthly, lastMonth, byHand }.Order(), sent.Accountants.Order());
 
-        // Within the hour it does not look again; at the hour it does (neither queued anything here).
+        // Within the hour it does not look again; at the hour it does (none queued anything here).
         host.Clock.Advance(TimeSpan.FromMinutes(59));
         await worker.RunPassAsync(CancellationToken.None);
-        Assert.Equal(2, sent.Accountants.Count);
+        Assert.Equal(3, sent.Accountants.Count);
         host.Clock.Advance(TimeSpan.FromMinutes(1));
         await worker.RunPassAsync(CancellationToken.None);
-        Assert.Equal(4, sent.Accountants.Count);
+        Assert.Equal(6, sent.Accountants.Count);
 
         // Past the first days of the month, in every time zone, it does not look.
         host.Clock.UtcNow = new DateTimeOffset(2026, 11, 9, 15, 0, 0, TimeSpan.Zero);
         Assert.Equal(0, await worker.RunPassAsync(CancellationToken.None));
-        Assert.Equal(4, sent.Accountants.Count);
+        Assert.Equal(6, sent.Accountants.Count);
         Assert.Empty(sent.Stamps);
     }
 
@@ -409,17 +411,35 @@ public class InvoicingWorkerTests
 
         await worker.RunPassAsync(CancellationToken.None);
         Assert.Equal(2, sent.Accountants.Count);
-        // A minute later, not an hour: the one left out goes first (the others queued nothing).
+        // A minute later, not an hour: the one left out goes, and only it (the others queued nothing a minute ago).
         host.Clock.Advance(TimeSpan.FromMinutes(1));
         await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(owed.Order(), sent.Accountants.Order());
 
-        Assert.Equal(4, sent.Accountants.Count);
-        Assert.Equal(owed.Order(), sent.Accountants.Distinct().Order());
+        // None queued anything (it is not yet 8:00 where they are, or the month before has no CFDI): each goes again an
+        // hour after it last went, in the passes it takes, not on every pass until the seventh day.
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await worker.RunPassAsync(CancellationToken.None);
+        host.Clock.Advance(TimeSpan.FromMinutes(57));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(3, sent.Accountants.Count);
+        host.Clock.Advance(TimeSpan.FromMinutes(2));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(5, sent.Accountants.Count);
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await worker.RunPassAsync(CancellationToken.None);
+        host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await worker.RunPassAsync(CancellationToken.None);
+        Assert.Equal(owed.Concat(owed).Order(), sent.Accountants.Order());
     }
 
-    /// <summary>A business with its accountant's email; when it sends them each month, and the month TienditApp queued last.</summary>
+    /// <summary>
+    /// A business with its accountant's email; when it sends them each month, and the month TienditApp queued last (or a
+    /// person sent, <paramref name="byHand"/>).
+    /// </summary>
     private static Task<Guid> AddAccountantAsync(
-        OutboxTestHost host, string slug, bool monthly = true, DateTimeOffset? queuedAt = null, TenantStatus status = TenantStatus.Active)
+        OutboxTestHost host, string slug, bool monthly = true, DateTimeOffset? queuedAt = null, TenantStatus status = TenantStatus.Active,
+        bool byHand = false)
         => host.InScopeAsync(async services =>
         {
             var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Retail, $"{slug}@demo.com");
@@ -431,7 +451,8 @@ public class InvoicingWorkerTests
             context.Tenants.Add(tenant);
             context.InvoicingProfiles.Add(profile);
             if (queuedAt is { } at)
-                context.CfdiMonthEmails.Add(CfdiMonthEmail.Request(tenant.Id, at.Year, at.Month, "contador@despacho.mx", null, at));
+                context.CfdiMonthEmails.Add(
+                    CfdiMonthEmail.Request(tenant.Id, at.Year, at.Month, "contador@despacho.mx", byHand ? Guid.NewGuid() : null, at));
             await context.SaveChangesAsync();
             return tenant.Id;
         });
