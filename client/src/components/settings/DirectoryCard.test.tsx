@@ -104,6 +104,20 @@ describe('DirectoryCard', () => {
     expect(api.updateProfile).not.toHaveBeenCalled();
   });
 
+  it('puts the notice away once it is saved, even if reading the card again fails', async () => {
+    api.getProfile.mockResolvedValueOnce(profile({ homeVisitAddressNotice: true })).mockRejectedValue(new Error('network'));
+    api.dismissHomeVisitAddressNotice.mockResolvedValue(undefined as never);
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByRole('button', { name: 'Ya lo revisé' }));
+
+    // Saved: never stuck on «Guardando…» waiting for a read that did not come back.
+    await waitFor(() => expect(screen.queryByText(/Tu tienda muestra la dirección/)).not.toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'Cómo te ven en TienditApp' })).toHaveFocus();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it('keeps the notice and says why when checking it fails', async () => {
     api.getProfile.mockResolvedValue(profile({ homeVisitAddressNotice: true }));
     api.dismissHomeVisitAddressNotice.mockRejectedValue(new Error('network'));

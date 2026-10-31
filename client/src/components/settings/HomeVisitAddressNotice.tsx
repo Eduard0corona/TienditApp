@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import type { HomeVisitRequestsSettings } from '../../api/appointmentsApi';
 import { getApiErrorMessage } from '../../api/errors';
-import { publicDirectoryApi } from '../../api/publicDirectoryApi';
+import { publicDirectoryApi, type DirectoryProfile } from '../../api/publicDirectoryApi';
 import { queryKeys } from '../../api/queries';
 import { useToast } from '../../hooks/useToast';
 
@@ -21,17 +22,20 @@ export default function HomeVisitAddressNotice({ onDismissed }: { onDismissed?: 
     setSaving(true);
     try {
       await publicDirectoryApi.dismissHomeVisitAddressNotice();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['directory-profile'] }),
-        queryClient.invalidateQueries({ queryKey: ['home-visit-requests'] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
-      ]);
-      // The notice and its button go away: the keyboard goes where its owner says.
-      onDismissed?.();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo guardar que ya lo revisaste.'));
       setSaving(false);
+      return;
     }
+    // Saved: the notice goes away now, not when the card is read again (a read that fails would leave it «Guardando…»).
+    queryClient.setQueriesData<DirectoryProfile>({ queryKey: ['directory-profile'] }, (old) => old && { ...old, homeVisitAddressNotice: false });
+    queryClient.setQueriesData<HomeVisitRequestsSettings>({ queryKey: ['home-visit-requests'] }, (old) => old && { ...old, addressNotice: false });
+    // The notice and its button go away: the keyboard goes where its owner says.
+    onDismissed?.();
+    // What the server says next, and the line of Inicio with it.
+    void queryClient.invalidateQueries({ queryKey: ['directory-profile'] });
+    void queryClient.invalidateQueries({ queryKey: ['home-visit-requests'] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
   };
 
   return (
