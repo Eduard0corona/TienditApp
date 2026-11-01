@@ -35,7 +35,7 @@ test.describe('Cotizaciones', () => {
       });
 
       test(`cotización en borrador ${look.suffix}`, async ({ page }) => {
-        await open(page, `/quotes/${DRAFT_QUOTE_ID}`);
+        await open(page, '/quotes/7a3f1c52-2d4b-4e6a-9c1f-0b8e5d2a7c41');
         await expect(page.getByRole('button', { name: 'Terminar y obtener enlace' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Agregar renglón' })).toBeVisible();
         await snap(page, `cotizacion-borrador-${look.suffix}`);
@@ -45,7 +45,7 @@ test.describe('Cotizaciones', () => {
 
   test('cotización enviada', async ({ page }) => {
     await page.setViewportSize(SIZES.desktop);
-    await open(page, `/quotes/${SENT_QUOTE_ID}`);
+    await open(page, '/quotes/0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58');
     await expect(page.getByRole('button', { name: 'Registrar respuesta' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Enviar por WhatsApp' })).toBeVisible();
     await expect(page.getByText('Visita (se descuenta)')).toBeVisible();
@@ -76,10 +76,22 @@ test.describe('Cotización del enlace', () => {
     await snap(page, 'cotizacion-enlace-reemplazada-telefono');
   });
 
+  test('cotización sin enlace', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/cotizacion');
+    await expect(page.getByRole('heading', { name: 'Abre el enlace de tu mensaje' })).toBeVisible();
+    await snap(page, 'cotizacion-sin-enlace-telefono');
+  });
+
   test('cotización con un enlace vencido', async ({ page }) => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/cotizacion#AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE');
     await expect(page.getByText(/Esta cotización no existe o su enlace ya venció/)).toBeVisible();
     await snap(page, 'cotizacion-enlace-vencido-telefono');
   });
+});
+
+// The ids are written out so the route coverage (coverage.spec.ts) reads them; the mocks answer the same ones.
+test('the scenes open the quotes the mocks answer', () => {
+  expect([DRAFT_QUOTE_ID, SENT_QUOTE_ID]).toEqual(['7a3f1c52-2d4b-4e6a-9c1f-0b8e5d2a7c41', '0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58']);
 });
