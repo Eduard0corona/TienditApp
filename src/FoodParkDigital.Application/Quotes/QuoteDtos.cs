@@ -109,6 +109,12 @@ public class QuoteDto
     public Guid? DraftRevisionId { get; set; }
     /// <summary>All the versions of the quote, from the first, this one included.</summary>
     public List<QuoteVersionDto> Versions { get; set; } = [];
+    /// <summary>The latest emails of this version sent from TienditApp (Fase 29D), the newest first.</summary>
+    public List<QuoteEmailDto> Emails { get; set; } = [];
+    /// <summary>The latest WhatsApp messages of this version sent from TienditApp (Fase 29D), the newest first.</summary>
+    public List<QuoteWhatsAppDto> WhatsApps { get; set; } = [];
+    /// <summary>The business connected its WhatsApp: «Mandar por WhatsApp» goes from TienditApp, not from the phone.</summary>
+    public bool WhatsAppConnected { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
 
@@ -118,6 +124,12 @@ public class QuoteSettingsDto
     public int ValidityDays { get; set; }
     public bool PricesIncludeTax { get; set; }
     public decimal DefaultTaxRate { get; set; }
+    /// <summary>The business connected its WhatsApp (Fase 29D): its quotes go by WhatsApp from TienditApp.</summary>
+    public bool WhatsAppConnected { get; set; }
+    /// <summary>The template the quotes go by WhatsApp with, while it is active and for quotes; null for TienditApp's text.</summary>
+    public Guid? WhatsAppTemplateId { get; set; }
+    /// <summary>The templates it can pick: active ones, for quotes.</summary>
+    public List<QuoteWhatsAppTemplateDto> WhatsAppTemplates { get; set; } = [];
 }
 
 /// <summary>Which quotes the list shows.</summary>

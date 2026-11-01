@@ -83,4 +83,46 @@ public sealed class CrossTenantQuoteSqlServerTests
             new { accepted = true, channel = 0, response = "Sí, el jueves" }));
         Assert.Equal((2, "Sí, el jueves"), (accepted.GetProperty("status").GetInt32(), accepted.GetProperty("customerResponse").GetString()));
     }
+
+    [SqlServerFact]
+    public async Task TheSendsOfAQuote_ShouldBeOnlyItsBusinesses_AndSoTheTemplateOfItsWhatsApp()
+    {
+        var mine = await _api.SignUpAsync("envia-a");
+        var theirs = await _api.SignUpAsync("envia-b");
+        var draft = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/quotes",
+            new { customerName = "Valeria Ruiz", customerPhone = "5522107765", customerEmail = "valeria@correo.mx" }));
+        var id = draft.GetProperty("id").GetGuid();
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"/api/v1/quotes/{id}", new
+        {
+            customerName = "Valeria Ruiz",
+            customerPhone = "5522107765",
+            validityDays = 15,
+            lines = new[] { new { productId = (Guid?)null, description = "Cambio de calentador", quantity = 1m, unitPrice = 1160m } }
+        }));
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"/api/v1/quotes/{id}/send", null));
+
+        var email = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/email", new { email = "valeria@correo.mx" }));
+        Assert.Equal("valeria@correo.mx", email.GetProperty("to").GetString());
+
+        // The other business does not send it by either channel; and its own quote shows none of these sends.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await theirs.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/email", new { email = "otro@correo.mx" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await theirs.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/whatsapp", new { phone = "5511112222" })).StatusCode);
+        var detail = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/quotes/{id}"));
+        Assert.Single(detail.GetProperty("emails").EnumerateArray());
+        // Without its WhatsApp connected, it says so instead of queuing the message.
+        var notConnected = await mine.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/whatsapp", new { phone = "5522107765" });
+        Assert.Equal(HttpStatusCode.BadRequest, notConnected.StatusCode);
+        Assert.Contains("Conecta el WhatsApp", await notConnected.Content.ReadAsStringAsync());
+
+        // A template of the other business is not one to pick.
+        var theirTemplate = await TwoBusinessesApi.ReadAsync(await theirs.Client.PostAsJsonAsync("/api/v1/messaging/templates",
+            new { name = "Cotización", purpose = 6, body = "Tu cotización {folio}: {enlace}" }));
+        var picked = await mine.Client.PutAsJsonAsync("/api/v1/quotes/settings/whatsapp-template",
+            new { templateId = theirTemplate.GetProperty("id").GetGuid() });
+        Assert.Equal(HttpStatusCode.BadRequest, picked.StatusCode);
+        Assert.Empty((await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync("/api/v1/quotes/settings")))
+            .GetProperty("whatsAppTemplates").EnumerateArray());
+    }
 }

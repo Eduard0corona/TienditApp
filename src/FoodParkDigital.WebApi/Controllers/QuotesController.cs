@@ -48,6 +48,12 @@ public class QuotesController : ControllerBase
     public async Task<ActionResult<QuoteSettingsDto>> UpdateSettings([FromBody] UpdateQuoteSettingsCommand command, CancellationToken cancellationToken)
         => Answer(await _mediator.Send(command, cancellationToken));
 
+    /// <summary>The WhatsApp template the quotes go out with, or TienditApp's text (null): owners and admins.</summary>
+    [HttpPut("settings/whatsapp-template")]
+    public async Task<ActionResult<QuoteSettingsDto>> SetWhatsAppTemplate(
+        [FromBody] SetQuoteWhatsAppTemplateCommand command, CancellationToken cancellationToken)
+        => Answer(await _mediator.Send(command, cancellationToken));
+
     /// <summary>A new draft for a customer, or for the visit of an appointment (which opens its quote when it has one).</summary>
     [HttpPost]
     public async Task<ActionResult<QuoteDto>> Create([FromBody] CreateQuoteCommand command, CancellationToken cancellationToken)
@@ -77,6 +83,17 @@ public class QuotesController : ControllerBase
     public async Task<ActionResult<QuoteDto>> Reply(Guid id, [FromBody] RecordQuoteReplyRequest request, CancellationToken cancellationToken)
         => Answer(await _mediator.Send(new RecordQuoteReplyCommand(id, request.Accepted, request.Channel, request.Response), cancellationToken));
 
+    /// <summary>Sends a valid sent version by email from TienditApp (Fase 29D); it goes out from the outbox.</summary>
+    [HttpPost("{id:guid}/email")]
+    public async Task<ActionResult<QuoteEmailDto>> SendByEmail(Guid id, [FromBody] SendQuoteByEmailRequest request, CancellationToken cancellationToken)
+        => Answer(await _mediator.Send(new SendQuoteByEmailCommand(id, request.Email), cancellationToken));
+
+    /// <summary>Sends a valid sent version by WhatsApp from the business's number (Fase 29D); it goes out from the queue.</summary>
+    [HttpPost("{id:guid}/whatsapp")]
+    public async Task<ActionResult<QuoteWhatsAppDto>> SendByWhatsApp(
+        Guid id, [FromBody] SendQuoteByWhatsAppRequest request, CancellationToken cancellationToken)
+        => Answer(await _mediator.Send(new SendQuoteByWhatsAppCommand(id, request.Phone), cancellationToken));
+
     private ActionResult Answer<T>(Result<T> result)
         => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
 }
@@ -90,6 +107,16 @@ public class UpdateQuoteDraftRequest
     public int ValidityDays { get; init; }
     public string? Note { get; init; }
     public List<QuoteLineRequest> Lines { get; init; } = [];
+}
+
+public class SendQuoteByEmailRequest
+{
+    public string Email { get; init; } = null!;
+}
+
+public class SendQuoteByWhatsAppRequest
+{
+    public string Phone { get; init; } = null!;
 }
 
 public class RecordQuoteReplyRequest

@@ -79,6 +79,14 @@ public record RecordQuoteReplyCommand(Guid Id, bool Accepted, QuoteReplyChannel 
 [RequiresCapability(TenantCapability.Service | TenantCapability.Appointments)]
 public record UpdateQuoteSettingsCommand(int ValidityDays) : IRequest<Result<QuoteSettingsDto>>;
 
+/// <summary>
+/// The WhatsApp template the business's quotes go out with (Fase 29D, owners and admins): an active one for quotes, or
+/// TienditApp's text (null).
+/// </summary>
+[RequiresTenantManager]
+[RequiresCapability(TenantCapability.Service | TenantCapability.Appointments)]
+public record SetQuoteWhatsAppTemplateCommand(Guid? TemplateId) : IRequest<Result<QuoteSettingsDto>>;
+
 public class ListQuotesQueryValidator : AbstractValidator<ListQuotesQuery>
 {
     public ListQuotesQueryValidator()
@@ -166,8 +174,10 @@ public class QuotesHandler :
     IRequestHandler<ReviseQuoteCommand, Result<QuoteDto>>,
     IRequestHandler<DiscardQuoteCommand, Result<QuoteDto>>,
     IRequestHandler<RecordQuoteReplyCommand, Result<QuoteDto>>,
-    IRequestHandler<UpdateQuoteSettingsCommand, Result<QuoteSettingsDto>>
+    IRequestHandler<UpdateQuoteSettingsCommand, Result<QuoteSettingsDto>>,
+    IRequestHandler<SetQuoteWhatsAppTemplateCommand, Result<QuoteSettingsDto>>
 {
+    public const string TemplateNotFoundMessage = "Elige una plantilla activa para cotizaciones, o el texto de TienditApp.";
     public const string AppointmentNotFoundMessage = "No encontramos esa cita.";
     public const string CustomerNotFoundMessage = "No encontramos ese cliente en tu lista.";
     public const string ProductNotFoundMessage = "Un renglón es de un producto que ya no está en tu catálogo: escríbelo a mano.";
@@ -455,15 +465,52 @@ public class QuotesHandler :
         return Result.Success(await SettingsAsync(cancellationToken));
     }
 
+    public async Task<Result<QuoteSettingsDto>> Handle(SetQuoteWhatsAppTemplateCommand request, CancellationToken cancellationToken)
+    {
+        var settings = await _context.TenantSettings.FirstOrDefaultAsync(s => s.TenantId == TenantId, cancellationToken);
+        if (settings is null)
+            return Result.Failure<QuoteSettingsDto>("Configura primero tu negocio.");
+        if (request.TemplateId is { } templateId
+            && !await _context.MessageTemplates.AnyAsync(t => t.Id == templateId && t.TenantId == TenantId && t.IsActive
+                && t.Purpose == Domain.Messaging.Enums.MessagePurpose.QuoteDocument, cancellationToken))
+            return Result.Failure<QuoteSettingsDto>(TemplateNotFoundMessage);
+
+        var previous = settings.QuoteWhatsAppTemplateId;
+        try
+        {
+            settings.UseQuoteWhatsAppTemplate(request.TemplateId);
+        }
+        catch (DomainException ex)
+        {
+            return Result.Failure<QuoteSettingsDto>(ex.Message);
+        }
+
+        if (previous != settings.QuoteWhatsAppTemplateId)
+        {
+            _context.AuditLogs.Add(new Domain.Audit.Entities.AuditLog(
+                tenantId: TenantId,
+                entityName: nameof(Domain.Tenants.Entities.TenantSettings),
+                entityId: settings.Id.ToString(),
+                action: QuoteAudit.WhatsAppTemplateChanged,
+                performedBy: _currentUser.UserName ?? "system",
+                metadata: System.Text.Json.JsonSerializer.Serialize(new { Previous = previous, New = settings.QuoteWhatsAppTemplateId })));
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        return Result.Success(await SettingsAsync(cancellationToken));
+    }
+
     private async Task<QuoteSettingsDto> SettingsAsync(CancellationToken cancellationToken)
-        => await _context.TenantSettings
+    {
+        var settings = await _context.TenantSettings
             .AsNoTracking()
             .Where(s => s.TenantId == TenantId)
             .Select(s => new QuoteSettingsDto
             {
                 ValidityDays = s.QuoteValidityDays,
                 PricesIncludeTax = s.PricesIncludeTax,
-                DefaultTaxRate = s.DefaultTaxRate
+                DefaultTaxRate = s.DefaultTaxRate,
+                WhatsAppTemplateId = s.QuoteWhatsAppTemplateId
             })
             .FirstOrDefaultAsync(cancellationToken)
            ?? new QuoteSettingsDto
@@ -472,6 +519,13 @@ public class QuotesHandler :
                PricesIncludeTax = TenantSalesSettings.Legacy.PricesIncludeTax,
                DefaultTaxRate = TenantSalesSettings.Legacy.DefaultTaxRate
            };
+        settings.WhatsAppConnected = await Messaging.Campaigns.CampaignRules.IsWhatsAppConnectedAsync(_context, TenantId, cancellationToken);
+        settings.WhatsAppTemplates = await QuoteDeliveries.TemplatesAsync(_context, TenantId, cancellationToken);
+        // A template deleted, turned off or moved to another purpose since is TienditApp's text again.
+        if (settings.WhatsAppTemplates.All(t => t.Id != settings.WhatsAppTemplateId))
+            settings.WhatsAppTemplateId = null;
+        return settings;
+    }
 
     private Task<Quote> FindAsync(Guid id, CancellationToken cancellationToken, bool tracking = true)
         => FindAsync(_context, TenantId, id, cancellationToken, tracking);

@@ -134,6 +134,10 @@ public class UseCaseRulesTests
         { typeof(GetQuoteSettingsQuery), "Permission(ManageOrders) Module(Service, Appointments)" },
         { typeof(RecordQuoteReplyCommand), "Permission(ManageOrders) Module(Service, Appointments)" },
         { typeof(UpdateQuoteSettingsCommand), "Manager Module(Service, Appointments)" },
+        // Sending a quote from TienditApp (Fase 29D): whoever takes orders; the template of its WhatsApp, the owner or an admin.
+        { typeof(SendQuoteByEmailCommand), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(SendQuoteByWhatsAppCommand), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(SetQuoteWhatsAppTemplateCommand), "Manager Module(Service, Appointments)" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UploadTenantCoverCommand), "Manager" },

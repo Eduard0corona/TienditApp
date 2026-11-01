@@ -131,8 +131,9 @@ public sealed class OutgoingMessageSender
             && await CreditDueSoonSkipReasonAsync(message, cancellationToken) is { } notDue)
             return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: notDue);
 
-        // An opt-out stops promotions and reminders; notices of the customer's own orders and appointments still go out.
-        if (message.Purpose != MessagePurpose.AppointmentNotice
+        // An opt-out stops promotions and reminders; notices of the customer's own orders and appointments, and the quote they
+        // asked the business for (Fase 29D), still go out.
+        if (message.Purpose is not (MessagePurpose.AppointmentNotice or MessagePurpose.QuoteDocument)
             && await _consent.IsOptedOutAsync(message.TenantId, message.Phone, cancellationToken))
             return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: OptedOutReason);
 
