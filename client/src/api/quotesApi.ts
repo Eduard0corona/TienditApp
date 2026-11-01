@@ -1,0 +1,45 @@
+import { apiRequest, type Schemas } from './typedClient';
+import type { QuoteListFilter } from '../types';
+
+// The quotes of the business (Fase 29C, ADR 0053) and the link a customer opens without an account (/cotizacion#link). The
+// server works out the taxes and the totals: the browser sends lines, never a total.
+
+export type Quote = Schemas['QuoteDto'];
+export type QuoteSummary = Schemas['QuoteSummaryDto'];
+export type QuoteLine = Schemas['QuoteLineDto'];
+export type QuoteLineRequest = Schemas['QuoteLineRequest'];
+export type QuoteSettings = Schemas['QuoteSettingsDto'];
+export type UpdateQuoteDraft = Schemas['UpdateQuoteDraftRequest'];
+export type CreateQuote = Schemas['CreateQuoteCommand'];
+export type QuoteReply = Schemas['RecordQuoteReplyRequest'];
+export type PublicQuote = Schemas['PublicQuoteDto'];
+
+export const quotesApi = {
+  list: (filter: QuoteListFilter, search: string, pageNumber: number, signal?: AbortSignal) =>
+    apiRequest('get', '/api/v1/quotes', { query: { filter, search: search || undefined, pageNumber, pageSize: 20 }, signal }),
+
+  get: (id: string, signal?: AbortSignal) => apiRequest('get', '/api/v1/quotes/{id}', { path: { id }, signal }),
+
+  settings: (signal?: AbortSignal) => apiRequest('get', '/api/v1/quotes/settings', { signal }),
+
+  /** How many days a quote is valid once sent (owners and admins). */
+  updateSettings: (validityDays: number) => apiRequest('put', '/api/v1/quotes/settings', { body: { validityDays } }),
+
+  /** A draft for a customer, or for the visit of an appointment (which opens its quote when it has one). */
+  create: (body: CreateQuote) => apiRequest('post', '/api/v1/quotes', { body }),
+
+  updateDraft: (id: string, body: UpdateQuoteDraft) => apiRequest('put', '/api/v1/quotes/{id}', { path: { id }, body }),
+
+  send: (id: string) => apiRequest('post', '/api/v1/quotes/{id}/send', { path: { id } }),
+
+  revise: (id: string) => apiRequest('post', '/api/v1/quotes/{id}/revise', { path: { id } }),
+
+  discard: (id: string) => apiRequest('post', '/api/v1/quotes/{id}/discard', { path: { id } }),
+
+  reply: (id: string, body: QuoteReply) => apiRequest('post', '/api/v1/quotes/{id}/reply', { path: { id }, body }),
+};
+
+export const publicQuoteApi = {
+  /** The quote of the link; unknown, expired or of a business no longer active, it is not found (404). */
+  view: (token: string, signal?: AbortSignal) => apiRequest('post', '/api/v1/public/quotes/view', { body: { token }, signal }),
+};

@@ -39,6 +39,16 @@ describe('navigation', () => {
     expect(owner.flatMap((group) => group.entries).length).toBeLessThanOrEqual(15);
   });
 
+  it('puts the quotes next to the orders, as a tab only where a business has them', () => {
+    const trade = TenantCapability.Service | TenantCapability.Appointments;
+    const owner = getAccess(user('TENANT_ADMIN'), trade);
+    const restaurant = getAccess(user('TENANT_ADMIN'), RESTAURANT);
+
+    expect(getSectionTabs('/quotes', owner, trade)?.pages.map((page) => page.label)).toEqual(['Pedidos', 'Cotizaciones']);
+    expect(getSectionTabs('/orders', restaurant, RESTAURANT)).toBeNull();
+    expect(entryLabels('TENANT_ADMIN', [], RESTAURANT)).toContain('Pedidos');
+  });
+
   it('keeps only the pages a person can open in each section', () => {
     const labels = entryLabels('STAFF', ['ManageOrders', 'ManageCustomers'], RESTAURANT);
 

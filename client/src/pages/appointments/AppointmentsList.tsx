@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import { appointmentsApi } from '../../api/appointmentsApi';
 import { employeesApi } from '../../api/employeesApi';
 import { quoteVisit } from '../../api/homeVisits';
 import { productsApi } from '../../api/productsApi';
+import { quotesApi } from '../../api/quotesApi';
 import type {
   AppointmentDto,
   AppointmentStatus,
@@ -143,6 +144,9 @@ export default function AppointmentsList() {
   const { tenant, capabilities } = useTenant();
   // «Cobrar» opens Vender with the appointment: only for whoever sells.
   const canSell = getAccess(user, capabilities).sell;
+  // «Cotizar» opens the quote of a visit (Fase 29C): for whoever takes orders.
+  const canQuote = getAccess(user, capabilities).quotes;
+  const [quoting, setQuoting] = useState<string | null>(null);
   // Like the server's notices: with IVA included while the business is read.
   const pricesIncludeTax = tenant?.pricesIncludeTax ?? true;
   const [data, setData] = useState<PaginatedList<AppointmentDto>>(EMPTY_PAGINATED);
@@ -434,6 +438,38 @@ export default function AppointmentsList() {
 
   const charge = (appointmentId: string) => navigate(`/sell?appointment=${encodeURIComponent(appointmentId)}`);
 
+  // The visit's quote: a new draft with its customer, or the one it already has.
+  const quote = async (appointmentId: string) => {
+    setQuoting(appointmentId);
+    try {
+      const created = await quotesApi.create({ appointmentId });
+      void queryClient.invalidateQueries({ queryKey: ['quotes'] });
+      navigate(`/quotes/${created.id}`);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo abrir la cotización de la visita.'));
+      setQuoting(null);
+    }
+  };
+
+  /** What a closed appointment offers, with «Cotizar» beside it when it is a visit done. */
+  const withQuote = (item: AppointmentDto, action: ReactNode) => {
+    const quoteAction = quoteButton(item);
+    return quoteAction ? <div className="d-flex gap-1 justify-content-center align-items-center">{action}{quoteAction}</div> : action;
+  };
+
+  const quoteButton = (item: AppointmentDto) => (canQuote && item.visit
+    && (item.status === AppointmentStatusConst.Completed || !isClosed(item.status)) ? (
+      <button
+        type="button"
+        className="btn btn-sm btn-light"
+        disabled={quoting !== null}
+        onClick={() => void quote(item.id)}
+        aria-label={`Cotizar la visita de ${item.customerName}`}
+      >
+        Cotizar
+      </button>
+    ) : null);
+
   const viewPicker = (
     <div className="btn-group btn-group-sm" role="group" aria-label="Qué citas ver">
       {([['upcoming', 'Próximas'], ['history', 'Anteriores'], ['route', 'Ruta del día']] as const).map(([value, label]) => (
@@ -608,7 +644,7 @@ export default function AppointmentsList() {
                       </button>
                     </div>
                   ) : isClosed(item.status) ? (
-                    canSell && canBeCharged(item) ? (
+                    withQuote(item, canSell && canBeCharged(item) ? (
                       <button
                         type="button"
                         className="btn btn-sm btn-light"
@@ -619,7 +655,7 @@ export default function AppointmentsList() {
                       </button>
                     ) : (
                       <span className="text-muted small">{saleLabel(item) ?? 'Cerrada'}</span>
-                    )
+                    ))
                   ) : (
                     <div className="d-flex gap-1 justify-content-center">
                       <select
@@ -654,6 +690,7 @@ export default function AppointmentsList() {
                           Cobrar
                         </button>
                       )}
+                      {quoteButton(item)}
                     </div>
                   )}
                 </td>

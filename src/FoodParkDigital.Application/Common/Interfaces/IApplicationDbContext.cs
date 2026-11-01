@@ -15,6 +15,7 @@ using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
+using FoodParkDigital.Domain.Quotes.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
@@ -86,6 +87,7 @@ public interface IApplicationDbContext
     DbSet<Supplier> Suppliers { get; }
     DbSet<PurchaseOrder> PurchaseOrders { get; }
     DbSet<PurchaseOrderLine> PurchaseOrderLines { get; }
+    DbSet<Quote> Quotes { get; }
     DbSet<CashSession> CashSessions { get; }
     DbSet<CashTransaction> CashTransactions { get; }
     DbSet<AuditLog> AuditLogs { get; }

@@ -1,6 +1,6 @@
 # ADR 0053: Oficios a domicilio, la visita para cotizar
 
-- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31) y para la solicitud en línea (etapa 2) en la Fase 29B (2026-11-01); la cotización (etapa 3) sigue propuesta.
+- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31), para la solicitud en línea (etapa 2) en la Fase 29B (2026-11-01) y para la cotización (etapa 3, puntos 14, 15 y 17) en la Fase 29C (2026-11-01); su envío desde el outbox (punto 16) y convertir la aceptada en el trabajo siguen propuestos para la Fase 29D.
 - Fecha: 2026-10-27
 - Continúa: [ADR 0020](0020-home-visits.md) (servicios a domicilio), [ADR 0021](0021-business-directory.md) (Explorar) y [ADR 0025](0025-online-booking.md) (citas en línea).
 
@@ -121,6 +121,35 @@ La etapa 2 (puntos 11 a 13). La migración es `20261101002207_AddHomeVisitBookin
 - **El enlace y Mis citas** dicen «A domicilio · CP …», nunca la dirección, y ofrecen pedir otra visita.
 - **El rollback** se detiene (50050) en cuanto hay una visita pedida en línea o un correo de cliente.
 
+### Lo que hizo la Fase 29C
+
+La cotización (puntos 14, 15 y 17), salvo convertir la aceptada en el trabajo. La migración es `20261101055834_AddQuotes`, con sus scripts en `database/production/20261101055834_AddQuotes/`. El envío desde el outbox (punto 16) y la conversión quedan para la Fase 29D.
+
+- **`Quote`** (`Domain/Quotes`): cada versión es una fila con el folio de su cotización (`COT-000123`, de `IFolioGenerator`, que empieza después del más alto del negocio) y su número de versión.
+  - Guarda el cliente (uno de la lista del negocio o su nombre y teléfono, y su correo), la cita de la visita, si sus precios incluyen IVA (la política del negocio al empezarla, que heredan sus versiones), la vigencia en días, una nota y sus renglones.
+  - Un renglón es un servicio o producto del catálogo, con su IVA, o algo escrito a mano, con el IVA del negocio. El negocio pone la cantidad y el precio; el agregado calcula el importe de cada renglón, el subtotal, el IVA y el total con `OrderTaxCalculator`, como un pedido. El navegador nunca manda un total.
+  - Borrar del catálogo el producto de un renglón, o de la lista al cliente, deja la cotización con lo que dice.
+- **Sus estados** los cambia el agregado: Borrador, Enviada, Aceptada, Rechazada, Reemplazada y Descartada.
+  - «Vencida» no se guarda: una enviada se lee vencida el día después de su vigencia, en el día del negocio. Así vence sola sin un proceso que la cambie. Vencida ya no se acepta ni se rechaza, pero se corrige.
+  - Enviada ya no se edita. «Corregir» (de una enviada, vencida o rechazada) empieza la versión siguiente con lo que decía. Al enviarse, la anterior queda «Reemplazada» con lo que decía (una rechazada conserva cuándo respondió el cliente). Un folio tiene un solo borrador a la vez (`IX_Quotes_TenantId_Number_Draft`), y una corrección no se envía si el cliente ya aceptó la versión que tenía: aceptarla descarta la corrección que se había empezado.
+  - Un borrador se descarta y queda en el historial: su folio y su versión no se vuelven a dar.
+- **Enviar** fija la vigencia desde el día del negocio (15 días por omisión, `TenantSettings.QuoteValidityDays`, de 1 a 90; dueños y administradores la cambian en Cotizaciones y queda en la actividad) y le da a la versión su enlace. La pantalla ofrece mandarlo por WhatsApp (`wa.me` al teléfono del cliente con el folio, lo que hay que pagar, la vigencia y el enlace), por correo (`mailto:`) o copiarlo. Mandarlo desde el outbox, con su historial, es la Fase 29D.
+- **El enlace** (`/cotizacion#…`, `POST /api/v1/public/quotes/view`) es como el de un pedido: va en el fragmento y abre solo esa versión, sin cuenta y con el límite de la tienda.
+  - Del cliente solo dice su nombre.
+  - Deja de abrir 30 días después de vencer.
+  - Una versión reemplazada lo dice y lleva a la nueva.
+- **«Visita (se descuenta)»**: con «Se descuenta si contratas» (la política con que se pidió la visita; si la agendó el equipo, la del negocio), la cotización de una visita cobrada resta lo que su venta cobró por la visita.
+  - Es el cargo de la zona y las unidades del servicio de la cita que el cliente conservó (sin las devueltas), con su IVA, y nunca más de lo que esa venta tiene pagado.
+  - Se recalcula en el borrador y se fija al enviarla.
+  - Un reembolso o una devolución posterior de esa venta (que la deja completada) baja lo que resta a lo que la venta sigue teniendo pagado por la visita.
+  - Si la venta se cancela o se reembolsa completa, deja de aplicar.
+  - Se resta del total: «Por pagar».
+- **La respuesta**: el negocio registra si el cliente la aceptó o la rechazó, por dónde (WhatsApp, correo, teléfono o en persona) y lo que dijo, hasta 500 caracteres. Lo que dijo queda en la cotización. La actividad guarda el folio, la versión, el total y por dónde, nunca lo que dijo.
+- **Quién**: quien toma pedidos (`ManageOrders`) en un negocio con órdenes de servicio o agenda. Cotizaciones es una pestaña junto a Pedidos.
+  - «Cotizar» en la Agenda abre la cotización de una visita (abierta o completada): una nueva con su cliente, o la que ya tiene. El servidor no cotiza una cita en el local, una cancelada, una a la que el cliente no llegó ni una solicitud por aceptar, y una visita tiene una sola cotización también con dos «Cotizar» a la vez (`IX_Quotes_TenantId_AppointmentId_First`).
+  - En la pantalla, «Terminar y obtener enlace» la deja enviada: TienditApp todavía no se la manda al cliente.
+- **El rollback** se detiene (50051) en cuanto hay una cotización o un negocio con otra vigencia.
+
 ### Etapa 2: la solicitud de la visita
 
 10. **El negocio decide cómo cobra la visita** (decisión 5, `TenantSettings.HomeVisitChargePolicy`), con el servicio del catálogo que eligió como su visita («Visita y diagnóstico»):
@@ -178,7 +207,7 @@ La etapa 2 (puntos 11 a 13). La migración es `20261101002207_AddHomeVisitBookin
   - «Cerca de mí» no ordena a estos negocios: no publican su punto, y las zonas son por código postal, no por distancia.
   - La búsqueda de Explorar no encuentra por su ciudad a uno «Solo a domicilio», porque no la muestra.
   - Una categoría más necesita migración, enum, cliente y la lista del registro ([ADR 0021](0021-business-directory.md)).
-- **Decisión por omisión** (sin preferencia expresa del dueño). La Fase 29A aplicó la primera, la segunda y la cuarta; la vigencia de la cotización se confirma en la etapa 3:
+- **Decisión por omisión** (sin preferencia expresa del dueño). La Fase 29A aplicó la primera, la segunda y la cuarta, y la Fase 29C la vigencia de la cotización (15 días, que cada negocio cambia):
   - el interruptor empieza prendido para los giros de oficio y apagado para los demás;
   - Carpintería y Herrería y soldadura conservan el local al registrarse, y los demás oficios empiezan «Solo a domicilio»;
   - la cotización vence a los 15 días;

@@ -12644,6 +12644,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/quotes/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PublicQuoteRequest"];
+                    "text/json": components["schemas"]["PublicQuoteRequest"];
+                    "application/*+json": components["schemas"]["PublicQuoteRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicQuoteDto"];
+                        "application/json": components["schemas"]["PublicQuoteDto"];
+                        "text/json": components["schemas"]["PublicQuoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/self-invoice/{slug}": {
         parameters: {
             query?: never;
@@ -13087,6 +13130,369 @@ export interface paths {
                         "text/plain": components["schemas"]["PurchaseOrderDto"];
                         "application/json": components["schemas"]["PurchaseOrderDto"];
                         "text/json": components["schemas"]["PurchaseOrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    filter?: components["schemas"]["QuoteListFilter"];
+                    search?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteSummaryDtoPaginatedList"];
+                        "application/json": components["schemas"]["QuoteSummaryDtoPaginatedList"];
+                        "text/json": components["schemas"]["QuoteSummaryDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateQuoteCommand"];
+                    "text/json": components["schemas"]["CreateQuoteCommand"];
+                    "application/*+json": components["schemas"]["CreateQuoteCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDto"];
+                        "application/json": components["schemas"]["QuoteDto"];
+                        "text/json": components["schemas"]["QuoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDto"];
+                        "application/json": components["schemas"]["QuoteDto"];
+                        "text/json": components["schemas"]["QuoteDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateQuoteDraftRequest"];
+                    "text/json": components["schemas"]["UpdateQuoteDraftRequest"];
+                    "application/*+json": components["schemas"]["UpdateQuoteDraftRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDto"];
+                        "application/json": components["schemas"]["QuoteDto"];
+                        "text/json": components["schemas"]["QuoteDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteSettingsDto"];
+                        "application/json": components["schemas"]["QuoteSettingsDto"];
+                        "text/json": components["schemas"]["QuoteSettingsDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateQuoteSettingsCommand"];
+                    "text/json": components["schemas"]["UpdateQuoteSettingsCommand"];
+                    "application/*+json": components["schemas"]["UpdateQuoteSettingsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteSettingsDto"];
+                        "application/json": components["schemas"]["QuoteSettingsDto"];
+                        "text/json": components["schemas"]["QuoteSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDto"];
+                        "application/json": components["schemas"]["QuoteDto"];
+                        "text/json": components["schemas"]["QuoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes/{id}/revise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDto"];
+                        "application/json": components["schemas"]["QuoteDto"];
+                        "text/json": components["schemas"]["QuoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes/{id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDto"];
+                        "application/json": components["schemas"]["QuoteDto"];
+                        "text/json": components["schemas"]["QuoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes/{id}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RecordQuoteReplyRequest"];
+                    "text/json": components["schemas"]["RecordQuoteReplyRequest"];
+                    "application/*+json": components["schemas"]["RecordQuoteReplyRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDto"];
+                        "application/json": components["schemas"]["QuoteDto"];
+                        "text/json": components["schemas"]["QuoteDto"];
                     };
                 };
             };
@@ -16198,6 +16604,15 @@ export interface components {
             /** Format: double */
             taxPercent: number;
             notes?: string | null;
+        };
+        CreateQuoteCommand: {
+            /** Format: uuid */
+            appointmentId?: string | null;
+            /** Format: uuid */
+            customerId?: string | null;
+            customerName?: string | null;
+            customerPhone?: string | null;
+            customerEmail?: string | null;
         };
         CreateSupplierCommand: {
             name: string;
@@ -19830,6 +20245,46 @@ export interface components {
         PublicOrderTrackingRequest: {
             token: string;
         };
+        PublicQuoteDto: {
+            businessName: string;
+            businessSlug: string;
+            businessContactPhone?: string | null;
+            number: string;
+            /** Format: int32 */
+            revision: number;
+            status: components["schemas"]["QuoteStatus"];
+            customerName: string;
+            /** Format: date-time */
+            sentAt: string;
+            /** Format: date */
+            validUntil: string;
+            pricesIncludeTax: boolean;
+            lines: components["schemas"]["PublicQuoteLineDto"][];
+            /** Format: double */
+            subTotal: number;
+            /** Format: double */
+            tax: number;
+            taxes: components["schemas"]["QuoteTaxDto"][];
+            /** Format: double */
+            total: number;
+            visitCredit?: components["schemas"]["QuoteVisitCreditDto"];
+            /** Format: double */
+            toPay: number;
+            note?: string | null;
+            newerToken?: string | null;
+        };
+        PublicQuoteLineDto: {
+            description: string;
+            /** Format: double */
+            quantity: number;
+            /** Format: double */
+            unitPrice: number;
+            /** Format: double */
+            total: number;
+        };
+        PublicQuoteRequest: {
+            token: string;
+        };
         PublicReviewDto: {
             /** Format: uuid */
             id: string;
@@ -19932,6 +20387,159 @@ export interface components {
          * @enum {integer}
          */
         PurchaseOrderStatus: 0 | 1 | 2 | 3 | 4 | 99;
+        QuoteAppointmentDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            startAt: string;
+            serviceName: string;
+            postalCode?: string | null;
+        };
+        QuoteDto: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: int32 */
+            revision: number;
+            status: components["schemas"]["QuoteStatus"];
+            /** Format: uuid */
+            customerId?: string | null;
+            customerName: string;
+            customerPhone: string;
+            customerEmail?: string | null;
+            appointment?: components["schemas"]["QuoteAppointmentDto"];
+            pricesIncludeTax: boolean;
+            /** Format: int32 */
+            validityDays: number;
+            /** Format: date */
+            validUntil?: string | null;
+            note?: string | null;
+            lines: components["schemas"]["QuoteLineDto"][];
+            /** Format: double */
+            subTotal: number;
+            /** Format: double */
+            tax: number;
+            taxes: components["schemas"]["QuoteTaxDto"][];
+            /** Format: double */
+            total: number;
+            visitCredit?: components["schemas"]["QuoteVisitCreditDto"];
+            /** Format: double */
+            toPay: number;
+            /** Format: date-time */
+            sentAt?: string | null;
+            trackingToken?: string | null;
+            /** Format: date-time */
+            closedAt?: string | null;
+            replyChannel?: components["schemas"]["QuoteReplyChannel"];
+            customerResponse?: string | null;
+            /** Format: uuid */
+            draftRevisionId?: string | null;
+            versions: components["schemas"]["QuoteVersionDto"][];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        QuoteLineDto: {
+            /** Format: int32 */
+            position: number;
+            /** Format: uuid */
+            productId?: string | null;
+            description: string;
+            /** Format: double */
+            quantity: number;
+            /** Format: double */
+            unitPrice: number;
+            /** Format: double */
+            taxRate: number;
+            isTaxExempt: boolean;
+            /** Format: double */
+            total: number;
+        };
+        QuoteLineRequest: {
+            /** Format: uuid */
+            productId?: string | null;
+            description?: string | null;
+            /** Format: double */
+            quantity: number;
+            /** Format: double */
+            unitPrice: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        QuoteListFilter: 0 | 1 | 2 | 3 | 4 | 5;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        QuoteReplyChannel: 0 | 1 | 2 | 3;
+        QuoteSettingsDto: {
+            /** Format: int32 */
+            validityDays: number;
+            pricesIncludeTax: boolean;
+            /** Format: double */
+            defaultTaxRate: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        QuoteStatus: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        QuoteSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: int32 */
+            revision: number;
+            status: components["schemas"]["QuoteStatus"];
+            customerName: string;
+            customerPhone: string;
+            /** Format: double */
+            total: number;
+            /** Format: date */
+            validUntil?: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+            fromVisit: boolean;
+        };
+        QuoteSummaryDtoPaginatedList: {
+            items: components["schemas"]["QuoteSummaryDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        QuoteTaxDto: {
+            /** Format: double */
+            ratePercent: number;
+            isExempt: boolean;
+            /** Format: double */
+            taxableBase: number;
+            /** Format: double */
+            taxAmount: number;
+        };
+        QuoteVersionDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            revision: number;
+            status: components["schemas"]["QuoteStatus"];
+            /** Format: double */
+            total: number;
+            /** Format: date-time */
+            sentAt?: string | null;
+            /** Format: date-time */
+            closedAt?: string | null;
+        };
+        QuoteVisitCreditDto: {
+            /** Format: double */
+            amount: number;
+            applies: boolean;
+        };
         RatingSummaryDto: {
             /** Format: int32 */
             count: number;
@@ -20012,6 +20620,11 @@ export interface components {
         };
         RecordInventoryCountRequest: {
             lines: components["schemas"]["InventoryCountEntry"][];
+        };
+        RecordQuoteReplyRequest: {
+            accepted: boolean;
+            channel: components["schemas"]["QuoteReplyChannel"];
+            response?: string | null;
         };
         RecordedInventoryCountDto: {
             count: components["schemas"]["InventoryCountDto"];
@@ -21163,6 +21776,21 @@ export interface components {
             availableToTime?: string | null;
             isTrackable: boolean;
             notifyCustomer: boolean;
+        };
+        UpdateQuoteDraftRequest: {
+            /** Format: uuid */
+            customerId?: string | null;
+            customerName: string;
+            customerPhone: string;
+            customerEmail?: string | null;
+            /** Format: int32 */
+            validityDays: number;
+            note?: string | null;
+            lines: components["schemas"]["QuoteLineRequest"][];
+        };
+        UpdateQuoteSettingsCommand: {
+            /** Format: int32 */
+            validityDays: number;
         };
         UpdateSalesPolicyCommand: {
             pricesIncludeTax: boolean;

@@ -18,6 +18,7 @@ using FoodParkDigital.Application.Messaging.OptOuts;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.PublicDirectory;
+using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Application.Reports.Queries;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.Queries;
@@ -121,6 +122,18 @@ public class UseCaseRulesTests
         { typeof(GetHomeVisitRequestsSettingsQuery), "Permission(ManageAppointments) Module(Appointments)" },
         { typeof(UpdateHomeVisitRequestsSettingsCommand), "Manager Module(Appointments)" },
         { typeof(DismissHomeVisitAddressNoticeCommand), "Manager" },
+        // Quotes (Fase 29C): whoever takes orders in a business with service orders or the agenda; the owner or an admin sets
+        // how long they are valid.
+        { typeof(ListQuotesQuery), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(GetQuoteQuery), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(CreateQuoteCommand), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(UpdateQuoteDraftCommand), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(SendQuoteCommand), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(ReviseQuoteCommand), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(DiscardQuoteCommand), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(GetQuoteSettingsQuery), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(RecordQuoteReplyCommand), "Permission(ManageOrders) Module(Service, Appointments)" },
+        { typeof(UpdateQuoteSettingsCommand), "Manager Module(Service, Appointments)" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UploadTenantCoverCommand), "Manager" },

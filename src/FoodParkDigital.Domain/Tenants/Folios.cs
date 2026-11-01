@@ -3,18 +3,24 @@ namespace FoodParkDigital.Domain.Tenants;
 /// <summary>
 /// The folio formats of a business. Orders count without end (ORD-000123); inventory movements, purchase orders,
 /// physical counts and transfers start again every day (INV-20261005-0007, PO-20261005-0002, CNT-20261021-0001,
-/// TRF-20261021-0001, by the UTC day). The invoices count without end within their serie (F-123, Fase 28A).
+/// TRF-20261021-0001, by the UTC day). The invoices count without end within their serie (F-123, Fase 28A), and so do the
+/// quotes (COT-000123, Fase 29C).
 /// </summary>
 public static class Folios
 {
     public const string OrderScope = "ORD";
     public const string OrderPrefix = OrderScope + "-";
+    /// <summary>The quotes of a business (Fase 29C, ADR 0053): their versions share the folio.</summary>
+    public const string QuoteScope = "COT";
+    public const string QuotePrefix = QuoteScope + "-";
     private const string InventoryMovementPrefix = "INV";
     private const string PurchaseOrderPrefix = "PO";
     private const string InventoryCountPrefix = "CNT";
     private const string InventoryTransferPrefix = "TRF";
 
     public static string OrderNumber(long number) => $"{OrderPrefix}{number:D6}";
+
+    public static string QuoteNumber(long number) => $"{QuotePrefix}{number:D6}";
 
     public static string InventoryMovementScope(DateTimeOffset movementDate) => DailyScope(InventoryMovementPrefix, movementDate);
 

@@ -3,6 +3,7 @@ using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Domain.Tenants.Entities;
@@ -285,6 +286,19 @@ public class TenantSettings : BaseEntity, ITenantScoped
         HomeVisitRequestsEnabled = enabled;
         HomeVisitServiceId = visitServiceId;
         HomeVisitChargePolicy = chargePolicy;
+    }
+
+    /// <summary>
+    /// How many days a quote is valid once sent (Fase 29C, ADR 0053 point 14): 15 until the owner picks otherwise. A draft
+    /// starts with it and may change it.
+    /// </summary>
+    public int QuoteValidityDays { get; private set; } = QuoteRules.DefaultValidityDays;
+
+    public void SetQuoteValidityDays(int days)
+    {
+        if (days is < QuoteRules.MinValidityDays or > QuoteRules.MaxValidityDays)
+            throw new DomainException(QuoteRules.ValidityDaysMessage);
+        QuoteValidityDays = days;
     }
 
     /// <summary>A trade starts receiving visits to quote when it signs up (ADR 0053), with or without its zones and hours yet.</summary>

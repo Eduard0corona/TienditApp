@@ -21,6 +21,7 @@ internal static class BeforeHomeVisitBooking
     {
         modelBuilder.Entity<Appointment>().Ignore(a => a.CustomerEmail);
         modelBuilder.Entity<AppointmentVisit>().Ignore(v => v.ChargePolicy);
+        BeforeQuotes.Ignore(modelBuilder);
     }
 
     private sealed class Context(

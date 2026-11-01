@@ -43,7 +43,7 @@ public class HomeVisitBookingMigrationSqlServerTests
             await before.SaveChangesAsync();
         }
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeQuotes.CreateContext(database, tenantId);
         var stored = await context.Appointments.SingleAsync();
         Assert.Equal(((string?)null, (HomeVisitChargePolicy?)null, 50m), (stored.CustomerEmail, stored.Visit!.ChargePolicy, stored.Visit.Fee));
     }
@@ -54,7 +54,7 @@ public class HomeVisitBookingMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var (tenantId, zoneId) = await SeedAsync(database);
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeQuotes.CreateContext(database, tenantId))
         {
             // Without an email (it is optional): only how the visit is charged would be lost.
             context.Appointments.Add(Appointment.RequestHomeVisit(
@@ -73,13 +73,13 @@ public class HomeVisitBookingMigrationSqlServerTests
         {
             var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
             Assert.True(stopped is SqlException { Number: 50050 }, stopped?.Message ?? "it was not stopped");
-            await using var context = database.CreateContext(tenantId);
+            await using var context = BeforeQuotes.CreateContext(database, tenantId);
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             await context.Database.ExecuteSqlRawAsync(cleanUp);
         }
 
         await MigrateAsync(database, BeforeMigration);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeQuotes.CreateContext(database))
         {
             Assert.Equal(BeforeMigration, await LatestMigrationAsync(context));
             Assert.Equal(0, await context.Database.SqlQuery<int>($"""
@@ -98,7 +98,7 @@ public class HomeVisitBookingMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the columns are back, empty.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenantId);
+        await using var forward = BeforeQuotes.CreateContext(database, tenantId);
         var appointment = await forward.Appointments.SingleAsync();
         Assert.Equal(((string?)null, (HomeVisitChargePolicy?)null, 0m), (appointment.CustomerEmail, appointment.Visit!.ChargePolicy, appointment.Visit.Fee));
     }
@@ -110,7 +110,7 @@ public class HomeVisitBookingMigrationSqlServerTests
         var tenant = new Tenant($"Plomería {slug}", slug, BusinessType.Service, $"{slug}@demo.com");
         var settings = new TenantSettings(tenant.Id, TenantCapability.Service | TenantCapability.Appointments);
         var zone = new DeliveryZone(tenant.Id, new DeliveryZoneFields("Centro", 50m, 0m, null, ["72000"]));
-        await using var seed = database.CreateContext(tenant.Id);
+        await using var seed = BeforeQuotes.CreateContext(database, tenant.Id);
         seed.AddRange(tenant, settings, zone);
         await seed.SaveChangesAsync();
         return (tenant.Id, zone.Id);

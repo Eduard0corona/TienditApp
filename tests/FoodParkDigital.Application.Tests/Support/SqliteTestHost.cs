@@ -10,6 +10,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
+using FoodParkDigital.Domain.Quotes.Entities;
 using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -223,6 +224,9 @@ internal sealed class SqliteTestHost : IAsyncDisposable
                 .HasDefaultValueSql("randomblob(8)");
             modelBuilder.Entity<OnlinePaymentRefund>()
                 .Property(r => r.Version)
+                .HasDefaultValueSql("randomblob(8)");
+            modelBuilder.Entity<Quote>()
+                .Property(q => q.Version)
                 .HasDefaultValueSql("randomblob(8)");
 
             SqliteConversationVersion.Configure(modelBuilder);

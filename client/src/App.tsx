@@ -23,6 +23,7 @@ const MyAppointments = lazy(() => import('./pages/account/MyAppointments'));
 const AppointmentTrackingPage = lazy(() => import('./pages/public/AppointmentTrackingPage'));
 const SelfInvoicePage = lazy(() => import('./pages/public/SelfInvoicePage'));
 const PublicCfdiPage = lazy(() => import('./pages/public/PublicCfdiPage'));
+const PublicQuotePage = lazy(() => import('./pages/public/PublicQuotePage'));
 const AccountPage = lazy(() => import('./pages/account/AccountPage'));
 const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
 const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
@@ -42,6 +43,8 @@ const SuppliersList = lazy(() => import('./pages/suppliers/SuppliersList'));
 const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersList'));
 const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
 const AppointmentsList = lazy(() => import('./pages/appointments/AppointmentsList'));
+const QuotesList = lazy(() => import('./pages/quotes/QuotesList'));
+const QuoteDetail = lazy(() => import('./pages/quotes/QuoteDetail'));
 const OperationalReports = lazy(() => import('./pages/reports/OperationalReports'));
 const PlatformSettlements = lazy(() => import('./pages/reports/PlatformSettlements'));
 const PlatformSettlementPage = lazy(() => import('./pages/reports/PlatformSettlementPage'));
@@ -125,6 +128,8 @@ export default function App() {
               <Route path="/m/:slug/facturar" element={<SelfInvoicePage />} />
               {/* The link of a CFDI a business sent by WhatsApp (/factura#link, Fase 28M), the same way. */}
               <Route path="/factura" element={<PublicCfdiPage />} />
+              {/* The link of a quote a business sent (/cotizacion#link, Fase 29C), the same way. */}
+              <Route path="/cotizacion" element={<PublicQuotePage />} />
               <Route
                 path="/mis-citas"
                 element={(
@@ -301,6 +306,22 @@ export default function App() {
                 element={(
                   <AccessRoute area="cash">
                     <CashManagement />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/quotes"
+                element={(
+                  <AccessRoute area="quotes">
+                    <QuotesList />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/quotes/:id"
+                element={(
+                  <AccessRoute area="quotes">
+                    <QuoteDetail />
                   </AccessRoute>
                 )}
               />
