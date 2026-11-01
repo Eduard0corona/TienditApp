@@ -53,7 +53,8 @@ public class QuoteFlowSqlServerTests
         var created = await RunAsync(database, tenantId,
             (context, tenant) => new CreateQuoteCommandHandler(context, tenant, new Owner(), new FolioGenerator(context), new Clock()),
             new CreateQuoteCommand(appointmentId, null, null, null, null));
-        await UpdateAsync(database, tenantId, created.Value.Id, [Line("Revisión", 500m)]);
+        var drafted = await UpdateAsync(database, tenantId, created.Value.Id, [Line("Revisión", 500m)]);
+        Assert.True(drafted.IsSuccess, drafted.Error);
         var sent = await RunAsync(database, tenantId,
             (context, tenant) => new QuotesHandler(context, tenant, new Owner(), new Clock()), new SendQuoteCommand(created.Value.Id));
         Assert.True(sent.IsSuccess, sent.Error);
@@ -79,7 +80,9 @@ public class QuoteFlowSqlServerTests
             new CreateQuoteCommand(appointmentId, null, null, null, null));
         Assert.True(created.IsSuccess, created.Error);
 
-        await UpdateAsync(database, tenantId, created.Value.Id, [Line("Revisión", 500m), Line("Mano de obra", 300m)]);
+        // The draft must have saved lines in positions 1 and 2 for the replacement to delete them before inserting the new ones.
+        var first = await UpdateAsync(database, tenantId, created.Value.Id, [Line("Revisión", 500m), Line("Mano de obra", 300m)]);
+        Assert.True(first.IsSuccess, first.Error);
         var replaced = await UpdateAsync(database, tenantId, created.Value.Id,
             [Line("Cambio de calentador", 2800m), Line("Tubería", 180m, 3m), Line("Mano de obra", 700m)]);
 
