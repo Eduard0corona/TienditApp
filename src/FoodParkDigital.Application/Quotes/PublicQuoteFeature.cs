@@ -112,8 +112,7 @@ public class GetPublicQuoteQueryHandler : IRequestHandler<GetPublicQuoteQuery, P
         if (!view.LinkOpensOn(today) || view.SentAt is not { } sentAt || view.ValidUntil is not { } validUntil)
             return null;
 
-        var applies = view.VisitCreditSaleOrderId is { } sale
-            && !(await QuoteVisitCredits.CancelledAsync(_context, [sale], cancellationToken)).Contains(sale);
+        var saleStillPaid = await QuoteVisitCredits.StillPaidAsync(_context, view.VisitCreditSaleOrderId, cancellationToken);
         var status = view.StatusOn(today);
         string? newer = null;
         if (status == QuoteStatus.Superseded)
@@ -153,8 +152,8 @@ public class GetPublicQuoteQueryHandler : IRequestHandler<GetPublicQuoteQuery, P
             Tax = view.Tax,
             Taxes = QuoteViews.Taxes(view),
             Total = view.Total,
-            VisitCredit = view.VisitCreditAmount is { } amount ? new QuoteVisitCreditDto { Amount = amount, Applies = applies } : null,
-            ToPay = view.ToPay(applies),
+            VisitCredit = QuoteVisitCredits.Describe(view, saleStillPaid),
+            ToPay = view.ToPay(saleStillPaid),
             Note = view.Note,
             NewerToken = newer
         };

@@ -202,7 +202,7 @@ describe('QuoteDetail', () => {
     renderAt();
 
     expect(await screen.findByText('Ya no aplica')).toBeInTheDocument();
-    expect(screen.getByText('La venta de la visita se canceló: ya no se descuenta.')).toBeInTheDocument();
+    expect(screen.getByText('La venta de la visita se canceló o se reembolsó: ya no se descuenta.')).toBeInTheDocument();
   });
 
   it('shows what the server said when it refuses to finish it', async () => {

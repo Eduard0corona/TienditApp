@@ -26,8 +26,9 @@ public class QuoteTaxDto
 }
 
 /// <summary>
-/// What the customer paid for the visit, which the quote takes off (ADR 0053, «Se descuenta si contratas»); it stops
-/// applying once the sale of the visit is cancelled.
+/// What the customer paid for the visit, which the quote takes off (ADR 0053, «Se descuenta si contratas»): never more than
+/// the sale of the visit still has paid. It stops applying once that sale is cancelled or all of it refunded; then
+/// <see cref="Amount"/> is what it took off.
 /// </summary>
 public class QuoteVisitCreditDto
 {

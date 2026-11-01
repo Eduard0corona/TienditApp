@@ -343,6 +343,34 @@ public class QuoteFlowTests
     }
 
     [Fact]
+    public async Task TheVisit_ShouldComeOff_OnlyWhatItsSaleStillHasPaid_AfterARefund()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture, pricesIncludeTax: false, policy: HomeVisitChargePolicy.CreditedIfHired);
+        var service = await fixture.AddProductAsync(tenant, "Visita y diagnóstico", 300m, unit: UnitType.Service);
+        var visit = await VisitAsync(fixture, service.Id);
+        var sale = await SellVisitAsync(fixture, tenant, service, visit.Id);
+        var quote = (await CreateAsync(fixture, new CreateQuoteCommand(visit.Id, null, null, null, null))).Value!;
+        await UpdateAsync(fixture, quote, [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = 1000m }]);
+        var sent = (await Handler(fixture).Handle(new SendQuoteCommand(quote.Id), CancellationToken.None)).Value!;
+        Assert.Equal((440.80m, true, 719.20m), (sent.VisitCredit!.Amount, sent.VisitCredit.Applies, sent.ToPay));
+
+        // The sale stays completed: a refund only lowers what it has paid.
+        await RefundAsync(fixture, sale.Id, 140.80m);
+        var partly = await GetAsync(fixture, sent.Id);
+        var partlyPublic = await PublicAsync(fixture, sent.TrackingToken!);
+        Assert.Equal((300m, true, 860m), (partly.VisitCredit!.Amount, partly.VisitCredit.Applies, partly.ToPay));
+        Assert.Equal((300m, true, 860m), (partlyPublic!.VisitCredit!.Amount, partlyPublic.VisitCredit.Applies, partlyPublic.ToPay));
+
+        await RefundAsync(fixture, sale.Id, 300m);
+        var refunded = await GetAsync(fixture, sent.Id);
+        var refundedPublic = await PublicAsync(fixture, sent.TrackingToken!);
+        Assert.Equal(OrderStatus.Completed, (await fixture.Context.Orders.AsNoTracking().SingleAsync(o => o.Id == sale.Id)).Status);
+        Assert.Equal((440.80m, false, 1160m), (refunded.VisitCredit!.Amount, refunded.VisitCredit.Applies, refunded.ToPay));
+        Assert.Equal((false, 1160m), (refundedPublic!.VisitCredit!.Applies, refundedPublic.ToPay));
+    }
+
+    [Fact]
     public async Task TheVisit_ShouldComeOff_OnlyWhatItsSalePaid_AndOnlyWhatWasForTheVisit()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -578,6 +606,19 @@ public class QuoteFlowTests
 
     /// <summary>Charges the visit with its service, paid in cash.</summary>
     /// <summary>Charges the visit with its service (and <paramref name="extra"/>, when given), paid in cash: all of it unless <paramref name="paid"/>.</summary>
+    /// <summary>Gives back part of what a sale was paid in cash, as the business does from its detail.</summary>
+    private static async Task RefundAsync(SalesTestFixture fixture, Guid saleId, decimal amount)
+    {
+        fixture.Context.ChangeTracker.Clear();
+        var refund = await new RefundOrderCommandHandler(
+                fixture.Context, fixture.CurrentUser, new Finance.OrderCashService(fixture.Context, fixture.CurrentUser),
+                fixture.Clock, NoOpOrderInventoryService.Instance)
+            .Handle(new RefundOrderCommand { OrderId = saleId, Amount = amount, Method = OrderPaymentMethod.Cash, Reason = "No se hizo el trabajo" },
+                CancellationToken.None);
+        Assert.True(refund.IsSuccess, refund.Error);
+        fixture.Context.ChangeTracker.Clear();
+    }
+
     private static async Task<OrderDto> SellVisitAsync(
         SalesTestFixture fixture, Domain.Tenants.Entities.Tenant tenant, Product service, Guid appointmentId, Product? extra = null, decimal? paid = null)
     {

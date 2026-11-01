@@ -68,19 +68,34 @@ internal static class QuoteVisitCredits
         return credit > 0 ? new QuoteVisitCredit(sale.Id, decimal.Round(credit, 2, MidpointRounding.ToEven)) : null;
     }
 
-    /// <summary>The sales of the visits these quotes take off that were cancelled since: they no longer take them off.</summary>
-    public static async Task<IReadOnlySet<Guid>> CancelledAsync(
-        IApplicationDbContext context, IEnumerable<Guid?> saleOrderIds, CancellationToken cancellationToken)
+    /// <summary>
+    /// What the sale of the visit a quote takes off still has paid: what was paid less what was refunded since. Null once that
+    /// sale was cancelled: it no longer takes anything off.
+    /// </summary>
+    public static async Task<decimal?> StillPaidAsync(
+        IApplicationDbContext context, Guid? saleOrderId, CancellationToken cancellationToken)
     {
-        var ids = saleOrderIds.OfType<Guid>().Distinct().ToList();
-        if (ids.Count == 0)
-            return new HashSet<Guid>();
-        return (await context.Orders
-                .AsNoTracking()
-                .Where(o => ids.Contains(o.Id) && o.Status == OrderStatus.Cancelled)
-                .Select(o => o.Id)
-                .ToListAsync(cancellationToken))
-            .ToHashSet();
+        if (saleOrderId is not { } id)
+            return null;
+        return await context.Orders
+            .AsNoTracking()
+            .Where(o => o.Id == id && o.Status != OrderStatus.Cancelled)
+            .Select(o => (decimal?)(o.PaidAmount - o.RefundedAmount))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// How a quote's visit credit reads: what it takes off now; once it takes nothing off (its sale was cancelled or refunded),
+    /// what it took off, as not applying.
+    /// </summary>
+    public static QuoteVisitCreditDto? Describe(Quote quote, decimal? saleStillPaid)
+    {
+        if (quote.VisitCreditAmount is not { } fixedAmount)
+            return null;
+        var standing = quote.VisitCreditStanding(saleStillPaid);
+        return standing > 0
+            ? new QuoteVisitCreditDto { Amount = standing, Applies = true }
+            : new QuoteVisitCreditDto { Amount = fixedAmount, Applies = false };
     }
 }
 
@@ -130,8 +145,7 @@ internal static class QuoteViews
                 })
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
-        var applies = quote.VisitCreditSaleOrderId is { } sale
-            && !(await QuoteVisitCredits.CancelledAsync(context, [sale], cancellationToken)).Contains(sale);
+        var saleStillPaid = await QuoteVisitCredits.StillPaidAsync(context, quote.VisitCreditSaleOrderId, cancellationToken);
         var status = quote.StatusOn(today);
         var draft = versions.FirstOrDefault(v => v.Status == QuoteStatus.Draft);
 
@@ -165,8 +179,8 @@ internal static class QuoteViews
             Tax = quote.Tax,
             Taxes = Taxes(quote),
             Total = quote.Total,
-            VisitCredit = quote.VisitCreditAmount is { } amount ? new QuoteVisitCreditDto { Amount = amount, Applies = applies } : null,
-            ToPay = quote.ToPay(applies),
+            VisitCredit = QuoteVisitCredits.Describe(quote, saleStillPaid),
+            ToPay = quote.ToPay(saleStillPaid),
             SentAt = quote.SentAt,
             TrackingToken = quote.LinkOpensOn(today) ? quote.TrackingToken : null,
             ClosedAt = quote.ClosedAt,

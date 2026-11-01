@@ -362,19 +362,24 @@ public class QuoteTests
     }
 
     [Fact]
-    public void TheVisitCredit_ShouldComeOffWhileItsSaleIsNotCancelled_NeverBelowZero()
+    public void TheVisitCredit_ShouldComeOffUpToWhatItsSaleStillHasPaid_NeverBelowZero()
     {
         var quote = Draft(appointmentId: Guid.NewGuid());
         quote.ReplaceLines([Line(unitPrice: 1160m)], Now);
         quote.SetVisitCredit(new QuoteVisitCredit(Guid.NewGuid(), 350m), Now);
 
-        Assert.Equal((810m, 1160m), (quote.ToPay(visitCreditApplies: true), quote.ToPay(visitCreditApplies: false)));
+        // Its sale still has all of it paid (or more); a sale cancelled (null) takes nothing off.
+        Assert.Equal((810m, 810m, 1160m), (quote.ToPay(350m), quote.ToPay(500m), quote.ToPay(null)));
+        // Refunded since: only what the sale still has paid comes off, and nothing once all of it was refunded.
+        Assert.Equal((150m, 1010m), (quote.VisitCreditStanding(150m), quote.ToPay(150m)));
+        Assert.Equal((0m, 1160m), (quote.VisitCreditStanding(0m), quote.ToPay(0m)));
+        Assert.Equal(0m, quote.VisitCreditStanding(-20m));
 
         quote.ReplaceLines([Line(unitPrice: 200m)], Now);
-        Assert.Equal(0m, quote.ToPay(visitCreditApplies: true));
+        Assert.Equal(0m, quote.ToPay(350m));
 
         quote.SetVisitCredit(null, Now);
-        Assert.Equal((200m, (decimal?)null), (quote.ToPay(visitCreditApplies: true), quote.VisitCreditAmount));
+        Assert.Equal((200m, 0m, (decimal?)null), (quote.ToPay(350m), quote.VisitCreditStanding(350m), quote.VisitCreditAmount));
     }
 
     [Fact]

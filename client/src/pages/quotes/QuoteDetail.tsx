@@ -441,7 +441,7 @@ function QuoteDetail({ id }: { id: string }) {
               )}
               <p className="text-muted small mt-2 mb-0">{ivaNote}</p>
               {quote.visitCredit && !quote.visitCredit.applies && (
-                <p className="text-muted small mt-1 mb-0">La venta de la visita se canceló: ya no se descuenta.</p>
+                <p className="text-muted small mt-1 mb-0">La venta de la visita se canceló o se reembolsó: ya no se descuenta.</p>
               )}
             </div>
           </div>

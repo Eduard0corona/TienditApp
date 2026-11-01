@@ -141,7 +141,8 @@ La cotización (puntos 14, 15 y 17), salvo convertir la aceptada en el trabajo. 
 - **«Visita (se descuenta)»**: con «Se descuenta si contratas» (la política con que se pidió la visita; si la agendó el equipo, la del negocio), la cotización de una visita cobrada resta lo que su venta cobró por la visita.
   - Es el cargo de la zona y los renglones del servicio de la cita, con su IVA, y nunca más de lo que esa venta tiene pagado.
   - Se recalcula en el borrador y se fija al enviarla.
-  - Si la venta se cancela, deja de aplicar.
+  - Un reembolso posterior de esa venta (que la deja completada) baja lo que resta a lo que la venta sigue teniendo pagado.
+  - Si la venta se cancela o se reembolsa completa, deja de aplicar.
   - Se resta del total: «Por pagar».
 - **La respuesta**: el negocio registra si el cliente la aceptó o la rechazó, por dónde (WhatsApp, correo, teléfono o en persona) y lo que dijo, hasta 500 caracteres. Lo que dijo queda en la cotización. La actividad guarda el folio, la versión, el total y por dónde, nunca lo que dijo.
 - **Quién**: quien toma pedidos (`ManageOrders`) en un negocio con órdenes de servicio o agenda. Cotizaciones es una pestaña junto a Pedidos.
