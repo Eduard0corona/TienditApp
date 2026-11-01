@@ -164,13 +164,16 @@ public class QuoteDeliveryFlowTests
         shop.Clock.UtcNow = SalesTestFixture.Now.AddDays(1).AddMinutes(1);
         Assert.True((await shop.EmailAsync(quote.Id, "valeria@correo.mx")).IsSuccess);
 
-        // Another version of the business, past the business's limit.
+        // Another version of the business brings the day to 299 emails: the 300th goes, the 301st does not.
         var other = await shop.SentAsync();
         var otherQuote = await shop.Context.Quotes.AsNoTracking().SingleAsync(q => q.Id == other.Id);
         var today = DateOnly.FromDateTime(shop.Clock.UtcNow.UtcDateTime);
-        for (var i = 0; i < QuoteRules.MaxSendsPerBusiness; i++)
+        var since = shop.Clock.UtcNow - QuoteDeliveries.Day;
+        var already = await shop.Context.QuoteEmails.CountAsync(e => e.RequestedAt > since);
+        for (var i = already; i < QuoteRules.MaxSendsPerBusiness - 1; i++)
             shop.Context.QuoteEmails.Add(QuoteEmail.Request(otherQuote, "otro@correo.mx", Guid.NewGuid(), today, shop.Clock.UtcNow));
         await shop.Context.SaveChangesAsync();
+        Assert.True((await shop.EmailAsync(quote.Id, "valeria@correo.mx")).IsSuccess);
         Assert.Equal(QuoteRules.TooManyBusinessSendsMessage, (await shop.EmailAsync(quote.Id, "valeria@correo.mx")).Error);
     }
 
@@ -223,15 +226,17 @@ public class QuoteDeliveryFlowTests
             Assert.True((await shop.WhatsAppAsync(first.Id, "5522107765")).IsSuccess);
 
         Assert.Equal(QuoteRules.TooManySendsMessage, (await shop.WhatsAppAsync(first.Id, "5522107765")).Error);
-        // Another version of the business still goes, until the business reaches its limit.
+        // Another version of the business still goes, until the business reaches its limit: the 300th goes, the 301st does not.
         Assert.True((await shop.WhatsAppAsync(second.Id, "5522107765")).IsSuccess);
         var other = await shop.SentAsync();
         var otherQuote = await shop.Context.Quotes.AsNoTracking().SingleAsync(q => q.Id == other.Id);
         var today = DateOnly.FromDateTime(shop.Clock.UtcNow.UtcDateTime);
-        for (var i = 0; i < QuoteRules.MaxSendsPerBusiness; i++)
+        var already = await shop.Context.OutgoingMessages.CountAsync(m => m.QuoteId != null);
+        for (var i = already; i < QuoteRules.MaxSendsPerBusiness - 1; i++)
             shop.Context.OutgoingMessages.Add(OutgoingMessage.ForQuote(otherQuote, "+525533334444", "Otro", "Hola", null, "es_MX", [],
                 Guid.NewGuid(), today, shop.Clock.UtcNow));
         await shop.Context.SaveChangesAsync();
+        Assert.True((await shop.WhatsAppAsync(second.Id, "5522107765")).IsSuccess);
         Assert.Equal(QuoteRules.TooManyBusinessSendsMessage, (await shop.WhatsAppAsync(second.Id, "5522107765")).Error);
     }
 

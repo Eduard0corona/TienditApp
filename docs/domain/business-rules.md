@@ -791,7 +791,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
     - solo una versión enviada y vigente (al pedirlo y al salir), 5 veces al día por medio y 300 cotizaciones al día por negocio y medio, y cada envío queda en su historial con dónde va (enviándose, enviado, entregado, leído o por qué no se envió).
   - Con «Se descuenta si contratas» (la política acordada con la visita; si la agendó el equipo, la del negocio), la cotización de una visita cobrada resta lo que la venta cobró por la visita (el cargo de la zona y las unidades del servicio de la cita que no se devolvieron, con IVA, hasta lo pagado): «Por pagar». Se fija al enviarla, nunca resta más de lo que esa venta sigue teniendo pagado por la visita si después se reembolsa o se devuelve el servicio, y deja de aplicar si se cancela o se reembolsa completa.
   - El negocio registra si el cliente la aceptó o la rechazó, por dónde y lo que dijo. La actividad guarda la cotización, su versión, su total y por dónde, nunca lo que dijo ni sus datos.
-  - Convertir la aceptada en una orden de servicio o en citas llega en la Fase 29D.
+  - Convertir la aceptada en una orden de servicio o en citas llega en la Fase 29E.
 
 ## Cancelación y trazabilidad
 
