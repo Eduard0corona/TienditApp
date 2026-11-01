@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appointmentsApi } from '../../api/appointmentsApi';
+import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { employeesApi } from '../../api/employeesApi';
 import { quoteVisit } from '../../api/homeVisits';
@@ -210,6 +211,24 @@ describe('AppointmentsList', () => {
     await user.click(dialog.getByRole('button', { name: 'Rechazar' }));
     await waitFor(() => expect(appointmentsApi.decline).toHaveBeenCalledWith('r1'));
     expect(toast.success).toHaveBeenCalledWith('Solicitud rechazada: el cliente recibe el aviso.');
+  });
+
+  it('says a visit to quote requested online is one, how it is charged and where its quote goes (Fase 29B)', async () => {
+    renderAgenda([appointment({
+      id: 'v1',
+      customerName: 'Valeria',
+      customerEmail: 'valeria@correo.mx',
+      status: AppointmentStatus.Requested,
+      channel: AppointmentChannel.Online,
+      visit: { postalCode: '72000', addressLine: 'Av. Juárez 123', zoneName: 'Centro', fee: 0, chargePolicy: HomeVisitChargePolicy.Free },
+    })]);
+
+    const row = (await screen.findByText('Valeria')).closest('tr')!;
+    expect(within(row).getByText('valeria@correo.mx')).toBeInTheDocument();
+    expect(within(row).getByText('A domicilio · CP 72000 · Centro')).toBeInTheDocument();
+    expect(within(row).getByText('Visita para cotizar · sin costo')).toBeInTheDocument();
+    // A visit the team arranged says only where it is.
+    expect(screen.queryByText(/Visita para cotizar · se cobra/)).not.toBeInTheDocument();
   });
 
   it('says how many requests wait and shows them, and opens on them from the notice', async () => {

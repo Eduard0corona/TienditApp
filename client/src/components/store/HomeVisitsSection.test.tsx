@@ -1,5 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { render as renderInDom, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import type { Schemas } from '../../api/typedClient';
@@ -22,9 +24,12 @@ function visits(overrides: Partial<PublicHomeVisits> = {}): PublicHomeVisits {
   };
 }
 
+/** The section links to the request page: it needs a router. */
+const render = (ui: ReactElement) => renderInDom(<MemoryRouter>{ui}</MemoryRouter>);
+
 describe('HomeVisitsSection', () => {
   it('says what a visit costs and how it is charged, where it goes, and its services as reference prices', () => {
-    render(<HomeVisitsSection visits={visits()} businessName="Plomería Hernández" contactPhone="222 123 4567" pricesIncludeTax />);
+    render(<HomeVisitsSection visits={visits()} slug="plomeria-hernandez" pricesIncludeTax />);
 
     const section = screen.getByRole('region', { name: 'Visitas a domicilio' });
     expect(within(section).getByText('Visita y diagnóstico')).toBeInTheDocument();
@@ -36,17 +41,15 @@ describe('HomeVisitsSection', () => {
     // Reference prices, never a cart.
     expect(within(section).queryByRole('button', { name: /Agregar/ })).not.toBeInTheDocument();
 
-    const request = within(section).getByRole('link', { name: 'Solicitar visita' });
-    expect(request.getAttribute('href')).toContain('https://wa.me/522221234567?text=');
-    expect(decodeURIComponent(request.getAttribute('href') ?? '')).toContain('Hola Plomería Hernández, quiero pedir una visita a domicilio');
+    // The visit is asked for online (Fase 29B), on its request page.
+    expect(within(section).getByRole('link', { name: 'Solicitar visita' })).toHaveAttribute('href', '/m/plomeria-hernandez/visita');
   });
 
-  it('writes a free visit and prices without IVA as the business does, with no request without a phone', () => {
+  it('writes a free visit and prices without IVA as the business does, and asks for it online even without a phone', () => {
     render(
       <HomeVisitsSection
         visits={visits({ chargePolicy: HomeVisitChargePolicy.Free, price: { amount: 0, isStarting: false }, visitServiceName: null })}
-        businessName="Fumigaciones Ruiz"
-        contactPhone={null}
+        slug="fumigaciones-ruiz"
         pricesIncludeTax={false}
       />,
     );
@@ -54,14 +57,14 @@ describe('HomeVisitsSection', () => {
     expect(screen.getByText('Visita sin costo')).toBeInTheDocument();
     expect(screen.getByText('Revisamos y te decimos cuánto cuesta, sin costo.')).toBeInTheDocument();
     expect(screen.getByText('desde $450.00 más IVA')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Solicitar visita' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Solicitar visita' })).toHaveAttribute('href', '/m/fumigaciones-ruiz/visita');
   });
 
   it('says what the visit costs where it costs nothing only in some postal codes, without calling it free', () => {
     render(
       <HomeVisitsSection
         visits={visits({ chargePolicy: HomeVisitChargePolicy.Charged, price: { amount: 0, isStarting: true } })}
-        businessName="Plomería Hernández"
+        slug="plomeria-hernandez"
         pricesIncludeTax
       />,
     );
@@ -75,7 +78,7 @@ describe('HomeVisitsSection', () => {
     render(
       <HomeVisitsSection
         visits={visits({ chargePolicy: HomeVisitChargePolicy.CreditedIfHired, price: { amount: 0, isStarting: false } })}
-        businessName="Plomería Hernández"
+        slug="plomeria-hernandez"
         pricesIncludeTax
       />,
     );
@@ -88,7 +91,7 @@ describe('HomeVisitsSection', () => {
   it('shows the first postal codes of a large zone, all of them on request, and says how many more it did not send', async () => {
     const codes = Array.from({ length: 300 }, (_, index) => String(72000 + index));
     render(
-      <HomeVisitsSection visits={visits({ postalCodes: codes, postalCodeCount: 340 })} businessName="Cerrajería Pérez" pricesIncludeTax />,
+      <HomeVisitsSection visits={visits({ postalCodes: codes, postalCodeCount: 340 })} slug="cerrajeria-perez" pricesIncludeTax />,
     );
 
     const list = screen.getByRole('list', { name: 'Vamos a estos códigos postales' });

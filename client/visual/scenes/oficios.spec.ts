@@ -1,12 +1,14 @@
 import { expect, test } from '../fixtures';
-import { SIZES, open, snap, snapElement } from '../helpers';
-import { OFICIOS_EN_EXPLORAR, PLOMERO_EN_CONFIGURACION, TIENDA_DE_PLOMERIA } from './oficios.mocks';
+import { SIZES, dialog, open, snap, snapElement } from '../helpers';
+import { OFICIOS_EN_EXPLORAR, PLOMERO_EN_CONFIGURACION, TIENDA_DE_PLOMERIA, VISITA_DE_PLOMERIA } from './oficios.mocks';
 
 // Oficios a domicilio (Fase 29A, ADR 0053): the trades that go to their customers' homes to quote look like what they
 // are. In Explorar, «Hogar y reparaciones» lists a plumber, a carpenter and a locksmith that receive visits: their cards
 // speak of visits and what one costs, never of orders, and with the customer's postal code say whether they go there
 // (the one that does not, last). The plumber's store shows its visits instead of an empty menu, and its owner sets them
-// in Configuración, where «Cómo te ven» says that its store still publishes the address of a local.
+// in Configuración, where «Cómo te ven» says that its store still publishes the address of a local. Its visits are asked
+// for online (Fase 29B): the postal code says whether it goes there and what the visit costs there, then a day and a free
+// time, what happens and where, and the receipt with the link of the visit.
 
 const LOOKS = [
   { suffix: 'escritorio', viewport: SIZES.desktop },
@@ -79,5 +81,53 @@ test.describe('Visitas a domicilio en Configuración', () => {
     await expect(card.getByRole('link', { name: 'Sucursales' })).toBeVisible();
     await card.scrollIntoViewIfNeeded();
     await snapElement(card, 'oficios-aviso-direccion');
+  });
+});
+
+test.describe('Solicitar una visita', () => {
+  test.use({ signedIn: false, extraRoutes: VISITA_DE_PLOMERIA });
+
+  /** Roma Norte, where the plumber goes: its free times open on Monday. */
+  async function openWithPostalCode(page: import('@playwright/test').Page) {
+    await open(page, '/m/plomeria-hernandez/visita');
+    await page.getByLabel('Código postal').fill('06700');
+    await expect(page.getByText('Vamos al 06700 · Visita $400.00 más IVA, se descuenta si contratas')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Lun 5.*lunes 5 de octubre$/ })).toHaveAttribute('aria-pressed', 'true');
+  }
+
+  for (const look of LOOKS) {
+    test(`solicitar visita ${look.suffix}`, async ({ page }) => {
+      await page.setViewportSize(look.viewport);
+      await openWithPostalCode(page);
+      await page.getByRole('button', { name: '10:00 a. m.' }).click();
+      await expect(page.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' })).toBeVisible();
+      await snap(page, `oficios-solicitar-visita-${look.suffix}`);
+    });
+  }
+
+  test('solicitar visita donde no va', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/m/plomeria-hernandez/visita');
+    await page.getByLabel('Código postal').fill('72000');
+    await expect(page.getByText('Por ahora no vamos al 72000.')).toBeVisible();
+    await snap(page, 'oficios-solicitar-visita-no-va-telefono');
+  });
+
+  test('solicitar visita datos y recibo', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await openWithPostalCode(page);
+    await page.getByRole('button', { name: '10:00 a. m.' }).click();
+    await page.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }).click();
+    const sheet = await dialog(page, 'Tu visita');
+    await sheet.getByLabel('¿Qué pasa?').fill('Gotea el calentador desde ayer en la noche.');
+    await sheet.getByLabel('Dirección').fill('Colima 120, Roma Norte');
+    await sheet.getByLabel('Tu nombre').fill('Valeria Ruiz');
+    await sheet.getByLabel('Teléfono (WhatsApp)').fill('55 2210 7765');
+    await snapElement(sheet, 'oficios-solicitar-visita-datos-telefono');
+
+    await sheet.getByRole('button', { name: 'Solicitar visita' }).click();
+    await expect(page.getByRole('heading', { name: '¡Solicitud enviada!' })).toBeVisible();
+    await expect(page.getByText('A domicilio · CP 06700')).toBeVisible();
+    await snap(page, 'oficios-solicitar-visita-enviada-telefono');
   });
 });

@@ -14781,6 +14781,204 @@
         }
       }
     },
+    "/api/v1/public/menu/{slug}/home-visit": {
+      "get": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHomeVisitDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHomeVisitDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHomeVisitDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/home-visit/coverage": {
+      "get": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHomeVisitCoverageDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHomeVisitCoverageDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHomeVisitCoverageDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/home-visit/slots": {
+      "get": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "staffId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicBookingSlotsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicBookingSlotsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicBookingSlotsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/home-visits": {
+      "post": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPublicHomeVisitRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPublicHomeVisitRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPublicHomeVisitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAppointmentReceiptDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAppointmentReceiptDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAppointmentReceiptDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/menu/{slug}/orders": {
       "post": {
         "tags": [
@@ -18166,6 +18364,10 @@
           "customerPhone": {
             "type": "string"
           },
+          "customerEmail": {
+            "type": "string",
+            "nullable": true
+          },
           "serviceName": {
             "type": "string"
           },
@@ -18307,6 +18509,9 @@
           "fee": {
             "type": "number",
             "format": "double"
+          },
+          "chargePolicy": {
+            "$ref": "#/components/schemas/HomeVisitChargePolicy"
           }
         },
         "additionalProperties": false
@@ -22918,6 +23123,9 @@
             "type": "string",
             "nullable": true
           },
+          "visit": {
+            "$ref": "#/components/schemas/CustomerVisitDto"
+          },
           "staffName": {
             "type": "string",
             "nullable": true
@@ -23399,6 +23607,21 @@
               "type": "string",
               "format": "uuid"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomerVisitDto": {
+        "required": [
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "chargePolicy": {
+            "$ref": "#/components/schemas/HomeVisitChargePolicy"
           }
         },
         "additionalProperties": false
@@ -33027,6 +33250,9 @@
             "type": "string",
             "nullable": true
           },
+          "visit": {
+            "$ref": "#/components/schemas/CustomerVisitDto"
+          },
           "staffName": {
             "type": "string",
             "nullable": true
@@ -33648,6 +33874,88 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicHomeVisitCoverageDto": {
+        "required": [
+          "covered",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "covered": {
+            "type": "boolean"
+          },
+          "price": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicHomeVisitDto": {
+        "required": [
+          "businessName",
+          "chargePolicy",
+          "daysAhead",
+          "durationMinutes",
+          "price",
+          "pricesIncludeTax",
+          "slug",
+          "staff",
+          "theme",
+          "visitName"
+        ],
+        "type": "object",
+        "properties": {
+          "businessName": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "theme": {
+            "$ref": "#/components/schemas/BusinessTheme"
+          },
+          "pricesIncludeTax": {
+            "type": "boolean"
+          },
+          "daysAhead": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "visitName": {
+            "type": "string"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "chargePolicy": {
+            "$ref": "#/components/schemas/HomeVisitChargePolicy"
+          },
+          "price": {
+            "$ref": "#/components/schemas/HomeVisitPriceDto"
+          },
+          "staff": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicBookingStaffDto"
+            }
           }
         },
         "additionalProperties": false
@@ -35055,6 +35363,57 @@
             "type": "string"
           },
           "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "staffId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RequestPublicHomeVisitRequest": {
+        "required": [
+          "addressLine",
+          "customerName",
+          "customerPhone",
+          "postalCode",
+          "problem",
+          "startAt"
+        ],
+        "type": "object",
+        "properties": {
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          },
+          "problem": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "customerPhone": {
+            "type": "string"
+          },
+          "customerEmail": {
             "type": "string",
             "nullable": true
           },

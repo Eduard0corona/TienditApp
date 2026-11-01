@@ -1425,6 +1425,20 @@ describe('SellPage with a platform order and no connection', () => {
       expect(ticket().getByRole('button', { name: /Cobrar \$400\.00/ })).toBeEnabled();
     });
 
+    it('brings no service for a visit to quote «Sin costo»: only what the cashier adds (Fase 29B)', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);
+      vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, haircut], totalCount: 2 } } as never);
+      vi.mocked(appointmentsApi.getById).mockResolvedValue({
+        data: { ...appointment, visit: { ...appointment.visit, fee: 0, chargePolicy: 1 } },
+      } as never);
+      renderAt('/sell?appointment=a1');
+
+      expect(await ticket().findByText(/Cobro de la cita de/)).toHaveTextContent('Ana Ruiz');
+      await waitFor(() => expect(toast.info).toHaveBeenCalledWith('La visita es sin costo: agrega al ticket lo que cobres.'));
+      expect(ticket().queryByRole('textbox', { name: 'Cantidad de Corte a domicilio' })).not.toBeInTheDocument();
+      expect(ticket().queryByText(/Cargo por visita/)).not.toBeInTheDocument();
+    });
+
     it('does not bring a cancelled appointment', async () => {
       // Whoever books the appointment charges it (ManageAppointments, as the server asks).
       signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);

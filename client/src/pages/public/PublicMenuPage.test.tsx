@@ -368,7 +368,7 @@ describe('PublicMenuPage', () => {
 
     const visits = await screen.findByRole('region', { name: 'Visitas a domicilio' });
     expect(within(visits).getByText('Visita $300.00')).toBeInTheDocument();
-    expect(within(visits).getByRole('link', { name: 'Solicitar visita' })).toBeInTheDocument();
+    expect(within(visits).getByRole('link', { name: 'Solicitar visita' })).toHaveAttribute('href', '/m/cafe-luna/visita');
     expect(screen.queryByText('El menú todavía no tiene productos.')).not.toBeInTheDocument();
     unmount();
 

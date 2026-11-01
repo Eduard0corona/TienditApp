@@ -12298,6 +12298,173 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/menu/{slug}/home-visit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicHomeVisitDto"];
+                        "application/json": components["schemas"]["PublicHomeVisitDto"];
+                        "text/json": components["schemas"]["PublicHomeVisitDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/home-visit/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    postalCode?: string;
+                };
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicHomeVisitCoverageDto"];
+                        "application/json": components["schemas"]["PublicHomeVisitCoverageDto"];
+                        "text/json": components["schemas"]["PublicHomeVisitCoverageDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/home-visit/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    from?: string;
+                    staffId?: string;
+                };
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicBookingSlotsDto"];
+                        "application/json": components["schemas"]["PublicBookingSlotsDto"];
+                        "text/json": components["schemas"]["PublicBookingSlotsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/home-visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RequestPublicHomeVisitRequest"];
+                    "text/json": components["schemas"]["RequestPublicHomeVisitRequest"];
+                    "application/*+json": components["schemas"]["RequestPublicHomeVisitRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicAppointmentReceiptDto"];
+                        "application/json": components["schemas"]["PublicAppointmentReceiptDto"];
+                        "text/json": components["schemas"]["PublicAppointmentReceiptDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/menu/{slug}/orders": {
         parameters: {
             query?: never;
@@ -14865,6 +15032,7 @@ export interface components {
             id: string;
             customerName: string;
             customerPhone: string;
+            customerEmail?: string | null;
             serviceName: string;
             staffName?: string | null;
             /** Format: uuid */
@@ -14907,6 +15075,7 @@ export interface components {
             zoneName: string;
             /** Format: double */
             fee: number;
+            chargePolicy?: components["schemas"]["HomeVisitChargePolicy"];
         };
         AppointmentVisitInput: {
             postalCode: string;
@@ -16272,6 +16441,7 @@ export interface components {
             businessSlug: string;
             businessContactPhone?: string | null;
             address?: string | null;
+            visit?: components["schemas"]["CustomerVisitDto"];
             staffName?: string | null;
         };
         CustomerAppointmentDtoPaginatedList: {
@@ -16414,6 +16584,10 @@ export interface components {
             notes?: string | null;
             options: string[];
             optionIds: string[];
+        };
+        CustomerVisitDto: {
+            postalCode: string;
+            chargePolicy?: components["schemas"]["HomeVisitChargePolicy"];
         };
         DailyCashCutByBranchDto: {
             /** Format: uuid */
@@ -19324,6 +19498,7 @@ export interface components {
             businessName: string;
             contactPhone?: string | null;
             address?: string | null;
+            visit?: components["schemas"]["CustomerVisitDto"];
             staffName?: string | null;
             linkedToAccount: boolean;
             trackingToken: string;
@@ -19493,6 +19668,28 @@ export interface components {
             addsTax: boolean;
             /** Format: double */
             distanceKm?: number | null;
+        };
+        PublicHomeVisitCoverageDto: {
+            postalCode: string;
+            covered: boolean;
+            /** Format: double */
+            price?: number | null;
+        };
+        PublicHomeVisitDto: {
+            businessName: string;
+            slug: string;
+            logoUrl?: string | null;
+            contactPhone?: string | null;
+            theme: components["schemas"]["BusinessTheme"];
+            pricesIncludeTax: boolean;
+            /** Format: int32 */
+            daysAhead: number;
+            visitName: string;
+            /** Format: int32 */
+            durationMinutes: number;
+            chargePolicy: components["schemas"]["HomeVisitChargePolicy"];
+            price: components["schemas"]["HomeVisitPriceDto"];
+            staff: components["schemas"]["PublicBookingStaffDto"][];
         };
         PublicHomeVisitServiceDto: {
             name: string;
@@ -19897,6 +20094,21 @@ export interface components {
             customerName: string;
             customerPhone: string;
             notes?: string | null;
+            /** Format: uuid */
+            idempotencyKey?: string | null;
+            /** Format: uuid */
+            staffId?: string | null;
+        };
+        RequestPublicHomeVisitRequest: {
+            /** Format: date-time */
+            startAt: string;
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+            problem: string;
+            customerName: string;
+            customerPhone: string;
+            customerEmail?: string | null;
             /** Format: uuid */
             idempotencyKey?: string | null;
             /** Format: uuid */

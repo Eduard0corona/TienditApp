@@ -114,6 +114,83 @@ const plumberStore: ExtraRoutes = (_data, { ok }) => [
   })],
 ];
 
+// The request page's week (Fase 29B), from the scenes' Sunday 4 October: free times with the trip of each visit already
+// left free, as the server gives them (PublicBookingSlotsDto). Mexico City is UTC-6 all year.
+const WEEK_DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const WEEK_FREE: Record<number, string[]> = {
+  5: ['09:00', '09:30', '10:00', '12:30', '13:00', '16:00', '16:30', '17:00'],
+  6: ['09:00', '11:30', '12:00', '15:00'],
+  7: ['10:00', '10:30', '11:00', '17:00'],
+  8: ['09:00', '09:30', '13:00'],
+  9: ['12:00', '12:30', '16:00', '16:30', '17:00'],
+  10: ['09:00', '10:00'],
+};
+const timeLabel = (time: string) => {
+  const [hour, minute] = time.split(':').map(Number);
+  return `${hour % 12 === 0 ? 12 : hour % 12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'a. m.' : 'p. m.'}`;
+};
+const visitWeek = () => ({
+  days: Array.from({ length: 7 }, (_, index) => {
+    const day = 4 + index;
+    const date = `2026-10-${String(day).padStart(2, '0')}`;
+    const label = `${WEEK_DAYS[index]} ${day} de octubre`;
+    return {
+      date,
+      label,
+      slots: (WEEK_FREE[day] ?? []).map((time) => ({ startAt: `${date}T${time}:00-06:00`, label: timeLabel(time), date, dateLabel: label })),
+    };
+  }),
+  nextFrom: '2026-10-11',
+});
+
+/** The postal codes the plumber goes to: Roma, Condesa and around, the visit $400 more IVA in all of them. */
+const PLUMBER_POSTAL_CODES = ['06100', '06140', '06170', '06600', '06700', '06720', '06760'];
+
+/** The link of the visit requested on the page (Fase 29B): 43 characters, as the API gives it. */
+export const VISIT_LINK = 'Vq7Lm2Qv7RtW4yXk9PbN1sDf5GhJ3aEu6Ki0Oo-_PlM';
+
+/**
+ * The request page of the plumber's visits (Fase 29B): «Visita y diagnóstico» of an hour, from $350 more IVA, taken off
+ * the quote when the customer hires the work; whoever is free goes. It goes to Roma Norte (06700), not to 72000.
+ */
+const plumberVisit: ExtraRoutes = (data, { ok }) => [
+  ['GET', /^\/public\/menu\/plomeria-hernandez\/home-visit$/, () => ok({
+    businessName: 'Plomería Hernández',
+    slug: 'plomeria-hernandez',
+    logoUrl: null,
+    contactPhone: '5512345678',
+    theme: TALAVERA,
+    pricesIncludeTax: false,
+    daysAhead: 30,
+    visitName: 'Visita y diagnóstico',
+    durationMinutes: 60,
+    chargePolicy: CREDITED_IF_HIRED,
+    price: { amount: 350, isStarting: true },
+    staff: [],
+  })],
+  ['GET', /^\/public\/menu\/plomeria-hernandez\/home-visit\/coverage$/, (_match, query) => {
+    const postalCode = query.get('postalCode') ?? '';
+    const covered = PLUMBER_POSTAL_CODES.includes(postalCode);
+    return ok({ postalCode, covered, price: covered ? 400 : null });
+  }],
+  ['GET', /^\/public\/menu\/plomeria-hernandez\/home-visit\/slots$/, () => ok(visitWeek())],
+  ['POST', /^\/public\/menu\/plomeria-hernandez\/home-visits$/, (_match, _query, body: { startAt?: string; postalCode?: string }) => ok({
+    serviceName: 'Visita y diagnóstico',
+    startAt: body?.startAt,
+    endAt: body?.startAt,
+    dateLabel: 'lunes 5 de octubre',
+    timeLabel: '10:00 a. m.',
+    businessName: 'Plomería Hernández',
+    contactPhone: '5512345678',
+    address: null,
+    visit: { postalCode: body?.postalCode ?? '', chargePolicy: CREDITED_IF_HIRED },
+    staffName: null,
+    linkedToAccount: data.profile.role === 'Customer',
+    trackingToken: VISIT_LINK,
+  })],
+];
+
 export const OFICIOS_EN_EXPLORAR = asOption(tradesInExplore);
 export const PLOMERO_EN_CONFIGURACION = asOption(plumberSettings);
 export const TIENDA_DE_PLOMERIA = asOption(plumberStore);
+export const VISITA_DE_PLOMERIA = asOption(plumberVisit);

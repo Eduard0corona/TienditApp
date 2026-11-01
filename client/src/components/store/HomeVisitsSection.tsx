@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import type { Schemas } from '../../api/typedClient';
 import { isFreeVisit, visitPriceText } from '../../utils/businessCategories';
 import { formatMoney } from '../../utils/money';
-import { businessWhatsAppUrl } from '../../utils/whatsApp';
 
 type PublicHomeVisits = Schemas['PublicHomeVisitsDto'];
 
@@ -19,17 +19,17 @@ const POLICY_NOTE: Record<HomeVisitChargePolicy, string> = {
 
 interface HomeVisitsSectionProps {
   visits: PublicHomeVisits;
-  businessName: string;
-  contactPhone?: string | null;
+  /** The store's slug: «Solicitar visita» opens its request page. */
+  slug: string;
   pricesIncludeTax: boolean;
 }
 
 /**
  * «Visitas a domicilio» on the store of a business that receives visits to quote (Fase 29A, ADR 0053 point 9): what the
  * visit costs and how it is charged, the postal codes it goes to (never the name of a zone) and its services as reference
- * prices, never in a cart. «Solicitar visita» opens WhatsApp with the business until visits are asked for online.
+ * prices, never in a cart. «Solicitar visita» opens its request page (/m/:slug/visita, Fase 29B).
  */
-export default function HomeVisitsSection({ visits, businessName, contactPhone, pricesIncludeTax }: HomeVisitsSectionProps) {
+export default function HomeVisitsSection({ visits, slug, pricesIncludeTax }: HomeVisitsSectionProps) {
   const titleId = useId();
   const codesId = useId();
   const [allCodes, setAllCodes] = useState(false);
@@ -39,10 +39,6 @@ export default function HomeVisitsSection({ visits, businessName, contactPhone, 
     if (allCodes) codesRef.current?.focus();
   }, [allCodes]);
   const price = visitPriceText(visits.price, visits.chargePolicy, pricesIncludeTax);
-  const request = businessWhatsAppUrl(
-    contactPhone,
-    `Hola ${businessName}, quiero pedir una visita a domicilio para cotizar. Mi código postal es `,
-  );
   const codes = allCodes ? visits.postalCodes : visits.postalCodes.slice(0, FIRST_POSTAL_CODES);
   const hidden = visits.postalCodeCount - codes.length;
   const taxNote = pricesIncludeTax ? '' : ' más IVA';
@@ -87,11 +83,9 @@ export default function HomeVisitsSection({ visits, businessName, contactPhone, 
         </>
       )}
 
-      {request && (
-        <a className="btn btn-primary pm-visits-request" href={request} target="_blank" rel="noopener noreferrer">
-          <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Solicitar visita
-        </a>
-      )}
+      <Link className="btn btn-primary pm-visits-request" to={`/m/${slug}/visita`}>
+        <i className="ri-calendar-schedule-line me-1" aria-hidden="true"></i>Solicitar visita
+      </Link>
     </section>
   );
 }

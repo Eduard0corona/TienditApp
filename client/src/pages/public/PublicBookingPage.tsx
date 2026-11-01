@@ -10,10 +10,11 @@ import {
   type RequestPublicAppointment,
 } from '../../api/publicMenuApi';
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
+import SlotPicker from '../../components/booking/SlotPicker';
+import StaffPicker from '../../components/booking/StaffPicker';
 import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { useScrollFade } from '../../hooks/useScrollFade';
 import { formatMoney } from '../../utils/money';
 import { describeDuration, shortDayLabel, upperFirst } from '../../utils/onlineBooking';
 import { localPhone } from '../../utils/phones';
@@ -33,8 +34,6 @@ const answerLost = (err: unknown) => {
   const status = getApiErrorStatus(err);
   return status === undefined || status >= 500;
 };
-
-const horarios = (count: number) => (count === 1 ? '1 horario' : `${count} horarios`);
 
 /**
  * A business's booking page (/m/:slug/agendar, Fase 24D, ADR 0025), without signing in: the customer picks a service it
@@ -96,11 +95,6 @@ export default function PublicBookingPage() {
     enabled: service !== null,
     retry: false,
   });
-  const days = slots.data?.days ?? [];
-  // The day picked while it has free times; otherwise the first of the week that has.
-  const shownDay = days.find((item) => item.date === day && item.slots.length > 0) ?? days.find((item) => item.slots.length > 0) ?? null;
-  const { ref: daysRef, fadeClass: daysFade } = useScrollFade<HTMLDivElement>(days.length);
-  const { ref: peopleRef, fadeClass: peopleFade } = useScrollFade<HTMLDivElement>(people.length);
   // The times are not found for the person chosen: they stopped taking the service, or the service stopped being booked.
   const personGone = staffId !== '' && slots.isError && getApiErrorStatus(slots.error) === 404;
   const anyoneRef = useRef<HTMLButtonElement>(null);
@@ -322,36 +316,7 @@ export default function PublicBookingPage() {
           {noticeAlert}
 
           {people.length > 0 && (
-            <>
-              <h2 className="pm-section-title pb-step">¿Con quién?</h2>
-              <div ref={peopleRef} className={`pb-people ta-scroll-fade ${peopleFade}`} role="group" aria-label="Quién te atiende">
-                <button
-                  ref={anyoneRef}
-                  type="button"
-                  className={`btn pb-person ${person === null ? 'btn-primary' : 'btn-light'}`}
-                  aria-pressed={person === null}
-                  onClick={() => choosePerson(null)}
-                >
-                  <span className="d-block fw-semibold">Sin preferencia</span>
-                  <span className="d-block small">Quien esté libre</span>
-                </button>
-                {people.map((item) => {
-                  const active = person?.id === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`btn pb-person ${active ? 'btn-primary' : 'btn-light'}`}
-                      aria-pressed={active}
-                      onClick={() => choosePerson(item.id)}
-                    >
-                      <PhotoOrInitial name={item.name} className="pb-person-initial" />
-                      <span className="d-block fw-semibold text-truncate pb-person-name">{item.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </>
+            <StaffPicker people={people} personId={person?.id ?? null} onChoose={choosePerson} anyoneRef={anyoneRef} label="Quién te atiende" />
           )}
 
           <h2 className="pm-section-title pb-step">Elige el día</h2>
@@ -382,73 +347,20 @@ export default function PublicBookingPage() {
           )}
 
           {slots.data && (
-            <>
-              <div ref={daysRef} className={`pb-days ta-scroll-fade ${daysFade}`} role="group" aria-label="Días de la semana">
-                {days.map((item) => {
-                  const active = shownDay?.date === item.date;
-                  return (
-                    <button
-                      key={item.date}
-                      type="button"
-                      className={`btn pb-day ${active ? 'btn-primary' : 'btn-light'}`}
-                      aria-pressed={active}
-                      disabled={item.slots.length === 0}
-                      onClick={() => setDay(item.date)}
-                    >
-                      {/* Its name says what shows, and the whole date for a screen reader. */}
-                      <span className="d-block fw-semibold">{shortDayLabel(item.date)}</span>
-                      <span className="d-block small">{item.slots.length > 0 ? horarios(item.slots.length) : 'Sin horarios'}</span>
-                      <span className="visually-hidden">, {item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="pb-weeks">
-                <button type="button" className="btn btn-sm btn-light" disabled={weeks.length === 0 || slots.isFetching} onClick={() => changeWeek(null)}>
-                  <i className="ri-arrow-left-s-line" aria-hidden="true"></i>Semana anterior
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-light"
-                  disabled={!slots.data?.nextFrom || slots.isFetching}
-                  onClick={() => changeWeek(slots.data?.nextFrom ?? null)}
-                >
-                  Semana siguiente<i className="ri-arrow-right-s-line" aria-hidden="true"></i>
-                </button>
-              </div>
-
-              {shownDay ? (
-                <>
-                  <h2 className="pm-section-title pb-step">Elige la hora · {shownDay.label}</h2>
-                  <div className="pb-slots" role="group" aria-label={`Horarios libres del ${shownDay.label}`}>
-                    {shownDay.slots.map((slot) => {
-                      const active = chosen?.slot.startAt === slot.startAt;
-                      return (
-                        <button
-                          key={slot.startAt}
-                          type="button"
-                          className={`btn ${active ? 'btn-primary' : 'btn-light'}`}
-                          aria-pressed={active}
-                          onClick={() => {
-                            setChosen({ slot });
-                            setNotice('');
-                          }}
-                        >
-                          {slot.label}
-                          {/* After midnight, in the opening of the day before: it says its own day. */}
-                          {slot.date !== shownDay.date && ` · ${shortDayLabel(slot.date)}`}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <p className="text-muted text-center py-4 mb-0">
-                  {days.length === 0 ? 'No hay más días para agendar en línea.' : 'No hay horarios libres esta semana.'}
-                  {slots.data.nextFrom && ' Mira la semana siguiente.'}
-                </p>
-              )}
-            </>
+            <SlotPicker
+              week={slots.data}
+              fetching={slots.isFetching}
+              canGoBack={weeks.length > 0}
+              onWeekChange={changeWeek}
+              day={day}
+              onDayChange={setDay}
+              chosen={chosen?.slot.startAt ?? null}
+              onChoose={(slot) => {
+                setChosen({ slot });
+                setNotice('');
+              }}
+              noMoreDays="No hay más días para agendar en línea."
+            />
           )}
         </main>
       )}
