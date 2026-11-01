@@ -13,6 +13,7 @@ using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
+using FoodParkDigital.Domain.Quotes.Entities;
 using FoodParkDigital.Domain.Reviews.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -247,6 +248,10 @@ internal sealed class SalesDbContext : ApplicationDbContext
             .ValueGeneratedNever();
         modelBuilder.Entity<CreditNote>()
             .Property(n => n.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<Quote>()
+            .Property(q => q.Version)
             .IsRequired(false)
             .ValueGeneratedNever();
     }

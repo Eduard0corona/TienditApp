@@ -184,19 +184,22 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
     /// The next version, a draft with what this one says, to correct it. Only the version the customer has: sent (even
     /// expired) or rejected. This one stays as it is until the new one is sent.
     /// </summary>
-    public Quote Revise(DateTimeOffset now)
+    /// <param name="revision">Its number: after every version of the quote, the discarded drafts included.</param>
+    public Quote Revise(int revision, DateTimeOffset now)
     {
         if (Status is not (QuoteStatus.Sent or QuoteStatus.Rejected))
             throw new DomainException(QuoteRules.CannotReviseMessage);
+        if (revision <= Revision)
+            throw new ArgumentOutOfRangeException(nameof(revision), "A correction comes after the version it corrects.");
 
-        var revision = new Quote(TenantId, Number, Revision + 1,
+        var draft = new Quote(TenantId, Number, revision,
             new QuoteCustomer(CustomerId, CustomerName, CustomerPhone, CustomerEmail),
             AppointmentId, PricesIncludeTax, ValidityDays, Note, VisitCredit, now);
         foreach (var line in _lines.OrderBy(line => line.Position))
-            revision._lines.Add(new QuoteLine(TenantId, revision.Id, line.Position,
+            draft._lines.Add(new QuoteLine(TenantId, draft.Id, line.Position,
                 new QuoteLineInput(line.ProductId, line.Description, line.Quantity, line.UnitPrice, line.VatRate)));
-        revision.RecalculateTotals();
-        return revision;
+        draft.RecalculateTotals();
+        return draft;
     }
 
     /// <summary>The business drops a draft before sending it. It stays, so its folio and version are not given again.</summary>

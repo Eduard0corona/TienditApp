@@ -194,7 +194,7 @@ public class QuoteTests
             (quote.Status, quote.ReplyChannel!.Value, quote.CustomerResponse, quote.ClosedAt!.Value));
         // Accepted is final: it is not answered again nor corrected.
         Assert.Throws<DomainException>(() => quote.Reject(Today, QuoteReplyChannel.Phone, null, Now));
-        Assert.Equal(QuoteRules.CannotReviseMessage, Assert.Throws<DomainException>(() => quote.Revise(Now)).Message);
+        Assert.Equal(QuoteRules.CannotReviseMessage, Assert.Throws<DomainException>(() => quote.Revise(2, Now)).Message);
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public class QuoteTests
         quote.SetVisitCredit(new QuoteVisitCredit(Guid.NewGuid(), 350m), Now);
         quote.Send(Today, Token, null, Now);
 
-        var revision = quote.Revise(Now.AddDays(1));
+        var revision = quote.Revise(2, Now.AddDays(1));
 
         Assert.Equal(("COT-000007", 2, QuoteStatus.Draft), (revision.Number, revision.Revision, revision.Status));
         Assert.Equal((appointment, 20, "Incluye material", 350m, true),
@@ -253,7 +253,7 @@ public class QuoteTests
     public void SendingACorrection_ShouldReplaceTheVersionTheCustomerHad_WhichKeepsWhatItSaid()
     {
         var quote = Sent();
-        var revision = quote.Revise(Now);
+        var revision = quote.Revise(2, Now);
         revision.ReplaceLines([Line(unitPrice: 990m)], Now);
 
         revision.Send(Today.AddDays(3), new string('b', 43), quote, Now.AddDays(3));
@@ -267,12 +267,12 @@ public class QuoteTests
     {
         var rejected = Sent();
         rejected.Reject(Today, QuoteReplyChannel.WhatsApp, "Está caro", Now);
-        var counter = rejected.Revise(Now);
+        var counter = rejected.Revise(2, Now);
         counter.Send(Today, new string('b', 43), rejected, Now);
         Assert.Equal(QuoteStatus.Superseded, rejected.Status);
 
         var expired = Sent(validityDays: 1);
-        var renewed = expired.Revise(Now.AddDays(5));
+        var renewed = expired.Revise(2, Now.AddDays(5));
         renewed.Send(Today.AddDays(5), new string('c', 43), expired, Now.AddDays(5));
         Assert.Equal((QuoteStatus.Superseded, QuoteStatus.Sent), (expired.Status, renewed.StatusOn(Today.AddDays(5))));
     }
@@ -281,7 +281,7 @@ public class QuoteTests
     public void ACorrection_ShouldNotBeSent_OnceTheCustomerAcceptedTheVersionTheyHad()
     {
         var quote = Sent();
-        var revision = quote.Revise(Now);
+        var revision = quote.Revise(2, Now);
         quote.Accept(Today, QuoteReplyChannel.WhatsApp, null, Now);
 
         var error = Assert.Throws<DomainException>(() => revision.Send(Today, new string('b', 43), quote, Now));
@@ -294,7 +294,7 @@ public class QuoteTests
     public void ACorrection_ShouldReplaceAnEarlierVersionOfTheSameQuote_AndAFirstVersionNone()
     {
         var quote = Sent();
-        var revision = quote.Revise(Now);
+        var revision = quote.Revise(2, Now);
         var other = Quote.Start(Business, Folios.QuoteNumber(8), Valeria, null, true, 15, Now);
         other.ReplaceLines([Line()], Now);
         other.Send(Today, new string('d', 43), null, Now);
@@ -308,14 +308,24 @@ public class QuoteTests
     }
 
     [Fact]
+    public void ACorrection_ShouldComeAfterEveryVersion_TheDiscardedDraftsIncluded()
+    {
+        var quote = Sent();
+        quote.Revise(2, Now).Discard(Now);
+
+        Assert.Equal(3, quote.Revise(3, Now).Revision);
+        Assert.Throws<ArgumentOutOfRangeException>(() => quote.Revise(1, Now));
+    }
+
+    [Fact]
     public void OnlyTheVersionTheCustomerHas_ShouldBeCorrected()
     {
         var quote = Sent();
-        var revision = quote.Revise(Now);
+        var revision = quote.Revise(2, Now);
         revision.Send(Today, new string('b', 43), quote, Now);
 
-        Assert.Equal(QuoteRules.CannotReviseMessage, Assert.Throws<DomainException>(() => quote.Revise(Now)).Message);
-        Assert.Equal(QuoteRules.CannotReviseMessage, Assert.Throws<DomainException>(() => Draft().Revise(Now)).Message);
+        Assert.Equal(QuoteRules.CannotReviseMessage, Assert.Throws<DomainException>(() => quote.Revise(2, Now)).Message);
+        Assert.Equal(QuoteRules.CannotReviseMessage, Assert.Throws<DomainException>(() => Draft().Revise(2, Now)).Message);
     }
 
     [Fact]

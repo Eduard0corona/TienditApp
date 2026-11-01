@@ -515,6 +515,35 @@ export const PurchaseOrderStatus = {
 } as const;
 export type PurchaseOrderStatus = (typeof PurchaseOrderStatus)[keyof typeof PurchaseOrderStatus];
 
+export const QuoteListFilter = {
+  Open: 0,
+  Accepted: 1,
+  Rejected: 2,
+  Expired: 3,
+  Discarded: 4,
+  All: 5,
+} as const;
+export type QuoteListFilter = (typeof QuoteListFilter)[keyof typeof QuoteListFilter];
+
+export const QuoteReplyChannel = {
+  WhatsApp: 0,
+  Email: 1,
+  Phone: 2,
+  InPerson: 3,
+} as const;
+export type QuoteReplyChannel = (typeof QuoteReplyChannel)[keyof typeof QuoteReplyChannel];
+
+export const QuoteStatus = {
+  Draft: 0,
+  Sent: 1,
+  Accepted: 2,
+  Rejected: 3,
+  Expired: 4,
+  Superseded: 5,
+  Discarded: 6,
+} as const;
+export type QuoteStatus = (typeof QuoteStatus)[keyof typeof QuoteStatus];
+
 export const ReceivablesSort = {
   Owed: 0,
   Oldest: 1,

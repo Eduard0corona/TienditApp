@@ -44,7 +44,7 @@ public class QuoteSqlServerTests
         await using (var context = database.CreateContext(tenantId))
         {
             var sent = await context.Quotes.Include(q => q.Lines).SingleAsync();
-            var revision = sent.Revise(Now.AddDays(1));
+            var revision = sent.Revise(2, Now.AddDays(1));
             revision.ReplaceLines([new QuoteLineInput(productId, "Cambio de calentador", 1m, 990m, VatRate.General)], Now.AddDays(1));
             revision.Send(Today.AddDays(1), new string('b', 43), sent, Now.AddDays(1));
             context.Quotes.Add(revision);
@@ -80,8 +80,8 @@ public class QuoteSqlServerTests
         // Two people correct it at the same time: the second correction collides.
         await using var first = database.CreateContext(tenantId);
         await using var second = database.CreateContext(tenantId);
-        first.Quotes.Add((await first.Quotes.Include(q => q.Lines).SingleAsync()).Revise(Now));
-        second.Quotes.Add((await second.Quotes.Include(q => q.Lines).SingleAsync()).Revise(Now));
+        first.Quotes.Add((await first.Quotes.Include(q => q.Lines).SingleAsync()).Revise(2, Now));
+        second.Quotes.Add((await second.Quotes.Include(q => q.Lines).SingleAsync()).Revise(2, Now));
         await first.SaveChangesAsync();
 
         await Assert.ThrowsAsync<DbUpdateException>(() => second.SaveChangesAsync());
