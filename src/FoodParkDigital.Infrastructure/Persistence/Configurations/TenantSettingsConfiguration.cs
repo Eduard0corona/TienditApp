@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
+using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,9 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
                 $"[OnlineBookingCapacity] >= 1 AND [OnlineBookingCapacity] <= {OnlineBookingRules.MaxCapacity}");
             table.HasCheckConstraint(
                 "CK_TenantSettings_HomeVisitChargePolicy", "[HomeVisitChargePolicy] >= 0 AND [HomeVisitChargePolicy] <= 2");
+            table.HasCheckConstraint(
+                "CK_TenantSettings_QuoteValidityDays",
+                $"[QuoteValidityDays] >= {QuoteRules.MinValidityDays} AND [QuoteValidityDays] <= {QuoteRules.MaxValidityDays}");
         });
         builder.HasKey(s => s.Id);
 
@@ -81,6 +85,12 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
         builder.Property(s => s.HomeVisitChargePolicy)
             .HasConversion<int>()
             .HasDefaultValue(HomeVisitChargePolicy.Charged)
+            .ValueGeneratedNever()
+            .IsRequired();
+        // Fase 29C (ADR 0053): a quote is valid 15 days; the database default fills the rows that exist and those the previous
+        // version saves while this one is published. EF always writes the value.
+        builder.Property(s => s.QuoteValidityDays)
+            .HasDefaultValue(QuoteRules.DefaultValidityDays)
             .ValueGeneratedNever()
             .IsRequired();
         // Fase 26C (ADR 0035): credit reminders start off, every 7 days; the database defaults fill the rows that exist and

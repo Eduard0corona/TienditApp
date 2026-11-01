@@ -65,6 +65,9 @@ public sealed class FolioGenerator : IFolioGenerator
         return Folios.DailyNumber(scope, await NextAsync(tenantId, scope, FolioKind.InventoryTransfer, cancellationToken));
     }
 
+    public async Task<string> NextQuoteNumberAsync(Guid tenantId, CancellationToken cancellationToken)
+        => Folios.QuoteNumber(await NextAsync(tenantId, Folios.QuoteScope, FolioKind.Quote, cancellationToken));
+
     public Task<long> NextInvoiceFolioAsync(Guid tenantId, string serie, CancellationToken cancellationToken)
         => NextAsync(tenantId, Folios.InvoiceScope(serie), FolioKind.Invoice, cancellationToken, serie);
 
@@ -152,6 +155,16 @@ public sealed class FolioGenerator : IFolioGenerator
                     WHERE [TenantId] = {tenantId} AND [TransferNumber] LIKE {scope + "-%"};
                 COMMIT TRANSACTION;
                 """, cancellationToken),
+            FolioKind.Quote => _context.Database.ExecuteSqlAsync($"""
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+                IF NOT EXISTS (SELECT 1 FROM [FolioSequences] WITH (UPDLOCK, HOLDLOCK) WHERE [TenantId] = {tenantId} AND [Scope] = {scope})
+                    INSERT INTO [FolioSequences] ([TenantId], [Scope], [LastNumber])
+                    SELECT {tenantId}, {scope}, ISNULL(MAX(TRY_CAST(SUBSTRING([Number], {Folios.QuotePrefix.Length + 1}, 18) AS bigint)), 0)
+                    FROM [Quotes]
+                    WHERE [TenantId] = {tenantId} AND [Number] LIKE {Folios.QuotePrefix + "%"};
+                COMMIT TRANSACTION;
+                """, cancellationToken),
             FolioKind.Invoice => _context.Database.ExecuteSqlAsync($"""
                 SET XACT_ABORT ON;
                 BEGIN TRANSACTION;
@@ -192,7 +205,12 @@ public sealed class FolioGenerator : IFolioGenerator
                 .MaxAsync(cancellationToken) ?? 0;
         }
 
-        var prefix = kind == FolioKind.Order ? Folios.OrderPrefix : scope + "-";
+        var prefix = kind switch
+        {
+            FolioKind.Order => Folios.OrderPrefix,
+            FolioKind.Quote => Folios.QuotePrefix,
+            _ => scope + "-"
+        };
         var numbers = kind switch
         {
             FolioKind.Order => await _context.Orders.IgnoreQueryFilters()
@@ -215,6 +233,10 @@ public sealed class FolioGenerator : IFolioGenerator
                 .Where(t => t.TenantId == tenantId && t.TransferNumber.StartsWith(prefix))
                 .Select(t => t.TransferNumber)
                 .ToListAsync(cancellationToken),
+            FolioKind.Quote => await _context.Quotes.IgnoreQueryFilters()
+                .Where(q => q.TenantId == tenantId && q.Number.StartsWith(prefix))
+                .Select(q => q.Number)
+                .ToListAsync(cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
         };
 
@@ -231,6 +253,7 @@ public sealed class FolioGenerator : IFolioGenerator
         PurchaseOrder,
         InventoryCount,
         InventoryTransfer,
-        Invoice
+        Invoice,
+        Quote
     }
 }

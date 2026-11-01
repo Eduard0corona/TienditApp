@@ -44,7 +44,7 @@ public class HomeVisitRequestsMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeHomeVisitBooking.CreateContext(database))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             var categories = await context.Tenants.IgnoreQueryFilters().ToDictionaryAsync(t => t.Id, t => t.DirectoryCategory);
@@ -73,7 +73,7 @@ public class HomeVisitRequestsMigrationSqlServerTests
             await previous.SaveChangesAsync();
         }
         var service = Guid.NewGuid();
-        await using (var context = database.CreateContext(plumber))
+        await using (var context = BeforeHomeVisitBooking.CreateContext(database, plumber))
         {
             var settings = await context.TenantSettings.SingleAsync();
             Assert.Equal((45, false), (settings.HomeVisitTravelMinutes, settings.HomeVisitRequestsEnabled));
@@ -81,7 +81,7 @@ public class HomeVisitRequestsMigrationSqlServerTests
             settings.DismissHomeVisitAddressNotice(DateTimeOffset.UtcNow);
             await context.SaveChangesAsync();
         }
-        await using (var context = database.CreateContext(plumber))
+        await using (var context = BeforeHomeVisitBooking.CreateContext(database, plumber))
         {
             var saved = await context.TenantSettings.SingleAsync();
             Assert.Equal((true, (Guid?)service, HomeVisitChargePolicy.CreditedIfHired, true),
@@ -89,7 +89,7 @@ public class HomeVisitRequestsMigrationSqlServerTests
                     saved.HomeVisitAddressNoticeDismissedAt.HasValue));
         }
         // Another business does not see them.
-        await using (var foreign = database.CreateContext(shop))
+        await using (var foreign = BeforeHomeVisitBooking.CreateContext(database, shop))
             Assert.False((await foreign.TenantSettings.SingleAsync()).HomeVisitRequestsEnabled);
 
         foreach (var (sql, constraint) in new (FormattableString, string)[]
@@ -126,7 +126,7 @@ public class HomeVisitRequestsMigrationSqlServerTests
         await ExecuteAsync(database, $"UPDATE [Tenants] SET [DirectoryCategory] = 1 WHERE [Id] = {chose}");
 
         // So does an owner who changed how the business receives visits to quote.
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeHomeVisitBooking.CreateContext(database))
         {
             context.Add(new AuditLog(plumber, "TenantSettings", plumber.ToString(), "HomeVisitRequestsUpdated", "owner"));
             await context.SaveChangesAsync();
@@ -157,7 +157,7 @@ public class HomeVisitRequestsMigrationSqlServerTests
         // Rolling back again does nothing, and forward again moves the trades as the first time.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext();
+        await using var forward = BeforeHomeVisitBooking.CreateContext(database);
         var again = await forward.Tenants.IgnoreQueryFilters().ToDictionaryAsync(t => t.Id, t => t.DirectoryCategory);
         // The locksmith signed up with this version is a shop now in Otros, which its giro gave: it moves too.
         Assert.Equal(
@@ -169,7 +169,7 @@ public class HomeVisitRequestsMigrationSqlServerTests
     {
         var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
         Assert.True(stopped is SqlException { Number: 50049 }, stopped?.Message ?? "it was not stopped");
-        await using var context = database.CreateContext();
+        await using var context = BeforeHomeVisitBooking.CreateContext(database);
         Assert.Equal(Migration, await LatestMigrationAsync(context));
     }
 
@@ -189,7 +189,7 @@ public class HomeVisitRequestsMigrationSqlServerTests
         var slug = $"negocio-{Guid.NewGuid():N}"[..20];
         var tenant = new Tenant("Negocio", slug, type, $"{slug}@demo.com");
         var settings = new TenantSettings(tenant.Id, TenantCapability.Retail);
-        await using (var context = latest ? database.CreateContext() : BeforeHomeVisitRequests.CreateContext(database))
+        await using (var context = latest ? BeforeHomeVisitBooking.CreateContext(database) : BeforeHomeVisitRequests.CreateContext(database))
         {
             if (latest)
                 settings.StartReceivingHomeVisits();

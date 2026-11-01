@@ -18,6 +18,7 @@ using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
+using FoodParkDigital.Domain.Quotes.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
 using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.OnlinePayments.Entities;
@@ -208,6 +209,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
+    public DbSet<Quote> Quotes => Set<Quote>();
     public DbSet<CashSession> CashSessions => Set<CashSession>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
