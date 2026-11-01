@@ -35384,6 +35384,8 @@
           "addressLine",
           "customerName",
           "customerPhone",
+          "expectedChargePolicy",
+          "expectedPrice",
           "postalCode",
           "problem",
           "startAt"
@@ -35426,6 +35428,13 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "expectedChargePolicy": {
+            "$ref": "#/components/schemas/HomeVisitChargePolicy"
+          },
+          "expectedPrice": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false

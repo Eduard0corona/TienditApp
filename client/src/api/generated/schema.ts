@@ -20113,6 +20113,9 @@ export interface components {
             idempotencyKey?: string | null;
             /** Format: uuid */
             staffId?: string | null;
+            expectedChargePolicy: components["schemas"]["HomeVisitChargePolicy"];
+            /** Format: double */
+            expectedPrice: number;
         };
         ResendConfirmationEmailCommand: {
             email: string;

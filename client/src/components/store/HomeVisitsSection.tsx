@@ -1,21 +1,14 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import type { Schemas } from '../../api/typedClient';
-import { isFreeVisit, visitPriceText } from '../../utils/businessCategories';
+import { visitPolicyNote, visitPriceText } from '../../utils/businessCategories';
 import { formatMoney } from '../../utils/money';
+import { homeVisitPath } from '../../utils/onlineBooking';
 
 type PublicHomeVisits = Schemas['PublicHomeVisitsDto'];
 
 /** Postal codes shown before «Ver todos»: a zone of a whole city has hundreds. */
 const FIRST_POSTAL_CODES = 18;
-
-/** What the visit policy means for the customer, in one line. */
-const POLICY_NOTE: Record<HomeVisitChargePolicy, string> = {
-  [HomeVisitChargePolicy.Charged]: 'Pagas la visita aunque no contrates el trabajo.',
-  [HomeVisitChargePolicy.Free]: 'Revisamos y te decimos cuánto cuesta, sin costo.',
-  [HomeVisitChargePolicy.CreditedIfHired]: 'Si contratas el trabajo, lo que pagaste de la visita se descuenta.',
-};
 
 interface HomeVisitsSectionProps {
   visits: PublicHomeVisits;
@@ -52,7 +45,7 @@ export default function HomeVisitsSection({ visits, slug, pricesIncludeTax }: Ho
         {visits.visitServiceName && <span className="pm-visits-service">{visits.visitServiceName}</span>}
         {price && <strong>{price}</strong>}
       </p>
-      <p className="pm-visits-note">{POLICY_NOTE[isFreeVisit(visits.price, visits.chargePolicy) ? HomeVisitChargePolicy.Free : visits.chargePolicy]}</p>
+      <p className="pm-visits-note">{visitPolicyNote(visits.price, visits.chargePolicy)}</p>
 
       <h3 className="pm-visits-subtitle" id={codesId}>Vamos a estos códigos postales</h3>
       <ul ref={codesRef} className="pm-visits-codes" aria-labelledby={codesId} tabIndex={-1}>
@@ -83,7 +76,7 @@ export default function HomeVisitsSection({ visits, slug, pricesIncludeTax }: Ho
         </>
       )}
 
-      <Link className="btn btn-primary pm-visits-request" to={`/m/${slug}/visita`}>
+      <Link className="btn btn-primary pm-visits-request" to={homeVisitPath(slug)}>
         <i className="ri-calendar-schedule-line me-1" aria-hidden="true"></i>Solicitar visita
       </Link>
     </section>

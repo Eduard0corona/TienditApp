@@ -767,9 +767,11 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **La guía de inicio** pide «Prepara tus visitas a domicilio» al negocio con el interruptor y el módulo de agenda, hasta que recibe visitas.
 - **La solicitud en línea** (Fase 29B, `/m/{slug}/visita`, sin cuenta):
   - el cliente escribe su código postal y el servidor dice si va ahí y cuánto cuesta la visita en él, sin el nombre de la zona (una cuenta elige una de sus direcciones);
-  - elige el día, una hora libre y, si el negocio dice quién agenda en línea, con quién: los que hacen el servicio de la visita, o cualquiera de ellos sin servicio;
+  - elige el día, una hora libre y, si el negocio dice quién agenda en línea, con quién: los que hacen el servicio de la visita, o cualquiera de ellos sin servicio. Si nadie de ellos la hace, se pide sin nadie asignado y el negocio la asigna;
   - las horas salen del horario con la duración del servicio de la visita (una hora sin él) y dejan libre el traslado del negocio antes y después, contra todas las citas de esa persona (o contra las del negocio, con las citas a la vez cuando no dice quién atiende);
-  - escribe qué pasa (hasta 500 caracteres), su dirección y referencias, su nombre, su teléfono y, si quiere, su correo para la cotización.
+  - escribe qué pasa (hasta 500 caracteres), su dirección y referencias, su nombre, su teléfono y, si quiere, su correo para la cotización;
+  - si el negocio cambió el costo de la visita o cómo la cobra desde que la página lo dijo, la solicitud se rechaza y la página lo lee otra vez.
+- **Una cita en línea en el local** deja libre el traslado de las visitas que ya hay también cuando el negocio no dice quién atiende.
 - **La solicitud es una cita «Por confirmar» con su visita**, como una cita en línea: la llave de la solicitud, el candado por negocio, el límite de 3 por confirmar por teléfono (las citas y las visitas cuentan juntas), el enlace `/cita#…`, Mis citas y el aviso por WhatsApp, que dice el código postal y nunca la dirección.
   - La visita guarda cómo la cobró el negocio al pedirla (`AppointmentVisits.ChargePolicy`): es lo que el cliente aceptó, aunque el negocio lo cambie después.
   - El cargo de la visita es el de la zona; «Sin costo» lo deja en cero a donde se mueva, y la base lo exige. El servicio se cobra con su renglón, como cualquier cita.

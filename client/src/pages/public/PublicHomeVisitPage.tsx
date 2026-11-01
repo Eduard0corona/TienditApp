@@ -18,7 +18,7 @@ import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { describeAccountAddress } from '../../utils/accountAddresses';
-import { visitPriceText } from '../../utils/businessCategories';
+import { visitPolicyNote, visitPriceText } from '../../utils/businessCategories';
 import { ADDRESS_LINE_MAX_LENGTH, REFERENCES_MAX_LENGTH, normalizePostalCode } from '../../utils/homeDelivery';
 import { describeDuration, shortDayLabel, upperFirst } from '../../utils/onlineBooking';
 import { readPostalCode } from '../../utils/postalCodePreference';
@@ -30,14 +30,10 @@ import { businessWhatsAppUrl } from '../../utils/whatsApp';
 import './PublicMenuPage.css';
 import './PublicBookingPage.css';
 
-/** What the customer reads about how the visit is charged, in one line. */
-const POLICY_NOTE: Record<HomeVisitChargePolicy, string> = {
-  [HomeVisitChargePolicy.Charged]: 'Pagas la visita aunque no contrates el trabajo.',
-  [HomeVisitChargePolicy.Free]: 'Revisamos y te decimos cuánto cuesta, sin costo.',
-  [HomeVisitChargePolicy.CreditedIfHired]: 'Si contratas el trabajo, lo que pagaste de la visita se descuenta.',
-};
-
 const PROBLEM_MAX_LENGTH = 500;
+
+/** The server's words when the business changed the visit's price or policy after the page showed it. */
+const VISIT_CHANGED_MESSAGE = 'El negocio cambió el costo de la visita o cómo la cobra. Revísalo antes de enviar tu solicitud.';
 
 interface VisitAddress {
   postalCode: string;
@@ -92,22 +88,33 @@ export default function PublicHomeVisitPage() {
     enabled: !!customer,
   });
   const savedAddresses = useMemo(() => (customer ? addresses.data ?? [] : []), [customer, addresses.data]);
-  const [addressChoice, setAddressChoice] = useState<string | null | undefined>(undefined);
+  const [addressChoice, setAddressChoice] = useState<string | null>(null);
   const [address, setAddress] = useState<VisitAddress>({ postalCode: '', addressLine: '', references: '' });
-  const chooseAddress = (saved: AccountAddress | null) => {
+  // The customer picked or typed where: the page no longer chooses for them.
+  const [addressTouched, setAddressTouched] = useState(false);
+  const applyAddress = (saved: AccountAddress | null) => {
     setAddressChoice(saved?.id ?? null);
     setAddress(saved
       ? { postalCode: saved.postalCode, addressLine: saved.addressLine, references: saved.references ?? '' }
       : { postalCode: readPostalCode(), addressLine: '', references: '' });
   };
-  // The first time: the account's last address used, or the postal code given in Explorar.
-  if (addressChoice === undefined && (!customer || !addresses.isPending)) {
-    if (savedAddresses[0]) {
-      chooseAddress(savedAddresses[0]);
-    } else {
-      setAddressChoice(null);
-      const remembered = readPostalCode();
-      if (remembered) setAddress((current) => ({ ...current, postalCode: current.postalCode || remembered }));
+  const chooseAddress = (saved: AccountAddress | null) => {
+    setAddressTouched(true);
+    applyAddress(saved);
+  };
+  // Where it starts, for a visitor and again once the account's session and addresses arrive (the session is read after
+  // the page opens): the account's last address used, or the postal code given in Explorar; never over what was typed.
+  const [addressDefaultFor, setAddressDefaultFor] = useState<string | null>(null);
+  const addressOwner = customer?.id ?? '';
+  if (addressDefaultFor !== addressOwner && (!customer || !addresses.isPending)) {
+    setAddressDefaultFor(addressOwner);
+    if (!addressTouched) {
+      if (savedAddresses[0]) {
+        applyAddress(savedAddresses[0]);
+      } else {
+        const remembered = readPostalCode();
+        if (remembered) setAddress((current) => ({ ...current, postalCode: current.postalCode || remembered }));
+      }
     }
   }
   const usingSaved = savedAddresses.some((saved) => saved.id === addressChoice);
@@ -120,9 +127,8 @@ export default function PublicHomeVisitPage() {
     staleTime: 60_000,
   });
   const covered = isPostalCode(postalCode) && coverage.data?.postalCode === postalCode && coverage.data.covered;
-  const price = covered && data
-    ? visitPriceText({ amount: coverage.data?.price ?? 0, isStarting: false }, data.chargePolicy, data.pricesIncludeTax)
-    : null;
+  const coveredPrice = covered ? { amount: coverage.data?.price ?? 0, isStarting: false } : null;
+  const price = coveredPrice && data ? visitPriceText(coveredPrice, data.chargePolicy, data.pricesIncludeTax) : null;
 
   // The weeks visited: the first starts today, each next one where the server said.
   const [weeks, setWeeks] = useState<string[]>([]);
@@ -191,6 +197,9 @@ export default function PublicHomeVisitPage() {
       customerPhone: phone.trim(),
       customerEmail: email.trim() || null,
       staffId: staffId || null,
+      // What the page said: a visit charged otherwise since is asked again, never stored.
+      expectedChargePolicy: data?.chargePolicy ?? HomeVisitChargePolicy.Charged,
+      expectedPrice: coverage.data?.price ?? 0,
     };
     // Another request (another time, place, name or phone) gets another key.
     const signature = JSON.stringify(request);
@@ -208,6 +217,14 @@ export default function PublicHomeVisitPage() {
       // sending it again answers the one stored instead of storing another.
       if (answerLost(err)) {
         setError(`${message} Si ya se había enviado, no se repite.`);
+        return;
+      }
+      // The business changed what the visit costs or how it charges it: the page reads both again and the customer sees them.
+      if (message === VISIT_CHANGED_MESSAGE) {
+        setSheetOpen(false);
+        setNotice(message);
+        void visitQuery.refetch();
+        void coverage.refetch();
         return;
       }
       // The person no longer goes: the page reads who does, and the customer picks again.
@@ -306,11 +323,12 @@ export default function PublicHomeVisitPage() {
     </div>
   );
   const startingPrice = visitPriceText(data.price, data.chargePolicy, data.pricesIncludeTax);
+  const notGoing = !!coverage.data && !covered && coverage.data.postalCode === postalCode;
   const coverageText = !isPostalCode(postalCode) ? 'Escribe tu código postal para ver si vamos y cuánto cuesta la visita.'
     : coverage.isFetching && coverage.data?.postalCode !== postalCode ? 'Revisando si vamos…'
     : coverage.isError ? getApiErrorMessage(coverage.error, 'No pudimos revisar tu código postal.')
     : covered ? `Vamos al ${postalCode}${price ? ` · ${price}` : ''}`
-    : coverage.data ? `Por ahora no vamos al ${postalCode}.`
+    : notGoing ? `Por ahora no vamos al ${postalCode}.`
     : '';
 
   return (
@@ -334,7 +352,7 @@ export default function PublicHomeVisitPage() {
             <div className="small text-muted">
               {describeDuration(data.durationMinutes)}{startingPrice && <> · <span className="ta-money">{startingPrice}</span></>}
             </div>
-            <div className="small text-muted">{POLICY_NOTE[data.chargePolicy]}</div>
+            <div className="small text-muted">{visitPolicyNote(coveredPrice ?? data.price, data.chargePolicy)}</div>
           </div>
         </div>
 
@@ -373,19 +391,29 @@ export default function PublicHomeVisitPage() {
               <label className="form-label small mb-1" htmlFor={`${fieldId}-postal-code`}>Código postal</label>
               <input
                 id={`${fieldId}-postal-code`}
-                className={`form-control ${coverage.data && !covered && coverage.data.postalCode === postalCode ? 'is-invalid' : ''}`}
+                className={`form-control ${notGoing ? 'is-invalid' : ''}`}
+                aria-invalid={notGoing}
                 inputMode="numeric"
                 autoComplete="postal-code"
                 maxLength={5}
                 pattern="\d{5}"
                 value={address.postalCode}
-                onChange={(event) => setAddress((current) => ({ ...current, postalCode: event.target.value.replace(/\D/g, '') }))}
+                onChange={(event) => {
+                  setAddressTouched(true);
+                  setAddress((current) => ({ ...current, postalCode: event.target.value.replace(/\D/g, '') }));
+                }}
                 aria-describedby={`${fieldId}-coverage`}
               />
             </div>
           )}
           <div id={`${fieldId}-coverage`} className="col-12 small" role="status">
-            <span className={coverage.data && !covered && coverage.data.postalCode === postalCode ? 'text-danger' : 'text-muted'}>{coverageText}</span>
+            <span className={notGoing ? 'text-danger' : 'text-muted'}>{coverageText}</span>
+            {coverage.isError && !coverage.isFetching && (
+              <>
+                {' '}
+                <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={() => void coverage.refetch()}>Intentar de nuevo</button>
+              </>
+            )}
           </div>
         </div>
 
@@ -444,7 +472,14 @@ export default function PublicHomeVisitPage() {
 
       {covered && chosen && (
         <div className="pm-cart-bar">
-          <button type="button" className="btn btn-primary pm-cart-button justify-content-center" onClick={() => setSheetOpen(true)}>
+          <button
+            type="button"
+            className="btn btn-primary pm-cart-button justify-content-center"
+            onClick={() => {
+              setError('');
+              setSheetOpen(true);
+            }}
+          >
             Continuar · {shortDayLabel(chosen.date)} · {chosen.label}
           </button>
         </div>

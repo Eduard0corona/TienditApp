@@ -221,14 +221,16 @@ describe('AppointmentsList', () => {
       status: AppointmentStatus.Requested,
       channel: AppointmentChannel.Online,
       visit: { postalCode: '72000', addressLine: 'Av. Juárez 123', zoneName: 'Centro', fee: 0, chargePolicy: HomeVisitChargePolicy.Free },
-    })]);
+    }), AT_HOME]);
 
     const row = (await screen.findByText('Valeria')).closest('tr')!;
     expect(within(row).getByText('valeria@correo.mx')).toBeInTheDocument();
     expect(within(row).getByText('A domicilio · CP 72000 · Centro')).toBeInTheDocument();
     expect(within(row).getByText('Visita para cotizar · sin costo')).toBeInTheDocument();
     // A visit the team arranged says only where it is.
-    expect(screen.queryByText(/Visita para cotizar · se cobra/)).not.toBeInTheDocument();
+    const teams = screen.getByText('Ana Ruiz').closest('tr')!;
+    expect(within(teams).getByText('A domicilio · CP 72000 · Centro')).toBeInTheDocument();
+    expect(within(teams).queryByText(/Visita para cotizar/)).not.toBeInTheDocument();
   });
 
   it('says how many requests wait and shows them, and opens on them from the notice', async () => {

@@ -117,6 +117,15 @@ describe('AppointmentTrackingPage', () => {
     expect(screen.queryByRole('link', { name: /Agendar otra/ })).not.toBeInTheDocument();
   });
 
+  it('books again an appointment the business moved to the customer’s home, not another visit', async () => {
+    api.trackAppointment.mockResolvedValue(appointment({ address: null, visit: { postalCode: '72000' } }) as never);
+    renderPage(`/cita#${LINK}`);
+
+    expect(await screen.findByText('A domicilio · CP 72000')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Agendar otra cita en Barbería Luis' })).toHaveAttribute('href', '/m/barberia-luis/agendar');
+    expect(screen.queryByRole('link', { name: /Pedir otra visita/ })).not.toBeInTheDocument();
+  });
+
   it('asks for the link when there is none', async () => {
     renderPage('/cita');
     expect(screen.getByRole('heading', { name: 'Abre el enlace de tu cita' })).toBeInTheDocument();

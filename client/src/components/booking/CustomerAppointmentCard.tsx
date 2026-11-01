@@ -93,7 +93,8 @@ export default function CustomerAppointmentCard({
               <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Escribir al negocio
             </a>
           )}
-          {appointment.visit ? (
+          {/* A visit to quote requested online asks for another visit; one the team moved to the home books again. */}
+          {appointment.visit?.chargePolicy != null ? (
             <Link
               className="btn btn-sm btn-light"
               to={homeVisitPath(appointment.businessSlug)}

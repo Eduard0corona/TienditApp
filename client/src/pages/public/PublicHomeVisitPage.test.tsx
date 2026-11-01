@@ -166,6 +166,9 @@ describe('PublicHomeVisitPage', () => {
       customerPhone: '5522107765',
       customerEmail: null,
       staffId: null,
+      // What the page said, so a visit charged otherwise since is asked again.
+      expectedChargePolicy: HomeVisitChargePolicy.CreditedIfHired,
+      expectedPrice: 400,
       idempotencyKey: expect.any(String),
     });
     expect(await screen.findByRole('heading', { name: '¡Solicitud enviada!' })).toBeInTheDocument();
@@ -212,8 +215,9 @@ describe('PublicHomeVisitPage', () => {
     expect(second.idempotencyKey).toBe(first.idempotencyKey);
     // Taken meanwhile: the sheet closes and the times say it.
     expect(await screen.findByText('Esa hora ya no está libre. Elige otra.')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Tu visita' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tu visita' })).not.toBeInTheDocument());
     expect(screen.queryByRole('button', { name: '10:00 a. m.' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Continuar/ })).not.toBeInTheDocument();
   });
 
   it('lets the customer choose who goes, with that person’s times', async () => {
@@ -237,6 +241,7 @@ describe('PublicHomeVisitPage', () => {
     const user = userEvent.setup();
     account.getAddresses.mockResolvedValue([
       { id: 'casa', label: 'Casa', postalCode: '72000', addressLine: 'Calle 5 de Mayo 8', references: 'Portón verde' },
+      { id: 'oficina', label: 'Oficina', postalCode: '72009', addressLine: 'Reforma 400', references: null },
     ] as never);
     api.requestHomeVisit.mockResolvedValue(receipt({ linkedToAccount: true }) as never);
     renderPage({
@@ -248,7 +253,9 @@ describe('PublicHomeVisitPage', () => {
       } as unknown as AuthContextType['user'],
     });
 
+    // The last one used comes first.
     expect(await screen.findByRole('radio', { name: /Casa/ })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: /Oficina/ })).toHaveAttribute('aria-checked', 'false');
     expect(screen.queryByLabelText('Código postal')).not.toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: '10:00 a. m.' }));
     await user.click(screen.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }));
@@ -262,6 +269,67 @@ describe('PublicHomeVisitPage', () => {
       postalCode: '72000', addressLine: 'Calle 5 de Mayo 8', references: 'Portón verde', customerEmail: 'valeria@correo.mx',
     })));
     expect(await screen.findByText('La encuentras en tus citas.')).toBeInTheDocument();
+  });
+
+  it('starts at the account’s address once its session arrives after the page opened, unless something was typed', async () => {
+    account.getAddresses.mockResolvedValue([
+      { id: 'casa', label: 'Casa', postalCode: '72000', addressLine: 'Calle 5 de Mayo 8', references: null },
+    ] as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (auth: Partial<AuthContextType>) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={auth as AuthContextType}>
+          <MemoryRouter initialEntries={['/m/plomeria-hernandez/visita']}>
+            <Routes><Route path="/m/:slug/visita" element={<PublicHomeVisitPage />} /></Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree({ isAuthenticated: false, isLoading: true, user: null }));
+    expect(await screen.findByLabelText('Código postal')).toBeInTheDocument();
+
+    rerender(tree({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        id: 'u1', email: 'valeria@correo.mx', firstName: 'Valeria', lastName: 'Ruiz', fullName: 'Valeria Ruiz',
+        phoneNumber: '+525522107765', phoneNumberConfirmed: true, emailConfirmed: true, role: 'Customer', permissions: [],
+      } as unknown as AuthContextType['user'],
+    }));
+
+    expect(await screen.findByRole('radio', { name: /Casa/ })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByLabelText('Código postal')).not.toBeInTheDocument();
+  });
+
+  it('asks again when the business changed what the visit costs since the page showed it', async () => {
+    const user = userEvent.setup();
+    api.requestHomeVisit.mockRejectedValue({ isAxiosError: true, response: { status: 400, data: {
+      detail: 'El negocio cambió el costo de la visita o cómo la cobra. Revísalo antes de enviar tu solicitud.',
+    } } });
+    renderPage();
+
+    const sheet = await pickMondayAtTen(user);
+    await user.type(sheet.getByLabelText('¿Qué pasa?'), 'Gotea el calentador');
+    await user.type(sheet.getByLabelText('Dirección'), 'Av. Juárez 123');
+    await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    api.getHomeVisit.mockResolvedValue(visit({ chargePolicy: HomeVisitChargePolicy.Charged }) as never);
+    await user.click(sheet.getByRole('button', { name: 'Solicitar visita' }));
+
+    expect(await screen.findByText(/El negocio cambió el costo de la visita/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tu visita' })).not.toBeInTheDocument());
+    // The page reads the visit and its price again: the customer sees what it costs now.
+    expect(await screen.findByText('Pagas la visita aunque no contrates el trabajo.')).toBeInTheDocument();
+    expect(api.getHomeVisitCoverage.mock.calls.filter(([, code]) => code === '72000').length).toBeGreaterThan(1);
+  });
+
+  it('never says the visit is paid while it costs nothing', async () => {
+    api.getHomeVisit.mockResolvedValue(visit({ chargePolicy: HomeVisitChargePolicy.Charged, price: { amount: 0, isStarting: false } }) as never);
+    renderPage();
+
+    expect(await screen.findByText(/Visita sin costo/)).toBeInTheDocument();
+    expect(screen.getByText('Revisamos y te decimos cuánto cuesta, sin costo.')).toBeInTheDocument();
+    expect(screen.queryByText('Pagas la visita aunque no contrates el trabajo.')).not.toBeInTheDocument();
   });
 
   it('says so when the business does not receive visits online', async () => {
