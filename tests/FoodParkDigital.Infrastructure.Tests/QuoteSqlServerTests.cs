@@ -77,14 +77,14 @@ public class QuoteSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        // Two people correct it at the same time: the second correction collides.
-        await using var first = database.CreateContext(tenantId);
-        await using var second = database.CreateContext(tenantId);
-        first.Quotes.Add((await first.Quotes.Include(q => q.Lines).SingleAsync()).Revise(2, Now));
-        second.Quotes.Add((await second.Quotes.Include(q => q.Lines).SingleAsync()).Revise(2, Now));
-        await first.SaveChangesAsync();
+        // Two drafts of the folio with different versions: only the index of one draft per folio stops the second.
+        await using var corrections = database.CreateContext(tenantId);
+        var sent = await corrections.Quotes.Include(q => q.Lines).SingleAsync();
+        corrections.Quotes.Add(sent.Revise(2, Now));
+        corrections.Quotes.Add(sent.Revise(3, Now));
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => second.SaveChangesAsync());
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() => corrections.SaveChangesAsync());
+        Assert.Contains("IX_Quotes_TenantId_Number_Draft", error.InnerException?.Message);
     }
 
     [SqlServerFact]
