@@ -105,6 +105,9 @@ public class TenantFilterBypassAllowlistTests
         // its business, its CFDI and when it was queued are read, and the CFDI itself inside that business (Fase 28M,
         // ADR 0058).
         ["src/FoodParkDigital.Application/Invoicing/PublicCfdiFeature.cs"] = 1,
+        // The link of a quote names one version of the platform before any business is in context: only its business is
+        // read, and the quote itself inside that business (Fase 29C, ADR 0053).
+        ["src/FoodParkDigital.Application/Quotes/PublicQuoteFeature.cs"] = 1,
         // A customer account's own appointments booked online, filtered by its user id (the list, and the business of
         // the one it cancels); and the link of one, which names its business before any is in context: only that business
         // and its time are read, and the appointment itself inside that business (Fase 24D, ADR 0025).
@@ -114,8 +117,8 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Application/Customers/Services/CustomerLookupService.cs"] = 2,
         ["src/FoodParkDigital.Application/Customers/Services/TemporaryCustomerClaimService.cs"] = 2,
         // The folio counters of the business named by the document (also the online menu, which has no business in
-        // context): the counter and the folios it continues after, filtered by that tenant.
-        ["src/FoodParkDigital.Infrastructure/Services/FolioGenerator.cs"] = 6,
+        // context): the counter and the folios it continues after, filtered by that tenant (the quotes' since Fase 29C).
+        ["src/FoodParkDigital.Infrastructure/Services/FolioGenerator.cs"] = 7,
         // Development seed data.
         ["src/FoodParkDigital.Infrastructure/Persistence/Seeds/SeedData.cs"] = 9,
     };

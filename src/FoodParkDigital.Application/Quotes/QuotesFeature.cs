@@ -166,6 +166,8 @@ public class QuotesHandler :
     public const string AppointmentNotFoundMessage = "No encontramos esa cita.";
     public const string CustomerNotFoundMessage = "No encontramos ese cliente en tu lista.";
     public const string ProductNotFoundMessage = "Un renglón es de un producto que ya no está en tu catálogo: escríbelo a mano.";
+    public const string AlreadyQuotingMessage = "Alguien más empezó la cotización de esta visita al mismo tiempo: vuelve a abrirla.";
+    public const string AlreadyRevisingMessage = "Alguien más empezó la corrección de esta cotización al mismo tiempo: ábrela desde la cotización.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -345,7 +347,20 @@ public class QuotesHandler :
 
         _context.Quotes.Add(revision);
         _context.AuditLogs.Add(QuoteAudit.Create(revision, QuoteAudit.Revised, _currentUser.UserName));
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Someone started the correction at the same time (a folio has one draft): this one is undone whole.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
+            if (await _context.Quotes.AsNoTracking().AnyAsync(
+                    q => q.TenantId == TenantId && q.Number == quote.Number && q.Status == QuoteStatus.Draft, cancellationToken))
+                return Result.Failure<QuoteDto>(AlreadyRevisingMessage);
+            throw;
+        }
+
         return Result.Success(await DescribeAsync(revision, cancellationToken));
     }
 
@@ -533,7 +548,22 @@ public class CreateQuoteCommandHandler : IRequestHandler<CreateQuoteCommand, Res
         quote.SetVisitCredit(credit, now);
         _context.Quotes.Add(quote);
         _context.AuditLogs.Add(QuoteAudit.Create(quote, QuoteAudit.Created, _currentUser.UserName));
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (request.AppointmentId is { } appointmentId)
+        {
+            // Someone started the quote of the visit at the same time (a visit has one): this one is undone whole, folio
+            // included.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
+            if (await _context.Quotes.AsNoTracking().AnyAsync(
+                    q => q.TenantId == TenantId && q.AppointmentId == appointmentId && q.Revision == 1
+                        && q.Status != QuoteStatus.Discarded, cancellationToken))
+                return Result.Failure<QuoteDto>(QuotesHandler.AlreadyQuotingMessage);
+            throw;
+        }
+
         return Result.Success(await DescribeAsync(quote, cancellationToken));
     }
 

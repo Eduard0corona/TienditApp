@@ -88,6 +88,43 @@ public class QuoteSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task AVisit_ShouldHaveOneQuote_UnlessItsDraftWasDiscarded()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenantId, _) = await SeedAsync(database);
+        var visit = new Domain.Appointments.Entities.Appointment(tenantId, "Valeria", "5522107765", "Visita", Now, Now.AddHours(1));
+        await using (var context = database.CreateContext(tenantId))
+        {
+            context.Appointments.Add(visit);
+            await context.SaveChangesAsync();
+        }
+
+        Quote ForTheVisit(int number) => Quote.Start(tenantId, Folios.QuoteNumber(number), Customer(), visit.Id, true, 15, Now);
+
+        // Two «Cotizar» at the same time: the second quote of the visit collides.
+        await using (var first = database.CreateContext(tenantId))
+        await using (var second = database.CreateContext(tenantId))
+        {
+            first.Quotes.Add(ForTheVisit(1));
+            second.Quotes.Add(ForTheVisit(2));
+            await first.SaveChangesAsync();
+            await Assert.ThrowsAsync<DbUpdateException>(() => second.SaveChangesAsync());
+        }
+
+        // Once its draft is discarded, the visit can be quoted again.
+        await using (var context = database.CreateContext(tenantId))
+        {
+            (await context.Quotes.SingleAsync()).Discard(Now);
+            context.Quotes.Add(ForTheVisit(3));
+            await context.SaveChangesAsync();
+        }
+
+        await using var check = database.CreateContext(tenantId);
+        Assert.Equal([("COT-000001", QuoteStatus.Discarded), ("COT-000003", QuoteStatus.Draft)],
+            await check.Quotes.OrderBy(q => q.Number).Select(q => new ValueTuple<string, QuoteStatus>(q.Number, q.Status)).ToListAsync());
+    }
+
+    [SqlServerFact]
     public async Task TwoEditsOfADraft_ShouldCollideOnItsVersion()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();

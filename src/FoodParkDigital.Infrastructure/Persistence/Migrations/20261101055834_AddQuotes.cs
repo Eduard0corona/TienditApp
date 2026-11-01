@@ -157,6 +157,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                 filter: "[CustomerId] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Quotes_TenantId_AppointmentId_First",
+                table: "Quotes",
+                columns: new[] { "TenantId", "AppointmentId" },
+                unique: true,
+                filter: "[AppointmentId] IS NOT NULL AND [Revision] = 1 AND [Status] <> 6");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Quotes_TenantId_CustomerPhone",
                 table: "Quotes",
                 columns: new[] { "TenantId", "CustomerPhone" });

@@ -10,7 +10,8 @@
 --   - [Quotes]: tabla nueva, una fila por versión de cada cotización (folio COT-000123 que comparten
 --     sus versiones), con el cliente, la cita de la visita, los totales que calcula el servidor, la
 --     vigencia, el enlace y la respuesta del cliente. Restricciones CK_Quotes_* con lo que el dominio
---     garantiza, un solo borrador por folio (IX_Quotes_TenantId_Number_Draft) y el enlace único.
+--     garantiza, un solo borrador por folio (IX_Quotes_TenantId_Number_Draft), una sola cotización
+--     por visita (IX_Quotes_TenantId_AppointmentId_First) y el enlace único.
 --   - [QuoteLines]: tabla nueva, los renglones de cada versión (del catálogo o escritos a mano).
 --   - [TenantSettings]: columna nueva [QuoteValidityDays] (int, no nula, 15 por omisión), cuántos días
 --     vale una cotización enviada, y su restricción [CK_TenantSettings_QuoteValidityDays] (1 a 90).
@@ -9472,6 +9473,14 @@ IF NOT EXISTS (
 )
 BEGIN
     EXEC(N'CREATE INDEX [IX_Quotes_CustomerId] ON [Quotes] ([CustomerId]) WHERE [CustomerId] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261101055834_AddQuotes'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_Quotes_TenantId_AppointmentId_First] ON [Quotes] ([TenantId], [AppointmentId]) WHERE [AppointmentId] IS NOT NULL AND [Revision] = 1 AND [Status] <> 6');
 END;
 
 IF NOT EXISTS (

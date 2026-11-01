@@ -101,6 +101,12 @@ public class QuoteConfiguration : IEntityTypeConfiguration<Quote>
         builder.HasIndex(x => new { x.TenantId, x.Status, x.UpdatedAt });
         builder.HasIndex(x => new { x.TenantId, x.CustomerPhone });
         builder.HasIndex(x => x.AppointmentId).HasFilter("[AppointmentId] IS NOT NULL");
+        // A visit has one quote: the first version of one folio, unless that draft was discarded. The command opens the one
+        // it has; this keeps two «Cotizar» at the same time from starting two.
+        builder.HasIndex(x => new { x.TenantId, x.AppointmentId })
+            .IsUnique()
+            .HasFilter("[AppointmentId] IS NOT NULL AND [Revision] = 1 AND [Status] <> 6")
+            .HasDatabaseName("IX_Quotes_TenantId_AppointmentId_First");
         builder.HasIndex(x => x.CustomerId).HasFilter("[CustomerId] IS NOT NULL");
         builder.HasIndex(x => x.VisitCreditSaleOrderId).HasFilter("[VisitCreditSaleOrderId] IS NOT NULL");
         builder.HasIndex(x => x.TrackingToken)

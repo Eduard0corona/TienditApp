@@ -6270,6 +6270,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("VisitCreditSaleOrderId")
                         .HasFilter("[VisitCreditSaleOrderId] IS NOT NULL");
 
+                    b.HasIndex("TenantId", "AppointmentId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Quotes_TenantId_AppointmentId_First")
+                        .HasFilter("[AppointmentId] IS NOT NULL AND [Revision] = 1 AND [Status] <> 6");
+
                     b.HasIndex("TenantId", "CustomerPhone");
 
                     b.HasIndex("TenantId", "Number")
