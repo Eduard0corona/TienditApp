@@ -49,7 +49,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("PK_QuoteEmails", x => x.Id);
                     table.CheckConstraint("CK_QuoteEmails_Attempts", "([FailedAttempts] = 0 AND [LastFailedAttemptAt] IS NULL) OR ([FailedAttempts] > 0 AND [LastFailedAttemptAt] IS NOT NULL)");
-                    table.CheckConstraint("CK_QuoteEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2)))");
+                    table.CheckConstraint("CK_QuoteEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3)))");
                     table.ForeignKey(
                         name: "FK_QuoteEmails_Quotes_QuoteId",
                         column: x => x.QuoteId,

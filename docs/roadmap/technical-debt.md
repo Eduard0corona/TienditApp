@@ -92,7 +92,8 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - El correo de la cotización no lleva PDF (TienditApp no genera PDF): la cotización va en el cuerpo y en su enlace. «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó.
     - Sin plantilla aprobada en Meta, el WhatsApp solo llega a quien escribió en las últimas 24 horas, y no cae solo al correo cuando WhatsApp lo rechaza: el negocio lo ve en el historial y lo manda por correo.
     - Sin la dirección de la app configurada (`AppUrl`), el enlace sale sin dominio (`/cotizacion#…`), como el de los avisos.
-    - Con el código anterior (rollback del despliegue), un WhatsApp de una cotización que siguiera pendiente sale como cualquier mensaje: a quien se dio de baja no le llega.
+    - Con el código anterior (rollback del despliegue), un WhatsApp de una cotización que siguiera pendiente sale como cualquier mensaje: a quien se dio de baja no le llega. Un correo pendiente queda apartado en el outbox y «Enviándose» hasta regresarlo a la cola (deploy-azure.md).
+    - Cada negocio manda hasta 300 correos de cotizaciones al día desde el dominio de TienditApp, con el texto que escribe; no hay un tope de toda la plataforma que cuide la reputación de ese dominio.
   - Dos personas que editan el mismo borrador a la vez: guarda el último que guardó, sin avisar (el `rowversion` solo protege lo que pasa entre leer y guardar en el servidor; la pantalla no manda la versión que leyó).
   - «Vencida» no se guarda: una enviada se lee vencida con el día del negocio. Un reporte que lea la base directo ve «Enviada» hasta que alguien la responde o la corrige.
   - Las citas en línea siguen sin ser a domicilio (`OnlineBookingBlocker.NoPremises`): a domicilio se pide la visita, no otro servicio.

@@ -2,10 +2,12 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Invoicing;
+using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Quotes;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Messaging;
@@ -131,8 +133,18 @@ public sealed class OutgoingMessageSender
             && await CreditDueSoonSkipReasonAsync(message, cancellationToken) is { } notDue)
             return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: notDue);
 
+        // A quote's message retried for hours may go out after its version stopped being what the business offers (Fase 29D).
+        if (message.Purpose == MessagePurpose.QuoteDocument)
+        {
+            var quote = await _context.Quotes.AsNoTracking()
+                .FirstOrDefaultAsync(q => q.Id == message.QuoteId && q.TenantId == message.TenantId, cancellationToken);
+            var today = await QuoteCalendar.TodayAsync(_context, message.TenantId, _clock.UtcNow, cancellationToken);
+            if (quote is null || quote.StatusOn(today) != QuoteStatus.Sent)
+                return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: QuoteDeliveries.NoLongerValidReason);
+        }
+
         // An opt-out stops promotions and reminders; notices of the customer's own orders and appointments, and the quote they
-        // asked the business for (Fase 29D), still go out.
+        // asked the business for (Fase 29D; another number that opted out is refused when it is asked for), still go out.
         if (message.Purpose is not (MessagePurpose.AppointmentNotice or MessagePurpose.QuoteDocument)
             && await _consent.IsOptedOutAsync(message.TenantId, message.Phone, cancellationToken))
             return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: OptedOutReason);

@@ -17,8 +17,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
 /// The sends of a quote on SQL Server (Fase 29D, ADR 0053 point 16), inside the transaction of the pipeline: «Mandar por
-/// correo» pressed eight times at once queues five emails of the version and tells the rest the limit was reached, since
-/// the business's lock of quote sends puts them in line.
+/// correo» or «Mandar por WhatsApp» pressed eight times at once queues five of the version and tells the rest the limit was
+/// reached, since the business's lock of quote sends puts them in line.
 /// </summary>
 public class QuoteDeliverySqlServerTests
 {
@@ -36,6 +36,34 @@ public class QuoteDeliverySqlServerTests
         Assert.All(results.Where(r => r.IsFailure), r => Assert.Equal(QuoteRules.TooManySendsMessage, r.Error));
         await using var check = database.CreateContext(tenantId);
         Assert.Equal(QuoteRules.MaxSendsPerQuoteVersion, await check.QuoteEmails.CountAsync());
+    }
+
+    [SqlServerFact]
+    public async Task MandarPorWhatsAppAtOnce_ShouldQueueFiveMessagesOfTheVersion_AndTellTheRestTheLimitWasReached()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenantId, quoteId) = await SeedAsync(database);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => SendWhatsAppAsync(database, tenantId, quoteId)));
+
+        Assert.Equal(QuoteRules.MaxSendsPerQuoteVersion, results.Count(r => r.IsSuccess));
+        Assert.All(results.Where(r => r.IsFailure), r => Assert.Equal(QuoteRules.TooManySendsMessage, r.Error));
+        await using var check = database.CreateContext(tenantId);
+        Assert.Equal(QuoteRules.MaxSendsPerQuoteVersion, await check.OutgoingMessages.CountAsync(m => m.QuoteId == quoteId));
+    }
+
+    /// <summary>One «Mandar por WhatsApp» in its own context, through the transaction of the pipeline.</summary>
+    private static async Task<Result<QuoteWhatsAppDto>> SendWhatsAppAsync(SqlServerTestDatabase database, Guid tenantId, Guid quoteId)
+    {
+        var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
+        tenant.SetTenant(tenantId);
+        await using var context = database.CreateProductionLikeContext(
+            tenant, new InMemoryApplicationDbContext.NullMediator(), new TenantSaveChangesInterceptor(tenant));
+        var handler = new QuoteDeliveryHandler(
+            context, tenant, new Owner(), new PhoneNormalizationService(), new QuoteSendingLock(context), new Links(), new Clock());
+        var command = new SendQuoteByWhatsAppCommand(quoteId, "5522107765");
+        return await new TransactionBehavior<SendQuoteByWhatsAppCommand, Result<QuoteWhatsAppDto>>(context)
+            .Handle(command, () => handler.Handle(command, CancellationToken.None), CancellationToken.None);
     }
 
     /// <summary>One «Mandar por correo» in its own context, through the transaction of the pipeline, as production does.</summary>
@@ -62,8 +90,11 @@ public class QuoteDeliverySqlServerTests
         quote.ReplaceLines([new QuoteLineInput(null, "Cambio de calentador", 1m, 1160m, VatRate.General)], Now);
         // The business's day: Mexico City, six hours behind.
         quote.Send(DateOnly.FromDateTime(Now.AddHours(-6).DateTime), new string('q', 43), null, Now);
+        // Its WhatsApp connected, so its quotes go by WhatsApp from TienditApp.
+        var whatsApp = new WhatsAppConfig(tenant.Id);
+        whatsApp.Update(isEnabled: true, accessToken: "token", phoneNumberId: "2233445566", wabaId: "1122334455", displayPhoneNumber: null);
         await using var seed = database.CreateContext(tenant.Id);
-        seed.AddRange(tenant, settings, quote);
+        seed.AddRange(tenant, settings, quote, whatsApp);
         await seed.SaveChangesAsync();
         return (tenant.Id, quote.Id);
     }

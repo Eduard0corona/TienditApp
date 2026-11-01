@@ -154,17 +154,18 @@ La cotización (puntos 14, 15 y 17), salvo convertir la aceptada en el trabajo. 
 
 El envío de la cotización desde TienditApp (punto 16). La migración es `20261101181148_AddQuoteDeliveries`, con sus scripts en `database/production/20261101181148_AddQuoteDeliveries/`. Convertir la aceptada en el trabajo queda para la Fase 29E: una orden solo lleva renglones del catálogo con su precio, y la cotización tiene renglones escritos a mano con su precio y su IVA, así que primero hay que decidir cómo entra un renglón sin producto.
 
-- **Solo se manda una versión enviada y vigente** en el día del negocio: una aceptada, rechazada, reemplazada o vencida ya no es lo que el negocio ofrece.
+- **Solo se manda una versión enviada y vigente** en el día del negocio: una aceptada, rechazada, reemplazada o vencida ya no es lo que el negocio ofrece. Se revisa al pedirlo y otra vez al salir: un correo o un WhatsApp que se reintentó hasta después de que la versión dejó de valer no sale (el correo termina como «ya no vigente»; el WhatsApp, como no enviado).
 - **«Enviar por correo»** (`POST /api/v1/quotes/{id}/email`) guarda un `QuoteEmail` con a quién y quién lo pidió, y el outbox lo manda después (`QuoteEmailRequestedEvent`), como el correo de un CFDI ([ADR 0049](0049-cfdi-email.md)).
   - Sale de la plataforma como «{Negocio} vía TienditApp», con `Reply-To` al correo del negocio, sin adjuntos: en el cuerpo, la cotización como el cliente la lee en su enlace (renglones, IVA, la visita que se descuenta, lo que falta pagar, hasta cuándo vale, la nota) y el enlace. Todo lo que escribieron el negocio o el cliente va codificado.
   - Un servidor que no responde se reintenta con el outbox; uno que rechaza la dirección, o sin correo configurado, lo termina; pasado el último intento termina sin entregarse. Cada correo guarda su resultado.
 - **«Enviar por WhatsApp»** (`POST /api/v1/quotes/{id}/whatsapp`), cuando el negocio conectó su WhatsApp, encola un `OutgoingMessage` con el propósito `QuoteDocument` (6) y la versión que lleva. Sale del número del negocio por la cola de mensajes, que lo reintenta y oye si se entregó y se leyó.
   - Va con la plantilla que el negocio eligió para sus cotizaciones en Cotizaciones (`TenantSettings.QuoteWhatsAppTemplateId`, dueños y administradores; una plantilla «Cotización por WhatsApp» lleva `{enlace}` y puede decir `{nombre}`, `{negocio}`, `{folio}`, `{monto}`, lo que paga el cliente, y `{fecha}`, hasta cuándo vale) o con el texto de TienditApp. Sin plantilla aprobada en Meta solo llega a quien escribió en las últimas 24 horas.
-  - La baja de un cliente no la detiene: él le pidió esa cotización al negocio. Esos mensajes no salen en Campañas › Mensajes ni en los mensajes fallidos de Inicio: se ven en su cotización.
+  - La baja del cliente de la cotización no la detiene: él le pidió esa cotización al negocio. A otro número que pidió no recibir mensajes no se le manda: se rechaza al pedirlo. Esos mensajes no salen en Campañas › Mensajes ni en los mensajes fallidos de Inicio: se ven en su cotización.
   - Sin WhatsApp conectado, la pantalla sigue ofreciendo mandarla desde el teléfono (`wa.me`).
 - **Límites**: cada versión se manda 5 veces al día por cada medio y un negocio 300 cotizaciones al día por cada medio, contadas bajo un candado de envíos del negocio, así que dos envíos a la vez no pasan del último.
 - **El historial**: el detalle de cada versión muestra sus últimos 5 correos y 5 WhatsApp con dónde va cada uno (enviándose, enviado, entregado, leído, o no se envió y por qué), y vuelve a preguntar mientras alguno va en camino.
 - **El rollback** se detiene (50052) en cuanto se mandó una cotización desde TienditApp o un negocio eligió una plantilla para ellas.
+- **Al publicar o volver a la versión anterior**, el worker de la 29C aparta el correo de una cotización que tome (no conoce el evento) y se queda «Enviándose»; [deploy-azure.md](../development/deploy-azure.md) tiene la consulta que lo regresa a la cola.
 
 ### Etapa 2: la solicitud de la visita
 

@@ -24,7 +24,9 @@
 -- de los CFDI ni lleva una cotización). /health/schema sigue sano. Volver a ella (redespliegue, o
 -- swap si el slot de staging está activo) funciona sin rollback.sql: el historial queda guardado y
 -- vuelve a verse al regresar a esta versión. Un WhatsApp de una cotización que siga pendiente al
--- volver lo manda la versión anterior como cualquier mensaje, salvo a quien se dio de baja.
+-- volver lo manda la versión anterior como cualquier mensaje, salvo a quien se dio de baja. Un
+-- correo de una cotización que tome el worker de la versión anterior se aparta (no conoce el evento)
+-- y se queda «Enviándose»: docs/development/deploy-azure.md tiene la consulta que lo regresa a la cola.
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a
@@ -9589,7 +9591,7 @@ BEGIN
         [Failure] int NULL,
         CONSTRAINT [PK_QuoteEmails] PRIMARY KEY ([Id]),
         CONSTRAINT [CK_QuoteEmails_Attempts] CHECK (([FailedAttempts] = 0 AND [LastFailedAttemptAt] IS NULL) OR ([FailedAttempts] > 0 AND [LastFailedAttemptAt] IS NOT NULL)),
-        CONSTRAINT [CK_QuoteEmails_Outcome] CHECK (([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2)))),
+        CONSTRAINT [CK_QuoteEmails_Outcome] CHECK (([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3)))),
         CONSTRAINT [FK_QuoteEmails_Quotes_QuoteId] FOREIGN KEY ([QuoteId]) REFERENCES [Quotes] ([Id]),
         CONSTRAINT [FK_QuoteEmails_Tenants_TenantId] FOREIGN KEY ([TenantId]) REFERENCES [Tenants] ([Id]) ON DELETE NO ACTION
     );

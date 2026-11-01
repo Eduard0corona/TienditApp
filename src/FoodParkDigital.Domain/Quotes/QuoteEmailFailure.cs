@@ -8,5 +8,7 @@ public enum QuoteEmailFailure
     /// <summary>TienditApp has no mail server set up.</summary>
     NotConfigured = 1,
     /// <summary>The mail server did not take it after every try.</summary>
-    NotDelivered = 2
+    NotDelivered = 2,
+    /// <summary>By the time it went out, the version was no longer sent and valid: accepted, rejected, replaced or expired.</summary>
+    NoLongerValid = 3
 }

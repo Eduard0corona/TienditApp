@@ -19,7 +19,7 @@ public class QuoteEmailConfiguration : IEntityTypeConfiguration<QuoteEmail>
             table.HasCheckConstraint(
                 "CK_QuoteEmails_Outcome",
                 "([SentAt] IS NULL OR [FailedAt] IS NULL)"
-                + " AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2)))");
+                + " AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2, 3)))");
             table.HasCheckConstraint(
                 "CK_QuoteEmails_Attempts",
                 "([FailedAttempts] = 0 AND [LastFailedAttemptAt] IS NULL) OR ([FailedAttempts] > 0 AND [LastFailedAttemptAt] IS NOT NULL)");

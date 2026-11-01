@@ -120,6 +120,11 @@ public static partial class QuoteDeliveries
     public const string NotConnectedMessage =
         "Conecta el WhatsApp de tu negocio en Configuración › WhatsApp para mandar cotizaciones desde TienditApp.";
 
+    public const string OptedOutMessage =
+        "Ese número pidió no recibir mensajes de tu negocio: solo se le manda la cotización al número de su cliente.";
+
+    public const string NoLongerValidReason = "La cotización ya no está vigente: se aceptó, se rechazó, se corrigió o venció.";
+
     private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-MX");
 
     // Meta refuses a template parameter with line breaks, tabs or more than four spaces in a row.
@@ -337,6 +342,14 @@ public class QuoteDeliveryHandler :
             return Result.Failure<QuoteWhatsAppDto>(QuoteDeliveries.NotConnectedMessage);
         if (!PhoneNumberRules.TryNormalizeTypedPhone(_phones, request.Phone, out var phone))
             return Result.Failure<QuoteWhatsAppDto>(InvoiceWhatsApp.InvalidMessage);
+        // The customer of the quote asked for it, so their own opt-out does not stop it; anyone else's does.
+        var customer = PhoneNumberRules.TryNormalizeTypedPhone(_phones, quote.CustomerPhone, out var customerPhone)
+            ? MessagingPhone.ToKey(customerPhone)
+            : null;
+        var key = MessagingPhone.ToKey(phone);
+        if (key != customer
+            && await _context.MessagingOptOuts.AnyAsync(o => o.TenantId == TenantId && o.Phone == key && o.ResubscribedAt == null, cancellationToken))
+            return Result.Failure<QuoteWhatsAppDto>(QuoteDeliveries.OptedOutMessage);
 
         await _lock.AcquireAsync(TenantId, cancellationToken);
         var now = _clock.UtcNow;
@@ -414,6 +427,14 @@ public sealed class QuoteEmailRequestedHandler : IOutboxEventHandler<QuoteEmailR
         var quote = await _context.Quotes.AsNoTracking()
             .Include(q => q.Lines)
             .FirstAsync(q => q.Id == email.QuoteId && q.TenantId == email.TenantId, cancellationToken);
+        // Retried for hours, it may go out after the version stopped being what the business offers: then it does not go.
+        var today = await QuoteCalendar.TodayAsync(_context, email.TenantId, _clock.UtcNow, cancellationToken);
+        if (quote.StatusOn(today) != QuoteStatus.Sent)
+        {
+            _logger.LogInformation("The email {QuoteEmailId} was not sent: its version is no longer sent and valid.", email.Id);
+            email.Fail(QuoteEmailFailure.NoLongerValid, _clock.UtcNow);
+            return;
+        }
         var business = await _context.Tenants.AsNoTracking()
             .Where(t => t.Id == email.TenantId)
             .Select(t => new { t.Name, t.ContactEmail, t.ContactPhone })

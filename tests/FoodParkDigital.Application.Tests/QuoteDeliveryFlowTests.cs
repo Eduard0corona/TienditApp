@@ -174,6 +174,67 @@ public class QuoteDeliveryFlowTests
         Assert.Equal(QuoteRules.TooManyBusinessSendsMessage, (await shop.EmailAsync(quote.Id, "valeria@correo.mx")).Error);
     }
 
+    [Fact]
+    public async Task ASend_ShouldNotGoOut_OnceTheVersionStoppedBeingValid_BeforeItLeft()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var accepted = await shop.SentAsync();
+        var expired = await shop.SentAsync();
+        await shop.EmailAsync(accepted.Id, "valeria@correo.mx");
+        await shop.EmailAsync(expired.Id, "valeria@correo.mx");
+        await shop.WhatsAppAsync(accepted.Id, "5522107765");
+        var emails = await shop.Context.QuoteEmails.AsNoTracking().ToDictionaryAsync(e => e.QuoteId, e => e.Id);
+        var message = await shop.Context.OutgoingMessages.AsNoTracking().SingleAsync();
+
+        // The customer accepted one meanwhile; the mail server answered the other only after its validity.
+        Assert.True((await shop.Handler.Handle(new RecordQuoteReplyCommand(accepted.Id, true, QuoteReplyChannel.Phone, null), CancellationToken.None)).IsSuccess);
+        await shop.DeliverAsync(emails[accepted.Id]);
+        shop.Clock.UtcNow = SalesTestFixture.Now.AddDays(16);
+        await shop.DeliverAsync(emails[expired.Id]);
+        var outcome = await shop.Sender().SendAsync(message, CancellationToken.None);
+
+        Assert.Empty(shop.Email.Documents);
+        Assert.All(await shop.Context.QuoteEmails.AsNoTracking().ToListAsync(), e => Assert.Equal(QuoteEmailFailure.NoLongerValid, e.Failure));
+        Assert.Equal((OutgoingSendDecision.Skipped, QuoteDeliveries.NoLongerValidReason), (outcome.Decision, outcome.Reason));
+    }
+
+    [Fact]
+    public async Task ANumberThatOptedOut_ShouldGetTheQuote_OnlyWhenItIsTheCustomersOwn()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.SentAsync();
+        shop.Context.MessagingOptOuts.AddRange(
+            new MessagingOptOut(shop.Tenant.Id, "+525522107765", OptOutSource.CustomerKeyword, SalesTestFixture.Now),
+            new MessagingOptOut(shop.Tenant.Id, "+525511112222", OptOutSource.Staff, SalesTestFixture.Now));
+        await shop.Context.SaveChangesAsync();
+
+        Assert.Equal(QuoteDeliveries.OptedOutMessage, (await shop.WhatsAppAsync(quote.Id, "55 1111 2222")).Error);
+        // The customer of the quote asked for it, in whichever form the number is written.
+        Assert.True((await shop.WhatsAppAsync(quote.Id, "+52 1 55 2210 7765")).IsSuccess);
+    }
+
+    [Fact]
+    public async Task AWhatsApp_ShouldCountFiveByVersion_AndThreeHundredByBusiness()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var first = await shop.SentAsync();
+        var second = await shop.SentAsync();
+        for (var i = 0; i < QuoteRules.MaxSendsPerQuoteVersion; i++)
+            Assert.True((await shop.WhatsAppAsync(first.Id, "5522107765")).IsSuccess);
+
+        Assert.Equal(QuoteRules.TooManySendsMessage, (await shop.WhatsAppAsync(first.Id, "5522107765")).Error);
+        // Another version of the business still goes, until the business reaches its limit.
+        Assert.True((await shop.WhatsAppAsync(second.Id, "5522107765")).IsSuccess);
+        var other = await shop.SentAsync();
+        var otherQuote = await shop.Context.Quotes.AsNoTracking().SingleAsync(q => q.Id == other.Id);
+        var today = DateOnly.FromDateTime(shop.Clock.UtcNow.UtcDateTime);
+        for (var i = 0; i < QuoteRules.MaxSendsPerBusiness; i++)
+            shop.Context.OutgoingMessages.Add(OutgoingMessage.ForQuote(otherQuote, "+525533334444", "Otro", "Hola", null, "es_MX", [],
+                Guid.NewGuid(), today, shop.Clock.UtcNow));
+        await shop.Context.SaveChangesAsync();
+        Assert.Equal(QuoteRules.TooManyBusinessSendsMessage, (await shop.WhatsAppAsync(second.Id, "5522107765")).Error);
+    }
+
     [Theory]
     [InlineData("", QuoteRules.EmailMessage)]
     [InlineData("valeria", InvoiceEmailAddress.InvalidMessage)]
@@ -411,6 +472,9 @@ public class QuoteDeliveryFlowTests
             => Deliveries.Handle(new SendQuoteByWhatsAppCommand(id, phone), CancellationToken.None);
 
         public Task<QuoteDto> GetAsync(Guid id) => Handler.Handle(new GetQuoteQuery(id), CancellationToken.None);
+
+        public OutgoingMessageSender Sender() => new(Context, new CreditTestKit.FakeWhatsApp(),
+            new MessagingConsentService(Context, Fixture.TenantService, Clock), Clock);
 
         /// <summary>The outbox runs the email's handler, attempt <paramref name="attempt"/> of <paramref name="maxAttempts"/>.</summary>
         public async Task DeliverAsync(Guid emailId, int attempt = 1, int maxAttempts = 8)
