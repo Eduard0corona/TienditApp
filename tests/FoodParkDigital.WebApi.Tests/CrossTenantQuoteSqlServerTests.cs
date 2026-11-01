@@ -72,6 +72,11 @@ public sealed class CrossTenantQuoteSqlServerTests
         Assert.DoesNotContain("valeria@correo.mx", body);
         Assert.Equal(HttpStatusCode.NotFound,
             (await stranger.PostAsJsonAsync("/api/v1/public/quotes/view", new { token = new string('x', 43) })).StatusCode);
+        // The column compares without case in SQL Server and finds it: the link is the exact one, so another case does not open it.
+        var otherCase = new string(token.Select(c => char.IsUpper(c) ? char.ToLowerInvariant(c) : char.ToUpperInvariant(c)).ToArray());
+        Assert.NotEqual(token, otherCase);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await stranger.PostAsJsonAsync("/api/v1/public/quotes/view", new { token = otherCase })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await stranger.GetAsync($"/api/v1/quotes/{id}")).StatusCode);
 
         var accepted = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/reply",
