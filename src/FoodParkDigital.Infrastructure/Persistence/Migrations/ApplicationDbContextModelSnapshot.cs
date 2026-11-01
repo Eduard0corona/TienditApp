@@ -163,6 +163,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("CustomerEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
                     b.Property<string>("CustomerName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -273,6 +277,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AppointmentId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int?>("ChargePolicy")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("Fee")
                         .HasColumnType("decimal(18,2)");
 
@@ -302,6 +309,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("AppointmentVisits", null, t =>
                         {
                             t.HasCheckConstraint("CK_AppointmentVisits_AddressLine", "LEN([AddressLine]) > 0");
+
+                            t.HasCheckConstraint("CK_AppointmentVisits_ChargePolicy", "[ChargePolicy] IS NULL OR ([ChargePolicy] >= 0 AND [ChargePolicy] <= 2 AND ([ChargePolicy] <> 1 OR [Fee] = 0))");
 
                             t.HasCheckConstraint("CK_AppointmentVisits_Fee", "[Fee] >= 0 AND [Fee] <= 10000");
 

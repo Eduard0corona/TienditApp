@@ -10,6 +10,8 @@ public readonly record struct BookedInterval(DateTimeOffset StartAt, DateTimeOff
 /// with its special days on top), every <see cref="OnlineBookingRules.SlotStepMinutes"/> minutes from each opening, ending by
 /// the time it closes, from the earliest time allowed on, and while fewer appointments than the business attends at once
 /// overlap it at any moment. Without weekly hours there is nothing to offer: the business never said when it attends.
+/// A visit at the customer's address (Fase 29B) also needs the trip before and after it free of other appointments, as in
+/// the agenda (ADR 0020): the time around it counts, not only its own.
 /// </summary>
 public static class BookingSlots
 {
@@ -19,6 +21,9 @@ public static class BookingSlots
     /// <param name="booked">The open appointments around the date, of the whole business.</param>
     /// <param name="capacity">Appointments the business attends at once.</param>
     /// <param name="earliest">Nothing starts before it (now plus the notice).</param>
+    /// <param name="around">
+    /// The trip of a visit (Fase 29B), before and after it: other appointments must leave it free too. Zero at the business.
+    /// </param>
     public static IReadOnlyList<DateTimeOffset> FreeStarts(
         BusinessSchedule? schedule,
         TimeZoneInfo zone,
@@ -26,9 +31,10 @@ public static class BookingSlots
         TimeSpan duration,
         IReadOnlyCollection<BookedInterval> booked,
         int capacity,
-        DateTimeOffset earliest)
+        DateTimeOffset earliest,
+        TimeSpan around = default)
     {
-        if (schedule is not { HasWeeklyHours: true } || duration <= TimeSpan.Zero || capacity < 1)
+        if (schedule is not { HasWeeklyHours: true } || duration <= TimeSpan.Zero || capacity < 1 || around < TimeSpan.Zero)
             return [];
 
         var starts = new List<DateTimeOffset>();
@@ -36,7 +42,7 @@ public static class BookingSlots
         {
             for (var start = opens; start + duration <= closes; start += Step)
             {
-                if (start >= earliest && MaxOverlapping(booked, start, start + duration) < capacity)
+                if (start >= earliest && MaxOverlapping(booked, start - around, start + duration + around) < capacity)
                     starts.Add(start);
             }
         }
@@ -48,6 +54,7 @@ public static class BookingSlots
     /// day before (an opening that runs past midnight belongs to the day it starts), of a date up to
     /// <paramref name="lastDate"/> when given (the last day offered).
     /// </summary>
+    /// <param name="around">The trip of a visit, before and after it (<see cref="FreeStarts"/>).</param>
     public static bool IsFree(
         BusinessSchedule? schedule,
         TimeZoneInfo zone,
@@ -56,11 +63,12 @@ public static class BookingSlots
         IReadOnlyCollection<BookedInterval> booked,
         int capacity,
         DateTimeOffset earliest,
-        DateOnly? lastDate = null)
+        DateOnly? lastDate = null,
+        TimeSpan around = default)
     {
         var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(start, zone).DateTime);
         bool OffersOn(DateOnly day) => (lastDate is null || day <= lastDate)
-            && FreeStarts(schedule, zone, day, duration, booked, capacity, earliest).Contains(start);
+            && FreeStarts(schedule, zone, day, duration, booked, capacity, earliest, around).Contains(start);
         return OffersOn(date) || OffersOn(date.AddDays(-1));
     }
 

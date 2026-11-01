@@ -24,6 +24,7 @@ internal static class BeforeHomeVisitRequests
         settings.Ignore(s => s.HomeVisitServiceId);
         settings.Ignore(s => s.HomeVisitChargePolicy);
         settings.Ignore(s => s.HomeVisitAddressNoticeDismissedAt);
+        BeforeHomeVisitBooking.Ignore(modelBuilder);
     }
 
     private sealed class Context(

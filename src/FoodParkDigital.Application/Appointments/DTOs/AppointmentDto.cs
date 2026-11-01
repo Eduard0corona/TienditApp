@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 
 namespace FoodParkDigital.Application.Appointments.DTOs;
 
@@ -9,6 +10,8 @@ public class AppointmentDto
     public Guid Id { get; set; }
     public string CustomerName { get; set; } = null!;
     public string CustomerPhone { get; set; } = null!;
+    /// <summary>Where the customer of a visit requested online gets its quote (Fase 29B); null when they gave none.</summary>
+    public string? CustomerEmail { get; set; }
     public string ServiceName { get; set; } = null!;
     public string? StaffName { get; set; }
     public Guid? ServiceProductId { get; set; }
@@ -33,6 +36,7 @@ public class AppointmentDto
         Id = appointment.Id,
         CustomerName = appointment.CustomerName,
         CustomerPhone = appointment.CustomerPhone,
+        CustomerEmail = appointment.CustomerEmail,
         ServiceName = appointment.ServiceName,
         StaffName = appointment.StaffName,
         ServiceProductId = appointment.ServiceProductId,
@@ -47,7 +51,8 @@ public class AppointmentDto
             AddressLine = appointment.Visit.AddressLine,
             References = appointment.Visit.References,
             ZoneName = appointment.Visit.ZoneName,
-            Fee = appointment.Visit.Fee
+            Fee = appointment.Visit.Fee,
+            ChargePolicy = appointment.Visit.ChargePolicy
         },
         SaleOrderId = appointment.SaleOrderId,
         Channel = appointment.Channel,
@@ -60,6 +65,7 @@ public class AppointmentDto
         Id = x.Id,
         CustomerName = x.CustomerName,
         CustomerPhone = x.CustomerPhone,
+        CustomerEmail = x.CustomerEmail,
         ServiceName = x.ServiceName,
         StaffName = x.StaffName,
         ServiceProductId = x.ServiceProductId,
@@ -74,7 +80,8 @@ public class AppointmentDto
             AddressLine = x.Visit.AddressLine,
             References = x.Visit.References,
             ZoneName = x.Visit.ZoneName,
-            Fee = x.Visit.Fee
+            Fee = x.Visit.Fee,
+            ChargePolicy = x.Visit.ChargePolicy
         },
         SaleOrderId = x.SaleOrderId,
         Channel = x.Channel,
@@ -93,4 +100,9 @@ public class AppointmentVisitDto
     public string? References { get; set; }
     public string ZoneName { get; set; } = null!;
     public decimal Fee { get; set; }
+    /// <summary>
+    /// A visit to quote the customer requested online (Fase 29B): how the business charges it, as agreed. «Sin costo» keeps
+    /// <see cref="Fee"/> at 0 wherever it moves. Null for a visit the team arranged.
+    /// </summary>
+    public HomeVisitChargePolicy? ChargePolicy { get; set; }
 }

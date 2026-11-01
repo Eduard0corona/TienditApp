@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import { publicMenuApi, type CustomerAppointment } from '../../api/publicMenuApi';
 import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { AppointmentStatus } from '../../types';
@@ -98,6 +99,31 @@ describe('AppointmentTrackingPage', () => {
 
     expect(await screen.findByText('Confirmada')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cancelar la cita/ })).not.toBeInTheDocument();
+  });
+
+  it('says a visit to quote is at home by its postal code, and offers to ask for another visit (Fase 29B)', async () => {
+    api.trackAppointment.mockResolvedValue(appointment({
+      serviceName: 'Visita y diagnóstico',
+      businessName: 'Plomería Hernández',
+      businessSlug: 'plomeria-hernandez',
+      address: null,
+      visit: { postalCode: '72000', chargePolicy: HomeVisitChargePolicy.Free },
+    }) as never);
+    renderPage(`/cita#${LINK}`);
+
+    expect(await screen.findByText('A domicilio · CP 72000')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Cómo llegar/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Pedir otra visita a Plomería Hernández' })).toHaveAttribute('href', '/m/plomeria-hernandez/visita');
+    expect(screen.queryByRole('link', { name: /Agendar otra/ })).not.toBeInTheDocument();
+  });
+
+  it('books again an appointment the business moved to the customer’s home, not another visit', async () => {
+    api.trackAppointment.mockResolvedValue(appointment({ address: null, visit: { postalCode: '72000' } }) as never);
+    renderPage(`/cita#${LINK}`);
+
+    expect(await screen.findByText('A domicilio · CP 72000')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Agendar otra cita en Barbería Luis' })).toHaveAttribute('href', '/m/barberia-luis/agendar');
+    expect(screen.queryByRole('link', { name: /Pedir otra visita/ })).not.toBeInTheDocument();
   });
 
   it('asks for the link when there is none', async () => {

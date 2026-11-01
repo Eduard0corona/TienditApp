@@ -79,16 +79,22 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - En la agenda, una solicitud que nadie decidió sigue «Por confirmar» después de su hora (la cuenta del cliente ya dice «No se confirmó»), y Aceptar responde que ya terminó.
   - Mis citas trae solo las citas agendadas en línea con la cuenta: no las que el negocio registró con el teléfono del cliente.
   - La 24D-1 suma 286 B a la primera visita (de 177,674 a 177,960 B, contra `master` en `d21f0f2`) y sube el presupuesto a 178,200 B.
-- Oficios a domicilio (plomería, electricidad, aire acondicionado y parecidos; [ADR 0053](../adr/0053-home-visit-quotes.md), etapa 1 desde la Fase 29A):
-  - La visita se pide por WhatsApp desde la tienda: no hay solicitud en línea a una hora exacta (Fase 29B), y el negocio la registra a mano en la Agenda.
+- Oficios a domicilio (plomería, electricidad, aire acondicionado y parecidos; [ADR 0053](../adr/0053-home-visit-quotes.md), etapa 1 desde la Fase 29A y solicitud en línea desde la 29B):
+  - La solicitud en línea tiene los límites de las citas en línea: cualquiera puede pedir una visita con un teléfono ajeno (solo la frenan las 3 por confirmar por teléfono y el límite por IP), y la Agenda la ve al volver a cargar.
+  - Sin fotos del problema: piden una subida pública validada y privada por negocio.
+  - Si el negocio dice quién agenda en línea y nadie hace el servicio de la visita, la visita llega sin nadie asignado y con las citas a la vez del negocio; la tarjeta de Configuración no lo advierte.
+  - Sin decir quién atiende, el traslado de una visita se cuenta contra todas las citas del negocio con las citas a la vez: no sabe de quién es cada una.
+  - Una visita pedida en línea que el equipo pasa al local y luego otra vez a domicilio pierde cómo se cobraba: vuelve a ser una visita del equipo, con el cargo de la zona.
+  - El aviso de la cita aceptada dice lo que cuesta la visita con el precio de hoy de su servicio, como lo cobrará la venta; el precio no queda congelado en la cita (solo el cargo de la zona).
+  - Con el código anterior (rollback del despliegue), mover a otra dirección una visita «Sin costo» pedida en línea falla: la restricción de la base no deja cobrarle la zona.
   - No hay cotización: lo que el negocio propone después de la visita no se guarda, ni si el cliente lo aceptó (Fase 29C). «Se descuenta si contratas» hoy solo se dice; descontarlo llega con la cotización.
-  - Las citas en línea no son a domicilio (`OnlineBookingBlocker.NoPremises`), aunque el negocio haga visitas.
+  - Las citas en línea siguen sin ser a domicilio (`OnlineBookingBlocker.NoPremises`): a domicilio se pide la visita, no otro servicio.
   - El aviso de la dirección es por negocio, no por sucursal; descartado no vuelve aunque después prenda el interruptor. Un negocio que lo descartó y sigue con local publica su dirección.
-  - Después del despliegue hay que correr `database/production/data-repair/20261031_HomeRepairsAfterDeploy/`: mueve a «Hogar y reparaciones» los oficios registrados entre `apply.sql` y el despliegue. Su segunda consulta de verificación lista, para revisarlos a mano, los negocios en esa categoría que no son oficios.
   - «Cerca de mí» no ordena a estos negocios, y la búsqueda de Explorar no encuentra sus servicios (solo los productos del menú).
   - La tarjeta de Configuración no calcula lo que costaría la visita con cambios sin guardar: dice lo de hoy y pide guardar.
   - La lista de servicios a elegir como visita trae los primeros 100 por nombre (el elegido siempre sale); la tienda, hasta 300 códigos postales y 50 servicios.
   - La 29A suma 156 B a la primera visita (de 180,710 a 180,866 B, contra `master` en `1d238ff`) y sube el presupuesto a 181,000 B.
+  - La 29B suma 124 B a la primera visita (de 180,866 a 180,990 B, contra `master` en `4172896`): la ruta de la página de la solicitud en `App.tsx` y el nombre de su pantalla, que se carga aparte con el selector de día y hora que comparte con la de agendar. El presupuesto sube de 181,000 a 181,200 B.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.

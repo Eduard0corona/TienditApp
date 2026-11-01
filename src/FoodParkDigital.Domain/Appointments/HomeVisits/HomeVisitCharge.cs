@@ -14,6 +14,14 @@ public static class HomeVisitCharge
         => policy == HomeVisitChargePolicy.Free ? 0m : (servicePrice ?? 0m) + zoneFee;
 
     /// <summary>
+    /// What going there adds to the visit (Fase 29B), the part a visit requested online keeps as its charge
+    /// (<see cref="Entities.AppointmentVisit.Fee"/>): nothing «Sin costo», otherwise what the zone charges. The service is
+    /// charged with its own line when the visit is charged, as any appointment.
+    /// </summary>
+    public static decimal ZoneFee(HomeVisitChargePolicy policy, decimal zoneFee)
+        => policy == HomeVisitChargePolicy.Free ? 0m : zoneFee;
+
+    /// <summary>
     /// Before the customer says where: the visit to the zone that charges least, and whether it is a starting price
     /// («desde»: some zone charges more). Null for a business without active zones, which goes nowhere.
     /// </summary>

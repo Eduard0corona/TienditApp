@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,8 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
             .ValueGeneratedNever()
             .IsRequired();
         builder.Property(x => x.TrackingToken).HasMaxLength(Order.TrackingTokenLength).IsUnicode(false);
+        // Fase 29B (ADR 0053): where the customer of a visit requested online gets its quote, as invoices keep an address.
+        builder.Property(x => x.CustomerEmail).HasMaxLength(InvoiceEmailAddress.MaxLength);
 
         // The customer account that booked it online; the appointment stays while it points to the account.
         builder.HasOne<ApplicationUser>()

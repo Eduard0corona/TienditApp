@@ -18,6 +18,7 @@ import type {
 } from '../../types';
 import { AppointmentChannel, AppointmentStatus as AppointmentStatusConst } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import { queryKeys } from '../../api/queries';
 import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -29,6 +30,7 @@ import {
   VISIT_ADDRESS_LINE_REQUIRED_MESSAGE,
   VISIT_POSTAL_CODE_REQUIRED_MESSAGE,
   describeVisitPlace,
+  describeVisitToQuote,
 } from '../../utils/homeVisits';
 import { isPostalCode } from '../../utils/postalCodes';
 import AppointmentVisitFields, { type VisitFieldsState, type VisitQuoteView } from './AppointmentVisitFields';
@@ -263,7 +265,8 @@ export default function AppointmentsList() {
     : !shouldQuote ? { kind: 'none' }
     : quoteAnswer?.postalCode !== typedPostalCode ? { kind: 'loading' }
     : 'message' in quoteAnswer ? { kind: 'refused', message: quoteAnswer.message }
-    : { kind: 'quoted', zoneName: quoteAnswer.zoneName, fee: quoteAnswer.fee };
+    // A visit «Sin costo» requested online stays free wherever it moves (Fase 29B): the server charges nothing for the zone.
+    : { kind: 'quoted', zoneName: quoteAnswer.zoneName, fee: editing?.visit?.chargePolicy === HomeVisitChargePolicy.Free ? 0 : quoteAnswer.fee };
 
   const serviceById = useMemo(() => new Map(services.map((service) => [service.id, service])), [services]);
 
@@ -559,6 +562,7 @@ export default function AppointmentsList() {
                     )}
                   </div>
                   <div className="text-muted small">{item.customerPhone}</div>
+                  {item.customerEmail && <div className="text-muted small text-break">{item.customerEmail}</div>}
                 </td>
                 <td>
                   <div>{item.serviceName}</div>
@@ -567,6 +571,7 @@ export default function AppointmentsList() {
                 <td>
                   <div>{formatSlot(item)}</div>
                   {item.visit && <div className="text-muted small">{describeVisitPlace(item.visit)}</div>}
+                  {item.visit && describeVisitToQuote(item.visit) && <div className="text-muted small">{describeVisitToQuote(item.visit)}</div>}
                 </td>
                 <td className="text-center">
                   <span className={`badge ${statusBadge(item.status)}`}>{statusLabel(item.status)}</span>

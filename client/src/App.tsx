@@ -61,6 +61,7 @@ const SellPage = lazy(() => import('./pages/sell/SellPage'));
 const TablesPage = lazy(() => import('./pages/tables/TablesPage'));
 const PublicMenuPage = lazy(() => import('./pages/public/PublicMenuPage'));
 const PublicBookingPage = lazy(() => import('./pages/public/PublicBookingPage'));
+const PublicHomeVisitPage = lazy(() => import('./pages/public/PublicHomeVisitPage'));
 const OnlinePaymentReturnPage = lazy(() => import('./pages/public/OnlinePaymentReturnPage'));
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
@@ -107,6 +108,8 @@ export default function App() {
             <Route path="/m/:slug" element={<PublicMenuPage />} />
             {/* Its booking page (Fase 24D): a service, a day and a free time, without signing in. */}
             <Route path="/m/:slug/agendar" element={<PublicBookingPage />} />
+            {/* The request page of its visits to quote (Fase 29B): a postal code, a day and a free time, without signing in. */}
+            <Route path="/m/:slug/visita" element={<PublicHomeVisitPage />} />
             {/* Where Mercado Pago sends the customer back after paying an order online (Fase 24I). */}
             <Route path="/m/:slug/pago/:checkoutId" element={<OnlinePaymentReturnPage />} />
 

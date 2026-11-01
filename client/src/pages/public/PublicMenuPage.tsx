@@ -609,12 +609,7 @@ export default function PublicMenuPage() {
         )}
 
         {data.homeVisits && !atTable && (
-          <HomeVisitsSection
-            visits={data.homeVisits}
-            businessName={data.businessName}
-            contactPhone={data.contactPhone}
-            pricesIncludeTax={data.pricesIncludeTax}
-          />
+          <HomeVisitsSection visits={data.homeVisits} slug={slug} pricesIncludeTax={data.pricesIncludeTax} />
         )}
 
         {categories.length > 0 && (

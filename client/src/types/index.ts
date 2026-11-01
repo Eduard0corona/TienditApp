@@ -345,6 +345,7 @@ export { TenantCapability } from '../api/generated/enums';
  */
 export { BranchServiceMode } from '../api/generated/enums';
 import type { OnlinePaymentDispute, OnlinePaymentRefundReason, OnlinePaymentRefundStatus } from '../api/generated/enums';
+import type { HomeVisitChargePolicy } from '../api/generated/enums';
 
 export interface RegisterBusinessRequest {
   email: string;
@@ -1154,6 +1155,8 @@ export interface AppointmentDto {
   id: string;
   customerName: string;
   customerPhone: string;
+  /** Where the customer of a visit requested online gets its quote (Fase 29B); null when they gave none. */
+  customerEmail?: string | null;
   serviceName: string;
   staffName?: string;
   /** The service of the catalog it books (older appointments only have the name). */
@@ -1184,6 +1187,11 @@ export interface AppointmentVisitDto {
   zoneName: string;
   /** With the business's tax policy, like its prices; 0 when the zone charges nothing. */
   fee: number;
+  /**
+   * A visit to quote the customer requested online (Fase 29B): how the business charges it, as agreed; «Sin costo» keeps
+   * the fee at 0 wherever it moves. Null for a visit the team arranged.
+   */
+  chargePolicy?: HomeVisitChargePolicy | null;
 }
 
 /** Where an appointment at the customer's address happens, as typed: the server finds its zone. */

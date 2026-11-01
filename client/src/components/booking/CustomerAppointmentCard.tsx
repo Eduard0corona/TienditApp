@@ -3,7 +3,7 @@ import type { CustomerAppointment } from '../../api/publicMenuApi';
 import ReviewButton from '../reviews/ReviewButton';
 import { AppointmentStatus } from '../../types';
 import { endSentence } from '../../utils/dates';
-import { addressMapUrl, bookingPath, customerAppointmentChip, upperFirst } from '../../utils/onlineBooking';
+import { addressMapUrl, bookingPath, customerAppointmentChip, homeVisitPath, upperFirst } from '../../utils/onlineBooking';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 
 interface CustomerAppointmentCardProps {
@@ -19,9 +19,9 @@ interface CustomerAppointmentCardProps {
 
 /**
  * An appointment booked online, as its customer sees it (Fase 24D): the service, the business, when, who attends it (Fase
- * 24J), where, its status in
+ * 24J), where (a visit to quote, Fase 29B: at home, by its postal code only), its status in
  * the business's words, and what the customer can do with it: cancel it while it has not started, write to the business,
- * book another one, or rate the business once it was attended (Fase 24H).
+ * book another one (or ask for another visit), or rate the business once it was attended (Fase 24H).
  */
 export default function CustomerAppointmentCard({
   appointment, onCancel, cancelling = false, titleAs: Title = 'h3', review,
@@ -49,6 +49,12 @@ export default function CustomerAppointmentCard({
           <p className="mb-1">
             <i className="ri-user-line me-1" aria-hidden="true"></i>
             Te atiende {appointment.staffName}
+          </p>
+        )}
+        {appointment.visit && (
+          <p className="small mb-1">
+            <i className="ri-home-gear-line me-1" aria-hidden="true"></i>
+            A domicilio · CP {appointment.visit.postalCode}
           </p>
         )}
         {appointment.address && (
@@ -87,13 +93,24 @@ export default function CustomerAppointmentCard({
               <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Escribir al negocio
             </a>
           )}
-          <Link
-            className="btn btn-sm btn-light"
-            to={bookingPath(appointment.businessSlug)}
-            aria-label={`Agendar otra cita en ${appointment.businessName}`}
-          >
-            Agendar otra
-          </Link>
+          {/* A visit to quote requested online asks for another visit; one the team moved to the home books again. */}
+          {appointment.visit?.chargePolicy != null ? (
+            <Link
+              className="btn btn-sm btn-light"
+              to={homeVisitPath(appointment.businessSlug)}
+              aria-label={`Pedir otra visita a ${appointment.businessName}`}
+            >
+              Pedir otra visita
+            </Link>
+          ) : (
+            <Link
+              className="btn btn-sm btn-light"
+              to={bookingPath(appointment.businessSlug)}
+              aria-label={`Agendar otra cita en ${appointment.businessName}`}
+            >
+              Agendar otra
+            </Link>
+          )}
         </div>
       </div>
     </div>

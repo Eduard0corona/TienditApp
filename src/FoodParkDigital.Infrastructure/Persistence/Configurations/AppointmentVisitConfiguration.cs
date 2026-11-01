@@ -18,6 +18,11 @@ public class AppointmentVisitConfiguration : IEntityTypeConfiguration<Appointmen
                 "CK_AppointmentVisits_PostalCode", "LEN([PostalCode]) = 5 AND [PostalCode] NOT LIKE '%[^0-9]%'");
             table.HasCheckConstraint("CK_AppointmentVisits_AddressLine", "LEN([AddressLine]) > 0");
             table.HasCheckConstraint("CK_AppointmentVisits_Fee", "[Fee] >= 0 AND [Fee] <= 10000");
+            // Fase 29B (ADR 0053): how a visit to quote requested online is charged (HomeVisitChargePolicy), and «Sin costo»
+            // (1) charges nothing for going there.
+            table.HasCheckConstraint(
+                "CK_AppointmentVisits_ChargePolicy",
+                "[ChargePolicy] IS NULL OR ([ChargePolicy] >= 0 AND [ChargePolicy] <= 2 AND ([ChargePolicy] <> 1 OR [Fee] = 0))");
         });
         builder.HasKey(x => x.Id);
 
@@ -28,6 +33,7 @@ public class AppointmentVisitConfiguration : IEntityTypeConfiguration<Appointmen
         builder.Property(x => x.References).HasMaxLength(DeliveryAddress.MaxReferencesLength);
         builder.Property(x => x.ZoneName).HasMaxLength(DeliveryZone.MaxNameLength).IsRequired();
         builder.Property(x => x.Fee).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(x => x.ChargePolicy).HasConversion<int?>();
 
         // One visit per appointment (the relationship lives in AppointmentConfiguration).
         builder.HasIndex(x => x.AppointmentId).IsUnique();

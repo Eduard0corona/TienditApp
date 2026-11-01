@@ -14,6 +14,9 @@ export type PublicBookingSlot = Schemas['PublicBookingSlotDto'];
 export type RequestPublicAppointment = Schemas['RequestPublicAppointmentRequest'];
 export type PublicAppointmentReceipt = Schemas['PublicAppointmentReceiptDto'];
 export type CustomerAppointment = Schemas['CustomerAppointmentDto'];
+export type PublicHomeVisit = Schemas['PublicHomeVisitDto'];
+export type PublicHomeVisitCoverage = Schemas['PublicHomeVisitCoverageDto'];
+export type RequestPublicHomeVisit = Schemas['RequestPublicHomeVisitRequest'];
 export type CreateOnlineCheckout = Schemas['CreateOnlineCheckoutRequest'];
 export type OnlineCheckoutStarted = Schemas['OnlineCheckoutStartedDto'];
 export type OnlineCheckoutStatus = Schemas['OnlineCheckoutStatusDto'];
@@ -70,6 +73,32 @@ export const publicMenuApi = {
   /** Asks for one of those times: the appointment waits «Por confirmar» until the business accepts it. */
   requestAppointment: (slug: string, body: RequestPublicAppointment) =>
     apiRequest('post', '/api/v1/public/menu/{slug}/appointments', { path: { slug }, body }),
+
+  /**
+   * The visit to quote a customer requests online (Fase 29B): what it is and what it costs before the postal code. Not
+   * found (404) while the business does not receive visits.
+   */
+  getHomeVisit: (slug: string, signal?: AbortSignal) =>
+    apiRequest('get', '/api/v1/public/menu/{slug}/home-visit', { path: { slug }, signal }),
+
+  /** Whether the business goes to a postal code and what the visit costs there; never the zone's name. */
+  getHomeVisitCoverage: (slug: string, postalCode: string, signal?: AbortSignal) =>
+    apiRequest('get', '/api/v1/public/menu/{slug}/home-visit/coverage', { path: { slug }, query: { postalCode }, signal }),
+
+  /**
+   * The free times of the visit for a week from `from` (today when omitted), with the trip around each visit free. With
+   * `staffId`, the ones of that person; not found (404) when they no longer go to visits.
+   */
+  getHomeVisitSlots: (slug: string, from?: string, staffId?: string, signal?: AbortSignal) =>
+    apiRequest('get', '/api/v1/public/menu/{slug}/home-visit/slots', {
+      path: { slug },
+      query: { ...(from ? { from } : {}), ...(staffId ? { staffId } : {}) },
+      signal,
+    }),
+
+  /** Requests the visit at one of those times: it waits «Por confirmar» until the business accepts it. */
+  requestHomeVisit: (slug: string, body: RequestPublicHomeVisit) =>
+    apiRequest('post', '/api/v1/public/menu/{slug}/home-visits', { path: { slug }, body }),
 
   /** An appointment followed with the link of its receipt: the link goes in the body, like an order's. */
   trackAppointment: (token: string, signal?: AbortSignal) =>

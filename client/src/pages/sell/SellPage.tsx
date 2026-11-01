@@ -6,6 +6,7 @@ import { appointmentsApi } from '../../api/appointmentsApi';
 import { ordersApi } from '../../api/ordersApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
+import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import { useDeliveryPlatformChannels } from '../../api/queries';
 import { useDeliveryZones } from '../../api/deliveryZones';
 import { useCustomerAccount, useRefreshCustomerCredit } from '../../api/customerCredit';
@@ -333,14 +334,17 @@ export default function SellPage() {
         visitFee: data.visit && data.visit.fee > 0 ? data.visit.fee : null,
         zoneName: data.visit?.zoneName ?? null,
       };
-      const service = data.serviceProductId ? products.find((product) => product.id === data.serviceProductId) : undefined;
+      // A visit to quote «Sin costo» (Fase 29B) does not charge its service: only what else the cashier adds.
+      const freeVisit = data.visit?.chargePolicy === HomeVisitChargePolicy.Free;
+      const service = data.serviceProductId && !freeVisit ? products.find((product) => product.id === data.serviceProductId) : undefined;
       pendingCharge.current = null;
       setCart(service ? [toCartLine(service, 1, '', [])] : []);
       // A counter sale of the business, for the customer of the appointment: no platform and no delivery.
       setDetails({ ...NO_SALE_DETAILS, customerName: data.customerName, customerPhone: data.customerPhone, appointment });
       setShowDetails(true);
       setSaleError('');
-      if (!service) toast.info('Agrega al ticket el servicio de la cita.');
+      if (freeVisit) toast.info('La visita es sin costo: agrega al ticket lo que cobres.');
+      else if (!service) toast.info('Agrega al ticket el servicio de la cita.');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se encontró la cita.'));
     }

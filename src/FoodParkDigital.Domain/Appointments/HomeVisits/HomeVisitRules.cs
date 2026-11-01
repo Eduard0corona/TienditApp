@@ -33,6 +33,14 @@ public static class HomeVisitRules
     public const string ChargePolicyMessage = "Elige cómo cobras la visita: se cobra, sin costo o se descuenta si contratan.";
     public const string VisitServiceMessage = "Elige un servicio de tu catálogo como la visita.";
 
+    /// <summary>The name of a visit to quote requested online when the business picked no service as its visit (Fase 29B).</summary>
+    public const string DefaultVisitName = "Visita a domicilio";
+
+    /// <summary>What the customer writes about what happens, in a visit requested online (Fase 29B).</summary>
+    public const int MaxProblemLength = 500;
+    public const string ProblemRequiredMessage = "Cuéntanos qué pasa para preparar la visita.";
+    public const string ProblemTooLongMessage = "Lo que pasa admite hasta 500 caracteres.";
+
     /// <summary>«Por ahora no hacemos visitas en el 72000.»</summary>
     public static string NotCoveredMessage(string postalCode)
         => string.Create(CultureInfo.InvariantCulture, $"Por ahora no hacemos visitas en el {postalCode}.");

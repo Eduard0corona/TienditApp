@@ -2,6 +2,7 @@
 // visit charges what its zone charged to go there when it was arranged, one more concept of the sale at the business's
 // IVA rate and with its tax policy. It is an estimate for the cashier: the server charges what the appointment says and
 // rejects the sale if the total it computes differs from the one shown.
+import { HomeVisitChargePolicy } from '../api/generated/enums';
 import { AppointmentStatus } from '../types';
 import { formatMoney } from './money';
 import { estimateOrderTotals, type OrderTotalsEstimate, type TotalsLine } from './orderTotals';
@@ -49,6 +50,18 @@ export function describeVisitFee(fee: number, pricesIncludeTax = true): string {
 /** «A domicilio · CP 72000 · Centro», for the agenda (the whole address is in the appointment). */
 export function describeVisitPlace(visit: { postalCode: string; zoneName: string }): string {
   return `A domicilio · CP ${visit.postalCode} · ${visit.zoneName}`;
+}
+
+/** How a visit to quote the customer requested online is charged (Fase 29B), for the agenda. */
+const VISIT_TO_QUOTE: Record<HomeVisitChargePolicy, string> = {
+  [HomeVisitChargePolicy.Charged]: 'Visita para cotizar · se cobra',
+  [HomeVisitChargePolicy.Free]: 'Visita para cotizar · sin costo',
+  [HomeVisitChargePolicy.CreditedIfHired]: 'Visita para cotizar · se descuenta si contrata',
+};
+
+/** «Visita para cotizar · sin costo» for a visit requested online; null for one the team arranged. */
+export function describeVisitToQuote(visit: { chargePolicy?: HomeVisitChargePolicy | null }): string | null {
+  return visit.chargePolicy == null ? null : VISIT_TO_QUOTE[visit.chargePolicy];
 }
 
 /** An appointment that has its sale: one that was cancelled no longer counts, and the appointment is charged again. */

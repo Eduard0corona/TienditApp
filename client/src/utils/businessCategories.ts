@@ -79,6 +79,21 @@ export function isFreeVisit(price: VisitPrice | null | undefined, policy: HomeVi
   return policy === HomeVisitChargePolicy.Free || (!!price && price.amount <= 0 && !price.isStarting);
 }
 
+/** What each visit policy means for the customer, in one line. */
+const VISIT_POLICY_NOTE: Record<HomeVisitChargePolicy, string> = {
+  [HomeVisitChargePolicy.Charged]: 'Pagas la visita aunque no contrates el trabajo.',
+  [HomeVisitChargePolicy.Free]: 'Revisamos y te decimos cuánto cuesta, sin costo.',
+  [HomeVisitChargePolicy.CreditedIfHired]: 'Si contratas el trabajo, lo que pagaste de la visita se descuenta.',
+};
+
+/**
+ * What the visit policy means for the customer (Fases 29A and 29B), in one line, said the same on the store and on the
+ * request page: a visit that costs nothing reads as free whatever the policy, so the note never contradicts its price.
+ */
+export function visitPolicyNote(price: VisitPrice | null | undefined, policy: HomeVisitChargePolicy): string {
+  return VISIT_POLICY_NOTE[isFreeVisit(price, policy) ? HomeVisitChargePolicy.Free : policy];
+}
+
 /**
  * What a visit to quote costs (Fase 29A), in the words of the card and the store: «Visita $350», «Visita desde $350» when
  * it depends on the postal code, or «Visita sin costo»; written like the prices of the business («más IVA» when they do

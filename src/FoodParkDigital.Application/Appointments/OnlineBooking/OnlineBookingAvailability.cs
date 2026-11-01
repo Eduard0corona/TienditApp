@@ -109,21 +109,32 @@ internal static class OnlineBookingCalendar
             || staff.Any(s => s.TenantId == p.TenantId && (s.AllServices || s.Services.Any(service => service.ProductId == p.Id))));
     }
 
-    /// <summary>The open appointments of the business that overlap the range, of every team member.</summary>
-    public static Task<List<BookedInterval>> BookedAsync(
+    /// <summary>
+    /// The open appointments of the business that overlap the range, of every team member. A visit at the customer's
+    /// address holds <paramref name="visitTravelMinutes"/> before and after it too (Fase 29B): an appointment at the business
+    /// leaves the trip free, as with who attends (<see cref="Calendars"/>). A new visit passes 0 and carries the trip itself.
+    /// </summary>
+    public static async Task<List<BookedInterval>> BookedAsync(
         IApplicationDbContext context,
         Guid tenantId,
         DateTimeOffset from,
         DateTimeOffset to,
+        int visitTravelMinutes,
         CancellationToken cancellationToken)
-        => context.Appointments
+    {
+        var travel = TimeSpan.FromMinutes(visitTravelMinutes);
+        var rows = await context.Appointments
             .AsNoTracking()
             .Where(a => a.TenantId == tenantId
                 && a.Status != AppointmentStatus.Cancelled
                 && a.Status != AppointmentStatus.NoShow
-                && a.StartAt < to && a.EndAt > from)
-            .Select(a => new BookedInterval(a.StartAt, a.EndAt))
+                && a.StartAt < to + travel && a.EndAt > from - travel)
+            .Select(a => new { a.StartAt, a.EndAt, IsVisit = a.Visit != null })
             .ToListAsync(cancellationToken);
+        return rows
+            .Select(a => a.IsVisit ? new BookedInterval(a.StartAt - travel, a.EndAt + travel) : new BookedInterval(a.StartAt, a.EndAt))
+            .ToList();
+    }
 
     /// <summary>
     /// The people customers book online now (Fase 24J): turned on by the business, with an active membership and account.

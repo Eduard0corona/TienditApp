@@ -35,6 +35,9 @@ export function customerAppointmentChip(status: AppointmentStatus): string {
 /** The booking page of a business: services, days and free times. */
 export const bookingPath = (slug: string) => `/m/${slug}/agendar`;
 
+/** The request page of a business's visits to quote (Fase 29B). */
+export const homeVisitPath = (slug: string) => `/m/${slug}/visita`;
+
 /** A map search of the business's address: opens the maps app on a phone. */
 export function addressMapUrl(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
