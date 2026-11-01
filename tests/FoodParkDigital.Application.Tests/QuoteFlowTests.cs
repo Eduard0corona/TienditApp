@@ -112,10 +112,21 @@ public class QuoteFlowTests
         fixture.Context.Appointments.Add(requested);
         await fixture.Context.SaveChangesAsync();
 
+        var missed = await VisitAsync(fixture, start: SalesTestFixture.Now.AddDays(4));
+        var done = await VisitAsync(fixture, start: SalesTestFixture.Now.AddDays(5));
+        var status = new UpdateAppointmentStatusCommandHandler(fixture.Context, new AppointmentNotices(fixture.Context, new PhoneNormalizationService(), fixture.Clock));
+        await status.Handle(new UpdateAppointmentStatusCommand { AppointmentId = missed.Id, NewStatus = AppointmentStatus.NoShow }, CancellationToken.None);
+        await status.Handle(new UpdateAppointmentStatusCommand { AppointmentId = done.Id, NewStatus = AppointmentStatus.Completed }, CancellationToken.None);
+
         Assert.Equal(QuoteRules.NotAVisitMessage, (await CreateAsync(fixture, new CreateQuoteCommand(atTheBusiness.Value!.Id, null, null, null, null))).Error);
         Assert.Equal(QuoteRules.VisitClosedMessage, (await CreateAsync(fixture, new CreateQuoteCommand(cancelled.Id, null, null, null, null))).Error);
+        Assert.Equal(QuoteRules.VisitClosedMessage, (await CreateAsync(fixture, new CreateQuoteCommand(missed.Id, null, null, null, null))).Error);
         Assert.Equal(QuoteRules.VisitRequestedMessage, (await CreateAsync(fixture, new CreateQuoteCommand(requested.Id, null, null, null, null))).Error);
         Assert.Equal(0, await fixture.Context.Quotes.CountAsync());
+        // The quote comes after the visit: a visit done is quoted.
+        var afterTheVisit = await CreateAsync(fixture, new CreateQuoteCommand(done.Id, null, null, null, null));
+        Assert.True(afterTheVisit.IsSuccess, afterTheVisit.Error);
+        Assert.Equal(done.Id, afterTheVisit.Value!.Appointment!.Id);
     }
 
     [Fact]
@@ -520,10 +531,10 @@ public class QuoteFlowTests
         return tenant;
     }
 
-    /// <summary>A visit the team scheduled at 72000 tomorrow at 10, with the service when given.</summary>
-    private static async Task<AppointmentDto> VisitAsync(SalesTestFixture fixture, Guid? serviceId = null)
+    /// <summary>A visit the team scheduled at 72000 (tomorrow unless said), with the service when given.</summary>
+    private static async Task<AppointmentDto> VisitAsync(SalesTestFixture fixture, Guid? serviceId = null, DateTimeOffset? start = null)
     {
-        var start = SalesTestFixture.Now.AddDays(1);
+        var startAt = start ?? SalesTestFixture.Now.AddDays(1);
         var created = await new CreateAppointmentCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock,
                 new AppointmentNotices(fixture.Context, new PhoneNormalizationService(), fixture.Clock))
             .Handle(new CreateAppointmentCommand
@@ -532,8 +543,8 @@ public class QuoteFlowTests
                 CustomerPhone = "5512345678",
                 ServiceName = serviceId is null ? "Visita" : null!,
                 ServiceProductId = serviceId,
-                StartAt = start,
-                EndAt = start.AddHours(1),
+                StartAt = startAt,
+                EndAt = startAt.AddHours(1),
                 Visit = new AppointmentVisitInput { PostalCode = "72000", AddressLine = "Av. Juárez 123, Col. Centro" }
             }, CancellationToken.None);
         Assert.True(created.IsSuccess, created.Error);
