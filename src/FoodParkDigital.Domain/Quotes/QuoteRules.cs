@@ -39,4 +39,7 @@ public static class QuoteRules
     public const string NotReplaceableMessage = "La versión anterior ya cambió: el cliente la aceptó o ya hay otra versión enviada.";
     public const string DraftOnlyDiscardMessage = "Solo se descarta un borrador.";
     public const string VisitCreditMessage = "El descuento de la visita sale de la venta de su cita.";
+    public const string NotAVisitMessage = "Solo se cotiza una visita a domicilio.";
+    public const string VisitClosedMessage = "Esa visita se canceló o el cliente no estuvo: no se cotiza.";
+    public const string VisitRequestedMessage = "Acepta primero la solicitud de la visita en la Agenda.";
 }

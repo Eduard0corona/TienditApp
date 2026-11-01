@@ -8,6 +8,7 @@ using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
@@ -15,6 +16,7 @@ using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -85,6 +87,35 @@ public class QuoteFlowTests
             (created.Value!.CustomerName, created.Value.CustomerPhone, created.Value.Appointment!.Id, created.Value.Appointment.PostalCode));
         Assert.Equal(created.Value.Id, again.Value!.Id);
         Assert.Equal(1, await fixture.Context.Quotes.CountAsync());
+    }
+
+    [Fact]
+    public async Task Create_ShouldQuoteOnlyAVisitOpenOrDone()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture);
+        var atTheBusiness = await new CreateAppointmentCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser,
+                fixture.Clock, new AppointmentNotices(fixture.Context, new PhoneNormalizationService(), fixture.Clock))
+            .Handle(new CreateAppointmentCommand
+            {
+                CustomerName = "Rosa", CustomerPhone = "5511112222", ServiceName = "Revisión",
+                StartAt = SalesTestFixture.Now.AddDays(2), EndAt = SalesTestFixture.Now.AddDays(2).AddHours(1)
+            }, CancellationToken.None);
+        var cancelled = await VisitAsync(fixture);
+        await new UpdateAppointmentStatusCommandHandler(fixture.Context, new AppointmentNotices(fixture.Context, new PhoneNormalizationService(), fixture.Clock))
+            .Handle(new UpdateAppointmentStatusCommand { AppointmentId = cancelled.Id, NewStatus = AppointmentStatus.Cancelled }, CancellationToken.None);
+        var zone = await fixture.Context.DeliveryZones.Include(z => z.PostalCodes).SingleAsync();
+        var requested = Domain.Appointments.Entities.Appointment.RequestHomeVisit(
+            tenant.Id, "Valeria", "5522107765", null, "Visita a domicilio", SalesTestFixture.Now.AddDays(3), SalesTestFixture.Now.AddDays(3).AddHours(1),
+            "Gotea el calentador", null, DeliveryAddress.ForVisit("72000", "Av. Juárez 123", null), zone, HomeVisitChargePolicy.Charged,
+            null, Guid.NewGuid(), new string('r', 43));
+        fixture.Context.Appointments.Add(requested);
+        await fixture.Context.SaveChangesAsync();
+
+        Assert.Equal(QuoteRules.NotAVisitMessage, (await CreateAsync(fixture, new CreateQuoteCommand(atTheBusiness.Value!.Id, null, null, null, null))).Error);
+        Assert.Equal(QuoteRules.VisitClosedMessage, (await CreateAsync(fixture, new CreateQuoteCommand(cancelled.Id, null, null, null, null))).Error);
+        Assert.Equal(QuoteRules.VisitRequestedMessage, (await CreateAsync(fixture, new CreateQuoteCommand(requested.Id, null, null, null, null))).Error);
+        Assert.Equal(0, await fixture.Context.Quotes.CountAsync());
     }
 
     [Fact]
@@ -214,6 +245,20 @@ public class QuoteFlowTests
         Assert.DoesNotContain("jueves", entry.Metadata);
         Assert.Equal(QuoteRules.CannotReviseMessage,
             (await Handler(fixture).Handle(new ReviseQuoteCommand(sent.Id), CancellationToken.None)).Error);
+    }
+
+    [Fact]
+    public async Task Accepting_ShouldDiscardACorrectionStartedOnIt_WhichCouldNeverBeSent()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await TradeAsync(fixture);
+        var sent = await SentAsync(fixture);
+        var correction = (await Handler(fixture).Handle(new ReviseQuoteCommand(sent.Id), CancellationToken.None)).Value!;
+
+        await Handler(fixture).Handle(new RecordQuoteReplyCommand(sent.Id, true, QuoteReplyChannel.WhatsApp, null), CancellationToken.None);
+
+        Assert.Equal(QuoteStatus.Discarded, (await GetAsync(fixture, correction.Id)).Status);
+        Assert.Empty((await Handler(fixture).Handle(new ListQuotesQuery(QuoteListFilter.Open), CancellationToken.None)).Items);
     }
 
     [Fact]
@@ -356,6 +401,19 @@ public class QuoteFlowTests
     }
 
     [Fact]
+    public async Task AVisitOfAnotherBusiness_ShouldNotBeQuoted()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await TradeAsync(fixture, slug: "otro");
+        var theirs = await VisitAsync(fixture);
+        await TradeAsync(fixture);
+
+        var refused = await CreateAsync(fixture, new CreateQuoteCommand(theirs.Id, null, null, null, null));
+
+        Assert.Equal(QuotesHandler.AppointmentNotFoundMessage, refused.Error);
+    }
+
+    [Fact]
     public async Task EveryBusiness_ShouldSeeAndChangeOnlyItsOwnQuotes()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -370,6 +428,9 @@ public class QuoteFlowTests
             () => Handler(fixture).Handle(new ReviseQuoteCommand(theirs.Id), CancellationToken.None));
         await Assert.ThrowsAsync<EntityNotFoundException>(() => Handler(fixture).Handle(
             new RecordQuoteReplyCommand(theirs.Id, true, QuoteReplyChannel.WhatsApp, null), CancellationToken.None));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => UpdateAsync(fixture, theirs, []));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => Handler(fixture).Handle(new SendQuoteCommand(theirs.Id), CancellationToken.None));
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => Handler(fixture).Handle(new DiscardQuoteCommand(theirs.Id), CancellationToken.None));
         // Each business counts its own folios.
         Assert.Equal("COT-000001", (await Handler(fixture).Handle(new ListQuotesQuery(QuoteListFilter.All), CancellationToken.None)).Items[0].Number);
     }
@@ -403,6 +464,12 @@ public class QuoteFlowTests
             [new QuoteLineRequest { Quantity = 0m, UnitPrice = 10.001m }]));
         Assert.Equal([QuoteRules.DescriptionMessage, QuoteRules.QuantityMessage, QuoteRules.UnitPriceMessage],
             draft.Errors.Select(e => e.ErrorMessage));
+        // Lines missing, or a missing line, are refused instead of breaking; a description that fits once trimmed passes.
+        var validator = new UpdateQuoteDraftCommandValidator();
+        Assert.False(validator.Validate(new UpdateQuoteDraftCommand(Guid.NewGuid(), null, "Valeria", "5522107765", null, 15, null, null!)).IsValid);
+        Assert.False(validator.Validate(new UpdateQuoteDraftCommand(Guid.NewGuid(), null, "Valeria", "5522107765", null, 15, null, [null!])).IsValid);
+        Assert.True(validator.Validate(new UpdateQuoteDraftCommand(Guid.NewGuid(), null, "Valeria", "5522107765", null, 15, null,
+            [new QuoteLineRequest { Description = $"  {new string('a', 200)}  ", Quantity = 1m, UnitPrice = 1m }])).IsValid);
     }
 
     private static QuotesHandler Handler(SalesTestFixture fixture)

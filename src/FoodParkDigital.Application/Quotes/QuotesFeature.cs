@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders;
+using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
@@ -120,12 +121,16 @@ public class UpdateQuoteDraftCommandValidator : AbstractValidator<UpdateQuoteDra
         RuleFor(x => x.ValidityDays).InclusiveBetween(QuoteRules.MinValidityDays, QuoteRules.MaxValidityDays)
             .WithMessage(QuoteRules.ValidityDaysMessage);
         RuleFor(x => x.Note).MaximumLength(QuoteRules.MaxNoteLength).WithMessage(QuoteRules.NoteTooLongMessage);
-        RuleFor(x => x.Lines).NotNull().Must(lines => lines.Count <= QuoteRules.MaxLines).WithMessage(QuoteRules.TooManyLinesMessage);
+        RuleFor(x => x.Lines).Cascade(CascadeMode.Stop)
+            .NotNull().WithMessage(QuoteRules.DescriptionMessage)
+            .Must(lines => lines.Count <= QuoteRules.MaxLines).WithMessage(QuoteRules.TooManyLinesMessage);
+        RuleForEach(x => x.Lines).NotNull().WithMessage(QuoteRules.DescriptionMessage);
         RuleForEach(x => x.Lines).ChildRules(line =>
         {
             line.RuleFor(l => l.ProductId).NotEqual(Guid.Empty);
             line.RuleFor(l => l.Description).NotEmpty().When(l => l.ProductId is null).WithMessage(QuoteRules.DescriptionMessage);
-            line.RuleFor(l => l.Description).MaximumLength(QuoteRules.MaxDescriptionLength).WithMessage(QuoteRules.DescriptionTooLongMessage);
+            line.RuleFor(l => l.Description)
+                .Must(d => d is null || d.Trim().Length <= QuoteRules.MaxDescriptionLength).WithMessage(QuoteRules.DescriptionTooLongMessage);
             line.RuleFor(l => l.Quantity)
                 .Must(q => q > 0 && q <= QuoteRules.MaxQuantity && decimal.Round(q, 3) == q).WithMessage(QuoteRules.QuantityMessage);
             line.RuleFor(l => l.UnitPrice)
@@ -401,6 +406,20 @@ public class QuotesHandler :
         // What the customer said stays on the quote; the activity keeps that they answered and how.
         _context.AuditLogs.Add(QuoteAudit.Create(quote, request.Accepted ? QuoteAudit.Accepted : QuoteAudit.Rejected,
             _currentUser.UserName, new { Channel = request.Channel.ToString() }));
+        // Accepted, a correction started on it can never be sent: it is discarded, and stays in the history.
+        if (request.Accepted)
+        {
+            var pendingCorrections = await _context.Quotes
+                .Include(q => q.Lines)
+                .Where(q => q.TenantId == TenantId && q.Number == quote.Number && q.Status == QuoteStatus.Draft)
+                .ToListAsync(cancellationToken);
+            foreach (var correction in pendingCorrections)
+            {
+                correction.Discard(now);
+                _context.AuditLogs.Add(QuoteAudit.Create(correction, QuoteAudit.Discarded, _currentUser.UserName,
+                    new { Reason = "AcceptedEarlierVersion" }));
+            }
+        }
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(await DescribeAsync(quote, cancellationToken));
     }
@@ -514,6 +533,13 @@ public class CreateQuoteCommandHandler : IRequestHandler<CreateQuoteCommand, Res
                     .FirstOrDefaultAsync(a => a.Id == appointmentId && a.TenantId == TenantId, cancellationToken);
                 if (appointment is null)
                     return Result.Failure<QuoteDto>(QuotesHandler.AppointmentNotFoundMessage);
+                // A visit open or done: a cancelled one, one the customer missed or a request not accepted yet is not quoted.
+                if (appointment.Visit is null)
+                    return Result.Failure<QuoteDto>(QuoteRules.NotAVisitMessage);
+                if (appointment.Status is AppointmentStatus.Cancelled or AppointmentStatus.NoShow)
+                    return Result.Failure<QuoteDto>(QuoteRules.VisitClosedMessage);
+                if (appointment.Status == AppointmentStatus.Requested)
+                    return Result.Failure<QuoteDto>(QuoteRules.VisitRequestedMessage);
 
                 // An appointment has one quote: its current version opens.
                 var existing = await _context.Quotes

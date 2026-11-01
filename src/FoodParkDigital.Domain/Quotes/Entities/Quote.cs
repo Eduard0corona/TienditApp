@@ -191,6 +191,9 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(QuoteRules.CannotReviseMessage);
         if (revision <= Revision)
             throw new ArgumentOutOfRangeException(nameof(revision), "A correction comes after the version it corrects.");
+        // This version is touched: a change of it at the same time (another correction sent, the customer's answer) collides
+        // on its version instead of the correction copying what it said before.
+        UpdatedAt = now;
 
         var draft = new Quote(TenantId, Number, revision,
             new QuoteCustomer(CustomerId, CustomerName, CustomerPhone, CustomerEmail),
@@ -244,7 +247,8 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
         if (Status is not (QuoteStatus.Sent or QuoteStatus.Rejected))
             throw new DomainException(QuoteRules.NotReplaceableMessage);
         Status = QuoteStatus.Superseded;
-        ClosedAt = now;
+        // A rejected one keeps when the customer answered.
+        ClosedAt ??= now;
         UpdatedAt = now;
     }
 

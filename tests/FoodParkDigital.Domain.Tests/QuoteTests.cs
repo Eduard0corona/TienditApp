@@ -263,6 +263,28 @@ public class QuoteTests
     }
 
     [Fact]
+    public void ARejectedQuoteReplaced_ShouldKeepWhenTheCustomerAnswered()
+    {
+        var rejected = Sent();
+        rejected.Reject(Today, QuoteReplyChannel.WhatsApp, "Está caro", Now.AddDays(1));
+        var counter = rejected.Revise(2, Now.AddDays(10));
+
+        counter.Send(Today.AddDays(10), new string('b', 43), rejected, Now.AddDays(10));
+
+        Assert.Equal((QuoteStatus.Superseded, Now.AddDays(1), "Está caro"), (rejected.Status, rejected.ClosedAt!.Value, rejected.CustomerResponse));
+    }
+
+    [Fact]
+    public void Revising_ShouldTouchTheVersionTheCustomerHas_SoAChangeOfItAtTheSameTimeCollides()
+    {
+        var quote = Sent();
+
+        quote.Revise(2, Now.AddDays(2));
+
+        Assert.Equal((QuoteStatus.Sent, Now.AddDays(2)), (quote.Status, quote.UpdatedAt!.Value));
+    }
+
+    [Fact]
     public void ARejectedOrExpiredQuote_ShouldBeCorrected()
     {
         var rejected = Sent();
