@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OutgoingMessageStatus, QuoteEmailFailure, QuoteReplyChannel, QuoteStatus } from '../types';
 import {
-  hasPendingSends, quoteFolio, quoteLink, quoteMailUrl, quoteMessage, quoteSends, quoteStatusChip, quoteStatusLabel, quoteWhatsAppUrl,
+  hasPendingSends, quoteFolio, quoteLink, quoteMessage, quoteSends, quoteStatusChip, quoteStatusLabel, quoteWhatsAppUrl,
   replyChannelPhrase,
 } from './quotes';
 
@@ -39,11 +39,9 @@ describe('quotes', () => {
     expect(replyChannelPhrase(QuoteReplyChannel.InPerson)).toBe('en persona');
   });
 
-  it('opens WhatsApp only with a phone, and the email only with an address', () => {
+  it('opens WhatsApp only with a phone', () => {
     expect(quoteWhatsAppUrl('55 2210 7765', 'Hola')).toBe('https://wa.me/525522107765?text=Hola');
     expect(quoteWhatsAppUrl('123', 'Hola')).toBeNull();
-    expect(quoteMailUrl(null, 'Cotización', 'Hola')).toBeNull();
-    expect(quoteMailUrl('valeria@correo.mx', 'Cotización', 'Hola')).toBe('mailto:valeria%40correo.mx?subject=Cotizaci%C3%B3n&body=Hola');
   });
 
   it('says where each send of a version is, the newest first, and whether one is still on its way', () => {
@@ -69,5 +67,26 @@ describe('quotes', () => {
     expect(hasPendingSends(quote)).toBe(false);
     expect(hasPendingSends({ whatsApps: [{ id: 'w3', phone: '+52', requestedAt: '2026-10-04T19:00:00Z', status: OutgoingMessageStatus.Pending, attempts: 0 }] })).toBe(true);
     expect(quoteSends({})).toEqual([]);
+  });
+
+  it('keeps asking a few minutes after a WhatsApp went out, until WhatsApp says whether it arrived', () => {
+    const sentAt = '2026-10-04T18:00:00Z';
+    const quote = { whatsApps: [{ id: 'w1', phone: '+52', requestedAt: sentAt, status: OutgoingMessageStatus.Sent, sentAt, attempts: 0 }] };
+    const at = (minutes: number) => Date.parse(sentAt) + minutes * 60_000;
+
+    expect(hasPendingSends(quote, at(2))).toBe(true);
+    expect(hasPendingSends(quote, at(6))).toBe(false);
+    expect(hasPendingSends({ whatsApps: [{ ...quote.whatsApps[0], deliveredAt: '2026-10-04T18:00:05Z' }] }, at(2))).toBe(false);
+  });
+
+  it('stops the history at the oldest send of a channel that came full, so nothing hidden sits between', () => {
+    const email = (i: number) => ({ id: `e${i}`, to: 'a@correo.mx', requestedAt: `2026-10-0${i + 2}T17:00:00Z`, sentAt: `2026-10-0${i + 2}T17:00:10Z`, failedAttempts: 0 });
+    const quote = {
+      // The latest five emails, from October 3 to 7; one WhatsApp on October 1, older than all of them.
+      emails: [5, 4, 3, 2, 1].map(email),
+      whatsApps: [{ id: 'w1', phone: '+52', requestedAt: '2026-10-01T17:00:00Z', status: OutgoingMessageStatus.Sent, sentAt: '2026-10-01T17:00:03Z', attempts: 0 }],
+    };
+
+    expect(quoteSends(quote).map((line) => line.key)).toEqual(['email-e5', 'email-e4', 'email-e3', 'email-e2', 'email-e1']);
   });
 });

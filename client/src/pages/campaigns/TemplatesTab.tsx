@@ -255,7 +255,11 @@ export default function TemplatesTab() {
               <textarea id="template-body" ref={bodyRef} className="form-control" rows={4} maxLength={1000} required
                 value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })}
                 placeholder={BODY_EXAMPLE[draft.purpose]} />
-              <div className="form-text">{draft.body.length}/1000. Incluye cómo darse de baja: «Escribe BAJA si no quieres recibir mensajes».</div>
+              <div className="form-text">
+                {draft.body.length}/1000.
+                {/* A quote goes to whoever asked for it: a BAJA does not stop it, so its text does not offer one. */}
+                {draft.purpose !== MessagePurpose.QuoteDocument && ' Incluye cómo darse de baja: «Escribe BAJA si no quieres recibir mensajes».'}
+              </div>
 
               <div className="row g-2 mt-2">
                 <div className="col-sm-7">

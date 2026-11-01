@@ -26,11 +26,11 @@ export default function SendQuoteDialog({ quote, channel, onClose, onSent }: Sen
   const [error, setError] = useState('');
 
   const send = useMutation({
-    mutationFn: async (): Promise<void> => {
-      if (byEmail) await quotesApi.sendByEmail(quote.id, to.trim());
-      else await quotesApi.sendByWhatsApp(quote.id, to.trim());
-    },
-    onSuccess: () => onSent(`La cotización ${quoteFolio(quote.number, quote.revision)} va en camino a ${to.trim()}.`),
+    // What the server took: the address, or the number as it was normalized.
+    mutationFn: async (address: string): Promise<string> => (byEmail
+      ? (await quotesApi.sendByEmail(quote.id, address)).to
+      : (await quotesApi.sendByWhatsApp(quote.id, address)).phone),
+    onSuccess: (sentTo) => onSent(`La cotización ${quoteFolio(quote.number, quote.revision)} va en camino a ${sentTo}.`),
     onError: (err) => setError(getApiErrorMessage(err, 'No se pudo enviar la cotización.')),
   });
 
@@ -40,13 +40,14 @@ export default function SendQuoteDialog({ quote, channel, onClose, onSent }: Sen
         onSubmit={(event) => {
           event.preventDefault();
           setError('');
-          send.mutate();
+          send.mutate(to.trim());
         }}
       >
-        <Modal.Header closeButton>
+        <Modal.Header closeButton={!send.isPending}>
           <Modal.Title id={titleId} as="h2" className="h5">{byEmail ? 'Enviar por correo' : 'Enviar por WhatsApp'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
+          <fieldset disabled={send.isPending}>
           <label className="form-label" htmlFor="quote-send-to">{byEmail ? 'Correo del cliente' : 'WhatsApp del cliente'}</label>
           <input
             id="quote-send-to"
@@ -62,9 +63,10 @@ export default function SendQuoteDialog({ quote, channel, onClose, onSent }: Sen
           />
           <p className="form-text mb-0">
             {byEmail
-              ? 'Sale de TienditApp a nombre de tu negocio, con la cotización y su enlace. Si el cliente responde, te llega a tu correo.'
-              : 'Sale del WhatsApp de tu negocio con la plantilla que elegiste en Cotizaciones. Sin una plantilla aprobada en Meta, solo le llega si te escribió en las últimas 24 horas.'}
+              ? 'Sale de TienditApp a nombre de tu negocio, con la cotización y su enlace. Si el cliente responde, la respuesta llega al correo de tu negocio.'
+              : 'Sale del WhatsApp de tu negocio con la plantilla de tus cotizaciones o el texto de TienditApp. Sin una plantilla aprobada en Meta, solo le llega si te escribió en las últimas 24 horas.'}
           </p>
+          </fieldset>
           {error && <div className="alert alert-danger mt-3 mb-0" role="alert">{error}</div>}
         </Modal.Body>
         <Modal.Footer>

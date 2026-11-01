@@ -20594,7 +20594,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        QuoteEmailFailure: 0 | 1 | 2;
+        QuoteEmailFailure: 0 | 1 | 2 | 3;
         QuoteLineDto: {
             /** Format: int32 */
             position: number;

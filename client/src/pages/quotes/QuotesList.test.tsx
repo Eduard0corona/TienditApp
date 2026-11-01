@@ -114,6 +114,14 @@ describe('QuotesList', () => {
     expect(await screen.findByText(/con la plantilla «Cotización lista»/)).toBeInTheDocument();
   });
 
+  it('tells staff how the quotes go by WhatsApp, without letting them change it', async () => {
+    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: [] });
+    renderList('STAFF');
+
+    expect(await screen.findByText(/salen del WhatsApp de tu negocio con el texto de TienditApp/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Plantilla')).not.toBeInTheDocument();
+  });
+
   it('says nothing of WhatsApp templates while the business has not connected its WhatsApp', async () => {
     renderList();
 

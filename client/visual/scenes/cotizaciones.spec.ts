@@ -60,13 +60,16 @@ test.describe('Cotizaciones', () => {
 test.describe('Cotizaciones desde TienditApp', () => {
   test.use({ prepareData: PLUMBER_QUOTES, extraRoutes: QUOTES_WITH_WHATSAPP_ROUTES });
 
-  for (const look of [LOOKS[0], LOOKS[1]]) {
-    test(`cotización con sus envíos ${look.suffix}`, async ({ page }) => {
-      await page.setViewportSize(look.viewport);
-      await open(page, '/quotes/3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63');
-      await expect(page.getByRole('button', { name: 'Enviar por WhatsApp' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: 'Envíos de esta versión' })).toBeVisible();
-      await snap(page, `cotizacion-envios-${look.suffix}`);
+  for (const look of LOOKS) {
+    test.describe(look.suffix, () => {
+      test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+      test(`cotización con sus envíos ${look.suffix}`, async ({ page }) => {
+        await open(page, '/quotes/3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63');
+        await expect(page.getByRole('button', { name: 'Enviar por WhatsApp' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Envíos de esta versión' })).toBeVisible();
+        await snap(page, `cotizacion-envios-${look.suffix}`);
+      });
     });
   }
 

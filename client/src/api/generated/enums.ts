@@ -520,6 +520,7 @@ export const QuoteEmailFailure = {
   Rejected: 0,
   NotConfigured: 1,
   NotDelivered: 2,
+  NoLongerValid: 3,
 } as const;
 export type QuoteEmailFailure = (typeof QuoteEmailFailure)[keyof typeof QuoteEmailFailure];
 

@@ -233,8 +233,8 @@ export default function QuotesList() {
                 <h2 className="h6 mt-3 mb-1">Mensaje de WhatsApp</h2>
                 <p className="text-muted small mb-2">
                   Tus cotizaciones salen del WhatsApp de tu negocio con{' '}
-                  {savedTemplate ? `la plantilla «${savedTemplate.name}»` : 'el texto de TienditApp'}. Sin una plantilla aprobada en
-                  Meta, solo llegan a quien te escribió en las últimas 24 horas.
+                  {savedTemplate ? `la plantilla «${savedTemplate.name}»` : 'el texto de TienditApp'}.
+                  {!savedTemplate?.providerTemplateName && ' Sin una plantilla aprobada en Meta, solo llegan a quien te escribió en las últimas 24 horas.'}
                 </p>
                 {isAdmin && (
                   <form

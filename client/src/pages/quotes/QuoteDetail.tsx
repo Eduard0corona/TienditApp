@@ -228,7 +228,8 @@ function QuoteDetail({ id }: { id: string }) {
   if (quoteQuery.isLoading || (quote && !form)) {
     return <div className="text-center py-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Cargando</span></div></div>;
   }
-  if (quoteQuery.error || !quote || !form) {
+  // A refresh that fails keeps what was loaded: only the first load shows the error instead of the quote.
+  if (!quote || !form) {
     return (
       <>
         <PageTitle title="Cotización" parent={{ label: 'Cotizaciones', to: '/quotes' }} />
@@ -256,6 +257,9 @@ function QuoteDetail({ id }: { id: string }) {
       <PageTitle title={`Cotización ${folio}`} parent={{ label: 'Cotizaciones', to: '/quotes' }} />
 
       {error && <div className="alert alert-danger" role="alert">{error}</div>}
+      {quoteQuery.isRefetchError && (
+        <p className="text-muted small" role="status">No se pudo actualizar la cotización: TienditApp lo vuelve a intentar.</p>
+      )}
       {quote.draftRevisionId && (
         <div className="alert alert-info" role="status">
           Hay una corrección en borrador. <Link to={`/quotes/${quote.draftRevisionId}`}>Abrir la corrección</Link>
@@ -517,8 +521,8 @@ function QuoteDetail({ id }: { id: string }) {
 
               {sends.length > 0 && (
                 <div>
-                  <h3 className="h6 mb-1">Envíos de esta versión</h3>
-                  <ul className="list-unstyled small mb-0" role="status">
+                  <h2 className="h6 mb-1">Envíos de esta versión</h2>
+                  <ul className="list-unstyled small mb-0" aria-live="polite" aria-atomic="false">
                     {sends.map((line) => (
                       <li key={line.key} className={line.state === 'failed' ? 'text-danger' : 'text-muted'}>
                         <i className={`${line.channel === 'email' ? 'ri-mail-line' : 'ri-whatsapp-line'} me-1`} aria-hidden="true"></i>

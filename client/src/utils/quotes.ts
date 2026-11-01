@@ -85,12 +85,6 @@ export function quoteWhatsAppUrl(phone: string, text: string): string | null {
   return businessWhatsAppUrl(phone, text);
 }
 
-/** A mailto link with the message, or null without an email. */
-export function quoteMailUrl(email: string | null | undefined, subject: string, text: string): string | null {
-  if (!email) return null;
-  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
-}
-
 // The sends of a version from TienditApp (Fase 29D): by email from the platform in the name of the business, and by
 // WhatsApp from the business's number. Each one says where it is: on its way, sent (delivered, read), or not sent and why.
 
@@ -98,7 +92,14 @@ const EMAIL_FAILURES: Record<QuoteEmailFailure, string> = {
   [QuoteEmailFailure.Rejected]: 'el servidor de correo rechazó la dirección.',
   [QuoteEmailFailure.NotConfigured]: 'el correo de TienditApp no está configurado.',
   [QuoteEmailFailure.NotDelivered]: 'el servidor de correo no lo tomó después de varios intentos.',
+  [QuoteEmailFailure.NoLongerValid]: 'cuando iba a salir, la cotización ya no estaba vigente.',
 };
+
+/** How many of the latest sends of each channel the server gives (QuoteDeliveries.Shown). */
+const SHOWN_PER_CHANNEL = 5;
+
+/** How long after a WhatsApp went out the detail keeps asking: WhatsApp tells later whether it arrived or failed. */
+const DELIVERY_WINDOW_MS = 5 * 60 * 1000;
 
 export type QuoteSendState = 'pending' | 'sent' | 'failed';
 
@@ -137,13 +138,30 @@ function whatsAppLine(message: QuoteWhatsApp): QuoteSendLine {
   }
 }
 
-/** The emails and WhatsApp messages of a version, the newest first. */
-export function quoteSends(quote: { emails?: QuoteEmail[] | null; whatsApps?: QuoteWhatsApp[] | null }): QuoteSendLine[] {
-  return [...(quote.emails ?? []).map(emailLine), ...(quote.whatsApps ?? []).map(whatsAppLine)]
+type WithSends = { emails?: QuoteEmail[] | null; whatsApps?: QuoteWhatsApp[] | null };
+
+/**
+ * The emails and WhatsApp messages of a version, the newest first. The server gives the latest of each channel: when one
+ * comes full, the list stops at its oldest, so an older send of the other channel never shows below newer ones it hid.
+ */
+export function quoteSends(quote: WithSends): QuoteSendLine[] {
+  const emails = quote.emails ?? [];
+  const whatsApps = quote.whatsApps ?? [];
+  const cutOffs = [emails, whatsApps]
+    .filter((sends) => sends.length >= SHOWN_PER_CHANNEL)
+    .map((sends) => sends.reduce((oldest, send) => (send.requestedAt < oldest ? send.requestedAt : oldest), sends[0].requestedAt));
+  const since = cutOffs.reduce<string | null>((latest, cutOff) => (latest === null || cutOff > latest ? cutOff : latest), null);
+  return [...emails.map(emailLine), ...whatsApps.map(whatsAppLine)]
+    .filter((line) => since === null || line.requestedAt >= since)
     .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
 }
 
-/** Something is still on its way: the detail asks again until it ends. */
-export function hasPendingSends(quote: { emails?: QuoteEmail[] | null; whatsApps?: QuoteWhatsApp[] | null }): boolean {
-  return quoteSends(quote).some((line) => line.state === 'pending');
+/**
+ * Something is still on its way, or a WhatsApp went out a moment ago and WhatsApp has not said whether it arrived: the
+ * detail asks again until it knows.
+ */
+export function hasPendingSends(quote: WithSends, now: number = Date.now()): boolean {
+  if (quoteSends(quote).some((line) => line.state === 'pending')) return true;
+  return (quote.whatsApps ?? []).some((message) => message.status === OutgoingMessageStatus.Sent && !message.deliveredAt
+    && !message.readAt && message.sentAt != null && now - Date.parse(message.sentAt) < DELIVERY_WINDOW_MS);
 }

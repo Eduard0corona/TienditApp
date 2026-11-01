@@ -300,9 +300,10 @@ describe('QuoteDetail', () => {
     expect(screen.getByRole('button', { name: 'Terminar y obtener enlace' })).toBeDisabled();
   });
 
-  it('sends it by email from TienditApp to the address it starts with, and tells it is on its way', async () => {
-    vi.mocked(quotesApi.get).mockResolvedValue(sent());
-    vi.mocked(quotesApi.sendByEmail).mockResolvedValue({ id: 'e1', to: 'valeria@correo.mx', requestedAt: '2026-10-04T17:00:00Z', failedAttempts: 0 });
+  it('sends it by email from TienditApp to the address it starts with, tells it is on its way and shows it in the history', async () => {
+    const email = { id: 'e1', to: 'valeria@correo.mx', requestedAt: '2026-10-04T17:00:00Z', failedAttempts: 0 };
+    vi.mocked(quotesApi.get).mockResolvedValueOnce(sent()).mockResolvedValue(sent({ emails: [email] }));
+    vi.mocked(quotesApi.sendByEmail).mockResolvedValue(email);
     renderAt();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Enviar por correo' }));
@@ -313,6 +314,38 @@ describe('QuoteDetail', () => {
     await waitFor(() => expect(quotesApi.sendByEmail).toHaveBeenCalledWith('q1', 'valeria@correo.mx'));
     expect(toast.success).toHaveBeenCalledWith('La cotización COT-000007 va en camino a valeria@correo.mx.');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Enviar por correo' })).not.toBeInTheDocument());
+    // The detail asks again, and the send appears on its way.
+    expect(await screen.findByText('Enviándose por correo a valeria@correo.mx…')).toBeInTheDocument();
+  });
+
+  it('keeps the dialog still while it sends, and names the number as the server normalized it', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({ whatsAppConnected: true }));
+    const answer = deferred<Awaited<ReturnType<typeof quotesApi.sendByWhatsApp>>>();
+    vi.mocked(quotesApi.sendByWhatsApp).mockReturnValue(answer.promise);
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Enviar por WhatsApp' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Enviar por WhatsApp' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Enviar' }));
+
+    expect(within(dialog).getByLabelText('WhatsApp del cliente')).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Enviando…' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    answer.resolve({ id: 'w1', phone: '+525522107765', requestedAt: '2026-10-04T17:00:00Z', status: OutgoingMessageStatus.Pending, attempts: 0 });
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('La cotización COT-000007 va en camino a +525522107765.'));
+  });
+
+  it('keeps showing the quote when a refresh fails, and says so', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValueOnce(sent()).mockRejectedValue(new Error('Network Error'));
+    vi.mocked(quotesApi.sendByEmail).mockResolvedValue({ id: 'e1', to: 'valeria@correo.mx', requestedAt: '2026-10-04T17:00:00Z', failedAttempts: 0 });
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Enviar por correo' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Enviar por correo' })).getByRole('button', { name: 'Enviar' }));
+
+    expect(await screen.findByText('No se pudo actualizar la cotización: TienditApp lo vuelve a intentar.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Cotización COT-000007' })).toBeInTheDocument();
+    expect(screen.queryByText('No encontramos esa cotización.')).not.toBeInTheDocument();
   });
 
   it('sends it by WhatsApp from the business once it connected its own, and keeps the refusal in the dialog', async () => {

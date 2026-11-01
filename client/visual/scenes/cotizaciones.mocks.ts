@@ -122,6 +122,7 @@ const CONNECTED = {
     { id: 'mail-1', to: 'administracion@amsterdam210.mx', requestedAt: '2026-09-23T18:05:00Z', sentAt: '2026-09-23T18:05:04Z', failedAttempts: 0 },
   ],
   whatsApps: [
+    { id: 'wa-2', phone: '+525598760000', requestedAt: '2026-10-01T15:00:00Z', status: 2, sentAt: null, attempts: 1, error: 'El número no tiene WhatsApp.' },
     { id: 'wa-1', phone: '+525598761234', requestedAt: '2026-09-23T18:02:00Z', status: 1, sentAt: '2026-09-23T18:02:03Z', deliveredAt: '2026-09-23T18:02:05Z', readAt: '2026-09-23T18:30:00Z', attempts: 0 },
   ],
 };
@@ -132,7 +133,7 @@ const WHATSAPP_TEMPLATES = [
 
 const quotesRoutes: ExtraRoutes = (_data, { ok, paginate }) => [
   ['GET', /^\/quotes$/, (_match, query) => ok(paginate(SUMMARIES, query, 20))],
-  ['GET', /^\/quotes\/settings$/, () => ok({ validityDays: 15, pricesIncludeTax: false, defaultTaxRate: 16 })],
+  ['GET', /^\/quotes\/settings$/, () => ok({ validityDays: 15, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] })],
   ['GET', new RegExp(`^/quotes/${DRAFT_ID}$`), () => ok(DRAFT)],
   ['GET', new RegExp(`^/quotes/${SENT_ID}$`), () => ok(SENT)],
   ['GET', new RegExp(`^/quotes/${CONNECTED_ID}$`), () => ok(CONNECTED)],
