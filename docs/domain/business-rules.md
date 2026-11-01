@@ -725,9 +725,9 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
 - **El historial** de cada envío (a quién, quién lo pidió, cuándo y cómo terminó) no se borra.
 - **Sin** PDF ni acuses en el archivo, varios destinatarios, otro día del mes, el mes por WhatsApp ni los CFDI recibidos.
 
-## Oficios a domicilio: la visita para cotizar (Fase 29A)
+## Oficios a domicilio: la visita para cotizar (Fases 29A y 29B)
 
-[ADR 0053](../adr/0053-home-visit-quotes.md), etapa 1:
+[ADR 0053](../adr/0053-home-visit-quotes.md), etapas 1 y 2:
 
 - **Recibe visitas** el negocio que cumple todo esto (`HomeVisitRequestAvailability`):
   - prendió «Visitas a domicilio para cotizar»;
@@ -755,7 +755,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - hasta 300 códigos postales (sin el nombre de la zona);
   - hasta 50 servicios como precios de referencia, sin carrito.
 
-  «Solicitar visita» abre un WhatsApp con el negocio hasta la Fase 29B. Desde una mesa no se muestra.
+  «Solicitar visita» abre la página de la solicitud (`/m/{slug}/visita`, Fase 29B). Desde una mesa no se muestra.
 - **«Hogar y reparaciones»** (categoría 11) la sugieren los giros de oficio. La migración movió ahí a los oficios cuya categoría seguía su giro; uno cuyo dueño la eligió la conserva. Los que se registren entre la migración y el despliegue los mueve el script de reparación posterior, con la misma regla.
 - **El registro con un giro de oficio:**
   - prende el interruptor;
@@ -765,7 +765,19 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - Nada cambia sin el dueño.
   - «Ya lo revisé» (dueños y administradores) lo quita para siempre.
 - **La guía de inicio** pide «Prepara tus visitas a domicilio» al negocio con el interruptor y el módulo de agenda, hasta que recibe visitas.
-- **Sin** solicitud de la visita en línea (29B) ni cotización (29C).
+- **La solicitud en línea** (Fase 29B, `/m/{slug}/visita`, sin cuenta):
+  - el cliente escribe su código postal y el servidor dice si va ahí y cuánto cuesta la visita en él, sin el nombre de la zona (una cuenta elige una de sus direcciones);
+  - elige el día, una hora libre y, si el negocio dice quién agenda en línea, con quién: los que hacen el servicio de la visita, o cualquiera de ellos sin servicio;
+  - las horas salen del horario con la duración del servicio de la visita (una hora sin él) y dejan libre el traslado del negocio antes y después, contra todas las citas de esa persona (o contra las del negocio, con las citas a la vez cuando no dice quién atiende);
+  - escribe qué pasa (hasta 500 caracteres), su dirección y referencias, su nombre, su teléfono y, si quiere, su correo para la cotización.
+- **La solicitud es una cita «Por confirmar» con su visita**, como una cita en línea: la llave de la solicitud, el candado por negocio, el límite de 3 por confirmar por teléfono (las citas y las visitas cuentan juntas), el enlace `/cita#…`, Mis citas y el aviso por WhatsApp, que dice el código postal y nunca la dirección.
+  - La visita guarda cómo la cobró el negocio al pedirla (`AppointmentVisits.ChargePolicy`): es lo que el cliente aceptó, aunque el negocio lo cambie después.
+  - El cargo de la visita es el de la zona; «Sin costo» lo deja en cero a donde se mueva, y la base lo exige. El servicio se cobra con su renglón, como cualquier cita.
+  - Sin servicio de la visita se llama «Visita a domicilio» y dura una hora.
+  - El correo del cliente (`Appointments.CustomerEmail`) queda en la cita para la cotización; nunca en la actividad ni en un registro.
+- **La Agenda** la decide como cualquier solicitud: la acepta, la rechaza o la mueve antes de aceptarla. Dice «Visita para cotizar» con cómo se cobra y el correo del cliente. Aceptada, el aviso dice lo que cuesta la visita («Visita: $350.00.») o que es sin costo. «Cobrar» de una visita «Sin costo» no agrega su servicio al ticket.
+- **El enlace y Mis citas** dicen «A domicilio · CP 72000», nunca la dirección, y ofrecen pedir otra visita.
+- **Sin** cotización (29C) ni fotos del problema.
 
 ## Cancelación y trazabilidad
 

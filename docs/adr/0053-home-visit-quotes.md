@@ -1,6 +1,6 @@
 # ADR 0053: Oficios a domicilio, la visita para cotizar
 
-- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31); la solicitud en línea (etapa 2) y la cotización (etapa 3) siguen propuestas.
+- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31) y para la solicitud en línea (etapa 2) en la Fase 29B (2026-11-01); la cotización (etapa 3) sigue propuesta.
 - Fecha: 2026-10-27
 - Continúa: [ADR 0020](0020-home-visits.md) (servicios a domicilio), [ADR 0021](0021-business-directory.md) (Explorar) y [ADR 0025](0025-online-booking.md) (citas en línea).
 
@@ -101,7 +101,24 @@ La etapa 1 completa y, de la etapa 2, la política de la visita (punto 10), porq
   - el costo y la política de la visita;
   - los códigos postales a los que va: hasta 300, con cuántos son en total, nunca el nombre de la zona;
   - hasta 50 servicios como precios de referencia, «desde», sin carrito;
-  - «Solicitar visita», que abre un WhatsApp con el negocio hasta que la solicitud en línea llegue en la Fase 29B. Desde una mesa no sale.
+  - «Solicitar visita», que abría un WhatsApp con el negocio hasta la Fase 29B. Desde una mesa no sale.
+
+### Lo que hizo la Fase 29B
+
+La etapa 2 (puntos 11 a 13). La migración es `20261101002207_AddHomeVisitBooking`, con sus scripts en `database/production/20261101002207_AddHomeVisitBooking/`.
+
+- **La página de la solicitud** (`/m/{slug}/visita`, sin cuenta), a la que lleva «Solicitar visita» de la tienda:
+  - `GET /api/v1/public/menu/{slug}/home-visit`: la visita (el servicio que el negocio eligió mientras se agenda, o «Visita a domicilio» de una hora sin él), su duración, cómo se cobra, lo que cuesta desde la zona más barata y quién va. No existe mientras el negocio no recibe visitas (`HomeVisitRequestAvailability`).
+  - `GET …/home-visit/coverage?postalCode=`: si va a ese código postal y cuánto cuesta la visita ahí, sin el nombre de la zona. Una cuenta empieza con su última dirección.
+  - `GET …/home-visit/slots`: las horas de una semana con la duración de la visita. El traslado del negocio (`HomeVisitTravelMinutes`) queda libre antes y después de la visita, contra todas las citas de cada persona; las otras citas ocupan solo su tiempo, así que entre dos visitas el traslado se cuenta una vez, como en la agenda. Sin decir quién atiende, cuenta contra todas las del negocio con las citas a la vez.
+  - Con quién: los que agendan en línea y hacen el servicio de la visita; sin servicio, cualquiera de ellos.
+- **La solicitud** (`POST …/home-visits`, `Appointment.RequestHomeVisit`) es una cita «Por confirmar» con su visita, por el mismo camino que una cita en línea: la llave, el candado del negocio, el límite de 3 por confirmar por teléfono (citas y visitas juntas), el enlace, Mis citas y el aviso por WhatsApp. No pide local.
+  - Lleva lo que pasa (las notas de la cita, hasta 500 caracteres), la dirección con sus referencias y el correo opcional del cliente (`Appointments.CustomerEmail`) para la cotización.
+  - La visita guarda cómo se cobra, como el cliente lo aceptó (`AppointmentVisits.ChargePolicy`). Su cargo es el de la zona; «Sin costo» lo deja en cero a donde se mueva, y la restricción `CK_AppointmentVisits_ChargePolicy` lo exige. Una visita que agenda el equipo queda sin política.
+  - El servicio se cobra con su renglón al cobrar la cita; con «Sin costo», «Cobrar» no lo agrega.
+- **La Agenda** decide la solicitud como cualquier otra y dice «Visita para cotizar» con cómo se cobra y el correo del cliente. Aceptada o movida, el aviso dice lo que cuesta la visita (el servicio más la zona) o que es sin costo.
+- **El enlace y Mis citas** dicen «A domicilio · CP …», nunca la dirección, y ofrecen pedir otra visita.
+- **El rollback** se detiene (50050) en cuanto hay una visita pedida en línea o un correo de cliente.
 
 ### Etapa 2: la solicitud de la visita
 
