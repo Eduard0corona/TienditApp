@@ -23,6 +23,7 @@ internal static class BeforeQuotes
         modelBuilder.Ignore<QuoteLine>();
         modelBuilder.Ignore<Quote>();
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.QuoteValidityDays);
+        BeforeQuoteDeliveries.Ignore(modelBuilder);
     }
 
     private sealed class Context(

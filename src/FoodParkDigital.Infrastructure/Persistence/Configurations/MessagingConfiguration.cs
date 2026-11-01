@@ -3,6 +3,7 @@ using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Quotes.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -58,13 +59,19 @@ public class OutgoingMessageConfiguration : IEntityTypeConfiguration<OutgoingMes
     {
         builder.ToTable("OutgoingMessages", table =>
         {
-            // The message of a CFDI (Fase 28M) says which one, of which invoice, with its link; no other message does.
+            // The message of a CFDI (Fase 28M) says which one, of which invoice, with its link; no other message does. Only it
+            // and the message of a quote (Fase 29D) say who asked for them.
             table.HasCheckConstraint(
                 "CK_OutgoingMessages_Cfdi",
                 $"([Purpose] = {(int)MessagePurpose.CfdiDocument} AND [CfdiDocument] IS NOT NULL AND [CfdiId] IS NOT NULL"
                 + " AND [OrderInvoiceId] IS NOT NULL AND [LinkToken] IS NOT NULL)"
                 + $" OR ([Purpose] <> {(int)MessagePurpose.CfdiDocument} AND [CfdiDocument] IS NULL AND [CfdiId] IS NULL"
-                + " AND [OrderInvoiceId] IS NULL AND [RequestedByUserId] IS NULL AND [LinkToken] IS NULL)");
+                + $" AND [OrderInvoiceId] IS NULL AND [LinkToken] IS NULL AND ([RequestedByUserId] IS NULL OR [Purpose] = {(int)MessagePurpose.QuoteDocument}))");
+            // The message of a quote (Fase 29D) says which version and who asked for it; no other message carries a quote.
+            table.HasCheckConstraint(
+                "CK_OutgoingMessages_Quote",
+                $"([Purpose] = {(int)MessagePurpose.QuoteDocument} AND [QuoteId] IS NOT NULL AND [RequestedByUserId] IS NOT NULL)"
+                + $" OR ([Purpose] <> {(int)MessagePurpose.QuoteDocument} AND [QuoteId] IS NULL)");
             table.HasCheckConstraint("CK_OutgoingMessages_CfdiDocument", "[CfdiDocument] IS NULL OR [CfdiDocument] IN (0, 1, 2)");
             // The message of an invoice carries that invoice.
             table.HasCheckConstraint("CK_OutgoingMessages_CfdiInvoice", "[CfdiDocument] IS NULL OR [CfdiDocument] <> 0 OR [CfdiId] = [OrderInvoiceId]");
@@ -98,6 +105,11 @@ public class OutgoingMessageConfiguration : IEntityTypeConfiguration<OutgoingMes
             .WithMany()
             .HasForeignKey(x => x.AppointmentId)
             .OnDelete(DeleteBehavior.SetNull);
+        // Quotes are never deleted: the history of their messages stays with them.
+        builder.HasOne<Quote>()
+            .WithMany()
+            .HasForeignKey(x => x.QuoteId)
+            .OnDelete(DeleteBehavior.NoAction);
 
         // The same reminder or campaign recipient is never queued twice, even by two instances at once.
         builder.HasIndex(x => new { x.TenantId, x.DeduplicationKey })
@@ -108,6 +120,13 @@ public class OutgoingMessageConfiguration : IEntityTypeConfiguration<OutgoingMes
             .HasDatabaseName("IX_OutgoingMessages_Pending")
             .HasFilter("[Status] = 0");
         builder.HasIndex(x => new { x.TenantId, x.CampaignId, x.Status });
+        // The messages of a quote's version (its latest ones, and how many in the last day), and those of the quotes of a
+        // business in the last day (Fase 29D): only the rows of quotes, which are few among the rest.
+        builder.HasIndex(x => new { x.QuoteId, x.CreatedAt })
+            .HasFilter("[QuoteId] IS NOT NULL");
+        builder.HasIndex(x => new { x.TenantId, x.CreatedAt })
+            .HasDatabaseName("IX_OutgoingMessages_Quotes_TenantId_CreatedAt")
+            .HasFilter("[QuoteId] IS NOT NULL");
         builder.HasIndex(x => new { x.TenantId, x.Purpose, x.CreatedAt });
         // Delivery reports from the webhook find the message by its provider id.
         builder.HasIndex(x => x.ProviderMessageId)

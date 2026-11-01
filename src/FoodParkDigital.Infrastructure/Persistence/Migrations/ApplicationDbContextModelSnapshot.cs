@@ -3979,6 +3979,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("Purpose")
                         .HasColumnType("int");
 
+                    b.Property<Guid?>("QuoteId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset?>("ReadAt")
                         .HasColumnType("datetimeoffset");
 
@@ -4024,6 +4027,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_OutgoingMessages_Pending")
                         .HasFilter("[Status] = 0");
 
+                    b.HasIndex("QuoteId", "CreatedAt")
+                        .HasFilter("[QuoteId] IS NOT NULL");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .HasDatabaseName("IX_OutgoingMessages_Quotes_TenantId_CreatedAt")
+                        .HasFilter("[QuoteId] IS NOT NULL");
+
                     b.HasIndex("TenantId", "DeduplicationKey")
                         .IsUnique()
                         .HasFilter("[DeduplicationKey] IS NOT NULL");
@@ -4037,13 +4047,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("OutgoingMessages", null, t =>
                         {
-                            t.HasCheckConstraint("CK_OutgoingMessages_Cfdi", "([Purpose] = 5 AND [CfdiDocument] IS NOT NULL AND [CfdiId] IS NOT NULL AND [OrderInvoiceId] IS NOT NULL AND [LinkToken] IS NOT NULL) OR ([Purpose] <> 5 AND [CfdiDocument] IS NULL AND [CfdiId] IS NULL AND [OrderInvoiceId] IS NULL AND [RequestedByUserId] IS NULL AND [LinkToken] IS NULL)");
+                            t.HasCheckConstraint("CK_OutgoingMessages_Cfdi", "([Purpose] = 5 AND [CfdiDocument] IS NOT NULL AND [CfdiId] IS NOT NULL AND [OrderInvoiceId] IS NOT NULL AND [LinkToken] IS NOT NULL) OR ([Purpose] <> 5 AND [CfdiDocument] IS NULL AND [CfdiId] IS NULL AND [OrderInvoiceId] IS NULL AND [LinkToken] IS NULL AND ([RequestedByUserId] IS NULL OR [Purpose] = 6))");
 
                             t.HasCheckConstraint("CK_OutgoingMessages_CfdiDocument", "[CfdiDocument] IS NULL OR [CfdiDocument] IN (0, 1, 2)");
 
                             t.HasCheckConstraint("CK_OutgoingMessages_CfdiInvoice", "[CfdiDocument] IS NULL OR [CfdiDocument] <> 0 OR [CfdiId] = [OrderInvoiceId]");
 
                             t.HasCheckConstraint("CK_OutgoingMessages_LinkToken", "[LinkToken] IS NULL OR LEN([LinkToken]) = 43");
+
+                            t.HasCheckConstraint("CK_OutgoingMessages_Quote", "([Purpose] = 6 AND [QuoteId] IS NOT NULL AND [RequestedByUserId] IS NOT NULL) OR ([Purpose] <> 6 AND [QuoteId] IS NULL)");
                         });
                 });
 
@@ -6309,6 +6321,57 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Quotes.Entities.QuoteEmail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Failure")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("LastFailedAttemptAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("QuoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("To")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuoteId", "RequestedAt");
+
+                    b.HasIndex("TenantId", "RequestedAt");
+
+                    b.ToTable("QuoteEmails", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_QuoteEmails_Attempts", "([FailedAttempts] = 0 AND [LastFailedAttemptAt] IS NULL) OR ([FailedAttempts] > 0 AND [LastFailedAttemptAt] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_QuoteEmails_Outcome", "([SentAt] IS NULL OR [FailedAt] IS NULL) AND (([FailedAt] IS NULL AND [Failure] IS NULL) OR ([FailedAt] IS NOT NULL AND [Failure] IS NOT NULL AND [Failure] IN (0, 1, 2)))");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Quotes.Entities.QuoteLine", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6825,6 +6888,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("QuoteValidityDays")
                         .HasColumnType("int")
                         .HasDefaultValue(15);
+
+                    b.Property<Guid?>("QuoteWhatsAppTemplateId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("SettingsJson")
                         .HasColumnType("nvarchar(max)");
@@ -7968,6 +8034,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("OrderInvoiceId")
                         .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("FoodParkDigital.Domain.Quotes.Entities.Quote", null)
+                        .WithMany()
+                        .HasForeignKey("QuoteId")
+                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.OnlinePayments.Entities.OnlineCheckout", b =>
@@ -8352,6 +8423,21 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("VisitCreditSaleOrderId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Quotes.Entities.QuoteEmail", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Quotes.Entities.Quote", null)
+                        .WithMany()
+                        .HasForeignKey("QuoteId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Quotes.Entities.QuoteLine", b =>
