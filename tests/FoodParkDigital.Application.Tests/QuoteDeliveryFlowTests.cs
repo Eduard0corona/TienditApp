@@ -335,17 +335,24 @@ public class QuoteDeliveryFlowTests
         await using var shop = await Shop.OpenAsync();
         var first = await shop.SentAsync();
         var second = await shop.SentAsync();
-        for (var i = 0; i < 5; i++)
+        // Six of each channel over the days (past the limit of a day), seeded as they were asked for.
+        var version = await shop.Context.Quotes.AsNoTracking().SingleAsync(q => q.Id == first.Id);
+        for (var i = 0; i < 6; i++)
         {
-            shop.Clock.UtcNow = SalesTestFixture.Now.AddMinutes(i);
-            await shop.EmailAsync(first.Id, $"c{i}@correo.mx");
+            var at = SalesTestFixture.Now.AddMinutes(i);
+            shop.Context.QuoteEmails.Add(QuoteEmail.Request(version, $"c{i}@correo.mx", Guid.NewGuid(), new DateOnly(2026, 10, 4), at));
+            shop.Context.OutgoingMessages.Add(OutgoingMessage.ForQuote(version, $"+52552210776{i}", "Valeria", "Hola", null, "es_MX", [],
+                Guid.NewGuid(), new DateOnly(2026, 10, 4), at));
         }
+        await shop.Context.SaveChangesAsync();
         await shop.EmailAsync(second.Id, "otra@correo.mx");
 
         var detail = await shop.GetAsync(first.Id);
 
-        Assert.Equal(["c4@correo.mx", "c3@correo.mx", "c2@correo.mx", "c1@correo.mx", "c0@correo.mx"], detail.Emails.Select(e => e.To));
+        Assert.Equal(["c5@correo.mx", "c4@correo.mx", "c3@correo.mx", "c2@correo.mx", "c1@correo.mx"], detail.Emails.Select(e => e.To));
+        Assert.Equal(["+525522107765", "+525522107764", "+525522107763", "+525522107762", "+525522107761"], detail.WhatsApps.Select(m => m.Phone));
         Assert.Equal(["otra@correo.mx"], (await shop.GetAsync(second.Id)).Emails.Select(e => e.To));
+        Assert.Empty((await shop.GetAsync(second.Id)).WhatsApps);
     }
 
     [Fact]
