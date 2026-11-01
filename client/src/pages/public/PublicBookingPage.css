@@ -30,7 +30,9 @@
   background: var(--ct-tertiary-bg);
 }
 
-.pb-step {
+/* A step's title on top of the menu's (.pm-section-title, margin 0 0 0.5rem): with both classes it wins whatever order the
+   two sheets load in. Since the visit's request page (Fase 29B) shares this sheet, it no longer loads after the menu's. */
+.pm-section-title.pb-step {
   margin-top: 1.25rem;
 }
 

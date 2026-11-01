@@ -94,7 +94,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La tarjeta de Configuración no calcula lo que costaría la visita con cambios sin guardar: dice lo de hoy y pide guardar.
   - La lista de servicios a elegir como visita trae los primeros 100 por nombre (el elegido siempre sale); la tienda, hasta 300 códigos postales y 50 servicios.
   - La 29A suma 156 B a la primera visita (de 180,710 a 180,866 B, contra `master` en `1d238ff`) y sube el presupuesto a 181,000 B.
-  - La 29B suma 129 B a la primera visita (de 180,866 a 180,995 B, contra `master` en `4172896`): la ruta de la página de la solicitud en `App.tsx` y el nombre de su pantalla, que se carga aparte con el selector de día y hora que comparte con la de agendar. El presupuesto sube de 181,000 a 181,200 B.
+  - La 29B suma 124 B a la primera visita (de 180,866 a 180,990 B, contra `master` en `4172896`): la ruta de la página de la solicitud en `App.tsx` y el nombre de su pantalla, que se carga aparte con el selector de día y hora que comparte con la de agendar. El presupuesto sube de 181,000 a 181,200 B.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.
