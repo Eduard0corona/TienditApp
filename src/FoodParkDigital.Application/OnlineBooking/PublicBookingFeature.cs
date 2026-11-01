@@ -109,7 +109,10 @@ public class PublicAppointmentReceiptDto
     public string TimeLabel { get; set; } = null!;
     public string BusinessName { get; set; } = null!;
     public string? ContactPhone { get; set; }
+    /// <summary>Where it happens at the business: its main branch, in one line; null without a street, or for a visit.</summary>
     public string? Address { get; set; }
+    /// <summary>A visit at the customer's address (Fase 29B): its postal code and how it is charged; null at the business.</summary>
+    public CustomerVisitDto? Visit { get; set; }
     /// <summary>Who attends it, by the name the business gave them for customers (Fase 24J); null when nobody is said.</summary>
     public string? StaffName { get; set; }
     /// <summary>Requested with a customer session: it is in the account's appointments.</summary>
@@ -226,15 +229,10 @@ public class GetPublicBookingSlotsQueryHandler : IRequestHandler<GetPublicBookin
 
         var now = _clock.UtcNow;
         var settings = business.Settings;
-        var zone = TenantDateTimeResolver.Resolve(settings.TimeZone);
-        var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(now, settings.TimeZone));
-        var lastDay = today.AddDays(OnlineBookingRules.DaysAhead - 1);
-        var first = request.From is { } from && from > today ? from : today;
-        if (first > lastDay)
+        var window = PublicSlotsWindow.Open(settings.TimeZone, now, request.From);
+        if (window is null)
             return new PublicBookingSlotsDto();
-        var last = first.AddDays(OnlineBookingRules.DaysPerRequest - 1);
-        if (last > lastDay)
-            last = lastDay;
+        var zone = window.Zone;
 
         var staff = await OnlineBookingCalendar.StaffAsync(_context, business.Tenant.Id, cancellationToken);
         var forService = staff.Where(person => person.Offers(service.Id)).ToList();
@@ -246,14 +244,11 @@ public class GetPublicBookingSlotsQueryHandler : IRequestHandler<GetPublicBookin
             return null;
 
         var hours = await BusinessHours.ReadAsync(_context, business.Tenant.Id, settings.OpeningHours, settings.TimeZone, now, cancellationToken);
-        // The range holds the week in any time zone, an opening that runs past midnight and the trip of a visit.
-        var rangeFrom = Midnight(first.AddDays(-1));
-        var rangeTo = Midnight(last.AddDays(2));
         var earliest = now.AddMinutes(OnlineBookingRules.MinNoticeMinutes);
         Func<DateOnly, IEnumerable<DateTimeOffset>> freeStarts;
         if (staff.Count > 0)
         {
-            var bookings = await OnlineBookingCalendar.BookingsAsync(_context, business.Tenant.Id, rangeFrom, rangeTo, cancellationToken);
+            var bookings = await OnlineBookingCalendar.BookingsAsync(_context, business.Tenant.Id, window.RangeFrom, window.RangeTo, cancellationToken);
             var (calendars, unassigned) = OnlineBookingCalendar.Calendars(forService, bookings, settings.HomeVisitTravelMinutes);
             freeStarts = date => StaffSlots.FreeStarts(hours?.Schedule, zone, date, service.Duration, calendars, unassigned, earliest)
                 .Where(slot => request.StaffId is not { } chosen || slot.FreeStaff.Contains(chosen))
@@ -261,31 +256,60 @@ public class GetPublicBookingSlotsQueryHandler : IRequestHandler<GetPublicBookin
         }
         else
         {
-            var booked = await OnlineBookingCalendar.BookedAsync(_context, business.Tenant.Id, rangeFrom, rangeTo, cancellationToken);
+            var booked = await OnlineBookingCalendar.BookedAsync(_context, business.Tenant.Id, window.RangeFrom, window.RangeTo, cancellationToken);
             freeStarts = date => BookingSlots.FreeStarts(
                 hours?.Schedule, zone, date, service.Duration, booked, settings.OnlineBookingCapacity, earliest);
         }
 
+        return window.Days(freeStarts);
+    }
+}
+
+/// <summary>
+/// The week of free times a booking page reads (Fase 24D), and a visit's request page (Fase 29B): from the day asked for
+/// (today when omitted or past) for <see cref="OnlineBookingRules.DaysPerRequest"/> days, up to the last day offered.
+/// </summary>
+internal sealed record PublicSlotsWindow(DateOnly First, DateOnly Last, DateOnly LastDay, TimeZoneInfo Zone)
+{
+    /// <summary>The week from <paramref name="from"/> in the business's time zone; null once it is past the last day offered.</summary>
+    public static PublicSlotsWindow? Open(string? timeZone, DateTimeOffset now, DateOnly? from)
+    {
+        var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(now, timeZone));
+        var lastDay = today.AddDays(OnlineBookingRules.DaysAhead - 1);
+        var first = from is { } day && day > today ? day : today;
+        if (first > lastDay)
+            return null;
+        var last = first.AddDays(OnlineBookingRules.DaysPerRequest - 1);
+        return new PublicSlotsWindow(first, last > lastDay ? lastDay : last, lastDay, TenantDateTimeResolver.Resolve(timeZone));
+    }
+
+    /// <summary>The appointments read around it hold the week in any time zone, an opening past midnight and a visit's trip.</summary>
+    public DateTimeOffset RangeFrom => Midnight(First.AddDays(-1));
+    public DateTimeOffset RangeTo => Midnight(Last.AddDays(2));
+
+    /// <summary>Each day of the week with its free starts, and where the next week begins.</summary>
+    public PublicBookingSlotsDto Days(Func<DateOnly, IEnumerable<DateTimeOffset>> freeStarts)
+    {
         var days = new List<PublicBookingDayDto>();
-        for (var date = first; date <= last; date = date.AddDays(1))
+        for (var date = First; date <= Last; date = date.AddDays(1))
         {
             days.Add(new PublicBookingDayDto
             {
                 Date = date,
                 Label = MessageValues.FormatDate(Midnight(date)),
-                Slots = freeStarts(date).Select(start => Slot(start, zone)).ToList()
+                Slots = freeStarts(date).Select(Slot).ToList()
             });
         }
 
-        return new PublicBookingSlotsDto { Days = days, NextFrom = last < lastDay ? last.AddDays(1) : null };
+        return new PublicBookingSlotsDto { Days = days, NextFrom = Last < LastDay ? Last.AddDays(1) : null };
     }
 
     private static DateTimeOffset Midnight(DateOnly date) => new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
     /// <summary>A free start, with the date it starts on: an opening may run past midnight into the next one.</summary>
-    private static PublicBookingSlotDto Slot(DateTimeOffset start, TimeZoneInfo zone)
+    private PublicBookingSlotDto Slot(DateTimeOffset start)
     {
-        var local = TimeZoneInfo.ConvertTime(start, zone);
+        var local = TimeZoneInfo.ConvertTime(start, Zone);
         return new PublicBookingSlotDto
         {
             StartAt = start,
@@ -399,7 +423,7 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         var tenantId = business.Tenant.Id;
         var now = _clock.UtcNow;
         // Until the business decides them, a phone cannot keep piling up requests.
-        if (await PendingForPhoneAsync(phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
+        if (await PublicAppointmentReceipts.PendingForPhoneAsync(_context, phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
             return Result.Failure<PublicAppointmentReceiptDto>(TooManyPendingMessage);
 
         var settings = business.Settings;
@@ -418,7 +442,7 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         await _bookingLock.AcquireAsync(tenantId, cancellationToken);
         if (request.IdempotencyKey is { } lockedKey && await RequestedAsync(lockedKey, phone, business, account, cancellationToken) is { } answered)
             return answered;
-        if (await PendingForPhoneAsync(phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
+        if (await PublicAppointmentReceipts.PendingForPhoneAsync(_context, phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
             return Result.Failure<PublicAppointmentReceiptDto>(TooManyPendingMessage);
         var hours = await BusinessHours.ReadAsync(_context, tenantId, settings.OpeningHours, settings.TimeZone, now, cancellationToken);
         var endAt = startAt + service.Duration;
@@ -486,20 +510,45 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         if (noticeQueued)
             _signal?.Notify();
 
-        return Result.Success(Receipt(appointment, business, account, attends?.Name));
+        return Result.Success(PublicAppointmentReceipts.Build(appointment, business.Tenant, business.Settings, business.MainBranch, account, attends?.Name));
     }
 
+    private Task<Result<PublicAppointmentReceiptDto>?> RequestedAsync(
+        Guid key,
+        string phone,
+        PublicBookingBusiness business,
+        Domain.Identity.Entities.ApplicationUser? account,
+        CancellationToken cancellationToken)
+        => PublicAppointmentReceipts.RequestedAsync(
+            _context, key, phone, business.Tenant, business.Settings, business.MainBranch, account, cancellationToken);
+}
+
+/// <summary>
+/// What every request a customer makes online shares (Fase 24D): its receipt, the answer to the same request sent again
+/// and how many a phone leaves waiting. The booking page and a visit's request page (Fase 29B) answer the same way.
+/// </summary>
+internal static class PublicAppointmentReceipts
+{
     /// <summary>The requests of a phone in the business still waiting for an answer.</summary>
-    private Task<int> PendingForPhoneAsync(string phone, DateTimeOffset now, CancellationToken cancellationToken)
-        => _context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online
+    public static Task<int> PendingForPhoneAsync(IApplicationDbContext context, string phone, DateTimeOffset now, CancellationToken cancellationToken)
+        => context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online
             && a.CustomerPhone == phone
             && a.Status == AppointmentStatus.Requested
             && a.StartAt > now, cancellationToken);
 
-    private static PublicAppointmentReceiptDto Receipt(
-        Appointment appointment, PublicBookingBusiness business, Domain.Identity.Entities.ApplicationUser? account, string? staffName)
+    /// <summary>
+    /// What the customer reads once the request is stored: at the business, its main branch; at the customer's address
+    /// (a visit, Fase 29B), the postal code and how it is charged, never the whole address.
+    /// </summary>
+    public static PublicAppointmentReceiptDto Build(
+        Appointment appointment,
+        Tenant tenant,
+        TenantSettings settings,
+        Branch? mainBranch,
+        Domain.Identity.Entities.ApplicationUser? account,
+        string? staffName)
     {
-        var local = TimeZoneInfo.ConvertTime(appointment.StartAt, TenantDateTimeResolver.Resolve(business.Settings.TimeZone));
+        var local = TimeZoneInfo.ConvertTime(appointment.StartAt, TenantDateTimeResolver.Resolve(settings.TimeZone));
         return new PublicAppointmentReceiptDto
         {
             ServiceName = appointment.ServiceName,
@@ -507,9 +556,10 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
             EndAt = appointment.EndAt,
             DateLabel = MessageValues.FormatDate(local),
             TimeLabel = MessageValues.FormatTime(local),
-            BusinessName = business.Tenant.Name,
-            ContactPhone = business.Tenant.ContactPhone,
-            Address = AddressText.ForCustomers(business.MainBranch),
+            BusinessName = tenant.Name,
+            ContactPhone = tenant.ContactPhone,
+            Address = appointment.Visit is null ? AddressText.ForCustomers(mainBranch) : null,
+            Visit = CustomerVisitDto.From(appointment.Visit),
             StaffName = staffName,
             LinkedToAccount = account is not null && appointment.CustomerUserId == account.Id,
             TrackingToken = appointment.TrackingToken!
@@ -520,30 +570,33 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
     /// The answer for a request of the business already stored with <paramref name="key"/>, or null. Only the same
     /// customer's online appointment answers, by its phone: a key is not a way to read another appointment.
     /// </summary>
-    private async Task<Result<PublicAppointmentReceiptDto>?> RequestedAsync(
+    public static async Task<Result<PublicAppointmentReceiptDto>?> RequestedAsync(
+        IApplicationDbContext context,
         Guid key,
         string phone,
-        PublicBookingBusiness business,
+        Tenant tenant,
+        TenantSettings settings,
+        Branch? mainBranch,
         Domain.Identity.Entities.ApplicationUser? account,
         CancellationToken cancellationToken)
     {
-        var appointment = await _context.Appointments
+        var appointment = await context.Appointments
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.TenantId == business.Tenant.Id && a.ClientRequestId == key, cancellationToken);
+            .FirstOrDefaultAsync(a => a.TenantId == tenant.Id && a.ClientRequestId == key, cancellationToken);
         if (appointment is null)
             return null;
         if (appointment.Channel != AppointmentChannel.Online || appointment.CustomerPhone != phone)
-            return Result.Failure<PublicAppointmentReceiptDto>(AlreadySentMessage);
+            return Result.Failure<PublicAppointmentReceiptDto>(RequestPublicAppointmentCommandHandler.AlreadySentMessage);
         if (appointment.Status == AppointmentStatus.Cancelled)
-            return Result.Failure<PublicAppointmentReceiptDto>(AlreadyCancelledMessage);
+            return Result.Failure<PublicAppointmentReceiptDto>(RequestPublicAppointmentCommandHandler.AlreadyCancelledMessage);
         var staffName = appointment.StaffUserId is { } staffUserId
-            ? await _context.OnlineBookingStaff
+            ? await context.OnlineBookingStaff
                 .AsNoTracking()
-                .Where(s => s.TenantId == business.Tenant.Id && s.UserId == staffUserId)
+                .Where(s => s.TenantId == tenant.Id && s.UserId == staffUserId)
                 .Select(s => s.Name)
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
-        return Result.Success(Receipt(appointment, business, account, staffName));
+        return Result.Success(Build(appointment, tenant, settings, mainBranch, account, staffName));
     }
 }
 

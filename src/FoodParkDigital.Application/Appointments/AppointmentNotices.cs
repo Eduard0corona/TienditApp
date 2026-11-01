@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +18,7 @@ namespace FoodParkDigital.Application.Appointments;
 /// time), so when a newer one of the same appointment is waiting, the older one is skipped instead of arriving
 /// after it. Internal steps (in service, completed, no-show) do not message the customer. An appointment at the customer's
 /// address (Fase 22E) says so with its postal code, never the whole address (the text stays in the messages' log), and the
-/// charge for the visit.
+/// charge for the visit; a visit to quote requested online (Fase 29B), what the visit costs, as its customer read it.
 /// </summary>
 public sealed class AppointmentNotices
 {
@@ -105,10 +106,23 @@ public sealed class AppointmentNotices
         var body = $"Hola {MessageValues.FirstName(appointment.CustomerName)}, "
             + describe(appointment.ServiceName, place, MessageValues.FormatDate(local), MessageValues.FormatTime(local));
         // The visit charges like the business's prices: with IVA added when they do not include it (ADR 0018).
-        if (withVisitFee && appointment.Visit is { Fee: > 0 } charged)
+        var taxNote = settings?.PricesIncludeTax == false ? " más IVA." : ".";
+        if (withVisitFee && appointment.Visit is { ChargePolicy: { } policy } toQuote)
         {
-            body += $" Cargo por visita: {OrderStatusLabels.FormatMoney(charged.Fee)}"
-                + (settings?.PricesIncludeTax == false ? " más IVA." : ".");
+            // A visit to quote: its service and going there, as the request page said it (Fase 29B), or nothing «Sin costo».
+            var servicePrice = policy == HomeVisitChargePolicy.Free || appointment.ServiceProductId is not { } serviceId
+                ? null
+                : await _context.Products
+                    .AsNoTracking()
+                    .Where(p => p.Id == serviceId && p.TenantId == appointment.TenantId)
+                    .Select(p => (decimal?)p.PriceAmount)
+                    .FirstOrDefaultAsync(cancellationToken);
+            var cost = HomeVisitCharge.To(policy, servicePrice, toQuote.Fee);
+            body += cost > 0 ? $" Visita: {OrderStatusLabels.FormatMoney(cost)}{taxNote}" : " La visita es sin costo.";
+        }
+        else if (withVisitFee && appointment.Visit is { Fee: > 0 } charged)
+        {
+            body += $" Cargo por visita: {OrderStatusLabels.FormatMoney(charged.Fee)}{taxNote}";
         }
 
         _context.OutgoingMessages.Add(new OutgoingMessage(

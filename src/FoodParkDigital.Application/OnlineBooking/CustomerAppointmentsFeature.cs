@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -34,13 +35,29 @@ public class CustomerAppointmentDto
     /// <summary>Its online menu (/m/{slug}), to book again.</summary>
     public string BusinessSlug { get; set; } = null!;
     public string? BusinessContactPhone { get; set; }
-    /// <summary>Where it happens: the main branch, in one line.</summary>
+    /// <summary>Where it happens at the business: the main branch, in one line; null for a visit.</summary>
     public string? Address { get; set; }
+    /// <summary>A visit at the customer's address (Fase 29B): its postal code and how it is charged; null at the business.</summary>
+    public CustomerVisitDto? Visit { get; set; }
     /// <summary>
     /// Who attends it, by the name the business gave them for customers (Fase 24J); null when nobody is assigned or the
     /// business gave them none.
     /// </summary>
     public string? StaffName { get; set; }
+}
+
+/// <summary>
+/// Where a visit at the customer's address happens, as its customer sees it (Fase 29B, ADR 0053): its postal code, never
+/// the whole address (the link of the appointment opens it without an account), and how the business charges it.
+/// </summary>
+public class CustomerVisitDto
+{
+    public string PostalCode { get; set; } = null!;
+    /// <summary>How the business charges the visit, as agreed when it was requested online; null for one the team arranged.</summary>
+    public HomeVisitChargePolicy? ChargePolicy { get; set; }
+
+    internal static CustomerVisitDto? From(AppointmentVisit? visit)
+        => visit is null ? null : new CustomerVisitDto { PostalCode = visit.PostalCode, ChargePolicy = visit.ChargePolicy };
 }
 
 public enum MyAppointmentsScope
@@ -102,7 +119,9 @@ public static class CustomerAppointments
             context.OnlineBookingStaff
                 .Where(s => s.TenantId == appointment.TenantId && s.UserId == appointment.StaffUserId)
                 .Select(s => s.Name)
-                .FirstOrDefault());
+                .FirstOrDefault(),
+            appointment.Visit == null ? null : appointment.Visit.PostalCode,
+            appointment.Visit == null ? null : appointment.Visit.ChargePolicy);
 
     internal static CustomerAppointmentDto ToDto(Row row, DateTimeOffset now)
     {
@@ -121,7 +140,8 @@ public static class CustomerAppointments
             BusinessName = row.BusinessName,
             BusinessSlug = row.BusinessSlug,
             BusinessContactPhone = row.BusinessContactPhone,
-            Address = AddressText.ForCustomers(row.MainBranch),
+            Address = row.VisitPostalCode is null ? AddressText.ForCustomers(row.MainBranch) : null,
+            Visit = row.VisitPostalCode is null ? null : new CustomerVisitDto { PostalCode = row.VisitPostalCode, ChargePolicy = row.VisitChargePolicy },
             StaffName = row.StaffName
         };
     }
@@ -139,7 +159,9 @@ public static class CustomerAppointments
         string? BusinessContactPhone,
         string? TimeZone,
         Domain.Branches.Entities.Branch? MainBranch,
-        string? StaffName);
+        string? StaffName,
+        string? VisitPostalCode,
+        HomeVisitChargePolicy? VisitChargePolicy);
 }
 
 /// <summary>

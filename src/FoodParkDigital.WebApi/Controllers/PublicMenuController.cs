@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.OnlineMenu;
@@ -14,7 +15,8 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// <summary>
 /// The public menu of a business (/m/{slug} in the app): no sign-in, only what the business published, and
 /// orders only when it turned them on. Rate limited per IP. A customer account that sends its session orders with it
-/// (Fase 24B). Its booking page (/m/{slug}/agendar, Fase 24D) asks for appointments the same way.
+/// (Fase 24B). Its booking page (/m/{slug}/agendar, Fase 24D) asks for appointments the same way, and the request page of
+/// its visits to quote (/m/{slug}/visita, Fase 29B) for visits.
 /// </summary>
 [ApiController]
 [Route("api/v1/public/menu/{slug}")]
@@ -109,6 +111,77 @@ public class PublicMenuController : ControllerBase
             CustomerName = request.CustomerName,
             CustomerPhone = request.CustomerPhone,
             Notes = request.Notes,
+            IdempotencyKey = request.IdempotencyKey,
+            StaffId = request.StaffId
+        }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>The visit to quote a customer requests online (Fase 29B); not found while the business does not receive visits.</summary>
+    /// <param name="slug">The business of the menu.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    [HttpGet("home-visit")]
+    [EnableRateLimiting("public-menu")]
+    public async Task<ActionResult<PublicHomeVisitDto>> GetHomeVisit(string slug, CancellationToken cancellationToken)
+    {
+        var visit = await _mediator.Send(new GetPublicHomeVisitQuery(slug), cancellationToken);
+        return visit is null ? this.ApiError(StatusCodes.Status404NotFound, RequestPublicHomeVisitCommandHandler.NotReceivingMessage) : Ok(visit);
+    }
+
+    /// <summary>Whether the business goes to a postal code and what the visit costs there (Fase 29B); never the zone's name.</summary>
+    /// <param name="slug">The business of the menu.</param>
+    /// <param name="postalCode">Five digits.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    [HttpGet("home-visit/coverage")]
+    [EnableRateLimiting("public-menu")]
+    public async Task<ActionResult<PublicHomeVisitCoverageDto>> GetHomeVisitCoverage(
+        string slug, [FromQuery] string postalCode, CancellationToken cancellationToken)
+    {
+        var coverage = await _mediator.Send(new GetPublicHomeVisitCoverageQuery(slug, postalCode), cancellationToken);
+        return coverage is null ? this.ApiError(StatusCodes.Status404NotFound, RequestPublicHomeVisitCommandHandler.NotReceivingMessage) : Ok(coverage);
+    }
+
+    /// <summary>
+    /// The free times of the visit, a week from <paramref name="from"/> (today when omitted), in the business's time, with
+    /// the trip before and after each visit free (Fase 29B).
+    /// </summary>
+    /// <param name="slug">The business of the menu.</param>
+    /// <param name="from">The first day of the week asked for.</param>
+    /// <param name="staffId">The person chosen; none for whoever is free.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    [HttpGet("home-visit/slots")]
+    [EnableRateLimiting("public-menu")]
+    public async Task<ActionResult<PublicBookingSlotsDto>> GetHomeVisitSlots(
+        string slug, [FromQuery] DateOnly? from, [FromQuery] Guid? staffId, CancellationToken cancellationToken)
+    {
+        var slots = await _mediator.Send(new GetPublicHomeVisitSlotsQuery(slug, from, staffId), cancellationToken);
+        return slots is null
+            ? this.ApiError(StatusCodes.Status404NotFound, staffId is null ? RequestPublicHomeVisitCommandHandler.NotReceivingMessage : RequestPublicHomeVisitCommandHandler.StaffGoneMessage)
+            : Ok(slots);
+    }
+
+    /// <summary>Requests a visit to quote at one of its free times (Fase 29B): it waits for the business to accept it.</summary>
+    [HttpPost("home-visits")]
+    [EnableRateLimiting("public-order")]
+    public async Task<ActionResult<PublicAppointmentReceiptDto>> RequestHomeVisit(
+        string slug, [FromBody] RequestPublicHomeVisitRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new RequestPublicHomeVisitCommand
+        {
+            Slug = slug,
+            StartAt = request.StartAt,
+            Address = new AppointmentVisitInput
+            {
+                PostalCode = request.PostalCode,
+                AddressLine = request.AddressLine,
+                References = request.References
+            },
+            Problem = request.Problem,
+            CustomerName = request.CustomerName,
+            CustomerPhone = request.CustomerPhone,
+            CustomerEmail = request.CustomerEmail,
             IdempotencyKey = request.IdempotencyKey,
             StaffId = request.StaffId
         }, cancellationToken);
@@ -216,6 +289,28 @@ public class PlacePublicOrderRequest
     /// <summary>Keep the delivery address in the signed-in customer account, named <see cref="AddressLabel"/> (Fase 24B).</summary>
     public bool SaveAddress { get; init; }
     public string? AddressLabel { get; init; }
+}
+
+public class RequestPublicHomeVisitRequest
+{
+    /// <summary>One of the free times of the visit.</summary>
+    public DateTimeOffset StartAt { get; init; }
+    /// <summary>Where the visit is: five digits a zone of the business reaches.</summary>
+    public string PostalCode { get; init; } = null!;
+    /// <summary>Street, number and neighborhood.</summary>
+    public string AddressLine { get; init; } = null!;
+    /// <summary>How to find the place, optional.</summary>
+    public string? References { get; init; }
+    /// <summary>What happens, up to 500 characters.</summary>
+    public string Problem { get; init; } = null!;
+    public string CustomerName { get; init; } = null!;
+    public string CustomerPhone { get; init; } = null!;
+    /// <summary>Where the customer gets the quote, optional.</summary>
+    public string? CustomerEmail { get; init; }
+    /// <summary>The request page's key for this request: sent again, it answers the visit already requested.</summary>
+    public Guid? IdempotencyKey { get; init; }
+    /// <summary>The person chosen; none for whoever is free.</summary>
+    public Guid? StaffId { get; init; }
 }
 
 public class RequestPublicAppointmentRequest
