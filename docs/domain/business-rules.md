@@ -745,7 +745,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - antes del código postal, desde la zona más barata («desde» si las zonas cobran distinto);
   - con «más IVA» si los precios del negocio no lo incluyen.
 
-  Descontar lo pagado de la cotización llega con la cotización (etapa 3).
+  La cotización descuenta lo pagado (Fase 29C, abajo).
 - **Explorar:**
   - Un negocio que recibe visitas aparece aunque su menú no tenga productos, en el grupo de los que atienden en línea, sin depender de la caja.
   - Su tarjeta dice «Visitas a domicilio», lo que cuesta la visita y su horario, nunca pedidos en pausa ni «Solo menú».
@@ -779,7 +779,16 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - El correo del cliente (`Appointments.CustomerEmail`) queda en la cita para la cotización; nunca en la actividad ni en un registro.
 - **La Agenda** la decide como cualquier solicitud: la acepta, la rechaza o la mueve antes de aceptarla. Dice «Visita para cotizar» con cómo se cobra y el correo del cliente. Aceptada, el aviso dice lo que cuesta la visita («Visita: $350.00.») o que es sin costo. «Cobrar» de una visita «Sin costo» no agrega su servicio al ticket.
 - **El enlace y Mis citas** dicen «A domicilio · CP 72000», nunca la dirección, y ofrecen pedir otra visita.
-- **Sin** cotización (29C) ni fotos del problema.
+- **Sin** fotos del problema.
+- **La cotización** (Fase 29C, ADR 0053): cada versión de una cotización es una fila con el folio que comparten (`COT-000123`) y su número de versión.
+  - La empieza quien toma pedidos en un negocio con órdenes de servicio o agenda: para un cliente (su nombre y teléfono, y su correo), o con «Cotizar» desde la cita de una visita, que toma su cliente; una cita tiene una sola cotización y «Cotizar» abre la que ya tiene.
+  - Sus renglones son del catálogo (con el IVA del producto) o escritos a mano (con el IVA del negocio), hasta 50, con cantidad y precio en `decimal`. El servidor calcula el importe de cada renglón, el subtotal, el IVA por tasa y el total, con la política de precios del negocio al empezarla. El navegador nunca manda un total.
+  - Borrador → Enviada → Aceptada o Rechazada. Enviada ya no se edita: «Corregir» hace la versión siguiente, y al enviarla la anterior queda «Reemplazada» con lo que decía. Un folio tiene un solo borrador a la vez; un borrador se descarta y queda en el historial.
+  - Vale los días del negocio (15 por omisión, de 1 a 90; cada borrador puede cambiarlos) desde el día en que se envía. Se lee «Vencida» el día después de su vigencia, sin guardarse: vencida ya no se acepta ni se rechaza, pero se corrige.
+  - Enviada tiene su enlace (`/cotizacion#…`), que abre solo esa versión sin cuenta, con solo el nombre del cliente, hasta 30 días después de vencer; una reemplazada lleva a la nueva. El negocio lo manda por WhatsApp o por correo desde su teléfono o lo copia; mandarlo desde TienditApp llega en la Fase 29D.
+  - Con «Se descuenta si contratas» (la política acordada con la visita; si la agendó el equipo, la del negocio), la cotización de una visita cobrada resta lo que la venta cobró por la visita (el cargo de la zona y los renglones del servicio de la cita, con IVA, hasta lo pagado): «Por pagar». Se fija al enviarla y deja de aplicar si esa venta se cancela.
+  - El negocio registra si el cliente la aceptó o la rechazó, por dónde y lo que dijo. La actividad guarda la cotización, su versión, su total y por dónde, nunca lo que dijo ni sus datos.
+  - Convertir la aceptada en una orden de servicio o en citas llega en la Fase 29D.
 
 ## Cancelación y trazabilidad
 

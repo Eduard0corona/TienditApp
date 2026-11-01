@@ -79,7 +79,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - En la agenda, una solicitud que nadie decidió sigue «Por confirmar» después de su hora (la cuenta del cliente ya dice «No se confirmó»), y Aceptar responde que ya terminó.
   - Mis citas trae solo las citas agendadas en línea con la cuenta: no las que el negocio registró con el teléfono del cliente.
   - La 24D-1 suma 286 B a la primera visita (de 177,674 a 177,960 B, contra `master` en `d21f0f2`) y sube el presupuesto a 178,200 B.
-- Oficios a domicilio (plomería, electricidad, aire acondicionado y parecidos; [ADR 0053](../adr/0053-home-visit-quotes.md), etapa 1 desde la Fase 29A y solicitud en línea desde la 29B):
+- Oficios a domicilio (plomería, electricidad, aire acondicionado y parecidos; [ADR 0053](../adr/0053-home-visit-quotes.md), etapa 1 desde la Fase 29A, solicitud en línea desde la 29B y cotización desde la 29C):
   - La solicitud en línea tiene los límites de las citas en línea: cualquiera puede pedir una visita con un teléfono ajeno (solo la frenan las 3 por confirmar por teléfono y el límite por IP), y la Agenda la ve al volver a cargar.
   - Sin fotos del problema: piden una subida pública validada y privada por negocio.
   - Si el negocio dice quién agenda en línea y nadie hace el servicio de la visita, la visita llega sin nadie asignado y con las citas a la vez del negocio; la tarjeta de Configuración no lo advierte.
@@ -87,7 +87,9 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - Una visita pedida en línea que el equipo pasa al local y luego otra vez a domicilio pierde cómo se cobraba: vuelve a ser una visita del equipo, con el cargo de la zona.
   - El aviso de la cita aceptada dice lo que cuesta la visita con el precio de hoy de su servicio, como lo cobrará la venta; el precio no queda congelado en la cita (solo el cargo de la zona).
   - Con el código anterior (rollback del despliegue), mover a otra dirección una visita «Sin costo» pedida en línea falla: la restricción de la base no deja cobrarle la zona.
-  - No hay cotización: lo que el negocio propone después de la visita no se guarda, ni si el cliente lo aceptó (Fase 29C). «Se descuenta si contratas» hoy solo se dice; descontarlo llega con la cotización.
+  - La cotización (Fase 29C) le llega al cliente desde el teléfono o el correo del negocio (`wa.me` y `mailto:`): no sale desde el outbox ni queda historial de cada envío con su resultado, y la aceptada no se convierte en orden de servicio ni en citas (Fase 29D).
+  - Dos personas que editan el mismo borrador a la vez: guarda el último que guardó, sin avisar (el `rowversion` solo protege lo que pasa entre leer y guardar en el servidor; la pantalla no manda la versión que leyó).
+  - «Vencida» no se guarda: una enviada se lee vencida con el día del negocio. Un reporte que lea la base directo ve «Enviada» hasta que alguien la responde o la corrige.
   - Las citas en línea siguen sin ser a domicilio (`OnlineBookingBlocker.NoPremises`): a domicilio se pide la visita, no otro servicio.
   - El aviso de la dirección es por negocio, no por sucursal; descartado no vuelve aunque después prenda el interruptor. Un negocio que lo descartó y sigue con local publica su dirección.
   - «Cerca de mí» no ordena a estos negocios, y la búsqueda de Explorar no encuentra sus servicios (solo los productos del menú).
@@ -95,6 +97,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La lista de servicios a elegir como visita trae los primeros 100 por nombre (el elegido siempre sale); la tienda, hasta 300 códigos postales y 50 servicios.
   - La 29A suma 156 B a la primera visita (de 180,710 a 180,866 B, contra `master` en `1d238ff`) y sube el presupuesto a 181,000 B.
   - La 29B suma 124 B a la primera visita (de 180,866 a 180,990 B, contra `master` en `4172896`): la ruta de la página de la solicitud en `App.tsx` y el nombre de su pantalla, que se carga aparte con el selector de día y hora que comparte con la de agendar. El presupuesto sube de 181,000 a 181,200 B.
+  - La 29C suma 344 B a la primera visita (de 180,990 a 181,334 B, contra `master` en `c00bc18`): las rutas de Cotizaciones, su detalle y el enlace público en `App.tsx` (las tres pantallas se cargan aparte), Pedidos como sección con la pestaña Cotizaciones y la regla de acceso. El presupuesto sube de 181,200 a 181,400 B.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.
