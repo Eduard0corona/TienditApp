@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -451,6 +451,12 @@ export default function AppointmentsList() {
     }
   };
 
+  /** What a closed appointment offers, with «Cotizar» beside it when it is a visit done. */
+  const withQuote = (item: AppointmentDto, action: ReactNode) => {
+    const quoteAction = quoteButton(item);
+    return quoteAction ? <div className="d-flex gap-1 justify-content-center align-items-center">{action}{quoteAction}</div> : action;
+  };
+
   const quoteButton = (item: AppointmentDto) => (canQuote && item.visit
     && (item.status === AppointmentStatusConst.Completed || !isClosed(item.status)) ? (
       <button
@@ -638,21 +644,18 @@ export default function AppointmentsList() {
                       </button>
                     </div>
                   ) : isClosed(item.status) ? (
-                    <div className="d-flex gap-1 justify-content-center align-items-center">
-                      {canSell && canBeCharged(item) ? (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-light"
-                          onClick={() => charge(item.id)}
-                          aria-label={`Cobrar la cita de ${item.customerName}`}
-                        >
-                          Cobrar
-                        </button>
-                      ) : (
-                        <span className="text-muted small">{saleLabel(item) ?? 'Cerrada'}</span>
-                      )}
-                      {quoteButton(item)}
-                    </div>
+                    withQuote(item, canSell && canBeCharged(item) ? (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-light"
+                        onClick={() => charge(item.id)}
+                        aria-label={`Cobrar la cita de ${item.customerName}`}
+                      >
+                        Cobrar
+                      </button>
+                    ) : (
+                      <span className="text-muted small">{saleLabel(item) ?? 'Cerrada'}</span>
+                    ))
                   ) : (
                     <div className="d-flex gap-1 justify-content-center">
                       <select
