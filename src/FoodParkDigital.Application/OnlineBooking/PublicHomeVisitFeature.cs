@@ -52,7 +52,10 @@ public class PublicHomeVisitDto
     public HomeVisitChargePolicy ChargePolicy { get; set; }
     /// <summary>What the visit costs before the customer says where: from the zone that charges least.</summary>
     public HomeVisitPriceDto Price { get; set; } = null!;
-    /// <summary>Who customers choose among, by name; empty when the business did not say who attends online.</summary>
+    /// <summary>
+    /// Who customers choose among, by name: the people the business books online who do its visit. Empty when it did not
+    /// say who attends online, or nobody of them does the visit, and then customers do not choose.
+    /// </summary>
     public List<PublicBookingStaffDto> Staff { get; set; } = [];
 }
 
@@ -94,7 +97,7 @@ public class GetPublicHomeVisitQueryHandler : IRequestHandler<GetPublicHomeVisit
             .Where(zone => zone.TenantId == tenant.Id && zone.IsActive)
             .Select(zone => zone.Fee)
             .ToListAsync(cancellationToken);
-        var staff = (await OnlineBookingCalendar.StaffAsync(_context, tenant.Id, cancellationToken)).Where(visit.GoesWith);
+        var staff = await visit.GoingAsync(_context, tenant.Id, cancellationToken);
         return new PublicHomeVisitDto
         {
             BusinessName = tenant.Name,
@@ -201,13 +204,9 @@ public class GetPublicHomeVisitSlotsQueryHandler : IRequestHandler<GetPublicHome
         var settings = business.Settings;
         var tenantId = business.Tenant.Id;
         var visit = await business.VisitAsync(_context, cancellationToken);
-        var staff = await OnlineBookingCalendar.StaffAsync(_context, tenantId, cancellationToken);
-        var going = staff.Where(visit.GoesWith).ToList();
-        // Customers choose among who goes, and only when the business says who attends.
-        var choosable = staff.Count > 0
-            ? going.Count > 0 && (request.StaffId is null || going.Any(person => person.Id == request.StaffId))
-            : request.StaffId is null;
-        if (!choosable)
+        var going = await visit.GoingAsync(_context, tenantId, cancellationToken);
+        // Customers choose among who goes, and only when someone of the online staff does the visit.
+        if (request.StaffId is { } chosenId && going.All(person => person.Id != chosenId))
             return null;
         var window = PublicSlotsWindow.Open(settings.TimeZone, now, request.From);
         if (window is null)
@@ -217,7 +216,7 @@ public class GetPublicHomeVisitSlotsQueryHandler : IRequestHandler<GetPublicHome
         var earliest = now.AddMinutes(OnlineBookingRules.MinNoticeMinutes);
         var trip = HomeVisitBooking.Trip(settings);
         Func<DateOnly, IEnumerable<DateTimeOffset>> freeStarts;
-        if (staff.Count > 0)
+        if (going.Count > 0)
         {
             var bookings = await OnlineBookingCalendar.BookingsAsync(_context, tenantId, window.RangeFrom, window.RangeTo, cancellationToken);
             // The visit carries its own trip: the other appointments hold only their time.
@@ -228,7 +227,7 @@ public class GetPublicHomeVisitSlotsQueryHandler : IRequestHandler<GetPublicHome
         }
         else
         {
-            var booked = await OnlineBookingCalendar.BookedAsync(_context, tenantId, window.RangeFrom, window.RangeTo, cancellationToken);
+            var booked = await OnlineBookingCalendar.BookedAsync(_context, tenantId, window.RangeFrom, window.RangeTo, visitTravelMinutes: 0, cancellationToken);
             freeStarts = date => BookingSlots.FreeStarts(
                 hours?.Schedule, window.Zone, date, visit.Duration, booked, settings.OnlineBookingCapacity, earliest, trip);
         }
@@ -262,6 +261,10 @@ public record RequestPublicHomeVisitCommand : IRequest<Result<PublicAppointmentR
     public Guid? IdempotencyKey { get; init; }
     /// <summary>Who the customer chose, of the request page's people; null for whoever is free, or when nobody is said.</summary>
     public Guid? StaffId { get; init; }
+    /// <summary>How the request page said the visit is charged: what the customer agreed to.</summary>
+    public HomeVisitChargePolicy ExpectedChargePolicy { get; init; }
+    /// <summary>What the request page said the visit costs at the postal code: what the customer agreed to.</summary>
+    public decimal ExpectedPrice { get; init; }
 }
 
 public class RequestPublicHomeVisitCommandValidator : AbstractValidator<RequestPublicHomeVisitCommand>
@@ -286,6 +289,9 @@ public class RequestPublicHomeVisitCommandValidator : AbstractValidator<RequestP
         RuleFor(x => x.IdempotencyKey).NotEqual(Guid.Empty).When(x => x.IdempotencyKey.HasValue)
             .WithMessage("La clave de la solicitud no es válida.");
         RuleFor(x => x.StaffId).NotEqual(Guid.Empty).When(x => x.StaffId.HasValue).WithMessage(RequestPublicHomeVisitCommandHandler.StaffGoneMessage);
+        RuleFor(x => x.ExpectedChargePolicy).IsInEnum().WithMessage(RequestPublicHomeVisitCommandHandler.VisitChangedMessage);
+        RuleFor(x => x.ExpectedPrice).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
+            .WithMessage(RequestPublicHomeVisitCommandHandler.VisitChangedMessage);
     }
 }
 
@@ -293,7 +299,7 @@ public class RequestPublicHomeVisitCommandHandler : IRequestHandler<RequestPubli
 {
     public const string NotReceivingMessage = "Este negocio no recibe visitas a domicilio en línea por ahora.";
     public const string StaffGoneMessage = "Esa persona ya no hace visitas en línea. Elige otra.";
-    public const string NobodyGoesMessage = "Por ahora nadie de este negocio hace visitas en línea. Escríbele para pedirla.";
+    public const string VisitChangedMessage = "El negocio cambió el costo de la visita o cómo la cobra. Revísalo antes de enviar tu solicitud.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -361,6 +367,10 @@ public class RequestPublicHomeVisitCommandHandler : IRequestHandler<RequestPubli
             return Result.Failure<PublicAppointmentReceiptDto>(RequestPublicAppointmentCommandHandler.TooManyPendingMessage);
 
         var visit = await business.VisitAsync(_context, cancellationToken);
+        // The customer agreed to what the page said: a visit charged otherwise since is asked again, never stored.
+        if (request.ExpectedChargePolicy != settings.HomeVisitChargePolicy
+            || request.ExpectedPrice != HomeVisitCharge.To(settings.HomeVisitChargePolicy, visit.Price, deliveryZone.Fee))
+            return Result.Failure<PublicAppointmentReceiptDto>(VisitChangedMessage);
         var timeZone = TenantDateTimeResolver.Resolve(settings.TimeZone);
         var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(now, settings.TimeZone));
         var lastDay = today.AddDays(OnlineBookingRules.DaysAhead - 1);
@@ -384,14 +394,11 @@ public class RequestPublicHomeVisitCommandHandler : IRequestHandler<RequestPubli
         var takenMessage = startDate > lastDay
             ? RequestPublicAppointmentCommandHandler.TooFarMessage
             : RequestPublicAppointmentCommandHandler.TimeTakenMessage;
-        var staff = await OnlineBookingCalendar.StaffAsync(_context, tenant.Id, cancellationToken);
+        var going = await visit.GoingAsync(_context, tenant.Id, cancellationToken);
         BookableStaff? goes = null;
-        if (staff.Count > 0)
+        if (going.Count > 0)
         {
             // Who goes: the person the customer chose, free for the visit and its trip, or whoever is free.
-            var going = staff.Where(visit.GoesWith).ToList();
-            if (going.Count == 0)
-                return Result.Failure<PublicAppointmentReceiptDto>(NobodyGoesMessage);
             if (request.StaffId is { } chosenId && going.All(person => person.Id != chosenId))
                 return Result.Failure<PublicAppointmentReceiptDto>(StaffGoneMessage);
             var bookings = await OnlineBookingCalendar.BookingsAsync(_context, tenant.Id, startAt.AddDays(-1), endAt.AddDays(1), cancellationToken);
@@ -410,7 +417,8 @@ public class RequestPublicHomeVisitCommandHandler : IRequestHandler<RequestPubli
         {
             if (request.StaffId is not null)
                 return Result.Failure<PublicAppointmentReceiptDto>(StaffGoneMessage);
-            var booked = await OnlineBookingCalendar.BookedAsync(_context, tenant.Id, startAt.AddDays(-1), endAt.AddDays(1), cancellationToken);
+            var booked = await OnlineBookingCalendar.BookedAsync(
+                _context, tenant.Id, startAt.AddDays(-1), endAt.AddDays(1), visitTravelMinutes: 0, cancellationToken);
             if (!BookingSlots.IsFree(hours?.Schedule, timeZone, startAt, visit.Duration, booked, settings.OnlineBookingCapacity, earliest, lastDay, trip))
                 return Result.Failure<PublicAppointmentReceiptDto>(takenMessage);
         }
@@ -526,4 +534,13 @@ internal sealed record HomeVisitOffer(Guid? ServiceId, string Name, TimeSpan Dur
 {
     /// <summary>Whether the person goes to it: anyone of the online staff without a service, otherwise who does the service.</summary>
     public bool GoesWith(BookableStaff person) => ServiceId is not { } id || person.Offers(id);
+
+    /// <summary>
+    /// Who goes to the visit, of the people the business books online. Empty when it did not say who attends, and also
+    /// when nobody of them does the visit: the visit is still requested, with nobody assigned, its times coming from how
+    /// many the business attends at once, and the business assigns it in the agenda. The store never offers a visit
+    /// nobody can take.
+    /// </summary>
+    public async Task<List<BookableStaff>> GoingAsync(IApplicationDbContext context, Guid tenantId, CancellationToken cancellationToken)
+        => (await OnlineBookingCalendar.StaffAsync(context, tenantId, cancellationToken)).Where(GoesWith).ToList();
 }

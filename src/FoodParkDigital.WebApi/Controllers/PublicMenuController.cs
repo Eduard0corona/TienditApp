@@ -4,6 +4,7 @@ using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Reviews;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -183,7 +184,9 @@ public class PublicMenuController : ControllerBase
             CustomerPhone = request.CustomerPhone,
             CustomerEmail = request.CustomerEmail,
             IdempotencyKey = request.IdempotencyKey,
-            StaffId = request.StaffId
+            StaffId = request.StaffId,
+            ExpectedChargePolicy = request.ExpectedChargePolicy,
+            ExpectedPrice = request.ExpectedPrice
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -311,6 +314,10 @@ public class RequestPublicHomeVisitRequest
     public Guid? IdempotencyKey { get; init; }
     /// <summary>The person chosen; none for whoever is free.</summary>
     public Guid? StaffId { get; init; }
+    /// <summary>How the page said the visit is charged: a visit charged otherwise since is refused, never stored.</summary>
+    public HomeVisitChargePolicy ExpectedChargePolicy { get; init; }
+    /// <summary>What the page said the visit costs at the postal code (the coverage's price).</summary>
+    public decimal ExpectedPrice { get; init; }
 }
 
 public class RequestPublicAppointmentRequest

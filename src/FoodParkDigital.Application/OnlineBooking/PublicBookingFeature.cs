@@ -256,7 +256,8 @@ public class GetPublicBookingSlotsQueryHandler : IRequestHandler<GetPublicBookin
         }
         else
         {
-            var booked = await OnlineBookingCalendar.BookedAsync(_context, business.Tenant.Id, window.RangeFrom, window.RangeTo, cancellationToken);
+            var booked = await OnlineBookingCalendar.BookedAsync(
+                _context, business.Tenant.Id, window.RangeFrom, window.RangeTo, settings.HomeVisitTravelMinutes, cancellationToken);
             freeStarts = date => BookingSlots.FreeStarts(
                 hours?.Schedule, zone, date, service.Duration, booked, settings.OnlineBookingCapacity, earliest);
         }
@@ -474,7 +475,8 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         {
             if (request.StaffId is not null)
                 return Result.Failure<PublicAppointmentReceiptDto>(StaffGoneMessage);
-            var booked = await OnlineBookingCalendar.BookedAsync(_context, tenantId, startAt.AddDays(-1), endAt.AddDays(1), cancellationToken);
+            var booked = await OnlineBookingCalendar.BookedAsync(
+                _context, tenantId, startAt.AddDays(-1), endAt.AddDays(1), settings.HomeVisitTravelMinutes, cancellationToken);
             if (!BookingSlots.IsFree(hours?.Schedule, zone, startAt, service.Duration, booked, settings.OnlineBookingCapacity, earliest, lastDay))
                 return Result.Failure<PublicAppointmentReceiptDto>(takenMessage);
         }

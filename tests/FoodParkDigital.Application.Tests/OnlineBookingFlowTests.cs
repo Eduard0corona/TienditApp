@@ -108,6 +108,27 @@ public class OnlineBookingFlowTests
     }
 
     [Fact]
+    public async Task Slots_ShouldLeaveTheTripOfAVisitFree_WhenNobodyIsSaid()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        var zone = new Domain.Delivery.DeliveryZone(tenant.Id, new Domain.Delivery.DeliveryZoneFields("Centro", 50m, 0m, null, ["72000"]));
+        fixture.Context.DeliveryZones.Add(zone);
+        // A visit at a customer's home from 10 to 11, with the business's half hour of trip on each side (Fase 29B).
+        var visit = new Appointment(tenant.Id, "Ana", "5512345678", "Corte a domicilio", Local(Monday, "10:00"), Local(Monday, "11:00"));
+        visit.ArrangeVisit(Domain.Orders.HomeDelivery.DeliveryAddress.ForVisit("72000", "Av. Juárez 123", null), zone, SalesTestFixture.Now);
+        fixture.Context.Appointments.Add(visit);
+        await fixture.Context.SaveChangesAsync();
+
+        var week = await SlotsAsync(fixture, haircut.Id);
+        var taken = await RequestAsync(fixture, haircut.Id, Local(Monday, "11:00"));
+
+        Assert.Equal(["11:30 a. m.", "12:00 p. m.", "12:30 p. m.", "1:00 p. m."], week!.Days[1].Slots.Select(s => s.Label));
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TimeTakenMessage, taken.Error);
+    }
+
+    [Fact]
     public async Task Slots_ShouldStopAtTheLastDayItBooks_AndRefuseAServiceItDoesNotBook()
     {
         await using var fixture = SalesTestFixture.Create();

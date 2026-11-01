@@ -81,7 +81,10 @@ public sealed class CrossTenantHomeVisitBookingSqlServerTests
         customerName = "Valeria Ruiz",
         customerPhone = "5522107765",
         customerEmail = "valeria@correo.mx",
-        idempotencyKey = Guid.NewGuid()
+        idempotencyKey = Guid.NewGuid(),
+        // What the page said: «Sin costo».
+        expectedChargePolicy = 1,
+        expectedPrice = 0m
     };
 
     /// <summary>The first free time of the visit the request page offers this week or the next.</summary>

@@ -151,9 +151,9 @@ public class HomeVisitBookingFlowTests
         var page = await PageAsync(fixture);
         var withAna = await SlotsAsync(fixture, staffId: ana.Id);
         var withLuis = await SlotsAsync(fixture, staffId: luis.Id);
-        var taken = await RequestAsync(fixture, Local(Monday, "11:00"));
-        var requested = await RequestAsync(fixture, Local(Monday, "11:30"));
-        var refused = await RequestAsync(fixture, Local(Monday, "14:00"), phone: "5511113333", staffId: luis.Id);
+        var taken = await RequestAsync(fixture, Local(Monday, "11:00"), price: 350m);
+        var requested = await RequestAsync(fixture, Local(Monday, "11:30"), price: 350m);
+        var refused = await RequestAsync(fixture, Local(Monday, "14:00"), phone: "5511113333", staffId: luis.Id, price: 350m);
 
         Assert.Equal(["Ana L."], page!.Staff.Select(person => person.Name));
         var monday = withAna!.Days.Single(day => day.Date == Monday).Slots.Select(slot => slot.Label).ToList();
@@ -178,7 +178,7 @@ public class HomeVisitBookingFlowTests
         var visit = await ServiceAsync(fixture, tenant, "Visita y diagnóstico", 300m, 45);
         await SetVisitAsync(fixture, tenant, visit);
 
-        var result = await RequestAsync(fixture, Local(Monday, "10:00"), email: " valeria@correo.mx ");
+        var result = await RequestAsync(fixture, Local(Monday, "10:00"), email: " valeria@correo.mx ", price: 350m);
 
         Assert.True(result.IsSuccess, result.Error);
         var receipt = result.Value!;
@@ -217,7 +217,7 @@ public class HomeVisitBookingFlowTests
         await ConnectWhatsAppAsync(fixture, tenant.Id);
         await SetVisitAsync(fixture, tenant, await ServiceAsync(fixture, tenant, "Visita y diagnóstico", 300m, 60), HomeVisitChargePolicy.Free);
 
-        var result = await RequestAsync(fixture, Local(Monday, "10:00"));
+        var result = await RequestAsync(fixture, Local(Monday, "10:00"), price: 0m, policy: HomeVisitChargePolicy.Free);
         var stored = await fixture.Context.Appointments.SingleAsync();
         await AcceptAsync(fixture, stored.Id);
 
@@ -261,13 +261,85 @@ public class HomeVisitBookingFlowTests
         var again = await RequestAsync(fixture, Local(Monday, "09:00"), key: key);
         var otherPhone = await RequestAsync(fixture, Local(Monday, "16:00"), key: key, phone: "5511112222");
         Assert.True((await RequestAsync(fixture, Local(Monday, "11:00"))).IsSuccess);
-        Assert.True((await RequestAsync(fixture, Local(Monday, "13:00"))).IsSuccess);
+        // An appointment the same phone asked for online at the business counts too.
+        fixture.Context.Appointments.Add(Appointment.RequestOnline(
+            (await fixture.Context.Tenants.SingleAsync(t => t.Slug == Slug)).Id, "Valeria Ruiz", "+525522107765", Guid.NewGuid(), "Revisión",
+            Local(Monday.AddDays(1), "10:00"), Local(Monday.AddDays(1), "11:00"), null, null, Guid.NewGuid(), new string('a', 43)));
+        await fixture.Context.SaveChangesAsync();
         var fourth = await RequestAsync(fixture, Local(Monday, "15:00"));
 
         Assert.Equal(first.Value!.TrackingToken, again.Value!.TrackingToken);
         Assert.Equal(RequestPublicAppointmentCommandHandler.AlreadySentMessage, otherPhone.Error);
         Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage, fourth.Error);
         Assert.Equal(3, await fixture.Context.Appointments.CountAsync());
+    }
+
+    [Fact]
+    public async Task Request_ShouldRefuse_AVisitChargedOtherwiseThanThePageSaid()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture);
+        var visit = await ServiceAsync(fixture, tenant, "Visita y diagnóstico", 300m, 60);
+        await SetVisitAsync(fixture, tenant, visit, HomeVisitChargePolicy.Free);
+
+        // The page said «Sin costo»; the owner charges it meanwhile, or charges more for it.
+        await SetVisitAsync(fixture, tenant, visit, HomeVisitChargePolicy.Charged);
+        var policyChanged = await RequestAsync(fixture, Local(Monday, "10:00"), price: 0m, policy: HomeVisitChargePolicy.Free);
+        var priceChanged = await RequestAsync(fixture, Local(Monday, "10:00"), price: 300m);
+        var agreed = await RequestAsync(fixture, Local(Monday, "10:00"), price: 350m);
+
+        Assert.Equal(RequestPublicHomeVisitCommandHandler.VisitChangedMessage, policyChanged.Error);
+        Assert.Equal(RequestPublicHomeVisitCommandHandler.VisitChangedMessage, priceChanged.Error);
+        Assert.True(agreed.IsSuccess, agreed.Error);
+        Assert.Equal(1, await fixture.Context.Appointments.CountAsync());
+    }
+
+    [Fact]
+    public async Task AVisitNobodyOfTheOnlineStaffDoes_ShouldStillBeRequested_WithNobodyAssigned()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture);
+        var visit = await ServiceAsync(fixture, tenant, "Visita y diagnóstico", 300m, 60);
+        var install = await ServiceAsync(fixture, tenant, "Instalación de boiler", 900m, 120);
+        await SetVisitAsync(fixture, tenant, visit);
+        var luis = await StaffAsync(fixture, tenant, "Luis", "Luis P.", [install.Id]);
+
+        var page = await PageAsync(fixture);
+        var week = await SlotsAsync(fixture);
+        var withLuis = await SlotsAsync(fixture, staffId: luis.Id);
+        var requested = await RequestAsync(fixture, Local(Monday, "10:00"), price: 350m);
+
+        // The store never offers a visit nobody can take: the business assigns it in the agenda.
+        Assert.Empty(page!.Staff);
+        Assert.Contains("10:00 a. m.", week!.Days.Single(day => day.Date == Monday).Slots.Select(slot => slot.Label));
+        Assert.Null(withLuis);
+        Assert.True(requested.IsSuccess, requested.Error);
+        var stored = await fixture.Context.Appointments.SingleAsync();
+        Assert.Equal(((Guid?)null, (string?)null), (stored.StaffUserId, stored.StaffName));
+    }
+
+    [Fact]
+    public async Task TheTrip_ShouldCountOnce_BetweenTwoVisitsOfThePerson()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture);
+        var visit = await ServiceAsync(fixture, tenant, "Visita y diagnóstico", 300m, 60);
+        await SetVisitAsync(fixture, tenant, visit);
+        var ana = await StaffAsync(fixture, tenant, "Ana", "Ana L.", [visit.Id]);
+        var zone = await fixture.Context.DeliveryZones.Include(z => z.PostalCodes).SingleAsync(z => z.TenantId == tenant.Id);
+        var other = new Appointment(
+            tenant.Id, "Cliente", "5511112222", "Revisión", Local(Monday, "10:00"), Local(Monday, "11:00"), staffName: "Ana Equipo", staffUserId: ana.UserId);
+        other.ArrangeVisit(Domain.Orders.HomeDelivery.DeliveryAddress.ForVisit("72000", "Calle 5 de Mayo 8", null), zone, SalesTestFixture.Now);
+        fixture.Context.Appointments.Add(other);
+        await fixture.Context.SaveChangesAsync();
+
+        var monday = (await SlotsAsync(fixture, staffId: ana.Id))!.Days.Single(day => day.Date == Monday).Slots.Select(slot => slot.Label).ToList();
+
+        // Half an hour between the two visits, not an hour: the other visit's trip is this one's.
+        Assert.DoesNotContain("11:00 a. m.", monday);
+        Assert.Contains("11:30 a. m.", monday);
+        // Before it, the visit at 9:00 would end when the other starts: no time to get there.
+        Assert.DoesNotContain("9:00 a. m.", monday);
     }
 
     [Fact]
@@ -431,7 +503,9 @@ public class HomeVisitBookingFlowTests
         string phone = "5522107765",
         Guid? key = null,
         string? email = null,
-        Guid? staffId = null)
+        Guid? staffId = null,
+        decimal price = 50m,
+        HomeVisitChargePolicy policy = HomeVisitChargePolicy.Charged)
         => new RequestPublicHomeVisitCommandHandler(
                 fixture.Context, fixture.TenantService, fixture.CurrentUser, new PhoneNormalizationService(), fixture.Clock,
                 new NoBookingLock(), Notices(fixture))
@@ -445,7 +519,9 @@ public class HomeVisitBookingFlowTests
                 CustomerPhone = phone,
                 CustomerEmail = email,
                 IdempotencyKey = key,
-                StaffId = staffId
+                StaffId = staffId,
+                ExpectedChargePolicy = policy,
+                ExpectedPrice = price
             }, CancellationToken.None);
 
     private static Task<Result<AppointmentDto>> AcceptAsync(SalesTestFixture fixture, Guid appointmentId)

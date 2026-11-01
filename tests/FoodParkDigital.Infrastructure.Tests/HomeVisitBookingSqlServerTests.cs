@@ -91,7 +91,10 @@ public class HomeVisitBookingSqlServerTests
             CustomerName = "Valeria Ruiz",
             CustomerPhone = phone,
             CustomerEmail = email,
-            IdempotencyKey = key
+            IdempotencyKey = key,
+            ExpectedChargePolicy = business.Policy,
+            // Without a visit service the visit costs what the zone charges, nothing «Sin costo».
+            ExpectedPrice = business.Policy == HomeVisitChargePolicy.Free ? 0m : 50m
         };
         var handler = new RequestPublicHomeVisitCommandHandler(
             context, tenant, new Anonymous(), new PhoneNormalizationService(), clock, new AppointmentBookingLock(context),
@@ -119,10 +122,10 @@ public class HomeVisitBookingSqlServerTests
         await using var seed = database.CreateContext(tenant.Id);
         seed.AddRange(tenant, settings, branch, zone);
         await seed.SaveChangesAsync();
-        return new Business(tenant.Id, slug);
+        return new Business(tenant.Id, slug, policy);
     }
 
-    private sealed record Business(Guid TenantId, string Slug);
+    private sealed record Business(Guid TenantId, string Slug, HomeVisitChargePolicy Policy);
 
     private sealed class Clock : IDateTimeProvider
     {
