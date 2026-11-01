@@ -23,8 +23,10 @@ public static partial class MessageTemplateText
     public const string DueSoon = "porvencer";
     /// <summary>Which CFDI and its number, «la factura F-123» (Fase 28M).</summary>
     public const string Document = "comprobante";
-    /// <summary>The link to download the XML and the PDF of a CFDI (Fase 28M).</summary>
+    /// <summary>The link to download the XML and the PDF of a CFDI (Fase 28M), or to open a quote (Fase 29D).</summary>
     public const string Link = "enlace";
+    /// <summary>The folio of a quote and its version, «COT-000123» or «COT-000123 v2» (Fase 29D).</summary>
+    public const string Folio = "folio";
 
     private static readonly string[] CampaignPlaceholders = [Name, Business];
     private static readonly string[] ReminderPlaceholders = [Name, Business, Service, Date, Time];
@@ -34,6 +36,8 @@ public static partial class MessageTemplateText
     private static readonly string[] CreditDueSoonPlaceholders = [Name, Business, Amount, DueSoon, Date];
     // {nombre} is the receiver of the CFDI, {monto} its total (the payment of a complement) and {fecha} the day it was issued.
     private static readonly string[] CfdiDocumentPlaceholders = [Name, Business, Document, Amount, Date, Link];
+    // {monto} is what the customer pays (the total less the visit it takes off) and {fecha} the last day it is valid.
+    private static readonly string[] QuoteDocumentPlaceholders = [Name, Business, Folio, Amount, Date, Link];
 
     [GeneratedRegex(@"\{([a-zA-Z_]+)\}")]
     private static partial Regex PlaceholderPattern();
@@ -44,6 +48,7 @@ public static partial class MessageTemplateText
         MessagePurpose.CreditReminder => CreditReminderPlaceholders,
         MessagePurpose.CreditDueSoon => CreditDueSoonPlaceholders,
         MessagePurpose.CfdiDocument => CfdiDocumentPlaceholders,
+        MessagePurpose.QuoteDocument => QuoteDocumentPlaceholders,
         _ => CampaignPlaceholders
     };
 
@@ -66,10 +71,15 @@ public static partial class MessageTemplateText
         // deliver the PDF alone.
         if (purpose == MessagePurpose.CfdiDocument && !GetPlaceholders(body).Contains(Link))
             throw new DomainException(MissingLinkMessage);
+        // A quote is read only through its link (Fase 29D): a template that leaves it out would tell the total alone.
+        if (purpose == MessagePurpose.QuoteDocument && !GetPlaceholders(body).Contains(Link))
+            throw new DomainException(MissingQuoteLinkMessage);
     }
 
     public const string MissingLinkMessage =
         "El mensaje de una factura lleva {enlace}: con él tu cliente descarga el XML, que WhatsApp no manda como documento.";
+    public const string MissingQuoteLinkMessage =
+        "El mensaje de una cotización lleva {enlace}: con él tu cliente ve lo que incluye.";
 
     public static string Render(string body, IReadOnlyDictionary<string, string> values)
         => PlaceholderPattern().Replace(body, match =>

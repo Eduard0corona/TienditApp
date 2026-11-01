@@ -1,3 +1,5 @@
+using FoodParkDigital.Domain.Exceptions;
+
 namespace FoodParkDigital.Domain.Quotes;
 
 /// <summary>The limits and the messages of the quotes (Fase 29C, ADR 0053 points 14 to 17).</summary>
@@ -42,4 +44,24 @@ public static class QuoteRules
     public const string NotAVisitMessage = "Solo se cotiza una visita a domicilio.";
     public const string VisitClosedMessage = "Esa visita se canceló o el cliente no estuvo: no se cotiza.";
     public const string VisitRequestedMessage = "Acepta primero la solicitud de la visita en la Agenda.";
+
+    /// <summary>How many times a version is sent by email, and by WhatsApp, in 24 hours (Fase 29D, ADR 0053 point 16).</summary>
+    public const int MaxSendsPerQuoteVersion = 5;
+    /// <summary>How many quotes a business sends by email, and by WhatsApp, in 24 hours.</summary>
+    public const int MaxSendsPerBusiness = 300;
+
+    public const string NotSendableMessage = "Solo se manda al cliente una cotización enviada y vigente.";
+    public const string EmailMessage = "Escribe el correo al que se manda.";
+    public const string TooManySendsMessage = "Esta versión ya se mandó 5 veces por ese medio en las últimas 24 horas.";
+    public const string TooManyBusinessSendsMessage = "Tu negocio ya mandó 300 cotizaciones por ese medio en las últimas 24 horas.";
+
+    /// <summary>
+    /// Only a version sent and still valid on the business's <paramref name="today"/> goes to the customer (Fase 29D): an
+    /// accepted, rejected, replaced or expired one is no longer what the business offers.
+    /// </summary>
+    public static void EnsureSendable(Entities.Quote quote, DateOnly today)
+    {
+        if (quote.StatusOn(today) != QuoteStatus.Sent || quote.TrackingToken is null)
+            throw new DomainException(NotSendableMessage);
+    }
 }

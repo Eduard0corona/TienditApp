@@ -25,7 +25,12 @@ public enum MessagePurpose
     /// and its invoice has a WhatsApp, or with «Enviar por WhatsApp». An opt-out does not stop it: it is the receipt of a
     /// purchase the customer asked to invoice.
     /// </summary>
-    CfdiDocument = 5
+    CfdiDocument = 5,
+    /// <summary>
+    /// A version of a quote, sent and valid, with its link (Fase 29D, ADR 0053 point 16): queued with «Mandar por WhatsApp».
+    /// An opt-out does not stop it: the customer asked the business for that quote.
+    /// </summary>
+    QuoteDocument = 6
 }
 
 public enum OutgoingMessageStatus
