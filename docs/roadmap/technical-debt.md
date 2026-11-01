@@ -104,6 +104,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La 29A suma 156 B a la primera visita (de 180,710 a 180,866 B, contra `master` en `1d238ff`) y sube el presupuesto a 181,000 B.
   - La 29B suma 124 B a la primera visita (de 180,866 a 180,990 B, contra `master` en `4172896`): la ruta de la página de la solicitud en `App.tsx` y el nombre de su pantalla, que se carga aparte con el selector de día y hora que comparte con la de agendar. El presupuesto sube de 181,000 a 181,200 B.
   - La 29C suma 345 B a la primera visita (de 180,990 a 181,335 B, contra `master` en `c00bc18`): las rutas de Cotizaciones, su detalle y el enlace público en `App.tsx` (las tres pantallas se cargan aparte), Pedidos como sección con la pestaña Cotizaciones y la regla de acceso. El presupuesto sube de 181,200 a 181,400 B.
+  - La 29D suma 32 B a la primera visita (de 181,335 a 181,367 B, contra `master` en `f15f043`): los valores nuevos de los enums; el diálogo y el historial van en el detalle. El presupuesto no cambia.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.
