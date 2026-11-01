@@ -4,6 +4,7 @@ using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
 
@@ -90,6 +91,11 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     public string? TrackingToken { get; private set; }
     /// <summary>When the customer cancelled it from the account or the link (Fase 24D); null otherwise.</summary>
     public DateTimeOffset? CancelledByCustomerAt { get; private set; }
+    /// <summary>
+    /// Where the customer gets the quote of a visit they requested online (Fase 29B, ADR 0053 point 11), when they gave it:
+    /// one plain address (<see cref="InvoiceEmailAddress"/>). Null otherwise. Theirs: it never goes in the activity or a log.
+    /// </summary>
+    public string? CustomerEmail { get; private set; }
 
     public bool IsHomeVisit => Visit is not null;
 
@@ -171,14 +177,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     {
         if (serviceProductId == Guid.Empty)
             throw new ArgumentException("The service is required.", nameof(serviceProductId));
-        if (customerUserId == Guid.Empty)
-            throw new ArgumentException("The account is required when given.", nameof(customerUserId));
-        if (clientRequestId == Guid.Empty)
-            throw new ArgumentException("The key is required when given.", nameof(clientRequestId));
-        if (!Order.IsTrackingToken(trackingToken))
-            throw new ArgumentException("The link must look like one.", nameof(trackingToken));
-        if (staffUserId == Guid.Empty || (staffUserId is null) != string.IsNullOrWhiteSpace(staffName))
-            throw new ArgumentException("Who attends it goes with their name.", nameof(staffUserId));
+        EnsureOnlineRequest(customerUserId, clientRequestId, trackingToken, staffUserId, staffName);
 
         var appointment = new Appointment(
             tenantId, customerName, customerPhone, serviceName, startAt, endAt,
@@ -192,6 +191,81 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             TrackingToken = trackingToken
         };
         return appointment;
+    }
+
+    /// <summary>
+    /// A customer requests a visit to quote online (Fase 29B, ADR 0053 points 11 and 12): the appointment holds its time
+    /// «Por confirmar» like any online request, at the customer's address. The zone must reach its postal code (and be
+    /// active); the visit keeps how the business charges it now, and what going there adds (nothing «Sin costo»).
+    /// </summary>
+    /// <param name="serviceProductId">The service the business picked as its visit; null when it has none.</param>
+    /// <param name="serviceName">That service's name, or <see cref="HomeVisitRules.DefaultVisitName"/>.</param>
+    /// <param name="problem">What happens, in the customer's words: the notes of the appointment.</param>
+    /// <param name="customerEmail">Where the customer gets the quote, when they give it.</param>
+    /// <param name="customerUserId">The customer account that requested it, when it was signed in.</param>
+    /// <param name="clientRequestId">The request page's key for this request.</param>
+    /// <param name="trackingToken">The link to follow it without an account.</param>
+    /// <param name="staffUserId">Who goes, when the business says who attends online; with <paramref name="staffName"/>.</param>
+    public static Appointment RequestHomeVisit(
+        Guid tenantId,
+        string customerName,
+        string customerPhone,
+        Guid? serviceProductId,
+        string serviceName,
+        DateTimeOffset startAt,
+        DateTimeOffset endAt,
+        string problem,
+        string? customerEmail,
+        DeliveryAddress address,
+        DeliveryZone zone,
+        HomeVisitChargePolicy chargePolicy,
+        Guid? customerUserId,
+        Guid? clientRequestId,
+        string trackingToken,
+        Guid? staffUserId = null,
+        string? staffName = null)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        ArgumentNullException.ThrowIfNull(zone);
+        if (serviceProductId == Guid.Empty)
+            throw new ArgumentException("The service is required when given.", nameof(serviceProductId));
+        if (!Enum.IsDefined(chargePolicy))
+            throw new ArgumentOutOfRangeException(nameof(chargePolicy));
+        EnsureOnlineRequest(customerUserId, clientRequestId, trackingToken, staffUserId, staffName);
+        if (string.IsNullOrWhiteSpace(problem))
+            throw new DomainException(HomeVisitRules.ProblemRequiredMessage);
+        if (problem.Trim().Length > HomeVisitRules.MaxProblemLength)
+            throw new DomainException(HomeVisitRules.ProblemTooLongMessage);
+        if (zone.TenantId != tenantId || !zone.Covers(address.PostalCode))
+            throw new DomainException(HomeVisitRules.NotCoveredMessage(address.PostalCode));
+
+        var appointment = new Appointment(
+            tenantId, customerName, customerPhone, serviceName, startAt, endAt,
+            staffName: staffName, notes: problem, serviceProductId: serviceProductId, staffUserId: staffUserId)
+        {
+            Status = AppointmentStatus.Requested,
+            Channel = AppointmentChannel.Online,
+            CustomerUserId = customerUserId,
+            ClientRequestId = clientRequestId,
+            TrackingToken = trackingToken,
+            CustomerEmail = InvoiceEmailAddress.Normalize(customerEmail)
+        };
+        appointment.Visit = new AppointmentVisit(tenantId, appointment.Id, address, zone.Name, zone.Fee, chargePolicy);
+        return appointment;
+    }
+
+    /// <summary>What every request a customer makes online carries: its account, its key, its link and who attends it.</summary>
+    private static void EnsureOnlineRequest(
+        Guid? customerUserId, Guid? clientRequestId, string trackingToken, Guid? staffUserId, string? staffName)
+    {
+        if (customerUserId == Guid.Empty)
+            throw new ArgumentException("The account is required when given.", nameof(customerUserId));
+        if (clientRequestId == Guid.Empty)
+            throw new ArgumentException("The key is required when given.", nameof(clientRequestId));
+        if (!Order.IsTrackingToken(trackingToken))
+            throw new ArgumentException("The link must look like one.", nameof(trackingToken));
+        if (staffUserId == Guid.Empty || (staffUserId is null) != string.IsNullOrWhiteSpace(staffName))
+            throw new ArgumentException("Who attends it goes with their name.", nameof(staffUserId));
     }
 
     /// <summary>

@@ -16,7 +16,8 @@ public sealed record StaffSlot(DateTimeOffset StartAt, IReadOnlyList<Guid> FreeS
 /// <see cref="BookingSlots"/> (inside the business's openings of a date, every half hour from each one, from the earliest
 /// allowed on), each with the people free for all of it: they attend then (their own hours, when they have them) and none
 /// of their open appointments overlaps it. An open appointment without anyone assigned takes someone too: a time is
-/// offered only while more people are free than such appointments run at once.
+/// offered only while more people are free than such appointments run at once. A visit at the customer's address
+/// (Fase 29B) needs each person's trip before and after it free too, as in the agenda (ADR 0020).
 /// </summary>
 public static class StaffSlots
 {
@@ -26,6 +27,10 @@ public static class StaffSlots
     /// <param name="staff">The people who do the service.</param>
     /// <param name="unassigned">The open appointments around the date with nobody assigned.</param>
     /// <param name="earliest">Nothing starts before it (now plus the notice).</param>
+    /// <param name="around">
+    /// The trip of a visit (Fase 29B), before and after it: the person's other appointments must leave it free too. Zero
+    /// at the business. The visit itself goes inside the business's and the person's hours; the trip may fall outside.
+    /// </param>
     public static IReadOnlyList<StaffSlot> FreeStarts(
         BusinessSchedule? schedule,
         TimeZoneInfo zone,
@@ -33,9 +38,10 @@ public static class StaffSlots
         TimeSpan duration,
         IReadOnlyCollection<StaffCalendar> staff,
         IReadOnlyCollection<BookedInterval> unassigned,
-        DateTimeOffset earliest)
+        DateTimeOffset earliest,
+        TimeSpan around = default)
     {
-        if (schedule is not { HasWeeklyHours: true } || duration <= TimeSpan.Zero || staff.Count == 0)
+        if (schedule is not { HasWeeklyHours: true } || duration <= TimeSpan.Zero || staff.Count == 0 || around < TimeSpan.Zero)
             return [];
 
         var hours = staff.ToDictionary(person => person.StaffId, person => Attends(person.WeeklyHours, zone, date));
@@ -47,12 +53,13 @@ public static class StaffSlots
                 if (start < earliest)
                     continue;
                 var end = start + duration;
+                var (heldFrom, heldTo) = (start - around, end + around);
                 var free = staff
                     .Where(person => Covers(hours[person.StaffId], start, end)
-                        && !person.Booked.Any(interval => interval.StartAt < end && interval.EndAt > start))
+                        && !person.Booked.Any(interval => interval.StartAt < heldTo && interval.EndAt > heldFrom))
                     .Select(person => person.StaffId)
                     .ToList();
-                if (free.Count > BookingSlots.MaxOverlapping(unassigned, start, end))
+                if (free.Count > BookingSlots.MaxOverlapping(unassigned, heldFrom, heldTo))
                     slots.Add(new StaffSlot(start, free));
             }
         }
@@ -63,6 +70,7 @@ public static class StaffSlots
     /// The people free for <paramref name="start"/> when it is one of the free starts (of the openings of its date or of
     /// the day before, up to <paramref name="lastDate"/> when given); none when it is not.
     /// </summary>
+    /// <param name="around">The trip of a visit, before and after it (<see cref="FreeStarts"/>).</param>
     public static IReadOnlyList<Guid> FreeAt(
         BusinessSchedule? schedule,
         TimeZoneInfo zone,
@@ -71,14 +79,15 @@ public static class StaffSlots
         IReadOnlyCollection<StaffCalendar> staff,
         IReadOnlyCollection<BookedInterval> unassigned,
         DateTimeOffset earliest,
-        DateOnly? lastDate = null)
+        DateOnly? lastDate = null,
+        TimeSpan around = default)
     {
         var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(start, zone).DateTime);
         foreach (var day in new[] { date, date.AddDays(-1) })
         {
             if (lastDate is not null && day > lastDate)
                 continue;
-            var slot = FreeStarts(schedule, zone, day, duration, staff, unassigned, earliest)
+            var slot = FreeStarts(schedule, zone, day, duration, staff, unassigned, earliest, around)
                 .FirstOrDefault(candidate => candidate.StartAt == start);
             if (slot is not null)
                 return slot.FreeStaff;
