@@ -56,15 +56,20 @@ public class HomeVisitBookingMigrationSqlServerTests
         var (tenantId, zoneId) = await SeedAsync(database);
         await using (var context = database.CreateContext(tenantId))
         {
+            // Without an email (it is optional): only how the visit is charged would be lost.
             context.Appointments.Add(Appointment.RequestHomeVisit(
                 tenantId, "Valeria", "+525522107765", null, HomeVisitRules.DefaultVisitName, Start, Start.AddHours(1),
-                "Gotea el calentador", "valeria@correo.mx", Address, await ZoneAsync(context, zoneId), HomeVisitChargePolicy.Free,
+                "Gotea el calentador", null, Address, await ZoneAsync(context, zoneId), HomeVisitChargePolicy.Free,
                 null, Guid.NewGuid(), new string('a', 43)));
             await context.SaveChangesAsync();
         }
 
-        // How the visit is charged stops it; so does the customer's email alone, each emptied on purpose.
-        foreach (var cleanUp in new[] { "UPDATE [AppointmentVisits] SET [ChargePolicy] = NULL", "UPDATE [Appointments] SET [CustomerEmail] = NULL" })
+        // How the visit is charged stops it alone; then, emptied on purpose, the customer's email alone stops it too.
+        foreach (var cleanUp in new[]
+        {
+            "UPDATE [AppointmentVisits] SET [ChargePolicy] = NULL; UPDATE [Appointments] SET [CustomerEmail] = N'valeria@correo.mx'",
+            "UPDATE [Appointments] SET [CustomerEmail] = NULL",
+        })
         {
             var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
             Assert.True(stopped is SqlException { Number: 50050 }, stopped?.Message ?? "it was not stopped");
