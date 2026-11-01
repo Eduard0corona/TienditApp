@@ -133,8 +133,9 @@ public class QuoteFlowTests
     public async Task Draft_ShouldBeTotalledByTheServer_WithTheProductsIva_AndTheBusinessesForALineByHand()
     {
         await using var fixture = SalesTestFixture.Create();
-        var tenant = await TradeAsync(fixture, pricesIncludeTax: false);
-        var heater = await fixture.AddProductAsync(tenant, "Cambio de calentador", 1000m, unit: UnitType.Service);
+        // A business at the border charges 8 %; the heater carries 16 % of its own.
+        var tenant = await TradeAsync(fixture, pricesIncludeTax: false, defaultTaxRate: 8m);
+        var heater = await fixture.AddProductAsync(tenant, "Cambio de calentador", 1000m, taxRate: 16m, unit: UnitType.Service);
         var pipe = await fixture.AddProductAsync(tenant, "Tubo de cobre", 50m, isTaxExempt: true);
         var quote = (await CreateAsync(fixture)).Value!;
 
@@ -145,12 +146,12 @@ public class QuoteFlowTests
 
         Assert.True(saved.IsSuccess, saved.Error);
         var lines = saved.Value!.Lines;
-        Assert.Equal([("Cambio de calentador", 900m, 16m, false), ("Tubo de cobre de 1/2", 150m, 0m, true), ("Mano de obra", 500m, 16m, false)],
+        Assert.Equal([("Cambio de calentador", 900m, 16m, false), ("Tubo de cobre de 1/2", 150m, 0m, true), ("Mano de obra", 500m, 8m, false)],
             lines.Select(l => (l.Description, l.Total, l.TaxRate, l.IsTaxExempt)));
-        // 1,400 at 16 % adds 224; the exempt 150 adds nothing.
-        Assert.Equal((1550m, 224m, 1774m, 1774m), (saved.Value.SubTotal, saved.Value.Tax, saved.Value.Total, saved.Value.ToPay));
-        Assert.Equal([(16m, false, 1400m, 224m), (0m, true, 150m, 0m)],
-            saved.Value.Taxes.Select(t => (t.RatePercent, t.IsExempt, t.TaxableBase, t.TaxAmount)));
+        // 900 at 16 % adds 144, the labour's 500 at 8 % adds 40, and the exempt 150 adds nothing.
+        Assert.Equal((1550m, 184m, 1734m, 1734m), (saved.Value.SubTotal, saved.Value.Tax, saved.Value.Total, saved.Value.ToPay));
+        Assert.Equal([(0m, true, 150m, 0m), (8m, false, 500m, 40m), (16m, false, 900m, 144m)],
+            saved.Value.Taxes.Select(t => (t.RatePercent, t.IsExempt, t.TaxableBase, t.TaxAmount)).OrderBy(t => t.RatePercent));
     }
 
     [Fact]
@@ -544,10 +545,11 @@ public class QuoteFlowTests
     /// <summary>A trade with the agenda and the zone «Centro» (72000, $80), its prices with IVA inside unless said.</summary>
     private static async Task<Domain.Tenants.Entities.Tenant> TradeAsync(
         SalesTestFixture fixture, bool pricesIncludeTax = true, string slug = "plomero",
-        HomeVisitChargePolicy policy = HomeVisitChargePolicy.Charged)
+        HomeVisitChargePolicy policy = HomeVisitChargePolicy.Charged, decimal defaultTaxRate = 16m)
     {
         var tenant = await fixture.AddTenantAsync(
-            BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, pricesIncludeTax: pricesIncludeTax, slug: slug);
+            BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, pricesIncludeTax: pricesIncludeTax,
+            defaultTaxRate: defaultTaxRate, slug: slug);
         (await fixture.Context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id)).UpdateHomeVisitRequests(true, null, policy);
         fixture.Context.DeliveryZones.Add(new DeliveryZone(tenant.Id, new DeliveryZoneFields("Centro", 80m, 0m, null, ["72000"])));
         await fixture.Context.SaveChangesAsync();
