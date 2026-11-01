@@ -87,7 +87,12 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - Una visita pedida en línea que el equipo pasa al local y luego otra vez a domicilio pierde cómo se cobraba: vuelve a ser una visita del equipo, con el cargo de la zona.
   - El aviso de la cita aceptada dice lo que cuesta la visita con el precio de hoy de su servicio, como lo cobrará la venta; el precio no queda congelado en la cita (solo el cargo de la zona).
   - Con el código anterior (rollback del despliegue), mover a otra dirección una visita «Sin costo» pedida en línea falla: la restricción de la base no deja cobrarle la zona.
-  - La cotización (Fase 29C) le llega al cliente desde el teléfono o el correo del negocio (`wa.me` y `mailto:`): no sale desde el outbox ni queda historial de cada envío con su resultado, y la aceptada no se convierte en orden de servicio ni en citas (Fase 29D).
+  - La aceptada no se convierte en orden de servicio ni en citas (Fase 29E): una orden solo lleva renglones del catálogo con su precio, y la cotización los tiene escritos a mano con su precio y su IVA.
+  - El envío desde TienditApp (Fase 29D):
+    - El correo de la cotización no lleva PDF (TienditApp no genera PDF): la cotización va en el cuerpo y en su enlace. «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó.
+    - Sin plantilla aprobada en Meta, el WhatsApp solo llega a quien escribió en las últimas 24 horas, y no cae solo al correo cuando WhatsApp lo rechaza: el negocio lo ve en el historial y lo manda por correo.
+    - Sin la dirección de la app configurada (`AppUrl`), el enlace sale sin dominio (`/cotizacion#…`), como el de los avisos.
+    - Con el código anterior (rollback del despliegue), un WhatsApp de una cotización que siguiera pendiente sale como cualquier mensaje: a quien se dio de baja no le llega.
   - Dos personas que editan el mismo borrador a la vez: guarda el último que guardó, sin avisar (el `rowversion` solo protege lo que pasa entre leer y guardar en el servidor; la pantalla no manda la versión que leyó).
   - «Vencida» no se guarda: una enviada se lee vencida con el día del negocio. Un reporte que lea la base directo ve «Enviada» hasta que alguien la responde o la corrige.
   - Las citas en línea siguen sin ser a domicilio (`OnlineBookingBlocker.NoPremises`): a domicilio se pide la visita, no otro servicio.

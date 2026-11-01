@@ -1,6 +1,6 @@
 # ADR 0053: Oficios a domicilio, la visita para cotizar
 
-- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31), para la solicitud en línea (etapa 2) en la Fase 29B (2026-11-01) y para la cotización (etapa 3, puntos 14, 15 y 17) en la Fase 29C (2026-11-01); su envío desde el outbox (punto 16) y convertir la aceptada en el trabajo siguen propuestos para la Fase 29D.
+- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31), para la solicitud en línea (etapa 2) en la Fase 29B (2026-11-01) para la cotización (etapa 3, puntos 14, 15 y 17) en la Fase 29C (2026-11-01) y para su envío desde TienditApp (punto 16) en la Fase 29D (2026-11-01); convertir la aceptada en el trabajo sigue propuesto para la Fase 29E.
 - Fecha: 2026-10-27
 - Continúa: [ADR 0020](0020-home-visits.md) (servicios a domicilio), [ADR 0021](0021-business-directory.md) (Explorar) y [ADR 0025](0025-online-booking.md) (citas en línea).
 
@@ -150,6 +150,22 @@ La cotización (puntos 14, 15 y 17), salvo convertir la aceptada en el trabajo. 
   - En la pantalla, «Terminar y obtener enlace» la deja enviada: TienditApp todavía no se la manda al cliente.
 - **El rollback** se detiene (50051) en cuanto hay una cotización o un negocio con otra vigencia.
 
+### Lo que hizo la Fase 29D
+
+El envío de la cotización desde TienditApp (punto 16). La migración es `20261101181148_AddQuoteDeliveries`, con sus scripts en `database/production/20261101181148_AddQuoteDeliveries/`. Convertir la aceptada en el trabajo queda para la Fase 29E: una orden solo lleva renglones del catálogo con su precio, y la cotización tiene renglones escritos a mano con su precio y su IVA, así que primero hay que decidir cómo entra un renglón sin producto.
+
+- **Solo se manda una versión enviada y vigente** en el día del negocio: una aceptada, rechazada, reemplazada o vencida ya no es lo que el negocio ofrece.
+- **«Enviar por correo»** (`POST /api/v1/quotes/{id}/email`) guarda un `QuoteEmail` con a quién y quién lo pidió, y el outbox lo manda después (`QuoteEmailRequestedEvent`), como el correo de un CFDI ([ADR 0049](0049-cfdi-email.md)).
+  - Sale de la plataforma como «{Negocio} vía TienditApp», con `Reply-To` al correo del negocio, sin adjuntos: en el cuerpo, la cotización como el cliente la lee en su enlace (renglones, IVA, la visita que se descuenta, lo que falta pagar, hasta cuándo vale, la nota) y el enlace. Todo lo que escribieron el negocio o el cliente va codificado.
+  - Un servidor que no responde se reintenta con el outbox; uno que rechaza la dirección, o sin correo configurado, lo termina; pasado el último intento termina sin entregarse. Cada correo guarda su resultado.
+- **«Enviar por WhatsApp»** (`POST /api/v1/quotes/{id}/whatsapp`), cuando el negocio conectó su WhatsApp, encola un `OutgoingMessage` con el propósito `QuoteDocument` (6) y la versión que lleva. Sale del número del negocio por la cola de mensajes, que lo reintenta y oye si se entregó y se leyó.
+  - Va con la plantilla que el negocio eligió para sus cotizaciones en Cotizaciones (`TenantSettings.QuoteWhatsAppTemplateId`, dueños y administradores; una plantilla «Cotización por WhatsApp» lleva `{enlace}` y puede decir `{nombre}`, `{negocio}`, `{folio}`, `{monto}`, lo que paga el cliente, y `{fecha}`, hasta cuándo vale) o con el texto de TienditApp. Sin plantilla aprobada en Meta solo llega a quien escribió en las últimas 24 horas.
+  - La baja de un cliente no la detiene: él le pidió esa cotización al negocio. Esos mensajes no salen en Campañas › Mensajes ni en los mensajes fallidos de Inicio: se ven en su cotización.
+  - Sin WhatsApp conectado, la pantalla sigue ofreciendo mandarla desde el teléfono (`wa.me`).
+- **Límites**: cada versión se manda 5 veces al día por cada medio y un negocio 300 cotizaciones al día por cada medio, contadas bajo un candado de envíos del negocio, así que dos envíos a la vez no pasan del último.
+- **El historial**: el detalle de cada versión muestra sus últimos 5 correos y 5 WhatsApp con dónde va cada uno (enviándose, enviado, entregado, leído, o no se envió y por qué), y vuelve a preguntar mientras alguno va en camino.
+- **El rollback** se detiene (50052) en cuanto se mandó una cotización desde TienditApp o un negocio eligió una plantilla para ellas.
+
 ### Etapa 2: la solicitud de la visita
 
 10. **El negocio decide cómo cobra la visita** (decisión 5, `TenantSettings.HomeVisitChargePolicy`), con el servicio del catálogo que eligió como su visita («Visita y diagnóstico»):
@@ -184,6 +200,8 @@ La cotización (puntos 14, 15 y 17), salvo convertir la aceptada en el trabajo. 
     - El WhatsApp lleva el folio, el total, la vigencia y el enlace. Fuera de las 24 horas necesita una plantilla aprobada en Meta, como el aviso «En camino».
     - El enlace es como el de un pedido ([ADR 0023](0023-order-tracking.md)): va en el fragmento, abre solo esa cotización sin datos del cliente fuera de su nombre, y deja de abrir 30 días después de vencer.
     - Cada envío queda en su historial con su resultado, como `CfdiEmail`.
+
+    Implementado en la Fase 29D (arriba).
 17. **El negocio registra si el cliente la aceptó o la rechazó**, con lo que le respondió por WhatsApp o por correo, y queda en la actividad. Aceptada, se convierte en el trabajo: una orden de servicio con sus renglones o las citas para hacerlo. La orden lleva sus fotos del antes y del después ([ADR 0024](0024-service-photos.md)).
 
 ### Después
