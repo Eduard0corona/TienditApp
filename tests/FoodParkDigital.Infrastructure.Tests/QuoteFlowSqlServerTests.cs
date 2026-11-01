@@ -18,8 +18,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
 /// The quotes through their handlers on SQL Server (Fase 29C, ADR 0053), inside the transaction of the pipeline: «Cotizar»
-/// pressed at once by several people starts one quote for the visit and gives back the folios of the others, and a draft
-/// whose lines are replaced keeps only the new ones.
+/// pressed at once by several people starts one quote for the visit and gives back the folios of the others, «Corregir» at
+/// once starts one correction, and a draft whose lines are replaced keeps only the new ones.
 /// </summary>
 public class QuoteFlowSqlServerTests
 {
@@ -43,6 +43,30 @@ public class QuoteFlowSqlServerTests
         Assert.Equal("COT-000001", (await check.Quotes.SingleAsync()).Number);
         // The refused ones gave their folio back: the next quote follows the one that stayed.
         Assert.Equal("COT-000002", await new FolioGenerator(check).NextQuoteNumberAsync(tenantId, CancellationToken.None));
+    }
+
+    [SqlServerFact]
+    public async Task CorregirAtOnce_ShouldStartOneCorrection_AndTellTheOthersSomeoneIsCorrectingIt()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenantId, appointmentId) = await SeedAsync(database);
+        var created = await RunAsync(database, tenantId,
+            (context, tenant) => new CreateQuoteCommandHandler(context, tenant, new Owner(), new FolioGenerator(context), new Clock()),
+            new CreateQuoteCommand(appointmentId, null, null, null, null));
+        await UpdateAsync(database, tenantId, created.Value.Id, [Line("Revisión", 500m)]);
+        var sent = await RunAsync(database, tenantId,
+            (context, tenant) => new QuotesHandler(context, tenant, new Owner(), new Clock()), new SendQuoteCommand(created.Value.Id));
+        Assert.True(sent.IsSuccess, sent.Error);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => RunAsync(database, tenantId,
+            (context, tenant) => new QuotesHandler(context, tenant, new Owner(), new Clock()), new ReviseQuoteCommand(sent.Value.Id))));
+
+        // Each one either started it, opened the one already started, or was told someone else was starting it.
+        Assert.Single(results.Where(r => r.IsSuccess).Select(r => r.Value.Id).Distinct());
+        Assert.All(results.Where(r => r.IsFailure), r => Assert.Equal(QuotesHandler.AlreadyRevisingMessage, r.Error));
+        await using var check = database.CreateContext(tenantId);
+        Assert.Equal([(1, QuoteStatus.Sent), (2, QuoteStatus.Draft)],
+            await check.Quotes.OrderBy(q => q.Revision).Select(q => new ValueTuple<int, QuoteStatus>(q.Revision, q.Status)).ToListAsync());
     }
 
     [SqlServerFact]
@@ -93,6 +117,10 @@ public class QuoteFlowSqlServerTests
         {
             CreateQuoteCommand create => await new TransactionBehavior<CreateQuoteCommand, Result<QuoteDto>>(context)
                 .Handle(create, () => handler.Handle(command, CancellationToken.None), CancellationToken.None),
+            SendQuoteCommand send => await new TransactionBehavior<SendQuoteCommand, Result<QuoteDto>>(context)
+                .Handle(send, () => handler.Handle(command, CancellationToken.None), CancellationToken.None),
+            ReviseQuoteCommand revise => await new TransactionBehavior<ReviseQuoteCommand, Result<QuoteDto>>(context)
+                .Handle(revise, () => handler.Handle(command, CancellationToken.None), CancellationToken.None),
             _ => await handler.Handle(command, CancellationToken.None)
         };
     }
