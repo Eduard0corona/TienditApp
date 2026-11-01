@@ -29,7 +29,7 @@ test.describe('Cotizaciones', () => {
 
       test(`cotizaciones abiertas ${look.suffix}`, async ({ page }) => {
         await open(page, '/quotes');
-        await expect(page.getByRole('link', { name: 'COT-000011 · versión 2' })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'COT-000011 · versión 2', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Nueva cotización' })).toBeVisible();
         await snap(page, `cotizaciones-${look.suffix}`);
       });
