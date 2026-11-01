@@ -4,8 +4,8 @@ import { publicRoutes } from './publico-cuenta-marco.mocks';
 type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 
 // The quotes (Fase 29C, ADR 0053) of Plomería Hernández, a plumber whose prices do not include IVA: the list of open ones,
-// a draft from a visit (its visit taken off, «Se descuenta si contratas»), the same one sent with its link, and the page the
-// customer opens without an account. Numbers as the server totals them.
+// a draft for a customer who called, the corrected quote of Valeria's visit sent with its link (its visit taken off, «Se
+// descuenta si contratas»), and the page Valeria opens without an account. Numbers as the server totals them.
 
 const DRAFT_ID = '7a3f1c52-2d4b-4e6a-9c1f-0b8e5d2a7c41';
 const SENT_ID = '0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58';
@@ -33,22 +33,27 @@ const TOTALS = {
 
 const APPOINTMENT = { id: 'appt-valeria', startAt: '2026-10-02T17:00:00Z', serviceName: 'Visita y diagnóstico', postalCode: '06700' };
 
+const NOTE = 'Incluye retirar el calentador viejo. El material se compra al aceptar.';
+
+/** Jorge called for a new water heater: no visit, so nothing comes off. */
 const DRAFT = {
   id: DRAFT_ID,
   number: 'COT-000012',
   revision: 1,
   status: 0,
   customerId: null,
-  customerName: 'Valeria Ruiz',
-  customerPhone: '5522107765',
-  customerEmail: 'valeria@correo.mx',
-  appointment: APPOINTMENT,
+  customerName: 'Jorge Salinas',
+  customerPhone: '5544332211',
+  customerEmail: null,
+  appointment: null,
   pricesIncludeTax: false,
   validityDays: 15,
   validUntil: null,
-  note: 'Incluye retirar el calentador viejo. El material se compra al aceptar.',
+  note: NOTE,
   lines: LINES,
   ...TOTALS,
+  visitCredit: null,
+  toPay: 4686.4,
   sentAt: null,
   trackingToken: null,
   closedAt: null,
@@ -59,12 +64,18 @@ const DRAFT = {
   createdAt: '2026-10-03T16:00:00Z',
 };
 
+/** Valeria's visit, its quote corrected once and sent. */
 const SENT = {
   ...DRAFT,
   id: SENT_ID,
   number: 'COT-000011',
   revision: 2,
   status: 1,
+  customerName: 'Valeria Ruiz',
+  customerPhone: '5522107765',
+  customerEmail: 'valeria@correo.mx',
+  appointment: APPOINTMENT,
+  ...TOTALS,
   validUntil: '2026-10-19',
   sentAt: '2026-10-04T16:20:00Z',
   trackingToken: QUOTE_LINK,
@@ -75,8 +86,8 @@ const SENT = {
 };
 
 const SUMMARIES = [
-  { id: DRAFT_ID, number: 'COT-000012', revision: 1, status: 0, customerName: 'Valeria Ruiz', customerPhone: '5522107765', total: 4686.4, validUntil: null, updatedAt: '2026-10-04T16:30:00Z', fromVisit: true },
-  { id: SENT_ID, number: 'COT-000011', revision: 2, status: 1, customerName: 'Jorge Salinas', customerPhone: '5544332211', total: 4686.4, validUntil: '2026-10-19', updatedAt: '2026-10-04T16:20:00Z', fromVisit: false },
+  { id: DRAFT_ID, number: 'COT-000012', revision: 1, status: 0, customerName: 'Jorge Salinas', customerPhone: '5544332211', total: 4686.4, validUntil: null, updatedAt: '2026-10-04T16:30:00Z', fromVisit: false },
+  { id: SENT_ID, number: 'COT-000011', revision: 2, status: 1, customerName: 'Valeria Ruiz', customerPhone: '5522107765', total: 4686.4, validUntil: '2026-10-19', updatedAt: '2026-10-04T16:20:00Z', fromVisit: true },
   { id: 'q-9', number: 'COT-000009', revision: 1, status: 1, customerName: 'Condominio Ámsterdam 210', customerPhone: '5598761234', total: 12528, validUntil: '2026-10-08', updatedAt: '2026-09-23T18:00:00Z', fromVisit: true },
 ];
 
@@ -108,7 +119,7 @@ const PUBLIC_QUOTE = {
   pricesIncludeTax: false,
   lines: LINES.map(({ description, quantity, unitPrice, total }) => ({ description, quantity, unitPrice, total })),
   ...TOTALS,
-  note: DRAFT.note,
+  note: NOTE,
   newerToken: null,
 };
 

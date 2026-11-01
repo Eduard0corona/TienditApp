@@ -3,6 +3,7 @@ import { Modal } from 'react-bootstrap';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
+import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { getApiErrorMessage } from '../../api/errors';
 import { productsApi } from '../../api/productsApi';
 import { quotesApi, type Quote, type QuoteLineRequest } from '../../api/quotesApi';
@@ -21,7 +22,7 @@ import {
   quoteStatusChip,
   quoteStatusLabel,
   quoteWhatsAppUrl,
-  replyChannelLabel,
+  replyChannelPhrase,
 } from '../../utils/quotes';
 
 interface LineForm {
@@ -61,6 +62,14 @@ function toForm(quote: Quote): DraftForm {
   };
 }
 
+/** Until when it is valid, as it stands: still, no longer, or until it was answered or replaced. */
+function validityText(status: QuoteStatus, validUntil: string): string {
+  const day = formatCalendarDate(validUntil);
+  if (status === QuoteStatus.Sent) return `Vale hasta el ${day}`;
+  if (status === QuoteStatus.Expired) return `Venció el ${day}`;
+  return `Valía hasta el ${day}`;
+}
+
 function toLines(lines: LineForm[]): QuoteLineRequest[] {
   return lines.map((line) => ({
     productId: line.productId,
@@ -70,13 +79,20 @@ function toLines(lines: LineForm[]): QuoteLineRequest[] {
   }));
 }
 
+type Action = 'save' | 'send' | 'revise' | 'discard' | 'reply';
+
 /**
  * A version of a quote (Fase 29C, ADR 0053). A draft is edited here and the server totals it when saved; sent, it says the
  * same forever: its link goes to the customer by WhatsApp or by email, the business records what they answered, and
- * correcting it starts the next version. The history lists every version of the quote.
+ * correcting it starts the next version. The history lists every version of the quote. Each version opens fresh: nothing
+ * typed or shown on another one stays.
  */
-export default function QuoteDetail() {
+export default function QuoteDetailPage() {
   const { id = '' } = useParams();
+  return <QuoteDetail key={id} id={id} />;
+}
+
+function QuoteDetail({ id }: { id: string }) {
   const navigate = useNavigate();
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -88,19 +104,24 @@ export default function QuoteDetail() {
   const [error, setError] = useState('');
   const [catalogSearch, setCatalogSearch] = useState('');
   const [showReply, setShowReply] = useState(false);
+  const [replyError, setReplyError] = useState('');
   const [reply, setReply] = useState<{ accepted: boolean; channel: QuoteReplyChannel; response: string }>(
     { accepted: true, channel: QuoteReplyChannel.WhatsApp, response: '' });
+  // One action at a time: every button waits for the one running, and the draft's fields too.
+  const [pending, setPending] = useState<Action | null>(null);
 
   const quoteQuery = useQuery({ queryKey: ['quotes', 'detail', id], queryFn: ({ signal }) => quotesApi.get(id, signal), enabled: !!id });
   const quote = quoteQuery.data;
   const isDraft = quote?.status === QuoteStatus.Draft;
 
-  // The form follows the version shown: another version, or what the server saved.
+  // The form follows what the server has while nothing is typed: a refresh never takes away what the person is writing.
   const [seen, setSeen] = useState<Quote | undefined>(undefined);
   if (quote && quote !== seen) {
     setSeen(quote);
-    setForm(toForm(quote));
-    setDirty(false);
+    if (!dirty || !seen) {
+      setForm(toForm(quote));
+      setDirty(false);
+    }
   }
 
   const catalogQuery = useQuery({
@@ -112,7 +133,13 @@ export default function QuoteDetail() {
   const show = (next: Quote) => {
     queryClient.setQueryData(['quotes', 'detail', next.id], next);
     void queryClient.invalidateQueries({ queryKey: ['quotes'], refetchType: 'none' });
-    if (next.id !== id) navigate(`/quotes/${next.id}`);
+    if (next.id !== id) {
+      navigate(`/quotes/${next.id}`);
+      return;
+    }
+    // What the server saved, while the fields waited for it.
+    setForm(toForm(next));
+    setDirty(false);
   };
 
   const save = useMutation({
@@ -127,25 +154,34 @@ export default function QuoteDetail() {
     }),
   });
 
-  const run = async (action: () => Promise<Quote>, done: string, fallback: string) => {
+  /** Runs one action at a time; the message of a refusal goes to <paramref name="onError"/> (the page's alert by default). */
+  const run = async (
+    kind: Action, action: () => Promise<Quote>, done: string, fallback: string, onError: (message: string) => void = setError,
+  ): Promise<boolean> => {
+    if (pending) return false;
+    setPending(kind);
     setError('');
     try {
       const next = await action();
       show(next);
       if (done) toast.success(done);
+      return true;
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, fallback));
+      onError(getApiErrorMessage(err, fallback));
+      return false;
+    } finally {
+      setPending(null);
     }
   };
 
-  const saveDraft = () => form && run(() => save.mutateAsync(form), 'Borrador guardado.', 'No se pudo guardar el borrador.');
+  const saveDraft = () => form && run('save', () => save.mutateAsync(form), 'Borrador guardado.', 'No se pudo guardar el borrador.');
 
-  const send = () => form && run(async () => {
-    if (dirty) await save.mutateAsync(form);
+  const send = () => form && run('send', async () => {
+    if (dirty) show(await save.mutateAsync(form));
     return quotesApi.send(id);
-  }, 'Cotización lista: mándale el enlace al cliente.', 'No se pudo enviar la cotización.');
+  }, 'Cotización lista: mándale el enlace al cliente.', 'No se pudo terminar la cotización.');
 
-  const revise = () => run(() => quotesApi.revise(id), '', 'No se pudo empezar la corrección.');
+  const revise = () => run('revise', () => quotesApi.revise(id), '', 'No se pudo empezar la corrección.');
 
   const discard = async () => {
     const accepted = await confirm({
@@ -155,15 +191,18 @@ export default function QuoteDetail() {
       cancelLabel: 'Volver',
       danger: true,
     });
-    if (accepted) await run(() => quotesApi.discard(id), 'Borrador descartado.', 'No se pudo descartar el borrador.');
+    if (accepted) await run('discard', () => quotesApi.discard(id), 'Borrador descartado.', 'No se pudo descartar el borrador.');
   };
 
   const recordReply = async () => {
-    await run(
+    setReplyError('');
+    const recorded = await run(
+      'reply',
       () => quotesApi.reply(id, { accepted: reply.accepted, channel: reply.channel, response: reply.response.trim() || null }),
       reply.accepted ? 'Cotización aceptada.' : 'Cotización rechazada.',
-      'No se pudo registrar la respuesta.');
-    setShowReply(false);
+      'No se pudo registrar la respuesta.',
+      setReplyError);
+    if (recorded) setShowReply(false);
   };
 
   const change = (update: (current: DraftForm) => DraftForm) => {
@@ -188,13 +227,15 @@ export default function QuoteDetail() {
 
   const folio = quoteFolio(quote.number, quote.revision);
   const link = quote.trackingToken ? quoteLink(quote.trackingToken) : null;
-  const message = link ? quoteMessage(quote, tenant?.name ?? 'tu negocio', link) : '';
+  const message = link ? quoteMessage(quote, tenant?.name ?? '', link) : '';
   const whatsApp = link ? quoteWhatsAppUrl(quote.customerPhone, message) : null;
   const mail = link ? quoteMailUrl(quote.customerEmail, `Cotización ${folio}`, message) : null;
-  const busy = save.isPending;
+  const busy = pending !== null;
   const canReply = quote.status === QuoteStatus.Sent;
   const canRevise = (quote.status === QuoteStatus.Sent || quote.status === QuoteStatus.Expired || quote.status === QuoteStatus.Rejected)
     && !quote.draftRevisionId;
+  // A correction of a version the customer already accepted is not sent: the server refuses it.
+  const acceptedVersion = isDraft ? quote.versions.find((version) => version.status === QuoteStatus.Accepted) : undefined;
   const ivaNote = quote.pricesIncludeTax ? 'Los precios incluyen IVA.' : 'El IVA se suma a los precios.';
 
   return (
@@ -214,7 +255,7 @@ export default function QuoteDetail() {
             <div className="card-body">
               <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
                 <span className={quoteStatusChip(quote.status)}>{quoteStatusLabel(quote.status)}</span>
-                {quote.validUntil && <span className="text-muted small">Vale hasta el {formatCalendarDate(quote.validUntil)}</span>}
+                {quote.validUntil && <span className="text-muted small">{validityText(quote.status, quote.validUntil)}</span>}
                 {quote.appointment && (
                   <span className="text-muted small">
                     Visita del {formatDateTime(quote.appointment.startAt)}
@@ -224,6 +265,7 @@ export default function QuoteDetail() {
               </div>
 
               {isDraft ? (
+                <fieldset disabled={busy}>
                 <div className="row">
                   <div className="col-md-6 mb-2">
                     <label className="form-label" htmlFor="quote-customer">Cliente *</label>
@@ -246,6 +288,7 @@ export default function QuoteDetail() {
                       onChange={(e) => change((x) => ({ ...x, validityDays: e.target.value }))} />
                   </div>
                 </div>
+                </fieldset>
               ) : (
                 <dl className="row small mb-0">
                   <dt className="col-4 col-sm-3 text-muted fw-normal">Cliente</dt>
@@ -273,7 +316,7 @@ export default function QuoteDetail() {
             <div className="card-body">
               <h2 className="h6">Renglones</h2>
               {isDraft ? (
-                <>
+                <fieldset disabled={busy}>
                   {form.lines.length === 0 && <p className="text-muted small">Agrega lo que incluye el trabajo: del catálogo o escrito a mano.</p>}
                   {form.lines.map((line, index) => (
                     <div key={line.key} className="row g-2 align-items-end mb-2">
@@ -319,7 +362,7 @@ export default function QuoteDetail() {
                     </div>
                   </div>
                   {catalogSearch.trim().length >= 2 && (
-                    <ul className="list-group list-group-flush mt-2" aria-label="Del catálogo">
+                    <ul className="list-group list-group-flush mt-2" aria-label="Resultados del catálogo">
                       {(catalogQuery.data ?? []).map((product) => (
                         <li key={product.id} className="list-group-item d-flex justify-content-between align-items-center px-0">
                           <span>{product.name} <span className="text-muted small">{formatMoney(product.priceAmount)}</span></span>
@@ -347,7 +390,7 @@ export default function QuoteDetail() {
                     <textarea id="quote-note" className="form-control" rows={2} maxLength={1000} value={form.note}
                       onChange={(e) => change((x) => ({ ...x, note: e.target.value }))} />
                   </div>
-                </>
+                </fieldset>
               ) : (
                 <div className="table-responsive">
                   <table className="table table-sm mb-0">
@@ -407,23 +450,39 @@ export default function QuoteDetail() {
             <div className="card-body d-grid gap-2">
               {isDraft && (
                 <>
-                  <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void send()}>
-                    <i className="ri-send-plane-line me-1" aria-hidden="true"></i>Enviar al cliente
+                  {acceptedVersion && (
+                    <div className="alert alert-warning small mb-0" role="status">
+                      El cliente ya aceptó la versión {acceptedVersion.revision}: esta corrección no se puede terminar. Descártala.
+                    </div>
+                  )}
+                  <button type="button" className="btn btn-primary" disabled={busy || !!acceptedVersion} onClick={() => void send()}>
+                    <i className="ri-link me-1" aria-hidden="true"></i>{pending === 'send' ? 'Terminando…' : 'Terminar y obtener enlace'}
                   </button>
                   <button type="button" className="btn btn-light" disabled={busy || !dirty} onClick={() => void saveDraft()}>
-                    {busy ? 'Guardando…' : 'Guardar borrador'}
+                    {pending === 'save' ? 'Guardando…' : 'Guardar borrador'}
                   </button>
                   <button type="button" className="btn btn-link text-danger" disabled={busy} onClick={() => void discard()}>
                     Descartar borrador
                   </button>
-                  <p className="text-muted small mb-0">Al enviarla vale {form.validityDays} días desde hoy y ya no se edita: se corrige con una versión nueva.</p>
+                  <p className="text-muted small mb-0">
+                    Al terminarla vale {form.validityDays} días desde hoy y ya no se edita: se corrige con una versión nueva.
+                    Después le mandas su enlace al cliente por WhatsApp o por correo.
+                  </p>
                 </>
               )}
 
               {link && quote.status === QuoteStatus.Sent && (
                 <>
                   {canReply && (
-                    <button type="button" className="btn btn-primary" onClick={() => setShowReply(true)}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={busy}
+                      onClick={() => {
+                        setReplyError('');
+                        setShowReply(true);
+                      }}
+                    >
                       Registrar respuesta
                     </button>
                   )}
@@ -437,17 +496,7 @@ export default function QuoteDetail() {
                       <i className="ri-mail-line me-1" aria-hidden="true"></i>Enviar por correo
                     </a>
                   )}
-                  <button
-                    type="button"
-                    className="btn btn-light"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(link).then(
-                        () => toast.success('Enlace copiado.'),
-                        () => toast.error('No se pudo copiar el enlace.'));
-                    }}
-                  >
-                    <i className="ri-link me-1" aria-hidden="true"></i>Copiar enlace
-                  </button>
+                  {quote.trackingToken && <CopyTrackingLink token={quote.trackingToken} path="/cotizacion" />}
                 </>
               )}
 
@@ -455,15 +504,16 @@ export default function QuoteDetail() {
                 <button
                   type="button"
                   className={quote.status === QuoteStatus.Sent ? 'btn btn-light' : 'btn btn-primary'}
+                  disabled={busy}
                   onClick={() => void revise()}
                 >
-                  Corregir
+                  {pending === 'revise' ? 'Empezando…' : 'Corregir'}
                 </button>
               )}
 
               {(quote.status === QuoteStatus.Accepted || quote.status === QuoteStatus.Rejected) && quote.replyChannel != null && (
                 <p className="small mb-0">
-                  {quote.status === QuoteStatus.Accepted ? 'Aceptó' : 'Rechazó'} por {replyChannelLabel(quote.replyChannel).toLowerCase()}
+                  {quote.status === QuoteStatus.Accepted ? 'Aceptó' : 'Rechazó'} {replyChannelPhrase(quote.replyChannel)}
                   {quote.closedAt ? ` el ${formatDateTime(quote.closedAt)}` : ''}.
                   {quote.customerResponse && <span className="d-block text-muted">«{quote.customerResponse}»</span>}
                 </p>
@@ -497,7 +547,7 @@ export default function QuoteDetail() {
         </div>
       </div>
 
-      <Modal show={showReply} onHide={() => setShowReply(false)} centered aria-labelledby={replyTitleId}>
+      <Modal show={showReply} onHide={() => !busy && setShowReply(false)} centered aria-labelledby={replyTitleId}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -533,10 +583,11 @@ export default function QuoteDetail() {
               <textarea id="quote-reply-response" className="form-control" rows={3} maxLength={500} value={reply.response}
                 onChange={(e) => setReply((x) => ({ ...x, response: e.target.value }))} />
             </div>
+            {replyError && <div className="alert alert-danger small mt-3 mb-0" role="alert">{replyError}</div>}
           </Modal.Body>
           <Modal.Footer>
-            <button type="button" className="btn btn-light" onClick={() => setShowReply(false)}>Cancelar</button>
-            <button type="submit" className="btn btn-primary">Guardar respuesta</button>
+            <button type="button" className="btn btn-light" disabled={busy} onClick={() => setShowReply(false)}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={busy}>{pending === 'reply' ? 'Guardando…' : 'Guardar respuesta'}</button>
           </Modal.Footer>
         </form>
       </Modal>

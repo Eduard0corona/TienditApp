@@ -443,6 +443,7 @@ export default function AppointmentsList() {
     setQuoting(appointmentId);
     try {
       const created = await quotesApi.create({ appointmentId });
+      void queryClient.invalidateQueries({ queryKey: ['quotes'] });
       navigate(`/quotes/${created.id}`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo abrir la cotización de la visita.'));
@@ -455,7 +456,7 @@ export default function AppointmentsList() {
       <button
         type="button"
         className="btn btn-sm btn-light"
-        disabled={quoting === item.id}
+        disabled={quoting !== null}
         onClick={() => void quote(item.id)}
         aria-label={`Cotizar la visita de ${item.customerName}`}
       >

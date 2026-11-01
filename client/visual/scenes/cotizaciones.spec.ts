@@ -10,9 +10,9 @@ import {
   SENT_QUOTE_ID,
 } from './cotizaciones.mocks';
 
-// The quotes (Fase 29C, ADR 0053): a plumber's list of open quotes, a draft from a visit with its lines and the visit taken
-// off, the same quote sent with its link to send by WhatsApp or by email, and the page the customer opens without an
-// account: valid, replaced by a new version, or a link that no longer opens.
+// The quotes (Fase 29C, ADR 0053): a plumber's list of open quotes, a draft with its lines, the quote of a visit sent with
+// the visit taken off and its link to send by WhatsApp or by email, and the page the customer opens without an account:
+// valid, replaced by a new version, or a link that no longer opens.
 
 const LOOKS = [
   { suffix: 'escritorio', colorMode: 'light', viewport: SIZES.desktop },
@@ -36,8 +36,8 @@ test.describe('Cotizaciones', () => {
 
       test(`cotización en borrador ${look.suffix}`, async ({ page }) => {
         await open(page, `/quotes/${DRAFT_QUOTE_ID}`);
-        await expect(page.getByRole('button', { name: 'Enviar al cliente' })).toBeVisible();
-        await expect(page.getByText('Visita (se descuenta)')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Terminar y obtener enlace' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Agregar renglón' })).toBeVisible();
         await snap(page, `cotizacion-borrador-${look.suffix}`);
       });
     });
@@ -48,6 +48,7 @@ test.describe('Cotizaciones', () => {
     await open(page, `/quotes/${SENT_QUOTE_ID}`);
     await expect(page.getByRole('button', { name: 'Registrar respuesta' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Enviar por WhatsApp' })).toBeVisible();
+    await expect(page.getByText('Visita (se descuenta)')).toBeVisible();
     await snap(page, 'cotizacion-enviada-escritorio');
   });
 });

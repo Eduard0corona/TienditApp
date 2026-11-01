@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { QuoteStatus } from '../types';
-import { quoteFolio, quoteLink, quoteMailUrl, quoteMessage, quoteStatusChip, quoteStatusLabel, quoteWhatsAppUrl } from './quotes';
+import { QuoteReplyChannel, QuoteStatus } from '../types';
+import { quoteFolio, quoteLink, quoteMailUrl, quoteMessage, quoteStatusChip, quoteStatusLabel, quoteWhatsAppUrl, replyChannelPhrase } from './quotes';
 
 describe('quotes', () => {
   it('names every status the server sends, an expired one as such', () => {
@@ -25,6 +25,15 @@ describe('quotes', () => {
     expect(text).toContain('$1,160.00');
     expect(text).toContain('19 de octubre de 2026');
     expect(text).toContain('https://x/cotizacion#t');
+  });
+
+  it('leaves out the business when its name is not known yet', () => {
+    expect(quoteMessage({ number: 'COT-000007', revision: 1, toPay: 10 }, '', 'L')).toBe('Hola, te comparto la cotización COT-000007 por $10.00. Puedes verla aquí: L');
+  });
+
+  it('says how the customer answered after the verb', () => {
+    expect(replyChannelPhrase(QuoteReplyChannel.WhatsApp)).toBe('por WhatsApp');
+    expect(replyChannelPhrase(QuoteReplyChannel.InPerson)).toBe('en persona');
   });
 
   it('opens WhatsApp only with a phone, and the email only with an address', () => {

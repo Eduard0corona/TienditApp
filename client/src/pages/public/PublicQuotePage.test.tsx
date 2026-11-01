@@ -41,7 +41,7 @@ function quote(overrides: Record<string, unknown> = {}) {
 
 function renderPage(url: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[url]}>
         <Routes>
@@ -80,11 +80,17 @@ describe('PublicQuotePage', () => {
     expect(screen.queryByRole('link', { name: 'Responder al negocio' })).toBeInTheDocument();
   });
 
-  it('does not offer to answer an expired quote', async () => {
-    vi.mocked(apiRequest).mockResolvedValue(quote({ status: QuoteStatus.Expired }) as never);
-    renderPage(`/cotizacion#${LINK}`);
+  it('lets the customer ask for a new one once it expired, and offers no answer to an accepted one', async () => {
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ status: QuoteStatus.Expired }) as never);
+    const { unmount } = renderPage(`/cotizacion#${LINK}`);
 
     expect(await screen.findByText(/Venció el 19 de octubre de 2026/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Responder al negocio' })).toBeInTheDocument();
+    unmount();
+
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ status: QuoteStatus.Accepted }) as never);
+    renderPage(`/cotizacion#${LINK}`);
+    expect(await screen.findByText('Le dijiste al negocio que la aceptas.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Responder al negocio' })).not.toBeInTheDocument();
   });
 

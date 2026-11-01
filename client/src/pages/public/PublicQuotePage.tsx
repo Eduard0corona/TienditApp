@@ -43,7 +43,8 @@ export default function PublicQuotePage() {
   });
   const quote = quoteQuery.data;
   const folio = quote ? quoteFolio(quote.number, quote.revision) : '';
-  const contact = quote && quote.status === QuoteStatus.Sent
+  // To accept it or ask about it while it stands, or to ask for a new one once it expired.
+  const contact = quote && (quote.status === QuoteStatus.Sent || quote.status === QuoteStatus.Expired)
     ? businessWhatsAppUrl(quote.businessContactPhone, `Hola, les escribo por la cotización ${folio}.`)
     : null;
 
