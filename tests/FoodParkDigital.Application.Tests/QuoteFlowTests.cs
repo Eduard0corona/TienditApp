@@ -341,6 +341,29 @@ public class QuoteFlowTests
         Assert.Equal((440.80m, false, 1160m), (after.VisitCredit!.Amount, after.VisitCredit.Applies, after.ToPay));
     }
 
+    [Fact]
+    public async Task TheVisit_ShouldComeOff_OnlyWhatItsSalePaid_AndOnlyWhatWasForTheVisit()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture, pricesIncludeTax: false, policy: HomeVisitChargePolicy.CreditedIfHired);
+        var service = await fixture.AddProductAsync(tenant, "Visita y diagnóstico", 300m, unit: UnitType.Service);
+        var part = await fixture.AddProductAsync(tenant, "Válvula de paso", 200m);
+        var withAdvance = await VisitAsync(fixture, service.Id);
+        var withPart = await VisitAsync(fixture, service.Id, SalesTestFixture.Now.AddDays(2));
+        // An advance of $100 on the $440.80 of the visit; and a visit that also sold a part, all paid ($672.80).
+        await SellVisitAsync(fixture, tenant, service, withAdvance.Id, paid: 100m);
+        await SellVisitAsync(fixture, tenant, service, withPart.Id, extra: part);
+
+        var advanced = (await CreateAsync(fixture, new CreateQuoteCommand(withAdvance.Id, null, null, null, null))).Value!;
+        var parted = (await CreateAsync(fixture, new CreateQuoteCommand(withPart.Id, null, null, null, null))).Value!;
+        advanced = (await UpdateAsync(fixture, advanced, [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = 1000m }])).Value!;
+        parted = (await UpdateAsync(fixture, parted, [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = 1000m }])).Value!;
+
+        // Only what was paid comes off; and of a sale that also sold a part, only the visit (its service and its zone).
+        Assert.Equal((100m, 1060m), (advanced.VisitCredit!.Amount, advanced.ToPay));
+        Assert.Equal((440.80m, 719.20m), (parted.VisitCredit!.Amount, parted.ToPay));
+    }
+
     [Theory]
     [InlineData(HomeVisitChargePolicy.Charged)]
     [InlineData(HomeVisitChargePolicy.Free)]
@@ -552,21 +575,29 @@ public class QuoteFlowTests
     }
 
     /// <summary>Charges the visit with its service, paid in cash.</summary>
-    private static async Task<OrderDto> SellVisitAsync(SalesTestFixture fixture, Domain.Tenants.Entities.Tenant tenant, Product service, Guid appointmentId)
+    /// <summary>Charges the visit with its service (and <paramref name="extra"/>, when given), paid in cash: all of it unless <paramref name="paid"/>.</summary>
+    private static async Task<OrderDto> SellVisitAsync(
+        SalesTestFixture fixture, Domain.Tenants.Entities.Tenant tenant, Product service, Guid appointmentId, Product? extra = null, decimal? paid = null)
     {
-        await fixture.OpenCashSessionAsync(tenant);
+        // One drawer open for every sale of the test.
+        if (!await fixture.Context.CashSessions.AnyAsync(c => c.TenantId == tenant.Id))
+            await fixture.OpenCashSessionAsync(tenant);
         var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, new FolioGenerator(fixture.Context),
             NullLogger<OrderInventoryService>.Instance);
         var settings = await fixture.Context.TenantSettings.AsNoTracking().SingleAsync(s => s.TenantId == tenant.Id);
-        // 300 and the zone's 80, with IVA when the prices do not include it.
-        var total = settings.PricesIncludeTax ? 380m : 440.80m;
+        // 300 and the zone's 80 (plus what the extra costs), with IVA when the prices do not include it.
+        var amount = 380m + (extra?.PriceAmount ?? 0m);
+        var total = settings.PricesIncludeTax ? amount : amount * 1.16m;
+        CreateOrderItemDto[] items = extra is null
+            ? [new CreateOrderItemDto { ProductId = service.Id, Quantity = 1 }]
+            : [new CreateOrderItemDto { ProductId = service.Id, Quantity = 1 }, new CreateOrderItemDto { ProductId = extra.Id, Quantity = 1 }];
         var sale = await fixture.CreateOrderHandler(inventory).Handle(new CreateOrderCommand
         {
             OrderType = OrderType.Service,
             CustomerName = "Luis",
-            Items = [new CreateOrderItemDto { ProductId = service.Id, Quantity = 1 }],
+            Items = [.. items],
             AppointmentId = appointmentId,
-            Payments = [new CreateOrderPaymentDto { Amount = total, Method = OrderPaymentMethod.Cash }]
+            Payments = [new CreateOrderPaymentDto { Amount = paid ?? total, Method = OrderPaymentMethod.Cash }]
         }, CancellationToken.None);
         Assert.True(sale.IsSuccess, sale.Error);
         fixture.Context.ChangeTracker.Clear();
