@@ -139,9 +139,9 @@ La cotización (puntos 14, 15 y 17), salvo convertir la aceptada en el trabajo. 
   - Deja de abrir 30 días después de vencer.
   - Una versión reemplazada lo dice y lleva a la nueva.
 - **«Visita (se descuenta)»**: con «Se descuenta si contratas» (la política con que se pidió la visita; si la agendó el equipo, la del negocio), la cotización de una visita cobrada resta lo que su venta cobró por la visita.
-  - Es el cargo de la zona y los renglones del servicio de la cita, con su IVA, y nunca más de lo que esa venta tiene pagado.
+  - Es el cargo de la zona y las unidades del servicio de la cita que el cliente conservó (sin las devueltas), con su IVA, y nunca más de lo que esa venta tiene pagado.
   - Se recalcula en el borrador y se fija al enviarla.
-  - Un reembolso posterior de esa venta (que la deja completada) baja lo que resta a lo que la venta sigue teniendo pagado.
+  - Un reembolso o una devolución posterior de esa venta (que la deja completada) baja lo que resta a lo que la venta sigue teniendo pagado por la visita.
   - Si la venta se cancela o se reembolsa completa, deja de aplicar.
   - Se resta del total: «Por pagar».
 - **La respuesta**: el negocio registra si el cliente la aceptó o la rechazó, por dónde (WhatsApp, correo, teléfono o en persona) y lo que dijo, hasta 500 caracteres. Lo que dijo queda en la cotización. La actividad guarda el folio, la versión, el total y por dónde, nunca lo que dijo.

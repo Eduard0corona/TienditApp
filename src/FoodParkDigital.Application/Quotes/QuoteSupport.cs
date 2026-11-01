@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Taxes;
 using FoodParkDigital.Domain.Quotes;
@@ -27,7 +28,7 @@ internal static class QuoteCalendar
 /// What the customer paid for the visit that a quote takes off (ADR 0053 point 14): the visit was agreed «Se descuenta si
 /// contratas» (or, scheduled by the team without a policy, the business charges its visits that way now), and its
 /// appointment has a sale that is not cancelled. It is what that sale charged for the visit, the charge of its zone and the
-/// lines of its service with their IVA, and never more than the sale has paid.
+/// units of its service the customer kept, with their IVA, and never more than the sale still has paid.
 /// </summary>
 internal static class QuoteVisitCredits
 {
@@ -50,6 +51,36 @@ internal static class QuoteVisitCredits
         if (policy != HomeVisitChargePolicy.CreditedIfHired)
             return null;
 
+        var paid = await PaidForTheVisitAsync(context, tenantId, saleId, appointment.ServiceProductId, cancellationToken);
+        return paid > 0 ? new QuoteVisitCredit(saleId, paid.Value) : null;
+    }
+
+    /// <summary>
+    /// What the sale of the visit a quote takes off still has paid for the visit, after what was refunded or returned since.
+    /// Null once that sale was cancelled: it no longer takes anything off.
+    /// </summary>
+    public static async Task<decimal?> StillPaidAsync(IApplicationDbContext context, Quote quote, CancellationToken cancellationToken)
+    {
+        if (quote.VisitCreditSaleOrderId is not { } saleId)
+            return null;
+        var service = quote.AppointmentId is { } appointmentId
+            ? await context.Appointments
+                .AsNoTracking()
+                .Where(a => a.Id == appointmentId && a.TenantId == quote.TenantId)
+                .Select(a => a.ServiceProductId)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+        return await PaidForTheVisitAsync(context, quote.TenantId, saleId, service, cancellationToken);
+    }
+
+    /// <summary>
+    /// What a sale has paid for its visit: what it charges for it (the charge of its zone and the units of the service the
+    /// customer kept, without those cancelled or returned, with their IVA), never more than the sale still has paid (what was
+    /// paid less what was refunded). Null when the sale is cancelled.
+    /// </summary>
+    private static async Task<decimal?> PaidForTheVisitAsync(
+        IApplicationDbContext context, Guid tenantId, Guid saleId, Guid? serviceProductId, CancellationToken cancellationToken)
+    {
         var sale = await context.Orders
             .AsNoTracking()
             .Include(o => o.Items)
@@ -58,41 +89,31 @@ internal static class QuoteVisitCredits
             return null;
 
         var amounts = sale.Items
-            .Where(item => appointment.ServiceProductId is { } service && item.ProductId == service && item.ChargedPrice > 0)
-            .Select(item => new TaxableAmount(item.ChargedPrice, item.VatRate))
+            .Where(item => serviceProductId is { } service && item.ProductId == service)
+            .Select(item => new TaxableAmount(Kept(item), item.VatRate))
+            .Where(amount => amount.Amount > 0)
             .ToList();
         if (sale.VisitCharge is { Fee: > 0 } charge)
             amounts.Add(new TaxableAmount(charge.Fee, charge.FeeVatRate));
         var charged = OrderTaxCalculator.Calculate(sale.PricesIncludeTax, amounts).Sum(line => line.Total);
-        var credit = Math.Min(charged, sale.NetPaidAmount);
-        return credit > 0 ? new QuoteVisitCredit(sale.Id, decimal.Round(credit, 2, MidpointRounding.ToEven)) : null;
+        return decimal.Round(Math.Max(0m, Math.Min(charged, sale.NetPaidAmount)), 2, MidpointRounding.ToEven);
     }
 
-    /// <summary>
-    /// What the sale of the visit a quote takes off still has paid: what was paid less what was refunded since. Null once that
-    /// sale was cancelled: it no longer takes anything off.
-    /// </summary>
-    public static async Task<decimal?> StillPaidAsync(
-        IApplicationDbContext context, Guid? saleOrderId, CancellationToken cancellationToken)
-    {
-        if (saleOrderId is not { } id)
-            return null;
-        return await context.Orders
-            .AsNoTracking()
-            .Where(o => o.Id == id && o.Status != OrderStatus.Cancelled)
-            .Select(o => (decimal?)(o.PaidAmount - o.RefundedAmount))
-            .FirstOrDefaultAsync(cancellationToken);
-    }
+    /// <summary>What a line charges for the units the customer kept: its charge in proportion, without those returned.</summary>
+    private static decimal Kept(OrderItem item)
+        => item.ActiveQuantity <= 0 || item.ReturnableQuantity <= 0
+            ? 0m
+            : decimal.Round(item.ChargedPrice * item.ReturnableQuantity / item.ActiveQuantity, 2, MidpointRounding.ToEven);
 
     /// <summary>
-    /// How a quote's visit credit reads: what it takes off now; once it takes nothing off (its sale was cancelled or refunded),
-    /// what it took off, as not applying.
+    /// How a quote's visit credit reads: what it takes off now; once it takes nothing off (its sale was cancelled, refunded
+    /// or the visit returned), what it took off, as not applying.
     /// </summary>
-    public static QuoteVisitCreditDto? Describe(Quote quote, decimal? saleStillPaid)
+    public static QuoteVisitCreditDto? Describe(Quote quote, decimal? stillPaidForTheVisit)
     {
         if (quote.VisitCreditAmount is not { } fixedAmount)
             return null;
-        var standing = quote.VisitCreditStanding(saleStillPaid);
+        var standing = quote.VisitCreditStanding(stillPaidForTheVisit);
         return standing > 0
             ? new QuoteVisitCreditDto { Amount = standing, Applies = true }
             : new QuoteVisitCreditDto { Amount = fixedAmount, Applies = false };
@@ -145,7 +166,7 @@ internal static class QuoteViews
                 })
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
-        var saleStillPaid = await QuoteVisitCredits.StillPaidAsync(context, quote.VisitCreditSaleOrderId, cancellationToken);
+        var stillPaid = await QuoteVisitCredits.StillPaidAsync(context, quote, cancellationToken);
         var status = quote.StatusOn(today);
         var draft = versions.FirstOrDefault(v => v.Status == QuoteStatus.Draft);
 
@@ -179,8 +200,8 @@ internal static class QuoteViews
             Tax = quote.Tax,
             Taxes = Taxes(quote),
             Total = quote.Total,
-            VisitCredit = QuoteVisitCredits.Describe(quote, saleStillPaid),
-            ToPay = quote.ToPay(saleStillPaid),
+            VisitCredit = QuoteVisitCredits.Describe(quote, stillPaid),
+            ToPay = quote.ToPay(stillPaid),
             SentAt = quote.SentAt,
             TrackingToken = quote.LinkOpensOn(today) ? quote.TrackingToken : null,
             ClosedAt = quote.ClosedAt,

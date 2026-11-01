@@ -186,6 +186,32 @@ public class QuoteFlowTests
     }
 
     [Fact]
+    public async Task TheBusinessesEvening_ShouldStillBeItsDay_ForTheValidity_TheExpiry_AndTheLink()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await TradeAsync(fixture);
+        var quote = await DraftWithALineAsync(fixture);
+        // October 4 at 19:00 in Mexico City is already October 5 in UTC.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 10, 5, 1, 0, 0, TimeSpan.Zero);
+
+        var sent = (await Handler(fixture).Handle(new SendQuoteCommand(quote.Id), CancellationToken.None)).Value!;
+
+        // Fifteen days from the business's October 4.
+        Assert.Equal(new DateOnly(2026, 10, 19), sent.ValidUntil);
+        // October 19 at 21:00 there (the 20th in UTC) it is still valid; past its midnight it expired.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 10, 20, 3, 0, 0, TimeSpan.Zero);
+        Assert.Equal(QuoteStatus.Sent, (await GetAsync(fixture, sent.Id)).Status);
+        Assert.Equal(QuoteStatus.Sent, (await PublicAsync(fixture, sent.TrackingToken!))!.Status);
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 10, 20, 7, 0, 0, TimeSpan.Zero);
+        Assert.Equal(QuoteStatus.Expired, (await GetAsync(fixture, sent.Id)).Status);
+        // Its link opens through November 18 there, 30 days after its validity, and not the day after.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 11, 19, 3, 0, 0, TimeSpan.Zero);
+        Assert.NotNull(await PublicAsync(fixture, sent.TrackingToken!));
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 11, 19, 7, 0, 0, TimeSpan.Zero);
+        Assert.Null(await PublicAsync(fixture, sent.TrackingToken!));
+    }
+
+    [Fact]
     public async Task Send_ShouldNeedALineWithAPrice()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -368,6 +394,38 @@ public class QuoteFlowTests
         Assert.Equal(OrderStatus.Completed, (await fixture.Context.Orders.AsNoTracking().SingleAsync(o => o.Id == sale.Id)).Status);
         Assert.Equal((440.80m, false, 1160m), (refunded.VisitCredit!.Amount, refunded.VisitCredit.Applies, refunded.ToPay));
         Assert.Equal((false, 1160m), (refundedPublic!.VisitCredit!.Applies, refundedPublic.ToPay));
+    }
+
+    [Fact]
+    public async Task TheVisit_ShouldNotComeOff_ForTheServiceReturned_EvenWhileTheSaleKeepsAPartPaid()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture, pricesIncludeTax: false, policy: HomeVisitChargePolicy.CreditedIfHired);
+        var service = await fixture.AddProductAsync(tenant, "Visita y diagnóstico", 300m, unit: UnitType.Service);
+        var part = await fixture.AddProductAsync(tenant, "Válvula de paso", 200m);
+        var returnedFirst = await VisitAsync(fixture, service.Id);
+        var returnedAfter = await VisitAsync(fixture, service.Id, SalesTestFixture.Now.AddDays(2));
+        // Each sale charged the visit (its service and its zone, $440.80) and a part ($232): $672.80, all paid.
+        var firstSale = await SellVisitAsync(fixture, tenant, service, returnedFirst.Id, extra: part);
+        var afterSale = await SellVisitAsync(fixture, tenant, service, returnedAfter.Id, extra: part);
+        var lines = new[] { new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = 1000m } };
+
+        // The service ($348 with IVA) is returned before quoting: only the zone's $92.80 is left paid for the visit.
+        await RefundAsync(fixture, firstSale.Id, 348m, firstSale.Items.Single(i => i.ProductId == service.Id).Id);
+        var first = (await CreateAsync(fixture, new CreateQuoteCommand(returnedFirst.Id, null, null, null, null))).Value!;
+        first = (await UpdateAsync(fixture, first, [.. lines])).Value!;
+        Assert.Equal((92.80m, true, 1067.20m), (first.VisitCredit!.Amount, first.VisitCredit.Applies, first.ToPay));
+
+        // Returned once the quote was sent with $440.80 off: the same $92.80 come off, also through its link.
+        var after = (await CreateAsync(fixture, new CreateQuoteCommand(returnedAfter.Id, null, null, null, null))).Value!;
+        await UpdateAsync(fixture, after, [.. lines]);
+        var sent = (await Handler(fixture).Handle(new SendQuoteCommand(after.Id), CancellationToken.None)).Value!;
+        Assert.Equal((440.80m, 719.20m), (sent.VisitCredit!.Amount, sent.ToPay));
+        await RefundAsync(fixture, afterSale.Id, 348m, afterSale.Items.Single(i => i.ProductId == service.Id).Id);
+        var read = await GetAsync(fixture, sent.Id);
+        var link = await PublicAsync(fixture, sent.TrackingToken!);
+        Assert.Equal((92.80m, true, 1067.20m), (read.VisitCredit!.Amount, read.VisitCredit.Applies, read.ToPay));
+        Assert.Equal((92.80m, 1067.20m), (link!.VisitCredit!.Amount, link.ToPay));
     }
 
     [Fact]
@@ -606,15 +664,21 @@ public class QuoteFlowTests
 
     /// <summary>Charges the visit with its service, paid in cash.</summary>
     /// <summary>Charges the visit with its service (and <paramref name="extra"/>, when given), paid in cash: all of it unless <paramref name="paid"/>.</summary>
-    /// <summary>Gives back part of what a sale was paid in cash, as the business does from its detail.</summary>
-    private static async Task RefundAsync(SalesTestFixture fixture, Guid saleId, decimal amount)
+    /// <summary>Gives back part of what a sale was paid in cash, with the units returned if any, as the business does from its detail.</summary>
+    private static async Task RefundAsync(SalesTestFixture fixture, Guid saleId, decimal amount, params Guid[] returnedItemIds)
     {
         fixture.Context.ChangeTracker.Clear();
         var refund = await new RefundOrderCommandHandler(
                 fixture.Context, fixture.CurrentUser, new Finance.OrderCashService(fixture.Context, fixture.CurrentUser),
                 fixture.Clock, NoOpOrderInventoryService.Instance)
-            .Handle(new RefundOrderCommand { OrderId = saleId, Amount = amount, Method = OrderPaymentMethod.Cash, Reason = "No se hizo el trabajo" },
-                CancellationToken.None);
+            .Handle(new RefundOrderCommand
+            {
+                OrderId = saleId,
+                Amount = amount,
+                Method = OrderPaymentMethod.Cash,
+                Reason = "No se hizo el trabajo",
+                Items = [.. returnedItemIds.Select(id => new RefundItemDto { OrderItemId = id, Quantity = 1m })]
+            }, CancellationToken.None);
         Assert.True(refund.IsSuccess, refund.Error);
         fixture.Context.ChangeTracker.Clear();
     }

@@ -109,15 +109,15 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
         => TrackingToken is not null && ValidUntil is { } until && today <= until.AddDays(QuoteRules.LinkDaysAfterValidity);
 
     /// <summary>
-    /// What it takes off for the visit while its sale still has <paramref name="saleStillPaid"/> paid (what was paid less
-    /// what was refunded; null once that sale was cancelled): what was fixed, never more than the sale still has paid.
+    /// What it takes off for the visit while its sale still has <paramref name="stillPaidForTheVisit"/> paid for it (after
+    /// what was refunded or returned; null once that sale was cancelled): what was fixed, never more than that.
     /// </summary>
-    public decimal VisitCreditStanding(decimal? saleStillPaid)
-        => VisitCreditAmount is { } credit && saleStillPaid is { } paid ? Math.Min(credit, Math.Max(0m, paid)) : 0m;
+    public decimal VisitCreditStanding(decimal? stillPaidForTheVisit)
+        => VisitCreditAmount is { } credit && stillPaidForTheVisit is { } paid ? Math.Min(credit, Math.Max(0m, paid)) : 0m;
 
     /// <summary>What is left to pay: the total less what it takes off for the visit (<see cref="VisitCreditStanding"/>).</summary>
-    public decimal ToPay(decimal? saleStillPaid)
-        => Math.Max(0m, Total - VisitCreditStanding(saleStillPaid));
+    public decimal ToPay(decimal? stillPaidForTheVisit)
+        => Math.Max(0m, Total - VisitCreditStanding(stillPaidForTheVisit));
 
     public IReadOnlyList<OrderTaxLine> GetTaxBreakdown()
         => OrderTaxCalculator.Calculate(PricesIncludeTax, _lines.Select(line => new TaxableAmount(line.Total, line.VatRate)));
