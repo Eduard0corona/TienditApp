@@ -22,7 +22,11 @@ internal static class BeforeQuoteDeliveries
     public static void Ignore(ModelBuilder modelBuilder)
     {
         modelBuilder.Ignore<QuoteEmail>();
-        modelBuilder.Entity<OutgoingMessage>().Ignore(m => m.QuoteId);
+        // The relationship to the quote first: left alone, it would keep QuoteId as a shadow property.
+        var messages = modelBuilder.Entity<OutgoingMessage>();
+        foreach (var foreignKey in messages.Metadata.GetForeignKeys().Where(k => k.PrincipalEntityType.ClrType == typeof(Quote)).ToList())
+            messages.Metadata.RemoveForeignKey(foreignKey);
+        messages.Ignore(m => m.QuoteId);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.QuoteWhatsAppTemplateId);
     }
 
