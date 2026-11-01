@@ -23,6 +23,15 @@ function user(role: string, permissions: string[] = []): UserProfileDto {
 }
 
 describe('getAccess', () => {
+  it('opens the quotes to whoever takes orders in a business with service orders or the agenda, like the API', () => {
+    const trade = TenantCapability.Service | TenantCapability.Appointments;
+
+    expect(getAccess(user('STAFF', ['ManageOrders']), trade).quotes).toBe(true);
+    expect(getAccess(user('STAFF', ['ManageOrders']), TenantCapability.Appointments).quotes).toBe(true);
+    expect(getAccess(user('STAFF', ['ManageAppointments']), trade).quotes).toBe(false);
+    expect(getAccess(user('TENANT_ADMIN'), FOOD_WITH_KITCHEN).quotes).toBe(false);
+  });
+
   it('lets a waiter take orders and seat tables but not charge or cook', () => {
     const access = getAccess(user('STAFF', ['ManageOrders']), FOOD_WITH_KITCHEN);
 

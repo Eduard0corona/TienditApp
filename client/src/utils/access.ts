@@ -35,6 +35,8 @@ export interface Access {
   /** Who owes the business (fiado, Fase 26A): ManageCustomers or ChargeOrders, as the API asks. */
   receivables: boolean;
   appointments: boolean;
+  /** Quotes (Fase 29C): ManageOrders in a business with service orders or the agenda, as the API asks. */
+  quotes: boolean;
   employees: boolean;
   /** WhatsApp chat: ManageWhatsApp. */
   chat: boolean;
@@ -97,6 +99,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     customers: commerce && can('ManageCustomers'),
     receivables: commerce && (can('ManageCustomers') || can('ChargeOrders')),
     appointments: hasCapability(capabilities, TenantCapability.Appointments) && can('ManageAppointments'),
+    quotes: hasAnyCapability(capabilities, TenantCapability.Service | TenantCapability.Appointments) && can('ManageOrders'),
     employees: commerce && isAdmin,
     chat: commerce && can('ManageWhatsApp'),
     whatsAppSettings: commerce && isAdmin,

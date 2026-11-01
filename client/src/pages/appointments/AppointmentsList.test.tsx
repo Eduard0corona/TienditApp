@@ -9,6 +9,7 @@ import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { employeesApi } from '../../api/employeesApi';
 import { quoteVisit } from '../../api/homeVisits';
+import { quotesApi } from '../../api/quotesApi';
 import { productsApi } from '../../api/productsApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -23,6 +24,7 @@ vi.mock('../../api/appointmentsApi', () => ({
 vi.mock('../../api/employeesApi', () => ({ employeesApi: { getAll: vi.fn() } }));
 vi.mock('../../api/productsApi', () => ({ productsApi: { getAll: vi.fn() } }));
 vi.mock('../../api/homeVisits', () => ({ quoteVisit: vi.fn(), useVisitRoute: vi.fn() }));
+vi.mock('../../api/quotesApi', () => ({ quotesApi: { create: vi.fn() } }));
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }));
@@ -76,6 +78,7 @@ function renderAgenda(items: AppointmentDto[], { requests = 0, path = '/appointm
           <Routes>
             <Route path="/appointments" element={<AppointmentsList />} />
             <Route path="/sell" element={<Sell />} />
+            <Route path="/quotes/:id" element={<p>Cotización abierta</p>} />
           </Routes>
         </MemoryRouter>
       </ConfirmProvider>
@@ -120,6 +123,35 @@ describe('AppointmentsList', () => {
 
     await user.click(screen.getByRole('button', { name: 'Cobrar la cita de Ana Ruiz' }));
     expect(await screen.findByText('Vender ?appointment=a1')).toBeInTheDocument();
+  });
+
+  it('quotes a visit, open or done, for whoever takes orders: a cancelled one and an appointment at the business no', async () => {
+    const user = userEvent.setup();
+    vi.mocked(quotesApi.create).mockResolvedValue({ id: 'q1' } as never);
+    renderAgenda([
+      AT_HOME,
+      appointment({ ...AT_HOME, id: 'a2', customerName: 'Mara', status: AppointmentStatus.Completed, saleOrderId: 'o1' }),
+      appointment({ ...AT_HOME, id: 'a3', customerName: 'Iván', status: AppointmentStatus.Cancelled }),
+      appointment({ id: 'a4', customerName: 'Rosa' }),
+    ]);
+
+    expect(await screen.findByRole('button', { name: 'Cotizar la visita de Mara' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cotizar la visita de Iván' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cotizar la visita de Rosa' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cotizar la visita de Ana Ruiz' }));
+
+    expect(quotesApi.create).toHaveBeenCalledWith({ appointmentId: 'a1' });
+    expect(await screen.findByText('Cotización abierta')).toBeInTheDocument();
+  });
+
+  it('offers no quote to whoever does not take orders', async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ManageAppointments'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    renderAgenda([AT_HOME]);
+
+    expect(await screen.findByText('Ana Ruiz')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cotizar la visita de Ana Ruiz' })).not.toBeInTheDocument();
   });
 
   it('offers no charge to whoever does not sell', async () => {

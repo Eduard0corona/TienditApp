@@ -1,0 +1,138 @@
+import { Link, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { getApiErrorMessage } from '../../api/errors';
+import { publicQuoteApi } from '../../api/quotesApi';
+import PageTitle from '../../components/common/PageTitle';
+import { QuoteStatus } from '../../types';
+import { formatCalendarDate } from '../../utils/dates';
+import { formatMoney } from '../../utils/money';
+import { quoteFolio, quoteStatusChip, quoteStatusLabel } from '../../utils/quotes';
+import { businessWhatsAppUrl } from '../../utils/whatsApp';
+
+/** What the customer reads about where the quote stands, beyond its chip. */
+function standing(status: QuoteStatus, validUntil: string): string | null {
+  switch (status) {
+    case QuoteStatus.Sent:
+      return `Vale hasta el ${formatCalendarDate(validUntil)}. Para aceptarla o preguntar algo, responde al negocio.`;
+    case QuoteStatus.Accepted:
+      return 'Le dijiste al negocio que la aceptas.';
+    case QuoteStatus.Rejected:
+      return 'Le dijiste al negocio que no la aceptas.';
+    case QuoteStatus.Expired:
+      return `Venció el ${formatCalendarDate(validUntil)}. Si aún te interesa, pídele al negocio una nueva.`;
+    case QuoteStatus.Superseded:
+      return 'El negocio la corrigió: esta versión ya no vale.';
+    default:
+      return null;
+  }
+}
+
+/**
+ * A quote opened with the link the business sent (/cotizacion#link, Fase 29C, ADR 0053), without an account: what it
+ * includes, its taxes and total, until when it is valid, and a way to answer the business. The link lives in the fragment,
+ * which the browser never sends to a server; the page sends it in the body of its request.
+ */
+export default function PublicQuotePage() {
+  const location = useLocation();
+  const token = location.hash.replace(/^#/, '');
+  const quoteQuery = useQuery({
+    queryKey: ['public', 'quote', token],
+    queryFn: ({ signal }) => publicQuoteApi.view(token, signal),
+    enabled: token.length > 0,
+    retry: false,
+  });
+  const quote = quoteQuery.data;
+  const folio = quote ? quoteFolio(quote.number, quote.revision) : '';
+  const contact = quote && quote.status === QuoteStatus.Sent
+    ? businessWhatsAppUrl(quote.businessContactPhone, `Hola, les escribo por la cotización ${folio}.`)
+    : null;
+
+  return (
+    <div className="cl-page">
+      <PageTitle title="Tu cotización" />
+
+      {!token && (
+        <div className="card">
+          <div className="card-body text-center py-5">
+            <i className="ri-file-paper-2-line fs-1 text-muted d-block mb-2" aria-hidden="true"></i>
+            <h2 className="h5">Abre el enlace de tu mensaje</h2>
+            <p className="text-muted mb-0">Cuando un negocio te manda una cotización, el mensaje trae un enlace para verla.</p>
+          </div>
+        </div>
+      )}
+      {quoteQuery.isLoading && (
+        <div className="text-center py-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Cargando</span></div></div>
+      )}
+      {quoteQuery.error && (
+        <div className="alert alert-warning" role="alert">
+          {getApiErrorMessage(quoteQuery.error, 'No se pudo cargar tu cotización.')}
+        </div>
+      )}
+
+      {quote && (
+        <div className="card mb-0">
+          <div className="card-body">
+            <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+              <div>
+                <h2 className="h5 mb-0">Cotización {folio}</h2>
+                <small className="text-muted">{quote.businessName} · para {quote.customerName}</small>
+              </div>
+              <span className={quoteStatusChip(quote.status)}>{quoteStatusLabel(quote.status)}</span>
+            </div>
+
+            {quote.status === QuoteStatus.Superseded && quote.newerToken ? (
+              <div className="alert alert-info small" role="status">
+                El negocio la corrigió: esta versión ya no vale.{' '}
+                <Link to={{ pathname: '/cotizacion', hash: quote.newerToken }}>Ver la versión nueva</Link>
+              </div>
+            ) : (
+              standing(quote.status, quote.validUntil) && <p className="small">{standing(quote.status, quote.validUntil)}</p>
+            )}
+
+            <div className="table-responsive">
+              <table className="table table-sm mb-2">
+                <thead>
+                  <tr><th>Qué incluye</th><th className="text-end">Cantidad</th><th className="text-end">Importe</th></tr>
+                </thead>
+                <tbody>
+                  {quote.lines.map((line, index) => (
+                    <tr key={index}>
+                      <td>{line.description}<span className="d-block text-muted small">{formatMoney(line.unitPrice)} c/u</span></td>
+                      <td className="text-end">{line.quantity}</td>
+                      <td className="text-end">{formatMoney(line.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <dl className="row small mb-2">
+              <dt className="col-7 col-sm-9 text-muted fw-normal text-sm-end">Subtotal</dt>
+              <dd className="col-5 col-sm-3 text-end">{formatMoney(quote.subTotal)}</dd>
+              <dt className="col-7 col-sm-9 text-muted fw-normal text-sm-end">IVA</dt>
+              <dd className="col-5 col-sm-3 text-end">{formatMoney(quote.tax)}</dd>
+              <dt className="col-7 col-sm-9 text-sm-end">Total</dt>
+              <dd className="col-5 col-sm-3 text-end fw-semibold">{formatMoney(quote.total)}</dd>
+              {quote.visitCredit?.applies && (
+                <>
+                  <dt className="col-7 col-sm-9 text-muted fw-normal text-sm-end">Visita (se descuenta)</dt>
+                  <dd className="col-5 col-sm-3 text-end">−{formatMoney(quote.visitCredit.amount)}</dd>
+                  <dt className="col-7 col-sm-9 text-sm-end">Por pagar</dt>
+                  <dd className="col-5 col-sm-3 text-end fw-semibold">{formatMoney(quote.toPay)}</dd>
+                </>
+              )}
+            </dl>
+            <p className="text-muted small mb-0">{quote.pricesIncludeTax ? 'Los precios incluyen IVA.' : 'El IVA se suma a los precios.'}</p>
+            {quote.note && <p className="small mt-2 mb-0">{quote.note}</p>}
+
+            {contact && (
+              <a className="btn btn-primary mt-3" href={contact} target="_blank" rel="noreferrer">
+                <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Responder al negocio
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

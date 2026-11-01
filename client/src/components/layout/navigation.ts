@@ -44,7 +44,15 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Inicio', path: '/dashboard', icon: 'ri-home-4-line', area: 'dashboard', keywords: 'resumen ventas hoy dashboard' },
       { label: 'Vender', path: '/sell', icon: 'ri-shopping-basket-2-line', area: 'sell', keywords: 'nueva venta cobrar punto de venta caja registradora' },
       { label: 'Mesas', path: '/tables', icon: 'ri-restaurant-line', area: 'tables', keywords: 'cuentas abiertas comandas rondas salón' },
-      { label: 'Pedidos', path: '/orders', icon: 'ri-file-list-3-line', area: 'orders', keywords: 'ordenes órdenes tickets folios' },
+      // The quotes (Fase 29C) are the other paper of a sale: next to the orders, as tabs where both open.
+      {
+        label: 'Pedidos',
+        icon: 'ri-file-list-3-line',
+        pages: [
+          { label: 'Pedidos', path: '/orders', icon: 'ri-file-list-3-line', area: 'orders', keywords: 'ordenes órdenes tickets folios' },
+          { label: 'Cotizaciones', path: '/quotes', icon: 'ri-file-paper-2-line', area: 'quotes', keywords: 'presupuestos cotizar visita trabajo propuesta' },
+        ],
+      },
       { label: 'Cocina', path: '/kitchen', icon: 'ri-restaurant-2-line', area: 'kitchen', keywords: 'comandas preparar' },
       { label: 'Taller', path: '/services/board', icon: 'ri-tools-line', area: 'serviceBoard', keywords: 'tablero de servicios piezas reparaciones lavado' },
       { label: 'Agenda', path: '/appointments', icon: 'ri-calendar-schedule-line', area: 'appointments', keywords: 'citas reservaciones' },
