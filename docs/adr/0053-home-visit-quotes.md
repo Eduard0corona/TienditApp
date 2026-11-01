@@ -131,7 +131,7 @@ La cotización (puntos 14, 15 y 17), salvo convertir la aceptada en el trabajo. 
   - Borrar del catálogo el producto de un renglón, o de la lista al cliente, deja la cotización con lo que dice.
 - **Sus estados** los cambia el agregado: Borrador, Enviada, Aceptada, Rechazada, Reemplazada y Descartada.
   - «Vencida» no se guarda: una enviada se lee vencida el día después de su vigencia, en el día del negocio. Así vence sola sin un proceso que la cambie. Vencida ya no se acepta ni se rechaza, pero se corrige.
-  - Enviada ya no se edita. «Corregir» (de una enviada, vencida o rechazada) empieza la versión siguiente con lo que decía. Al enviarse, la anterior queda «Reemplazada» con lo que decía. Un folio tiene un solo borrador a la vez (`IX_Quotes_TenantId_Number_Draft`), y una corrección no se envía si el cliente ya aceptó la versión que tenía.
+  - Enviada ya no se edita. «Corregir» (de una enviada, vencida o rechazada) empieza la versión siguiente con lo que decía. Al enviarse, la anterior queda «Reemplazada» con lo que decía (una rechazada conserva cuándo respondió el cliente). Un folio tiene un solo borrador a la vez (`IX_Quotes_TenantId_Number_Draft`), y una corrección no se envía si el cliente ya aceptó la versión que tenía: aceptarla descarta la corrección que se había empezado.
   - Un borrador se descarta y queda en el historial: su folio y su versión no se vuelven a dar.
 - **Enviar** fija la vigencia desde el día del negocio (15 días por omisión, `TenantSettings.QuoteValidityDays`, de 1 a 90; dueños y administradores la cambian en Cotizaciones y queda en la actividad) y le da a la versión su enlace. La pantalla ofrece mandarlo por WhatsApp (`wa.me` al teléfono del cliente con el folio, lo que hay que pagar, la vigencia y el enlace), por correo (`mailto:`) o copiarlo. Mandarlo desde el outbox, con su historial, es la Fase 29D.
 - **El enlace** (`/cotizacion#…`, `POST /api/v1/public/quotes/view`) es como el de un pedido: va en el fragmento y abre solo esa versión, sin cuenta y con el límite de la tienda.
@@ -145,7 +145,8 @@ La cotización (puntos 14, 15 y 17), salvo convertir la aceptada en el trabajo. 
   - Se resta del total: «Por pagar».
 - **La respuesta**: el negocio registra si el cliente la aceptó o la rechazó, por dónde (WhatsApp, correo, teléfono o en persona) y lo que dijo, hasta 500 caracteres. Lo que dijo queda en la cotización. La actividad guarda el folio, la versión, el total y por dónde, nunca lo que dijo.
 - **Quién**: quien toma pedidos (`ManageOrders`) en un negocio con órdenes de servicio o agenda. Cotizaciones es una pestaña junto a Pedidos.
-  - «Cotizar» en la Agenda abre la cotización de una visita (abierta o completada): una nueva con su cliente, o la que ya tiene.
+  - «Cotizar» en la Agenda abre la cotización de una visita (abierta o completada): una nueva con su cliente, o la que ya tiene. El servidor no cotiza una cita en el local, una cancelada, una a la que el cliente no llegó ni una solicitud por aceptar, y una visita tiene una sola cotización también con dos «Cotizar» a la vez (`IX_Quotes_TenantId_AppointmentId_First`).
+  - En la pantalla, «Terminar y obtener enlace» la deja enviada: TienditApp todavía no se la manda al cliente.
 - **El rollback** se detiene (50051) en cuanto hay una cotización o un negocio con otra vigencia.
 
 ### Etapa 2: la solicitud de la visita
