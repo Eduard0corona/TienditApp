@@ -291,6 +291,7 @@ export const MessagePurpose = {
   CreditReminder: 3,
   CreditDueSoon: 4,
   CfdiDocument: 5,
+  QuoteDocument: 6,
 } as const;
 export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
 
@@ -514,6 +515,13 @@ export const PurchaseOrderStatus = {
   Cancelled: 99,
 } as const;
 export type PurchaseOrderStatus = (typeof PurchaseOrderStatus)[keyof typeof PurchaseOrderStatus];
+
+export const QuoteEmailFailure = {
+  Rejected: 0,
+  NotConfigured: 1,
+  NotDelivered: 2,
+} as const;
+export type QuoteEmailFailure = (typeof QuoteEmailFailure)[keyof typeof QuoteEmailFailure];
 
 export const QuoteListFilter = {
   Open: 0,

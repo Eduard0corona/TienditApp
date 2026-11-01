@@ -15,7 +15,7 @@ vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('../../api/quotesApi', () => ({
-  quotesApi: { list: vi.fn(), settings: vi.fn(), updateSettings: vi.fn(), create: vi.fn() },
+  quotesApi: { list: vi.fn(), settings: vi.fn(), updateSettings: vi.fn(), setWhatsAppTemplate: vi.fn(), create: vi.fn() },
 }));
 
 const toast = { success: vi.fn(), error: vi.fn() };
@@ -44,7 +44,7 @@ describe('QuotesList', () => {
     vi.clearAllMocks();
     vi.mocked(useTenant).mockReturnValue({ capabilities: TenantCapability.Service | TenantCapability.Appointments } as unknown as ReturnType<typeof useTenant>);
     vi.mocked(useToast).mockReturnValue(toast as unknown as ReturnType<typeof useToast>);
-    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, pricesIncludeTax: true, defaultTaxRate: 16 });
+    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
     vi.mocked(quotesApi.list).mockResolvedValue(page([
       { id: 'q1', number: 'COT-000007', revision: 2, status: QuoteStatus.Expired, customerName: 'Valeria Ruiz', customerPhone: '5522107765', total: 1160, validUntil: '2026-10-19', updatedAt: '2026-10-04T17:00:00Z', fromVisit: true },
     ]) as never);
@@ -79,7 +79,7 @@ describe('QuotesList', () => {
   });
 
   it('lets owners change how long quotes are valid, and only tells the rest', async () => {
-    vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 30, pricesIncludeTax: true, defaultTaxRate: 16 });
+    vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 30, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
     renderList();
 
     const days = await screen.findByLabelText('Días de vigencia');
@@ -96,5 +96,28 @@ describe('QuotesList', () => {
 
     expect(await screen.findByText(/Una cotización vale 15 días desde que la envías/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Días de vigencia')).not.toBeInTheDocument();
+  });
+
+  it('lets owners pick the WhatsApp template of the quotes once the business connected its WhatsApp', async () => {
+    const templates = [{ id: 't1', name: 'Cotización lista', body: 'Tu cotización {folio}: {enlace}', providerTemplateName: 'cotizacion_lista' }];
+    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: templates });
+    vi.mocked(quotesApi.setWhatsAppTemplate).mockResolvedValue({
+      validityDays: 15, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 't1', whatsAppTemplates: templates,
+    });
+    renderList();
+
+    expect(await screen.findByText(/salen del WhatsApp de tu negocio con el texto de TienditApp/)).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Plantilla'), 'Cotización lista (aprobada en Meta)');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar plantilla' }));
+
+    await waitFor(() => expect(quotesApi.setWhatsAppTemplate).toHaveBeenCalledWith('t1'));
+    expect(await screen.findByText(/con la plantilla «Cotización lista»/)).toBeInTheDocument();
+  });
+
+  it('says nothing of WhatsApp templates while the business has not connected its WhatsApp', async () => {
+    renderList();
+
+    await screen.findByLabelText('Días de vigencia');
+    expect(screen.queryByLabelText('Plantilla')).not.toBeInTheDocument();
   });
 });

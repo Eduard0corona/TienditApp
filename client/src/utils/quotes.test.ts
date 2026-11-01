@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { QuoteReplyChannel, QuoteStatus } from '../types';
-import { quoteFolio, quoteLink, quoteMailUrl, quoteMessage, quoteStatusChip, quoteStatusLabel, quoteWhatsAppUrl, replyChannelPhrase } from './quotes';
+import { OutgoingMessageStatus, QuoteEmailFailure, QuoteReplyChannel, QuoteStatus } from '../types';
+import {
+  hasPendingSends, quoteFolio, quoteLink, quoteMailUrl, quoteMessage, quoteSends, quoteStatusChip, quoteStatusLabel, quoteWhatsAppUrl,
+  replyChannelPhrase,
+} from './quotes';
 
 describe('quotes', () => {
   it('names every status the server sends, an expired one as such', () => {
@@ -41,5 +44,30 @@ describe('quotes', () => {
     expect(quoteWhatsAppUrl('123', 'Hola')).toBeNull();
     expect(quoteMailUrl(null, 'Cotización', 'Hola')).toBeNull();
     expect(quoteMailUrl('valeria@correo.mx', 'Cotización', 'Hola')).toBe('mailto:valeria%40correo.mx?subject=Cotizaci%C3%B3n&body=Hola');
+  });
+
+  it('says where each send of a version is, the newest first, and whether one is still on its way', () => {
+    const quote = {
+      emails: [
+        { id: 'e1', to: 'a@correo.mx', requestedAt: '2026-10-04T17:00:00Z', sentAt: '2026-10-04T17:00:10Z', failedAttempts: 0 },
+        { id: 'e2', to: 'b@correo.mx', requestedAt: '2026-10-04T16:00:00Z', failedAt: '2026-10-04T20:00:00Z', failure: QuoteEmailFailure.NotDelivered, failedAttempts: 8 },
+      ],
+      whatsApps: [
+        { id: 'w1', phone: '+525522107765', requestedAt: '2026-10-04T18:00:00Z', status: OutgoingMessageStatus.Sent, deliveredAt: '2026-10-04T18:00:30Z', attempts: 0 },
+        { id: 'w2', phone: '+525511112222', requestedAt: '2026-10-04T15:00:00Z', status: OutgoingMessageStatus.Failed, error: 'El número no tiene WhatsApp.', attempts: 6 },
+      ],
+    };
+
+    const sends = quoteSends(quote);
+
+    expect(sends.map((line) => [line.channel, line.state])).toEqual([
+      ['whatsapp', 'sent'], ['email', 'sent'], ['email', 'failed'], ['whatsapp', 'failed'],
+    ]);
+    expect(sends[0].text).toMatch(/^Le llegó por WhatsApp a \+525522107765 el /);
+    expect(sends[2].text).toBe('No se envió por correo a b@correo.mx: el servidor de correo no lo tomó después de varios intentos.');
+    expect(sends[3].text).toBe('No se envió por WhatsApp a +525511112222: El número no tiene WhatsApp.');
+    expect(hasPendingSends(quote)).toBe(false);
+    expect(hasPendingSends({ whatsApps: [{ id: 'w3', phone: '+52', requestedAt: '2026-10-04T19:00:00Z', status: OutgoingMessageStatus.Pending, attempts: 0 }] })).toBe(true);
+    expect(quoteSends({})).toEqual([]);
   });
 });

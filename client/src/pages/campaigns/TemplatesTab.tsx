@@ -9,6 +9,7 @@ import {
   CREDIT_DUE_SOON_PLACEHOLDER_HELP,
   CREDIT_PLACEHOLDER_HELP,
   PLACEHOLDER_HELP,
+  QUOTE_PLACEHOLDER_HELP,
 } from './campaignLabels';
 
 const PURPOSE_LABEL: Record<MessagePurpose, string> = {
@@ -18,6 +19,7 @@ const PURPOSE_LABEL: Record<MessagePurpose, string> = {
   [MessagePurpose.CreditReminder]: 'Recordatorio del fiado',
   [MessagePurpose.CreditDueSoon]: 'Aviso antes de vencer',
   [MessagePurpose.CfdiDocument]: 'Factura por WhatsApp',
+  [MessagePurpose.QuoteDocument]: 'Cotización por WhatsApp',
 };
 
 // Appointment notices are written by the system: no template uses them.
@@ -28,6 +30,7 @@ const PLACEHOLDERS: Record<MessagePurpose, string[]> = {
   [MessagePurpose.CreditReminder]: ['nombre', 'negocio', 'monto', 'vencido', 'fecha'],
   [MessagePurpose.CreditDueSoon]: ['nombre', 'negocio', 'monto', 'porvencer', 'fecha'],
   [MessagePurpose.CfdiDocument]: ['nombre', 'negocio', 'comprobante', 'monto', 'fecha', 'enlace'],
+  [MessagePurpose.QuoteDocument]: ['nombre', 'negocio', 'folio', 'monto', 'fecha', 'enlace'],
 };
 
 const BODY_EXAMPLE: Record<MessagePurpose, string> = {
@@ -37,6 +40,7 @@ const BODY_EXAMPLE: Record<MessagePurpose, string> = {
   [MessagePurpose.CreditReminder]: 'Hola {nombre}, en {negocio} tienes un saldo de {monto}; {vencido} venció el {fecha}.',
   [MessagePurpose.CreditDueSoon]: 'Hola {nombre}, en {negocio} tienes un saldo de {monto}; {porvencer} vence el {fecha}.',
   [MessagePurpose.CfdiDocument]: 'Hola {nombre}: {negocio} te envía {comprobante} por {monto}, del {fecha}. Descarga el XML y el PDF aquí: {enlace}',
+  [MessagePurpose.QuoteDocument]: 'Hola {nombre}: {negocio} te manda la cotización {folio} por {monto}, vale hasta el {fecha}. Mírala aquí: {enlace}',
 };
 
 // What each placeholder chip says when hovered: those of the fiado tell what is owed instead of the appointment.
@@ -44,6 +48,7 @@ const HELP: Partial<Record<MessagePurpose, Record<string, string>>> = {
   [MessagePurpose.CreditReminder]: CREDIT_PLACEHOLDER_HELP,
   [MessagePurpose.CreditDueSoon]: CREDIT_DUE_SOON_PLACEHOLDER_HELP,
   [MessagePurpose.CfdiDocument]: CFDI_PLACEHOLDER_HELP,
+  [MessagePurpose.QuoteDocument]: QUOTE_PLACEHOLDER_HELP,
 };
 
 type Draft = {
@@ -234,6 +239,7 @@ export default function TemplatesTab() {
                     <option value={MessagePurpose.CreditReminder}>Recordatorio del fiado</option>
                     <option value={MessagePurpose.CreditDueSoon}>Aviso antes de vencer</option>
                     <option value={MessagePurpose.CfdiDocument}>Factura por WhatsApp</option>
+                    <option value={MessagePurpose.QuoteDocument}>Cotización por WhatsApp</option>
                   </select>
                 </div>
               </div>
@@ -271,6 +277,12 @@ export default function TemplatesTab() {
                   del cliente.
                 </div>
               )}
+              {draft.purpose === MessagePurpose.QuoteDocument && (
+                <div className="form-text">
+                  Lleva {'{enlace}'}: con él tu cliente ve lo que incluye la cotización. Elígela en Cotizaciones. Sin plantilla aprobada,
+                  WhatsApp solo la entrega en las 24 horas desde el último mensaje del cliente.
+                </div>
+              )}
               {order.length > 0 && (
                 <div className="form-text">
                   En Meta, las variables van en este orden: {order.map((name, index) => `{{${index + 1}}} = {${name}}`).join(', ')}.
@@ -280,7 +292,7 @@ export default function TemplatesTab() {
                 <div className="form-check form-switch mt-3">
                   <input id="template-active" type="checkbox" role="switch" className="form-check-input" checked={draft.isActive}
                     onChange={(event) => setDraft({ ...draft, isActive: event.target.checked })} />
-                  <label className="form-check-label" htmlFor="template-active">Activa (se puede elegir en campañas, recordatorios y Facturación)</label>
+                  <label className="form-check-label" htmlFor="template-active">Activa (se puede elegir en campañas, recordatorios, Facturación y Cotizaciones)</label>
                 </div>
               )}
               {formError && <div className="alert alert-danger mt-3 mb-0">{formError}</div>}
