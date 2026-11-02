@@ -195,10 +195,16 @@ public class QuoteConversionFlowTests
         Assert.Equal(QuoteConversions.ChargeToApplyVisitMessage, refused.Message);
         var withoutVisit = await shop.ConvertAsync(plain.Id);
         Assert.True(withoutVisit.IsSuccess, withoutVisit.Error);
-        // Charging is not enough: the sale of the visit gives the money back, which is a refund.
+        // Charging is not enough: the sale of the visit gives the money back, which is a refund; nor is refunding: the order is
+        // paid with it, which is charging.
         shop.Permissions = [nameof(TenantPermission.ManageOrders), nameof(TenantPermission.ChargeOrders)];
         shop.Context.ChangeTracker.Clear();
-        await Assert.ThrowsAsync<ForbiddenAccessException>(() => shop.ConvertAsync(credited.Id));
+        Assert.Equal(QuoteConversions.ChargeToApplyVisitMessage,
+            (await Assert.ThrowsAsync<ForbiddenAccessException>(() => shop.ConvertAsync(credited.Id))).Message);
+        shop.Permissions = [nameof(TenantPermission.ManageOrders), nameof(TenantPermission.ProcessRefunds)];
+        shop.Context.ChangeTracker.Clear();
+        Assert.Equal(QuoteConversions.ChargeToApplyVisitMessage,
+            (await Assert.ThrowsAsync<ForbiddenAccessException>(() => shop.ConvertAsync(credited.Id))).Message);
         shop.Permissions = [nameof(TenantPermission.ManageOrders), nameof(TenantPermission.ChargeOrders), nameof(TenantPermission.ProcessRefunds)];
         shop.Context.ChangeTracker.Clear();
         Assert.True((await shop.ConvertAsync(credited.Id)).IsSuccess);
