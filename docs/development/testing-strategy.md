@@ -1726,6 +1726,41 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Las 5 nuevas (`cotizaciones.spec.ts`: la cotización con sus envíos en escritorio, teléfono y oscuro, el diálogo del correo y la plantilla de WhatsApp en Cotizaciones) pasaron dos corridas seguidas.
     - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
 
+- Fase 29E, la cotización aceptada se convierte en una orden de servicio ([ADR 0053](../adr/0053-home-visit-quotes.md), punto 17):
+  - **Domain:**
+    - `QuoteConversionTests` (13, nuevo):
+      - solo una versión aceptada se convierte, y una vez;
+      - lo aplicado de la visita queda como lo que descuenta aunque su venta ya no tenga nada pagado, y sin visita aplicada no descuenta nada;
+      - no aplica más de lo fijado ni sin visita;
+      - un renglón del catálogo conserva su producto y claves al precio aceptado;
+      - uno a mano, o sin producto, es una unidad de servicio con el id del renglón;
+      - una cantidad que su unidad no vende va como una al importe del renglón, y la hora conserva la suya;
+      - el nombre con la cantidad cabe en el renglón;
+      - la orden suma lo mismo que la cotización, con y sin IVA incluido, con tasas de 16, 8 y exento.
+    - Sin la regla de lo aplicado, fallan dos.
+  - **Infrastructure:**
+    - `QuoteConversionMigrationSqlServerTests` (3, nuevo):
+      - la versión anterior sigue guardando cotizaciones sobre las columnas nuevas;
+      - la base rechaza una conversión que el agregado no escribe: de una versión no aceptada, a medias, aplicando la visita sin visita, más de lo fijado o más del total, y dos cotizaciones de una orden;
+      - el rollback se detiene con 50053 y luego quita solo lo suyo; otra vez no hace nada.
+      - Sin la guarda, falla.
+    - `QuoteConversionSqlServerTests` (1, nuevo): cuatro «Convertir en orden de servicio» a la vez por el pipeline dejan una orden y avisan a las demás. Sin atrapar el choque de versiones, falla.
+    - `BeforeQuoteConversion` (nuevo): las pruebas de las migraciones anteriores guardan cotizaciones sin las columnas nuevas. `BeforeQuoteDeliveries` lo encadena, y `QuoteDeliveriesMigrationSqlServerTests` siembra con él.
+  - **Application:**
+    - `QuoteConversionFlowTests` (11, nuevo):
+      - la orden del negocio, «Aceptada», con el cliente, los renglones a los precios aceptados (no a los del catálogo de hoy), el renglón a mano como servicio, la cantidad con decimales en su nombre, la fecha prometida, la nota de ingreso, la pieza del servicio con seguimiento y el total de la cotización;
+      - la actividad sin datos del cliente; el detalle de la orden abre su cotización;
+      - conserva la política de IVA de la cotización aunque el negocio cambió la suya;
+      - solo la aceptada y una vez; un negocio sin órdenes de servicio no la convierte;
+      - lo pagado de la visita pasa de su venta al saldo a favor y paga la orden, sin movimiento de caja y con el saldo en cero, y la cotización lo sigue descontando;
+      - necesita a quien puede cobrar solo cuando aplica la visita; con la venta cancelada no aplica nada; cobrada sin teléfono no se convierte;
+      - otro negocio no la encuentra; la fecha prometida va de hoy a un año.
+    - Sin el permiso de cobrar, o con la política de IVA del negocio en lugar de la de la cotización, fallan.
+  - **WebApi:**
+    - `CrossTenantQuoteSqlServerTests` (+1): el otro negocio no la convierte ni ve su orden; la orden abre su cotización; la segunda vez responde 400.
+  - **Cliente:**
+    - `QuoteDetail.test.tsx` (+3): convertir la aceptada desde el diálogo con lo de la visita como pago, el aviso y el enlace a la orden; la fecha prometida y el error en el diálogo; sin órdenes de servicio dice dónde se prenden.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

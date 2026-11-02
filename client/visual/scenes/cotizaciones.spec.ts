@@ -1,7 +1,9 @@
 import { expect, test } from '../fixtures';
 import { SIZES, open, snap } from '../helpers';
 import {
+  ACCEPTED_QUOTE_ID,
   CONNECTED_QUOTE_ID,
+  CONVERTED_QUOTE_ID,
   DRAFT_QUOTE_ID,
   PLUMBER_QUOTES,
   PUBLIC_QUOTE_ROUTES,
@@ -52,6 +54,40 @@ test.describe('Cotizaciones', () => {
     await expect(page.getByRole('link', { name: 'Enviar por WhatsApp' })).toBeVisible();
     await expect(page.getByText('Visita (se descuenta)')).toBeVisible();
     await snap(page, 'cotizacion-enviada-escritorio');
+  });
+});
+
+// Fase 29E: the accepted quote becomes the job, a service order with what was paid for the visit as its payment; then it
+// says which order it became.
+test.describe('Cotización aceptada', () => {
+  test.use({ prepareData: PLUMBER_QUOTES, extraRoutes: QUOTES_ROUTES });
+
+  for (const look of LOOKS) {
+    test.describe(look.suffix, () => {
+      test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+      test(`cotización aceptada ${look.suffix}`, async ({ page }) => {
+        await open(page, '/quotes/5d2a8f61-3c7e-4b9a-8e14-6f0b2c9d7a35');
+        await expect(page.getByRole('button', { name: 'Convertir en orden de servicio' })).toBeVisible();
+        await snap(page, `cotizacion-aceptada-${look.suffix}`);
+      });
+    });
+  }
+
+  test('convertir en orden de servicio', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/quotes/5d2a8f61-3c7e-4b9a-8e14-6f0b2c9d7a35');
+    await page.getByRole('button', { name: 'Convertir en orden de servicio' }).click();
+    await expect(page.getByRole('dialog', { name: 'Convertir en orden de servicio' })).toBeVisible();
+    await expect(page.getByLabel('Para cuándo es el trabajo')).toBeVisible();
+    await snap(page, 'cotizacion-convertir-escritorio');
+  });
+
+  test('cotización convertida', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/quotes/8b4e1d73-9a2c-4f6e-b5d8-2c7a0e9f4b16');
+    await expect(page.getByRole('link', { name: 'Ver la orden' })).toBeVisible();
+    await snap(page, 'cotizacion-convertida-escritorio');
   });
 });
 
@@ -131,7 +167,8 @@ test.describe('Cotización del enlace', () => {
 
 // The ids are written out so the route coverage (coverage.spec.ts) reads them; the mocks answer the same ones.
 test('the scenes open the quotes the mocks answer', () => {
-  expect([DRAFT_QUOTE_ID, SENT_QUOTE_ID, CONNECTED_QUOTE_ID]).toEqual([
+  expect([DRAFT_QUOTE_ID, SENT_QUOTE_ID, CONNECTED_QUOTE_ID, ACCEPTED_QUOTE_ID, CONVERTED_QUOTE_ID]).toEqual([
     '7a3f1c52-2d4b-4e6a-9c1f-0b8e5d2a7c41', '0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58', '3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63',
+    '5d2a8f61-3c7e-4b9a-8e14-6f0b2c9d7a35', '8b4e1d73-9a2c-4f6e-b5d8-2c7a0e9f4b16',
   ]);
 });

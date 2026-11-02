@@ -20,7 +20,7 @@ vi.mock('../../api/productsApi', () => ({ productsApi: { getAll: vi.fn() } }));
 vi.mock('../../api/quotesApi', () => ({
   quotesApi: {
     get: vi.fn(), updateDraft: vi.fn(), send: vi.fn(), revise: vi.fn(), discard: vi.fn(), reply: vi.fn(),
-    sendByEmail: vi.fn(), sendByWhatsApp: vi.fn(),
+    sendByEmail: vi.fn(), sendByWhatsApp: vi.fn(), convertToOrder: vi.fn(),
   },
 }));
 
@@ -384,5 +384,52 @@ describe('QuoteDetail', () => {
     expect(items[0]).toBe('Enviándose por correo a valeria@correo.mx… El servidor de correo no lo ha tomado; TienditApp lo vuelve a intentar.');
     expect(items[1]).toMatch(/^Lo leyó en WhatsApp \(\+525522107765\) el /);
     expect(items[2]).toBe('No se envió por correo a vale@correo: el servidor de correo rechazó la dirección.');
+  });
+
+  it('turns an accepted quote into its service order, with what was paid for the visit as its payment', async () => {
+    const accepted = sent({
+      status: QuoteStatus.Accepted, replyChannel: QuoteReplyChannel.WhatsApp, closedAt: '2026-10-05T17:00:00Z', canConvertToOrder: true,
+      visitCredit: { amount: 440.8, applies: true }, toPay: 719.2,
+    });
+    vi.mocked(quotesApi.get).mockResolvedValue(accepted);
+    vi.mocked(quotesApi.convertToOrder).mockResolvedValue({
+      ...accepted, canConvertToOrder: false, convertedAt: '2026-10-05T18:00:00Z',
+      order: { id: 'o1', orderNumber: 'ORD-000031', status: 4 },
+    } as Quote);
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Convertir en orden de servicio' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Convertir en orden de servicio' });
+    expect(dialog).toHaveTextContent('La orden lleva su renglón a los precios que el cliente aceptó: $1,160.00.');
+    expect(dialog).toHaveTextContent('Lo que pagó por la visita ($440.80) queda como pago de la orden: falta cobrar $719.20.');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Convertir' }));
+
+    await waitFor(() => expect(quotesApi.convertToOrder).toHaveBeenCalledWith('q1', null));
+    expect(toast.success).toHaveBeenCalledWith('Se creó la orden de servicio ORD-000031.');
+    expect(await screen.findByRole('link', { name: 'Ver la orden' })).toHaveAttribute('href', '/orders?search=ORD-000031');
+    expect(screen.getByText('Lo que pagó por la visita quedó como pago de la orden.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Convertir en orden de servicio' })).not.toBeInTheDocument();
+  });
+
+  it('sends when the job is promised, and keeps a refusal in the dialog', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({ status: QuoteStatus.Accepted, canConvertToOrder: true }));
+    vi.mocked(quotesApi.convertToOrder).mockRejectedValueOnce(refusal('Esta cotización ya se convirtió en una orden de servicio.'));
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Convertir en orden de servicio' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Convertir en orden de servicio' });
+    await userEvent.type(within(dialog).getByLabelText('Para cuándo es el trabajo'), '2026-10-08T10:30');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Convertir' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Esta cotización ya se convirtió en una orden de servicio.');
+    expect(quotesApi.convertToOrder).toHaveBeenCalledWith('q1', new Date('2026-10-08T10:30').toISOString());
+  });
+
+  it('says how to turn it into an order when the business has no service orders', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({ status: QuoteStatus.Accepted, canConvertToOrder: false }));
+    renderAt();
+
+    expect(await screen.findByText(/tu negocio necesita las órdenes de servicio/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Convertir en orden de servicio' })).not.toBeInTheDocument();
   });
 });

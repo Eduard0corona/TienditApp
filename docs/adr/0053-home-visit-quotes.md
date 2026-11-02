@@ -1,6 +1,6 @@
 # ADR 0053: Oficios a domicilio, la visita para cotizar
 
-- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31), para la solicitud en línea (etapa 2) en la Fase 29B (2026-11-01) para la cotización (etapa 3, puntos 14, 15 y 17) en la Fase 29C (2026-11-01) y para su envío desde TienditApp (punto 16) en la Fase 29D (2026-11-01); convertir la aceptada en el trabajo sigue propuesto para la Fase 29E.
+- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31), para la solicitud en línea (etapa 2) en la Fase 29B (2026-11-01) para la cotización (etapa 3, puntos 14, 15 y 17) en la Fase 29C (2026-11-01) para su envío desde TienditApp (punto 16) en la Fase 29D (2026-11-01) y para convertir la aceptada en una orden de servicio (punto 17) en la Fase 29E (2026-11-02); agendar las citas para hacer el trabajo sigue propuesto.
 - Fecha: 2026-10-27
 - Continúa: [ADR 0020](0020-home-visits.md) (servicios a domicilio), [ADR 0021](0021-business-directory.md) (Explorar) y [ADR 0025](0025-online-booking.md) (citas en línea).
 
@@ -167,6 +167,26 @@ El envío de la cotización desde TienditApp (punto 16). La migración es `20261
 - **El rollback** se detiene (50052) en cuanto se mandó una cotización desde TienditApp o un negocio eligió una plantilla para ellas.
 - **Al publicar o volver a la versión anterior**, el worker de la 29C aparta el correo de una cotización que tome (no conoce el evento) y se queda «Enviándose»; [deploy-azure.md](../development/deploy-azure.md) tiene la consulta que lo regresa a la cola.
 
+### Lo que hizo la Fase 29E
+
+La cotización aceptada se convierte en el trabajo (punto 17): una orden de servicio. La migración es `20261102014702_AddQuoteConversion`, con sus scripts en `database/production/20261102014702_AddQuoteConversion/`. Las citas para hacer el trabajo quedan para después: una cita lleva un solo servicio del catálogo, y la orden ya lleva los renglones.
+
+- **«Convertir en orden de servicio»** (`POST /api/v1/quotes/{id}/order`) en la versión aceptada, una sola vez, con quien toma pedidos (`ManageOrders`) en un negocio con órdenes de servicio. Sin ellas, la pantalla dice dónde se prenden.
+  - La orden es del negocio y empieza «Aceptada», como una orden de servicio capturada en el mostrador. Lleva el cliente de la cotización, su sucursal (la caja de quien la convierte o la principal), «De la cotización COT-… (versión …)» en sus notas de ingreso y, si se dice, para cuándo se promete (`PromisedAt`, de hoy a un año). Saca los insumos de los productos con receta, sin rechazarse por faltantes: el cliente ya aceptó.
+  - **Sus renglones** van al precio y con el IVA que el cliente aceptó, nunca al precio del catálogo de hoy, y con la política de precios con IVA de la cotización, así que la orden suma lo mismo (`QuoteConversion.Lines`):
+    - un producto que sigue en el catálogo conserva su producto y sus claves del SAT, y un servicio con seguimiento da una pieza por unidad, como en el mostrador;
+    - un renglón escrito a mano, o cuyo producto ya no está, entra como unidad de servicio (E48, clave genérica) con el id del renglón donde iría el producto, como queda un producto borrado después de una venta: no saca insumos y los reportes lo muestran por su nombre;
+    - una cantidad que su unidad no vende (3.5 de un servicio por pieza) entra como una al importe del renglón, con la cantidad en el nombre: «Tubo de cobre (3.5)».
+  - **Lo que se pagó de la visita** («Se descuenta si contratas», punto 14) sale de la venta de la visita hacia la orden. La venta lo devuelve al saldo a favor de la cuenta de su teléfono y la orden se paga con él en el mismo momento: «Saldo a favor», que la factura declara como aplicación de anticipos.
+    - Nada entra ni sale de una caja y el saldo queda como estaba, así que el negocio vende lo que vale el trabajo.
+    - Necesita a quien puede cobrar (`ChargeOrders`).
+    - Nunca aplica más que el total de la cotización.
+    - Desde entonces la cotización descuenta lo aplicado (`AppliedVisitCredit`), pase lo que pase con la venta de la visita.
+    - Si esa venta se cobró sin teléfono o en línea, no hay cuenta por donde pasar: la conversión lo dice y no cambia nada.
+  - La cotización guarda su orden y cuándo (`OrderId`, `ConvertedAt`). Dos conversiones a la vez chocan en la versión de la cotización: una queda y la otra se deshace entera, con su folio. La actividad guarda el folio, la versión, el total, la orden y lo aplicado, nunca datos del cliente.
+- **La pantalla**: la cotización convertida dice en qué orden se convirtió y la abre, y el detalle de la orden abre su cotización.
+- **El rollback** se detiene (50053) en cuanto una cotización se convirtió.
+
 ### Etapa 2: la solicitud de la visita
 
 10. **El negocio decide cómo cobra la visita** (decisión 5, `TenantSettings.HomeVisitChargePolicy`), con el servicio del catálogo que eligió como su visita («Visita y diagnóstico»):
@@ -205,8 +225,11 @@ El envío de la cotización desde TienditApp (punto 16). La migración es `20261
     Implementado en la Fase 29D (arriba).
 17. **El negocio registra si el cliente la aceptó o la rechazó**, con lo que le respondió por WhatsApp o por correo, y queda en la actividad. Aceptada, se convierte en el trabajo: una orden de servicio con sus renglones o las citas para hacerlo. La orden lleva sus fotos del antes y del después ([ADR 0024](0024-service-photos.md)).
 
+    La conversión en una orden de servicio se implementó en la Fase 29E (arriba); las citas para hacer el trabajo, no.
+
 ### Después
 
+- Agendar el trabajo de una orden que viene de una cotización: las citas para hacerlo, con quién y en la dirección de la visita.
 - Que el cliente acepte la cotización desde su enlace, con un anticipo por Mercado Pago ([ADR 0031](0031-online-payments.md)).
 - Fotos del problema en la solicitud.
 - PDF de la cotización y documento adjunto por WhatsApp.

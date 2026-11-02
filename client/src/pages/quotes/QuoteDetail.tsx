@@ -25,6 +25,7 @@ import {
   quoteWhatsAppUrl,
   replyChannelPhrase,
 } from '../../utils/quotes';
+import ConvertQuoteDialog from './ConvertQuoteDialog';
 import SendQuoteDialog, { type QuoteChannel } from './SendQuoteDialog';
 
 /** While a send is on its way, the detail asks for its outcome this often. */
@@ -90,8 +91,8 @@ type Action = 'save' | 'send' | 'revise' | 'discard' | 'reply';
  * A version of a quote (Fase 29C, ADR 0053). A draft is edited here and the server totals it when saved; sent, it says the
  * same forever: it goes to the customer by email or by WhatsApp from TienditApp (Fase 29D; by WhatsApp from the phone while
  * the business has not connected its own), the business records what they answered, and correcting it starts the next
- * version. Each send of the version stays in its history. The history lists every version of the quote. Each version opens fresh: nothing
- * typed or shown on another one stays.
+ * version. Each send of the version stays in its history. The history lists every version of the quote. Accepted, it becomes
+ * its service order once (Fase 29E) and then opens it. Each version opens fresh: nothing typed or shown on another one stays.
  */
 export default function QuoteDetailPage() {
   const { id = '' } = useParams();
@@ -116,6 +117,7 @@ function QuoteDetail({ id }: { id: string }) {
   // One action at a time: every button waits for the one running, and the draft's fields too.
   const [pending, setPending] = useState<Action | null>(null);
   const [sendingBy, setSendingBy] = useState<QuoteChannel | null>(null);
+  const [converting, setConverting] = useState(false);
 
   const quoteQuery = useQuery({
     queryKey: ['quotes', 'detail', id],
@@ -460,6 +462,9 @@ function QuoteDetail({ id }: { id: string }) {
               {quote.visitCredit && !quote.visitCredit.applies && (
                 <p className="text-muted small mt-1 mb-0">La venta de la visita se canceló o se reembolsó: ya no se descuenta.</p>
               )}
+              {quote.order && quote.visitCredit?.applies && (
+                <p className="text-muted small mt-1 mb-0">Lo que pagó por la visita quedó como pago de la orden.</p>
+              )}
             </div>
           </div>
 
@@ -544,6 +549,21 @@ function QuoteDetail({ id }: { id: string }) {
                 </button>
               )}
 
+              {quote.status === QuoteStatus.Accepted && (quote.order ? (
+                <p className="small mb-0" role="status">
+                  Se convirtió en la orden {quote.order.orderNumber}.{' '}
+                  <Link to={`/orders?search=${encodeURIComponent(quote.order.orderNumber)}`}>Ver la orden</Link>
+                </p>
+              ) : quote.canConvertToOrder ? (
+                <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setConverting(true)}>
+                  <i className="ri-tools-line me-1" aria-hidden="true"></i>Convertir en orden de servicio
+                </button>
+              ) : (
+                <p className="text-muted small mb-0">
+                  Para convertirla en una orden de servicio, tu negocio necesita las órdenes de servicio: se prenden en Configuración.
+                </p>
+              ))}
+
               {(quote.status === QuoteStatus.Accepted || quote.status === QuoteStatus.Rejected) && quote.replyChannel != null && (
                 <p className="small mb-0">
                   {quote.status === QuoteStatus.Accepted ? 'Aceptó' : 'Rechazó'} {replyChannelPhrase(quote.replyChannel)}
@@ -589,6 +609,18 @@ function QuoteDetail({ id }: { id: string }) {
             setSendingBy(null);
             toast.success(sent);
             void queryClient.invalidateQueries({ queryKey: ['quotes', 'detail', id] });
+          }}
+        />
+      )}
+
+      {converting && (
+        <ConvertQuoteDialog
+          quote={quote}
+          onClose={() => setConverting(false)}
+          onConverted={(converted) => {
+            setConverting(false);
+            show(converted);
+            toast.success(`Se creó la orden de servicio ${converted.order?.orderNumber ?? ''}.`);
           }}
         />
       )}

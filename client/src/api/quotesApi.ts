@@ -16,6 +16,7 @@ export type PublicQuote = Schemas['PublicQuoteDto'];
 export type QuoteEmail = Schemas['QuoteEmailDto'];
 export type QuoteWhatsApp = Schemas['QuoteWhatsAppDto'];
 export type QuoteWhatsAppTemplate = Schemas['QuoteWhatsAppTemplateDto'];
+export type QuoteOrder = Schemas['QuoteOrderDto'];
 
 export const quotesApi = {
   list: (filter: QuoteListFilter, search: string, pageNumber: number, signal?: AbortSignal) =>
@@ -46,6 +47,13 @@ export const quotesApi = {
 
   /** Sends a valid sent version by WhatsApp from the business's number (Fase 29D). */
   sendByWhatsApp: (id: string, phone: string) => apiRequest('post', '/api/v1/quotes/{id}/whatsapp', { path: { id }, body: { phone } }),
+
+  /**
+   * The accepted version becomes its service order (Fase 29E), once, at the accepted prices; what was paid for the visit
+   * becomes a payment of the order. <paramref name="promisedAt"/> is when the job is promised (optional).
+   */
+  convertToOrder: (id: string, promisedAt: string | null) =>
+    apiRequest('post', '/api/v1/quotes/{id}/order', { path: { id }, body: { promisedAt } }),
 
   /** The WhatsApp template the quotes go out with, or TienditApp's text (null): owners and admins. */
   setWhatsAppTemplate: (templateId: string | null) =>

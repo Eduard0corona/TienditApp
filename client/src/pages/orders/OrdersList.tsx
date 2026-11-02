@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import ChannelBadge from '../../components/common/ChannelBadge';
@@ -57,6 +57,7 @@ import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 import { describeOnlineDispute, describeOnlineRefund, isDisputeRefund } from '../../utils/onlineRefunds';
 import { getApiErrorMessage } from '../../api/errors';
 import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
+import { quoteFolio } from '../../utils/quotes';
 
 const ALL_STATUSES: OrderStatus[] = [0, 1, 2, 3, 4, 5, 6, 7, 99];
 
@@ -837,6 +838,12 @@ export default function OrdersList() {
                     <p className="mb-1 small">
                       Incluye el cargo por visita a domicilio ({selectedOrder.visitCharge.zoneName}):{' '}
                       <span className="ta-money">{formatMoney(selectedOrder.visitCharge.fee)}</span>
+                    </p>
+                  )}
+                  {selectedOrder.quote && (
+                    <p className="mb-1 small">
+                      De la cotización{' '}
+                      <Link to={`/quotes/${selectedOrder.quote.id}`}>{quoteFolio(selectedOrder.quote.number, selectedOrder.quote.revision)}</Link>
                     </p>
                   )}
                   {selectedOrder.taxBreakdown.filter((line) => line.taxAmount > 0).map((line) => (
