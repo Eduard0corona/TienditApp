@@ -19,6 +19,7 @@ internal static class BeforeQuoteConversion
     /// <summary>For the context of an earlier version, which does not know them either (one before the quotes ignores them whole).</summary>
     public static void Ignore(ModelBuilder modelBuilder)
     {
+        BeforeAppointmentWork.Ignore(modelBuilder);
         if (modelBuilder.Model.FindEntityType(typeof(Quote)) is null)
             return;
 

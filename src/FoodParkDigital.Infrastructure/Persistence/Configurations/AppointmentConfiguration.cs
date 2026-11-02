@@ -18,6 +18,10 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
             table.HasCheckConstraint(
                 "CK_Appointments_TrackingToken",
                 $"[TrackingToken] IS NULL OR LEN([TrackingToken]) = {Order.TrackingTokenLength}");
+            // Fase 29F (ADR 0053): the job of an order is agendado by the team and charged in its order, never with a sale.
+            table.HasCheckConstraint(
+                "CK_Appointments_Work",
+                "[WorkOrderId] IS NULL OR ([SaleOrderId] IS NULL AND [Channel] = 0 AND [TrackingToken] IS NULL)");
         });
         builder.HasKey(x => x.Id);
 
@@ -64,8 +68,17 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
             .HasForeignKey(x => x.SaleOrderId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // The service order whose job it does (Fase 29F); the order stays while an appointment does its job.
+        builder.HasOne<Order>()
+            .WithMany()
+            .HasForeignKey(x => x.WorkOrderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(x => new { x.TenantId, x.StartAt });
         builder.HasIndex(x => new { x.TenantId, x.Status });
+        // The appointments of the job of an order, for the order and its quote.
+        builder.HasIndex(x => x.WorkOrderId)
+            .HasFilter("[WorkOrderId] IS NOT NULL");
         builder.HasIndex(x => new { x.TenantId, x.CustomerPhone });
         // Overlaps are checked per team member.
         builder.HasIndex(x => new { x.TenantId, x.StaffUserId, x.StartAt });
