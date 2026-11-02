@@ -95,6 +95,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - Cancelar la orden pide primero devolver lo pagado, como en cualquier orden, y la cotización sigue ligada a la orden cancelada: el negocio captura la orden nueva en Vender.
     - El reembolso al saldo a favor de la venta de la visita no lleva nota de crédito (ADR 0036): si esa venta ya estaba facturada, lo aplicado queda facturado dos veces hasta que el contador emite el egreso; si no, la factura global deja fuera esa venta.
     - Un renglón de un producto que no se vende en fracciones guardado con decimales antes de la 29E entra como una al importe del renglón y saca los insumos de una.
+    - Una cotización aceptada cuyos servicios con seguimiento darían más de 500 piezas (guardada antes de la 29E, o con un servicio que empezó a llevar seguimiento después) se convierte sin piezas: TienditApp no agrega piezas a una orden ya creada, así que esa orden se sigue completa, no pieza por pieza.
   - El envío desde TienditApp (Fase 29D):
     - El correo de la cotización no lleva PDF (TienditApp no genera PDF): la cotización va en el cuerpo y en su enlace. «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó.
     - Sin plantilla aprobada en Meta, el WhatsApp solo llega a quien escribió en las últimas 24 horas, y no cae solo al correo cuando WhatsApp lo rechaza: el negocio lo ve en el historial y lo manda por correo.

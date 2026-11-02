@@ -188,6 +188,7 @@ La cotización aceptada se convierte en el trabajo (punto 17): una orden de serv
   - La cotización guarda su orden y cuándo (`OrderId`, `ConvertedAt`). Dos conversiones a la vez chocan en la versión de la cotización: una queda y la otra se deshace entera, con su folio. La actividad guarda el folio, la versión, el total, la orden y lo aplicado, nunca datos del cliente.
   - Una orden cancelada no regresa su cotización: queda ligada a ella y el negocio captura la orden nueva en Vender.
   - Para que la orden saque los insumos por las unidades que vende, un renglón de un producto que no se vende en fracciones ya no se guarda con decimales en la cotización.
+  - Una orden genera como máximo 500 piezas de servicio (`OrderLimits`), así que un borrador cuyos servicios con seguimiento pasarían de 500 piezas no se guarda: el negocio lo divide en dos cotizaciones. Si un servicio empezó a llevar seguimiento después de aceptada (una aceptada ya no se corrige), la orden va sin piezas y sus notas de ingreso lo dicen, en lugar de que la cotización quede sin poder convertirse.
 - **La pantalla**: la cotización convertida dice en qué orden se convirtió y la abre, y el detalle de la orden abre su cotización.
 - **El rollback** se detiene (50053) en cuanto una cotización se convirtió.
 

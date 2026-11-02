@@ -76,7 +76,25 @@ public static class QuoteConversions
 
     public static string PaymentNote(Order visitSale) => $"Lo que se pagó de la visita (venta {visitSale.OrderNumber}).";
 
-    public static string IntakeNote(Quote quote) => $"De la cotización {quote.Number} (versión {quote.Revision}).";
+    /// <summary>
+    /// «De la cotización COT-… (versión …).» and, when its trackable services would give more pieces than an order generates,
+    /// that the order goes without them.
+    /// </summary>
+    public static string IntakeNote(Quote quote, int? piecesLeftOut = null)
+        => $"De la cotización {quote.Number} (versión {quote.Revision})."
+            + (piecesLeftOut is { } pieces
+                ? $" Sin piezas: serían {pieces} y una orden genera como máximo {OrderLimits.MaxServicePiecesPerOrder}."
+                : string.Empty);
+
+    /// <summary>A quote whose order would give more pieces than an order generates: refused while it is still a draft.</summary>
+    public static string TooManyPiecesMessage(int pieces)
+        => $"Esta cotización generaría {pieces} piezas de servicio y una orden genera como máximo {OrderLimits.MaxServicePiecesPerOrder}: divídela en dos cotizaciones.";
+
+    /// <summary>The pieces an order gives its trackable services: one per unit, as at the counter.</summary>
+    public static int ServicePieces(IEnumerable<(Domain.Catalog.Entities.Product Product, decimal Quantity)> lines)
+        => (int)lines
+            .Where(line => line.Product.IsTrackable && OrderProductClassifier.IsServiceUnit(line.Product.Unit))
+            .Sum(line => decimal.Ceiling(line.Quantity));
 }
 
 /// <summary>
@@ -226,9 +244,13 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
                 && OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable)
             .Select(line => (products[line.ProductId], new CreateOrderItemDto { ProductId = line.ProductId, Quantity = line.Quantity }))
             .ToList();
-        order.SetServiceDetail(now, request.PromisedAt, QuoteConversions.NormalPriority, QuoteConversions.IntakeNote(quote),
-            null, null, null, null);
-        if (OrderPlacement.AddServicePieces(order, null, trackable, lines.Select(l => l.ProductId).ToHashSet()) is { } piecesError)
+        // A draft past what an order generates is refused, but a product may have become trackable since, and an accepted
+        // quote is no longer corrected: past it, the order goes without pieces and its intake note says so, never stuck.
+        var pieces = QuoteConversions.ServicePieces(trackable.Select(t => (t.Item1, t.Item2.Quantity)));
+        var withPieces = pieces <= OrderLimits.MaxServicePiecesPerOrder;
+        order.SetServiceDetail(now, request.PromisedAt, QuoteConversions.NormalPriority,
+            QuoteConversions.IntakeNote(quote, withPieces ? null : pieces), null, null, null, null);
+        if (withPieces && OrderPlacement.AddServicePieces(order, null, trackable, lines.Select(l => l.ProductId).ToHashSet()) is { } piecesError)
             return Result.Failure<QuoteDto>(piecesError);
         OrderPlacement.ApplyBusinessDefaultStatus(order, _currentUser.UserName);
         if (order.Total != quote.Total)

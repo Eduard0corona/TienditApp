@@ -269,6 +269,13 @@ public class QuotesHandler :
             .ToDictionaryAsync(p => p.Id, cancellationToken);
         if (products.Count != productIds.Count)
             return Result.Failure<QuoteDto>(ProductNotFoundMessage);
+        // Its order gives a piece per unit of each trackable service: once accepted, a quote past what an order generates
+        // could only become an order without them.
+        var pieces = QuoteConversions.ServicePieces(request.Lines
+            .Where(line => line.ProductId is not null)
+            .Select(line => (products[line.ProductId!.Value], line.Quantity)));
+        if (pieces > OrderLimits.MaxServicePiecesPerOrder)
+            return Result.Failure<QuoteDto>(QuoteConversions.TooManyPiecesMessage(pieces));
 
         var now = _clock.UtcNow;
         try

@@ -260,6 +260,47 @@ public class QuoteConversionFlowTests
     }
 
     [Fact]
+    public async Task ADraftWhoseOrderWouldGiveMorePiecesThanAnOrderGenerates_ShouldBeRefused()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var uniform = await shop.ProductAsync("Lavado de uniforme", 45m, trackable: true);
+        var ironing = await shop.ProductAsync("Planchado", 20m);
+
+        // A piece per unit of a trackable service, across its lines; a service without tracking gives none.
+        var past = await shop.SaveDraftAsync(
+            new QuoteLineRequest { ProductId = uniform.Id, Description = "Lavado de uniforme", Quantity = 300m, UnitPrice = 45m },
+            new QuoteLineRequest { ProductId = uniform.Id, Description = "Lavado de camisas", Quantity = 201m, UnitPrice = 45m });
+        var upToIt = await shop.SaveDraftAsync(
+            new QuoteLineRequest { ProductId = uniform.Id, Description = "Lavado de uniforme", Quantity = 500m, UnitPrice = 45m },
+            new QuoteLineRequest { ProductId = ironing.Id, Description = "Planchado", Quantity = 600m, UnitPrice = 20m });
+
+        Assert.Equal(QuoteConversions.TooManyPiecesMessage(501), past.Error);
+        Assert.True(upToIt.IsSuccess, upToIt.Error);
+    }
+
+    [Theory]
+    [InlineData(500, 500, "De la cotización COT-000001 (versión 1).")]
+    [InlineData(600, 0, "De la cotización COT-000001 (versión 1). Sin piezas: serían 600 y una orden genera como máximo 500.")]
+    public async Task AServiceTrackedAfterTheQuoteWasAccepted_ShouldGiveItsPieces_UpToWhatAnOrderGenerates_AndNeverStickTheQuote(
+        int quantity, int pieces, string intakeNote)
+    {
+        await using var shop = await Shop.OpenAsync();
+        var uniform = await shop.ProductAsync("Lavado de uniforme", 45m);
+        var quote = await shop.AcceptedAsync(
+            new QuoteLineRequest { ProductId = uniform.Id, Description = "Lavado de uniforme", Quantity = quantity, UnitPrice = 45m });
+        // The business tracks the service once the customer accepted: an accepted quote is no longer corrected.
+        var tracked = await shop.Context.Products.SingleAsync(p => p.Id == uniform.Id);
+        shop.Context.Entry(tracked).Property(p => p.IsTrackable).CurrentValue = true;
+        await shop.Context.SaveChangesAsync();
+
+        var converted = await shop.ConvertAsync(quote.Id);
+
+        Assert.True(converted.IsSuccess, converted.Error);
+        var order = await shop.Context.Orders.Include(o => o.ServiceDetail).Include(o => o.ServicePieces).SingleAsync();
+        Assert.Equal((pieces, intakeNote, quote.Total), (order.ServicePieces.Count, order.ServiceDetail!.IntakeNotes, order.Total));
+    }
+
+    [Fact]
     public async Task AQuoteWhosePhoneDoesNotRead_ShouldStillBecomeAnOrder()
     {
         await using var shop = await Shop.OpenAsync();
