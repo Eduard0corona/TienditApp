@@ -96,8 +96,16 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// one plain address (<see cref="InvoiceEmailAddress"/>). Null otherwise. Theirs: it never goes in the activity or a log.
     /// </summary>
     public string? CustomerEmail { get; private set; }
+    /// <summary>
+    /// The service order whose job it does (Fase 29F, ADR 0053 point 17): the job of an accepted quote, charged in that order,
+    /// so the appointment never gets a sale of its own. Null for every other appointment.
+    /// </summary>
+    public Guid? WorkOrderId { get; private set; }
 
     public bool IsHomeVisit => Visit is not null;
+
+    /// <summary>It does the job of a service order (<see cref="WorkOrderId"/>).</summary>
+    public bool IsWork => WorkOrderId is not null;
 
     /// <summary>Booked online and waiting for the business to accept it.</summary>
     public bool IsRequest => Status == AppointmentStatus.Requested;
@@ -254,6 +262,42 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         return appointment;
     }
 
+    /// <summary>
+    /// The business schedules the job of a service order that came from an accepted quote (Fase 29F, ADR 0053 point 17), or
+    /// part of it: agendada like any appointment of the team. It happens at the place of the visit the quote came from, when
+    /// there was one (<paramref name="at"/>, copied with nothing to charge: the job is charged in its order).
+    /// </summary>
+    /// <param name="workOrderId">The service order whose job it does.</param>
+    /// <param name="at">The visit the quote came from, or none for a job at the business or not arranged yet.</param>
+    public static Appointment ForWork(
+        Guid tenantId,
+        Guid workOrderId,
+        string customerName,
+        string customerPhone,
+        string serviceName,
+        DateTimeOffset startAt,
+        DateTimeOffset endAt,
+        AppointmentVisit? at,
+        string? staffName = null,
+        Guid? staffUserId = null,
+        string? notes = null)
+    {
+        if (workOrderId == Guid.Empty)
+            throw new ArgumentException("The order is required.", nameof(workOrderId));
+        if (at is not null && at.TenantId != tenantId)
+            throw new ArgumentException("The visit must be of the same business.", nameof(at));
+
+        var appointment = new Appointment(
+            tenantId, customerName, customerPhone, serviceName, startAt, endAt,
+            staffName: staffName, notes: notes, staffUserId: staffUserId)
+        {
+            WorkOrderId = workOrderId
+        };
+        if (at is not null)
+            appointment.Visit = AppointmentVisit.ForWork(appointment.Id, at);
+        return appointment;
+    }
+
     /// <summary>What every request a customer makes online carries: its account, its key, its link and who attends it.</summary>
     private static void EnsureOnlineRequest(
         Guid? customerUserId, Guid? clientRequestId, string trackingToken, Guid? staffUserId, string? staffName)
@@ -310,7 +354,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>
     /// The appointment happens at the customer's address: the zone must reach its postal code (and be active), and the
     /// visit charges what the zone charges to go there (its minimum and «envío gratis desde» are for orders). At the same
-    /// address it keeps the zone and the charge it was arranged with: what the customer agreed to.
+    /// address it keeps the zone and the charge it was arranged with: what the customer agreed to. The job of an order
+    /// charges nothing to go there: it is charged in its order (Fase 29F).
     /// </summary>
     /// <returns>False when it was already at that address.</returns>
     public bool ArrangeVisit(DeliveryAddress address, DeliveryZone zone, DateTimeOffset changedAt)
@@ -323,10 +368,11 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         if (zone.TenantId != TenantId || !zone.Covers(address.PostalCode))
             throw new DomainException(HomeVisitRules.NotCoveredMessage(address.PostalCode));
 
+        var fee = IsWork ? 0m : zone.Fee;
         if (Visit is null)
-            Visit = new AppointmentVisit(TenantId, Id, address, zone.Name, zone.Fee);
+            Visit = new AppointmentVisit(TenantId, Id, address, zone.Name, fee);
         else
-            Visit.MoveTo(address, zone.Name, zone.Fee);
+            Visit.MoveTo(address, zone.Name, fee);
         // The appointment changes with its visit, so its version catches a charge (or a cancellation) saved meanwhile.
         UpdatedAt = changedAt;
         return true;
@@ -366,11 +412,14 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>
     /// The appointment was charged with <paramref name="orderId"/>: it is done, if it was still open. A cancelled
     /// appointment, or one the customer missed, is not charged; one already charged only again when its sale was cancelled.
+    /// The job of an order is charged in that order, never with a sale of its own.
     /// </summary>
     public void RecordSale(Guid orderId, bool previousSaleCancelled = false)
     {
         if (orderId == Guid.Empty)
             throw new ArgumentException("The sale is required.", nameof(orderId));
+        if (IsWork)
+            throw new DomainException(AppointmentWorkRules.ChargedInItsOrderMessage);
         if (Status == AppointmentStatus.Cancelled)
             throw new DomainException(HomeVisitRules.CancelledSaleMessage);
         if (Status == AppointmentStatus.NoShow)

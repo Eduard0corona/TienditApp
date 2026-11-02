@@ -29,6 +29,14 @@ public class AppointmentVisit : BaseEntity, ITenantScoped
         MoveTo(address, zoneName, zoneFee);
     }
 
+    /// <summary>
+    /// The place of <paramref name="visit"/> for the job it led to (Fase 29F): the same address and zone, with nothing to
+    /// charge (the job is charged in its order), even if the zone no longer reaches it: it is where the customer was visited.
+    /// </summary>
+    internal static AppointmentVisit ForWork(Guid appointmentId, AppointmentVisit visit)
+        => new(visit.TenantId, appointmentId, DeliveryAddress.ForVisit(visit.PostalCode, visit.AddressLine, visit.References),
+            visit.ZoneName, 0m);
+
     public Guid TenantId { get; private set; }
     public Guid AppointmentId { get; private set; }
 
