@@ -313,7 +313,7 @@ function QuoteDetail({ id }: { id: string }) {
               {/* What the customer said happens when they requested the visit online, with their photos (Fase 29H). */}
               {quote.appointment && (quote.appointment.problem || (quote.appointment.problemPhotos?.length ?? 0) > 0) && (
                 <section className="border rounded p-2 mb-3" aria-labelledby={problemId}>
-                  <h2 id={problemId} className="h6 mb-2">Lo que pasa, según el cliente</h2>
+                  <h2 id={problemId} className="h6 mb-2">Lo que pasa</h2>
                   <VisitProblem problem={quote.appointment.problem} photos={quote.appointment.problemPhotos ?? []} size={72} />
                 </section>
               )}

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
@@ -7,9 +7,9 @@ import CustomerAppointmentCard from '../../components/booking/CustomerAppointmen
 import { ProblemPhotosSender } from '../../components/booking/ProblemPhotos';
 import PageTitle from '../../components/common/PageTitle';
 import { useConfirm } from '../../hooks/useConfirm';
+import { useProblemPhotoUploads } from '../../hooks/useProblemPhotoUploads';
 import { useToast } from '../../hooks/useToast';
 import { cancelAppointmentMessage } from '../../utils/onlineBooking';
-import { MAX_PROBLEM_PHOTOS } from '../../utils/problemPhotos';
 
 /**
  * An appointment booked online followed with the link of its receipt (/cita#link, Fase 24D), without an account: its
@@ -24,8 +24,11 @@ export default function AppointmentTrackingPage() {
   const toast = useToast();
   const [cancelling, setCancelling] = useState(false);
   const photosId = useId();
-  // Once photos went from here, the section stays to say how they went, also after the last one that fit.
-  const [sentHere, setSentHere] = useState(false);
+  // The photos going with this link (also from the receipt): the visit as the server answers each one is the one shown.
+  const uploads = useProblemPhotoUploads(token);
+  useEffect(() => {
+    if (uploads.latest) queryClient.setQueryData(['public', 'appointment', token], uploads.latest);
+  }, [uploads.latest, queryClient, token]);
   const queryKey = ['public', 'appointment', token];
   const appointmentQuery = useQuery({
     queryKey,
@@ -84,27 +87,20 @@ export default function AppointmentTrackingPage() {
         <div className="row">
           <div className="col-12 col-lg-7">
             <CustomerAppointmentCard appointment={appointment} onCancel={() => void cancel()} cancelling={cancelling} titleAs="h2" />
-            {(appointment.canAddPhotos || sentHere) && (
+          </div>
+          {/* Its own column: the card fills the height of its column. */}
+          {/* While it takes them, or while there are photos of this link to say how they went. */}
+          {(appointment.canAddPhotos || uploads.photos.length > 0) && (
+            <div className="col-12 col-lg-7">
               <section className="card mt-3 mb-0" aria-labelledby={photosId}>
                 <div className="card-body">
                   <h2 id={photosId} className="h6">Fotos de lo que pasa</h2>
-                  <p className="small text-muted mb-2">
-                    Ayudan a {appointment.businessName} a preparar la visita. Solo las ve el negocio.
-                    {appointment.canAddPhotos && ` Caben ${MAX_PROBLEM_PHOTOS - appointment.problemPhotos} más.`}
-                  </p>
-                  <ProblemPhotosSender
-                    token={token}
-                    sent={appointment.problemPhotos}
-                    canAdd={appointment.canAddPhotos}
-                    onSent={(updated) => {
-                      setSentHere(true);
-                      queryClient.setQueryData(queryKey, updated);
-                    }}
-                  />
+                  <p className="small text-muted mb-2">Ayudan a {appointment.businessName} a preparar la visita. Solo las ve el negocio.</p>
+                  <ProblemPhotosSender token={token} sent={appointment.problemPhotos} canAdd={appointment.canAddPhotos} />
                 </div>
               </section>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>

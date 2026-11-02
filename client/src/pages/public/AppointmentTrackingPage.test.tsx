@@ -7,6 +7,7 @@ import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import { publicMenuApi, type CustomerAppointment } from '../../api/publicMenuApi';
 import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { AppointmentStatus } from '../../types';
+import { resetLinkUploads } from '../../hooks/useProblemPhotoUploads';
 import AppointmentTrackingPage from './AppointmentTrackingPage';
 
 vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
@@ -58,6 +59,7 @@ function renderPage(url: string) {
 describe('AppointmentTrackingPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    resetLinkUploads();
   });
 
   it('shows the appointment of the link and cancels it after asking', async () => {
@@ -136,12 +138,13 @@ describe('AppointmentTrackingPage', () => {
 
     const photos = within(await screen.findByRole('region', { name: 'Fotos de lo que pasa' }));
     expect(screen.getByText('Mandaste 3 fotos de lo que pasa')).toBeInTheDocument();
-    expect(photos.getByText(/Ayudan a Plomería Hernández a preparar la visita\. Solo las ve el negocio\. Caben 2 más\./)).toBeInTheDocument();
+    expect(photos.getByText('Ayudan a Plomería Hernández a preparar la visita. Solo las ve el negocio.')).toBeInTheDocument();
+    expect(photos.getByText('Caben 2 más.')).toBeInTheDocument();
     await user.upload(photos.getByTestId('problem-photos-input'), [
       new File(['a'], 'fuga.jpg', { type: 'image/jpeg' }), new File(['b'], 'pared.jpg', { type: 'image/jpeg' }),
     ]);
 
-    expect(await photos.findByText('Enviaste 2 fotos de lo que pasa.')).toBeInTheDocument();
+    expect(await photos.findByText('Listo: se mandaron 2 fotos.')).toBeInTheDocument();
     expect(api.addAppointmentPhoto.mock.calls.map(([token, file]) => [token, file.name])).toEqual([[LINK, 'fuga.jpg'], [LINK, 'pared.jpg']]);
     // The card says it with what the server answered; the section stays to say how they went, with nothing more to add.
     expect(screen.getByText('Mandaste 5 fotos de lo que pasa')).toBeInTheDocument();

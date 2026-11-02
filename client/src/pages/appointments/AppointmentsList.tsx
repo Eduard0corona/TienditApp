@@ -123,10 +123,10 @@ function sameMinute(a: string, b: string): boolean {
   return Math.floor(new Date(a).getTime() / 60_000) === Math.floor(new Date(b).getTime() / 60_000);
 }
 
-/** «Lo que pasa · 2 fotos», or «Lo que pasa» when the customer only wrote it. */
+/** «Ver lo que pasa · 2 fotos», or «Ver lo que pasa» when the customer only wrote it. */
 function problemLabel(item: AppointmentDto): string {
   const photos = item.problemPhotos?.length ?? 0;
-  return photos > 0 ? `Lo que pasa · ${photoCount(photos)}` : 'Lo que pasa';
+  return photos > 0 ? `Ver lo que pasa · ${photoCount(photos)}` : 'Ver lo que pasa';
 }
 
 function formatSlot(item: AppointmentDto): string {

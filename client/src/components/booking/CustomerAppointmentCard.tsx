@@ -4,6 +4,7 @@ import ReviewButton from '../reviews/ReviewButton';
 import { AppointmentStatus } from '../../types';
 import { endSentence } from '../../utils/dates';
 import { addressMapUrl, bookingPath, customerAppointmentChip, homeVisitPath, upperFirst } from '../../utils/onlineBooking';
+import { photoCount } from '../../utils/problemPhotos';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 
 interface CustomerAppointmentCardProps {
@@ -60,7 +61,7 @@ export default function CustomerAppointmentCard({
         {appointment.visit && appointment.problemPhotos > 0 && (
           <p className="small mb-1">
             <i className="ri-image-line me-1" aria-hidden="true"></i>
-            Mandaste {appointment.problemPhotos === 1 ? 'una foto' : `${appointment.problemPhotos} fotos`} de lo que pasa
+            Mandaste {photoCount(appointment.problemPhotos)} de lo que pasa
           </p>
         )}
         {appointment.address && (

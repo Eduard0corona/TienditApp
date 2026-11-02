@@ -260,22 +260,7 @@ export default function PublicHomeVisitPage() {
     }
   };
 
-  if (visitQuery.isPending) {
-    return <div className="pm-page"><p className="text-muted p-4" aria-busy="true">Cargando…</p></div>;
-  }
-  if (visitQuery.isError || !data) {
-    return (
-      <div className="pm-page">
-        <div className="pm-empty">
-          <i className="ri-home-gear-line" aria-hidden="true"></i>
-          <h1 className="h5">Este negocio no recibe visitas en línea</h1>
-          <p className="text-muted">Mira su tienda o escríbele para pedir una visita.</p>
-          <Link className="btn btn-light" to={`/m/${slug}`}>Ver la tienda</Link>
-        </div>
-      </div>
-    );
-  }
-
+  // Once requested, the receipt stays: a failed read of the page again never hides it, nor the photos going with it.
   if (receipt) {
     const followUp = businessWhatsAppUrl(
       receipt.contactPhone,
@@ -299,7 +284,7 @@ export default function PublicHomeVisitPage() {
           {photos.length > 0 && (
             <section className="text-start w-100 mt-3" aria-labelledby={`${fieldId}-photos`}>
               <h2 id={`${fieldId}-photos`} className="h6">Tus fotos de lo que pasa</h2>
-              <ProblemPhotosSender token={receipt.trackingToken} sent={0} canAdd initial={photos} onSent={() => undefined} />
+              <ProblemPhotosSender token={receipt.trackingToken} sent={0} canAdd initial={photos} />
             </section>
           )}
           <div className="d-grid gap-2 mt-3 pb-receipt-actions">
@@ -321,6 +306,22 @@ export default function PublicHomeVisitPage() {
               ¿Pides servicios seguido? <Link to="/register?cuenta=cliente">Crea tu cuenta</Link> y tus citas quedan juntas.
             </p>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (visitQuery.isPending) {
+    return <div className="pm-page"><p className="text-muted p-4" aria-busy="true">Cargando…</p></div>;
+  }
+  if (visitQuery.isError || !data) {
+    return (
+      <div className="pm-page">
+        <div className="pm-empty">
+          <i className="ri-home-gear-line" aria-hidden="true"></i>
+          <h1 className="h5">Este negocio no recibe visitas en línea</h1>
+          <p className="text-muted">Mira su tienda o escríbele para pedir una visita.</p>
+          <Link className="btn btn-light" to={`/m/${slug}`}>Ver la tienda</Link>
         </div>
       </div>
     );

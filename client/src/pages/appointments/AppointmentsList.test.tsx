@@ -335,18 +335,18 @@ describe('AppointmentsList', () => {
     ]);
 
     const row = (await screen.findByText('Valeria')).closest('tr')!;
-    await user.click(within(row).getByRole('button', { name: 'Lo que pasa · 2 fotos, en la visita de Valeria' }));
+    await user.click(within(row).getByRole('button', { name: 'Ver lo que pasa · 2 fotos, en la visita de Valeria' }));
 
     const dialog = within(await screen.findByRole('dialog', { name: 'Lo que pasa' }));
     expect(dialog.getByText('Gotea el calentador desde ayer')).toBeInTheDocument();
     expect(dialog.getByText(/^Valeria · /)).toBeInTheDocument();
-    await waitFor(() => expect(dialog.getAllByRole('link', { name: /Abrir Foto \d de lo que pasa/ })).toHaveLength(2));
+    await waitFor(() => expect(dialog.getAllByRole('link', { name: /Abrir foto \d de lo que pasa/ })).toHaveLength(2));
     expect(filesApi.get).toHaveBeenCalledWith(photo(1));
     await user.click(dialog.getByRole('button', { name: 'Cerrar' }));
     // Only written: no photos. A visit the team arranged keeps the team's notes, which are not what the customer said.
     const rosa = screen.getByText('Rosa').closest('tr')!;
-    expect(within(rosa).getByRole('button', { name: 'Lo que pasa, en la visita de Rosa' })).toBeInTheDocument();
-    expect(within(screen.getByText('Ana Ruiz').closest('tr')!).queryByRole('button', { name: /Lo que pasa/ })).not.toBeInTheDocument();
+    expect(within(rosa).getByRole('button', { name: 'Ver lo que pasa, en la visita de Rosa' })).toBeInTheDocument();
+    expect(within(screen.getByText('Ana Ruiz').closest('tr')!).queryByRole('button', { name: /lo que pasa/ })).not.toBeInTheDocument();
   });
 
   it('says how many requests wait and shows them, and opens on them from the notice', async () => {

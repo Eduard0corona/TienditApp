@@ -117,8 +117,10 @@ export const publicMenuApi = {
     const form = new FormData();
     form.append('token', token);
     form.append('file', file);
+    // A stalled upload over mobile data gives up after two minutes, and may go again.
     const response = await api.post<CustomerAppointment>('/public/appointments/tracking/photos', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120_000,
     });
     return response.data;
   },

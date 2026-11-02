@@ -184,9 +184,27 @@ describe('QuoteDetail', () => {
     } as Partial<Quote>));
     renderAt();
 
-    const section = within(await screen.findByRole('region', { name: 'Lo que pasa, según el cliente' }));
+    const section = within(await screen.findByRole('region', { name: 'Lo que pasa' }));
     expect(section.getByText('Gotea el calentador desde ayer')).toBeInTheDocument();
-    expect(await section.findByRole('link', { name: 'Abrir Foto 1 de lo que pasa' })).toBeInTheDocument();
+    expect(await section.findByRole('link', { name: 'Abrir foto 1 de lo que pasa' })).toBeInTheDocument();
+    expect(filesApi.get).toHaveBeenCalledWith(photo);
+  });
+
+  it('opens only the private photos of the business, never another address a record could carry', async () => {
+    const photo = '/files/orders/0b6f1c7e-2d1a-4c3b-9e8f-1a2b3c4d5e6f/visit-problem/202611/9f8e7d6c-5b4a-4321-8765-0fedcba98761.webp';
+    vi.mocked(filesApi.get).mockResolvedValue({ data: new Blob(['x'], { type: 'image/webp' }) } as never);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:foto');
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({
+      appointment: {
+        id: 'a1', startAt: '2026-10-03T16:00:00Z', serviceName: 'Visita', postalCode: '72000', problem: null,
+        problemPhotos: ['https://tracker.example/pixel.png', photo],
+      },
+    } as Partial<Quote>));
+    renderAt();
+
+    const section = within(await screen.findByRole('region', { name: 'Lo que pasa' }));
+    expect(await section.findAllByRole('link', { name: /Abrir foto/ })).toHaveLength(1);
+    expect(filesApi.get).toHaveBeenCalledTimes(1);
     expect(filesApi.get).toHaveBeenCalledWith(photo);
   });
 
@@ -197,7 +215,7 @@ describe('QuoteDetail', () => {
     renderAt();
 
     expect(await screen.findByText(/Visita del/)).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Lo que pasa, según el cliente' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Lo que pasa' })).not.toBeInTheDocument();
   });
 
   it('records what the customer answered and how', async () => {

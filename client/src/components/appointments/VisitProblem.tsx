@@ -24,7 +24,7 @@ export default function VisitProblem({ problem, photos, size = 96 }: VisitProble
         <ul className="list-unstyled d-flex flex-wrap gap-2 mb-0">
           {paths.map((path, index) => (
             <li key={path}>
-              <PrivatePhoto path={path} alt={`Foto ${index + 1} de lo que pasa`} linked className="rounded border" style={{ width: size, height: size }} />
+              <PrivatePhoto path={path} alt={`foto ${index + 1} de lo que pasa`} linked className="rounded border" style={{ width: size, height: size }} />
             </li>
           ))}
         </ul>

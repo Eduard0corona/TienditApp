@@ -7,6 +7,7 @@ import { accountApi } from '../../api/accountApi';
 import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import { publicMenuApi, type PublicBookingSlots, type PublicHomeVisit } from '../../api/publicMenuApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
+import { resetLinkUploads } from '../../hooks/useProblemPhotoUploads';
 import PublicHomeVisitPage from './PublicHomeVisitPage';
 
 vi.mock('../../api/publicMenuApi', () => ({
@@ -122,6 +123,7 @@ async function pickMondayAtTen(user: ReturnType<typeof userEvent.setup>) {
 describe('PublicHomeVisitPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    resetLinkUploads();
     window.localStorage.clear();
     api.getHomeVisit.mockResolvedValue(visit() as never);
     api.getHomeVisitCoverage.mockImplementation(async (_slug, postalCode) =>
@@ -206,7 +208,7 @@ describe('PublicHomeVisitPage', () => {
     await user.click(sheet.getByRole('button', { name: 'Solicitar visita' }));
 
     const photos = within(await screen.findByRole('region', { name: 'Tus fotos de lo que pasa' }));
-    expect(await photos.findByText('Enviaste 2 fotos de lo que pasa.')).toBeInTheDocument();
+    expect(await photos.findByText('Listo: se mandaron 2 fotos.')).toBeInTheDocument();
     // One at a time, in the order picked, with the link of the request; never with the request itself.
     expect(api.addAppointmentPhoto.mock.calls).toEqual([[LINK, fuga], [LINK, pared]]);
     expect(api.requestHomeVisit.mock.calls[0][1]).not.toHaveProperty('photos');

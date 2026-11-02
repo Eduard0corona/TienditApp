@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
-import { publicMenuApi, type CustomerAppointment } from '../../api/publicMenuApi';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
+import { useProblemPhotoUploads, type UploadStatus } from '../../hooks/useProblemPhotoUploads';
 import {
   ACCEPTED_PHOTO_TYPES,
   MAX_PROBLEM_PHOTOS,
-  forgetPhotos,
+  forgetPreview,
   photoCount,
   pickPhotos,
+  previewOf,
   type PickedPhoto,
 } from '../../utils/problemPhotos';
 
@@ -14,11 +14,12 @@ interface PhotoButtonProps {
   label: string;
   room: number;
   disabled?: boolean;
+  buttonRef?: RefObject<HTMLButtonElement | null>;
   onPicked: (picked: PickedPhoto[], refused: string | null) => void;
 }
 
 /** «Agregar fotos»: the phone offers its camera or its gallery, and only what fits is taken. */
-function PhotoButton({ label, room, disabled = false, onPicked }: PhotoButtonProps) {
+function PhotoButton({ label, room, disabled = false, buttonRef, onPicked }: PhotoButtonProps) {
   const input = useRef<HTMLInputElement>(null);
   return (
     <>
@@ -41,6 +42,7 @@ function PhotoButton({ label, room, disabled = false, onPicked }: PhotoButtonPro
         }}
       />
       <button
+        ref={buttonRef}
         type="button"
         className="btn btn-outline-secondary btn-sm"
         disabled={disabled || room <= 0}
@@ -50,6 +52,10 @@ function PhotoButton({ label, room, disabled = false, onPicked }: PhotoButtonPro
       </button>
     </>
   );
+}
+
+function Thumb({ file, alt }: { file: File; alt: string }) {
+  return <img src={previewOf(file)} alt={alt} className="rounded border d-block" width={72} height={72} style={{ objectFit: 'cover' }} />;
 }
 
 interface ProblemPhotosPickerProps {
@@ -66,6 +72,7 @@ interface ProblemPhotosPickerProps {
 export function ProblemPhotosPicker({ photos, onChange, businessName, disabled = false }: ProblemPhotosPickerProps) {
   const id = useId();
   const [refused, setRefused] = useState<string | null>(null);
+  const add = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="mb-2" role="group" aria-labelledby={`${id}-label`} aria-describedby={`${id}-hint`}>
@@ -77,17 +84,19 @@ export function ProblemPhotosPicker({ photos, onChange, businessName, disabled =
         <ul className="list-unstyled d-flex flex-wrap gap-2 mb-2">
           {photos.map((photo, index) => (
             <li key={photo.id} className="position-relative">
-              <img src={photo.preview} alt={`Foto ${index + 1} de lo que pasa`} className="rounded border" width={72} height={72} style={{ objectFit: 'cover' }} />
+              <Thumb file={photo.file} alt={`Foto ${index + 1} de lo que pasa`} />
               <button
                 type="button"
-                className="btn btn-light btn-sm position-absolute top-0 end-0 p-0 lh-1 rounded-circle border"
-                style={{ width: 24, height: 24 }}
+                className="btn btn-light btn-sm position-absolute top-0 end-0 p-0 lh-1 rounded-circle border d-flex align-items-center justify-content-center"
+                style={{ width: 32, height: 32, transform: 'translate(25%, -25%)' }}
                 disabled={disabled}
                 aria-label={`Quitar la foto ${index + 1}`}
                 onClick={() => {
-                  forgetPhotos([photo]);
+                  forgetPreview(photo.file);
                   setRefused(null);
                   onChange(photos.filter((item) => item.id !== photo.id));
+                  // The button that had the focus goes away: «Agregar» keeps it.
+                  add.current?.focus();
                 }}
               >
                 <i className="ri-close-line" aria-hidden="true"></i>
@@ -100,6 +109,7 @@ export function ProblemPhotosPicker({ photos, onChange, businessName, disabled =
         label={photos.length > 0 ? 'Agregar más fotos' : 'Agregar fotos'}
         room={MAX_PROBLEM_PHOTOS - photos.length}
         disabled={disabled}
+        buttonRef={add}
         onPicked={(picked, why) => {
           setRefused(why);
           if (picked.length > 0) onChange([...photos, ...picked]);
@@ -110,123 +120,101 @@ export function ProblemPhotosPicker({ photos, onChange, businessName, disabled =
   );
 }
 
-type SendStatus = 'waiting' | 'sending' | 'sent' | 'failed';
-
-interface Sending extends PickedPhoto {
-  status: SendStatus;
-  error?: string;
-  /** It may go again: the connection or the server failed, not a refusal of the visit. */
-  retryable?: boolean;
-}
-
 interface ProblemPhotosSenderProps {
   token: string;
-  /** How many the visit already has, as the server said. */
+  /** How many the visit has, as the page last read it from the server. */
   sent: number;
-  /** The visit still takes photos, as the server said. */
+  /** The visit takes more, as the page last read it from the server (a cancelled visit, or one whose time came, does not). */
   canAdd: boolean;
-  /** The photos picked in the request, sent as soon as this shows. */
+  /** The photos picked in the request, sent as soon as this shows (once, also if it shows again). */
   initial?: PickedPhoto[];
-  /** The visit as the server answered the last photo it took. */
-  onSent: (appointment: CustomerAppointment) => void;
 }
 
-const STATUS_LABEL: Record<SendStatus, string> = {
+const STATUS_LABEL: Record<UploadStatus, string> = {
   waiting: 'En espera',
-  sending: 'Enviando…',
+  sending: 'Mandando…',
   sent: 'Enviada',
-  failed: 'No se envió',
+  failed: 'No se mandó',
 };
 
 const NO_PHOTOS: PickedPhoto[] = [];
 
 /**
- * Sends the photos of what happens with the link of the visit (Fase 29H), one at a time: the ones picked in the request as
- * soon as it is saved, and more from here while the visit takes them. Each says how it went; one that failed for the
- * connection can go again.
+ * The photos of what happens going to the visit of a link (Fase 29H), one at a time, and how each went: the ones picked in
+ * the request as soon as it is saved, and more from here while the visit takes them. They keep going when the customer
+ * opens the visit's link, which shows the same ones; one that failed for the connection can go again. How many fit is what
+ * the server last said, less the ones still going.
  */
-export function ProblemPhotosSender({ token, sent, canAdd, initial = NO_PHOTOS, onSent }: ProblemPhotosSenderProps) {
-  const [queue, setQueue] = useState<Sending[]>(() => initial.map((photo) => ({ ...photo, status: 'waiting' })));
+export function ProblemPhotosSender({ token, sent, canAdd, initial = NO_PHOTOS }: ProblemPhotosSenderProps) {
+  const { photos, latest, closed, store } = useProblemPhotoUploads(token);
   const [refused, setRefused] = useState<string | null>(null);
-  const [allowed, setAllowed] = useState({ sent, canAdd });
-  const waiting = useRef<PickedPhoto[]>([]);
-  const busy = useRef(false);
-  const started = useRef(false);
-  const onSentRef = useRef(onSent);
+  const summaryRef = useRef<HTMLParagraphElement>(null);
+  const focusSummary = useRef(false);
+
   useEffect(() => {
-    onSentRef.current = onSent;
+    if (initial.length > 0) store.enqueue(initial);
+  }, [initial, store]);
+
+  // A button that had the focus went away (all sent, nothing more fits): the summary takes it.
+  useEffect(() => {
+    if (!focusSummary.current) return;
+    focusSummary.current = false;
+    summaryRef.current?.focus();
   });
 
-  const mark = (id: string, change: Partial<Sending>) =>
-    setQueue((current) => current.map((photo) => (photo.id === id ? { ...photo, ...change } : photo)));
-
-  // One at a time, in the order picked: the server gives each the next place.
-  const send = useCallback(async (photos: PickedPhoto[]) => {
-    waiting.current.push(...photos);
-    if (busy.current) return;
-    busy.current = true;
-    for (let next = waiting.current.shift(); next; next = waiting.current.shift()) {
-      const { id, file } = next;
-      mark(id, { status: 'sending', error: undefined });
-      try {
-        const appointment = await publicMenuApi.addAppointmentPhoto(token, file);
-        setAllowed({ sent: appointment.problemPhotos, canAdd: appointment.canAddPhotos });
-        mark(id, { status: 'sent' });
-        onSentRef.current(appointment);
-      } catch (err: unknown) {
-        const status = getApiErrorStatus(err);
-        mark(id, {
-          status: 'failed',
-          error: getApiErrorMessage(err, 'Revisa tu conexión e inténtalo otra vez.'),
-          retryable: status === undefined || status === 429 || status >= 500,
-        });
-      }
-    }
-    busy.current = false;
-  }, [token]);
-
-  // The photos of the request go once, as soon as it is saved (also when the page mounts twice while developing).
-  useEffect(() => {
-    if (started.current || initial.length === 0) return;
-    started.current = true;
-    void Promise.resolve().then(() => send(initial));
-  }, [initial, send]);
-
-  const pending = queue.filter((photo) => photo.status === 'waiting' || photo.status === 'sending').length;
-  const failed = queue.filter((photo) => photo.status === 'failed');
+  const pending = photos.filter((photo) => photo.status === 'waiting' || photo.status === 'sending').length;
+  const failed = photos.filter((photo) => photo.status === 'failed');
   const retryable = failed.filter((photo) => photo.retryable);
-  const done = queue.filter((photo) => photo.status === 'sent').length;
-  const room = allowed.canAdd ? MAX_PROBLEM_PHOTOS - allowed.sent - pending - retryable.length : 0;
+  const done = photos.filter((photo) => photo.status === 'sent').length;
+  const takes = canAdd && !closed && (latest?.canAddPhotos ?? true);
+  const has = Math.max(sent, latest?.problemPhotos ?? 0);
+  const room = takes ? Math.max(MAX_PROBLEM_PHOTOS - has - pending - retryable.length, 0) : 0;
 
   const summary = pending > 0
-    ? `Enviando tus fotos (${done + 1} de ${done + pending})…`
+    ? `Mandando ${photoCount(pending)}…`
     : failed.length > 0
-      ? `${failed.length === 1 ? 'Una foto no se envió' : `${failed.length} fotos no se enviaron`}: ${failed[0].error}`
+      ? `${failed.length === 1 ? 'Una foto no se mandó' : `${failed.length} fotos no se mandaron`}: ${failed[0].error}`
       : done > 0
-        ? `Enviaste ${photoCount(done)} de lo que pasa.`
+        ? `Listo: ${done === 1 ? 'se mandó una foto' : `se mandaron ${done} fotos`}.`
         : null;
 
   return (
     <div>
-      <p className={`small ${summary ? 'mb-2' : 'mb-0'}`} aria-live="polite">{summary}</p>
-      {queue.length > 0 && (
+      <p ref={summaryRef} tabIndex={-1} className={`small ${summary ? 'mb-2' : 'mb-0'}`} aria-live="polite">{summary}</p>
+      {photos.length > 0 && (
         <ul className="list-unstyled d-flex flex-wrap gap-2 mb-2">
-          {queue.map((photo, index) => (
+          {photos.map((photo, index) => (
             <li key={photo.id} className="text-center" style={{ width: 72 }}>
-              <img src={photo.preview} alt={`Foto ${index + 1} de lo que pasa`} className="rounded border d-block" width={72} height={72} style={{ objectFit: 'cover' }} />
+              <Thumb file={photo.file} alt={`Foto ${index + 1} de lo que pasa`} />
               <span className={`d-block small ${photo.status === 'failed' ? 'text-danger' : 'text-muted'}`}>{STATUS_LABEL[photo.status]}</span>
+              {photo.status === 'failed' && !photo.retryable && (
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0"
+                  aria-label={`Quitar la foto ${index + 1}, que no se mandó`}
+                  onClick={() => {
+                    forgetPreview(photo.file);
+                    store.dismiss(photo.id);
+                    focusSummary.current = true;
+                  }}
+                >
+                  Quitar
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
+      {room > 0 && pending === 0 && <p className="small text-muted mb-2">Caben {room} más.</p>}
       <div className="d-flex flex-wrap gap-2">
         {pending === 0 && retryable.length > 0 && (
           <button
             type="button"
             className="btn btn-outline-secondary btn-sm"
+            aria-label="Reintentar las fotos que no se mandaron"
             onClick={() => {
-              for (const photo of retryable) mark(photo.id, { status: 'waiting', error: undefined });
-              void send(retryable);
+              store.retry();
+              focusSummary.current = true;
             }}
           >
             Reintentar
@@ -234,13 +222,13 @@ export function ProblemPhotosSender({ token, sent, canAdd, initial = NO_PHOTOS, 
         )}
         {room > 0 && (
           <PhotoButton
-            label={queue.length > 0 || allowed.sent > 0 ? 'Agregar más fotos' : 'Agregar fotos'}
+            label={photos.length > 0 || has > 0 ? 'Agregar más fotos' : 'Agregar fotos'}
             room={room}
             onPicked={(picked, why) => {
               setRefused(why);
               if (picked.length === 0) return;
-              setQueue((current) => [...current, ...picked.map((photo) => ({ ...photo, status: 'waiting' as const }))]);
-              void send(picked);
+              if (picked.length >= room) focusSummary.current = true;
+              store.enqueue(picked);
             }}
           />
         )}
