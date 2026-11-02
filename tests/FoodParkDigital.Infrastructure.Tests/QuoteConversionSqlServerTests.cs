@@ -86,13 +86,19 @@ public class QuoteConversionSqlServerTests
 
         await using var check = database.CreateContext(tenantId);
         var visitSale = await check.Orders.Include(o => o.Refunds).SingleAsync(o => o.Id == visitSaleId);
-        Assert.Equal(406m, visitSale.Refunds.Sum(r => r.Amount));
-        Assert.True(visitSale.NetPaidAmount >= 0);
-        var balance = await check.CustomerBalanceEntries.SumAsync(e => (decimal?)e.Amount) ?? 0m;
-        Assert.Equal(0m, balance);
-        if ((await conversion).IsSuccess)
-            Assert.Equal(406m, (await check.Orders.Include(o => o.Payments).SingleAsync(o => o.Id != visitSaleId)).PaidAmount);
+        var refunds = visitSale.Refunds.ToList();
+        var job = await check.Orders.Include(o => o.Payments).SingleOrDefaultAsync(o => o.Id != visitSaleId);
+        // The 406 went one way only: back in cash, or to the balance and from it into the job.
+        Assert.Equal(406m, Assert.Single(refunds).Amount);
+        Assert.Equal(0m, visitSale.NetPaidAmount);
+        if (refunds[0].Method == OrderPaymentMethod.Cash)
+            Assert.Equal(0m, job?.PaidAmount ?? 0m);
         else
+            Assert.Equal((OrderPaymentMethod.CustomerBalance, 406m), (refunds[0].Method, job!.PaidAmount));
+        Assert.Equal(0m, await check.CustomerBalanceEntries.SumAsync(e => (decimal?)e.Amount) ?? 0m);
+        // The one that lost says why: the cash refund collided, or the conversion says the sale of the visit changed.
+        Assert.True(await refund || (await conversion).IsSuccess);
+        if ((await conversion).IsFailure)
             Assert.Equal(QuoteConversions.ChangedMeanwhileMessage, (await conversion).Error);
     }
 
@@ -103,7 +109,6 @@ public class QuoteConversionSqlServerTests
         tenant.SetTenant(tenantId);
         await using var context = database.CreateProductionLikeContext(
             tenant, new InMemoryApplicationDbContext.NullMediator(), new TenantSaveChangesInterceptor(tenant));
-        var user = new Owner();
         var clock = new Clock();
         var sale = await context.Orders.Include(o => o.Items).Include(o => o.Payments).Include(o => o.Refunds).ThenInclude(r => r.Lines)
             .SingleAsync(o => o.Id == visitSaleId);

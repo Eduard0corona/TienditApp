@@ -238,10 +238,12 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
         catch (DbUpdateConcurrencyException)
         {
             // The quote or the sale of its visit changed at the same time: the other change stands, and this one is undone
-            // whole. Converted by someone else, it says so.
+            // whole. Converted by someone else (into another order: this transaction may have already written its own before
+            // the sale collided), it says so.
             var converted = await _context.Quotes
                 .AsNoTracking()
-                .AnyAsync(q => q.Id == quote.Id && q.TenantId == TenantId && q.OrderId != null, cancellationToken);
+                .AnyAsync(q => q.Id == quote.Id && q.TenantId == TenantId && q.OrderId != null && q.OrderId != order.Id,
+                    cancellationToken);
             return Result.Failure<QuoteDto>(converted ? QuoteRules.AlreadyConvertedMessage : QuoteConversions.ChangedMeanwhileMessage);
         }
 
