@@ -63,6 +63,16 @@ public class PublicQuoteDto
     public string? Note { get; set; }
     /// <summary>The link of the version that replaced this one, while it opens; null otherwise.</summary>
     public string? NewerToken { get; set; }
+    /// <summary>
+    /// The customer can accept or reject it here (Fase 29G, ADR 0061): sent, still valid and the business lets them.
+    /// </summary>
+    public bool CanReply { get; set; }
+    /// <summary>When it was accepted or rejected; null while it waits or once it expired or was replaced unanswered.</summary>
+    public DateTimeOffset? RepliedAt { get; set; }
+    /// <summary>The customer answered here, from its link; otherwise the business recorded the answer.</summary>
+    public bool RepliedFromLink { get; set; }
+    /// <summary>What the customer wrote when they answered here; never what the business recorded.</summary>
+    public string? Response { get; set; }
 }
 
 public class GetPublicQuoteQueryHandler : IRequestHandler<GetPublicQuoteQuery, PublicQuoteDto?>
@@ -80,45 +90,77 @@ public class GetPublicQuoteQueryHandler : IRequestHandler<GetPublicQuoteQuery, P
 
     public async Task<PublicQuoteDto?> Handle(GetPublicQuoteQuery request, CancellationToken cancellationToken)
     {
-        if (!Order.IsTrackingToken(request.Token))
-            return null;
-
-        // The link names one quote of the whole platform before any business is in context: only its business is read here;
-        // the quote itself is read inside that business.
-        var found = await (
-                from quote in _context.Quotes.IgnoreQueryFilters().AsNoTracking()
-                join tenant in _context.Tenants.AsNoTracking() on quote.TenantId equals tenant.Id
-                where quote.TrackingToken == request.Token && tenant.Status == TenantStatus.Active
-                select new { quote.Id, quote.TenantId, quote.TrackingToken })
-            .FirstOrDefaultAsync(cancellationToken);
-        // The column compares without case, as the database does; the link is the exact one.
-        if (found is null || !string.Equals(found.TrackingToken, request.Token, StringComparison.Ordinal))
+        var found = await PublicQuotes.FindAsync(_context, request.Token, cancellationToken);
+        if (found is null)
             return null;
 
         _tenantService.SetTenant(found.TenantId);
-        var view = await _context.Quotes
+        return await PublicQuotes.DescribeAsync(_context, found, _clock.UtcNow, cancellationToken);
+    }
+}
+
+/// <summary>A quote named by its link, before any business is in context, and how its customer reads it.</summary>
+internal static class PublicQuotes
+{
+    public sealed record Found(Guid QuoteId, Guid TenantId);
+
+    /// <summary>
+    /// The quote of the whole platform the link names, of an active business; null for a link unknown, malformed or that
+    /// differs only in case. Only its business is read here: the quote itself is read inside that business.
+    /// </summary>
+    public static async Task<Found?> FindAsync(IApplicationDbContext context, string token, CancellationToken cancellationToken)
+    {
+        if (!Order.IsTrackingToken(token))
+            return null;
+
+        var found = await (
+                from quote in context.Quotes.IgnoreQueryFilters().AsNoTracking()
+                join tenant in context.Tenants.AsNoTracking() on quote.TenantId equals tenant.Id
+                where quote.TrackingToken == token && tenant.Status == TenantStatus.Active
+                select new { quote.Id, quote.TenantId, quote.TrackingToken })
+            .FirstOrDefaultAsync(cancellationToken);
+        // The column compares without case, as the database does; the link is the exact one.
+        return found is null || !string.Equals(found.TrackingToken, token, StringComparison.Ordinal)
+            ? null
+            : new Found(found.Id, found.TenantId);
+    }
+
+    /// <summary>The business's time zone and whether it lets its customers answer from the link.</summary>
+    public static Task<BusinessView?> BusinessAsync(IApplicationDbContext context, Guid tenantId, CancellationToken cancellationToken)
+        => context.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => new BusinessView(t.Name, t.Slug, t.ContactPhone, t.Settings!.TimeZone, t.Settings.QuoteOnlineReplies))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public sealed record BusinessView(string Name, string Slug, string? ContactPhone, string TimeZone, bool OnlineReplies);
+
+    /// <summary>
+    /// The quote as its customer reads it: that version only, until 30 days after its validity (null after it). Of the customer,
+    /// only their name.
+    /// </summary>
+    public static async Task<PublicQuoteDto?> DescribeAsync(
+        IApplicationDbContext context, Found found, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var view = await context.Quotes
             .AsNoTracking()
             .Include(q => q.Lines)
-            .FirstOrDefaultAsync(q => q.Id == found.Id && q.TenantId == found.TenantId, cancellationToken);
-        var business = await _context.Tenants
-            .AsNoTracking()
-            .Where(t => t.Id == found.TenantId)
-            .Select(t => new { t.Name, t.Slug, t.ContactPhone, t.Settings!.TimeZone })
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(q => q.Id == found.QuoteId && q.TenantId == found.TenantId, cancellationToken);
+        var business = await BusinessAsync(context, found.TenantId, cancellationToken);
         if (view is null || business is null)
             return null;
 
-        var today = QuoteCalendar.Today(business.TimeZone, _clock.UtcNow);
+        var today = QuoteCalendar.Today(business.TimeZone, now);
         if (!view.LinkOpensOn(today) || view.SentAt is not { } sentAt || view.ValidUntil is not { } validUntil)
             return null;
 
-        var stillPaid = await QuoteVisitCredits.StillPaidAsync(_context, view, cancellationToken);
+        var stillPaid = await QuoteVisitCredits.StillPaidAsync(context, view, cancellationToken);
         var status = view.StatusOn(today);
         string? newer = null;
         if (status == QuoteStatus.Superseded)
         {
             // The latest version sent since, while its link opens.
-            var latest = await _context.Quotes
+            var latest = await context.Quotes
                 .AsNoTracking()
                 .Where(q => q.TenantId == view.TenantId && q.Number == view.Number && q.Revision > view.Revision
                     && q.TrackingToken != null && q.Status != QuoteStatus.Superseded)
@@ -129,6 +171,8 @@ public class GetPublicQuoteQueryHandler : IRequestHandler<GetPublicQuoteQuery, P
                 newer = latest.TrackingToken;
         }
 
+        var replied = status is QuoteStatus.Accepted or QuoteStatus.Rejected;
+        var fromLink = replied && view.ReplyChannel == QuoteReplyChannel.Link;
         return new PublicQuoteDto
         {
             BusinessName = business.Name,
@@ -155,7 +199,11 @@ public class GetPublicQuoteQueryHandler : IRequestHandler<GetPublicQuoteQuery, P
             VisitCredit = QuoteVisitCredits.Describe(view, stillPaid),
             ToPay = view.ToPay(stillPaid),
             Note = view.Note,
-            NewerToken = newer
+            NewerToken = newer,
+            CanReply = status == QuoteStatus.Sent && business.OnlineReplies,
+            RepliedAt = replied ? view.ClosedAt : null,
+            RepliedFromLink = fromLink,
+            Response = fromLink ? view.CustomerResponse : null
         };
     }
 }

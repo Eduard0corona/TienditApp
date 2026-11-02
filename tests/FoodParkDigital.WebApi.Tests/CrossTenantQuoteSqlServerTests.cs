@@ -198,4 +198,69 @@ public sealed class CrossTenantQuoteSqlServerTests
         Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1/appointments/{appointmentId}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1/orders/{orderId}")).StatusCode);
     }
+
+    [SqlServerFact]
+    public async Task TheCustomer_ShouldAnswerFromTheLink_WithoutAnAccount_OnlyThatQuote_WhileItsBusinessLetsThem()
+    {
+        var mine = await _api.SignUpAsync("responde-a");
+        var theirs = await _api.SignUpAsync("responde-b");
+        var (id, token) = await SentQuoteAsync(mine.Client);
+        var (theirId, theirToken) = await SentQuoteAsync(theirs.Client);
+        using var stranger = _api.AnonymousClient();
+
+        // The customer accepts from the link, without an account; the answer says nothing of them but their name.
+        var answer = await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token, accepted = true, response = "Los espero el jueves" });
+        var body = await answer.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        var replied = await TwoBusinessesApi.ReadAsync(answer);
+        Assert.Equal((2, true, false), (replied.GetProperty("status").GetInt32(), replied.GetProperty("repliedFromLink").GetBoolean(),
+            replied.GetProperty("canReply").GetBoolean()));
+        Assert.DoesNotContain("5522107765", body);
+        // The same answer again changes nothing; another one is refused; a link unknown or of another case is not found.
+        Assert.Equal(HttpStatusCode.OK, (await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token, accepted = true })).StatusCode);
+        var changed = await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token, accepted = false });
+        Assert.Equal(HttpStatusCode.BadRequest, changed.StatusCode);
+        Assert.Contains("ya tiene respuesta", await changed.Content.ReadAsStringAsync());
+        var otherCase = new string(token.Select(c => char.IsUpper(c) ? char.ToLowerInvariant(c) : char.ToUpperInvariant(c)).ToArray());
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = otherCase, accepted = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = new string('x', 43), accepted = true })).StatusCode);
+
+        // The business sees how the customer answered; the other business does not see it, and its own quote did not move.
+        var seen = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/quotes/{id}"));
+        Assert.Equal((2, 4, "Los espero el jueves"), (seen.GetProperty("status").GetInt32(), seen.GetProperty("replyChannel").GetInt32(),
+            seen.GetProperty("customerResponse").GetString()));
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1/quotes/{id}")).StatusCode);
+        Assert.Equal(1, (await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync($"/api/v1/quotes/{theirId}"))).GetProperty("status").GetInt32());
+        // Nor does a business record an answer «from the link» itself.
+        Assert.Equal(HttpStatusCode.BadRequest, (await theirs.Client.PostAsJsonAsync($"/api/v1/quotes/{theirId}/reply",
+            new { accepted = true, channel = 4 })).StatusCode);
+
+        // A business that turns it off records the answer itself: its link no longer takes one.
+        var off = await TwoBusinessesApi.ReadAsync(await theirs.Client.PutAsJsonAsync("/api/v1/quotes/settings", new { validityDays = 15, onlineReplies = false }));
+        Assert.False(off.GetProperty("onlineReplies").GetBoolean());
+        Assert.False((await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/quotes/view", new { token = theirToken })))
+            .GetProperty("canReply").GetBoolean());
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = theirToken, accepted = true })).StatusCode);
+        Assert.True((await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync("/api/v1/quotes/settings"))).GetProperty("onlineReplies").GetBoolean());
+    }
+
+    /// <summary>A quote of the business for «Cambio de calentador», sent: its id and its link.</summary>
+    private static async Task<(Guid Id, string Token)> SentQuoteAsync(HttpClient client)
+    {
+        var draft = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/quotes",
+            new { customerName = "Valeria Ruiz", customerPhone = "5522107765" }));
+        var id = draft.GetProperty("id").GetGuid();
+        await TwoBusinessesApi.ReadAsync(await client.PutAsJsonAsync($"/api/v1/quotes/{id}", new
+        {
+            customerName = "Valeria Ruiz",
+            customerPhone = "5522107765",
+            validityDays = 15,
+            lines = new[] { new { productId = (Guid?)null, description = "Cambio de calentador", quantity = 1m, unitPrice = 1160m } }
+        }));
+        var sent = await TwoBusinessesApi.ReadAsync(await client.PostAsync($"/api/v1/quotes/{id}/send", null));
+        return (id, sent.GetProperty("trackingToken").GetString()!);
+    }
 }

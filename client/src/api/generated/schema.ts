@@ -12687,6 +12687,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/quotes/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PublicQuoteReplyRequest"];
+                    "text/json": components["schemas"]["PublicQuoteReplyRequest"];
+                    "application/*+json": components["schemas"]["PublicQuoteReplyRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicQuoteDto"];
+                        "application/json": components["schemas"]["PublicQuoteDto"];
+                        "text/json": components["schemas"]["PublicQuoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/self-invoice/{slug}": {
         parameters: {
             query?: never;
@@ -20511,6 +20554,11 @@ export interface components {
             toPay: number;
             note?: string | null;
             newerToken?: string | null;
+            canReply: boolean;
+            /** Format: date-time */
+            repliedAt?: string | null;
+            repliedFromLink: boolean;
+            response?: string | null;
         };
         PublicQuoteLineDto: {
             description: string;
@@ -20520,6 +20568,11 @@ export interface components {
             unitPrice: number;
             /** Format: double */
             total: number;
+        };
+        PublicQuoteReplyRequest: {
+            token: string;
+            accepted: boolean;
+            response?: string | null;
         };
         PublicQuoteRequest: {
             token: string;
@@ -20747,10 +20800,11 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        QuoteReplyChannel: 0 | 1 | 2 | 3;
+        QuoteReplyChannel: 0 | 1 | 2 | 3 | 4;
         QuoteSettingsDto: {
             /** Format: int32 */
             validityDays: number;
+            onlineReplies: boolean;
             pricesIncludeTax: boolean;
             /** Format: double */
             defaultTaxRate: number;
@@ -22113,6 +22167,7 @@ export interface components {
         UpdateQuoteSettingsCommand: {
             /** Format: int32 */
             validityDays: number;
+            onlineReplies?: boolean | null;
         };
         UpdateSalesPolicyCommand: {
             pricesIncludeTax: boolean;

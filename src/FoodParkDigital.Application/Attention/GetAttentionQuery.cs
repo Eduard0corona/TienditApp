@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Domain.Messaging.Enums;
@@ -50,11 +51,18 @@ public static class AttentionKeys
     /// <see cref="HomeVisitAddressNotice"/>): 1 until the owner marks the branch «Solo a domicilio» or dismisses it.
     /// </summary>
     public const string HomeVisitAddress = "homeVisitAddress";
+    /// <summary>
+    /// Quotes the customer accepted in the last 30 days that have not become their service order yet (Fase 29G, ADR 0061);
+    /// those the customer accepted from their link are urgent: the business may not know yet.
+    /// </summary>
+    public const string QuotesToConvert = "quotesToConvert";
 }
 
 public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, AttentionDto>
 {
     private static readonly OrderStatus[] FinishedStatuses = [OrderStatus.Delivered, OrderStatus.Completed, OrderStatus.Cancelled];
+    /// <summary>How far back an accepted quote still waits to become its order in «Requiere atención».</summary>
+    public const int QuoteToConvertDays = 30;
 
     private readonly IApplicationDbContext _context;
     private readonly CurrentAccessContext _access;
@@ -165,6 +173,15 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
                 .Where(a => a.Status == AppointmentStatus.Requested && a.StartAt > now);
             Add(AttentionKeys.AppointmentRequests, await requests.CountAsync(cancellationToken),
                 await requests.CountAsync(a => a.StartAt <= endOfToday, cancellationToken));
+        }
+
+        if (Can(TenantPermission.ManageOrders) && Has(TenantCapability.Service))
+        {
+            var acceptedSince = now.AddDays(-QuoteToConvertDays);
+            var toConvert = _context.Quotes.AsNoTracking()
+                .Where(q => q.Status == QuoteStatus.Accepted && q.OrderId == null && q.ClosedAt >= acceptedSince);
+            Add(AttentionKeys.QuotesToConvert, await toConvert.CountAsync(cancellationToken),
+                await toConvert.CountAsync(q => q.ReplyChannel == QuoteReplyChannel.Link, cancellationToken));
         }
 
         if (isManager)

@@ -147,6 +147,8 @@ public class QuoteOrderDto
 public class QuoteSettingsDto
 {
     public int ValidityDays { get; set; }
+    /// <summary>The customer accepts or rejects a quote from its link (Fase 29G, ADR 0061).</summary>
+    public bool OnlineReplies { get; set; }
     public bool PricesIncludeTax { get; set; }
     public decimal DefaultTaxRate { get; set; }
     /// <summary>The business connected its WhatsApp (Fase 29D): its quotes go by WhatsApp from TienditApp.</summary>

@@ -539,6 +539,7 @@ export const QuoteReplyChannel = {
   Email: 1,
   Phone: 2,
   InPerson: 3,
+  Link: 4,
 } as const;
 export type QuoteReplyChannel = (typeof QuoteReplyChannel)[keyof typeof QuoteReplyChannel];
 
