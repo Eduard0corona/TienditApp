@@ -205,6 +205,26 @@ describe('PublicQuotePage', () => {
     expect(screen.getByText(/La cotización acaba de cambiar/)).toBeInTheDocument();
   });
 
+  it('announces the same refusal again and takes the focus to it on every attempt', async () => {
+    const headers = new AxiosHeaders();
+    const offline = () => new AxiosError('Network Error', 'ERR_NETWORK', { headers });
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true }) as never)
+      .mockRejectedValueOnce(offline()).mockRejectedValueOnce(offline());
+    renderPage(`/cotizacion#${LINK}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Aceptar la cotización' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, la acepto' }));
+    const first = await screen.findByRole('alert');
+    await waitFor(() => expect(first).toHaveFocus());
+    expect(first).toHaveTextContent('Tu respuesta no se envió. No hay conexión con el servidor.');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, la acepto' }));
+
+    // A new alert (announced again), with the focus, though it says the same.
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBe(first));
+    expect(screen.getByRole('alert')).toHaveFocus();
+  });
+
   it('says only that the link no longer opens when it expired while answering', async () => {
     const headers = new AxiosHeaders();
     const gone = () => new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {

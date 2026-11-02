@@ -56,7 +56,8 @@ export default function PublicQuotePage() {
   const quote = getApiErrorStatus(quoteQuery.error) === 404 ? undefined : quoteQuery.data;
   const folio = quote ? quoteFolio(quote.number, quote.revision) : '';
   // Fase 29G: why the answer was not taken stays on the page of that link, also once the answer can no longer be given there.
-  const [refusal, setRefusal] = useState<{ token: string; message: string } | null>(null);
+  // Each refusal is its own (`attempt`): the same reason again is announced and takes the focus again.
+  const [refusal, setRefusal] = useState<{ token: string; message: string; attempt: number } | null>(null);
   const refusalMessage = refusal?.token === token ? refusal.message : null;
   // After answering, or a refusal, the focus goes to what the page says now: the button that had it is gone.
   const focusNext = useRef<'status' | 'refusal' | null>(null);
@@ -67,7 +68,7 @@ export default function PublicQuotePage() {
     if (!target) return;
     focusNext.current = null;
     target.focus();
-  }, [quote, refusalMessage]);
+  }, [quote, refusal]);
   // To accept it or ask about it while it stands, or to ask for a new one once it expired.
   const contact = quote && (quote.status === QuoteStatus.Sent || quote.status === QuoteStatus.Expired)
     ? businessWhatsAppUrl(quote.businessContactPhone, `Hola, les escribo por la cotización ${folio}.`)
@@ -115,7 +116,7 @@ export default function PublicQuotePage() {
               standing(quote) && <p ref={statusRef} tabIndex={-1} className="small" role="status">{standing(quote)}</p>
             )}
             {refusalMessage && (
-              <div ref={refusalRef} tabIndex={-1} className="alert alert-warning small" role="alert">
+              <div key={refusal?.attempt} ref={refusalRef} tabIndex={-1} className="alert alert-warning small" role="alert">
                 <strong>Tu respuesta no se envió.</strong> {refusalMessage}
               </div>
             )}
@@ -168,7 +169,7 @@ export default function PublicQuotePage() {
                 }}
                 onRefused={(message) => {
                   focusNext.current = 'refusal';
-                  setRefusal({ token, message });
+                  setRefusal((last) => ({ token, message, attempt: (last?.attempt ?? 0) + 1 }));
                 }}
               />
             )}
