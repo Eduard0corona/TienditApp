@@ -162,6 +162,22 @@ internal static class QuoteAudit
             metadata: JsonSerializer.Serialize(new { quote.Number, quote.Revision, quote.Total, Extra = extra }));
 }
 
+/// <summary>
+/// The accepted quotes still waiting to become their service order (Fase 29G, ADR 0061): accepted in the last 30 days and not
+/// converted. «Requiere atención» counts them and the list filters them with the same rule.
+/// </summary>
+public static class QuotesToConvert
+{
+    /// <summary>How far back an accepted quote still waits to become its order.</summary>
+    public const int Days = 30;
+
+    public static IQueryable<Quote> Of(IQueryable<Quote> quotes, DateTimeOffset now)
+    {
+        var acceptedSince = now.AddDays(-Days);
+        return quotes.Where(q => q.Status == QuoteStatus.Accepted && q.OrderId == null && q.ClosedAt >= acceptedSince);
+    }
+}
+
 /// <summary>The corrections of a quote the customer accepted.</summary>
 internal static class QuoteCorrections
 {

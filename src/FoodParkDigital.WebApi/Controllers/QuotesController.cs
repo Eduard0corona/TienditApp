@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Domain.Quotes;
@@ -214,7 +215,8 @@ public class PublicQuoteReplyRequest
 {
     /// <summary>The link of the quote (the fragment of /cotizacion#token).</summary>
     public string Token { get; init; } = null!;
-    /// <summary>True to accept it, false to reject it.</summary>
+    /// <summary>True to accept it, false to reject it. Required: a body without it is refused, never read as a rejection.</summary>
+    [JsonRequired]
     public bool Accepted { get; init; }
     /// <summary>What the customer wants to tell the business, up to 500 characters.</summary>
     public string? Response { get; init; }

@@ -36236,7 +36236,8 @@
           2,
           3,
           4,
-          5
+          5,
+          6
         ],
         "type": "integer",
         "format": "int32",
@@ -36246,7 +36247,8 @@
           "Rejected",
           "Expired",
           "Discarded",
-          "All"
+          "All",
+          "ToConvert"
         ]
       },
       "QuoteOrderDto": {
@@ -36366,6 +36368,7 @@
           "fromVisit",
           "id",
           "number",
+          "repliedFromLink",
           "revision",
           "status",
           "total",
@@ -36407,6 +36410,9 @@
             "format": "date-time"
           },
           "fromVisit": {
+            "type": "boolean"
+          },
+          "repliedFromLink": {
             "type": "boolean"
           }
         },

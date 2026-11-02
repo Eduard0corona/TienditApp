@@ -130,10 +130,11 @@ internal static class PublicQuotes
         => context.Tenants
             .AsNoTracking()
             .Where(t => t.Id == tenantId)
-            .Select(t => new BusinessView(t.Name, t.Slug, t.ContactPhone, t.Settings!.TimeZone, t.Settings.QuoteOnlineReplies))
+            // A business without its settings row (legal, if rare) reads the defaults: its time zone and the answers on.
+            .Select(t => new BusinessView(t.Name, t.Slug, t.ContactPhone, t.Settings!.TimeZone, (bool?)t.Settings.QuoteOnlineReplies ?? true))
             .FirstOrDefaultAsync(cancellationToken);
 
-    public sealed record BusinessView(string Name, string Slug, string? ContactPhone, string TimeZone, bool OnlineReplies);
+    public sealed record BusinessView(string Name, string Slug, string? ContactPhone, string? TimeZone, bool OnlineReplies);
 
     /// <summary>
     /// The quote as its customer reads it: that version only, until 30 days after its validity (null after it). Of the customer,

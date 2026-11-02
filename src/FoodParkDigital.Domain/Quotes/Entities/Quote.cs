@@ -271,7 +271,7 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
             case QuoteStatus.Accepted or QuoteStatus.Rejected:
                 throw new DomainException(QuoteRules.AnsweredAlreadyMessage);
             default:
-                throw new DomainException(QuoteRules.NotSentMessage);
+                throw new DomainException(QuoteRules.NotAnswerableMessage);
         }
         var trimmed = string.IsNullOrWhiteSpace(response) ? null : response.Trim();
         if (trimmed?.Length > QuoteRules.MaxResponseLength)

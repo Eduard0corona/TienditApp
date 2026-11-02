@@ -221,6 +221,7 @@ public class QuotesHandler :
             QuoteListFilter.Rejected => quotes.Where(q => q.Status == QuoteStatus.Rejected),
             QuoteListFilter.Expired => quotes.Where(q => q.Status == QuoteStatus.Sent && q.ValidUntil < today),
             QuoteListFilter.Discarded => quotes.Where(q => q.Status == QuoteStatus.Discarded),
+            QuoteListFilter.ToConvert => QuotesToConvert.Of(quotes, _clock.UtcNow),
             _ => quotes
         };
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -243,7 +244,9 @@ public class QuotesHandler :
                     Total = q.Total,
                     ValidUntil = q.ValidUntil,
                     UpdatedAt = q.UpdatedAt ?? q.CreatedAt,
-                    FromVisit = q.AppointmentId != null
+                    FromVisit = q.AppointmentId != null,
+                    RepliedFromLink = q.ReplyChannel == QuoteReplyChannel.Link
+                        && (q.Status == QuoteStatus.Accepted || q.Status == QuoteStatus.Rejected)
                 }),
             request.PageNumber, request.PageSize, cancellationToken);
         return page;

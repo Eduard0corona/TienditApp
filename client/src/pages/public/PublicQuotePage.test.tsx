@@ -119,12 +119,17 @@ describe('PublicQuotePage', () => {
     expect(screen.getByRole('link', { name: 'Preguntar algo al negocio' })).not.toHaveClass('btn-primary');
     await userEvent.click(screen.getByRole('button', { name: 'Aceptar la cotización' }));
     expect(screen.getByText(/Aceptas la cotización COT-000007 por \$810\.00, ya con la visita descontada/)).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText('Mensaje para Plomería Ruiz (opcional)'), '  Los espero el jueves  ');
+    // The button that had the focus is gone: the message takes it.
+    const message = screen.getByLabelText('Mensaje para Plomería Ruiz (opcional)');
+    expect(message).toHaveFocus();
+    await userEvent.type(message, '  Los espero el jueves  ');
+    expect(screen.getByText('24 de 500 caracteres')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Sí, la acepto' }));
 
     expect(apiRequest).toHaveBeenLastCalledWith('post', '/api/v1/public/quotes/reply',
       { body: { token: LINK, accepted: true, response: 'Los espero el jueves' } });
-    expect(await screen.findByText(/La aceptaste aquí el 5 oct 2026\. Plomería Ruiz ya lo sabe/)).toBeInTheDocument();
+    const status = await screen.findByText(/La aceptaste aquí el 5 de octubre de 2026\. Plomería Ruiz ya lo sabe/);
+    expect(status).toHaveFocus();
     expect(screen.getByText('Tu mensaje: «Los espero el jueves»')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Aceptar la cotización' })).not.toBeInTheDocument();
   });
@@ -136,12 +141,13 @@ describe('PublicQuotePage', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Aceptar la cotización' }));
     await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(screen.getByRole('button', { name: 'Aceptar la cotización' })).toHaveFocus();
     await userEvent.click(screen.getByRole('button', { name: 'No la acepto' }));
-    expect(screen.getByText(/Plomería Ruiz recibe que no la aceptas/)).toBeInTheDocument();
+    expect(screen.getByText(/Plomería Ruiz sabrá que no la aceptas/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Enviar mi respuesta' }));
 
     expect(apiRequest).toHaveBeenLastCalledWith('post', '/api/v1/public/quotes/reply', { body: { token: LINK, accepted: false, response: null } });
-    expect(await screen.findByText('Le dijiste aquí que no la aceptas, el 5 oct 2026.')).toBeInTheDocument();
+    expect(await screen.findByText('Le dijiste aquí que no la aceptas, el 5 de octubre de 2026.')).toBeInTheDocument();
   });
 
   it('says why an answer was refused and shows the quote as it stands now', async () => {
@@ -159,6 +165,44 @@ describe('PublicQuotePage', () => {
     expect(await screen.findByRole('link', { name: 'Ver la versión nueva' })).toBeInTheDocument();
     expect(apiRequest).toHaveBeenLastCalledWith('post', '/api/v1/public/quotes/view', expect.objectContaining({ body: { token: LINK } }));
     expect(screen.queryByRole('button', { name: 'Sí, la acepto' })).not.toBeInTheDocument();
+    // Why it was not taken stays, also once the quote can no longer be answered here.
+    const refusal = screen.getByRole('alert');
+    expect(refusal).toHaveTextContent('Tu respuesta no se envió. La cotización acaba de cambiar: ábrela otra vez para ver cómo quedó.');
+    expect(refusal).toHaveFocus();
+  });
+
+  it('says the business now records the answer itself when it turned them off meanwhile', async () => {
+    const headers = new AxiosHeaders();
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true }) as never)
+      .mockRejectedValueOnce(new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+        status: 400, data: { detail: 'Este negocio recibe la respuesta por mensaje o en persona: escríbele para responderle.' }, statusText: '', headers, config: { headers },
+      } as AxiosResponse))
+      .mockResolvedValueOnce(quote({ canReply: false }) as never);
+    renderPage(`/cotizacion#${LINK}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'No la acepto' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar mi respuesta' }));
+
+    expect(await screen.findByRole('link', { name: 'Responder al negocio' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Este negocio recibe la respuesta por mensaje o en persona');
+    expect(screen.queryByRole('button', { name: 'No la acepto' })).not.toBeInTheDocument();
+  });
+
+  it('says only that the link no longer opens when it expired while answering', async () => {
+    const headers = new AxiosHeaders();
+    const gone = () => new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+      status: 404, data: { detail: 'Esta cotización no existe o su enlace ya venció.' }, statusText: '', headers, config: { headers },
+    } as AxiosResponse);
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true }) as never)
+      .mockRejectedValueOnce(gone()).mockRejectedValueOnce(gone());
+    renderPage(`/cotizacion#${LINK}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Aceptar la cotización' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, la acepto' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta cotización no existe o su enlace ya venció.');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.queryByRole('heading', { name: 'Cotización COT-000007' })).not.toBeInTheDocument();
   });
 
   it('keeps the answer to the business while it records it itself', async () => {

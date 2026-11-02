@@ -1,9 +1,11 @@
 using FoodParkDigital.Application.Attention;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Quotes.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -144,6 +146,32 @@ public class QuoteLinkReplyFlowTests
 
         await Handler(fixture).Handle(new UpdateQuoteSettingsCommand(20, OnlineReplies: true), CancellationToken.None);
         Assert.True((await ReplyAsync(fixture, sent.TrackingToken!, accepted: true, null))!.IsSuccess);
+
+        // Off again: the answer it already has is still the answer, and a replaced version says it was replaced.
+        await Handler(fixture).Handle(new UpdateQuoteSettingsCommand(20, OnlineReplies: false), CancellationToken.None);
+        Assert.True((await ReplyAsync(fixture, sent.TrackingToken!, accepted: true, null))!.IsSuccess);
+        var other = await SentAsync(fixture);
+        var correction = (await Handler(fixture).Handle(new ReviseQuoteCommand(other.Id), CancellationToken.None)).Value!;
+        await Handler(fixture).Handle(new SendQuoteCommand(correction.Id), CancellationToken.None);
+        Assert.Equal(QuoteRules.ReplacedMessage, (await ReplyAsync(fixture, other.TrackingToken!, accepted: true, null))!.Error);
+    }
+
+    [Fact]
+    public async Task TheSameAnswerSavedFirstAtTheSameTime_ShouldBeTheAnswer_WithoutAConflict()
+    {
+        // A double tap, another tab, or the business recording the same answer: saved first, it is the answer.
+        var meanwhile = new BusinessAnswersMeanwhile(quote => quote.ReplyFromLink(accepted: true,
+            DateOnly.FromDateTime(SalesTestFixture.Now.UtcDateTime), "Primero", SalesTestFixture.Now));
+        await using var fixture = SalesTestFixture.Create(interceptors: meanwhile);
+        await TradeAsync(fixture);
+        var sent = await SentAsync(fixture);
+        meanwhile.Tenant = fixture.TenantService;
+        meanwhile.Armed = true;
+
+        var replied = await ReplyAsync(fixture, sent.TrackingToken!, accepted: true, "Después");
+
+        Assert.True(replied!.IsSuccess, replied.Error);
+        Assert.Equal((QuoteStatus.Accepted, "Primero"), (replied.Value!.Status, replied.Value.Response));
     }
 
     [Fact]
@@ -186,15 +214,27 @@ public class QuoteLinkReplyFlowTests
         var item = Assert.Single((await AttentionAsync(fixture)).Items, i => i.Key == AttentionKeys.QuotesToConvert);
         Assert.Equal((2, 1), (item.Count, item.UrgentCount));
         Assert.Equal(QuoteStatus.Sent, (await GetAsync(fixture, waiting.Id)).Status);
+        // Where the notice leads lists the same ones, the one from the link marked.
+        var listed = (await Handler(fixture).Handle(new ListQuotesQuery(QuoteListFilter.ToConvert), CancellationToken.None)).Items;
+        Assert.Equal([(fromLink.Id, true), (recorded.Id, false)],
+            listed.OrderBy(q => q.Number).Select(q => (q.Id, q.RepliedFromLink)));
 
         // After 30 days they no longer wait there; nor for whoever does not take orders.
-        fixture.Clock.UtcNow = SalesTestFixture.Now.AddDays(GetAttentionQueryHandler.QuoteToConvertDays + 1);
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddDays(QuotesToConvert.Days + 1);
         Assert.DoesNotContain((await AttentionAsync(fixture)).Items, i => i.Key == AttentionKeys.QuotesToConvert && i.Count > 0);
+        Assert.Empty((await Handler(fixture).Handle(new ListQuotesQuery(QuoteListFilter.ToConvert), CancellationToken.None)).Items);
         fixture.Clock.UtcNow = SalesTestFixture.Now;
         // A member of the team who only handles the agenda (an owner or an admin takes orders by being one).
         fixture.CurrentUser.TenantRole = "Staff";
         fixture.CurrentUser.Permissions = ["ManageAppointments"];
         Assert.DoesNotContain((await AttentionAsync(fixture)).Items, i => i.Key == AttentionKeys.QuotesToConvert);
+        // Nor in a business without service orders, which converts nothing, even for whoever takes orders.
+        fixture.CurrentUser.Permissions = ["ManageOrders"];
+        var agendaOnly = await new GetAttentionQueryHandler(fixture.Context,
+                new CurrentAccessContext(fixture.CurrentUser, fixture.TenantService, new ModulesAccess(TenantCapability.Appointments, ["ManageOrders"])),
+                fixture.CurrentUser, fixture.Clock)
+            .Handle(new GetAttentionQuery(), CancellationToken.None);
+        Assert.DoesNotContain(agendaOnly.Items, i => i.Key == AttentionKeys.QuotesToConvert);
     }
 
     [Fact]
@@ -220,11 +260,32 @@ public class QuoteLinkReplyFlowTests
                 fixture.Context, TestAccess.For(fixture.CurrentUser, fixture.TenantService), fixture.CurrentUser, fixture.Clock)
             .Handle(new GetAttentionQuery(), CancellationToken.None);
 
+    /// <summary>A member of a business with only these modules and permissions.</summary>
+    private sealed class ModulesAccess(TenantCapability modules, IReadOnlyCollection<string> permissions) : ITenantAccessService
+    {
+        public Task<TenantAccessSnapshot> GetAccessSnapshotAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
+            => Task.FromResult(new TenantAccessSnapshot(true, modules, permissions, IsManager: false));
+
+        public Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<bool> HasCapabilityAsync(Guid tenantId, TenantCapability capability, CancellationToken cancellationToken)
+            => Task.FromResult((capability & modules) == capability);
+
+        public Task<bool> HasAnyCapabilityAsync(Guid tenantId, TenantCapability capabilities, CancellationToken cancellationToken)
+            => Task.FromResult((capabilities & modules) != 0);
+
+        public Task<IReadOnlyCollection<string>> GetPermissionsAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
+            => Task.FromResult(permissions);
+
+        public Task<bool> HasPermissionAsync(Guid userId, Guid tenantId, TenantPermission permission, CancellationToken cancellationToken)
+            => Task.FromResult(permissions.Contains(permission.ToString()));
+    }
+
     /// <summary>
     /// The save of the customer's answer finds that the business (with its own context) recorded another one first: the
     /// database refuses this one as stale.
     /// </summary>
-    private sealed class BusinessAnswersMeanwhile : SaveChangesInterceptor
+    private sealed class BusinessAnswersMeanwhile(Action<Quote>? answer = null) : SaveChangesInterceptor
     {
         public bool Armed { get; set; }
         public ICurrentTenantService? Tenant { get; set; }
@@ -242,7 +303,10 @@ public class QuoteLinkReplyFlowTests
             Options = (DbContextOptions<ApplicationDbContext>)eventData.Context.GetService<IDbContextOptions>();
             await using var other = new SalesDbContext(Options, Tenant!);
             var theirs = await other.Quotes.SingleAsync(q => q.Id == answering.Id, cancellationToken);
-            theirs.Reject(DateOnly.FromDateTime(SalesTestFixture.Now.UtcDateTime), QuoteReplyChannel.Phone, null, SalesTestFixture.Now);
+            if (answer is not null)
+                answer(theirs);
+            else
+                theirs.Reject(DateOnly.FromDateTime(SalesTestFixture.Now.UtcDateTime), QuoteReplyChannel.Phone, null, SalesTestFixture.Now);
             await other.SaveChangesAsync(cancellationToken);
             throw new DbUpdateConcurrencyException("The business answered meanwhile.");
         }

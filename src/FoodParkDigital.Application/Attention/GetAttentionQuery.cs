@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Appointments.HomeVisits;
+using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
@@ -61,8 +62,6 @@ public static class AttentionKeys
 public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, AttentionDto>
 {
     private static readonly OrderStatus[] FinishedStatuses = [OrderStatus.Delivered, OrderStatus.Completed, OrderStatus.Cancelled];
-    /// <summary>How far back an accepted quote still waits to become its order in «Requiere atención».</summary>
-    public const int QuoteToConvertDays = 30;
 
     private readonly IApplicationDbContext _context;
     private readonly CurrentAccessContext _access;
@@ -177,9 +176,7 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
 
         if (Can(TenantPermission.ManageOrders) && Has(TenantCapability.Service))
         {
-            var acceptedSince = now.AddDays(-QuoteToConvertDays);
-            var toConvert = _context.Quotes.AsNoTracking()
-                .Where(q => q.Status == QuoteStatus.Accepted && q.OrderId == null && q.ClosedAt >= acceptedSince);
+            var toConvert = QuotesToConvert.Of(_context.Quotes.AsNoTracking(), now);
             Add(AttentionKeys.QuotesToConvert, await toConvert.CountAsync(cancellationToken),
                 await toConvert.CountAsync(q => q.ReplyChannel == QuoteReplyChannel.Link, cancellationToken));
         }

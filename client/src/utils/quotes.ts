@@ -30,6 +30,8 @@ export function quoteStatusChip(status: QuoteStatus): string {
 export const QUOTE_FILTERS: { value: QuoteListFilter; label: string }[] = [
   { value: QuoteListFilter.Open, label: 'Abiertas' },
   { value: QuoteListFilter.Accepted, label: 'Aceptadas' },
+  // Fase 29G: accepted in the last 30 days and not yet their order, as «Requiere atención» counts them.
+  { value: QuoteListFilter.ToConvert, label: 'Por convertir' },
   { value: QuoteListFilter.Rejected, label: 'Rechazadas' },
   { value: QuoteListFilter.Expired, label: 'Vencidas' },
   { value: QuoteListFilter.Discarded, label: 'Descartadas' },

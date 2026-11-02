@@ -107,6 +107,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - Quien tenga el enlace responde, también si el cliente lo reenvía, como con el seguimiento de un pedido; no hay código ni cuenta.
     - El cliente no cambia su respuesta desde el enlace, y una aceptada no se reabre: si se equivocó, el negocio hace una cotización nueva.
     - Apagar la opción no deshace las respuestas que ya llegaron.
+    - El aviso y el filtro «Por convertir» cuentan 30 días hacia atrás: una aceptada más vieja sin convertir ya no avisa, aunque sigue en «Aceptadas».
     - Con el código anterior (rollback del despliegue), una cotización respondida desde el enlace se ve aceptada o rechazada sin decir por dónde, y el enlace deja de ofrecer la respuesta.
   - El envío desde TienditApp (Fase 29D):
     - El correo de la cotización no lleva PDF (TienditApp no genera PDF): la cotización va en el cuerpo y en su enlace. «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó.
@@ -127,6 +128,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La 29D suma 32 B a la primera visita (de 181,335 a 181,367 B, contra `master` en `f15f043`): los valores nuevos de los enums; el diálogo y el historial van en el detalle. El presupuesto no cambia.
   - La 29E suma 5 B a la primera visita (de 181,462 a 181,467 B, contra `master` en `744632b`): el diálogo y el enlace van en pantallas que se cargan aparte, y los 5 B son los dos chunks compartidos más que la entrada precarga con la pantalla de órdenes. El presupuesto (181,500 B) no cambia.
   - La 29F suma 62 B a la primera visita (de 181,467 a 181,529 B, contra `master` en `7013d87`): el diálogo de agendar se carga aparte, y los 62 B son la lista de precarga de la entrada, con tres chunks compartidos nuevos (la lista de citas del trabajo, los estados de una cita y la API del equipo). El presupuesto sube de 181,500 a 181,600 B.
+  - La 29G suma 104 B a la primera visita (de 181,529 a 181,633 B, contra `master` en `38d0560`): el aviso de «Cotizaciones aceptadas por convertir» va en la entrada con la campana, y el filtro «Por convertir» y los valores nuevos de los enums también; el panel para responder se carga con la página del enlace. El presupuesto sube de 181,600 a 181,700 B.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.

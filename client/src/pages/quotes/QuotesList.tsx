@@ -32,10 +32,8 @@ interface NewQuoteForm {
 
 const EMPTY_FORM: NewQuoteForm = { customerName: '', customerPhone: '', customerEmail: '' };
 
-/** «?estado=aceptadas» opens the accepted ones: where «Requiere atención» leads to those waiting to become their order. */
-function initialFilter(estado: string | null): QuoteListFilter {
-  return estado === 'aceptadas' ? QuoteListFilter.Accepted : QuoteListFilter.Open;
-}
+/** «?estado=por-convertir» opens the accepted ones still to convert: where «Requiere atención» leads (Fase 29G). */
+const TO_CONVERT_LINK = 'por-convertir';
 
 /**
  * The business's quotes (Fase 29C, ADR 0053): what it proposed after looking at each job and where each one stands. A new
@@ -50,10 +48,20 @@ export default function QuotesList() {
   const { capabilities } = useTenant();
   const isAdmin = getAccess(user, capabilities).isAdmin;
   const [searchParams] = useSearchParams();
-  const [filter, setFilter] = useState<QuoteListFilter>(() => initialFilter(searchParams.get('estado')));
+  const linked = searchParams.get('estado');
+  const [filter, setFilter] = useState<QuoteListFilter>(linked === TO_CONVERT_LINK ? QuoteListFilter.ToConvert : QuoteListFilter.Open);
   const onlineRepliesId = useId();
   const [search, setSearch] = useState('');
   const [pageNumber, setPageNumber] = useState(1);
+  // The bell leads here also from this screen: a link followed again sets the filter it names.
+  const [seenLink, setSeenLink] = useState(linked);
+  if (seenLink !== linked) {
+    setSeenLink(linked);
+    if (linked === TO_CONVERT_LINK) {
+      setFilter(QuoteListFilter.ToConvert);
+      setPageNumber(1);
+    }
+  }
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState<NewQuoteForm>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
@@ -189,6 +197,7 @@ export default function QuotesList() {
                 </td>
                 <td className="text-center">
                   <span className={quoteStatusChip(item.status)}>{quoteStatusLabel(item.status)}</span>
+                  {item.repliedFromLink && <span className="d-block small text-muted">Desde su enlace</span>}
                 </td>
                 <td className="text-center text-nowrap">
                   {item.validUntil ? formatCalendarDate(item.validUntil, { day: 'numeric', month: 'short' }) : '—'}
@@ -241,7 +250,7 @@ export default function QuotesList() {
                 <button
                   type="submit"
                   className="btn btn-sm btn-light"
-                  disabled={saveValidity.isPending || validity === null || Number(validityDays) === settings.validityDays}
+                  disabled={saveValidity.isPending || saveOnlineReplies.isPending || validity === null || Number(validityDays) === settings.validityDays}
                 >
                   Guardar vigencia
                 </button>
@@ -251,7 +260,7 @@ export default function QuotesList() {
             <h2 className="h6 mt-3 mb-1">Respuesta del cliente</h2>
             <p className="text-muted small mb-2">
               {settings.onlineReplies
-                ? 'Tus clientes aceptan o rechazan la cotización desde su enlace, y te avisamos en Inicio. También puedes registrar lo que te respondan por otro medio.'
+                ? 'Tus clientes aceptan o rechazan la cotización desde su enlace, y su respuesta aparece aquí con «Desde su enlace». También puedes registrar lo que te respondan por otro medio.'
                 : 'Tus clientes ven la cotización en su enlace y te responden por mensaje o en persona; tú registras su respuesta.'}
             </p>
             {isAdmin && (
@@ -262,11 +271,15 @@ export default function QuotesList() {
                   role="switch"
                   className="form-check-input"
                   checked={saveOnlineReplies.isPending ? saveOnlineReplies.variables.onlineReplies : settings.onlineReplies}
-                  disabled={saveOnlineReplies.isPending}
-                  onChange={(e) => saveOnlineReplies.mutate({ validityDays: settings.validityDays, onlineReplies: e.target.checked })}
+                  // Not «disabled» while saving: a disabled control drops the keyboard's focus. A change meanwhile waits.
+                  aria-disabled={saveOnlineReplies.isPending || saveValidity.isPending}
+                  onChange={(e) => {
+                    if (saveOnlineReplies.isPending || saveValidity.isPending) return;
+                    saveOnlineReplies.mutate({ validityDays: settings.validityDays, onlineReplies: e.target.checked });
+                  }}
                 />
                 <label className="form-check-label small" htmlFor={onlineRepliesId}>
-                  Responder desde el enlace
+                  Tus clientes responden desde su enlace
                 </label>
               </div>
             )}

@@ -796,7 +796,8 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
     - Una sola respuesta: la misma otra vez no cambia nada, otra distinta se rechaza, y una versión corregida o vencida no se responde. Si el negocio la cambia al mismo tiempo, gana el que guardó primero.
     - El canal es «Desde su enlace», que el negocio nunca registra a mano. La actividad lo guarda como «Cliente (enlace)», sin su mensaje ni sus datos.
     - El enlace dice cuándo la respondió y su mensaje; de una respuesta que registró el negocio, solo si la aceptó o la rechazó.
-    - Inicio › Requiere atención cuenta las aceptadas en los últimos 30 días que no se han convertido en su orden (urgentes las del enlace), para quien toma pedidos en un negocio con órdenes de servicio.
+    - Inicio › Requiere atención cuenta las aceptadas en los últimos 30 días que no se han convertido en su orden (urgentes las del enlace), para quien toma pedidos en un negocio con órdenes de servicio, y lleva a Cotizaciones › Por convertir, que lista las mismas. La lista dice «Desde su enlace» en las que el cliente respondió ahí.
+    - La misma respuesta guardada primero (un doble toque, otra pestaña o el negocio) es la respuesta, sin conflicto.
   - La aceptada se convierte en el trabajo una sola vez (Fase 29E): «Convertir en orden de servicio», con quien toma pedidos en un negocio con órdenes de servicio.
     - La orden es del negocio y empieza «Aceptada», con el cliente de la cotización, su política de precios con IVA y sus renglones al precio y con el IVA que el cliente aceptó, así que suma lo mismo; puede decir para cuándo se promete (de hoy a un año; hoy empieza a la medianoche de la zona horaria del negocio).
     - Un renglón escrito a mano, o cuyo producto ya no está, entra como unidad de servicio; una cantidad que su unidad no vende entra como una al importe del renglón, con la cantidad en el nombre.

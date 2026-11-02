@@ -70,6 +70,7 @@ public static class QuoteRules
     public const string ExpiredForCustomerMessage = "Esta cotización ya venció: pídele al negocio una nueva.";
     public const string ChangedMeanwhileMessage = "La cotización acaba de cambiar: ábrela otra vez para ver cómo quedó.";
     public const string CustomerResponseTooLongMessage = "Tu mensaje admite hasta 500 caracteres.";
+    public const string NotAnswerableMessage = "Esta cotización ya no se responde aquí: escríbele al negocio.";
 
     /// <summary>
     /// Only a version sent and still valid on the business's <paramref name="today"/> goes to the customer (Fase 29D): an

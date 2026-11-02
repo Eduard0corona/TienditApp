@@ -531,6 +531,7 @@ export const QuoteListFilter = {
   Expired: 3,
   Discarded: 4,
   All: 5,
+  ToConvert: 6,
 } as const;
 export type QuoteListFilter = (typeof QuoteListFilter)[keyof typeof QuoteListFilter];
 

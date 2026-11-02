@@ -226,6 +226,9 @@ public sealed class CrossTenantQuoteSqlServerTests
             (await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = otherCase, accepted = false })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = new string('x', 43), accepted = true })).StatusCode);
+        // An answer that says neither is refused, never read as a rejection.
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = theirToken })).StatusCode);
 
         // The business sees how the customer answered; the other business does not see it, and its own quote did not move.
         var seen = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/quotes/{id}"));

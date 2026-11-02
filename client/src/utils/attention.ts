@@ -65,7 +65,7 @@ export function describeAttention(item: AttentionItem): AttentionNotice | null {
       return {
         key,
         text: `${plural(count, 'cotización aceptada', 'cotizaciones aceptadas')} por convertir en orden${urgentCount > 0 ? ` (${urgentCount} desde su enlace)` : ''}`,
-        path: '/quotes?estado=aceptadas',
+        path: '/quotes?estado=por-convertir',
         icon: 'ri-file-list-3-line',
         tone: urgentCount > 0 ? 'warning' : 'info',
       };

@@ -23,7 +23,8 @@ public class ReplyToQuoteFromLinkCommandValidator : AbstractValidator<ReplyToQuo
     public ReplyToQuoteFromLinkCommandValidator()
     {
         RuleFor(x => x.Token).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.Response).MaximumLength(QuoteRules.MaxResponseLength).WithMessage(QuoteRules.CustomerResponseTooLongMessage);
+        RuleFor(x => x.Response).Must(r => r is null || r.Trim().Length <= QuoteRules.MaxResponseLength)
+            .WithMessage(QuoteRules.CustomerResponseTooLongMessage);
     }
 }
 
@@ -61,8 +62,9 @@ public class ReplyToQuoteFromLinkCommandHandler : IRequestHandler<ReplyToQuoteFr
         bool changed;
         try
         {
-            // The business turned the answers off: only the answer it already has is still the answer.
-            if (!business.OnlineReplies && quote.Status != (request.Accepted ? QuoteStatus.Accepted : QuoteStatus.Rejected))
+            // The business turned the answers off: a version still waiting is not answered here (a replaced or expired one says
+            // what it is, and the answer it already has is still the answer).
+            if (!business.OnlineReplies && quote.StatusOn(today) == QuoteStatus.Sent)
                 return Result.Failure<PublicQuoteDto>(QuoteRules.OnlineRepliesOffMessage);
             changed = quote.ReplyFromLink(request.Accepted, today, request.Response, now);
         }
@@ -84,8 +86,15 @@ public class ReplyToQuoteFromLinkCommandHandler : IRequestHandler<ReplyToQuoteFr
             }
             catch (DbUpdateConcurrencyException)
             {
-                // The business changed it at the same time (recorded an answer, sent a correction): nothing of this answer stays.
-                return Result.Failure<PublicQuoteDto>(QuoteRules.ChangedMeanwhileMessage);
+                // Saved first by a double tap, another tab or the business: if it is this same answer, it is the answer; anything
+                // else (another answer, a correction) wins, and nothing of this one stays.
+                var saved = await _context.Quotes
+                    .AsNoTracking()
+                    .Where(q => q.Id == found.QuoteId && q.TenantId == found.TenantId)
+                    .Select(q => q.Status)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (saved != (request.Accepted ? QuoteStatus.Accepted : QuoteStatus.Rejected))
+                    return Result.Failure<PublicQuoteDto>(QuoteRules.ChangedMeanwhileMessage);
             }
         }
 

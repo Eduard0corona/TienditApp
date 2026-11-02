@@ -78,6 +78,10 @@ public class QuoteLinkReplyTests
         Assert.Equal(QuoteRules.ExpiredForCustomerMessage,
             Assert.Throws<DomainException>(() => expired.ReplyFromLink(accepted: true, Today.AddDays(2), null, Now)).Message);
         Assert.True(expired.ReplyFromLink(accepted: true, Today.AddDays(1), null, Now));
+        // A draft has no link; were it asked, the customer reads a message for them, not the business's.
+        var draft = Quote.Start(Business, Folios.QuoteNumber(9), Valeria, null, true, 15, Now);
+        Assert.Equal(QuoteRules.NotAnswerableMessage,
+            Assert.Throws<DomainException>(() => draft.ReplyFromLink(accepted: true, Today, null, Now)).Message);
     }
 
     [Fact]

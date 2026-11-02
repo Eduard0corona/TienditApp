@@ -22,9 +22,9 @@ Tomé las decisiones de la Fase 29G con la autorización permanente del dueño d
    - **No hay cuenta ni código:** pedir un código por SMS pondría una barrera que el WhatsApp o el correo con el enlace ya resuelven.
    - **El enlace viaja en el cuerpo** de la petición, nunca en la ruta ni en la consulta.
    - **Uno desconocido, cambiado o vencido no existe (404)**, igual que al abrirlo.
-2. **El negocio decide si se ofrece:** `TenantSettings.QuoteOnlineReplies`, en Cotizaciones › Respuesta del cliente (dueños y administradores).
+2. **El negocio decide si se ofrece:** `TenantSettings.QuoteOnlineReplies`, en Cotizaciones › Respuesta del cliente («Tus clientes responden desde su enlace», dueños y administradores).
    - **Encendida por omisión** para todos los negocios, también los que existen.
-   - **Apagada**, el enlace muestra la cotización y «Responder al negocio», como hasta ahora, y el negocio registra la respuesta. Una cotización que el cliente ya respondió conserva su respuesta.
+   - **Apagada**, el enlace muestra la cotización y «Responder al negocio», como hasta ahora, y el negocio registra la respuesta. Una cotización que el cliente ya respondió conserva su respuesta, y una corregida o vencida dice eso, no que está apagada.
    - **Cambiarla queda en la actividad.**
 3. **Un canal nuevo, «Desde su enlace»** (`QuoteReplyChannel.Link`). Solo lo usa el cliente:
    - el agregado rechaza que el negocio lo registre a mano (`Accept` y `Reject`);
@@ -41,7 +41,8 @@ Tomé las decisiones de la Fase 29G con la autorización permanente del dueño d
    - una versión corregida se rechaza con un enlace a la nueva, y una vencida se rechaza con su propio mensaje para el cliente.
 6. **Al mismo tiempo que el negocio:** la cotización tiene `rowversion`. Si el negocio registra una respuesta o envía una corrección mientras el cliente responde, gana el que guardó primero.
    - El otro recibe un conflicto (409): «La cotización acaba de cambiar: ábrela otra vez para ver cómo quedó.»
-   - La página se pone al día sola.
+   - Si lo que se guardó primero es la misma respuesta (un doble toque, otra pestaña o el negocio registrándola), esa es la respuesta: no hay conflicto.
+   - La página del cliente y el detalle del negocio se ponen al día solos, y el cliente sigue viendo por qué no se tomó su respuesta.
 7. **La actividad** guarda «Cotización aceptada» o «Rechazada» con el folio, la versión, el total y el canal. Quien la hizo aparece como «Cliente (enlace)».
    - Nunca guarda el mensaje, el teléfono, la IP ni otro dato del cliente.
 8. **Lo que ve el cliente:**
@@ -50,12 +51,14 @@ Tomé las decisiones de la Fase 29G con la autorización permanente del dueño d
    - **Si la respuesta la registró el negocio**, ve que la aceptó o la rechazó, pero nunca lo que el negocio anotó.
 9. **Lo que ve el negocio:**
    - **En el detalle:** «Aceptó desde su enlace el …», con el mensaje.
-   - **En Inicio › Requiere atención:** «N cotizaciones aceptadas por convertir en orden» lleva a Cotizaciones › Aceptadas.
-     - Cuenta las aceptadas en los últimos 30 días que no se han convertido. Las aceptadas desde el enlace cuentan como urgentes, porque el negocio puede no saberlo todavía.
+   - **En Inicio › Requiere atención** (y en la campana): «N cotizaciones aceptadas por convertir en orden» lleva a Cotizaciones › Por convertir.
+     - Cuenta las aceptadas en los últimos 30 días que no se han convertido; el filtro «Por convertir» lista las mismas, con la misma regla (`QuotesToConvert`). Las aceptadas desde el enlace cuentan como urgentes, porque el negocio puede no saberlo todavía.
      - Lo ve quien toma pedidos en un negocio con órdenes de servicio.
-10. **Ruta:** `POST /api/v1/public/quotes/reply` con `{ token, accepted, response }`, anónima y con el límite de peticiones de un pedido en línea (`public-order`).
+   - **En la lista:** cada cotización respondida desde el enlace dice «Desde su enlace».
+10. **Ruta:** `POST /api/v1/public/quotes/reply` con `{ token, accepted, response }`, anónima y con el límite de peticiones de un pedido en línea (`public-order`). `accepted` es obligatorio: sin él se rechaza, nunca se lee como un rechazo.
     - Responde la cotización como la ve el cliente (`PublicQuoteDto`), con `canReply`, `repliedAt`, `repliedFromLink` y `response`.
     - La configuración de cotizaciones lleva `onlineReplies`. Si el cliente no lo manda (una versión anterior del navegador), queda como está.
+    - La lista de cotizaciones suma el filtro `ToConvert` (6) y `repliedFromLink` en cada renglón.
 11. **Fuera de esta fase:**
     - **El anticipo por Mercado Pago al aceptar.** Necesita decidir cuánto se cobra, qué pasa si el pago llega tarde o la cotización cambió, y cómo entra el pago a la orden ([ADR 0031](0031-online-payments.md), [ADR 0044](0044-online-payment-reconciliation.md)).
     - **Que aceptar convierta sola la cotización en su orden:** la conversión sigue siendo del negocio (Fase 29E), que decide cuándo promete el trabajo.

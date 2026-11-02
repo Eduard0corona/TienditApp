@@ -20788,7 +20788,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        QuoteListFilter: 0 | 1 | 2 | 3 | 4 | 5;
+        QuoteListFilter: 0 | 1 | 2 | 3 | 4 | 5 | 6;
         QuoteOrderDto: {
             /** Format: uuid */
             id: string;
@@ -20834,6 +20834,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             fromVisit: boolean;
+            repliedFromLink: boolean;
         };
         QuoteSummaryDtoPaginatedList: {
             items: components["schemas"]["QuoteSummaryDto"][];

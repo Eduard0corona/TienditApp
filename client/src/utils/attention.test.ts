@@ -38,10 +38,10 @@ describe('attention', () => {
     });
   });
 
-  it('leads the accepted quotes waiting for their order to the accepted ones, those from the link first (Fase 29G)', () => {
+  it('leads the accepted quotes waiting for their order to those still to convert, the ones from the link urgent (Fase 29G)', () => {
     expect(describeAttention({ key: 'quotesToConvert', count: 3, urgentCount: 1 })).toMatchObject({
       text: '3 cotizaciones aceptadas por convertir en orden (1 desde su enlace)',
-      path: '/quotes?estado=aceptadas',
+      path: '/quotes?estado=por-convertir',
       tone: 'warning',
     });
     expect(describeAttention({ key: 'quotesToConvert', count: 1, urgentCount: 0 })).toMatchObject({

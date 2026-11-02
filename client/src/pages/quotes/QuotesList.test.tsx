@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { quotesApi } from '../../api/quotesApi';
 import { useAuth } from '../../hooks/useAuth';
@@ -31,7 +31,7 @@ function renderList(role = 'TENANT_ADMIN', url = '/quotes') {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[url]}>
         <Routes>
-          <Route path="/quotes" element={<QuotesList />} />
+          <Route path="/quotes" element={<><Link to="/quotes?estado=por-convertir">Campana</Link><QuotesList /></>} />
           <Route path="/quotes/:id" element={<p>Detalle de la cotización</p>} />
         </Routes>
       </MemoryRouter>
@@ -95,7 +95,7 @@ describe('QuotesList', () => {
     vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 15, onlineReplies: false, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
     renderList();
 
-    const answers = await screen.findByRole('switch', { name: 'Responder desde el enlace' });
+    const answers = await screen.findByRole('switch', { name: 'Tus clientes responden desde su enlace' });
     expect(answers).toBeChecked();
     expect(screen.getByText(/Tus clientes aceptan o rechazan la cotización desde su enlace/)).toBeInTheDocument();
     await userEvent.click(answers);
@@ -103,14 +103,34 @@ describe('QuotesList', () => {
     await waitFor(() => expect(quotesApi.updateSettings).toHaveBeenCalledWith(15, false));
     expect(toast.success).toHaveBeenCalledWith('Listo: tus clientes te responden por mensaje o en persona, y tú registras su respuesta.');
     expect(await screen.findByText(/te responden por mensaje o en persona; tú registras su respuesta/)).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Responder desde el enlace' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Tus clientes responden desde su enlace' })).not.toBeChecked();
   });
 
-  it('opens the accepted ones from «Requiere atención»', async () => {
-    renderList('TENANT_ADMIN', '/quotes?estado=aceptadas');
+  it('opens those still to convert from «Requiere atención», also when the bell is followed from this screen', async () => {
+    renderList('TENANT_ADMIN', '/quotes?estado=por-convertir');
 
-    expect(await screen.findByLabelText('Estado')).toHaveValue(String(QuoteListFilter.Accepted));
-    await waitFor(() => expect(quotesApi.list).toHaveBeenCalledWith(QuoteListFilter.Accepted, '', 1, expect.anything()));
+    expect(await screen.findByLabelText('Estado')).toHaveValue(String(QuoteListFilter.ToConvert));
+    await waitFor(() => expect(quotesApi.list).toHaveBeenCalledWith(QuoteListFilter.ToConvert, '', 1, expect.anything()));
+  });
+
+  it('sets the filter the bell names when followed while the list is open', async () => {
+    renderList();
+    const filter = await screen.findByLabelText('Estado');
+    expect(filter).toHaveValue(String(QuoteListFilter.Open));
+
+    await userEvent.click(screen.getByRole('link', { name: 'Campana' }));
+
+    await waitFor(() => expect(filter).toHaveValue(String(QuoteListFilter.ToConvert)));
+    await waitFor(() => expect(quotesApi.list).toHaveBeenLastCalledWith(QuoteListFilter.ToConvert, '', 1, expect.anything()));
+  });
+
+  it('marks the quotes the customer answered from the link', async () => {
+    vi.mocked(quotesApi.list).mockResolvedValue(page([
+      { id: 'q2', number: 'COT-000008', revision: 1, status: QuoteStatus.Accepted, customerName: 'Ana López', customerPhone: '5511112222', total: 990, validUntil: '2026-10-19', updatedAt: '2026-10-05T17:00:00Z', fromVisit: false, repliedFromLink: true },
+    ]) as never);
+    renderList();
+
+    expect(await screen.findByText('Desde su enlace')).toBeInTheDocument();
   });
 
   it('only tells staff how long quotes are valid', async () => {
@@ -119,7 +139,7 @@ describe('QuotesList', () => {
     expect(await screen.findByText(/Una cotización vale 15 días desde que la envías/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Días de vigencia')).not.toBeInTheDocument();
     expect(screen.getByText(/Tus clientes aceptan o rechazan la cotización desde su enlace/)).toBeInTheDocument();
-    expect(screen.queryByRole('switch', { name: 'Responder desde el enlace' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Tus clientes responden desde su enlace' })).not.toBeInTheDocument();
   });
 
   it('lets owners pick the WhatsApp template of the quotes once the business connected its WhatsApp', async () => {
