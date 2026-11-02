@@ -964,6 +964,16 @@ La Fase 29F trae una migración, [`database/production/20261102073115_AddAppoint
 - **Volver a la versión anterior:** funciona sin tocar la base. Una cita del trabajo se ve como una cita común; si alguien intenta cobrarla con esa versión, la base lo rechaza (`CK_Appointments_Work`) y el trabajo no se cobra dos veces. Esa versión sí deja cotizarla, y moverla a otra dirección le pone el cargo de la zona; al regresar a esta versión vuelve a decir de qué orden es, y su aviso y la ruta no dicen ese cargo ni nada lo cobra.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50054 en cuanto una cita hace el trabajo de una orden; si no, quita lo que agregó.
 
+## El cliente responde la cotización desde su enlace (Fase 29G)
+
+La Fase 29G trae una migración, [`database/production/20261102151555_AddQuoteOnlineReplies`](../../database/production/20261102151555_AddQuoteOnlineReplies). Su `apply.sql` va antes del merge.
+
+- **La migración:** agrega a `TenantSettings` la columna `QuoteOnlineReplies` (`bit`, no nula, 1 por omisión: cada negocio que existe queda con la respuesta desde el enlace encendida) y vuelve a crear `CK_Quotes_Reply` para admitir la respuesta desde el enlace (`ReplyChannel` 4). No cambia datos.
+- **Mientras se publica:** la versión de `master` (la 29F) no conoce la columna ni la escribe; el valor por omisión llena lo que guarda, y sigue funcionando.
+- **Sin configuración nueva:** la ruta pública `POST /api/v1/public/quotes/reply` usa el límite de peticiones `public-order` que ya existe; no hay evento nuevo en el outbox ni mensajes nuevos.
+- **Volver a la versión anterior:** funciona sin tocar la base. El enlace deja de ofrecer la respuesta, y una cotización que el cliente respondió desde su enlace se ve aceptada o rechazada, sin decir por dónde.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50055 en cuanto un cliente respondió desde su enlace o un negocio apagó la opción; si no, quita la columna y deja `CK_Quotes_Reply` como antes.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

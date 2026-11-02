@@ -101,6 +101,13 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - El recordatorio por WhatsApp de una cita a domicilio usa el texto de cualquier visita: «tu cita de Trabajo de la cotización COT-…».
     - Con el código anterior (rollback del despliegue), una cita del trabajo se ve como una común y ofrece «Cobrar»; la base lo rechaza (`CK_Appointments_Work`) con un error en lugar de cobrar dos veces el trabajo. Esa versión también la deja cotizar, y moverla a otra dirección le pone el cargo de la zona; al regresar a esta versión, el aviso y la ruta no lo dicen y nada lo cobra.
     - Una orden cancelada entre que se lee y se guarda la cita (dos personas a la vez) deja agendado el trabajo de una orden cancelada, y dos envíos iguales crean dos citas, como en la Agenda: no hay llave de la solicitud.
+  - La respuesta desde el enlace (Fase 29G, [ADR 0061](../adr/0061-quote-replies-from-link.md)):
+    - Sin anticipo: aceptar no cobra nada ni convierte la cotización en su orden; el negocio la convierte (Fase 29E).
+    - El negocio se entera al abrir TienditApp (Inicio, la lista, la actividad), no por WhatsApp, correo ni en tiempo real.
+    - Quien tenga el enlace responde, también si el cliente lo reenvía, como con el seguimiento de un pedido; no hay código ni cuenta.
+    - El cliente no cambia su respuesta desde el enlace, y una aceptada no se reabre: si se equivocó, el negocio hace una cotización nueva.
+    - Apagar la opción no deshace las respuestas que ya llegaron.
+    - Con el código anterior (rollback del despliegue), una cotización respondida desde el enlace se ve aceptada o rechazada sin decir por dónde, y el enlace deja de ofrecer la respuesta.
   - El envío desde TienditApp (Fase 29D):
     - El correo de la cotización no lleva PDF (TienditApp no genera PDF): la cotización va en el cuerpo y en su enlace. «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó.
     - Sin plantilla aprobada en Meta, el WhatsApp solo llega a quien escribió en las últimas 24 horas, y no cae solo al correo cuando WhatsApp lo rechaza: el negocio lo ve en el historial y lo manda por correo.
@@ -760,4 +767,4 @@ Pendientes detectados en la Fase 3:
 - Cantidades fraccionarias y control de stock por producto.
 - Capabilities ligadas al plan contratado.
 - Evidencia de servicios: si el cliente recibe las fotos (WhatsApp, ticket o seguimiento) y si se guardan con un plazo; la Fase 25 decidió fotos por orden, solo para el negocio, mientras exista la orden ([ADR 0024](../adr/0024-service-photos.md)).
-- Oficios a domicilio: confirmar los 15 días de vigencia de la cotización de la [ADR 0053](../adr/0053-home-visit-quotes.md) y cuándo el cliente la acepta en línea. La Fase 29A aplicó las demás decisiones por omisión: el interruptor prendido para los giros de oficio, y todos menos Carpintería y Herrería y soldadura empiezan «Solo a domicilio».
+- Oficios a domicilio: confirmar los 15 días de vigencia de la cotización de la [ADR 0053](../adr/0053-home-visit-quotes.md) y si el cliente deja un anticipo al aceptarla en línea. La Fase 29A aplicó las demás decisiones por omisión: el interruptor prendido para los giros de oficio, y todos menos Carpintería y Herrería y soldadura empiezan «Solo a domicilio». La Fase 29G deja que el cliente la acepte o la rechace desde su enlace, sin anticipo, encendido por omisión para todos ([ADR 0061](../adr/0061-quote-replies-from-link.md)).
