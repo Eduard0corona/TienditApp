@@ -119,6 +119,8 @@ public class GetOrdersByBusinessQueryHandler : IRequestHandler<GetOrdersByBusine
         var result = await PaginatedList<OrderDto>.CreateAsync(
             projectedQuery, request.PageNumber, request.PageSize, cancellationToken);
         result.Items.ApplyStateMetadata();
+        // The accepted quote each service order came from (Fase 29E), so its detail opens it.
+        await OrderQuoteLinks.ApplyAsync(_context, result.Items, cancellationToken);
         return result;
     }
 }

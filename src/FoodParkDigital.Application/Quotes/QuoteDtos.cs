@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Quotes;
 
 namespace FoodParkDigital.Application.Quotes;
@@ -115,7 +116,23 @@ public class QuoteDto
     public List<QuoteWhatsAppDto> WhatsApps { get; set; } = [];
     /// <summary>The business connected its WhatsApp: «Mandar por WhatsApp» goes from TienditApp, not from the phone.</summary>
     public bool WhatsAppConnected { get; set; }
+    /// <summary>The service order this accepted version became (Fase 29E); null until it becomes one.</summary>
+    public QuoteOrderDto? Order { get; set; }
+    public DateTimeOffset? ConvertedAt { get; set; }
+    /// <summary>
+    /// It can become a service order now: accepted, not converted yet, in a business with service orders. Applying what was
+    /// paid for the visit also needs who may charge, which the server checks.
+    /// </summary>
+    public bool CanConvertToOrder { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>The service order an accepted quote became (Fase 29E): its folio and where it is.</summary>
+public class QuoteOrderDto
+{
+    public Guid Id { get; set; }
+    public string OrderNumber { get; set; } = null!;
+    public OrderStatus Status { get; set; }
 }
 
 /// <summary>How the business's quotes are valid.</summary>

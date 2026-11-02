@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Application.Orders;
@@ -132,6 +133,7 @@ internal static class QuoteAudit
     public const string Rejected = "QuoteRejected";
     public const string SettingsUpdated = "QuoteSettingsUpdated";
     public const string WhatsAppTemplateChanged = "QuoteWhatsAppTemplateChanged";
+    public const string Converted = "QuoteConverted";
 
     public static AuditLog Create(Quote quote, string action, string? performedBy, object? extra = null)
         => new(
@@ -172,6 +174,17 @@ internal static class QuoteViews
         var sends = await QuoteDeliveries.LatestAsync(context, quote, cancellationToken);
         var status = quote.StatusOn(today);
         var draft = versions.FirstOrDefault(v => v.Status == QuoteStatus.Draft);
+        // The service order it became (Fase 29E), or whether it can become one now.
+        var order = quote.OrderId is { } orderId
+            ? await context.Orders
+                .AsNoTracking()
+                .Where(o => o.Id == orderId && o.TenantId == quote.TenantId)
+                .Select(o => new QuoteOrderDto { Id = o.Id, OrderNumber = o.OrderNumber, Status = o.Status })
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+        var canConvert = quote.Status == QuoteStatus.Accepted && quote.OrderId is null
+            && TenantCapabilityRules.CanCreateOrderType(
+                await TenantCapabilityRules.ResolveCapabilitiesAsync(context, quote.TenantId, cancellationToken), OrderType.Service);
 
         return new QuoteDto
         {
@@ -225,7 +238,10 @@ internal static class QuoteViews
             CreatedAt = quote.CreatedAt,
             Emails = sends.Emails,
             WhatsApps = sends.WhatsApps,
-            WhatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(context, quote.TenantId, cancellationToken)
+            WhatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(context, quote.TenantId, cancellationToken),
+            Order = order,
+            ConvertedAt = quote.ConvertedAt,
+            CanConvertToOrder = canConvert
         };
     }
 
