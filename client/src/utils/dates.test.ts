@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   BUSINESS_TIME_ZONES,
   addCalendarDays,
+  businessDateTimeToIso,
   businessDayEnd,
   businessDayStart,
   calendarDaysBetween,
@@ -14,6 +15,7 @@ import {
   getBusinessTimeZone,
   getBusinessToday,
   setBusinessTimeZone,
+  toBusinessDateTimeInput,
 } from './dates';
 
 // Intl may separate "p. m." with narrow spaces; compare without them.
@@ -61,6 +63,29 @@ describe('dates in the business time zone', () => {
     setBusinessTimeZone('America/Tijuana');
     expect(businessDayStart('2026-10-05')).toBe('2026-10-05T07:00:00.000Z');
     expect(businessDayStart('2026-12-05')).toBe('2026-12-05T08:00:00.000Z');
+  });
+
+  it('reads a typed date and time as the clock of the business, not the device', () => {
+    // Tijuana is on summer time (UTC-7) in October and on standard time (UTC-8) in December.
+    setBusinessTimeZone('America/Tijuana');
+    expect(businessDateTimeToIso('2026-10-08T10:30')).toBe('2026-10-08T17:30:00.000Z');
+    expect(businessDateTimeToIso('2026-12-08T10:30')).toBe('2026-12-08T18:30:00.000Z');
+    expect(businessDateTimeToIso('2026-10-08T10:30:15')).toBe('2026-10-08T17:30:15.000Z');
+
+    setBusinessTimeZone('America/Mexico_City');
+    expect(businessDateTimeToIso('2026-10-08T10:30')).toBe('2026-10-08T16:30:00.000Z');
+  });
+
+  it('shows an instant in a date and time input as the clock of the business', () => {
+    setBusinessTimeZone('America/Tijuana');
+    expect(toBusinessDateTimeInput('2026-10-08T17:30:00.000Z')).toBe('2026-10-08T10:30');
+    // Midnight is 00, not 24; and 06:30 UTC on the 9th is still the 8th in Tijuana.
+    expect(toBusinessDateTimeInput('2026-10-09T07:00:00.000Z')).toBe('2026-10-09T00:00');
+    expect(toBusinessDateTimeInput(new Date('2026-10-09T06:30:00.000Z'))).toBe('2026-10-08T23:30');
+    expect(toBusinessDateTimeInput('no es fecha')).toBe('');
+
+    // What the input shows goes back to the same instant.
+    expect(businessDateTimeToIso(toBusinessDateTimeInput('2026-12-08T18:30:00.000Z'))).toBe('2026-12-08T18:30:00.000Z');
   });
 
   it('shows a calendar date as words without shifting it', () => {

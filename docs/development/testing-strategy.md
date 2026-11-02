@@ -1726,6 +1726,15 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Las 5 nuevas (`cotizaciones.spec.ts`: la cotización con sus envíos en escritorio, teléfono y oscuro, el diálogo del correo y la plantilla de WhatsApp en Cotizaciones) pasaron dos corridas seguidas.
     - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
 
+- Fechas del servicio en la zona del negocio, después de la 29D:
+  - La Orden detallada leía la recepción y la promesa en la zona del dispositivo: con el negocio en Tijuana y la laptop en la hora del centro, las 10:30 de un día de octubre se guardaban como 16:30 UTC y el tablero mostraba 9:30 (8:30 en invierno). Ahora las lee como el reloj del negocio (`businessDateTimeToIso`), y la recepción empieza en la hora actual del negocio (`toBusinessDateTimeInput`).
+  - **Cliente:**
+    - `OrdersCart.test.tsx` (2, nuevo): con el negocio en Tijuana y el dispositivo en la hora del centro, la recepción de las 9:00 y la promesa de las 10:30 del 8 de octubre salen como `16:00` y `17:30` UTC; la recepción empieza en la hora del negocio (10:30, no 11:30) y vuelve tal cual, sin promesa si no se escribe. Las dos fallaron con el código anterior.
+    - `dates.test.ts` (+2): la fecha y hora escritas en Tijuana en verano y en invierno, con segundos y en el centro; el instante en el campo, la medianoche como 00, la noche que todavía es el día anterior en Tijuana y una fecha que no es fecha.
+  - **Cliente en total:** 186 archivos y 1,382 pruebas.
+  - **Primera visita:** 181,507 B (`master` en `cfde7d4`: 181,367 B). Son +140 B de los dos helpers, que viven en `utils/dates.ts` con el resto de las fechas del negocio, que ya carga la primera visita. El presupuesto sube de 181,400 B a 181,600 B.
+  - **Escenas:** no se corrieron; no hay CSS global nuevo, y las de Orden detallada abren el carrito vacío, sin la recepción del servicio.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

@@ -168,3 +168,21 @@ export function businessDayStart(date: string): string {
 export function businessDayEnd(date: string): string {
   return businessWallTimeToInstant(date, '23:59:59').toISOString();
 }
+
+/**
+ * A datetime-local value ("2026-10-08T10:30") read as the business's wall clock, as the API wants it (ISO):
+ * 10:30 typed for a business in Tijuana is 10:30 in Tijuana, whatever the zone of the device.
+ */
+export function businessDateTimeToIso(value: string): string {
+  const [date, time] = value.split('T');
+  return businessWallTimeToInstant(date, time.length === 5 ? `${time}:00` : time).toISOString();
+}
+
+/** An instant as a datetime-local input shows it in the business, to the minute ("2026-10-08T10:30"); "" when invalid. */
+export function toBusinessDateTimeInput(value: string | number | Date): string {
+  const date = toDate(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offset = businessTimeZone ? zoneOffsetMinutes(businessTimeZone, date) : -date.getTimezoneOffset();
+  // The instant moved by the zone's offset reads, in UTC, as the wall clock of the business.
+  return new Date(date.getTime() + offset * 60_000).toISOString().slice(0, 16);
+}
