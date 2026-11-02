@@ -1,3 +1,4 @@
+import api from './axios';
 import { apiRequest, type Schemas } from './typedClient';
 
 export type PublicMenu = Schemas['PublicMenuDto'];
@@ -107,4 +108,18 @@ export const publicMenuApi = {
   /** The customer cancels it from its link, before it starts. */
   cancelAppointmentByLink: (token: string) =>
     apiRequest('post', '/api/v1/public/appointments/tracking/cancel', { body: { token } }),
+
+  /**
+   * A photo of what happens for the visit of its link (Fase 29H): the link goes in the form, never in the address. Answers the
+   * visit with how many photos it has and whether it takes more.
+   */
+  addAppointmentPhoto: async (token: string, file: File) => {
+    const form = new FormData();
+    form.append('token', token);
+    form.append('file', file);
+    const response = await api.post<CustomerAppointment>('/public/appointments/tracking/photos', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
 };

@@ -13,6 +13,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OutgoingMessageStatus, QuoteEmailFailure, QuoteReplyChannel, QuoteStatus, TenantCapability } from '../../types';
 import { setBusinessTimeZone } from '../../utils/dates';
+import { filesApi } from '../../api/filesApi';
 import QuoteDetail from './QuoteDetail';
 
 vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
@@ -21,6 +22,7 @@ vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: vi.fn() }));
 vi.mock('../../api/productsApi', () => ({ productsApi: { getAll: vi.fn() } }));
+vi.mock('../../api/filesApi', () => ({ filesApi: { get: vi.fn() } }));
 vi.mock('../../api/employeesApi', () => ({ employeesApi: { getAll: vi.fn() } }));
 vi.mock('../../api/quotesApi', () => ({
   quotesApi: {
@@ -168,6 +170,34 @@ describe('QuoteDetail', () => {
     // The email goes from TienditApp, in the name of the business.
     expect(screen.getByRole('button', { name: 'Enviar por correo' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Guardar borrador' })).not.toBeInTheDocument();
+  });
+
+  it('shows what the customer said happens and the photos they sent with the visit (Fase 29H)', async () => {
+    const photo = '/files/orders/0b6f1c7e-2d1a-4c3b-9e8f-1a2b3c4d5e6f/visit-problem/202611/9f8e7d6c-5b4a-4321-8765-0fedcba98761.webp';
+    vi.mocked(filesApi.get).mockResolvedValue({ data: new Blob(['x'], { type: 'image/webp' }) } as never);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:foto');
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({
+      appointment: {
+        id: 'a1', startAt: '2026-10-03T16:00:00Z', serviceName: 'Visita y diagnóstico', postalCode: '72000',
+        problem: 'Gotea el calentador desde ayer', problemPhotos: [photo],
+      },
+    } as Partial<Quote>));
+    renderAt();
+
+    const section = within(await screen.findByRole('region', { name: 'Lo que pasa, según el cliente' }));
+    expect(section.getByText('Gotea el calentador desde ayer')).toBeInTheDocument();
+    expect(await section.findByRole('link', { name: 'Abrir Foto 1 de lo que pasa' })).toBeInTheDocument();
+    expect(filesApi.get).toHaveBeenCalledWith(photo);
+  });
+
+  it('says nothing of what happens for a visit the team arranged', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({
+      appointment: { id: 'a1', startAt: '2026-10-03T16:00:00Z', serviceName: 'Visita', postalCode: '72000', problem: null, problemPhotos: [] },
+    } as Partial<Quote>));
+    renderAt();
+
+    expect(await screen.findByText(/Visita del/)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Lo que pasa, según el cliente' })).not.toBeInTheDocument();
   });
 
   it('records what the customer answered and how', async () => {
@@ -461,7 +491,7 @@ describe('QuoteDetail', () => {
   function converted(overrides: Partial<Quote> = {}) {
     return sent({
       status: QuoteStatus.Accepted, canConvertToOrder: false, canScheduleWork: true, convertedAt: '2026-10-05T18:00:00Z',
-      appointment: { id: 'a1', startAt: '2026-10-03T16:00:00Z', serviceName: 'Visita y diagnóstico', postalCode: '72000' },
+      appointment: { id: 'a1', startAt: '2026-10-03T16:00:00Z', serviceName: 'Visita y diagnóstico', postalCode: '72000', problemPhotos: [] },
       order: { id: 'o1', orderNumber: 'ORD-000031', status: 4, workAppointments: [] },
       ...overrides,
     } as Partial<Quote>);

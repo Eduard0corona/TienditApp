@@ -10,7 +10,9 @@ import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDef
 import PublicHomeVisitPage from './PublicHomeVisitPage';
 
 vi.mock('../../api/publicMenuApi', () => ({
-  publicMenuApi: { getHomeVisit: vi.fn(), getHomeVisitCoverage: vi.fn(), getHomeVisitSlots: vi.fn(), requestHomeVisit: vi.fn() },
+  publicMenuApi: {
+    getHomeVisit: vi.fn(), getHomeVisitCoverage: vi.fn(), getHomeVisitSlots: vi.fn(), requestHomeVisit: vi.fn(), addAppointmentPhoto: vi.fn(),
+  },
 }));
 vi.mock('../../api/accountApi', () => ({ accountApi: { getAddresses: vi.fn() } }));
 
@@ -176,6 +178,39 @@ describe('PublicHomeVisitPage', () => {
     expect(screen.getByText(/Plomería Hernández te confirma por WhatsApp/)).toBeInTheDocument();
     await user.click(screen.getByRole('link', { name: 'Ver tu visita' }));
     expect(await screen.findByText(`En /cita#${LINK}`)).toBeInTheDocument();
+  });
+
+  it('takes photos of what happens with the request, and sends them with its link once it is saved (Fase 29H)', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`);
+    api.requestHomeVisit.mockResolvedValue(receipt() as never);
+    api.addAppointmentPhoto
+      .mockResolvedValueOnce({ problemPhotos: 1, canAddPhotos: true } as never)
+      .mockResolvedValueOnce({ problemPhotos: 2, canAddPhotos: true } as never);
+    const fuga = new File(['f'], 'fuga.jpg', { type: 'image/jpeg' });
+    const pared = new File(['p'], 'pared.png', { type: 'image/png' });
+    const otra = new File(['o'], 'otra.jpg', { type: 'image/jpeg' });
+    renderPage();
+
+    const sheet = await pickMondayAtTen(user);
+    expect(sheet.getByText('Hasta 5 fotos de hasta 10 MB. Solo las ve Plomería Hernández.')).toBeInTheDocument();
+    await user.upload(sheet.getByTestId('problem-photos-input'), [fuga, otra, pared]);
+    expect(sheet.getAllByRole('img', { name: /de lo que pasa/ })).toHaveLength(3);
+    await user.click(sheet.getByRole('button', { name: 'Quitar la foto 2' }));
+    expect(sheet.getAllByRole('img', { name: /de lo que pasa/ }).map((img) => img.getAttribute('src'))).toEqual(['blob:fuga.jpg', 'blob:pared.png']);
+    expect(sheet.getByRole('button', { name: 'Agregar más fotos' })).toBeEnabled();
+    await user.type(sheet.getByLabelText('¿Qué pasa?'), 'Gotea el calentador');
+    await user.type(sheet.getByLabelText('Dirección'), 'Av. Juárez 123, Col. Centro');
+    await user.type(sheet.getByLabelText('Tu nombre'), 'Valeria Ruiz');
+    await user.type(sheet.getByLabelText('Teléfono (WhatsApp)'), '5522107765');
+    await user.click(sheet.getByRole('button', { name: 'Solicitar visita' }));
+
+    const photos = within(await screen.findByRole('region', { name: 'Tus fotos de lo que pasa' }));
+    expect(await photos.findByText('Enviaste 2 fotos de lo que pasa.')).toBeInTheDocument();
+    // One at a time, in the order picked, with the link of the request; never with the request itself.
+    expect(api.addAppointmentPhoto.mock.calls).toEqual([[LINK, fuga], [LINK, pared]]);
+    expect(api.requestHomeVisit.mock.calls[0][1]).not.toHaveProperty('photos');
+    expect(photos.getAllByText('Enviada')).toHaveLength(2);
   });
 
   it('says so when the business does not go to the postal code, and offers no times', async () => {

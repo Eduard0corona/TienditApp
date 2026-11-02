@@ -1181,6 +1181,11 @@ export interface AppointmentDto {
   workOrderId?: string | null;
   /** The folio of that order. */
   workOrderNumber?: string | null;
+  /**
+   * The photos of what happens the customer sent with a visit requested online (Fase 29H), as private paths, in the order
+   * sent; the agenda's lists carry them.
+   */
+  problemPhotos?: string[];
 }
 
 /** One appointment that does (part of) the job of a service order that came from a quote (Fase 29F). */

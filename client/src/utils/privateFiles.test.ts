@@ -12,6 +12,11 @@ describe('private files', () => {
     expect(toPrivateFilePath(`https://cuenta.blob.core.windows.net/uploads/${key}`)).toBe(`/files/${key}`);
   });
 
+  it('opens the photos of what happens a customer sent with a visit (Fase 29H)', () => {
+    const photo = `orders/${tenant}/visit-problem/202611/${file}.webp`;
+    expect(toPrivateFilePath(`/files/${photo}`)).toBe(`/files/${photo}`);
+  });
+
   it('never points the screen at another address', () => {
     expect(toPrivateFilePath('https://tracker.example/pixel.png')).toBeNull();
     expect(toPrivateFilePath(`http://cuenta.blob.core.windows.net/uploads/${key}`)).toBeNull();

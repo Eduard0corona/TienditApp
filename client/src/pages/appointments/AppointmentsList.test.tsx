@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appointmentsApi } from '../../api/appointmentsApi';
+import { filesApi } from '../../api/filesApi';
 import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { employeesApi } from '../../api/employeesApi';
@@ -26,6 +27,7 @@ vi.mock('../../api/employeesApi', () => ({ employeesApi: { getAll: vi.fn() } }))
 vi.mock('../../api/productsApi', () => ({ productsApi: { getAll: vi.fn() } }));
 vi.mock('../../api/homeVisits', () => ({ quoteVisit: vi.fn(), useVisitRoute: vi.fn() }));
 vi.mock('../../api/quotesApi', () => ({ quotesApi: { create: vi.fn() } }));
+vi.mock('../../api/filesApi', () => ({ filesApi: { get: vi.fn() } }));
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }));
@@ -304,6 +306,47 @@ describe('AppointmentsList', () => {
     const teams = screen.getByText('Ana Ruiz').closest('tr')!;
     expect(within(teams).getByText('A domicilio · CP 72000 · Centro')).toBeInTheDocument();
     expect(within(teams).queryByText(/Visita para cotizar/)).not.toBeInTheDocument();
+  });
+
+  it('shows what the customer said happens and their photos, only for a visit requested online (Fase 29H)', async () => {
+    const user = userEvent.setup();
+    const photo = (n: number) => `/files/orders/0b6f1c7e-2d1a-4c3b-9e8f-1a2b3c4d5e6f/visit-problem/202611/9f8e7d6c-5b4a-4321-8765-0fedcba9876${n}.webp`;
+    vi.mocked(filesApi.get).mockResolvedValue({ data: new Blob(['x'], { type: 'image/webp' }) } as never);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:foto');
+    renderAgenda([
+      appointment({
+        id: 'v1',
+        customerName: 'Valeria',
+        status: AppointmentStatus.Requested,
+        channel: AppointmentChannel.Online,
+        notes: 'Gotea el calentador desde ayer',
+        visit: { postalCode: '72000', addressLine: 'Av. Juárez 123', zoneName: 'Centro', fee: 50, chargePolicy: HomeVisitChargePolicy.Charged },
+        problemPhotos: [photo(1), photo(2)],
+      }),
+      appointment({
+        id: 'v2',
+        customerName: 'Rosa',
+        status: AppointmentStatus.Requested,
+        channel: AppointmentChannel.Online,
+        notes: 'No enciende el boiler',
+        visit: { postalCode: '72000', addressLine: 'Av. Reforma 5', zoneName: 'Centro', fee: 50, chargePolicy: HomeVisitChargePolicy.Charged },
+      }),
+      { ...AT_HOME, notes: 'Llevar escalera' },
+    ]);
+
+    const row = (await screen.findByText('Valeria')).closest('tr')!;
+    await user.click(within(row).getByRole('button', { name: 'Lo que pasa · 2 fotos, en la visita de Valeria' }));
+
+    const dialog = within(await screen.findByRole('dialog', { name: 'Lo que pasa' }));
+    expect(dialog.getByText('Gotea el calentador desde ayer')).toBeInTheDocument();
+    expect(dialog.getByText(/^Valeria · /)).toBeInTheDocument();
+    await waitFor(() => expect(dialog.getAllByRole('link', { name: /Abrir Foto \d de lo que pasa/ })).toHaveLength(2));
+    expect(filesApi.get).toHaveBeenCalledWith(photo(1));
+    await user.click(dialog.getByRole('button', { name: 'Cerrar' }));
+    // Only written: no photos. A visit the team arranged keeps the team's notes, which are not what the customer said.
+    const rosa = screen.getByText('Rosa').closest('tr')!;
+    expect(within(rosa).getByRole('button', { name: 'Lo que pasa, en la visita de Rosa' })).toBeInTheDocument();
+    expect(within(screen.getByText('Ana Ruiz').closest('tr')!).queryByRole('button', { name: /Lo que pasa/ })).not.toBeInTheDocument();
   });
 
   it('says how many requests wait and shows them, and opens on them from the notice', async () => {

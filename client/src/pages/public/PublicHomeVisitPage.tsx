@@ -11,6 +11,7 @@ import {
   type PublicBookingSlot,
   type RequestPublicHomeVisit,
 } from '../../api/publicMenuApi';
+import { ProblemPhotosPicker, ProblemPhotosSender } from '../../components/booking/ProblemPhotos';
 import SlotPicker from '../../components/booking/SlotPicker';
 import StaffPicker from '../../components/booking/StaffPicker';
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
@@ -25,6 +26,7 @@ import { readPostalCode } from '../../utils/postalCodePreference';
 import { isPostalCode } from '../../utils/postalCodes';
 import { localPhone } from '../../utils/phones';
 import { previewBusinessTheme } from '../../utils/theme';
+import type { PickedPhoto } from '../../utils/problemPhotos';
 import { newUuid } from '../../utils/uuid';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 import './PublicMenuPage.css';
@@ -157,6 +159,8 @@ export default function PublicHomeVisitPage() {
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [problem, setProblem] = useState('');
+  // The photos of what happens (Fase 29H): picked here, sent with the link once the request is saved.
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -292,6 +296,12 @@ export default function PublicHomeVisitPage() {
           {receipt.linkedToAccount
             ? <p className="small mb-0">La encuentras en tus citas.</p>
             : <p className="small mb-0">Guarda el enlace de tu visita para verla o cancelarla.</p>}
+          {photos.length > 0 && (
+            <section className="text-start w-100 mt-3" aria-labelledby={`${fieldId}-photos`}>
+              <h2 id={`${fieldId}-photos`} className="h6">Tus fotos de lo que pasa</h2>
+              <ProblemPhotosSender token={receipt.trackingToken} sent={0} canAdd initial={photos} onSent={() => undefined} />
+            </section>
+          )}
           <div className="d-grid gap-2 mt-3 pb-receipt-actions">
             <Link className="btn btn-primary btn-touch" to={`/cita#${receipt.trackingToken}`}>
               <i className="ri-calendar-event-line me-1" aria-hidden="true"></i>Ver tu visita
@@ -504,6 +514,9 @@ export default function PublicHomeVisitPage() {
                   <textarea id={`${fieldId}-problem`} className="form-control" required rows={3} maxLength={PROBLEM_MAX_LENGTH}
                     placeholder="Ej. gotea el calentador desde ayer"
                     value={problem} onChange={(event) => setProblem(event.target.value)} />
+                </div>
+                <div className="col-12">
+                  <ProblemPhotosPicker photos={photos} onChange={setPhotos} businessName={data.businessName} disabled={sending} />
                 </div>
                 <div className="col-12">
                   <label className="form-label small mb-1" htmlFor={`${fieldId}-address`}>Dirección</label>

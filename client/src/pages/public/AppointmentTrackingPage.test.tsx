@@ -11,7 +11,7 @@ import AppointmentTrackingPage from './AppointmentTrackingPage';
 
 vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
 vi.mock('../../api/publicMenuApi', () => ({
-  publicMenuApi: { trackAppointment: vi.fn(), cancelAppointmentByLink: vi.fn() },
+  publicMenuApi: { trackAppointment: vi.fn(), cancelAppointmentByLink: vi.fn(), addAppointmentPhoto: vi.fn() },
 }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: () => toast }));
@@ -34,6 +34,8 @@ function appointment(overrides: Partial<CustomerAppointment> = {}): CustomerAppo
     businessSlug: 'barberia-luis',
     businessContactPhone: '2221234567',
     address: 'Av. Juárez 123, Centro',
+    problemPhotos: 0,
+    canAddPhotos: false,
     ...overrides,
   };
 }
@@ -115,6 +117,44 @@ describe('AppointmentTrackingPage', () => {
     expect(screen.queryByRole('link', { name: /Cómo llegar/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Pedir otra visita a Plomería Hernández' })).toHaveAttribute('href', '/m/plomeria-hernandez/visita');
     expect(screen.queryByRole('link', { name: /Agendar otra/ })).not.toBeInTheDocument();
+  });
+
+  it('takes photos of what happens from the link while the visit takes them, and says how many it has (Fase 29H)', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`);
+    const visit = {
+      serviceName: 'Visita y diagnóstico',
+      businessName: 'Plomería Hernández',
+      address: null,
+      visit: { postalCode: '72000', chargePolicy: HomeVisitChargePolicy.Charged },
+    };
+    api.trackAppointment.mockResolvedValue(appointment({ ...visit, problemPhotos: 3, canAddPhotos: true }) as never);
+    api.addAppointmentPhoto
+      .mockResolvedValueOnce(appointment({ ...visit, problemPhotos: 4, canAddPhotos: true }) as never)
+      .mockResolvedValueOnce(appointment({ ...visit, problemPhotos: 5, canAddPhotos: false }) as never);
+    renderPage(`/cita#${LINK}`);
+
+    const photos = within(await screen.findByRole('region', { name: 'Fotos de lo que pasa' }));
+    expect(screen.getByText('Mandaste 3 fotos de lo que pasa')).toBeInTheDocument();
+    expect(photos.getByText(/Ayudan a Plomería Hernández a preparar la visita\. Solo las ve el negocio\. Caben 2 más\./)).toBeInTheDocument();
+    await user.upload(photos.getByTestId('problem-photos-input'), [
+      new File(['a'], 'fuga.jpg', { type: 'image/jpeg' }), new File(['b'], 'pared.jpg', { type: 'image/jpeg' }),
+    ]);
+
+    expect(await photos.findByText('Enviaste 2 fotos de lo que pasa.')).toBeInTheDocument();
+    expect(api.addAppointmentPhoto.mock.calls.map(([token, file]) => [token, file.name])).toEqual([[LINK, 'fuga.jpg'], [LINK, 'pared.jpg']]);
+    // The card says it with what the server answered; the section stays to say how they went, with nothing more to add.
+    expect(screen.getByText('Mandaste 5 fotos de lo que pasa')).toBeInTheDocument();
+    expect(photos.queryByRole('button', { name: /Agregar/ })).not.toBeInTheDocument();
+  });
+
+  it('offers no photos for a visit that no longer takes them, nor for an appointment at the business', async () => {
+    api.trackAppointment.mockResolvedValue(appointment({ problemPhotos: 0, canAddPhotos: false }) as never);
+    renderPage(`/cita#${LINK}`);
+
+    expect(await screen.findByRole('heading', { name: 'Corte de cabello' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Fotos de lo que pasa' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/de lo que pasa/)).not.toBeInTheDocument();
   });
 
   it('books again an appointment the business moved to the customer’s home, not another visit', async () => {

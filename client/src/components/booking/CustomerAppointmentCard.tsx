@@ -57,6 +57,12 @@ export default function CustomerAppointmentCard({
             A domicilio · CP {appointment.visit.postalCode}
           </p>
         )}
+        {appointment.visit && appointment.problemPhotos > 0 && (
+          <p className="small mb-1">
+            <i className="ri-image-line me-1" aria-hidden="true"></i>
+            Mandaste {appointment.problemPhotos === 1 ? 'una foto' : `${appointment.problemPhotos} fotos`} de lo que pasa
+          </p>
+        )}
         {appointment.address && (
           <p className="small mb-1">
             <i className="ri-map-pin-line me-1" aria-hidden="true"></i>
