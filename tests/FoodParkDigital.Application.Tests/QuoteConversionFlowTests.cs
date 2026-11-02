@@ -84,6 +84,10 @@ public class QuoteConversionFlowTests
         // The order's detail opens its quote.
         var orderDetail = await new GetOrderByIdQueryHandler(shop.Context).Handle(new GetOrderByIdQuery(order.Id), CancellationToken.None);
         Assert.Equal((quote.Id, quote.Number, 1), (orderDetail.Quote!.Id, orderDetail.Quote.Number, orderDetail.Quote.Revision));
+        // And so does the list of orders, where the detail of an order opens.
+        var listed = Assert.Single((await new GetOrdersByBusinessQueryHandler(shop.Context, shop.Fixture.TenantService)
+            .Handle(new GetOrdersByBusinessQuery(), CancellationToken.None)).Items);
+        Assert.Equal(quote.Id, listed.Quote!.Id);
     }
 
     [Fact]
