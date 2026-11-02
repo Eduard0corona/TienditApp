@@ -1851,7 +1851,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - apagada no se responde y se puede volver a encender; apagada, la respuesta que ya tiene sigue y una corregida dice que se corrigió (por la revisión);
     - la misma respuesta guardada primero al mismo tiempo es la respuesta (por la revisión), y otra del negocio gana sin dejar nada del cliente;
     - Requiere atención cuenta las aceptadas por convertir (urgentes las del enlace) y el filtro «Por convertir» lista las mismas; ni después de 30 días, ni para quien no toma pedidos, ni en un negocio sin órdenes de servicio (por la revisión);
-    - los validadores rechazan «Desde su enlace» del negocio y un mensaje largo.
+    - los validadores rechazan «Desde su enlace» del negocio y un mensaje largo, medido ya recortado (por la revisión automática).
   - `AuthorizationBehaviorTests`: la respuesta desde el enlace es una de las solicitudes anónimas.
   - **Mutaciones:** sin la regla de la opción apagada, la del orden de su mensaje, el descarte de correcciones, el mensaje del negocio oculto, `canReply` con la opción, lo urgente del enlace, el choque con el negocio, la misma respuesta al mismo tiempo o el módulo de órdenes en el aviso, falla al menos una prueba; sin el freno del rollback para la opción apagada, falla su prueba de migración.
   - **WebApi:** `CrossTenantQuoteSqlServerTests` (+1): el cliente responde sin cuenta y sin ver datos suyos; la misma respuesta pasa, otra se rechaza, una sin `accepted` también (por la revisión) y un enlace desconocido o en otras mayúsculas no existe; el negocio ve el canal y el otro negocio no ve la cotización ni cambia la suya; el negocio no registra «Desde su enlace»; apagada, el enlace ya no la ofrece ni la toma.

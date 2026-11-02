@@ -245,10 +245,17 @@ public class QuoteLinkReplyFlowTests
         var tooLong = new ReplyToQuoteFromLinkCommandValidator().Validate(
             new ReplyToQuoteFromLinkCommand(new string('a', 43), true, new string('a', 501)));
         var noLink = new ReplyToQuoteFromLinkCommandValidator().Validate(new ReplyToQuoteFromLinkCommand("", true, null));
+        // Measured as the quote keeps it, trimmed: 500 characters pasted with spaces or a line break pass, 501 do not.
+        var padded = new ReplyToQuoteFromLinkCommandValidator().Validate(
+            new ReplyToQuoteFromLinkCommand(new string('a', 43), true, $"  {new string('a', 500)}\n"));
+        var paddedTooLong = new ReplyToQuoteFromLinkCommandValidator().Validate(
+            new ReplyToQuoteFromLinkCommand(new string('a', 43), true, $"  {new string('a', 501)}  "));
 
         Assert.Equal([QuoteRules.LinkChannelMessage], recorded.Errors.Select(e => e.ErrorMessage));
         Assert.Equal([QuoteRules.CustomerResponseTooLongMessage], tooLong.Errors.Select(e => e.ErrorMessage));
         Assert.False(noLink.IsValid);
+        Assert.True(padded.IsValid);
+        Assert.Equal([QuoteRules.CustomerResponseTooLongMessage], paddedTooLong.Errors.Select(e => e.ErrorMessage));
     }
 
     private static Task<Common.Models.Result<PublicQuoteDto>?> ReplyAsync(SalesTestFixture fixture, string token, bool accepted, string? response)
