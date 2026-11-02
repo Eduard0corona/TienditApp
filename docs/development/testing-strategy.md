@@ -1770,6 +1770,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - el diálogo quieto mientras convierte; el aviso a quien no puede cobrar y hacer reembolsos; la visita sin pasar del total;
       - sin órdenes de servicio, dónde se activa el módulo (o que lo pida al dueño). Todo por la revisión, salvo el primero.
     - `OrdersList.test.tsx` (+1): el detalle de una orden de servicio abre su cotización.
+  - **.NET en total:** 4,493 pruebas (Domain 1,333; Application 2,018; WebApi 480; Infrastructure 662). **Cliente en total:** 185 archivos y 1,386 pruebas.
+  - **Primera visita:** 181,365 B (`master` en `cfde7d4`: 181,367 B, −2 B). El diálogo y el enlace van en pantallas que se cargan aparte. La conversión de la hora del negocio vive en un módulo aparte: en `dates.ts` sumaba 69 B y pasaba el presupuesto (181,400 B), que no cambia.
+  - **Escenas:** contra la línea base de `master` en `cfde7d4` (784 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - 769 salen iguales.
+    - **Ninguna cambia.**
+    - Las 5 nuevas (`cotizaciones.spec.ts`: la aceptada en escritorio, teléfono y oscuro, el diálogo de convertir y la convertida) pasaron dos corridas seguidas.
+    - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
