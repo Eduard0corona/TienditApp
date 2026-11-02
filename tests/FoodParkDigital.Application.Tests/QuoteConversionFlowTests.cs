@@ -298,18 +298,42 @@ public class QuoteConversionFlowTests
         Assert.Equal(0, await shop.Context.Orders.IgnoreQueryFilters().CountAsync());
     }
 
-    [Theory]
-    [InlineData(-2)]
-    [InlineData(366)]
-    public void APromiseInThePast_OrYearsAway_ShouldBeRefused(int days)
-    {
-        var validator = new ConvertQuoteToOrderCommandValidator(new SalesClock());
+    private const int MinutesInADay = 24 * 60;
 
-        var result = validator.Validate(new ConvertQuoteToOrderCommand(Guid.NewGuid(), SalesTestFixture.Now.AddDays(days)));
+    [Theory]
+    [InlineData(-2 * MinutesInADay)]
+    [InlineData(-MinutesInADay - 1)]
+    [InlineData(366 * MinutesInADay)]
+    public void APromiseInThePast_OrYearsAway_ShouldBeRefused(int minutes)
+    {
+        var result = PromiseFor(SalesTestFixture.Now.AddMinutes(minutes));
 
         Assert.Contains(result.Errors, e => e.ErrorMessage == QuoteConversions.PromisedAtMessage);
-        Assert.True(validator.Validate(new ConvertQuoteToOrderCommand(Guid.NewGuid(), null)).IsValid);
     }
+
+    [Theory]
+    // Today begins in the business's zone: up to a day before now in UTC.
+    [InlineData(-MinutesInADay)]
+    [InlineData(-23 * 60)]
+    [InlineData(0)]
+    [InlineData(3 * MinutesInADay)]
+    public void APromiseFromToday_ShouldBeAccepted(int minutes)
+    {
+        Assert.True(PromiseFor(SalesTestFixture.Now.AddMinutes(minutes)).IsValid);
+    }
+
+    [Fact]
+    public void APromiseAYearAway_ShouldBeAccepted_ButNotAMinuteLater_AndNoPromiseAtAll_Too()
+    {
+        var aYearAway = SalesTestFixture.Now.AddYears(1);
+
+        Assert.True(PromiseFor(aYearAway).IsValid);
+        Assert.Contains(PromiseFor(aYearAway.AddMinutes(1)).Errors, e => e.ErrorMessage == QuoteConversions.PromisedAtMessage);
+        Assert.True(PromiseFor(null).IsValid);
+    }
+
+    private static FluentValidation.Results.ValidationResult PromiseFor(DateTimeOffset? promisedAt)
+        => new ConvertQuoteToOrderCommandValidator(new SalesClock()).Validate(new ConvertQuoteToOrderCommand(Guid.NewGuid(), promisedAt));
 
     private sealed class Access(Func<IReadOnlyCollection<string>> permissions) : ITenantAccessService
     {

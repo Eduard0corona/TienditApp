@@ -1752,7 +1752,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - una conversión guardada justo antes de que el reembolso en efectivo guarde: queda la conversión con su pago, y el reembolso choca (por la revisión automática de la PR, que pidió forzar los dos órdenes).
     - `BeforeQuoteConversion` (nuevo): las pruebas de las migraciones anteriores guardan cotizaciones sin las columnas nuevas. `BeforeQuoteDeliveries` lo encadena, y `QuoteDeliveriesMigrationSqlServerTests` siembra con él.
   - **Application:**
-    - `QuoteConversionFlowTests` (15, nuevo):
+    - `QuoteConversionFlowTests` (17, nuevo):
       - la orden del negocio, «Aceptada», con el cliente, los renglones a los precios aceptados (no a los del catálogo de hoy), el renglón a mano como servicio, la cantidad con decimales en su nombre, la fecha prometida, la nota de ingreso, la pieza del servicio con seguimiento y el total de la cotización;
       - la actividad sin datos del cliente; el detalle de la orden y la lista de órdenes abren su cotización;
       - conserva la política de IVA de la cotización aunque el negocio cambió la suya;
@@ -1762,7 +1762,8 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - necesita a quien puede cobrar y hacer reembolsos solo cuando aplica la visita (por la revisión); con la venta cancelada no aplica nada; cobrada sin teléfono no se convierte;
       - un producto que no se vende en fracciones se cotiza sin decimales, y la hora sí los lleva (por la revisión);
       - una cotización cuyo teléfono no se lee se convierte igual: sin teléfono, o con el de la venta de su visita (por la revisión automática);
-      - otro negocio no la encuentra; la fecha prometida va de hoy a un año.
+      - otro negocio no la encuentra;
+      - la fecha prometida va de hoy a un año: se rechaza antes del día anterior o después de un año, y se acepta desde el inicio de hoy en la zona del negocio hasta un año exacto (los límites, por la revisión automática).
     - Sin el permiso de cobrar, o con la política de IVA del negocio en lugar de la de la cotización, fallan.
   - **WebApi:**
     - `CrossTenantQuoteSqlServerTests` (+1): el otro negocio no la convierte ni ve su orden; la orden abre su cotización; la segunda vez responde 400.
@@ -1773,7 +1774,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - el diálogo quieto mientras convierte; el aviso a quien no puede cobrar y hacer reembolsos; la visita sin pasar del total;
       - sin órdenes de servicio, dónde se activa el módulo (o que lo pida al dueño). Todo por la revisión, salvo el primero.
     - `OrdersList.test.tsx` (+2): el detalle de una orden de servicio abre su cotización, y la conserva después de un reembolso cuya respuesta no la trae (por la revisión automática).
-  - **.NET en total:** 4,498 pruebas (Domain 1,334; Application 2,021; WebApi 480; Infrastructure 663). **Cliente en total:** 185 archivos y 1,387 pruebas.
+  - **.NET en total:** 4,504 pruebas (Domain 1,334; Application 2,027; WebApi 480; Infrastructure 663). **Cliente en total:** 185 archivos y 1,387 pruebas.
   - **Primera visita:** 181,365 B (`master` en `cfde7d4`: 181,367 B, −2 B). El diálogo y el enlace van en pantallas que se cargan aparte. La conversión de la hora del negocio vive en un módulo aparte: en `dates.ts` sumaba 69 B y pasaba el presupuesto (181,400 B), que no cambia.
   - **Escenas:** contra la línea base de `master` en `cfde7d4` (784 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
     - 769 salen iguales.
