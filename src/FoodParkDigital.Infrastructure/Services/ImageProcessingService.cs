@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Formats.Webp;
+using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
 namespace FoodParkDigital.Infrastructure.Services;
@@ -76,7 +77,16 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
         int maxDimension,
         CancellationToken cancellationToken = default)
     {
-        using var image = await LoadAsync(imageStream, cancellationToken);
+        // Decoded already within the size it is kept at (a JPEG decodes scaled, which is most phone photos) and with 8 bits per
+        // channel: a large photo, or a 16-bit PNG, never takes the memory of its full size (Fase 29H, also for photos sent
+        // without an account).
+        var options = new DecoderOptions
+        {
+            Configuration = DecoderOptions.Configuration,
+            MaxFrames = DecoderOptions.MaxFrames,
+            TargetSize = new Size(maxDimension, maxDimension)
+        };
+        using var image = await LoadAsync(imageStream, cancellationToken, options, rgba32: true);
         image.Mutate(ctx =>
         {
             var size = ctx.GetCurrentSize();
@@ -115,8 +125,10 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
         return output.ToArray();
     }
 
-    private static async Task<Image> LoadAsync(Stream stream, CancellationToken cancellationToken)
+    private static async Task<Image> LoadAsync(
+        Stream stream, CancellationToken cancellationToken, DecoderOptions? options = null, bool rgba32 = false)
     {
+        options ??= DecoderOptions;
         var seekable = stream;
         if (!stream.CanSeek)
         {
@@ -127,12 +139,14 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
         try
         {
             seekable.Position = 0;
-            var info = await Image.IdentifyAsync(DecoderOptions, seekable, cancellationToken);
+            var info = await Image.IdentifyAsync(options, seekable, cancellationToken);
             if ((long)info.Width * info.Height > MaxPixels)
                 throw new DomainException("La imagen es demasiado grande (máximo 50 megapíxeles).");
 
             seekable.Position = 0;
-            var image = await Image.LoadAsync(DecoderOptions, seekable, cancellationToken);
+            var image = rgba32
+                ? await Image.LoadAsync<Rgba32>(options, seekable, cancellationToken)
+                : await Image.LoadAsync(options, seekable, cancellationToken);
             // Applies the EXIF orientation to the pixels, since the metadata is dropped when encoding.
             image.Mutate(ctx => ctx.AutoOrient());
             return image;

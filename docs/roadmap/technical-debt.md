@@ -81,7 +81,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La 24D-1 suma 286 B a la primera visita (de 177,674 a 177,960 B, contra `master` en `d21f0f2`) y sube el presupuesto a 178,200 B.
 - Oficios a domicilio (plomería, electricidad, aire acondicionado y parecidos; [ADR 0053](../adr/0053-home-visit-quotes.md), etapa 1 desde la Fase 29A, solicitud en línea desde la 29B y cotización desde la 29C):
   - La solicitud en línea tiene los límites de las citas en línea: cualquiera puede pedir una visita con un teléfono ajeno (solo la frenan las 3 por confirmar por teléfono y el límite por IP), y la Agenda la ve al volver a cargar.
-  - Sin fotos del problema: piden una subida pública validada y privada por negocio.
+  - Resuelto en la Fase 29H: las fotos del problema ([ADR 0062](../adr/0062-visit-problem-photos.md)); sus límites, abajo.
   - Si el negocio dice quién agenda en línea y nadie hace el servicio de la visita, la visita llega sin nadie asignado y con las citas a la vez del negocio; la tarjeta de Configuración no lo advierte.
   - Sin decir quién atiende, el traslado de una visita se cuenta contra todas las citas del negocio con las citas a la vez: no sabe de quién es cada una.
   - Una visita pedida en línea que el equipo pasa al local y luego otra vez a domicilio pierde cómo se cobraba: vuelve a ser una visita del equipo, con el cargo de la zona.
@@ -109,6 +109,18 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - Apagar la opción no deshace las respuestas que ya llegaron.
     - El aviso y el filtro «Por convertir» cuentan 30 días hacia atrás: una aceptada más vieja sin convertir ya no avisa, aunque sigue en «Aceptadas».
     - Con el código anterior (rollback del despliegue), una cotización respondida desde el enlace se ve aceptada o rechazada sin decir por dónde, y el enlace deja de ofrecer la respuesta.
+  - Las fotos de lo que pasa (Fase 29H, [ADR 0062](../adr/0062-visit-problem-photos.md)):
+    - Quien tenga el enlace de la visita manda fotos, como con la cancelación; lo frenan las 5 por visita y el límite por IP (`public-upload`, 20 cada 10 minutos).
+    - Un archivo puede quedar sin foto: si se guardó y la visita se llenó con otras al mismo tiempo, o si la base falló después. Queda en el almacenamiento privado sin que nadie lo abra; no hay limpieza (como con las fotos de un servicio, ADR 0024) y `IPrivateFileStorage` no borra.
+    - El cliente no quita una foto ni la vuelve a ver desde el servidor; el negocio tampoco la borra. Una foto se guarda mientras exista la cita, también si se cancela.
+    - El negocio no recibe aviso cuando llega una foto: la ve al abrir la Agenda o la cotización.
+    - La foto no se achica en el teléfono: una de más de 10 MB se rechaza antes de mandarla, y una conexión lenta sube el archivo completo.
+    - Cada instancia decodifica a lo más dos fotos a la vez; con muchas fotos al mismo tiempo, una tercera se rechaza después de 10 segundos (429) y el cliente la manda otra vez.
+    - Las fotos no pasan a la orden de servicio al convertir la cotización: la orden tiene sus propias fotos del antes y el después.
+    - Reintentar puede guardar dos veces la misma foto si el servidor la guardó y su respuesta se perdió; evitarlo pediría una llave por foto.
+    - «Lo que pasa» son las notas de la visita: si el equipo las edita en la Agenda, la Agenda y la cotización muestran lo que escribió el equipo como lo que pasa.
+    - Las fotos en camino viven mientras la página está abierta: al cerrarla (el navegador pregunta antes) se pierden las que faltaban.
+    - Con el código anterior (rollback del despliegue), la solicitud y el enlace dejan de ofrecer las fotos, y las que ya se mandaron no se ven.
   - El envío desde TienditApp (Fase 29D):
     - El correo de la cotización no lleva PDF (TienditApp no genera PDF): la cotización va en el cuerpo y en su enlace. «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó.
     - Sin plantilla aprobada en Meta, el WhatsApp solo llega a quien escribió en las últimas 24 horas, y no cae solo al correo cuando WhatsApp lo rechaza: el negocio lo ve en el historial y lo manda por correo.
@@ -129,6 +141,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La 29E suma 5 B a la primera visita (de 181,462 a 181,467 B, contra `master` en `744632b`): el diálogo y el enlace van en pantallas que se cargan aparte, y los 5 B son los dos chunks compartidos más que la entrada precarga con la pantalla de órdenes. El presupuesto (181,500 B) no cambia.
   - La 29F suma 62 B a la primera visita (de 181,467 a 181,529 B, contra `master` en `7013d87`): el diálogo de agendar se carga aparte, y los 62 B son la lista de precarga de la entrada, con tres chunks compartidos nuevos (la lista de citas del trabajo, los estados de una cita y la API del equipo). El presupuesto sube de 181,500 a 181,600 B.
   - La 29G suma 76 B a la primera visita (de 181,529 a 181,605 B, contra `master` en `38d0560`): el aviso de «Cotizaciones aceptadas por convertir» va en la entrada con la campana, y el filtro «Por convertir» y los valores nuevos de los enums también; el panel para responder se carga con la página del enlace. El presupuesto sube de 181,600 a 181,700 B.
+  - La 29H suma 100 B a la primera visita (de 181,605 a 181,705 B, contra `master` en `8ecfa7f`): las fotos se cargan con sus pantallas, y los 100 B son la lista de precarga de la entrada, con los chunks compartidos nuevos (las fotos para mandar con su cola, sus reglas y «Lo que pasa» del negocio), y la regla de las rutas privadas con el área nueva. El presupuesto sube de 181,700 a 181,800 B.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.
@@ -490,13 +503,14 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - En SQL Server, la parte de la comisión de cada pago se calcula con escala 6 antes de sumarse: con pagos parciales, un punto medio raro puede diferir un centavo del cálculo con toda la precisión.
     - Desde el primer pedido de plataforma no hay rollback de la base (error 50008), solo correcciones hacia adelante. No conviene publicar entre las 00:00 y las 00:45, hora del negocio (ver [migraciones](../development/database-migrations.md)).
     - El badge «En línea» de Pedidos usa el acento (`bg-primary-subtle`), algo que viene de antes; se dejó igual para no mover las líneas base.
-- Resuelto en la Fase 29H: dependencia con avisos de seguridad (vista en la Fase 22F). `SixLabors.ImageSharp` pasó de la 3.1.12 a la 3.2.0 (`Directory.Packages.props`), en la misma versión mayor y con la misma licencia.
-  - La 3.1.12 tenía tres avisos de TIFF: GHSA-j9gm-c75j-xc9q y GHSA-jjfr-hcj7-qf5w (altos) y GHSA-wmxv-xphr-5c9g (moderado). `ImageProcessingService` ya rechazaba un TIFF antes de decodificarlo, porque solo registra los decodificadores de JPEG, PNG, WebP y GIF.
-  - Después salieron tres avisos más:
-    - GHSA-gwg2-r3hj-4w44 (moderado): el perfil de color ICC que trae un JPEG o un PNG pide la memoria que el archivo diga.
-    - GHSA-v76p-62qx-wwq2 (alto): un TIFF en mosaico con compresión de fax.
+- Dependencia con avisos de seguridad (visto en la Fase 22F, revisado en la 29H): `SixLabors.ImageSharp` 3.1.12 (`Directory.Packages.props`), y `dotnet restore` los marca (NU1903, NU1902).
+  - Tres avisos de TIFF: GHSA-j9gm-c75j-xc9q y GHSA-jjfr-hcj7-qf5w (altos) y GHSA-wmxv-xphr-5c9g (moderado). `ImageProcessingService` solo registra los decodificadores de JPEG, PNG, WebP y GIF, así que un TIFF subido se rechaza antes de decodificarse.
+  - Tres avisos más, vistos en la 29H:
+    - GHSA-v76p-62qx-wwq2 (alto): otro de TIFF, que tampoco se decodifica.
     - GHSA-j3p4-wp97-rph4 (alto): `HistogramEqualization`, que no usamos.
-  - La 29H recibe fotos sin cuenta, así que subirla dejó de ser opcional. Con la 3.2.0, `dotnet restore` ya no marca ningún aviso de ImageSharp. Pasan las pruebas de imágenes de Infrastructure y Application y la suite completa.
+    - GHSA-gwg2-r3hj-4w44 (moderado): el perfil de color ICC de un JPEG o PNG pide la memoria que el archivo diga. Toca a cualquier imagen subida, y desde la 29H también a las fotos que manda un cliente sin cuenta. Lo frenan el tope de megapíxeles, el límite por IP, las 5 fotos por visita y las dos que se decodifican a la vez por instancia.
+  - **La 3.2.0 corrige los seis**, en la misma versión mayor y con el mismo texto de licencia (Six Labors Split License). Pero trae una revisión al compilar: **sin una licencia de Six Labors (`SixLaborsLicenseKey`), el build en Release falla**, y con él el CI, el despliegue y el Dockerfile. La 29H la probó y la regresó a la 3.1.12 por eso.
+  - **Decisión del dueño del producto:** conseguir la licencia (revisar si el negocio califica para la comunitaria o necesita la comercial) y pasarla como secreto al CI, al despliegue y al build de Docker, nunca en el repositorio; o cambiar de librería. Hasta entonces sigue la 3.1.12.
 - Resuelto en la Fase 21: días especiales y horario real en WhatsApp ([ADR 0012](../adr/0012-special-days.md)).
   - El dueño marca por fecha los días que cierra o abre con otro horario (festivos, vacaciones, inventario), con un motivo que ven sus clientes y festivos sugeridos que nunca se aplican solos. Las fechas pasadas no cambian y cada cambio queda en la bitácora.
   - El menú en línea y su pedido los toman en cuenta, también sin horario de la semana, y el servidor escribe lo que dicen ("Cerrado · por Navidad · abre el sábado 26 a las 9:00"); en un día especial cerrado tampoco pide una mesa (decisión por omisión).

@@ -51,8 +51,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             // The photos customers sent with their visits would be lost: the previous version has nowhere to keep them (Fase 29H).
+            // The lock holds until the table is dropped, in the same transaction: no photo saved in between is lost.
             migrationBuilder.Sql(@"
-EXEC(N'IF EXISTS (SELECT 1 FROM [AppointmentProblemPhotos])
+EXEC(N'IF EXISTS (SELECT 1 FROM [AppointmentProblemPhotos] WITH (TABLOCKX, HOLDLOCK))
     THROW 50056, N''Customers already sent photos of what happens with their visits; rolling back would lose them. Roll forward instead.'', 1;');
 ");
 

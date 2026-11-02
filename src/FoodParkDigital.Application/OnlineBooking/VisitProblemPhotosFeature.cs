@@ -43,8 +43,9 @@ public class AddVisitProblemPhotoCommandValidator : AbstractValidator<AddVisitPr
 
 public class AddVisitProblemPhotoCommandHandler : IRequestHandler<AddVisitProblemPhotoCommand, Result<CustomerAppointmentDto>?>
 {
-    // Two photos sent at once read the same count: the base keeps the place once, and the second takes the next one.
-    private const int Attempts = 3;
+    // Photos sent at once read the same count: the base keeps each place once, and the one that lost it takes the next. Each
+    // place lost is one more taken, so within this many tries the photo has its place or the visit is full.
+    private const int Attempts = HomeVisitRules.MaxProblemPhotos + 1;
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -114,6 +115,11 @@ public class AddVisitProblemPhotoCommandHandler : IRequestHandler<AddVisitProble
 
             await using (photo)
             {
+                // Waiting and decoding take time: the visit may have filled up meanwhile, and then no file is written.
+                photos = await CountAsync(appointmentId, cancellationToken);
+                if (appointment.ProblemPhotoRefusal(photos, now) is { } meanwhile)
+                    return Result.Failure<CustomerAppointmentDto>(meanwhile);
+
                 key = $"{OrderUploadRules.VisitProblemFolder(tenantId, now)}/{Guid.NewGuid()}.webp";
                 await _storage.SaveAsync(key, photo, "image/webp", cancellationToken);
             }

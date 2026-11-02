@@ -9,9 +9,10 @@
 -- mandó una foto de lo que pasa con su visita: se perdería cuál es de qué visita. Entonces solo
 -- queda corregir hacia adelante (la consulta 3 de verify.sql las cuenta). Si no, borra la tabla.
 -- Los archivos de las fotos no se borran: quedan en el almacenamiento privado del negocio.
--- Correrlo después de regresar el código a master con la Fase 29G: la guarda no bloquea la tabla,
--- y esta versión podría guardar una foto entre la guarda y el borrado. Volver al código anterior
--- funciona también sin este script.
+-- La guarda bloquea la tabla hasta borrarla, en la misma transacción: ninguna foto se guarda entre
+-- la guarda y el borrado (la que llegue espera y falla). Aun así, córrelo después de regresar el
+-- código a master con la Fase 29G, que ya no recibe fotos. Volver al código anterior funciona
+-- también sin este script.
 -- Idempotente: no hace nada si la migración no está aplicada.
 --     sqlcmd -S <servidor> -d <base> <autenticación> -b -i rollback.sql
 -- =====================================================================================
@@ -32,7 +33,7 @@ IF EXISTS (
 )
 BEGIN
 
-    EXEC(N'IF EXISTS (SELECT 1 FROM [AppointmentProblemPhotos])
+    EXEC(N'IF EXISTS (SELECT 1 FROM [AppointmentProblemPhotos] WITH (TABLOCKX, HOLDLOCK))
         THROW 50056, N''Customers already sent photos of what happens with their visits; rolling back would lose them. Roll forward instead.'', 1;');
 
 END;

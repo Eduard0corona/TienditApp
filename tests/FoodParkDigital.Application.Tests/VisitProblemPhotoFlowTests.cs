@@ -210,7 +210,9 @@ public class VisitProblemPhotoFlowTests
         var other = await TradeAsync(empty);
         await RequestedAsync(empty, other.Id);
         meanwhile.Tenant = empty.TenantService;
+        meanwhile.Saves = 0;
         await Assert.ThrowsAsync<DbUpdateException>(() => SendAsync(empty, new MemoryPrivateStorage(), Token, Jpeg(40, 30)));
+        Assert.Equal(1, meanwhile.Saves);
     }
 
     [Fact]
@@ -238,7 +240,7 @@ public class VisitProblemPhotoFlowTests
     }
 
     [Fact]
-    public async Task TheQuoteOfTheVisit_ShouldShowWhatHappens_AndItsPhotos_OnlyAsTheCustomerToldIt()
+    public async Task TheQuoteOfTheVisit_ShouldShowWhatHappens_AndItsPhotos_OnlyForAVisitRequestedOnline()
     {
         await using var fixture = SalesTestFixture.Create();
         var tenant = await TradeAsync(fixture);
@@ -267,6 +269,67 @@ public class VisitProblemPhotoFlowTests
         await fixture.Context.SaveChangesAsync();
         var theirs = (await CreateAsync(fixture, new CreateQuoteCommand(arranged.Id, null, null, null, null))).Value!;
         Assert.Equal(((string?)null, 0), (theirs.Appointment!.Problem, theirs.Appointment.ProblemPhotos.Count));
+    }
+
+    [Fact]
+    public async Task FilledWhileItWasRead_ShouldBeRefused_WithoutWritingItsFile()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture);
+        var visit = await RequestedAsync(fixture, tenant.Id);
+        var storage = new MemoryPrivateStorage();
+        // While this photo is decoded, the other five arrive.
+        var others = new FillsWhileDecoding(async () =>
+        {
+            for (var n = 0; n < HomeVisitRules.MaxProblemPhotos; n++)
+                fixture.Context.AppointmentProblemPhotos.Add(visit.AddProblemPhoto(n, $"{OrderUploadRules.VisitProblemFolder(tenant.Id, SalesTestFixture.Now)}/{Guid.NewGuid()}.webp", SalesTestFixture.Now));
+            await fixture.Context.SaveChangesAsync();
+        });
+
+        var refused = await new AddVisitProblemPhotoCommandHandler(
+                fixture.Context, fixture.TenantService, fixture.Clock, storage, others, new PublicPhotoGate())
+            .Handle(new AddVisitProblemPhotoCommand { Token = Token, FileStream = Jpeg(40, 30), FileSize = 1 }, CancellationToken.None);
+
+        Assert.Equal(HomeVisitRules.ProblemPhotosFullMessage, refused!.Error);
+        Assert.Empty(storage.Files);
+    }
+
+    [Fact]
+    public async Task TheAccountsAppointments_ShouldSayHowManyPhotos_InEveryBusiness()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture);
+        var account = Guid.NewGuid();
+        var zone = await fixture.Context.DeliveryZones.IgnoreQueryFilters().Include(z => z.PostalCodes).SingleAsync(z => z.TenantId == tenant.Id);
+        var at = SalesTestFixture.Now.AddDays(3);
+        var visit = Appointment.RequestHomeVisit(
+            tenant.Id, "Valeria", "5522107765", null, HomeVisitRules.DefaultVisitName, at, at.AddHours(1), "Gotea el calentador", null,
+            DeliveryAddress.ForVisit("72000", "Av. Juárez 123", null), zone, HomeVisitChargePolicy.Charged, account, Guid.NewGuid(), Token);
+        fixture.Context.Appointments.Add(visit);
+        await fixture.Context.SaveChangesAsync();
+        Assert.True((await SendAsync(fixture, new MemoryPrivateStorage(), Token, Jpeg(40, 30)))!.IsSuccess);
+        // The account reads its appointments of every business, with no business in context.
+        fixture.TenantService.SetTenant(Guid.Empty);
+        fixture.CurrentUser.UserId = account.ToString();
+
+        var mine = await new GetMyAppointmentsQueryHandler(fixture.Context, fixture.CurrentUser, fixture.Clock)
+            .Handle(new GetMyAppointmentsQuery(), CancellationToken.None);
+
+        Assert.Equal((1, true), (Assert.Single(mine.Items).ProblemPhotos, mine.Items[0].CanAddPhotos));
+    }
+
+    [Fact]
+    public void TheirFiles_ShouldOpenOnlyForWhoeverWorksTheAgendaOrQuotesTheVisit()
+    {
+        var permissions = typeof(GetVisitProblemPhotoFileQuery).GetCustomAttributes(typeof(Common.Security.RequiresPermissionAttribute), false)
+            .Cast<Common.Security.RequiresPermissionAttribute>().Single();
+        var capabilities = typeof(GetVisitProblemPhotoFileQuery).GetCustomAttributes(typeof(Common.Security.RequiresCapabilityAttribute), false)
+            .Cast<Common.Security.RequiresCapabilityAttribute>().Single();
+
+        Assert.Equal(
+            new HashSet<Domain.Tenants.Enums.TenantPermission> { Domain.Tenants.Enums.TenantPermission.ManageAppointments, Domain.Tenants.Enums.TenantPermission.ManageOrders },
+            permissions.AnyOf.ToHashSet());
+        Assert.Equal(Domain.Tenants.Enums.TenantCapability.Appointments | Domain.Tenants.Enums.TenantCapability.Service, capabilities.AnyOf);
     }
 
     [Fact]
@@ -320,6 +383,16 @@ public class VisitProblemPhotoFlowTests
         return stream;
     }
 
+    /// <summary>The visit fills up while the photo is decoded.</summary>
+    private sealed class FillsWhileDecoding(Func<Task> meanwhile) : IImageNormalizationService
+    {
+        public async Task<Stream> NormalizeToWebpAsync(Stream imageStream, int maxDimension, CancellationToken cancellationToken = default)
+        {
+            await meanwhile();
+            return new MemoryStream([1, 2, 3]);
+        }
+    }
+
     /// <summary>
     /// Other photos of the same visit saved first, between the count the handler read and its own save, which then fails as
     /// the base refuses a place taken twice; or a save that fails for something else.
@@ -328,6 +401,8 @@ public class VisitProblemPhotoFlowTests
     {
         public int Armed { get; set; }
         public bool FailsAnyway { get; set; }
+        /// <summary>How many saves carried a photo.</summary>
+        public int Saves { get; set; }
         public ICurrentTenantService? Tenant { get; set; }
 
         public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -337,6 +412,7 @@ public class VisitProblemPhotoFlowTests
                 .FirstOrDefault(entry => entry.State == EntityState.Added)?.Entity;
             if (sending is null)
                 return result;
+            Saves++;
             if (FailsAnyway)
                 throw new DbUpdateException("The base did not answer.");
             if (Armed == 0)

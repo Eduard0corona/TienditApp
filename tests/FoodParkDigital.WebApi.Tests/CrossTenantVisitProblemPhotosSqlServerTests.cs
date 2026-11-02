@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using static FoodParkDigital.WebApi.Tests.CrossTenantHomeVisitBookingSqlServerTests;
 
@@ -69,6 +70,12 @@ public sealed class CrossTenantVisitProblemPhotosSqlServerTests
         Assert.Contains("Manda una foto JPG, PNG o WebP.", await html.Content.ReadAsStringAsync());
         var nothing = await stranger.PostAsync(Photos, new MultipartFormDataContent { { new StringContent(token), "token" } });
         Assert.Equal(HttpStatusCode.BadRequest, nothing.StatusCode);
+        // More than 10 MB: refused by its size, and a body past the form's limit is not read at all.
+        var heavy = await stranger.PostAsync(Photos, Form(token, new byte[VisitProblemPhotos.MaxFileBytes + 1], "image/jpeg", "grande.jpg"));
+        Assert.Equal(HttpStatusCode.BadRequest, heavy.StatusCode);
+        Assert.Contains(VisitProblemPhotos.TooLargeMessage, await heavy.Content.ReadAsStringAsync());
+        var huge = await stranger.PostAsync(Photos, Form(token, new byte[VisitProblemPhotos.MaxFileBytes + 512 * 1024], "image/jpeg", "enorme.jpg"));
+        Assert.False(huge.IsSuccessStatusCode, $"answered {(int)huge.StatusCode}");
         var tracked = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/appointments/tracking", new { token }));
         Assert.Equal(1, tracked.GetProperty("problemPhotos").GetInt32());
     }
