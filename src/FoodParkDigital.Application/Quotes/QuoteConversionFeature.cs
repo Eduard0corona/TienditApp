@@ -153,10 +153,15 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
                 throw new ForbiddenAccessException(QuoteConversions.ChargeToApplyVisitMessage);
         }
 
-        if (!_phones.TryNormalizeToE164(quote.CustomerPhone, CustomerPhoneOwnershipRules.DefaultCountry, out var phone))
-            return Result.Failure<QuoteDto>(PhoneNumberRules.InvalidPhoneMessage);
-        var customer = await _customerLookup.ResolveForOrderAsync(
-            TenantId, phone, quote.CustomerName, CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
+        // The customer by the quote's phone. A quote only asks that it is written, and an accepted one is no longer corrected: one
+        // that does not read as a phone takes the phone of the sale of its visit (kept in E.164), or none, as a counter sale.
+        var phone = _phones.TryNormalizeToE164(quote.CustomerPhone, CustomerPhoneOwnershipRules.DefaultCountry, out var quotePhone)
+            ? quotePhone
+            : visitSale?.CustomerPhone;
+        var customer = string.IsNullOrWhiteSpace(phone)
+            ? null
+            : await _customerLookup.ResolveForOrderAsync(
+                TenantId, phone, quote.CustomerName, CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
 
         var branch = await BranchRules.ResolveForSaleAsync(
             _context, TenantId, null, Guid.TryParse(_currentUser.UserId, out var userId) ? userId : null, cancellationToken);
@@ -170,14 +175,14 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
 
         var order = new Order(
             tenantId: TenantId,
-            customerUserId: customer.CustomerUserId,
-            temporaryCustomerId: customer.TemporaryCustomerId,
+            customerUserId: customer?.CustomerUserId,
+            temporaryCustomerId: customer?.TemporaryCustomerId,
             createdByBusiness: true,
             orderNumber: Order.NumberNotAssigned,
             businessType: businessType,
             orderType: OrderType.Service,
             customerName: quote.CustomerName,
-            customerPhone: customer.PhoneNormalized,
+            customerPhone: customer?.PhoneNormalized,
             customerNotes: null,
             tableNumber: null,
             pricesIncludeTax: quote.PricesIncludeTax,

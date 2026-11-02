@@ -260,6 +260,33 @@ public class QuoteConversionFlowTests
     }
 
     [Fact]
+    public async Task AQuoteWhosePhoneDoesNotRead_ShouldStillBecomeAnOrder()
+    {
+        await using var shop = await Shop.OpenAsync();
+        // The quote only asks that the phone is written; accepted, it is no longer corrected.
+        var quote = await shop.AcceptedForAsync("555-1234", new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = 1160m });
+
+        var converted = await shop.ConvertAsync(quote.Id);
+
+        Assert.True(converted.IsSuccess, converted.Error);
+        var order = await shop.Context.Orders.AsNoTracking().SingleAsync();
+        Assert.Equal(("Valeria Ruiz", (string?)null, 1160m), (order.CustomerName, order.CustomerPhone, order.Total));
+    }
+
+    [Fact]
+    public async Task AQuoteWhosePhoneDoesNotRead_ShouldTakeThePhoneOfTheSaleOfItsVisit()
+    {
+        await using var shop = await Shop.OpenAsync(pricesIncludeTax: false, policy: HomeVisitChargePolicy.CreditedIfHired);
+        var (sale, quote) = await shop.CreditedVisitQuoteAsync(quotePhone: "555-1234");
+
+        var converted = await shop.ConvertAsync(quote.Id);
+
+        Assert.True(converted.IsSuccess, converted.Error);
+        var order = await shop.Context.Orders.Include(o => o.Payments).AsNoTracking().SingleAsync(o => o.Id != sale.Id);
+        Assert.Equal(("+525522107765", 440.80m), (order.CustomerPhone, Assert.Single(order.Payments).Amount));
+    }
+
+    [Fact]
     public async Task AQuoteOfAnotherBusiness_ShouldNotBeFound()
     {
         await using var shop = await Shop.OpenAsync();
@@ -353,13 +380,24 @@ public class QuoteConversionFlowTests
         public async Task<QuoteDto> AcceptedAsync(params QuoteLineRequest[] lines)
             => await AcceptAsync(await SentAsync(lines));
 
+        /// <summary>An accepted quote for Valeria with the phone as written.</summary>
+        public async Task<QuoteDto> AcceptedForAsync(string phone, params QuoteLineRequest[] lines)
+        {
+            var created = await new CreateQuoteCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, new FolioGenerator(Context), Fixture.Clock)
+                .Handle(new CreateQuoteCommand(null, null, "Valeria Ruiz", phone, null), CancellationToken.None);
+            Assert.True(created.IsSuccess, created.Error);
+            return await AcceptAsync(await SendAsync(created.Value!, [.. lines]));
+        }
+
         /// <summary>
         /// A visit «Se descuenta si contratas» charged with its service (300 plus IVA) and the zone's 80 plus IVA, paid 440.80 in
         /// cash, and its quote for 1,000 plus IVA, accepted.
         /// </summary>
         /// <param name="salePhone">The phone the sale of the visit was charged with: the visit's customer's, as the Agenda fills it.</param>
         /// <param name="jobPrice">The price of the job quoted, plus IVA.</param>
-        public async Task<(OrderDto Sale, QuoteDto Quote)> CreditedVisitQuoteAsync(string? salePhone = "5522107765", decimal jobPrice = 1000m)
+        /// <param name="quotePhone">The phone the quote is corrected to before it is sent; the visit's, unless said.</param>
+        public async Task<(OrderDto Sale, QuoteDto Quote)> CreditedVisitQuoteAsync(
+            string? salePhone = "5522107765", decimal jobPrice = 1000m, string? quotePhone = null)
         {
             var service = await Fixture.AddProductAsync(Tenant, "Visita y diagnóstico", 300m, unit: UnitType.Service);
             var visit = await VisitAsync(service.Id);
@@ -381,7 +419,10 @@ public class QuoteConversionFlowTests
             var created = await new CreateQuoteCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, new FolioGenerator(Context), Fixture.Clock)
                 .Handle(new CreateQuoteCommand(visit.Id, null, null, null, null), CancellationToken.None);
             Assert.True(created.IsSuccess, created.Error);
-            var sent = await SendAsync(created.Value!, [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = jobPrice }]);
+            var draft = created.Value!;
+            if (quotePhone is not null)
+                draft.CustomerPhone = quotePhone;
+            var sent = await SendAsync(draft, [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = jobPrice }]);
             return (sale.Value!, await AcceptAsync(sent));
         }
 

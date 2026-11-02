@@ -1752,7 +1752,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - una conversión guardada justo antes de que el reembolso en efectivo guarde: queda la conversión con su pago, y el reembolso choca (por la revisión automática de la PR, que pidió forzar los dos órdenes).
     - `BeforeQuoteConversion` (nuevo): las pruebas de las migraciones anteriores guardan cotizaciones sin las columnas nuevas. `BeforeQuoteDeliveries` lo encadena, y `QuoteDeliveriesMigrationSqlServerTests` siembra con él.
   - **Application:**
-    - `QuoteConversionFlowTests` (13, nuevo):
+    - `QuoteConversionFlowTests` (15, nuevo):
       - la orden del negocio, «Aceptada», con el cliente, los renglones a los precios aceptados (no a los del catálogo de hoy), el renglón a mano como servicio, la cantidad con decimales en su nombre, la fecha prometida, la nota de ingreso, la pieza del servicio con seguimiento y el total de la cotización;
       - la actividad sin datos del cliente; el detalle de la orden y la lista de órdenes abren su cotización;
       - conserva la política de IVA de la cotización aunque el negocio cambió la suya;
@@ -1761,6 +1761,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - una visita que costó más que el trabajo paga la orden completa y el resto se queda en su venta (por la revisión automática);
       - necesita a quien puede cobrar y hacer reembolsos solo cuando aplica la visita (por la revisión); con la venta cancelada no aplica nada; cobrada sin teléfono no se convierte;
       - un producto que no se vende en fracciones se cotiza sin decimales, y la hora sí los lleva (por la revisión);
+      - una cotización cuyo teléfono no se lee se convierte igual: sin teléfono, o con el de la venta de su visita (por la revisión automática);
       - otro negocio no la encuentra; la fecha prometida va de hoy a un año.
     - Sin el permiso de cobrar, o con la política de IVA del negocio en lugar de la de la cotización, fallan.
   - **WebApi:**
