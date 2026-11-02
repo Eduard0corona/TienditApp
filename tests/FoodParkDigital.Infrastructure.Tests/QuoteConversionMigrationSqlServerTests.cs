@@ -79,9 +79,13 @@ public class QuoteConversionMigrationSqlServerTests
         {
             // A version not accepted.
             $"UPDATE [Quotes] SET [OrderId] = '{order}', [ConvertedAt] = SYSDATETIMEOFFSET() WHERE [Id] = '{sentId}'",
-            // Half recorded: which order without when, or when without which order.
+            // Half recorded: which order without when, when without which order, or what it applied without either.
             $"UPDATE [Quotes] SET [OrderId] = '{order}' WHERE [Id] = '{accepted}'",
             $"UPDATE [Quotes] SET [ConvertedAt] = SYSDATETIMEOFFSET() WHERE [Id] = '{accepted}'",
+            $"UPDATE [Quotes] SET [AppliedVisitCredit] = 100 WHERE [Id] = '{accepted}'",
+            // Applying nothing, or less than nothing, is stored as nothing applied.
+            $"UPDATE [Quotes] SET [OrderId] = '{order}', [ConvertedAt] = SYSDATETIMEOFFSET(), [AppliedVisitCredit] = 0 WHERE [Id] = '{accepted}'",
+            $"UPDATE [Quotes] SET [OrderId] = '{order}', [ConvertedAt] = SYSDATETIMEOFFSET(), [AppliedVisitCredit] = -1 WHERE [Id] = '{accepted}'",
             // Applying the visit of an accepted quote that takes nothing off for it.
             $"UPDATE [Quotes] SET [OrderId] = '{order}', [ConvertedAt] = SYSDATETIMEOFFSET(), [AppliedVisitCredit] = 100 WHERE [Id] = '{withoutVisitId}'",
             // Applying more of the visit than was fixed (406).
