@@ -180,6 +180,25 @@ public class QuoteLinkReplyFlowTests
     }
 
     [Fact]
+    public async Task TheSameAnswerTheBusinessRecordsFirstAtTheSameTime_ShouldBeTheAnswer_AsTheBusinessRecordedIt()
+    {
+        // The business records «accepted» by phone while the customer taps «Aceptar»: the quote is accepted, as recorded.
+        var meanwhile = new BusinessAnswersMeanwhile(quote => quote.Accept(
+            DateOnly.FromDateTime(SalesTestFixture.Now.UtcDateTime), QuoteReplyChannel.Phone, "Por teléfono", SalesTestFixture.Now));
+        await using var fixture = SalesTestFixture.Create(interceptors: meanwhile);
+        await TradeAsync(fixture);
+        var sent = await SentAsync(fixture);
+        meanwhile.Tenant = fixture.TenantService;
+        meanwhile.Armed = true;
+
+        var replied = await ReplyAsync(fixture, sent.TrackingToken!, accepted: true, "Desde el enlace");
+
+        Assert.True(replied!.IsSuccess, replied.Error);
+        Assert.Equal((QuoteStatus.Accepted, false, (string?)null),
+            (replied.Value!.Status, replied.Value.RepliedFromLink, replied.Value.Response));
+    }
+
+    [Fact]
     public async Task AnAnswerTheBusinessRecordsAtTheSameTime_ShouldWin_AndNothingOfTheCustomersStay()
     {
         var meanwhile = new BusinessAnswersMeanwhile();

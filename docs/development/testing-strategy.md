@@ -1842,14 +1842,14 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Infrastructure:**
     - `QuoteOnlineRepliesMigrationSqlServerTests` (3, nuevo): la versión anterior sigue guardando negocios (encendida por omisión) y respuestas; la base toma la respuesta desde el enlace y rechaza otro canal; el rollback se detiene con 50055 por una respuesta desde el enlace y por un negocio que la apagó, y luego quita solo lo suyo.
     - `BeforeQuoteOnlineReplies` (nuevo): el modelo sin la columna; `BeforeAppointmentWork` lo encadena, y las pruebas de la 29D y de la 29F leen con el modelo de su versión.
-  - **Application:** `QuoteLinkReplyFlowTests` (10, nuevo):
+  - **Application:** `QuoteLinkReplyFlowTests` (11, nuevo):
     - acepta desde el enlace con otro negocio en contexto, en el día del negocio aunque en UTC ya sea el siguiente (por la revisión automática), el negocio ve el canal y el mensaje, y la actividad dice «Cliente (enlace)» sin el mensaje ni datos del cliente;
     - rechaza sin mensaje;
     - la misma respuesta no cambia nada y otra se rechaza; lo que registró el negocio no se muestra en el enlace;
     - aceptada descarta la corrección en borrador;
     - una versión corregida o vencida no se responde, y un enlace vencido o en otras mayúsculas no existe;
     - apagada no se responde y se puede volver a encender; apagada, la respuesta que ya tiene sigue, y una corregida o vencida dice lo que es (por las revisiones);
-    - la misma respuesta guardada primero al mismo tiempo es la respuesta (por la revisión), y otra del negocio gana sin dejar nada del cliente;
+    - la misma respuesta guardada primero al mismo tiempo es la respuesta, también si la registró el negocio por otro canal (por las revisiones), y otra del negocio gana sin dejar nada del cliente;
     - Requiere atención cuenta las aceptadas por convertir (urgentes las del enlace), no las rechazadas, y el filtro «Por convertir» lista las mismas; ni después de 30 días, ni para quien no toma pedidos, ni en un negocio sin órdenes de servicio (por las revisiones);
     - los validadores rechazan «Desde su enlace» del negocio y un mensaje largo, medido ya recortado (por la revisión automática).
   - `AuthorizationBehaviorTests`: la respuesta desde el enlace es una de las solicitudes anónimas.
@@ -1859,7 +1859,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `PublicQuotePage.test.tsx` (+8): aceptar con mensaje, el contador, el foco en el mensaje y luego en lo que dice la página, y la aceptada con su fecha y su mensaje; rechazar sin mensaje y cancelar con el foco de vuelta; un rechazo dice por qué (también cuando ya no se puede responder ahí) y la página se pone al día; si releerla falla por otra cosa, la cotización y el motivo siguen, y el mismo rechazo otra vez se anuncia y toma el foco de nuevo (por la revisión automática); un enlace que dejó de abrir lo dice una vez; apagada, «Responder al negocio» es la acción principal.
     - `QuotesList.test.tsx` (+5): el interruptor para dueños y el texto para el equipo; «Por convertir» desde Requiere atención, desde la campana con la lista abierta y otra vez después de cambiar el filtro a mano (por la revisión automática); «Desde su enlace» en la lista.
     - `QuoteDetail.test.tsx` (+2), `attention.test.ts` (+1) y `quotes.test.ts` (+1): «Aceptó desde su enlace» con el mensaje; registrar una respuesta rechazado porque el cliente respondió desde el enlace pone el detalle al día, y una respuesta refresca el aviso (por la revisión automática); el aviso y a dónde lleva, y el canal que el negocio no elige.
-  - **.NET en total:** 4,555 pruebas (Domain 1,350; Application 2,054; WebApi 482; Infrastructure 669). **Cliente en total:** 189 archivos y 1,432 pruebas.
+  - **.NET en total:** 4,556 pruebas (Domain 1,350; Application 2,055; WebApi 482; Infrastructure 669). **Cliente en total:** 189 archivos y 1,432 pruebas.
   - **Primera visita:** 181,605 B (`master` en `38d0560`: 181,529 B, +76 B). El panel para responder se carga con la página del enlace. Los +76 B son el aviso de Requiere atención (va en la entrada con la campana), el filtro «Por convertir» y los valores nuevos de los enums. El presupuesto sube de 181,600 B a 181,700 B.
   - **Escenas:** contra la línea base de `master` en `38d0560` (790 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
     - 771 salen iguales.
