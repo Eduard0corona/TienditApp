@@ -797,7 +797,13 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
     - Lo que se pagó de la visita sale de su venta hacia la orden: la venta lo devuelve al saldo a favor de la cuenta de su teléfono y la orden se paga con él en el mismo momento, sin que nada entre ni salga de una caja. Necesita a quien puede cobrar y hacer reembolsos, nunca pasa del total y la cotización lo descuenta desde entonces. Si esa venta se cobró sin teléfono o en línea, la cotización no se convierte.
     - Un renglón de un producto que no se vende en fracciones se cotiza sin decimales.
     - Un borrador cuyos servicios con seguimiento darían más piezas de las que genera una orden (500) no se guarda. Si el servicio empezó a llevar seguimiento después de aceptada, la orden va sin piezas y sus notas de ingreso lo dicen.
-    - La actividad guarda el folio, la versión, el total, la orden y lo aplicado. Las citas para hacer el trabajo quedan para después.
+    - La actividad guarda el folio, la versión, el total, la orden y lo aplicado.
+  - El trabajo de esa orden se agenda (Fase 29F): «Agendar el trabajo» en la cotización convertida, con quien maneja la agenda y toma pedidos en un negocio con agenda, mientras la orden no se cancele.
+    - Cada cita es del equipo, con quién y cuándo (hasta 12 horas, también al moverla; un trabajo de varios días lleva varias citas), y respeta las reglas de la Agenda: la persona no tiene otra cita a la misma hora y entre visitas queda el traslado del negocio.
+    - Va en la dirección de la visita de la que vino la cotización, sin cargo por ir; sin visita, va sin dirección y se le agrega en la Agenda, también sin cargo.
+    - Se cobra en su orden: no lleva venta propia ni se cotiza, y la Agenda y la Ruta del día abren su orden en lugar de «Cobrar».
+    - El cliente recibe el aviso y el recordatorio de la cita, nunca con cargo por visita; sin dirección, el aviso no le dice que vaya al negocio. La actividad guarda la orden, la cita, sus horas y quién la hace.
+    - Las citas no mueven la orden: completarlas no la entrega, y cancelar la orden no las cancela ni detiene sus recordatorios.
 
 ## Cancelación y trazabilidad
 

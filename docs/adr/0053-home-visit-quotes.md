@@ -1,6 +1,6 @@
 # ADR 0053: Oficios a domicilio, la visita para cotizar
 
-- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31), para la solicitud en línea (etapa 2) en la Fase 29B (2026-11-01) para la cotización (etapa 3, puntos 14, 15 y 17) en la Fase 29C (2026-11-01) para su envío desde TienditApp (punto 16) en la Fase 29D (2026-11-01) y para convertir la aceptada en una orden de servicio (punto 17) en la Fase 29E (2026-11-02); agendar las citas para hacer el trabajo sigue propuesto.
+- Estado: Aceptada para la etapa 1 y la política de la visita (punto 10) en la Fase 29A (2026-10-31), para la solicitud en línea (etapa 2) en la Fase 29B (2026-11-01) para la cotización (etapa 3, puntos 14, 15 y 17) en la Fase 29C (2026-11-01) para su envío desde TienditApp (punto 16) en la Fase 29D (2026-11-01) para convertir la aceptada en una orden de servicio (punto 17) en la Fase 29E (2026-11-02) y para agendar las citas para hacer el trabajo (punto 17) en la Fase 29F (2026-11-02).
 - Fecha: 2026-10-27
 - Continúa: [ADR 0020](0020-home-visits.md) (servicios a domicilio), [ADR 0021](0021-business-directory.md) (Explorar) y [ADR 0025](0025-online-booking.md) (citas en línea).
 
@@ -192,6 +192,25 @@ La cotización aceptada se convierte en el trabajo (punto 17): una orden de serv
 - **La pantalla**: la cotización convertida dice en qué orden se convirtió y la abre, y el detalle de la orden abre su cotización.
 - **El rollback** se detiene (50053) en cuanto una cotización se convirtió.
 
+### Lo que hizo la Fase 29F
+
+El trabajo de la orden en que se convirtió la cotización se agenda (punto 17): las citas para hacerlo, con quién y en la dirección de la visita. La migración es `20261102073115_AddAppointmentWorkOrder`, con sus scripts en `database/production/20261102073115_AddAppointmentWorkOrder/`.
+
+- **«Agendar el trabajo»** (`POST /api/v1/quotes/{id}/work-appointments`) en la cotización convertida, con quien maneja la agenda y toma pedidos (`ManageAppointments` y `ManageOrders`, porque la respuesta es la cotización) en un negocio con agenda. Una orden cancelada ya no lo agenda.
+  - **La cita** (`Appointment.ForWork`) es del equipo, «Programada», con la orden cuyo trabajo hace (`WorkOrderId`), «Trabajo de la cotización COT-…» como su servicio, el cliente de la orden (o el teléfono como lo escribió la cotización, si la orden no tiene) y, si se dice, quién lo hace y notas para el equipo. Dura hasta 12 horas, también cuando se mueve en la Agenda: un trabajo de varios días se agenda en varias citas.
+  - **El lugar:** si la cotización vino de una visita, la cita va en su dirección, copiada aunque la zona ya no llegue, sin cargo por ir. Si no, va sin dirección y se le agrega después en la Agenda (con una zona que llegue, también sin cargo).
+  - **Las reglas de la Agenda:** la persona no puede tener otra cita a la misma hora, y entre una visita y otra queda el traslado del negocio ([ADR 0020](0020-home-visits.md)).
+  - **Se cobra en su orden:** la cita no lleva venta propia (`RecordSale` la rechaza) ni se cotiza; la Agenda y la Ruta del día abren su orden en lugar de «Cobrar» y no dicen cargo por visita.
+  - **El cliente** recibe el aviso de la cita agendada y su recordatorio por WhatsApp, como cualquier cita, nunca con cargo por visita. Sin dirección, el aviso no le dice que vaya al negocio.
+  - **La actividad** guarda el folio, la versión, la orden, la cita, sus horas y quién la hace, nunca datos del cliente.
+- **`CK_Appointments_Work`** repite en la base que una cita del trabajo no lleva venta, es del negocio y no tiene enlace de seguimiento.
+- **La pantalla:** la cotización convertida y el detalle de la orden listan las citas del trabajo (cuándo, quién, si es a domicilio y cómo van), y la Agenda dice en qué orden se cobra cada una.
+- **El rollback** se detiene (50054) en cuanto una cita hace el trabajo de una orden.
+- **Límites:**
+  - El trabajo se agenda desde su cotización; una orden de servicio capturada en el mostrador no tiene este camino.
+  - Las citas no mueven la orden: completarlas no la entrega, y cancelar la orden no cancela sus citas ni sus recordatorios (se cancelan en la Agenda, que dice el folio de la orden pero no que se canceló).
+  - El recordatorio de una cita a domicilio dice «tu cita de Trabajo de la cotización COT-…»: el mismo texto que el de cualquier visita.
+
 ### Etapa 2: la solicitud de la visita
 
 10. **El negocio decide cómo cobra la visita** (decisión 5, `TenantSettings.HomeVisitChargePolicy`), con el servicio del catálogo que eligió como su visita («Visita y diagnóstico»):
@@ -230,11 +249,10 @@ La cotización aceptada se convierte en el trabajo (punto 17): una orden de serv
     Implementado en la Fase 29D (arriba).
 17. **El negocio registra si el cliente la aceptó o la rechazó**, con lo que le respondió por WhatsApp o por correo, y queda en la actividad. Aceptada, se convierte en el trabajo: una orden de servicio con sus renglones o las citas para hacerlo. La orden lleva sus fotos del antes y del después ([ADR 0024](0024-service-photos.md)).
 
-    La conversión en una orden de servicio se implementó en la Fase 29E (arriba); las citas para hacer el trabajo, no.
+    La conversión en una orden de servicio se implementó en la Fase 29E, y las citas para hacer el trabajo en la Fase 29F (arriba).
 
 ### Después
 
-- Agendar el trabajo de una orden que viene de una cotización: las citas para hacerlo, con quién y en la dirección de la visita.
 - Que el cliente acepte la cotización desde su enlace, con un anticipo por Mercado Pago ([ADR 0031](0031-online-payments.md)).
 - Fotos del problema en la solicitud.
 - PDF de la cotización y documento adjunto por WhatsApp.

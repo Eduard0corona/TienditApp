@@ -1798,6 +1798,38 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Las 5 nuevas (`cotizaciones.spec.ts`: la aceptada en escritorio, teléfono y oscuro, el diálogo de convertir y la convertida) pasaron dos corridas seguidas.
     - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
 
+- Fase 29F, agendar el trabajo de la cotización convertida ([ADR 0053](../adr/0053-home-visit-quotes.md), punto 17):
+  - **Domain:**
+    - `AppointmentWorkTests` (8, nuevo): la cita del trabajo es del equipo y de su orden; va en el lugar de la visita copiado sin cargo; necesita su orden y una visita de su negocio; nunca lleva venta propia; movida a otra dirección sigue sin cargo pero necesita una zona que llegue; arreglada después tampoco cobra la zona; dura hasta 12 horas al agendarla y al moverla (por la revisión), y se confirma y se cierra como cualquier cita. Sin la regla de la venta, la del tope al moverla, o cobrando la zona al copiar o al mover, fallan.
+  - **Infrastructure:**
+    - `AppointmentWorkMigrationSqlServerTests` (3, nuevo): la versión anterior sigue guardando y cobrando sus citas; la base rechaza una cita del trabajo con venta, en línea, con enlace o de una orden que no existe; el rollback se detiene con 50054 y luego quita solo lo suyo.
+    - `BeforeAppointmentWork` (nuevo): el modelo sin la columna; `BeforeQuoteConversion` lo encadena, y las pruebas de la 29E siembran sus citas con él.
+  - **Application:**
+    - `QuoteWorkFlowTests` (16, nuevo):
+      - el trabajo de una cotización de visita va en su dirección sin cargo, con su orden, su servicio, el cliente, quién y las notas, y la actividad sin datos del cliente;
+      - sin visita va sin dirección, en más de una cita, con el cliente y el teléfono de la orden; una orden sin teléfono toma el que escribió la cotización (por la revisión);
+      - solo el de una orden convertida y no cancelada; un negocio sin agenda no lo ofrece;
+      - respeta la hora de la persona y el traslado entre visitas; solo alguien del equipo lo hace;
+      - la cita no se cobra aparte ni se cotiza;
+      - el aviso al cliente sin cargo por visita, tampoco si su visita quedó con un cargo, y sin dirección no lo manda al negocio (por la revisión);
+      - la orden, la Agenda y la Ruta del día lo muestran con su orden y sin cargo;
+      - otro negocio no lo agenda; la cita termina después de empezar y dura hasta 12 horas.
+    - `AuthorizationBehaviorTests` (+1): agendar el trabajo pide la agenda y tomar pedidos, porque responde la cotización (por la revisión).
+    - Sin la regla de cotizar, la de la orden cancelada, la copia del lugar, la del negocio con agenda, la de los empalmes, la del traslado, el permiso de pedidos, el teléfono de la cotización o las del aviso, fallan.
+  - **WebApi:**
+    - `CrossTenantQuoteSqlServerTests` (+1): el otro negocio no agenda el trabajo ni ve la cita ni la orden; la cita dice su orden y la orden lista la cita.
+  - **Cliente:**
+    - `QuoteDetail.test.tsx` (+5): agendar el trabajo en la zona del negocio con quién (sin los inactivos), el fin de dos horas y las notas, y luego la lista; un rechazo dice por qué, la página queda como está ahora, «Agendar» ya no se reintenta y el foco va a la orden; no se ofrece a quien no maneja la agenda; sin visita dice dónde va la dirección; la lista en la hora del negocio, la duración que se conserva al mover el inicio, el fin después del inicio, el aviso cuando no se puede traer al equipo y el diálogo quieto mientras agenda (por la revisión).
+    - `OrdersList.test.tsx` (+1): el detalle de la orden lista las citas de su trabajo y las conserva después de un reembolso.
+    - `AppointmentsList.test.tsx` (+2) y `VisitRoute.test.tsx` (+1): la cita del trabajo abre su orden en lugar de «Cobrar» y «Cotizar» (sin enlace para quien no ve pedidos), al moverla de dirección dice que es sin cargo, y la ruta no dice cargo por visita (por la revisión, salvo el primero). `SellPage.test.tsx` (+1) no la trae a Vender y `homeVisits.test.ts` no la cobra.
+  - **.NET en total:** 4,533 pruebas (Domain 1,342; Application 2,044; WebApi 481; Infrastructure 666). **Cliente en total:** 189 archivos y 1,415 pruebas.
+  - **Primera visita:** 181,529 B (`master` en `7013d87`: 181,467 B, +62 B). El diálogo de agendar se carga aparte. Los +62 B son la lista de precarga de la entrada, que anota tres chunks compartidos nuevos: la lista de citas del trabajo y los estados de una cita (de la cotización, la orden y la Agenda) y la API del equipo (de la Agenda y el diálogo). El presupuesto sube de 181,500 B a 181,600 B.
+  - **Escenas:** contra la línea base de `master` en `7013d87` (788 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - 774 salen iguales. Las 3 de la Ruta del día cambiaban unos 36 píxeles al juntar en un solo texto el cargo de la visita; vuelve a ir aparte y salen iguales (las de la Agenda y de Cotizaciones se volvieron a correr con el build final).
+    - **Ninguna cambia.**
+    - Las 4 nuevas (`cotizaciones.spec.ts`: la cotización con su trabajo agendado en escritorio, teléfono y oscuro, y el diálogo de agendar) pasaron dos corridas seguidas.
+    - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
