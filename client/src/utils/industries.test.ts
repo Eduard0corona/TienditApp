@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOME_DELIVERY_INDUSTRY, INDUSTRY_OPTIONS, matchIndustry } from './industries';
+import { HOME_DELIVERY_INDUSTRY, HOME_TRADES, INDUSTRY_OPTIONS, matchIndustry } from './industries';
 
 describe('industries', () => {
   it('finds the option of a giro saved with capitals on every word', () => {
@@ -39,6 +39,14 @@ describe('industries', () => {
     for (const giro of ['Fumigación', 'Refrigeración y línea blanca', 'Cerrajería', 'Jardinería', 'Limpieza del hogar', 'Pintura e impermeabilización']) {
       expect(INDUSTRY_OPTIONS).toContain(giro);
     }
+  });
+
+  it('lists the trades as HomeTrades.All, every one among the options', () => {
+    expect(HOME_TRADES).toEqual([
+      'Carpintería', 'Herrería y soldadura', 'Electricista', 'Plomería', 'Aire acondicionado',
+      'Fumigación', 'Refrigeración y línea blanca', 'Cerrajería', 'Jardinería', 'Limpieza del hogar', 'Pintura e impermeabilización',
+    ]);
+    for (const giro of HOME_TRADES) expect(INDUSTRY_OPTIONS).toContain(giro);
   });
 
   it('offers the giro of a kitchen that only delivers, written as the server reads it', () => {
