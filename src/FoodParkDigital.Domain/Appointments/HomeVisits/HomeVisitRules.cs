@@ -1,4 +1,5 @@
 using System.Globalization;
+using FoodParkDigital.Domain.Appointments.Enums;
 
 namespace FoodParkDigital.Domain.Appointments.HomeVisits;
 
@@ -40,6 +41,31 @@ public static class HomeVisitRules
     public const int MaxProblemLength = 500;
     public const string ProblemRequiredMessage = "Cuéntanos qué pasa para preparar la visita.";
     public const string ProblemTooLongMessage = "Lo que pasa admite hasta 500 caracteres.";
+
+    /// <summary>The photos of what happens a visit requested online receives from its link (Fase 29H, ADR 0062).</summary>
+    public const int MaxProblemPhotos = 5;
+    public const string ProblemPhotosFullMessage = "Tu visita ya tiene sus 5 fotos.";
+    public const string ProblemPhotosClosedMessage =
+        "Tu visita ya no recibe fotos: ya pasó su hora, se canceló o ya se atendió.";
+    public const string ProblemPhotosNotAVisitMessage = "Solo una visita a domicilio pedida en línea recibe fotos de lo que pasa.";
+
+    /// <summary>
+    /// Why a visit takes no more photos of what happens from its link (Fase 29H, ADR 0062), or null when it takes one more:
+    /// a visit to quote the customer requested online (not the job of a quote), «Por confirmar» or agendada, before its
+    /// time, with fewer than <see cref="MaxProblemPhotos"/>.
+    /// </summary>
+    /// <param name="photosSoFar">How many it already has.</param>
+    public static string? ProblemPhotoRefusal(
+        AppointmentChannel channel, bool homeVisit, bool work, AppointmentStatus status, DateTimeOffset startAt, int photosSoFar,
+        DateTimeOffset now)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(photosSoFar);
+        if (channel != AppointmentChannel.Online || !homeVisit || work)
+            return ProblemPhotosNotAVisitMessage;
+        if (status is not (AppointmentStatus.Requested or AppointmentStatus.Scheduled or AppointmentStatus.Confirmed) || startAt <= now)
+            return ProblemPhotosClosedMessage;
+        return photosSoFar >= MaxProblemPhotos ? ProblemPhotosFullMessage : null;
+    }
 
     /// <summary>«Por ahora no hacemos visitas en el 72000.»</summary>
     public static string NotCoveredMessage(string postalCode)
