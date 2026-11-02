@@ -272,6 +272,43 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.AppointmentProblemPhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FileKey")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(300)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId", "Position")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "FileKey")
+                        .IsUnique();
+
+                    b.ToTable("AppointmentProblemPhotos", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AppointmentProblemPhotos_Position", "[Position] >= 0 AND [Position] < 5");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.AppointmentVisit", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7436,6 +7473,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("WorkOrderId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.AppointmentProblemPhoto", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Appointments.Entities.Appointment", null)
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.AppointmentVisit", b =>

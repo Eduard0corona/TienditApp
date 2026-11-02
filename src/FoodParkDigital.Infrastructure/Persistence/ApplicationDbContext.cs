@@ -206,6 +206,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<OnlineBookingStaff> OnlineBookingStaff => Set<OnlineBookingStaff>();
     public DbSet<AppointmentVisit> AppointmentVisits => Set<AppointmentVisit>();
+    public DbSet<AppointmentProblemPhoto> AppointmentProblemPhotos => Set<AppointmentProblemPhoto>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
