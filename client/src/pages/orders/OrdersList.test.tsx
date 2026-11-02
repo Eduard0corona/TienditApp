@@ -42,7 +42,13 @@ vi.mock('../../hooks/useOrderSignalR', () => {
     }),
   };
 });
-vi.mock('../../api/ordersApi', () => ({ ordersApi: { getAll: vi.fn(), getById: vi.fn(), cancel: vi.fn(), setPlatformOrderId: vi.fn() } }));
+vi.mock('../../api/ordersApi', () => ({ ordersApi: { getAll: vi.fn(), getById: vi.fn(), cancel: vi.fn(), setPlatformOrderId: vi.fn(), refund: vi.fn() } }));
+// The refund's own form has its tests: here it only hands the order its refund.
+vi.mock('../../components/orders/RefundOrderModal', () => ({
+  default: ({ onSubmit }: { onSubmit: (data: unknown) => void }) => (
+    <button type="button" onClick={() => onSubmit({ amount: 100, method: 0, reason: 'No se hizo una parte', items: [] })}>Registrar el reembolso</button>
+  ),
+}));
 // The delivery platforms of the business (GET /delivery-platforms/channels) come through the typed client.
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 
@@ -412,6 +418,29 @@ describe('OrdersList', () => {
 
     expect(within(detail).getByRole('link', { name: 'COT-000011 · versión 2' })).toHaveAttribute('href', '/quotes/q-11');
     expect(within(detail).getByText(/De la cotización/)).toBeInTheDocument();
+  });
+
+  it('keeps the quote of a service order after a refund, whose answer does not bring it (Fase 29E)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ViewOrders', 'ManageOrders', 'ProcessRefunds'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    const job = order({
+      orderType: OrderType.Service, customerName: 'Valeria Ruiz', total: 4686.4, paidAmount: 464, refundedAmount: 0, balance: 4222.4,
+      items: [], taxBreakdown: [], statusHistory: [], servicePieces: [], allowedTransitions: [], refunds: [], payments: [],
+      quote: { id: 'q-11', number: 'COT-000011', revision: 2 },
+    } as Partial<OrderDto>);
+    renderOrders(TenantCapability.Service, [job]);
+    vi.mocked(ordersApi.refund).mockResolvedValue({ data: { ...job, refundedAmount: 100, quote: null } } as never);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    await user.click(within(detail).getByRole('button', { name: 'Reembolsar' }));
+    await user.click(screen.getByRole('button', { name: 'Registrar el reembolso' }));
+
+    await waitFor(() => expect(ordersApi.refund).toHaveBeenCalled());
+    expect(await within(screen.getByRole('dialog', { name: 'Pedido ORD-000001' }))
+      .findByRole('link', { name: 'COT-000011 · versión 2' })).toHaveAttribute('href', '/quotes/q-11');
   });
 
   it('says the business charged an order the courier paid', async () => {
