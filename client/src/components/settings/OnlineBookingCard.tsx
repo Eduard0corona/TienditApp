@@ -1,20 +1,12 @@
 import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { appointmentsApi, type OnlineBookingSettings } from '../../api/appointmentsApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { onlineBookingSettingsKey, useOnlineBookingSettings } from '../../api/onlineBookingSettings';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
-import { TenantCapability, type TenantProfileDto } from '../../types';
 import { bookingPath } from '../../utils/onlineBooking';
-import { hasCapability } from '../../utils/tenantCapabilities';
-
-/**
- * Publishing or turning off the menu, or giving the business its hours, changes whether customers book: asked again with
- * each.
- */
-const settingsKey = (tenant: TenantProfileDto | null | undefined) =>
-  ['online-booking-settings', tenant?.onlineMenuMode, (tenant?.openingHours?.length ?? 0) > 0];
 
 /** Whether customers book now, and when they do not, what is missing (the server's words). */
 function BookingNotice({ settings }: { settings: OnlineBookingSettings }) {
@@ -57,7 +49,7 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
     setSaving(true);
     try {
       const saved = await appointmentsApi.updateOnlineBooking(enabled, parsed);
-      queryClient.setQueryData(settingsKey(tenant), saved);
+      queryClient.setQueryData(onlineBookingSettingsKey(tenant), saved);
       toast.success(saved.booksOnline ? 'Guardado: tus clientes ya pueden agendar en línea.' : 'Guardado.');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudieron guardar las citas en línea.'));
@@ -141,15 +133,10 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
  * the business's hours and the duration of each service; the business accepts or declines each request in the Agenda.
  */
 export default function OnlineBookingCard() {
-  const { tenant, capabilities } = useTenant();
+  const { tenant } = useTenant();
   const titleId = useId();
-  const withAgenda = hasCapability(capabilities, TenantCapability.Appointments);
-  const settings = useQuery({
-    queryKey: settingsKey(tenant),
-    queryFn: ({ signal }) => appointmentsApi.getOnlineBooking(signal),
-    enabled: !!tenant && withAgenda,
-  });
-  if (!tenant || !withAgenda) return null;
+  const settings = useOnlineBookingSettings();
+  if (!tenant || !settings.withAgenda) return null;
 
   return (
     <section className="card" aria-labelledby={titleId}>

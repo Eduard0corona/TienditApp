@@ -267,10 +267,16 @@ test.describe('Solicitudes en la agenda', () => {
   });
 });
 
+/** Café La Esquina is a café: until it turns them on, its appointments online wait under «Más opciones». */
+async function openMoreOptions(page: Page) {
+  await page.getByText(/^Más opciones/).click();
+}
+
 test.describe('Citas en línea en Configuración', () => {
   test('configuracion citas en linea apagadas', async ({ page }) => {
     await page.setViewportSize(SIZES.desktop);
     await open(page, '/settings/business');
+    await openMoreOptions(page);
     const card = page.getByRole('region', { name: 'Citas en línea' });
     await expect(card.getByText(/Las citas en línea están apagadas/)).toBeVisible();
     await snapElement(card, 'configuracion-citas-apagadas-escritorio');
@@ -279,6 +285,7 @@ test.describe('Citas en línea en Configuración', () => {
   test('configuracion quien atiende sin nadie', async ({ page }) => {
     await page.setViewportSize(SIZES.desktop);
     await open(page, '/settings/business');
+    await openMoreOptions(page);
     const card = page.getByRole('region', { name: 'Quién atiende' });
     await expect(card.getByRole('button', { name: 'Configurar a Carlos Méndez' })).toBeVisible();
     await snapElement(card, 'configuracion-quien-atiende-sin-nadie-escritorio');

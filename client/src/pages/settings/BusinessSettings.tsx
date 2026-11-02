@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -18,15 +18,18 @@ import ThemeCard from '../../components/settings/ThemeCard';
 import SubscriptionCard from '../../components/settings/SubscriptionCard';
 import { useMySubscription } from '../../hooks/useMySubscription';
 import { tenantApi } from '../../api/tenantApi';
-import { queryKeys, useSpecialDays } from '../../api/queries';
+import { queryKeys, useDeliveryPlatforms, useSpecialDays } from '../../api/queries';
+import { useHomeVisitRequests } from '../../api/homeVisitRequests';
+import { useOnlineBookingSettings } from '../../api/onlineBookingSettings';
 import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
 import type { UpdateTenantRequest, TenantProfileDto } from '../../types';
 import { BUSINESS_TYPE_LABELS } from '../../utils/labels';
 import { getApiErrorMessage } from '../../api/errors';
-import { COMMERCE_CAPABILITIES, hasAnyCapability } from '../../utils/tenantCapabilities';
+import { COMMERCE_CAPABILITIES, hasAnyCapability, hasCapability } from '../../utils/tenantCapabilities';
 import { formatInBusinessZone, BUSINESS_TIME_ZONES, DEFAULT_TIME_ZONE } from '../../utils/dates';
 import { HOME_DELIVERY_INDUSTRY, INDUSTRY_OPTIONS, matchIndustry } from '../../utils/industries';
+import { GIRO_OPTION_LABELS, giroUsesOption, type GiroOption } from '../../utils/giroOptions';
 
 
 const TAX_REGIME_OPTIONS = [
@@ -91,11 +94,35 @@ const CAPABILITY_PRESETS = [
   },
 ];
 
+/** The heading of a group of cards of Mi negocio. */
+function GroupTitle({ children }: { children: ReactNode }) {
+  return <h2 className="h5 mt-2 mb-3">{children}</h2>;
+}
+
+/**
+ * The first answer to a question asked when the page opens (undefined while it is asked): what the business already uses
+ * places its card, and turning an option on under «Más opciones» does not move its card away during the visit.
+ */
+function useFirstAnswer(answer: boolean | undefined): boolean {
+  const [first, setFirst] = useState(answer);
+  if (first === undefined && answer !== undefined) setFirst(answer);
+  return first ?? false;
+}
+
 export default function BusinessSettings() {
-  const { tenant: activeTenant, refreshTenant } = useTenant();
+  const { tenant: activeTenant, capabilities: activeCapabilities, refreshTenant } = useTenant();
   const queryClient = useQueryClient();
   // Its special days: removing the weekly hours says what is left of them, and saving the hours renews its suggestions.
   const specialDays = useSpecialDays(!!activeTenant);
+  // What the business already uses of the options its giro may not: the same requests their cards make.
+  const deliveryPlatforms = useDeliveryPlatforms(!!activeTenant);
+  const onlineBooking = useOnlineBookingSettings();
+  const homeVisits = useHomeVisitRequests();
+  const inUse: Record<GiroOption, boolean> = {
+    deliveryPlatforms: useFirstAnswer(deliveryPlatforms.data?.platforms.some((platform) => platform.isActive)),
+    onlineBooking: useFirstAnswer(onlineBooking.data?.enabled),
+    homeVisits: useFirstAnswer(homeVisits.data?.enabled),
+  };
   const [capabilities, setCapabilities] = useState<number>(0);
   const subscription = useMySubscription();
   // Modules the plan lets the business turn on; null without plan (no limits).
@@ -224,6 +251,18 @@ export default function BusinessSettings() {
   // The giro changes no branch: each one says in Sucursales whether customers come to it.
   const homeDelivery = watch('industry') === HOME_DELIVERY_INDUSTRY;
 
+  // The options only some giros use go in their group when the saved giro uses them or the business already does, and
+  // under «Más opciones» otherwise: nothing a business may turn on is lost. Those of the agenda still need its module.
+  const withAgenda = hasCapability(activeCapabilities, TenantCapability.Appointments);
+  const offered: Record<GiroOption, boolean> = { deliveryPlatforms: true, onlineBooking: withAgenda, homeVisits: withAgenda };
+  const inGroup = (option: GiroOption) => offered[option] && (giroUsesOption(tenant?.industry, option) || inUse[option]);
+  const moreOptions = (Object.keys(offered) as GiroOption[]).filter((option) => offered[option] && !inGroup(option));
+  const optionCards: Record<GiroOption, ReactNode> = {
+    deliveryPlatforms: <DeliveryPlatformsCard />,
+    onlineBooking: <><OnlineBookingCard /><OnlineBookingStaffCard /></>,
+    homeVisits: <HomeVisitRequestsCard />,
+  };
+
   const formatAddress = () => {
     const parts = [
       tenant?.street,
@@ -324,28 +363,16 @@ export default function BusinessSettings() {
         </div>
       </div>
 
+      <SubscriptionCard />
+
+      {/* What «Editar negocio» edits, right under it */}
+      <GroupTitle>Datos del negocio</GroupTitle>
       {msg && (
         <div className={`alert alert-${msg.type} alert-dismissible fade show`}>
           {msg.text}
           <button type="button" className="btn-close" onClick={() => setMsg(null)} />
         </div>
       )}
-
-      <SubscriptionCard />
-      <SalesPolicyCard />
-      <OnlineMenuCard />
-      <MenuCoverCard />
-      <DirectoryCard />
-      <OpeningHoursCard
-        upcomingSpecialDays={specialDays.data?.upcoming.length ?? 0}
-        onSaved={() => void queryClient.invalidateQueries({ queryKey: queryKeys.specialDays })}
-      />
-      <SpecialDaysCard />
-      <OnlineBookingCard />
-      <OnlineBookingStaffCard />
-      <HomeVisitRequestsCard />
-      <DeliveryPlatformsCard />
-      <ThemeCard />
 
       <div className="row">
         {/* Left Column */}
@@ -727,6 +754,44 @@ export default function BusinessSettings() {
           </div>
         </div>
       </div>
+      <ThemeCard />
+
+      <GroupTitle>Ventas</GroupTitle>
+      <SalesPolicyCard />
+      {inGroup('deliveryPlatforms') && optionCards.deliveryPlatforms}
+
+      <GroupTitle>Tienda en línea</GroupTitle>
+      <OnlineMenuCard />
+      <MenuCoverCard />
+      <DirectoryCard />
+
+      <GroupTitle>Horario</GroupTitle>
+      <OpeningHoursCard
+        upcomingSpecialDays={specialDays.data?.upcoming.length ?? 0}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: queryKeys.specialDays })}
+      />
+      <SpecialDaysCard />
+
+      {(inGroup('onlineBooking') || inGroup('homeVisits')) && (
+        <>
+          <GroupTitle>Agenda</GroupTitle>
+          {inGroup('onlineBooking') && optionCards.onlineBooking}
+          {inGroup('homeVisits') && optionCards.homeVisits}
+        </>
+      )}
+
+      {moreOptions.length > 0 && (
+        <details className="mt-2 mb-4">
+          <summary className="h5">
+            Más opciones
+            <span className="fw-normal text-muted small"> · {new Intl.ListFormat('es').format(moreOptions.map((option) => GIRO_OPTION_LABELS[option]))}</span>
+          </summary>
+          <p className="text-muted small mt-2">
+            Por tu giro ({matchIndustry(tenant?.industry)}) no suelen hacer falta. Si las necesitas, configúralas aquí.
+          </p>
+          {moreOptions.map((option) => <Fragment key={option}>{optionCards[option]}</Fragment>)}
+        </details>
+      )}
     </>
   );
 }
