@@ -47,7 +47,7 @@ export default function QuotesList() {
   const { user } = useAuth();
   const { capabilities } = useTenant();
   const isAdmin = getAccess(user, capabilities).isAdmin;
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const linked = searchParams.get('estado');
   const [filter, setFilter] = useState<QuoteListFilter>(linked === TO_CONVERT_LINK ? QuoteListFilter.ToConvert : QuoteListFilter.Open);
   const onlineRepliesId = useId();
@@ -161,6 +161,13 @@ export default function QuotesList() {
                   onChange={(e) => {
                     setFilter(Number(e.target.value) as QuoteListFilter);
                     setPageNumber(1);
+                    // A filter picked by hand drops the one the link named: the bell sets it again, and a reload keeps this one.
+                    if (linked) {
+                      setSearchParams((params) => {
+                        params.delete('estado');
+                        return params;
+                      }, { replace: true });
+                    }
                   }}
                 >
                   {QUOTE_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

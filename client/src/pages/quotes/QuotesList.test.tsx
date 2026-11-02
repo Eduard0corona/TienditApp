@@ -124,6 +124,18 @@ describe('QuotesList', () => {
     await waitFor(() => expect(quotesApi.list).toHaveBeenLastCalledWith(QuoteListFilter.ToConvert, '', 1, expect.anything()));
   });
 
+  it('sets the filter the bell names again after it was changed by hand', async () => {
+    renderList('TENANT_ADMIN', '/quotes?estado=por-convertir');
+    const filter = await screen.findByLabelText('Estado');
+    expect(filter).toHaveValue(String(QuoteListFilter.ToConvert));
+
+    await userEvent.selectOptions(filter, String(QuoteListFilter.Open));
+    expect(filter).toHaveValue(String(QuoteListFilter.Open));
+    await userEvent.click(screen.getByRole('link', { name: 'Campana' }));
+
+    await waitFor(() => expect(filter).toHaveValue(String(QuoteListFilter.ToConvert)));
+  });
+
   it('marks the quotes the customer answered from the link', async () => {
     vi.mocked(quotesApi.list).mockResolvedValue(page([
       { id: 'q2', number: 'COT-000008', revision: 1, status: QuoteStatus.Accepted, customerName: 'Ana López', customerPhone: '5511112222', total: 990, validUntil: '2026-10-19', updatedAt: '2026-10-05T17:00:00Z', fromVisit: false, repliedFromLink: true },
