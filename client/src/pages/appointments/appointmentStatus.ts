@@ -35,9 +35,11 @@ export const isClosed = (status: AppointmentStatus) =>
 
 /**
  * Whether «Cobrar» is offered: an appointment neither cancelled nor missed, without its sale yet or whose sale was
- * cancelled (the server charges it again then).
+ * cancelled (the server charges it again then). The job of an order (Fase 29F) is charged in that order, never here.
  */
-export const canBeCharged = (appointment: { status: AppointmentStatus; saleOrderId?: string | null; saleCancelled?: boolean }) =>
+export const canBeCharged = (
+  appointment: { status: AppointmentStatus; saleOrderId?: string | null; saleCancelled?: boolean; workOrderId?: string | null },
+) =>
   appointmentSaleProblem(appointment) === null;
 
 /** «Con venta» once it has its sale (paid or not: Pedidos has it), «Venta cancelada» when that sale was cancelled. */

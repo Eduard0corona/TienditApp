@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -455,13 +455,13 @@ export default function AppointmentsList() {
     }
   };
 
-  /** What a closed appointment offers, with «Cotizar» beside it when it is a visit done. */
+  /** What a closed appointment offers, with «Cotizar» beside it when it is a visit done (never the job of an order). */
   const withQuote = (item: AppointmentDto, action: ReactNode) => {
     const quoteAction = quoteButton(item);
     return quoteAction ? <div className="d-flex gap-1 justify-content-center align-items-center">{action}{quoteAction}</div> : action;
   };
 
-  const quoteButton = (item: AppointmentDto) => (canQuote && item.visit
+  const quoteButton = (item: AppointmentDto) => (canQuote && item.visit && !item.workOrderId
     && (item.status === AppointmentStatusConst.Completed || !isClosed(item.status)) ? (
       <button
         type="button"
@@ -607,6 +607,13 @@ export default function AppointmentsList() {
                 <td>
                   <div>{item.serviceName}</div>
                   <div className="text-muted small">{item.staffName || 'Sin asignar'}</div>
+                  {/* The job of an order (Fase 29F): charged in it, so it opens the order instead of «Cobrar». */}
+                  {item.workOrderNumber && (
+                    <div className="text-muted small">
+                      Se cobra en la orden{' '}
+                      <Link to={`/orders?search=${encodeURIComponent(item.workOrderNumber)}`}>{item.workOrderNumber}</Link>
+                    </div>
+                  )}
                 </td>
                 <td>
                   <div>{formatSlot(item)}</div>

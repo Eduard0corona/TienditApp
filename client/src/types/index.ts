@@ -1177,6 +1177,21 @@ export interface AppointmentDto {
   channel?: AppointmentChannel;
   /** Its customer cancelled it from its link or account (Fase 24D). */
   cancelledByCustomer?: boolean;
+  /** The service order whose job it does (Fase 29F): charged in that order, never on its own nor quoted. */
+  workOrderId?: string | null;
+  /** The folio of that order. */
+  workOrderNumber?: string | null;
+}
+
+/** One appointment that does (part of) the job of a service order that came from a quote (Fase 29F). */
+export interface WorkAppointmentDto {
+  id: string;
+  startAt: string;
+  endAt: string;
+  staffName?: string | null;
+  status: AppointmentStatus;
+  /** It happens at the customer's address (the place of the visit the quote came from). */
+  atCustomersAddress: boolean;
 }
 
 /** The customer's address of an appointment at their home, its zone and the charge for the visit agreed then. */
@@ -1667,6 +1682,8 @@ export interface OrderDto {
   visitCharge?: OrderVisitChargeDto | null;
   /** The accepted quote the service order came from (Fase 29E), to open it. */
   quote?: OrderQuoteDto | null;
+  /** The appointments that do its job (Fase 29F), in the order of their time. */
+  workAppointments?: WorkAppointmentDto[];
   paidAmount: number;
   balance: number;
   /** Money given back; payments are never edited. */

@@ -55,6 +55,22 @@ describe('VisitRoute', () => {
     expect(route.getByText('Con venta')).toBeInTheDocument();
   });
 
+  it('says the job of an order is charged in it, with no charge for the visit nor «Cobrar» (Fase 29F)', () => {
+    giveRoute([{
+      staffUserId: 'u1',
+      staffName: 'Luis Paz',
+      feeTotal: 0,
+      stops: [stop({ serviceName: 'Trabajo de la cotización COT-000012', fee: 0, workOrderId: 'o9', workOrderNumber: 'ORD-000031' })],
+    }]);
+    render(<VisitRoute staff={[]} pricesIncludeTax canCharge onCharge={vi.fn()} />);
+
+    const route = within(screen.getByRole('region', { name: 'Ruta de Luis Paz' }));
+    expect(route.getByText('Se cobra en la orden ORD-000031')).toBeInTheDocument();
+    expect(route.getByText('CP 72000 · Centro')).toBeInTheDocument();
+    expect(route.queryByText(/Visita sin cargo/)).not.toBeInTheDocument();
+    expect(route.queryByRole('button', { name: 'Cobrar la cita de Ana Ruiz' })).not.toBeInTheDocument();
+  });
+
   it('says when there are no visits, and offers no charge to whoever does not sell', () => {
     giveRoute([]);
     const { rerender } = render(<VisitRoute staff={[]} pricesIncludeTax canCharge={false} onCharge={vi.fn()} />);

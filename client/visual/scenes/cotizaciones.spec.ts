@@ -11,6 +11,7 @@ import {
   QUOTES_WITH_WHATSAPP_ROUTES,
   QUOTE_LINK,
   REPLACED_QUOTE_LINK,
+  SCHEDULED_QUOTE_ID,
   SENT_QUOTE_ID,
 } from './cotizaciones.mocks';
 
@@ -92,6 +93,32 @@ test.describe('Cotización aceptada', () => {
   });
 });
 
+// Fase 29F: the job of the order is agendado at the place of the visit, in one appointment or more, with whom and when.
+test.describe('Trabajo de la cotización', () => {
+  test.use({ prepareData: PLUMBER_QUOTES, extraRoutes: QUOTES_ROUTES });
+
+  for (const look of LOOKS) {
+    test.describe(look.suffix, () => {
+      test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+      test(`cotización con su trabajo agendado ${look.suffix}`, async ({ page }) => {
+        await open(page, '/quotes/2f6c8a14-7d3b-4e9a-a5c2-9b1e0d4f7a83');
+        await expect(page.getByRole('heading', { name: 'Citas del trabajo' })).toBeVisible();
+        await snap(page, `cotizacion-trabajo-${look.suffix}`);
+      });
+    });
+  }
+
+  test('agendar el trabajo', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/quotes/2f6c8a14-7d3b-4e9a-a5c2-9b1e0d4f7a83');
+    await page.getByRole('button', { name: 'Agendar el trabajo' }).click();
+    const form = await dialog(page, 'Agendar el trabajo');
+    await expect(form.getByLabel('Quién lo hace')).toBeVisible();
+    await snap(page, 'cotizacion-agendar-trabajo-escritorio', { fullPage: false });
+  });
+});
+
 // Fase 29D: the business connected its WhatsApp, so the quote goes from TienditApp by WhatsApp and by email, each send with
 // where it is; and the owner picks the template its quotes go with.
 test.describe('Cotizaciones desde TienditApp', () => {
@@ -168,8 +195,8 @@ test.describe('Cotización del enlace', () => {
 
 // The ids are written out so the route coverage (coverage.spec.ts) reads them; the mocks answer the same ones.
 test('the scenes open the quotes the mocks answer', () => {
-  expect([DRAFT_QUOTE_ID, SENT_QUOTE_ID, CONNECTED_QUOTE_ID, ACCEPTED_QUOTE_ID, CONVERTED_QUOTE_ID]).toEqual([
+  expect([DRAFT_QUOTE_ID, SENT_QUOTE_ID, CONNECTED_QUOTE_ID, ACCEPTED_QUOTE_ID, CONVERTED_QUOTE_ID, SCHEDULED_QUOTE_ID]).toEqual([
     '7a3f1c52-2d4b-4e6a-9c1f-0b8e5d2a7c41', '0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58', '3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63',
-    '5d2a8f61-3c7e-4b9a-8e14-6f0b2c9d7a35', '8b4e1d73-9a2c-4f6e-b5d8-2c7a0e9f4b16',
+    '5d2a8f61-3c7e-4b9a-8e14-6f0b2c9d7a35', '8b4e1d73-9a2c-4f6e-b5d8-2c7a0e9f4b16', '2f6c8a14-7d3b-4e9a-a5c2-9b1e0d4f7a83',
   ]);
 });

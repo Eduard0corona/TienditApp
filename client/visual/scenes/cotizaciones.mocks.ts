@@ -151,10 +151,30 @@ const CONVERTED = {
   id: CONVERTED_ID,
   canConvertToOrder: false,
   convertedAt: '2026-10-04T18:20:00Z',
-  order: { id: 'order-calentador', orderNumber: 'ORD-000031', status: 4 },
+  order: { id: 'order-calentador', orderNumber: 'ORD-000031', status: 4, workAppointments: [] },
   versions: [
     { id: 'replaced', revision: 1, status: 5, total: 5150.4, sentAt: '2026-10-03T15:00:00Z', closedAt: '2026-10-04T16:20:00Z' },
     { id: CONVERTED_ID, revision: 2, status: 2, total: 4686.4, sentAt: '2026-10-04T16:20:00Z', closedAt: '2026-10-04T18:10:00Z' },
+  ],
+};
+
+// Fase 29F: the job of that order is agendado, at the place of the visit: two mornings, the second one still unassigned.
+const SCHEDULED_ID = '2f6c8a14-7d3b-4e9a-a5c2-9b1e0d4f7a83';
+
+const SCHEDULED = {
+  ...CONVERTED,
+  id: SCHEDULED_ID,
+  canScheduleWork: true,
+  order: {
+    ...CONVERTED.order,
+    workAppointments: [
+      { id: 'job-1', startAt: '2026-10-08T15:00:00Z', endAt: '2026-10-08T18:00:00Z', staffName: 'Luis Pérez', status: 1, atCustomersAddress: true },
+      { id: 'job-2', startAt: '2026-10-09T15:00:00Z', endAt: '2026-10-09T17:00:00Z', staffName: null, status: 0, atCustomersAddress: true },
+    ],
+  },
+  versions: [
+    { id: 'replaced', revision: 1, status: 5, total: 5150.4, sentAt: '2026-10-03T15:00:00Z', closedAt: '2026-10-04T16:20:00Z' },
+    { id: SCHEDULED_ID, revision: 2, status: 2, total: 4686.4, sentAt: '2026-10-04T16:20:00Z', closedAt: '2026-10-04T18:10:00Z' },
   ],
 };
 
@@ -170,6 +190,7 @@ const quotesRoutes: ExtraRoutes = (_data, { ok, paginate }) => [
   ['GET', new RegExp(`^/quotes/${CONNECTED_ID}$`), () => ok(CONNECTED)],
   ['GET', new RegExp(`^/quotes/${ACCEPTED_ID}$`), () => ok(ACCEPTED)],
   ['GET', new RegExp(`^/quotes/${CONVERTED_ID}$`), () => ok(CONVERTED)],
+  ['GET', new RegExp(`^/quotes/${SCHEDULED_ID}$`), () => ok(SCHEDULED)],
 ];
 
 /** The same business once it connected its WhatsApp and picked the template of its quotes. */
@@ -219,6 +240,7 @@ export const SENT_QUOTE_ID = SENT_ID;
 export const CONNECTED_QUOTE_ID = CONNECTED_ID;
 export const ACCEPTED_QUOTE_ID = ACCEPTED_ID;
 export const CONVERTED_QUOTE_ID = CONVERTED_ID;
+export const SCHEDULED_QUOTE_ID = SCHEDULED_ID;
 export const PLUMBER_QUOTES = asOption(plumber);
 export const QUOTES_ROUTES = asOption(quotesRoutes);
 export const QUOTES_WITH_WHATSAPP_ROUTES = asOption(quotesWithWhatsAppRoutes);

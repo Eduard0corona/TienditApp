@@ -11,6 +11,8 @@ import { estimateOrderTotals, type OrderTotalsEstimate, type TotalsLine } from '
 export const CANCELLED_SALE_MESSAGE = 'La cita se canceló: ya no se cobra.';
 export const NO_SHOW_SALE_MESSAGE = 'El cliente no se presentó a la cita: no se cobra.';
 export const ALREADY_SOLD_MESSAGE = 'La cita ya tiene su venta.';
+/** The server's words (AppointmentWorkRules): the job of an order (Fase 29F) is charged in that order. */
+export const CHARGED_IN_ITS_ORDER_MESSAGE = 'El trabajo de esta cita se cobra en su orden: no lleva venta aparte.';
 /** The server's words (OnlineBookingRules): a request booked online is accepted before it is charged. */
 export const ACCEPT_BEFORE_CHARGING_MESSAGE = 'Acepta la cita antes de cobrarla.';
 export const VISIT_POSTAL_CODE_REQUIRED_MESSAGE = 'Escribe el código postal de la visita.';
@@ -71,8 +73,9 @@ export function hasLiveSale(appointment: { saleOrderId?: string | null; saleCanc
 
 /** An appointment that cannot be charged (the server says so too); null when it can. */
 export function appointmentSaleProblem(
-  appointment: { status: AppointmentStatus; saleOrderId?: string | null; saleCancelled?: boolean },
+  appointment: { status: AppointmentStatus; saleOrderId?: string | null; saleCancelled?: boolean; workOrderId?: string | null },
 ): string | null {
+  if (appointment.workOrderId) return CHARGED_IN_ITS_ORDER_MESSAGE;
   if (appointment.status === AppointmentStatus.Cancelled) return CANCELLED_SALE_MESSAGE;
   if (appointment.status === AppointmentStatus.NoShow) return NO_SHOW_SALE_MESSAGE;
   if (appointment.status === AppointmentStatus.Requested) return ACCEPT_BEFORE_CHARGING_MESSAGE;

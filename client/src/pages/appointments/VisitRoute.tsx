@@ -106,10 +106,11 @@ function PersonRoute({ person, pricesIncludeTax, canCharge, onCharge }: { person
               {saleLabel(stop) && <span className="small text-muted">{saleLabel(stop)}</span>}
             </div>
             <div>{stop.customerName} · {stop.serviceName}</div>
+            {stop.workOrderNumber && <div className="small text-muted">Se cobra en la orden {stop.workOrderNumber}</div>}
             <div className="small">{stop.addressLine}</div>
             {stop.references && <div className="small text-muted">Ref.: {stop.references}</div>}
             <div className="small text-muted">
-              CP {stop.postalCode} · {stop.zoneName} · {describeVisitFee(stop.fee, pricesIncludeTax)}
+              CP {stop.postalCode} · {stop.zoneName}{stop.workOrderNumber ? '' : ` · ${describeVisitFee(stop.fee, pricesIncludeTax)}`}
             </div>
             <div className="d-flex flex-wrap gap-1 mt-1">
               <a
