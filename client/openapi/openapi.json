@@ -35493,6 +35493,11 @@
             "format": "date-time",
             "nullable": true
           },
+          "repliedOn": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
           "repliedFromLink": {
             "type": "boolean"
           },

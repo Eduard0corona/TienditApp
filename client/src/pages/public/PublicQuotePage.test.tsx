@@ -37,6 +37,7 @@ function quote(overrides: Record<string, unknown> = {}) {
     newerToken: null,
     canReply: false,
     repliedAt: null,
+    repliedOn: null,
     repliedFromLink: false,
     response: null,
     ...overrides,
@@ -110,7 +111,7 @@ describe('PublicQuotePage', () => {
   it('lets the customer accept it here, saying what they want, and shows it accepted', async () => {
     vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true }) as never)
       .mockResolvedValueOnce(quote({
-        status: QuoteStatus.Accepted, repliedFromLink: true, repliedAt: '2026-10-05T18:00:00Z', response: 'Los espero el jueves',
+        status: QuoteStatus.Accepted, repliedFromLink: true, repliedAt: '2026-10-06T04:00:00Z', repliedOn: '2026-10-05', response: 'Los espero el jueves',
       }) as never);
     renderPage(`/cotizacion#${LINK}`);
 
@@ -136,7 +137,7 @@ describe('PublicQuotePage', () => {
 
   it('lets the customer reject it here without a message, or step back before sending it', async () => {
     vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true }) as never)
-      .mockResolvedValueOnce(quote({ status: QuoteStatus.Rejected, repliedFromLink: true, repliedAt: '2026-10-05T18:00:00Z' }) as never);
+      .mockResolvedValueOnce(quote({ status: QuoteStatus.Rejected, repliedFromLink: true, repliedAt: '2026-10-06T04:00:00Z', repliedOn: '2026-10-05' }) as never);
     renderPage(`/cotizacion#${LINK}`);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Aceptar la cotización' }));

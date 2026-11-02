@@ -47,7 +47,7 @@ Tomé las decisiones de la Fase 29G con la autorización permanente del dueño d
    - Nunca guarda el mensaje, el teléfono, la IP ni otro dato del cliente.
 8. **Lo que ve el cliente:**
    - **Mientras puede responder**, «Aceptar la cotización» es la acción principal. El WhatsApp del negocio queda como «Preguntar algo al negocio».
-   - **Respondida desde el enlace**, ve cuándo la aceptó o rechazó y su mensaje.
+   - **Respondida desde el enlace**, ve el día en que la aceptó o rechazó, en el día del negocio como su vigencia (`repliedOn`), y su mensaje.
    - **Si la respuesta la registró el negocio**, ve que la aceptó o la rechazó, pero nunca lo que el negocio anotó.
 9. **Lo que ve el negocio:**
    - **En el detalle:** «Aceptó desde su enlace el …», con el mensaje.
@@ -56,7 +56,7 @@ Tomé las decisiones de la Fase 29G con la autorización permanente del dueño d
      - Lo ve quien toma pedidos en un negocio con órdenes de servicio.
    - **En la lista:** cada cotización respondida desde el enlace dice «Desde su enlace».
 10. **Ruta:** `POST /api/v1/public/quotes/reply` con `{ token, accepted, response }`, anónima y con el límite de peticiones de un pedido en línea (`public-order`). `accepted` es obligatorio: sin él se rechaza, nunca se lee como un rechazo.
-    - Responde la cotización como la ve el cliente (`PublicQuoteDto`), con `canReply`, `repliedAt`, `repliedFromLink` y `response`.
+    - Responde la cotización como la ve el cliente (`PublicQuoteDto`), con `canReply`, `repliedAt`, `repliedOn`, `repliedFromLink` y `response`.
     - La configuración de cotizaciones lleva `onlineReplies`. Si el cliente no lo manda (una versión anterior del navegador), queda como está.
     - La lista de cotizaciones suma el filtro `ToConvert` (6) y `repliedFromLink` en cada renglón.
 11. **Fuera de esta fase:**

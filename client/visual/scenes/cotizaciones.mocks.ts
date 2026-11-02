@@ -226,6 +226,7 @@ const PUBLIC_QUOTE = {
   newerToken: null,
   canReply: true,
   repliedAt: null,
+  repliedOn: null,
   repliedFromLink: false,
   response: null,
 };
@@ -242,7 +243,7 @@ const publicQuoteRoutes: ExtraRoutes = (data, helpers) => [
     }
     if (body?.token === ANSWERED_QUOTE_LINK) {
       return helpers.ok({
-        ...PUBLIC_QUOTE, status: 2, canReply: false, repliedFromLink: true, repliedAt: '2026-10-05T15:40:00Z',
+        ...PUBLIC_QUOTE, status: 2, canReply: false, repliedFromLink: true, repliedAt: '2026-10-05T15:40:00Z', repliedOn: '2026-10-05',
         response: 'Los espero el jueves por la mañana; el portón negro.',
       });
     }

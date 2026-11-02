@@ -29,7 +29,8 @@ public class QuoteLinkReplyFlowTests
         var sent = await SentAsync(fixture);
         // Another business is in context: the link carries its own.
         await TradeAsync(fixture, slug: "otro");
-        fixture.Clock.UtcNow = SalesTestFixture.Now.AddHours(3);
+        // 5 October at 04:00 UTC is still the 4th, 22:00, in Mexico City: the business's day.
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddHours(11);
 
         var replied = await ReplyAsync(fixture, sent.TrackingToken!, accepted: true, "  Los espero el jueves  ");
 
@@ -37,7 +38,7 @@ public class QuoteLinkReplyFlowTests
         var view = replied.Value!;
         Assert.Equal((QuoteStatus.Accepted, true, "Los espero el jueves", false),
             (view.Status, view.RepliedFromLink, view.Response, view.CanReply));
-        Assert.Equal(SalesTestFixture.Now.AddHours(3), view.RepliedAt);
+        Assert.Equal((SalesTestFixture.Now.AddHours(11), new DateOnly(2026, 10, 4)), (view.RepliedAt!.Value, view.RepliedOn!.Value));
         fixture.TenantService.SetTenant(tenant.Id);
         var seen = await GetAsync(fixture, sent.Id);
         Assert.Equal((QuoteStatus.Accepted, QuoteReplyChannel.Link, "Los espero el jueves"),

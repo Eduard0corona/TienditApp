@@ -69,6 +69,11 @@ public class PublicQuoteDto
     public bool CanReply { get; set; }
     /// <summary>When it was accepted or rejected; null while it waits or once it expired or was replaced unanswered.</summary>
     public DateTimeOffset? RepliedAt { get; set; }
+    /// <summary>
+    /// The business's day it was answered on, as its validity: the customer's device may be in another time zone, and the page
+    /// says the same day the business sees.
+    /// </summary>
+    public DateOnly? RepliedOn { get; set; }
     /// <summary>The customer answered here, from its link; otherwise the business recorded the answer.</summary>
     public bool RepliedFromLink { get; set; }
     /// <summary>What the customer wrote when they answered here; never what the business recorded.</summary>
@@ -203,6 +208,7 @@ internal static class PublicQuotes
             NewerToken = newer,
             CanReply = status == QuoteStatus.Sent && business.OnlineReplies,
             RepliedAt = replied ? view.ClosedAt : null,
+            RepliedOn = replied && view.ClosedAt is { } closedAt ? QuoteCalendar.Today(business.TimeZone, closedAt) : null,
             RepliedFromLink = fromLink,
             Response = fromLink ? view.CustomerResponse : null
         };

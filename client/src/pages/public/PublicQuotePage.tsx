@@ -5,7 +5,7 @@ import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
 import { publicQuoteApi, type PublicQuote } from '../../api/quotesApi';
 import PageTitle from '../../components/common/PageTitle';
 import { QuoteStatus } from '../../types';
-import { formatCalendarDate, formatInBusinessZone } from '../../utils/dates';
+import { formatCalendarDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { quoteFolio, quoteStatusChip, quoteStatusLabel } from '../../utils/quotes';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
@@ -14,8 +14,8 @@ import QuoteReplyPanel from './QuoteReplyPanel';
 /** What the customer reads about where the quote stands, beyond its chip. */
 function standing(quote: PublicQuote): string | null {
   const { validUntil } = quote;
-  // The same long date as the validity: «5 de octubre de 2026».
-  const here = quote.repliedFromLink && quote.repliedAt ? formatInBusinessZone(quote.repliedAt, { dateStyle: 'long' }) : null;
+  // The business's day, as the validity («5 de octubre de 2026»): the customer's device may be in another time zone.
+  const here = quote.repliedFromLink && quote.repliedOn ? formatCalendarDate(quote.repliedOn) : null;
   switch (quote.status) {
     case QuoteStatus.Sent:
       return quote.canReply

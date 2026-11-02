@@ -1843,7 +1843,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `QuoteOnlineRepliesMigrationSqlServerTests` (3, nuevo): la versión anterior sigue guardando negocios (encendida por omisión) y respuestas; la base toma la respuesta desde el enlace y rechaza otro canal; el rollback se detiene con 50055 por una respuesta desde el enlace y por un negocio que la apagó, y luego quita solo lo suyo.
     - `BeforeQuoteOnlineReplies` (nuevo): el modelo sin la columna; `BeforeAppointmentWork` lo encadena, y las pruebas de la 29D y de la 29F leen con el modelo de su versión.
   - **Application:** `QuoteLinkReplyFlowTests` (10, nuevo):
-    - acepta desde el enlace con otro negocio en contexto, el negocio ve el canal y el mensaje, y la actividad dice «Cliente (enlace)» sin el mensaje ni datos del cliente;
+    - acepta desde el enlace con otro negocio en contexto, en el día del negocio aunque en UTC ya sea el siguiente (por la revisión automática), el negocio ve el canal y el mensaje, y la actividad dice «Cliente (enlace)» sin el mensaje ni datos del cliente;
     - rechaza sin mensaje;
     - la misma respuesta no cambia nada y otra se rechaza; lo que registró el negocio no se muestra en el enlace;
     - aceptada descarta la corrección en borrador;

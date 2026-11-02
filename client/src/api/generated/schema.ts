@@ -20557,6 +20557,8 @@ export interface components {
             canReply: boolean;
             /** Format: date-time */
             repliedAt?: string | null;
+            /** Format: date */
+            repliedOn?: string | null;
             repliedFromLink: boolean;
             response?: string | null;
         };
