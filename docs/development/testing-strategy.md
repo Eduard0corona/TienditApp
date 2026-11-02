@@ -1830,6 +1830,43 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Las 4 nuevas (`cotizaciones.spec.ts`: la cotización con su trabajo agendado en escritorio, teléfono y oscuro, y el diálogo de agendar) pasaron dos corridas seguidas.
     - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
 
+- Fase 29G, el cliente responde la cotización desde su enlace ([ADR 0061](../adr/0061-quote-replies-from-link.md)):
+  - **Domain:** `QuoteLinkReplyTests` (8, nuevo):
+    - acepta con su mensaje y rechaza sin él, con el canal «Desde su enlace»;
+    - la respuesta que ya tiene, de donde venga, no cambia nada, y otra distinta se rechaza;
+    - una versión corregida o vencida no se responde, y un borrador dice un mensaje para el cliente (por la revisión);
+    - el mensaje hasta 500 caracteres;
+    - el negocio no registra «Desde su enlace» a mano;
+    - la aceptada se convierte y una corrección ya no se envía;
+    - el negocio la tiene encendida hasta que la apaga.
+  - **Infrastructure:**
+    - `QuoteOnlineRepliesMigrationSqlServerTests` (3, nuevo): la versión anterior sigue guardando negocios (encendida por omisión) y respuestas; la base toma la respuesta desde el enlace y rechaza otro canal; el rollback se detiene con 50055 por una respuesta desde el enlace y por un negocio que la apagó, y luego quita solo lo suyo.
+    - `BeforeQuoteOnlineReplies` (nuevo): el modelo sin la columna; `BeforeAppointmentWork` lo encadena, y las pruebas de la 29D y de la 29F leen con el modelo de su versión.
+  - **Application:** `QuoteLinkReplyFlowTests` (10, nuevo):
+    - acepta desde el enlace con otro negocio en contexto, el negocio ve el canal y el mensaje, y la actividad dice «Cliente (enlace)» sin el mensaje ni datos del cliente;
+    - rechaza sin mensaje;
+    - la misma respuesta no cambia nada y otra se rechaza; lo que registró el negocio no se muestra en el enlace;
+    - aceptada descarta la corrección en borrador;
+    - una versión corregida o vencida no se responde, y un enlace vencido o en otras mayúsculas no existe;
+    - apagada no se responde y se puede volver a encender; apagada, la respuesta que ya tiene sigue y una corregida dice que se corrigió (por la revisión);
+    - la misma respuesta guardada primero al mismo tiempo es la respuesta (por la revisión), y otra del negocio gana sin dejar nada del cliente;
+    - Requiere atención cuenta las aceptadas por convertir (urgentes las del enlace) y el filtro «Por convertir» lista las mismas; ni después de 30 días, ni para quien no toma pedidos, ni en un negocio sin órdenes de servicio (por la revisión);
+    - los validadores rechazan «Desde su enlace» del negocio y un mensaje largo.
+  - `AuthorizationBehaviorTests`: la respuesta desde el enlace es una de las solicitudes anónimas.
+  - **Mutaciones:** sin la regla de la opción apagada, la del orden de su mensaje, el descarte de correcciones, el mensaje del negocio oculto, `canReply` con la opción, lo urgente del enlace, el choque con el negocio, la misma respuesta al mismo tiempo o el módulo de órdenes en el aviso, falla al menos una prueba; sin el freno del rollback para la opción apagada, falla su prueba de migración.
+  - **WebApi:** `CrossTenantQuoteSqlServerTests` (+1): el cliente responde sin cuenta y sin ver datos suyos; la misma respuesta pasa, otra se rechaza, una sin `accepted` también (por la revisión) y un enlace desconocido o en otras mayúsculas no existe; el negocio ve el canal y el otro negocio no ve la cotización ni cambia la suya; el negocio no registra «Desde su enlace»; apagada, el enlace ya no la ofrece ni la toma.
+  - **Cliente:**
+    - `PublicQuotePage.test.tsx` (+6): aceptar con mensaje, el contador, el foco en el mensaje y luego en lo que dice la página, y la aceptada con su fecha y su mensaje; rechazar sin mensaje y cancelar con el foco de vuelta; un rechazo dice por qué (también cuando ya no se puede responder ahí) y la página se pone al día; un enlace que dejó de abrir lo dice una vez; apagada, «Responder al negocio» es la acción principal.
+    - `QuotesList.test.tsx` (+4): el interruptor para dueños y el texto para el equipo; «Por convertir» desde Requiere atención y desde la campana con la lista abierta; «Desde su enlace» en la lista.
+    - `QuoteDetail.test.tsx` (+1), `attention.test.ts` (+1) y `quotes.test.ts` (+1): «Aceptó desde su enlace» con el mensaje, el aviso y a dónde lleva, y el canal que el negocio no elige.
+  - **.NET en total:** 4,555 pruebas (Domain 1,350; Application 2,054; WebApi 482; Infrastructure 669). **Cliente en total:** 189 archivos y 1,428 pruebas.
+  - **Primera visita:** 181,633 B (`master` en `38d0560`: 181,529 B, +104 B). El panel para responder se carga con la página del enlace. Los +104 B son el aviso de Requiere atención (va en la entrada con la campana), el filtro «Por convertir» y los valores nuevos de los enums. El presupuesto sube de 181,600 B a 181,700 B.
+  - **Escenas:** contra la línea base de `master` en `38d0560` (790 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - 771 salen iguales.
+    - **Cambian 7, a propósito:** las 3 de la lista de cotizaciones y la de la plantilla de WhatsApp suman la sección «Respuesta del cliente», y las 3 del enlace suman el panel para responder (el WhatsApp del negocio queda como «Preguntar algo al negocio»).
+    - Las 2 nuevas (`cotizaciones.spec.ts`: aceptar desde el enlace y la aceptada desde el enlace, en teléfono) pasaron dos corridas seguidas.
+    - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
