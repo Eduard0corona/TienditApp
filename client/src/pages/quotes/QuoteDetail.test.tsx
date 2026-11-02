@@ -287,6 +287,16 @@ describe('QuoteDetail', () => {
     expect(screen.getByText(/Valía hasta el 19 de octubre de 2026/)).toBeInTheDocument();
   });
 
+  it('says when the customer answered from the link, with what they wrote (Fase 29G)', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({
+      status: QuoteStatus.Accepted, replyChannel: QuoteReplyChannel.Link, customerResponse: 'Los espero el jueves', closedAt: '2026-10-05T17:00:00Z',
+    }));
+    renderAt();
+
+    expect(await screen.findByText(/Aceptó desde su enlace/)).toBeInTheDocument();
+    expect(screen.getByText('«Los espero el jueves»')).toBeInTheDocument();
+  });
+
   it('answers a sent quote as its one main action, and offers the link to copy by hand where the browser does not copy', async () => {
     vi.mocked(quotesApi.get).mockResolvedValue(sent());
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });

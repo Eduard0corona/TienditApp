@@ -38,6 +38,18 @@ describe('attention', () => {
     });
   });
 
+  it('leads the accepted quotes waiting for their order to the accepted ones, those from the link first (Fase 29G)', () => {
+    expect(describeAttention({ key: 'quotesToConvert', count: 3, urgentCount: 1 })).toMatchObject({
+      text: '3 cotizaciones aceptadas por convertir en orden (1 desde su enlace)',
+      path: '/quotes?estado=aceptadas',
+      tone: 'warning',
+    });
+    expect(describeAttention({ key: 'quotesToConvert', count: 1, urgentCount: 0 })).toMatchObject({
+      text: '1 cotización aceptada por convertir en orden',
+      tone: 'info',
+    });
+  });
+
   it('marks stock as urgent when something ran out', () => {
     expect(describeAttention({ key: 'lowStock', count: 3, urgentCount: 1 })).toMatchObject({
       text: '3 insumos por reabastecer (1 agotado o crítico)',

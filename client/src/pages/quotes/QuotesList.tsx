@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -32,6 +32,11 @@ interface NewQuoteForm {
 
 const EMPTY_FORM: NewQuoteForm = { customerName: '', customerPhone: '', customerEmail: '' };
 
+/** «?estado=aceptadas» opens the accepted ones: where «Requiere atención» leads to those waiting to become their order. */
+function initialFilter(estado: string | null): QuoteListFilter {
+  return estado === 'aceptadas' ? QuoteListFilter.Accepted : QuoteListFilter.Open;
+}
+
 /**
  * The business's quotes (Fase 29C, ADR 0053): what it proposed after looking at each job and where each one stands. A new
  * one starts here for a customer, or from the Agenda for the visit of an appointment; each opens in its own screen.
@@ -44,7 +49,9 @@ export default function QuotesList() {
   const { user } = useAuth();
   const { capabilities } = useTenant();
   const isAdmin = getAccess(user, capabilities).isAdmin;
-  const [filter, setFilter] = useState<QuoteListFilter>(QuoteListFilter.Open);
+  const [searchParams] = useSearchParams();
+  const [filter, setFilter] = useState<QuoteListFilter>(() => initialFilter(searchParams.get('estado')));
+  const onlineRepliesId = useId();
   const [search, setSearch] = useState('');
   const [pageNumber, setPageNumber] = useState(1);
   const [showNew, setShowNew] = useState(false);
@@ -82,6 +89,19 @@ export default function QuotesList() {
       toast.success(`Tus cotizaciones valen ${settings.validityDays} días desde que las envías.`);
     },
     onError: (err) => toast.error(getApiErrorMessage(err, 'No se pudo guardar la vigencia.')),
+  });
+
+  // Fase 29G: whether customers answer from the link, saved as soon as it changes (with the validity as it is saved).
+  const saveOnlineReplies = useMutation({
+    mutationFn: ({ validityDays, onlineReplies }: { validityDays: number; onlineReplies: boolean }) =>
+      quotesApi.updateSettings(validityDays, onlineReplies),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['quotes', 'settings'], settings);
+      toast.success(settings.onlineReplies
+        ? 'Listo: tus clientes pueden aceptar o rechazar la cotización desde su enlace.'
+        : 'Listo: tus clientes te responden por mensaje o en persona, y tú registras su respuesta.');
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err, 'No se pudo guardar cómo te responden tus clientes.')),
   });
 
   const saveTemplate = useMutation({
@@ -226,6 +246,29 @@ export default function QuotesList() {
                   Guardar vigencia
                 </button>
               </form>
+            )}
+
+            <h2 className="h6 mt-3 mb-1">Respuesta del cliente</h2>
+            <p className="text-muted small mb-2">
+              {settings.onlineReplies
+                ? 'Tus clientes aceptan o rechazan la cotización desde su enlace, y te avisamos en Inicio. También puedes registrar lo que te respondan por otro medio.'
+                : 'Tus clientes ven la cotización en su enlace y te responden por mensaje o en persona; tú registras su respuesta.'}
+            </p>
+            {isAdmin && (
+              <div className="form-check form-switch">
+                <input
+                  id={onlineRepliesId}
+                  type="checkbox"
+                  role="switch"
+                  className="form-check-input"
+                  checked={saveOnlineReplies.isPending ? saveOnlineReplies.variables.onlineReplies : settings.onlineReplies}
+                  disabled={saveOnlineReplies.isPending}
+                  onChange={(e) => saveOnlineReplies.mutate({ validityDays: settings.validityDays, onlineReplies: e.target.checked })}
+                />
+                <label className="form-check-label small" htmlFor={onlineRepliesId}>
+                  Responder desde el enlace
+                </label>
+              </div>
             )}
 
             {settings.whatsAppConnected && (

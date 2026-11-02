@@ -1,23 +1,31 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
-import { publicQuoteApi } from '../../api/quotesApi';
+import { publicQuoteApi, type PublicQuote } from '../../api/quotesApi';
 import PageTitle from '../../components/common/PageTitle';
 import { QuoteStatus } from '../../types';
-import { formatCalendarDate } from '../../utils/dates';
+import { formatCalendarDate, formatDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { quoteFolio, quoteStatusChip, quoteStatusLabel } from '../../utils/quotes';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
+import QuoteReplyPanel from './QuoteReplyPanel';
 
 /** What the customer reads about where the quote stands, beyond its chip. */
-function standing(status: QuoteStatus, validUntil: string): string | null {
-  switch (status) {
+function standing(quote: PublicQuote): string | null {
+  const { validUntil } = quote;
+  const here = quote.repliedFromLink && quote.repliedAt ? formatDate(quote.repliedAt) : null;
+  switch (quote.status) {
     case QuoteStatus.Sent:
-      return `Vale hasta el ${formatCalendarDate(validUntil)}. Para aceptarla o preguntar algo, responde al negocio.`;
+      return quote.canReply
+        ? `Vale hasta el ${formatCalendarDate(validUntil)}. Respóndela aquí o escríbele al negocio si tienes dudas.`
+        : `Vale hasta el ${formatCalendarDate(validUntil)}. Para aceptarla o preguntar algo, responde al negocio.`;
     case QuoteStatus.Accepted:
-      return 'Le dijiste al negocio que la aceptas.';
+      // Fase 29G: answered here, the business already knows and gets in touch.
+      return here
+        ? `La aceptaste aquí el ${here}. ${quote.businessName} ya lo sabe y se pondrá en contacto contigo para hacer el trabajo.`
+        : 'Le dijiste al negocio que la aceptas.';
     case QuoteStatus.Rejected:
-      return 'Le dijiste al negocio que no la aceptas.';
+      return here ? `Le dijiste aquí que no la aceptas, el ${here}.` : 'Le dijiste al negocio que no la aceptas.';
     case QuoteStatus.Expired:
       return `Venció el ${formatCalendarDate(validUntil)}. Si aún te interesa, pídele al negocio una nueva.`;
     case QuoteStatus.Superseded:
@@ -87,8 +95,9 @@ export default function PublicQuotePage() {
                 <Link to={{ pathname: '/cotizacion', hash: quote.newerToken }}>Ver la versión nueva</Link>
               </div>
             ) : (
-              standing(quote.status, quote.validUntil) && <p className="small">{standing(quote.status, quote.validUntil)}</p>
+              standing(quote) && <p className="small" role="status">{standing(quote)}</p>
             )}
+            {quote.response && <p className="small text-muted">Tu mensaje: «{quote.response}»</p>}
 
             <div className="table-responsive">
               <table className="table table-sm mb-2">
@@ -126,9 +135,12 @@ export default function PublicQuotePage() {
             <p className="text-muted small mb-0">{quote.pricesIncludeTax ? 'Los precios incluyen IVA.' : 'El IVA se suma a los precios.'}</p>
             {quote.note && <p className="small mt-2 mb-0">{quote.note}</p>}
 
+            {quote.canReply && <QuoteReplyPanel quote={quote} token={token} />}
+
             {contact && (
-              <a className="btn btn-primary mt-3" href={contact} target="_blank" rel="noreferrer">
-                <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Responder al negocio
+              // While the customer can answer here, the business's WhatsApp is for questions: one primary action per screen.
+              <a className={quote.canReply ? 'btn btn-link px-0 mt-2' : 'btn btn-primary mt-3'} href={contact} target="_blank" rel="noreferrer">
+                <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>{quote.canReply ? 'Preguntar algo al negocio' : 'Responder al negocio'}
               </a>
             )}
           </div>

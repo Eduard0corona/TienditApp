@@ -44,6 +44,7 @@ export const REPLY_CHANNELS: { value: QuoteReplyChannel; label: string }[] = [
 ];
 
 export function replyChannelLabel(channel: QuoteReplyChannel): string {
+  if (channel === QuoteReplyChannel.Link) return 'Desde su enlace';
   return REPLY_CHANNELS.find((option) => option.value === channel)?.label ?? String(channel);
 }
 
@@ -52,6 +53,8 @@ const REPLY_PHRASES: Record<QuoteReplyChannel, string> = {
   [QuoteReplyChannel.Email]: 'por correo',
   [QuoteReplyChannel.Phone]: 'por teléfono',
   [QuoteReplyChannel.InPerson]: 'en persona',
+  // Fase 29G: the customer answered from the quote's link; the business never picks it.
+  [QuoteReplyChannel.Link]: 'desde su enlace',
 };
 
 /** How the customer answered, after the verb: «Aceptó por WhatsApp», «Rechazó en persona». */

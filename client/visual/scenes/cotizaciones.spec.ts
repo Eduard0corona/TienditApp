@@ -2,6 +2,7 @@ import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
 import {
   ACCEPTED_QUOTE_ID,
+  ANSWERED_QUOTE_LINK,
   CONNECTED_QUOTE_ID,
   CONVERTED_QUOTE_ID,
   DRAFT_QUOTE_ID,
@@ -165,11 +166,29 @@ test.describe('Cotización del enlace', () => {
       test(`cotización del enlace ${look.suffix}`, async ({ page }) => {
         await open(page, `/cotizacion#${QUOTE_LINK}`);
         await expect(page.getByRole('heading', { name: 'Cotización COT-000011 · versión 2' })).toBeVisible();
-        await expect(page.getByRole('link', { name: 'Responder al negocio' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Aceptar la cotización' })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Preguntar algo al negocio' })).toBeVisible();
         await snap(page, `cotizacion-enlace-${look.suffix}`);
       });
     });
   }
+
+  // Fase 29G: the customer accepts it here, saying what they want, and reads it accepted.
+  test('aceptar la cotización desde el enlace', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/cotizacion#${QUOTE_LINK}`);
+    await page.getByRole('button', { name: 'Aceptar la cotización' }).click();
+    await page.getByLabel('Mensaje para Plomería Hernández (opcional)').fill('Los espero el jueves por la mañana');
+    await expect(page.getByRole('button', { name: 'Sí, la acepto' })).toBeVisible();
+    await snap(page, 'cotizacion-enlace-aceptar-telefono');
+  });
+
+  test('cotización aceptada desde el enlace', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/cotizacion#${ANSWERED_QUOTE_LINK}`);
+    await expect(page.getByText(/La aceptaste aquí el/)).toBeVisible();
+    await snap(page, 'cotizacion-enlace-aceptada-telefono');
+  });
 
   test('cotización del enlace reemplazada', async ({ page }) => {
     await page.setViewportSize(SIZES.phone);

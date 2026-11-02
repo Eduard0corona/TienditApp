@@ -24,12 +24,12 @@ function page(items: unknown[]) {
   return { items, pageNumber: 1, totalPages: 1, totalCount: items.length, hasPreviousPage: false, hasNextPage: false };
 }
 
-function renderList(role = 'TENANT_ADMIN') {
+function renderList(role = 'TENANT_ADMIN', url = '/quotes') {
   vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role, permissions: ['ManageOrders'] } } as unknown as ReturnType<typeof useAuth>);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/quotes']}>
+      <MemoryRouter initialEntries={[url]}>
         <Routes>
           <Route path="/quotes" element={<QuotesList />} />
           <Route path="/quotes/:id" element={<p>Detalle de la cotización</p>} />
@@ -44,7 +44,7 @@ describe('QuotesList', () => {
     vi.clearAllMocks();
     vi.mocked(useTenant).mockReturnValue({ capabilities: TenantCapability.Service | TenantCapability.Appointments } as unknown as ReturnType<typeof useTenant>);
     vi.mocked(useToast).mockReturnValue(toast as unknown as ReturnType<typeof useToast>);
-    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
+    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
     vi.mocked(quotesApi.list).mockResolvedValue(page([
       { id: 'q1', number: 'COT-000007', revision: 2, status: QuoteStatus.Expired, customerName: 'Valeria Ruiz', customerPhone: '5522107765', total: 1160, validUntil: '2026-10-19', updatedAt: '2026-10-04T17:00:00Z', fromVisit: true },
     ]) as never);
@@ -79,7 +79,7 @@ describe('QuotesList', () => {
   });
 
   it('lets owners change how long quotes are valid, and only tells the rest', async () => {
-    vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 30, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
+    vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 30, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
     renderList();
 
     const days = await screen.findByLabelText('Días de vigencia');
@@ -91,18 +91,42 @@ describe('QuotesList', () => {
     expect(toast.success).toHaveBeenCalledWith('Tus cotizaciones valen 30 días desde que las envías.');
   });
 
+  it('lets owners turn off the answers from the link, and only tells the rest how customers answer (Fase 29G)', async () => {
+    vi.mocked(quotesApi.updateSettings).mockResolvedValue({ validityDays: 15, onlineReplies: false, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] });
+    renderList();
+
+    const answers = await screen.findByRole('switch', { name: 'Responder desde el enlace' });
+    expect(answers).toBeChecked();
+    expect(screen.getByText(/Tus clientes aceptan o rechazan la cotización desde su enlace/)).toBeInTheDocument();
+    await userEvent.click(answers);
+
+    await waitFor(() => expect(quotesApi.updateSettings).toHaveBeenCalledWith(15, false));
+    expect(toast.success).toHaveBeenCalledWith('Listo: tus clientes te responden por mensaje o en persona, y tú registras su respuesta.');
+    expect(await screen.findByText(/te responden por mensaje o en persona; tú registras su respuesta/)).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Responder desde el enlace' })).not.toBeChecked();
+  });
+
+  it('opens the accepted ones from «Requiere atención»', async () => {
+    renderList('TENANT_ADMIN', '/quotes?estado=aceptadas');
+
+    expect(await screen.findByLabelText('Estado')).toHaveValue(String(QuoteListFilter.Accepted));
+    await waitFor(() => expect(quotesApi.list).toHaveBeenCalledWith(QuoteListFilter.Accepted, '', 1, expect.anything()));
+  });
+
   it('only tells staff how long quotes are valid', async () => {
     renderList('STAFF');
 
     expect(await screen.findByText(/Una cotización vale 15 días desde que la envías/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Días de vigencia')).not.toBeInTheDocument();
+    expect(screen.getByText(/Tus clientes aceptan o rechazan la cotización desde su enlace/)).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Responder desde el enlace' })).not.toBeInTheDocument();
   });
 
   it('lets owners pick the WhatsApp template of the quotes once the business connected its WhatsApp', async () => {
     const templates = [{ id: 't1', name: 'Cotización lista', body: 'Tu cotización {folio}: {enlace}', providerTemplateName: 'cotizacion_lista' }];
-    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: templates });
+    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: templates });
     vi.mocked(quotesApi.setWhatsAppTemplate).mockResolvedValue({
-      validityDays: 15, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 't1', whatsAppTemplates: templates,
+      validityDays: 15, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 't1', whatsAppTemplates: templates,
     });
     renderList();
 
@@ -115,7 +139,7 @@ describe('QuotesList', () => {
   });
 
   it('tells staff how the quotes go by WhatsApp, without letting them change it', async () => {
-    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: [] });
+    vi.mocked(quotesApi.settings).mockResolvedValue({ validityDays: 15, onlineReplies: true, pricesIncludeTax: true, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplates: [] });
     renderList('STAFF');
 
     expect(await screen.findByText(/salen del WhatsApp de tu negocio con el texto de TienditApp/)).toBeInTheDocument();

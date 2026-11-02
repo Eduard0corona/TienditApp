@@ -35,6 +35,10 @@ function quote(overrides: Record<string, unknown> = {}) {
     visitCredit: { amount: 350, applies: true },
     note: 'Incluye material',
     newerToken: null,
+    canReply: false,
+    repliedAt: null,
+    repliedFromLink: false,
+    response: null,
     ...overrides,
   };
 }
@@ -101,6 +105,69 @@ describe('PublicQuotePage', () => {
     } as AxiosResponse));
     renderPage(`/cotizacion#${LINK}`);
     expect(await screen.findByRole('alert')).toHaveTextContent('Esta cotización no existe o su enlace ya venció.');
+  });
+
+  it('lets the customer accept it here, saying what they want, and shows it accepted', async () => {
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true }) as never)
+      .mockResolvedValueOnce(quote({
+        status: QuoteStatus.Accepted, repliedFromLink: true, repliedAt: '2026-10-05T18:00:00Z', response: 'Los espero el jueves',
+      }) as never);
+    renderPage(`/cotizacion#${LINK}`);
+
+    expect(await screen.findByText(/Respóndela aquí o escríbele al negocio si tienes dudas/)).toBeInTheDocument();
+    // One primary action: while the customer can answer here, the business's WhatsApp is for questions.
+    expect(screen.getByRole('link', { name: 'Preguntar algo al negocio' })).not.toHaveClass('btn-primary');
+    await userEvent.click(screen.getByRole('button', { name: 'Aceptar la cotización' }));
+    expect(screen.getByText(/Aceptas la cotización COT-000007 por \$810\.00, ya con la visita descontada/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Mensaje para Plomería Ruiz (opcional)'), '  Los espero el jueves  ');
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, la acepto' }));
+
+    expect(apiRequest).toHaveBeenLastCalledWith('post', '/api/v1/public/quotes/reply',
+      { body: { token: LINK, accepted: true, response: 'Los espero el jueves' } });
+    expect(await screen.findByText(/La aceptaste aquí el 5 oct 2026\. Plomería Ruiz ya lo sabe/)).toBeInTheDocument();
+    expect(screen.getByText('Tu mensaje: «Los espero el jueves»')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Aceptar la cotización' })).not.toBeInTheDocument();
+  });
+
+  it('lets the customer reject it here without a message, or step back before sending it', async () => {
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true }) as never)
+      .mockResolvedValueOnce(quote({ status: QuoteStatus.Rejected, repliedFromLink: true, repliedAt: '2026-10-05T18:00:00Z' }) as never);
+    renderPage(`/cotizacion#${LINK}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Aceptar la cotización' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'No la acepto' }));
+    expect(screen.getByText(/Plomería Ruiz recibe que no la aceptas/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar mi respuesta' }));
+
+    expect(apiRequest).toHaveBeenLastCalledWith('post', '/api/v1/public/quotes/reply', { body: { token: LINK, accepted: false, response: null } });
+    expect(await screen.findByText('Le dijiste aquí que no la aceptas, el 5 oct 2026.')).toBeInTheDocument();
+  });
+
+  it('says why an answer was refused and shows the quote as it stands now', async () => {
+    const headers = new AxiosHeaders();
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true }) as never)
+      .mockRejectedValueOnce(new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+        status: 409, data: { detail: 'La cotización acaba de cambiar: ábrela otra vez para ver cómo quedó.' }, statusText: '', headers, config: { headers },
+      } as AxiosResponse))
+      .mockResolvedValueOnce(quote({ status: QuoteStatus.Superseded, newerToken: NEWER }) as never);
+    renderPage(`/cotizacion#${LINK}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Aceptar la cotización' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, la acepto' }));
+
+    expect(await screen.findByRole('link', { name: 'Ver la versión nueva' })).toBeInTheDocument();
+    expect(apiRequest).toHaveBeenLastCalledWith('post', '/api/v1/public/quotes/view', expect.objectContaining({ body: { token: LINK } }));
+    expect(screen.queryByRole('button', { name: 'Sí, la acepto' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the answer to the business while it records it itself', async () => {
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: false }) as never);
+    renderPage(`/cotizacion#${LINK}`);
+
+    expect(await screen.findByText(/Para aceptarla o preguntar algo, responde al negocio/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Aceptar la cotización' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Responder al negocio' })).toHaveClass('btn-primary');
   });
 
   it('asks for the link of the message when there is none', () => {

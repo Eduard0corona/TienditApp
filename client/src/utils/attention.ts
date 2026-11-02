@@ -60,6 +60,15 @@ export function describeAttention(item: AttentionItem): AttentionNotice | null {
         icon: 'ri-file-warning-line',
         tone: 'danger',
       };
+    case 'quotesToConvert':
+      // Fase 29G: accepted in the last 30 days and not yet their order; those the customer accepted from the link are news.
+      return {
+        key,
+        text: `${plural(count, 'cotización aceptada', 'cotizaciones aceptadas')} por convertir en orden${urgentCount > 0 ? ` (${urgentCount} desde su enlace)` : ''}`,
+        path: '/quotes?estado=aceptadas',
+        icon: 'ri-file-list-3-line',
+        tone: urgentCount > 0 ? 'warning' : 'info',
+      };
     case 'homeVisitAddress':
       // A business that goes to homes (Fase 29A) whose store publishes the address of a local: only its owner knows
       // whether customers go there, so the notice waits in «Cómo te ven» until they check it.

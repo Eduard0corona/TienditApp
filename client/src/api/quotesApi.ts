@@ -28,8 +28,12 @@ export const quotesApi = {
 
   settings: (signal?: AbortSignal) => apiRequest('get', '/api/v1/quotes/settings', { signal }),
 
-  /** How many days a quote is valid once sent (owners and admins). */
-  updateSettings: (validityDays: number) => apiRequest('put', '/api/v1/quotes/settings', { body: { validityDays } }),
+  /**
+   * How many days a quote is valid once sent and whether the customer answers it from its link (Fase 29G; left out, it stays
+   * as it is). Owners and admins.
+   */
+  updateSettings: (validityDays: number, onlineReplies?: boolean) =>
+    apiRequest('put', '/api/v1/quotes/settings', { body: { validityDays, onlineReplies } }),
 
   /** A draft for a customer, or for the visit of an appointment (which opens its quote when it has one). */
   create: (body: CreateQuote) => apiRequest('post', '/api/v1/quotes', { body }),
@@ -72,4 +76,11 @@ export const quotesApi = {
 export const publicQuoteApi = {
   /** The quote of the link; unknown, expired or of a business no longer active, it is not found (404). */
   view: (token: string, signal?: AbortSignal) => apiRequest('post', '/api/v1/public/quotes/view', { body: { token }, signal }),
+
+  /**
+   * The customer accepts or rejects it from its link (Fase 29G), with what they want to tell the business; the quote comes
+   * back as it stands. Changed by the business at the same time, it is a conflict (409).
+   */
+  reply: (token: string, accepted: boolean, response: string | null) =>
+    apiRequest('post', '/api/v1/public/quotes/reply', { body: { token, accepted, response } }),
 };
