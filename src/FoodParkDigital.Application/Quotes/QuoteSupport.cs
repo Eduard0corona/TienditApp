@@ -149,6 +149,8 @@ internal static class QuoteAudit
     public const string WhatsAppTemplateChanged = "QuoteWhatsAppTemplateChanged";
     public const string Converted = "QuoteConverted";
     public const string WorkScheduled = "QuoteWorkScheduled";
+    /// <summary>Who answered when the customer did from the quote's link (Fase 29G): the activity shows it as is.</summary>
+    public const string CustomerFromLink = "Cliente (enlace)";
 
     public static AuditLog Create(Quote quote, string action, string? performedBy, object? extra = null)
         => new(
@@ -158,6 +160,44 @@ internal static class QuoteAudit
             action: action,
             performedBy: performedBy ?? "system",
             metadata: JsonSerializer.Serialize(new { quote.Number, quote.Revision, quote.Total, Extra = extra }));
+}
+
+/// <summary>
+/// The accepted quotes still waiting to become their service order (Fase 29G, ADR 0061): accepted in the last 30 days and not
+/// converted. «Requiere atención» counts them and the list filters them with the same rule.
+/// </summary>
+public static class QuotesToConvert
+{
+    /// <summary>How far back an accepted quote still waits to become its order.</summary>
+    public const int Days = 30;
+
+    public static IQueryable<Quote> Of(IQueryable<Quote> quotes, DateTimeOffset now)
+    {
+        var acceptedSince = now.AddDays(-Days);
+        return quotes.Where(q => q.Status == QuoteStatus.Accepted && q.OrderId == null && q.ClosedAt >= acceptedSince);
+    }
+}
+
+/// <summary>The corrections of a quote the customer accepted.</summary>
+internal static class QuoteCorrections
+{
+    /// <summary>
+    /// Accepted, a correction started on it can never be sent: it is discarded, and stays in the history. Whoever recorded
+    /// the answer (the business, or the customer from the link since the Fase 29G) is who discarded it.
+    /// </summary>
+    public static async Task DiscardPendingAsync(
+        IApplicationDbContext context, Quote accepted, DateTimeOffset now, string? performedBy, CancellationToken cancellationToken)
+    {
+        var pendingCorrections = await context.Quotes
+            .Include(q => q.Lines)
+            .Where(q => q.TenantId == accepted.TenantId && q.Number == accepted.Number && q.Status == QuoteStatus.Draft)
+            .ToListAsync(cancellationToken);
+        foreach (var correction in pendingCorrections)
+        {
+            correction.Discard(now);
+            context.AuditLogs.Add(QuoteAudit.Create(correction, QuoteAudit.Discarded, performedBy, new { Reason = "AcceptedEarlierVersion" }));
+        }
+    }
 }
 
 /// <summary>How a quote reads for the business.</summary>

@@ -52,6 +52,8 @@ public class QuoteSummaryDto
     public DateOnly? ValidUntil { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public bool FromVisit { get; set; }
+    /// <summary>The customer accepted or rejected it from its link (Fase 29G).</summary>
+    public bool RepliedFromLink { get; set; }
 }
 
 /// <summary>Another version of the same quote, for its history.</summary>
@@ -147,6 +149,8 @@ public class QuoteOrderDto
 public class QuoteSettingsDto
 {
     public int ValidityDays { get; set; }
+    /// <summary>The customer accepts or rejects a quote from its link (Fase 29G, ADR 0061).</summary>
+    public bool OnlineReplies { get; set; }
     public bool PricesIncludeTax { get; set; }
     public decimal DefaultTaxRate { get; set; }
     /// <summary>The business connected its WhatsApp (Fase 29D): its quotes go by WhatsApp from TienditApp.</summary>
@@ -167,7 +171,12 @@ public enum QuoteListFilter
     Expired = 3,
     Discarded = 4,
     /// <summary>Every version but the replaced ones.</summary>
-    All = 5
+    All = 5,
+    /// <summary>
+    /// Accepted in the last 30 days and not yet their service order (Fase 29G): what «Requiere atención» counts
+    /// (<see cref="QuotesToConvert"/>).
+    /// </summary>
+    ToConvert = 6
 }
 
 /// <summary>A line as the business writes it: from the catalog, or by hand with what it includes.</summary>

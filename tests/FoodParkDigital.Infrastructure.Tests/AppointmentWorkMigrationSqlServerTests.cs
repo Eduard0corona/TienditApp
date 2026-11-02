@@ -47,7 +47,7 @@ public class AppointmentWorkMigrationSqlServerTests
             (tenantId, appointmentId) = (tenant.Id, appointment.Id);
         }
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeQuoteOnlineReplies.CreateContext(database, tenantId);
         var saved = await context.Appointments.SingleAsync(a => a.Id == appointmentId);
         Assert.Equal(((Guid?)null, false), (saved.WorkOrderId, saved.IsWork));
         Assert.NotNull(saved.SaleOrderId);
@@ -60,7 +60,7 @@ public class AppointmentWorkMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var (tenantId, appointmentId, orderId) = await SeedAsync(database);
         Guid saleId;
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeQuoteOnlineReplies.CreateContext(database, tenantId))
         {
             var sale = Order(tenantId, "ORD-000003");
             context.Orders.Add(sale);
@@ -68,7 +68,7 @@ public class AppointmentWorkMigrationSqlServerTests
             saleId = sale.Id;
         }
 
-        await using var check = database.CreateContext(tenantId);
+        await using var check = BeforeQuoteOnlineReplies.CreateContext(database, tenantId);
         foreach (var sql in new[]
         {
             // A sale of its own: the job is charged in its order.
@@ -101,7 +101,7 @@ public class AppointmentWorkMigrationSqlServerTests
 
         var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
         Assert.True(stopped is SqlException { Number: 50054 }, stopped?.Message ?? "it was not stopped");
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeQuoteOnlineReplies.CreateContext(database, tenantId))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(orderId, (await context.Appointments.SingleAsync(a => a.Id == appointmentId)).WorkOrderId);
@@ -126,7 +126,7 @@ public class AppointmentWorkMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the appointment does no job.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenantId);
+        await using var forward = BeforeQuoteOnlineReplies.CreateContext(database, tenantId);
         Assert.Null((await forward.Appointments.SingleAsync()).WorkOrderId);
     }
 
@@ -144,7 +144,7 @@ public class AppointmentWorkMigrationSqlServerTests
         var order = Order(tenant.Id, "ORD-000002");
         var appointment = Appointment.ForWork(
             tenant.Id, order.Id, "Valeria", "5522107765", AppointmentWorkRules.ServiceName("COT-000001"), Start, Start.AddHours(3), null);
-        await using var seed = database.CreateContext(tenant.Id);
+        await using var seed = BeforeQuoteOnlineReplies.CreateContext(database, tenant.Id);
         seed.AddRange(tenant, settings, order, appointment);
         await seed.SaveChangesAsync();
         return (tenant.Id, appointment.Id, order.Id);

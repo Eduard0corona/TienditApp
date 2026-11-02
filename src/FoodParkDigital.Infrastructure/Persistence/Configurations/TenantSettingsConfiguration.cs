@@ -93,6 +93,13 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             .HasDefaultValue(QuoteRules.DefaultValidityDays)
             .ValueGeneratedNever()
             .IsRequired();
+        // Fase 29G (ADR 0061): the customer answers the quote from its link unless the business turns it off; the database
+        // default fills the rows that exist and those the previous version saves while this one is published. EF always writes
+        // the value.
+        builder.Property(s => s.QuoteOnlineReplies)
+            .HasDefaultValue(true)
+            .ValueGeneratedNever()
+            .IsRequired();
         // Fase 26C (ADR 0035): credit reminders start off, every 7 days; the database defaults fill the rows that exist and
         // those the previous version saves while this one is published. EF always writes the values.
         builder.Property(s => s.CreditRemindersEnabled)

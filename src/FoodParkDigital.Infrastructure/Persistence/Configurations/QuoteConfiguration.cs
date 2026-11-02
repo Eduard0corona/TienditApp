@@ -34,11 +34,12 @@ public class QuoteConfiguration : IEntityTypeConfiguration<Quote>
             table.HasCheckConstraint(
                 "CK_Quotes_TrackingToken",
                 $"[TrackingToken] IS NULL OR LEN([TrackingToken]) = {Order.TrackingTokenLength}");
-            // The customer's answer on an accepted or rejected one, which a rejected one keeps once replaced.
+            // The customer's answer on an accepted or rejected one, which a rejected one keeps once replaced. Since the Fase 29G
+            // (ADR 0061) also from its link (4).
             table.HasCheckConstraint(
                 "CK_Quotes_Reply",
                 "([ReplyChannel] IS NULL AND [CustomerResponse] IS NULL AND [Status] NOT IN (2, 3))"
-                + " OR ([ReplyChannel] IN (0, 1, 2, 3) AND [Status] IN (2, 3, 5))");
+                + " OR ([ReplyChannel] IN (0, 1, 2, 3, 4) AND [Status] IN (2, 3, 5))");
             table.HasCheckConstraint(
                 "CK_Quotes_ClosedAt",
                 "([Status] IN (0, 1) AND [ClosedAt] IS NULL) OR ([Status] IN (2, 3, 5, 6) AND [ClosedAt] IS NOT NULL)");

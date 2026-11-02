@@ -19,6 +19,8 @@ internal static class BeforeAppointmentWork
     /// <summary>For the context of an earlier version, which does not know it either.</summary>
     public static void Ignore(ModelBuilder modelBuilder)
     {
+        // Nor what came after it.
+        BeforeQuoteOnlineReplies.Ignore(modelBuilder);
         // The relationship to the order first: left alone, it would keep WorkOrderId as a shadow property.
         var appointments = modelBuilder.Entity<Appointment>();
         foreach (var foreignKey in appointments.Metadata.GetForeignKeys()

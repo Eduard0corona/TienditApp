@@ -593,34 +593,34 @@ public class QuoteFlowTests
             [new QuoteLineRequest { Description = $"  {new string('a', 200)}  ", Quantity = 1m, UnitPrice = 1m }])).IsValid);
     }
 
-    private static QuotesHandler Handler(SalesTestFixture fixture)
+    internal static QuotesHandler Handler(SalesTestFixture fixture)
         => new(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock);
 
-    private static Task<Result<QuoteDto>> CreateAsync(SalesTestFixture fixture, CreateQuoteCommand? command = null)
+    internal static Task<Result<QuoteDto>> CreateAsync(SalesTestFixture fixture, CreateQuoteCommand? command = null)
         => new CreateQuoteCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, new FolioGenerator(fixture.Context), fixture.Clock).Handle(command ?? new CreateQuoteCommand(null, null, "Valeria Ruiz", "5522107765", "valeria@correo.mx"),
             CancellationToken.None);
 
-    private static Task<Result<QuoteDto>> UpdateAsync(SalesTestFixture fixture, QuoteDto quote, List<QuoteLineRequest> lines, int? validityDays = null)
+    internal static Task<Result<QuoteDto>> UpdateAsync(SalesTestFixture fixture, QuoteDto quote, List<QuoteLineRequest> lines, int? validityDays = null)
         => Handler(fixture).Handle(new UpdateQuoteDraftCommand(
             quote.Id, quote.CustomerId, quote.CustomerName, quote.CustomerPhone, quote.CustomerEmail, validityDays ?? quote.ValidityDays,
             quote.Note, lines), CancellationToken.None);
 
-    private static Task<QuoteDto> GetAsync(SalesTestFixture fixture, Guid id)
+    internal static Task<QuoteDto> GetAsync(SalesTestFixture fixture, Guid id)
         => Handler(fixture).Handle(new GetQuoteQuery(id), CancellationToken.None);
 
-    private static Task<PublicQuoteDto?> PublicAsync(SalesTestFixture fixture, string token)
+    internal static Task<PublicQuoteDto?> PublicAsync(SalesTestFixture fixture, string token)
         => new GetPublicQuoteQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
             .Handle(new GetPublicQuoteQuery(token), CancellationToken.None);
 
     /// <summary>A draft with «Cambio de calentador» for $1,160.</summary>
-    private static async Task<QuoteDto> DraftWithALineAsync(SalesTestFixture fixture, int validityDays = 15)
+    internal static async Task<QuoteDto> DraftWithALineAsync(SalesTestFixture fixture, int validityDays = 15)
     {
         var quote = (await CreateAsync(fixture)).Value!;
         return (await UpdateAsync(fixture, quote,
             [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = 1160m }], validityDays)).Value!;
     }
 
-    private static async Task<QuoteDto> SentAsync(SalesTestFixture fixture, int validityDays = 15)
+    internal static async Task<QuoteDto> SentAsync(SalesTestFixture fixture, int validityDays = 15)
     {
         var draft = await DraftWithALineAsync(fixture, validityDays);
         var sent = await Handler(fixture).Handle(new SendQuoteCommand(draft.Id), CancellationToken.None);
@@ -629,7 +629,7 @@ public class QuoteFlowTests
     }
 
     /// <summary>A trade with the agenda and the zone «Centro» (72000, $80), its prices with IVA inside unless said.</summary>
-    private static async Task<Domain.Tenants.Entities.Tenant> TradeAsync(
+    internal static async Task<Domain.Tenants.Entities.Tenant> TradeAsync(
         SalesTestFixture fixture, bool pricesIncludeTax = true, string slug = "plomero",
         HomeVisitChargePolicy policy = HomeVisitChargePolicy.Charged, decimal defaultTaxRate = 16m)
     {

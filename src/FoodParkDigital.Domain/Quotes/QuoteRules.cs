@@ -62,6 +62,16 @@ public static class QuoteRules
     public const string TooManySendsMessage = "Esta versión ya se mandó 5 veces por ese medio en las últimas 24 horas.";
     public const string TooManyBusinessSendsMessage = "Tu negocio ya mandó 300 cotizaciones por ese medio en las últimas 24 horas.";
 
+    // Fase 29G (ADR 0061): the customer answers from the quote's link. What the customer reads.
+    public const string LinkChannelMessage = "«Desde su enlace» lo marca solo el cliente cuando responde ahí.";
+    public const string OnlineRepliesOffMessage = "Este negocio recibe la respuesta por mensaje o en persona: escríbele para responderle.";
+    public const string AnsweredAlreadyMessage = "Esta cotización ya tiene respuesta. Si cambiaste de opinión, escríbele al negocio.";
+    public const string ReplacedMessage = "El negocio corrigió esta cotización: responde la versión nueva.";
+    public const string ExpiredForCustomerMessage = "Esta cotización ya venció: pídele al negocio una nueva.";
+    public const string ChangedMeanwhileMessage = "La cotización acaba de cambiar: ábrela otra vez para ver cómo quedó.";
+    public const string CustomerResponseTooLongMessage = "Tu mensaje admite hasta 500 caracteres.";
+    public const string NotAnswerableMessage = "Esta cotización ya no se responde aquí: escríbele al negocio.";
+
     /// <summary>
     /// Only a version sent and still valid on the business's <paramref name="today"/> goes to the customer (Fase 29D): an
     /// accepted, rejected, replaced or expired one is no longer what the business offers.

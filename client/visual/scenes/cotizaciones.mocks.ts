@@ -14,6 +14,8 @@ const SENT_ID = '0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58';
 export const QUOTE_LINK = 'Qt5Lm8Rv2PxK7nWc4Yb9Hd1Mf6Js3Ga0Ue-_RtXpZa';
 /** The link of its first version, replaced by the second. */
 export const REPLACED_QUOTE_LINK = 'Rp4Kq9Lm2Xc7Vz1Hd6Pf3Js8Ga0Ue5Yt-_RwTiOpQs';
+/** The link of a quote the customer already accepted from it (Fase 29G). */
+export const ANSWERED_QUOTE_LINK = 'Ak7Pz2Wq9Lm4Xc1Vb6Hd3Nf8Js5Ga0Ue-_RtYuIoPa';
 
 const LINES = [
   { position: 1, productId: 'svc-calentador', description: 'Cambio de calentador de paso', quantity: 1, unitPrice: 2800, taxRate: 16, isTaxExempt: false, total: 2800 },
@@ -185,7 +187,7 @@ const WHATSAPP_TEMPLATES = [
 
 const quotesRoutes: ExtraRoutes = (_data, { ok, paginate }) => [
   ['GET', /^\/quotes$/, (_match, query) => ok(paginate(SUMMARIES, query, 20))],
-  ['GET', /^\/quotes\/settings$/, () => ok({ validityDays: 15, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] })],
+  ['GET', /^\/quotes\/settings$/, () => ok({ validityDays: 15, onlineReplies: true, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] })],
   ['GET', new RegExp(`^/quotes/${DRAFT_ID}$`), () => ok(DRAFT)],
   ['GET', new RegExp(`^/quotes/${SENT_ID}$`), () => ok(SENT)],
   ['GET', new RegExp(`^/quotes/${CONNECTED_ID}$`), () => ok(CONNECTED)],
@@ -197,13 +199,16 @@ const quotesRoutes: ExtraRoutes = (_data, { ok, paginate }) => [
 /** The same business once it connected its WhatsApp and picked the template of its quotes. */
 const quotesWithWhatsAppRoutes: ExtraRoutes = (data, helpers) => [
   ['GET', /^\/quotes\/settings$/, () => helpers.ok({
-    validityDays: 15, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 'tpl-cotizacion',
+    validityDays: 15, onlineReplies: true, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 'tpl-cotizacion',
     whatsAppTemplates: WHATSAPP_TEMPLATES,
   })],
   ...quotesRoutes(data, helpers),
 ];
 
-/** What the customer reads: the folio, the lines, the IVA on top, the visit taken off and until when. */
+/**
+ * What the customer reads: the folio, the lines, the IVA on top, the visit taken off and until when; and, since the Fase 29G,
+ * the answer they give here.
+ */
 const PUBLIC_QUOTE = {
   businessName: 'Plomería Hernández',
   businessSlug: 'plomeria-hernandez',
@@ -219,6 +224,11 @@ const PUBLIC_QUOTE = {
   ...TOTALS,
   note: NOTE,
   newerToken: null,
+  canReply: true,
+  repliedAt: null,
+  repliedOn: null,
+  repliedFromLink: false,
+  response: null,
 };
 
 function problem(status: number, detail: string) {
@@ -229,7 +239,13 @@ const publicQuoteRoutes: ExtraRoutes = (data, helpers) => [
   ['POST', /^\/public\/quotes\/view$/, (_match, _query, body: { token?: string }) => {
     if (body?.token === QUOTE_LINK) return helpers.ok(PUBLIC_QUOTE);
     if (body?.token === REPLACED_QUOTE_LINK) {
-      return helpers.ok({ ...PUBLIC_QUOTE, revision: 1, status: 5, total: 5150.4, toPay: 4686.4, newerToken: QUOTE_LINK });
+      return helpers.ok({ ...PUBLIC_QUOTE, revision: 1, status: 5, total: 5150.4, toPay: 4686.4, newerToken: QUOTE_LINK, canReply: false });
+    }
+    if (body?.token === ANSWERED_QUOTE_LINK) {
+      return helpers.ok({
+        ...PUBLIC_QUOTE, status: 2, canReply: false, repliedFromLink: true, repliedAt: '2026-10-05T15:40:00Z', repliedOn: '2026-10-05',
+        response: 'Los espero el jueves por la mañana; el portón negro.',
+      });
     }
     return problem(404, 'Esta cotización no existe o su enlace ya venció. Pídele al negocio que te la mande otra vez.');
   }],

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { OutgoingMessageStatus, QuoteEmailFailure, QuoteReplyChannel, QuoteStatus } from '../types';
 import {
   hasPendingSends, quoteFolio, quoteLink, quoteMessage, quoteSends, quoteStatusChip, quoteStatusLabel, quoteWhatsAppUrl,
-  replyChannelPhrase,
+  REPLY_CHANNELS, replyChannelLabel, replyChannelPhrase,
 } from './quotes';
 
 describe('quotes', () => {
@@ -37,6 +37,12 @@ describe('quotes', () => {
   it('says how the customer answered after the verb', () => {
     expect(replyChannelPhrase(QuoteReplyChannel.WhatsApp)).toBe('por WhatsApp');
     expect(replyChannelPhrase(QuoteReplyChannel.InPerson)).toBe('en persona');
+  });
+
+  it('names the answer from the link, which only the customer gives and the business never picks (Fase 29G)', () => {
+    expect(replyChannelPhrase(QuoteReplyChannel.Link)).toBe('desde su enlace');
+    expect(replyChannelLabel(QuoteReplyChannel.Link)).toBe('Desde su enlace');
+    expect(REPLY_CHANNELS.map((option) => option.value)).not.toContain(QuoteReplyChannel.Link);
   });
 
   it('opens WhatsApp only with a phone', () => {

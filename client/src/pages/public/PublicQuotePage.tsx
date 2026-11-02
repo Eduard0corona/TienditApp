@@ -1,23 +1,33 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getApiErrorMessage } from '../../api/errors';
-import { publicQuoteApi } from '../../api/quotesApi';
+import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
+import { publicQuoteApi, type PublicQuote } from '../../api/quotesApi';
 import PageTitle from '../../components/common/PageTitle';
 import { QuoteStatus } from '../../types';
 import { formatCalendarDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { quoteFolio, quoteStatusChip, quoteStatusLabel } from '../../utils/quotes';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
+import QuoteReplyPanel from './QuoteReplyPanel';
 
 /** What the customer reads about where the quote stands, beyond its chip. */
-function standing(status: QuoteStatus, validUntil: string): string | null {
-  switch (status) {
+function standing(quote: PublicQuote): string | null {
+  const { validUntil } = quote;
+  // The business's day, as the validity («5 de octubre de 2026»): the customer's device may be in another time zone.
+  const here = quote.repliedFromLink && quote.repliedOn ? formatCalendarDate(quote.repliedOn) : null;
+  switch (quote.status) {
     case QuoteStatus.Sent:
-      return `Vale hasta el ${formatCalendarDate(validUntil)}. Para aceptarla o preguntar algo, responde al negocio.`;
+      return quote.canReply
+        ? `Vale hasta el ${formatCalendarDate(validUntil)}. Respóndela aquí o escríbele al negocio si tienes dudas.`
+        : `Vale hasta el ${formatCalendarDate(validUntil)}. Para aceptarla o preguntar algo, responde al negocio.`;
     case QuoteStatus.Accepted:
-      return 'Le dijiste al negocio que la aceptas.';
+      // Fase 29G: answered here, the business already knows and gets in touch.
+      return here
+        ? `La aceptaste aquí el ${here}. ${quote.businessName} ya lo sabe y se pondrá en contacto contigo para hacer el trabajo.`
+        : 'Le dijiste al negocio que la aceptas.';
     case QuoteStatus.Rejected:
-      return 'Le dijiste al negocio que no la aceptas.';
+      return here ? `Le dijiste aquí que no la aceptas, el ${here}.` : 'Le dijiste al negocio que no la aceptas.';
     case QuoteStatus.Expired:
       return `Venció el ${formatCalendarDate(validUntil)}. Si aún te interesa, pídele al negocio una nueva.`;
     case QuoteStatus.Superseded:
@@ -41,8 +51,24 @@ export default function PublicQuotePage() {
     enabled: token.length > 0,
     retry: false,
   });
-  const quote = quoteQuery.data;
+  // A link that stopped opening (404, refetched after an answer) shows only why, never the quote it no longer opens; any other
+  // failed refresh keeps the quote on screen under its alert.
+  const quote = getApiErrorStatus(quoteQuery.error) === 404 ? undefined : quoteQuery.data;
   const folio = quote ? quoteFolio(quote.number, quote.revision) : '';
+  // Fase 29G: why the answer was not taken stays on the page of that link, also once the answer can no longer be given there.
+  // Each refusal is its own (`attempt`): the same reason again is announced and takes the focus again.
+  const [refusal, setRefusal] = useState<{ token: string; message: string; attempt: number } | null>(null);
+  const refusalMessage = refusal?.token === token ? refusal.message : null;
+  // After answering, or a refusal, the focus goes to what the page says now: the button that had it is gone.
+  const focusNext = useRef<'status' | 'refusal' | null>(null);
+  const statusRef = useRef<HTMLParagraphElement>(null);
+  const refusalRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const target = focusNext.current === 'status' ? statusRef.current : focusNext.current === 'refusal' ? refusalRef.current : null;
+    if (!target) return;
+    focusNext.current = null;
+    target.focus();
+  }, [quote, refusal]);
   // To accept it or ask about it while it stands, or to ask for a new one once it expired.
   const contact = quote && (quote.status === QuoteStatus.Sent || quote.status === QuoteStatus.Expired)
     ? businessWhatsAppUrl(quote.businessContactPhone, `Hola, les escribo por la cotización ${folio}.`)
@@ -87,8 +113,14 @@ export default function PublicQuotePage() {
                 <Link to={{ pathname: '/cotizacion', hash: quote.newerToken }}>Ver la versión nueva</Link>
               </div>
             ) : (
-              standing(quote.status, quote.validUntil) && <p className="small">{standing(quote.status, quote.validUntil)}</p>
+              standing(quote) && <p ref={statusRef} tabIndex={-1} className="small" role="status">{standing(quote)}</p>
             )}
+            {refusalMessage && (
+              <div key={refusal?.attempt} ref={refusalRef} tabIndex={-1} className="alert alert-warning small" role="alert">
+                <strong>Tu respuesta no se envió.</strong> {refusalMessage}
+              </div>
+            )}
+            {quote.response && <p className="small text-muted">Tu mensaje: «{quote.response}»</p>}
 
             <div className="table-responsive">
               <table className="table table-sm mb-2">
@@ -126,9 +158,26 @@ export default function PublicQuotePage() {
             <p className="text-muted small mb-0">{quote.pricesIncludeTax ? 'Los precios incluyen IVA.' : 'El IVA se suma a los precios.'}</p>
             {quote.note && <p className="small mt-2 mb-0">{quote.note}</p>}
 
+            {quote.canReply && (
+              <QuoteReplyPanel
+                key={token}
+                quote={quote}
+                token={token}
+                onAnswered={() => {
+                  focusNext.current = 'status';
+                  setRefusal(null);
+                }}
+                onRefused={(message) => {
+                  focusNext.current = 'refusal';
+                  setRefusal((last) => ({ token, message, attempt: (last?.attempt ?? 0) + 1 }));
+                }}
+              />
+            )}
+
             {contact && (
-              <a className="btn btn-primary mt-3" href={contact} target="_blank" rel="noreferrer">
-                <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Responder al negocio
+              // While the customer can answer here, the business's WhatsApp is for questions: one primary action per screen.
+              <a className={quote.canReply ? 'btn btn-link px-0 mt-2' : 'btn btn-primary mt-3'} href={contact} target="_blank" rel="noreferrer">
+                <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>{quote.canReply ? 'Preguntar algo al negocio' : 'Responder al negocio'}
               </a>
             )}
           </div>

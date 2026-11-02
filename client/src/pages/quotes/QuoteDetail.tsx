@@ -4,7 +4,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
-import { getApiErrorMessage } from '../../api/errors';
+import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
+import { queryKeys } from '../../api/queries';
 import { productsApi } from '../../api/productsApi';
 import { quotesApi, type Quote, type QuoteLineRequest } from '../../api/quotesApi';
 import { useAuth } from '../../hooks/useAuth';
@@ -166,6 +167,8 @@ function QuoteDetail({ id }: { id: string }) {
   const show = (next: Quote) => {
     queryClient.setQueryData(['quotes', 'detail', next.id], next);
     void queryClient.invalidateQueries({ queryKey: ['quotes'], refetchType: 'none' });
+    // «Requiere atención» counts the accepted ones still to convert (Fase 29G): an answer or a conversion changes it.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
     if (next.id !== id) {
       navigate(`/quotes/${next.id}`);
       return;
@@ -201,6 +204,10 @@ function QuoteDetail({ id }: { id: string }) {
       return true;
     } catch (err: unknown) {
       onError(getApiErrorMessage(err, fallback));
+      // Refused because the quote changed meanwhile (since the Fase 29G the customer may have answered from the link): the
+      // page shows how it stands now.
+      const status = getApiErrorStatus(err);
+      if (status === 400 || status === 409) void queryClient.invalidateQueries({ queryKey: ['quotes', 'detail', id] });
       return false;
     } finally {
       setPending(null);

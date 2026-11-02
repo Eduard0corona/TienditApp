@@ -101,6 +101,14 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - El recordatorio por WhatsApp de una cita a domicilio usa el texto de cualquier visita: «tu cita de Trabajo de la cotización COT-…».
     - Con el código anterior (rollback del despliegue), una cita del trabajo se ve como una común y ofrece «Cobrar»; la base lo rechaza (`CK_Appointments_Work`) con un error en lugar de cobrar dos veces el trabajo. Esa versión también la deja cotizar, y moverla a otra dirección le pone el cargo de la zona; al regresar a esta versión, el aviso y la ruta no lo dicen y nada lo cobra.
     - Una orden cancelada entre que se lee y se guarda la cita (dos personas a la vez) deja agendado el trabajo de una orden cancelada, y dos envíos iguales crean dos citas, como en la Agenda: no hay llave de la solicitud.
+  - La respuesta desde el enlace (Fase 29G, [ADR 0061](../adr/0061-quote-replies-from-link.md)):
+    - Sin anticipo: aceptar no cobra nada ni convierte la cotización en su orden; el negocio la convierte (Fase 29E).
+    - El negocio se entera al abrir TienditApp (Inicio, la lista, la actividad), no por WhatsApp, correo ni en tiempo real.
+    - Quien tenga el enlace responde, también si el cliente lo reenvía, como con el seguimiento de un pedido; no hay código ni cuenta.
+    - El cliente no cambia su respuesta desde el enlace, y una aceptada no se reabre: si se equivocó, el negocio hace una cotización nueva.
+    - Apagar la opción no deshace las respuestas que ya llegaron.
+    - El aviso y el filtro «Por convertir» cuentan 30 días hacia atrás: una aceptada más vieja sin convertir ya no avisa, aunque sigue en «Aceptadas».
+    - Con el código anterior (rollback del despliegue), una cotización respondida desde el enlace se ve aceptada o rechazada sin decir por dónde, y el enlace deja de ofrecer la respuesta.
   - El envío desde TienditApp (Fase 29D):
     - El correo de la cotización no lleva PDF (TienditApp no genera PDF): la cotización va en el cuerpo y en su enlace. «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó.
     - Sin plantilla aprobada en Meta, el WhatsApp solo llega a quien escribió en las últimas 24 horas, y no cae solo al correo cuando WhatsApp lo rechaza: el negocio lo ve en el historial y lo manda por correo.
@@ -120,6 +128,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La 29D suma 32 B a la primera visita (de 181,335 a 181,367 B, contra `master` en `f15f043`): los valores nuevos de los enums; el diálogo y el historial van en el detalle. El presupuesto no cambia.
   - La 29E suma 5 B a la primera visita (de 181,462 a 181,467 B, contra `master` en `744632b`): el diálogo y el enlace van en pantallas que se cargan aparte, y los 5 B son los dos chunks compartidos más que la entrada precarga con la pantalla de órdenes. El presupuesto (181,500 B) no cambia.
   - La 29F suma 62 B a la primera visita (de 181,467 a 181,529 B, contra `master` en `7013d87`): el diálogo de agendar se carga aparte, y los 62 B son la lista de precarga de la entrada, con tres chunks compartidos nuevos (la lista de citas del trabajo, los estados de una cita y la API del equipo). El presupuesto sube de 181,500 a 181,600 B.
+  - La 29G suma 76 B a la primera visita (de 181,529 a 181,605 B, contra `master` en `38d0560`): el aviso de «Cotizaciones aceptadas por convertir» va en la entrada con la campana, y el filtro «Por convertir» y los valores nuevos de los enums también; el panel para responder se carga con la página del enlace. El presupuesto sube de 181,600 a 181,700 B.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.
@@ -760,4 +769,4 @@ Pendientes detectados en la Fase 3:
 - Cantidades fraccionarias y control de stock por producto.
 - Capabilities ligadas al plan contratado.
 - Evidencia de servicios: si el cliente recibe las fotos (WhatsApp, ticket o seguimiento) y si se guardan con un plazo; la Fase 25 decidió fotos por orden, solo para el negocio, mientras exista la orden ([ADR 0024](../adr/0024-service-photos.md)).
-- Oficios a domicilio: confirmar los 15 días de vigencia de la cotización de la [ADR 0053](../adr/0053-home-visit-quotes.md) y cuándo el cliente la acepta en línea. La Fase 29A aplicó las demás decisiones por omisión: el interruptor prendido para los giros de oficio, y todos menos Carpintería y Herrería y soldadura empiezan «Solo a domicilio».
+- Oficios a domicilio: confirmar los 15 días de vigencia de la cotización de la [ADR 0053](../adr/0053-home-visit-quotes.md) y si el cliente deja un anticipo al aceptarla en línea. La Fase 29A aplicó las demás decisiones por omisión: el interruptor prendido para los giros de oficio, y todos menos Carpintería y Herrería y soldadura empiezan «Solo a domicilio». La Fase 29G deja que el cliente la acepte o la rechace desde su enlace, sin anticipo, encendido por omisión para todos ([ADR 0061](../adr/0061-quote-replies-from-link.md)).

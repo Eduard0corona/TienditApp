@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Quotes;
 using FoodParkDigital.Domain.Quotes;
@@ -184,10 +185,39 @@ public class PublicQuotesController : ControllerBase
         var quote = await _mediator.Send(new GetPublicQuoteQuery(request.Token), cancellationToken);
         return quote is null ? this.ApiError(StatusCodes.Status404NotFound, PublicQuoteDto.NotFoundMessage) : Ok(quote);
     }
+
+    /// <summary>
+    /// The customer accepts or rejects the quote (Fase 29G, ADR 0061) and gets it back as it stands. A link unknown or
+    /// expired is not found; a quote the business changed at the same time is a conflict; any other refusal says why.
+    /// </summary>
+    [HttpPost("reply")]
+    [EnableRateLimiting("public-order")]
+    public async Task<ActionResult<PublicQuoteDto>> Reply([FromBody] PublicQuoteReplyRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ReplyToQuoteFromLinkCommand(request.Token, request.Accepted, request.Response), cancellationToken);
+        if (result is null)
+            return this.ApiError(StatusCodes.Status404NotFound, PublicQuoteDto.NotFoundMessage);
+        if (result.IsFailure)
+            return this.ApiError(
+                result.Error == QuoteRules.ChangedMeanwhileMessage ? StatusCodes.Status409Conflict : StatusCodes.Status400BadRequest,
+                result.Error);
+        return Ok(result.Value);
+    }
 }
 
 public class PublicQuoteRequest
 {
     /// <summary>The link of the quote (the fragment of /cotizacion#token).</summary>
     public string Token { get; init; } = null!;
+}
+
+public class PublicQuoteReplyRequest
+{
+    /// <summary>The link of the quote (the fragment of /cotizacion#token).</summary>
+    public string Token { get; init; } = null!;
+    /// <summary>True to accept it, false to reject it. Required: a body without it is refused, never read as a rejection.</summary>
+    [JsonRequired]
+    public bool Accepted { get; init; }
+    /// <summary>What the customer wants to tell the business, up to 500 characters.</summary>
+    public string? Response { get; init; }
 }

@@ -76,10 +76,13 @@ public record DiscardQuoteCommand(Guid Id) : IRequest<Result<QuoteDto>>;
 [RequiresCapability(TenantCapability.Service | TenantCapability.Appointments)]
 public record RecordQuoteReplyCommand(Guid Id, bool Accepted, QuoteReplyChannel Channel, string? Response) : IRequest<Result<QuoteDto>>;
 
-/// <summary>How many days the business's quotes are valid once sent (owners and admins).</summary>
+/// <summary>
+/// How many days the business's quotes are valid once sent and, since the Fase 29G (ADR 0061), whether the customer answers
+/// them from their link (null keeps it as it is: a client that does not know it yet). Owners and admins.
+/// </summary>
 [RequiresTenantManager]
 [RequiresCapability(TenantCapability.Service | TenantCapability.Appointments)]
-public record UpdateQuoteSettingsCommand(int ValidityDays) : IRequest<Result<QuoteSettingsDto>>;
+public record UpdateQuoteSettingsCommand(int ValidityDays, bool? OnlineReplies = null) : IRequest<Result<QuoteSettingsDto>>;
 
 /// <summary>
 /// The WhatsApp template the business's quotes go out with (Fase 29D, owners and admins): an active one for quotes, or
@@ -154,6 +157,8 @@ public class RecordQuoteReplyCommandValidator : AbstractValidator<RecordQuoteRep
     public RecordQuoteReplyCommandValidator()
     {
         RuleFor(x => x.Channel).IsInEnum().WithMessage(QuoteRules.ReplyChannelMessage);
+        // Only the customer answers from the link (Fase 29G).
+        RuleFor(x => x.Channel).NotEqual(QuoteReplyChannel.Link).WithMessage(QuoteRules.LinkChannelMessage);
         RuleFor(x => x.Response).MaximumLength(QuoteRules.MaxResponseLength).WithMessage(QuoteRules.ResponseTooLongMessage);
     }
 }
@@ -216,6 +221,7 @@ public class QuotesHandler :
             QuoteListFilter.Rejected => quotes.Where(q => q.Status == QuoteStatus.Rejected),
             QuoteListFilter.Expired => quotes.Where(q => q.Status == QuoteStatus.Sent && q.ValidUntil < today),
             QuoteListFilter.Discarded => quotes.Where(q => q.Status == QuoteStatus.Discarded),
+            QuoteListFilter.ToConvert => QuotesToConvert.Of(quotes, _clock.UtcNow),
             _ => quotes
         };
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -238,7 +244,9 @@ public class QuotesHandler :
                     Total = q.Total,
                     ValidUntil = q.ValidUntil,
                     UpdatedAt = q.UpdatedAt ?? q.CreatedAt,
-                    FromVisit = q.AppointmentId != null
+                    FromVisit = q.AppointmentId != null,
+                    RepliedFromLink = q.ReplyChannel == QuoteReplyChannel.Link
+                        && (q.Status == QuoteStatus.Accepted || q.Status == QuoteStatus.Rejected)
                 }),
             request.PageNumber, request.PageSize, cancellationToken);
         return page;
@@ -428,20 +436,8 @@ public class QuotesHandler :
         // What the customer said stays on the quote; the activity keeps that they answered and how.
         _context.AuditLogs.Add(QuoteAudit.Create(quote, request.Accepted ? QuoteAudit.Accepted : QuoteAudit.Rejected,
             _currentUser.UserName, new { Channel = request.Channel.ToString() }));
-        // Accepted, a correction started on it can never be sent: it is discarded, and stays in the history.
         if (request.Accepted)
-        {
-            var pendingCorrections = await _context.Quotes
-                .Include(q => q.Lines)
-                .Where(q => q.TenantId == TenantId && q.Number == quote.Number && q.Status == QuoteStatus.Draft)
-                .ToListAsync(cancellationToken);
-            foreach (var correction in pendingCorrections)
-            {
-                correction.Discard(now);
-                _context.AuditLogs.Add(QuoteAudit.Create(correction, QuoteAudit.Discarded, _currentUser.UserName,
-                    new { Reason = "AcceptedEarlierVersion" }));
-            }
-        }
+            await QuoteCorrections.DiscardPendingAsync(_context, quote, now, _currentUser.UserName, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(await DescribeAsync(quote, cancellationToken));
     }
@@ -453,16 +449,19 @@ public class QuotesHandler :
             return Result.Failure<QuoteSettingsDto>("Configura primero tu negocio.");
 
         var previous = settings.QuoteValidityDays;
+        var previousOnlineReplies = settings.QuoteOnlineReplies;
         try
         {
             settings.SetQuoteValidityDays(request.ValidityDays);
+            if (request.OnlineReplies is { } onlineReplies)
+                settings.SetQuoteOnlineReplies(onlineReplies);
         }
         catch (DomainException ex)
         {
             return Result.Failure<QuoteSettingsDto>(ex.Message);
         }
 
-        if (previous != settings.QuoteValidityDays)
+        if (previous != settings.QuoteValidityDays || previousOnlineReplies != settings.QuoteOnlineReplies)
         {
             _context.AuditLogs.Add(new Domain.Audit.Entities.AuditLog(
                 tenantId: TenantId,
@@ -470,7 +469,13 @@ public class QuotesHandler :
                 entityId: settings.Id.ToString(),
                 action: QuoteAudit.SettingsUpdated,
                 performedBy: _currentUser.UserName ?? "system",
-                metadata: System.Text.Json.JsonSerializer.Serialize(new { Previous = previous, New = settings.QuoteValidityDays })));
+                metadata: System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    Previous = previous,
+                    New = settings.QuoteValidityDays,
+                    PreviousOnlineReplies = previousOnlineReplies,
+                    OnlineReplies = settings.QuoteOnlineReplies
+                })));
             await _context.SaveChangesAsync(cancellationToken);
         }
 
@@ -520,6 +525,7 @@ public class QuotesHandler :
             .Select(s => new QuoteSettingsDto
             {
                 ValidityDays = s.QuoteValidityDays,
+                OnlineReplies = s.QuoteOnlineReplies,
                 PricesIncludeTax = s.PricesIncludeTax,
                 DefaultTaxRate = s.DefaultTaxRate,
                 WhatsAppTemplateId = s.QuoteWhatsAppTemplateId
@@ -528,6 +534,7 @@ public class QuotesHandler :
            ?? new QuoteSettingsDto
            {
                ValidityDays = QuoteRules.DefaultValidityDays,
+               OnlineReplies = true,
                PricesIncludeTax = TenantSalesSettings.Legacy.PricesIncludeTax,
                DefaultTaxRate = TenantSalesSettings.Legacy.DefaultTaxRate
            };

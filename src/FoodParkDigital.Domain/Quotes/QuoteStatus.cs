@@ -21,11 +21,16 @@ public enum QuoteStatus
     Discarded = 6
 }
 
-/// <summary>How the customer answered the quote, as the business records it.</summary>
+/// <summary>
+/// How the customer answered the quote: as the business records it, or <see cref="Link"/> when the customer answered from
+/// the quote's link (Fase 29G, ADR 0061).
+/// </summary>
 public enum QuoteReplyChannel
 {
     WhatsApp = 0,
     Email = 1,
     Phone = 2,
-    InPerson = 3
+    InPerson = 3,
+    /// <summary>The customer answered from the quote's link. Only they do: the business never records it by hand.</summary>
+    Link = 4
 }
