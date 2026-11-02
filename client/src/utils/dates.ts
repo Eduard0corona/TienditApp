@@ -119,12 +119,6 @@ export function calendarDaysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
 }
 
-/** Value for an <input type="datetime-local"> in local time. */
-export function toDateTimeLocalInput(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 /** Today's date in the business, as a date input wants it ("2026-10-05"). */
 export function getBusinessToday(now: Date = new Date()): string {
   // en-CA writes dates as yyyy-mm-dd.
@@ -149,7 +143,7 @@ function zoneOffsetMinutes(timeZone: string, at: Date): number {
 }
 
 /** The instant a wall clock in the business shows that date and time. */
-export function businessWallTimeToInstant(date: string, time: string): Date {
+function businessWallTimeToInstant(date: string, time: string): Date {
   if (!businessTimeZone) return new Date(`${date}T${time}`);
   const [year, month, day] = date.split('-').map(Number);
   const [hour, minute, second] = time.split(':').map(Number);
@@ -167,4 +161,28 @@ export function businessDayStart(date: string): string {
 /** When a business day ends, for "to" filters of the API (ISO). */
 export function businessDayEnd(date: string): string {
   return businessWallTimeToInstant(date, '23:59:59').toISOString();
+}
+
+/**
+ * A datetime-local value ("2026-10-08T10:30") read as the business's wall clock, as the API wants it (ISO):
+ * 10:30 typed for a business in Tijuana is 10:30 in Tijuana, whatever the zone of the device.
+ * `filledWith` is the instant the field started with: while it still shows it, it stays that one. The night the clock
+ * goes back repeats an hour, and a typed hour in it is the first time (as on the server, ADR 0012): without this, a
+ * field filled with the second time would move an hour back.
+ */
+export function businessDateTimeToIso(value: string, filledWith?: string | number | Date | null): string {
+  if (filledWith != null && toBusinessDateTimeInput(filledWith) === value) {
+    return new Date(Math.floor(toDate(filledWith).getTime() / 60_000) * 60_000).toISOString();
+  }
+  const [date, time] = value.split('T');
+  return businessWallTimeToInstant(date, time.length === 5 ? `${time}:00` : time).toISOString();
+}
+
+/** An instant as a datetime-local input shows it in the business, to the minute ("2026-10-08T10:30"); "" when invalid. */
+export function toBusinessDateTimeInput(value: string | number | Date): string {
+  const date = toDate(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offset = businessTimeZone ? zoneOffsetMinutes(businessTimeZone, date) : -date.getTimezoneOffset();
+  // The instant moved by the zone's offset reads, in UTC, as the wall clock of the business.
+  return new Date(date.getTime() + offset * 60_000).toISOString().slice(0, 16);
 }

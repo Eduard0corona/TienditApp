@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appointmentsApi } from '../../api/appointmentsApi';
 import { HomeVisitChargePolicy } from '../../api/generated/enums';
 import ConfirmProvider from '../../components/feedback/ConfirmProvider';
@@ -14,6 +14,7 @@ import { productsApi } from '../../api/productsApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { AppointmentChannel, AppointmentStatus, TenantCapability, type AppointmentDto } from '../../types';
+import { setBusinessTimeZone } from '../../utils/dates';
 import AppointmentsList from './AppointmentsList';
 
 vi.mock('../../api/appointmentsApi', () => ({
@@ -287,5 +288,112 @@ describe('AppointmentsList', () => {
 
     const row = (await screen.findByText('Ana Ruiz')).closest('tr')!;
     expect(within(row).getByText('La canceló el cliente')).toBeInTheDocument();
+  });
+
+  describe('with the business in Tijuana and the device on Mexico City time', () => {
+    // Tijuana is UTC-7 in October; Mexico City, UTC-6.
+    beforeEach(() => {
+      vi.stubEnv('TZ', 'America/Mexico_City');
+      setBusinessTimeZone('America/Tijuana');
+    });
+
+    afterEach(() => {
+      setBusinessTimeZone(null);
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    });
+
+    it('opens the upcoming ones at the start of the business day, not the device day', async () => {
+      // 06:30 UTC on the 14th: 00:30 of the 14th on the device, still 23:30 of the 13th in Tijuana.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-14T06:30:00.000Z'));
+      renderAgenda([]);
+
+      await waitFor(() => expect(listCalls()[0]).toEqual(expect.objectContaining({ fromDate: '2026-10-13T07:00:00.000Z' })));
+    });
+
+    it('shows the day an appointment ends when it ends after the midnight of the business', async () => {
+      // 23:00 of the 13th to 00:30 of the 14th in Tijuana (the same day, 00:00 to 01:30, on the device); the other
+      // one is 9:00 to 10:00 of the 14th.
+      renderAgenda([
+        appointment({ id: 'n1', customerName: 'Noche', startAt: '2026-10-14T06:00:00Z', endAt: '2026-10-14T07:30:00Z' }),
+        appointment({ id: 'd1', customerName: 'Día' }),
+      ]);
+
+      const late = (await screen.findByText('Noche')).closest('tr')!;
+      expect(late).toHaveTextContent(/13 de oct · 11:00 p\.\s?m\. a 14\/10\/26/);
+      const day = screen.getByText('Día').closest('tr')!;
+      expect(day).toHaveTextContent(/14 de oct · 09:00 a\.\s?m\. a 10:00 a\.\s?m\./);
+      expect(day).not.toHaveTextContent(/14\/10\/26/);
+    });
+
+    it('keeps an appointment in the hour the clock repeats where it was when it is saved without moving it', async () => {
+      const user = userEvent.setup();
+      vi.mocked(appointmentsApi.update).mockResolvedValue({ data: appointment({}) } as never);
+      // 1 November: 01:30 PST to 02:30 PST, the second time 01:30 comes (the first is 08:30 UTC, still PDT).
+      renderAgenda([appointment({ startAt: '2026-11-01T09:30:00Z', endAt: '2026-11-01T10:30:00Z' })]);
+
+      await user.click(await screen.findByRole('button', { name: 'Editar o reprogramar la cita de Ana Ruiz' }));
+      const form = within(await screen.findByRole('dialog', { name: 'Editar o reprogramar la cita' }));
+      expect(form.getByLabelText('Inicio *')).toHaveValue('2026-11-01T01:30');
+      expect(form.queryByText(/el nuevo horario/)).not.toBeInTheDocument();
+      await user.click(form.getByRole('button', { name: 'Guardar cambios' }));
+
+      await waitFor(() => expect(appointmentsApi.update).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(appointmentsApi.update).mock.calls[0][1]).toEqual(expect.objectContaining({
+        startAt: '2026-11-01T09:30:00.000Z',
+        endAt: '2026-11-01T10:30:00.000Z',
+      }));
+      expect(toast.success).toHaveBeenCalledWith('Cita actualizada.');
+    });
+
+    it('books the start typed as the clock of the business, and the end after its duration', async () => {
+      const user = userEvent.setup();
+      vi.mocked(appointmentsApi.create).mockResolvedValue({ data: appointment({}) } as never);
+      renderAgenda([]);
+
+      await user.click(await screen.findByRole('button', { name: 'Nueva cita' }));
+      const form = within(await screen.findByRole('dialog', { name: 'Nueva cita' }));
+      await user.type(form.getByLabelText('Cliente *'), 'Ana Ruiz');
+      await user.type(form.getByLabelText('Teléfono *'), '5512345678');
+      await user.selectOptions(form.getByLabelText('Servicio *'), 'Otro (escribirlo)');
+      await user.type(form.getByRole('textbox', { name: 'Nombre del servicio' }), 'Corte');
+      fireEvent.change(form.getByLabelText('Inicio *'), { target: { value: '2026-10-14T10:00' } });
+      expect(form.getByLabelText('Fin *')).toHaveValue('2026-10-14T11:00');
+      await user.click(form.getByRole('button', { name: 'Registrar cita' }));
+
+      await waitFor(() => expect(appointmentsApi.create).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(appointmentsApi.create).mock.calls[0][0]).toEqual(expect.objectContaining({
+        startAt: '2026-10-14T17:00:00.000Z',
+        endAt: '2026-10-14T18:00:00.000Z',
+      }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    });
+
+    it('shows the appointment at the hour of the business and moves it from there', async () => {
+      const user = userEvent.setup();
+      vi.mocked(appointmentsApi.update).mockResolvedValue({ data: appointment({}) } as never);
+      // 16:00 to 17:00 UTC: 9:00 to 10:00 in Tijuana (10:00 to 11:00 on the device).
+      renderAgenda([appointment({})]);
+
+      await user.click(await screen.findByRole('button', { name: 'Editar o reprogramar la cita de Ana Ruiz' }));
+      const form = within(await screen.findByRole('dialog', { name: 'Editar o reprogramar la cita' }));
+      expect(form.getByLabelText('Inicio *')).toHaveValue('2026-10-14T09:00');
+      expect(form.getByLabelText('Fin *')).toHaveValue('2026-10-14T10:00');
+      // The same hour is not a new one for the customer.
+      expect(form.queryByText(/el nuevo horario/)).not.toBeInTheDocument();
+
+      fireEvent.change(form.getByLabelText('Inicio *'), { target: { value: '2026-10-14T12:30' } });
+      expect(form.getByLabelText('Fin *')).toHaveValue('2026-10-14T13:30');
+      expect(form.getByText('Al guardar, el cliente recibe por WhatsApp el nuevo horario.')).toBeInTheDocument();
+      await user.click(form.getByRole('button', { name: 'Guardar cambios' }));
+
+      await waitFor(() => expect(appointmentsApi.update).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(appointmentsApi.update).mock.calls[0][1]).toEqual(expect.objectContaining({
+        startAt: '2026-10-14T19:30:00.000Z',
+        endAt: '2026-10-14T20:30:00.000Z',
+      }));
+      expect(toast.success).toHaveBeenCalledWith('Cita reprogramada: el cliente recibe el aviso.');
+    });
   });
 });

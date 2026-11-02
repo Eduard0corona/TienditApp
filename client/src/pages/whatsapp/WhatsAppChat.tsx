@@ -12,7 +12,7 @@ import { getAccess } from '../../utils/access';
 import { buildSellLink } from '../../utils/sellLink';
 import './WhatsAppChat.css';
 import { getApiErrorMessage } from '../../api/errors';
-import { formatInBusinessZone } from '../../utils/dates';
+import { formatInBusinessZone, getBusinessToday, toBusinessDateTimeInput } from '../../utils/dates';
 import { asButton } from '../../utils/a11y';
 
 /** Same Mexican number whichever way it was stored (+52 or +521 and ten digits). */
@@ -267,13 +267,9 @@ export default function WhatsAppChat() {
   };
 
   const formatTime = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const now = new Date();
-    const isToday = d.toDateString() === now.toDateString();
-    if (isToday) {
-      return formatInBusinessZone(d, { hour: '2-digit', minute: '2-digit' });
-    }
-    return formatInBusinessZone(d, { day: '2-digit', month: 'short' });
+    // A message of today shows its hour and an older one its date: today of the business, not of the device.
+    const isToday = toBusinessDateTimeInput(dateStr).slice(0, 10) === getBusinessToday();
+    return formatInBusinessZone(dateStr, isToday ? { hour: '2-digit', minute: '2-digit' } : { day: '2-digit', month: 'short' });
   };
 
   const getInitials = (name?: string, phone?: string) => {

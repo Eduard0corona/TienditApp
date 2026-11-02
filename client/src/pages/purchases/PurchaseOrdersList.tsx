@@ -21,7 +21,7 @@ import PurchaseOrderDetail, { type PurchaseOrderDetailMode } from '../../compone
 import { getSupplyLineDefaults } from './purchaseLineDefaults';
 import { getPurchaseOrderStatusBadge, getPurchaseOrderStatusLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
-import { formatInBusinessZone } from '../../utils/dates';
+import { businessDateTimeToIso, formatInBusinessZone } from '../../utils/dates';
 
 const COLUMNS = [
   { header: 'Folio' },
@@ -204,7 +204,8 @@ export default function PurchaseOrdersList() {
 
     const payload: CreatePurchaseOrderRequest = {
       supplierId: form.supplierId,
-      expectedDeliveryAt: form.expectedDeliveryAt ? new Date(form.expectedDeliveryAt).toISOString() : undefined,
+      // Typed as the business's clock, the one the detail shows it with.
+      expectedDeliveryAt: form.expectedDeliveryAt ? businessDateTimeToIso(form.expectedDeliveryAt) : undefined,
       referenceNumber: form.referenceNumber.trim() || undefined,
       notes: form.notes.trim() || undefined,
       markAsSent: form.markAsSent,

@@ -26,7 +26,13 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
-import { formatInBusinessZone } from '../../utils/dates';
+import {
+  businessDateTimeToIso,
+  businessDayStart,
+  formatInBusinessZone,
+  getBusinessToday,
+  toBusinessDateTimeInput,
+} from '../../utils/dates';
 import {
   VISIT_ADDRESS_LINE_REQUIRED_MESSAGE,
   VISIT_POSTAL_CODE_REQUIRED_MESSAGE,
@@ -98,15 +104,16 @@ const buildForm = (): FormState => ({
 /** The answer of the server for a postal code: the zone and the charge, or why it does not go there. */
 type QuoteAnswer = { postalCode: string } & ({ zoneName: string; fee: number } | { message: string });
 
-/** "2026-10-05T10:30" for a datetime-local input, in the device's time. */
-function toInputDateTime(value: string | Date): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+/**
+ * The instant, in milliseconds, of a start or an end typed on the business's clock ("2026-10-05T10:30"), not the
+ * device's. An appointment being edited keeps its own while the field shows it (the hour the clock repeats).
+ */
+function instantOf(input: string, original?: string): number {
+  return Date.parse(businessDateTimeToIso(input, original));
 }
 
-function addMinutes(input: string, minutes: number): string {
-  return toInputDateTime(new Date(new Date(input).getTime() + minutes * 60_000));
+function addMinutes(input: string, minutes: number, original?: string): string {
+  return toBusinessDateTimeInput(instantOf(input, original) + minutes * 60_000);
 }
 
 /** Same minute: the server may answer with seconds or another offset notation. */
@@ -114,16 +121,11 @@ function sameMinute(a: string, b: string): boolean {
   return Math.floor(new Date(a).getTime() / 60_000) === Math.floor(new Date(b).getTime() / 60_000);
 }
 
-function startOfToday(): Date {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-}
-
 function formatSlot(item: AppointmentDto): string {
   const start = new Date(item.startAt);
   const end = new Date(item.endAt);
-  const sameDay = start.toDateString() === end.toDateString();
+  // The same day of the business: an appointment past its midnight shows the date it ends.
+  const sameDay = toBusinessDateTimeInput(start).slice(0, 10) === toBusinessDateTimeInput(end).slice(0, 10);
   const day = formatInBusinessZone(start, { weekday: 'short', day: 'numeric', month: 'short' });
   const from = formatInBusinessZone(start, { hour: '2-digit', minute: '2-digit' });
   const to = sameDay
@@ -184,7 +186,7 @@ export default function AppointmentsList() {
     if (view === 'route') return;
     setLoading(true);
     try {
-      // Upcoming opens with today, the soonest first; history reads from the newest back.
+      // Upcoming opens with the business's today, the soonest first; history reads from the newest back.
       const params: {
         status?: AppointmentStatus;
         search?: string;
@@ -194,7 +196,7 @@ export default function AppointmentsList() {
         pageNumber: number;
         pageSize: number;
       } = view === 'upcoming'
-        ? { pageNumber, pageSize, fromDate: startOfToday().toISOString() }
+        ? { pageNumber, pageSize, fromDate: businessDayStart(getBusinessToday()) }
         : { pageNumber, pageSize, toDate: new Date().toISOString() };
       if (statusFilter !== '') params.status = Number(statusFilter) as AppointmentStatus;
       if (search) params.search = search;
@@ -289,8 +291,8 @@ export default function AppointmentsList() {
       serviceProductId: item.serviceProductId ?? OTHER_SERVICE,
       serviceName: item.serviceName,
       staffUserId: item.staffUserId ?? '',
-      startAt: toInputDateTime(item.startAt),
-      endAt: toInputDateTime(item.endAt),
+      startAt: toBusinessDateTimeInput(item.startAt),
+      endAt: toBusinessDateTimeInput(item.endAt),
       notes: item.notes ?? '',
       atHome: Boolean(item.visit),
       postalCode: item.visit?.postalCode ?? '',
@@ -309,16 +311,18 @@ export default function AppointmentsList() {
       ...current,
       serviceProductId,
       // Changing the service keeps the start and moves the end to its duration.
-      endAt: current.startAt && serviceProductId !== OTHER_SERVICE ? addMinutes(current.startAt, durationOf(serviceProductId)) : current.endAt,
+      endAt: current.startAt && serviceProductId !== OTHER_SERVICE
+        ? addMinutes(current.startAt, durationOf(serviceProductId), editing?.startAt)
+        : current.endAt,
     }));
   };
 
   const changeStart = (startAt: string) => {
     setForm((current) => {
       const duration = current.startAt && current.endAt
-        ? Math.max(5, Math.round((new Date(current.endAt).getTime() - new Date(current.startAt).getTime()) / 60_000))
+        ? Math.max(5, Math.round((instantOf(current.endAt, editing?.endAt) - instantOf(current.startAt, editing?.startAt)) / 60_000))
         : durationOf(current.serviceProductId);
-      return { ...current, startAt, endAt: startAt ? addMinutes(startAt, duration) : current.endAt };
+      return { ...current, startAt, endAt: startAt ? addMinutes(startAt, duration, editing?.startAt) : current.endAt };
     });
   };
 
@@ -333,7 +337,7 @@ export default function AppointmentsList() {
       setFormError('Elige el servicio o escribe cuál es.');
       return;
     }
-    if (!form.startAt || !form.endAt || new Date(form.endAt) <= new Date(form.startAt)) {
+    if (!form.startAt || !form.endAt || instantOf(form.endAt, editing?.endAt) <= instantOf(form.startAt, editing?.startAt)) {
       setFormError('Indica el inicio y un fin posterior al inicio.');
       return;
     }
@@ -352,8 +356,8 @@ export default function AppointmentsList() {
       serviceProductId: usesCatalog ? form.serviceProductId : undefined,
       serviceName: usesCatalog ? undefined : form.serviceName.trim(),
       staffUserId: form.staffUserId || undefined,
-      startAt: new Date(form.startAt).toISOString(),
-      endAt: new Date(form.endAt).toISOString(),
+      startAt: businessDateTimeToIso(form.startAt, editing?.startAt),
+      endAt: businessDateTimeToIso(form.endAt, editing?.endAt),
       notes: form.notes.trim() || undefined,
       // The server finds the zone and sets the charge (at the same address it keeps the one agreed).
       visit: form.atHome
@@ -763,10 +767,10 @@ export default function AppointmentsList() {
               <textarea id="appointment-notes" className="form-control" rows={2} value={form.notes} onChange={(e) => setForm((x) => ({ ...x, notes: e.target.value }))} />
             </div>
           </div>
-          {editing && form.startAt && !sameMinute(editing.startAt, form.startAt) && (
+          {editing && form.startAt && !sameMinute(editing.startAt, businessDateTimeToIso(form.startAt, editing.startAt)) && (
             <div className="alert alert-info py-2 small mt-3 mb-0">Al guardar, el cliente recibe por WhatsApp el nuevo horario.</div>
           )}
-          {editing && sameMinute(editing.startAt, form.startAt || editing.startAt)
+          {editing && sameMinute(editing.startAt, form.startAt ? businessDateTimeToIso(form.startAt, editing.startAt) : editing.startAt)
             && (editing.visit?.postalCode ?? '') !== (form.atHome ? form.postalCode.trim() : '') && (
             <div className="alert alert-info py-2 small mt-3 mb-0">Al guardar, el cliente recibe por WhatsApp el nuevo lugar.</div>
           )}

@@ -10,6 +10,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
 import { formatMoney } from '../../utils/money';
+import { businessDateTimeToIso, toBusinessDateTimeInput } from '../../utils/dates';
 import { SERVICE_PRIORITY_OPTIONS } from '../../utils/serviceDetail';
 import { getApiErrorMessage } from '../../api/errors';
 import './OrdersCart.css';
@@ -55,15 +56,6 @@ function isPlausiblePhone(value: string): boolean {
   return digits.length >= 8 && digits.length <= 15;
 }
 
-function toLocalDateTimeInput(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
 function buildChecklistItem(label = ''): ServiceChecklistItem {
   return {
     id: crypto.randomUUID(),
@@ -105,7 +97,10 @@ export default function OrdersCart() {
   const [tableNumber, setTableNumber] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
   const [productSearch, setProductSearch] = useState('');
-  const [serviceReceivedAt, setServiceReceivedAt] = useState(() => toLocalDateTimeInput(new Date()));
+  // Both dates are the business's wall clock, like the service board shows them, not the device's. The received date
+  // starts when the order was opened, and stays that instant while it shows it.
+  const [openedAt] = useState(() => new Date());
+  const [serviceReceivedAt, setServiceReceivedAt] = useState(() => toBusinessDateTimeInput(openedAt));
   const [servicePromisedAt, setServicePromisedAt] = useState('');
   const [servicePriority, setServicePriority] = useState(3);
   const [serviceIntakeNotes, setServiceIntakeNotes] = useState('');
@@ -433,8 +428,8 @@ export default function OrdersCart() {
       ...(resolvedOrderType === OrderTypeConst.Service
         ? {
             serviceDetail: {
-              receivedAt: serviceReceivedAt ? new Date(serviceReceivedAt).toISOString() : undefined,
-              promisedAt: servicePromisedAt ? new Date(servicePromisedAt).toISOString() : undefined,
+              receivedAt: serviceReceivedAt ? businessDateTimeToIso(serviceReceivedAt, openedAt) : undefined,
+              promisedAt: servicePromisedAt ? businessDateTimeToIso(servicePromisedAt) : undefined,
               priority: servicePriority,
               intakeNotes: serviceIntakeNotes.trim() || undefined,
               deliveryNotes: serviceDeliveryNotes.trim() || undefined,

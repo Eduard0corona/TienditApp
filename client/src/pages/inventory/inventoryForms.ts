@@ -10,7 +10,7 @@ import {
   type UnitType,
   type UpsertProductRecipeRequest,
 } from '../../types';
-import { businessDayStart } from '../../utils/dates';
+import { businessDateTimeToIso, businessDayStart, toBusinessDateTimeInput } from '../../utils/dates';
 
 /** What a form gives: the request for the API, or the first problem to show. */
 export type FormResult<T> = { request: T; error?: undefined } | { request?: undefined; error: string };
@@ -68,6 +68,8 @@ export interface MovementFormState {
   movementType: InventoryMovementType;
   movementReason: InventoryMovementReason;
   movementDate: string;
+  /** The instant the date started with: it stays that one while the field shows it. */
+  movementDateFilledWith: string;
   referenceNumber: string;
   externalReference: string;
   counterpartyName: string;
@@ -241,27 +243,22 @@ export const buildEmptyMovementLineForm = (): MovementLineFormState => ({
   notes: '',
 });
 
-/** The value of a datetime-local input: the device's own date and time, to the minute. */
-export const toDateTimeLocalValue = (value: Date) => {
-  const year = value.getFullYear();
-  const month = `${value.getMonth() + 1}`.padStart(2, '0');
-  const day = `${value.getDate()}`.padStart(2, '0');
-  const hour = `${value.getHours()}`.padStart(2, '0');
-  const minute = `${value.getMinutes()}`.padStart(2, '0');
-  return `${year}-${month}-${day}T${hour}:${minute}`;
+export const buildEmptyMovementForm = (): MovementFormState => {
+  const now = new Date();
+  return {
+    movementType: InventoryMovementType.Entry,
+    movementReason: InventoryMovementReason.Purchase,
+    // The date and time of the movement are the business's clock, as the kardex shows them.
+    movementDate: toBusinessDateTimeInput(now),
+    movementDateFilledWith: now.toISOString(),
+    referenceNumber: '',
+    externalReference: '',
+    counterpartyName: '',
+    documentNumber: '',
+    notes: '',
+    lines: [buildEmptyMovementLineForm()],
+  };
 };
-
-export const buildEmptyMovementForm = (): MovementFormState => ({
-  movementType: InventoryMovementType.Entry,
-  movementReason: InventoryMovementReason.Purchase,
-  movementDate: toDateTimeLocalValue(new Date()),
-  referenceNumber: '',
-  externalReference: '',
-  counterpartyName: '',
-  documentNumber: '',
-  notes: '',
-  lines: [buildEmptyMovementLineForm()],
-});
 
 export function toMovementRequest(form: MovementFormState): FormResult<CreateInventoryMovementRequest> {
   if (form.lines.length === 0) return { error: 'Debes agregar al menos un detalle.' };
@@ -280,7 +277,7 @@ export function toMovementRequest(form: MovementFormState): FormResult<CreateInv
     request: {
       movementType: form.movementType,
       movementReason: form.movementReason,
-      movementDate: form.movementDate ? new Date(form.movementDate).toISOString() : undefined,
+      movementDate: form.movementDate ? businessDateTimeToIso(form.movementDate, form.movementDateFilledWith) : undefined,
       referenceNumber: optional(form.referenceNumber),
       externalReference: optional(form.externalReference),
       counterpartyName: optional(form.counterpartyName),

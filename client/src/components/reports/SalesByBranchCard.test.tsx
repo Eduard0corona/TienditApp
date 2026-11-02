@@ -1,9 +1,10 @@
 import { render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { reportsApi, type SalesByBranchReport } from '../../api/reportsApi';
 import type { Schemas } from '../../api/typedClient';
 import { useActiveBranches } from '../../hooks/useWorkingBranch';
+import { setBusinessTimeZone } from '../../utils/dates';
 import SalesByBranchCard from './SalesByBranchCard';
 
 vi.mock('../../api/reportsApi', () => ({ reportsApi: { getSalesByBranch: vi.fn() } }));
@@ -60,6 +61,29 @@ describe('SalesByBranchCard', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(useActiveBranches).mockReturnValue({ data: [] } as unknown as ReturnType<typeof useActiveBranches>);
+  });
+
+  describe('with the business in Tijuana and the device on Mexico City time', () => {
+    afterEach(() => {
+      setBusinessTimeZone(null);
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    });
+
+    it('opens on the month so far in the business days, not the device days', async () => {
+      // 06:30 UTC on 1 November: 00:30 of the 1st on the device, still 23:30 of 31 October in Tijuana.
+      vi.stubEnv('TZ', 'America/Mexico_City');
+      setBusinessTimeZone('America/Tijuana');
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-01T06:30:00.000Z'));
+      vi.mocked(reportsApi.getSalesByBranch).mockResolvedValue(report(figures(), figures(), figures()));
+      renderCard();
+
+      expect(screen.getByLabelText('Desde')).toHaveValue('2026-10-01');
+      expect(screen.getByLabelText('Hasta')).toHaveValue('2026-10-31');
+      await screen.findByRole('table');
+      expect(reportsApi.getSalesByBranch).toHaveBeenCalledWith({ from: '2026-10-01', to: '2026-10-31', branchId: undefined });
+    });
   });
 
   it('keeps the columns it always had while no platform charged anything in the period', async () => {
