@@ -1742,7 +1742,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Infrastructure:**
     - `QuoteConversionMigrationSqlServerTests` (3, nuevo):
       - la versión anterior sigue guardando cotizaciones sobre las columnas nuevas;
-      - la base rechaza una conversión que el agregado no escribe: de una versión no aceptada, a medias, aplicando la visita de una aceptada sin visita (sin la guarda del NULL, falla), más de lo fijado o más del total, y dos cotizaciones de una orden;
+      - la base rechaza una conversión que el agregado no escribe: de una versión no aceptada, a medias (también lo aplicado sin orden), aplicando cero o menos, aplicando la visita de una aceptada sin visita (sin la guarda del NULL, falla), más de lo fijado o más del total, y dos cotizaciones de una orden;
       - el rollback se detiene con 50053 y luego quita solo lo suyo; otra vez no hace nada.
       - Sin la guarda, falla.
     - `QuoteConversionSqlServerTests` (4, nuevo):
@@ -1772,8 +1772,8 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - la fecha prometida en la zona del negocio, descrita como opcional, y después de un rechazo la página como está ahora;
       - el diálogo quieto mientras convierte; el aviso a quien no puede cobrar y hacer reembolsos; la visita sin pasar del total;
       - sin órdenes de servicio, dónde se activa el módulo (o que lo pida al dueño). Todo por la revisión, salvo el primero.
-    - `OrdersList.test.tsx` (+1): el detalle de una orden de servicio abre su cotización.
-  - **.NET en total:** 4,493 pruebas (Domain 1,333; Application 2,018; WebApi 480; Infrastructure 662). **Cliente en total:** 185 archivos y 1,386 pruebas.
+    - `OrdersList.test.tsx` (+2): el detalle de una orden de servicio abre su cotización, y la conserva después de un reembolso cuya respuesta no la trae (por la revisión automática).
+  - **.NET en total:** 4,498 pruebas (Domain 1,334; Application 2,021; WebApi 480; Infrastructure 663). **Cliente en total:** 185 archivos y 1,387 pruebas.
   - **Primera visita:** 181,365 B (`master` en `cfde7d4`: 181,367 B, −2 B). El diálogo y el enlace van en pantallas que se cargan aparte. La conversión de la hora del negocio vive en un módulo aparte: en `dates.ts` sumaba 69 B y pasaba el presupuesto (181,400 B), que no cambia.
   - **Escenas:** contra la línea base de `master` en `cfde7d4` (784 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
     - 769 salen iguales.
