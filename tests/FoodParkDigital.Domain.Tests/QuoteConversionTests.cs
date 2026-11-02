@@ -110,6 +110,18 @@ public class QuoteConversionTests
     }
 
     [Fact]
+    public void WhatItApplies_ShouldNeverPassTheTotal_EvenWhenTheVisitCostMore()
+    {
+        // A visit of 2,000 taken off a job of 1,160.
+        var quote = Accepted(credit: new QuoteVisitCredit(Guid.NewGuid(), 2000m));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => quote.ConvertToOrder(Guid.NewGuid(), 1160.01m, Now));
+        quote.ConvertToOrder(Guid.NewGuid(), 1160m, Now);
+
+        Assert.Equal((1160m, 0m), (quote.AppliedVisitCredit, quote.ToPay(null)));
+    }
+
+    [Fact]
     public void AQuoteWithoutTheVisit_ShouldApplyNothing()
     {
         var quote = Accepted();

@@ -61,14 +61,17 @@ public class QuoteConversionMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var (tenantId, accepted, order) = await SeedAsync(database);
         Guid sentId;
+        Guid withoutVisitId;
         await using (var context = database.CreateContext(tenantId))
         {
             var sent = Quote.Start(tenantId, Folios.QuoteNumber(2), new QuoteCustomer(null, "Luis", "5522107766", null), null, true, 15, Now);
             sent.ReplaceLines([new QuoteLineInput(null, "Revisión", 1m, 500m, VatRate.General)], Now);
             sent.Send(Today, new string('s', 43), null, Now);
-            context.Quotes.Add(sent);
+            // Accepted, and it takes nothing off for a visit.
+            var withoutVisit = Accepted(tenantId, 3);
+            context.Quotes.AddRange(sent, withoutVisit);
             await context.SaveChangesAsync();
-            sentId = sent.Id;
+            (sentId, withoutVisitId) = (sent.Id, withoutVisit.Id);
         }
 
         await using var check = database.CreateContext(tenantId);
@@ -79,8 +82,8 @@ public class QuoteConversionMigrationSqlServerTests
             // Half recorded: which order without when, or when without which order.
             $"UPDATE [Quotes] SET [OrderId] = '{order}' WHERE [Id] = '{accepted}'",
             $"UPDATE [Quotes] SET [ConvertedAt] = SYSDATETIMEOFFSET() WHERE [Id] = '{accepted}'",
-            // Applying the visit of a quote that takes nothing off for it.
-            $"UPDATE [Quotes] SET [OrderId] = '{order}', [ConvertedAt] = SYSDATETIMEOFFSET(), [AppliedVisitCredit] = 100 WHERE [Id] = '{sentId}'",
+            // Applying the visit of an accepted quote that takes nothing off for it.
+            $"UPDATE [Quotes] SET [OrderId] = '{order}', [ConvertedAt] = SYSDATETIMEOFFSET(), [AppliedVisitCredit] = 100 WHERE [Id] = '{withoutVisitId}'",
             // Applying more of the visit than was fixed (406).
             $"UPDATE [Quotes] SET [OrderId] = '{order}', [ConvertedAt] = SYSDATETIMEOFFSET(), [AppliedVisitCredit] = 406.01 WHERE [Id] = '{accepted}'",
             // Applying more than its total (1,160), even within what was fixed for the visit.

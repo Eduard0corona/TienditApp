@@ -165,6 +165,24 @@ public class QuoteConversionFlowTests
     }
 
     [Fact]
+    public async Task AVisitThatCostMoreThanTheJob_ShouldPayTheJobWhole_AndLeaveTheRestInItsSale()
+    {
+        await using var shop = await Shop.OpenAsync(pricesIncludeTax: false, policy: HomeVisitChargePolicy.CreditedIfHired);
+        // The visit paid 440.80; the job is 250 plus IVA, 290.
+        var (sale, quote) = await shop.CreditedVisitQuoteAsync(jobPrice: 250m);
+        Assert.Equal((290m, 0m), (quote.Total, quote.ToPay));
+
+        var converted = await shop.ConvertAsync(quote.Id);
+
+        Assert.True(converted.IsSuccess, converted.Error);
+        var order = await shop.Context.Orders.Include(o => o.Payments).AsNoTracking().SingleAsync(o => o.Id != sale.Id);
+        Assert.Equal((290m, 290m, 0m), (Assert.Single(order.Payments).Amount, order.Total, order.Balance));
+        var visitSale = await shop.Context.Orders.Include(o => o.Refunds).AsNoTracking().SingleAsync(o => o.Id == sale.Id);
+        Assert.Equal((290m, 150.80m), (Assert.Single(visitSale.Refunds).Amount, visitSale.NetPaidAmount));
+        Assert.Equal(290m, (await shop.Context.Quotes.AsNoTracking().SingleAsync(q => q.Id == quote.Id)).AppliedVisitCredit);
+    }
+
+    [Fact]
     public async Task ApplyingTheVisit_ShouldNeedWhoMayChargeAndRefund_AndConvertingWithoutIt_ShouldNot()
     {
         await using var shop = await Shop.OpenAsync(pricesIncludeTax: false, policy: HomeVisitChargePolicy.CreditedIfHired);
@@ -334,7 +352,8 @@ public class QuoteConversionFlowTests
         /// cash, and its quote for 1,000 plus IVA, accepted.
         /// </summary>
         /// <param name="salePhone">The phone the sale of the visit was charged with: the visit's customer's, as the Agenda fills it.</param>
-        public async Task<(OrderDto Sale, QuoteDto Quote)> CreditedVisitQuoteAsync(string? salePhone = "5522107765")
+        /// <param name="jobPrice">The price of the job quoted, plus IVA.</param>
+        public async Task<(OrderDto Sale, QuoteDto Quote)> CreditedVisitQuoteAsync(string? salePhone = "5522107765", decimal jobPrice = 1000m)
         {
             var service = await Fixture.AddProductAsync(Tenant, "Visita y diagnóstico", 300m, unit: UnitType.Service);
             var visit = await VisitAsync(service.Id);
@@ -356,7 +375,7 @@ public class QuoteConversionFlowTests
             var created = await new CreateQuoteCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, new FolioGenerator(Context), Fixture.Clock)
                 .Handle(new CreateQuoteCommand(visit.Id, null, null, null, null), CancellationToken.None);
             Assert.True(created.IsSuccess, created.Error);
-            var sent = await SendAsync(created.Value!, [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = 1000m }]);
+            var sent = await SendAsync(created.Value!, [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = jobPrice }]);
             return (sale.Value!, await AcceptAsync(sent));
         }
 

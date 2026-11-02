@@ -1728,10 +1728,10 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 
 - Fase 29E, la cotización aceptada se convierte en una orden de servicio ([ADR 0053](../adr/0053-home-visit-quotes.md), punto 17):
   - **Domain:**
-    - `QuoteConversionTests` (14, nuevo):
+    - `QuoteConversionTests` (15, nuevo):
       - solo una versión aceptada se convierte, y una vez;
       - lo aplicado de la visita queda como lo que descuenta aunque su venta ya no tenga nada pagado, y sin visita aplicada no descuenta nada;
-      - no aplica más de lo fijado ni sin visita;
+      - no aplica más de lo fijado, ni del total aunque la visita costara más (por la revisión automática), ni sin visita;
       - un renglón del catálogo conserva su producto y claves al precio aceptado;
       - uno a mano, o sin producto, es una unidad de servicio con el id del renglón;
       - una cantidad que su unidad no vende va como una al importe del renglón, y la hora conserva la suya;
@@ -1742,7 +1742,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Infrastructure:**
     - `QuoteConversionMigrationSqlServerTests` (3, nuevo):
       - la versión anterior sigue guardando cotizaciones sobre las columnas nuevas;
-      - la base rechaza una conversión que el agregado no escribe: de una versión no aceptada, a medias, aplicando la visita sin visita, más de lo fijado o más del total, y dos cotizaciones de una orden;
+      - la base rechaza una conversión que el agregado no escribe: de una versión no aceptada, a medias, aplicando la visita de una aceptada sin visita (sin la guarda del NULL, falla), más de lo fijado o más del total, y dos cotizaciones de una orden;
       - el rollback se detiene con 50053 y luego quita solo lo suyo; otra vez no hace nada.
       - Sin la guarda, falla.
     - `QuoteConversionSqlServerTests` (4, nuevo):
@@ -1752,12 +1752,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - una conversión guardada justo antes de que el reembolso en efectivo guarde: queda la conversión con su pago, y el reembolso choca (por la revisión automática de la PR, que pidió forzar los dos órdenes).
     - `BeforeQuoteConversion` (nuevo): las pruebas de las migraciones anteriores guardan cotizaciones sin las columnas nuevas. `BeforeQuoteDeliveries` lo encadena, y `QuoteDeliveriesMigrationSqlServerTests` siembra con él.
   - **Application:**
-    - `QuoteConversionFlowTests` (12, nuevo):
+    - `QuoteConversionFlowTests` (13, nuevo):
       - la orden del negocio, «Aceptada», con el cliente, los renglones a los precios aceptados (no a los del catálogo de hoy), el renglón a mano como servicio, la cantidad con decimales en su nombre, la fecha prometida, la nota de ingreso, la pieza del servicio con seguimiento y el total de la cotización;
       - la actividad sin datos del cliente; el detalle de la orden y la lista de órdenes abren su cotización;
       - conserva la política de IVA de la cotización aunque el negocio cambió la suya;
       - solo la aceptada y una vez; un negocio sin órdenes de servicio no la convierte;
       - lo pagado de la visita pasa de su venta al saldo a favor y paga la orden, sin movimiento de caja y con el saldo en cero, y la cotización lo sigue descontando;
+      - una visita que costó más que el trabajo paga la orden completa y el resto se queda en su venta (por la revisión automática);
       - necesita a quien puede cobrar y hacer reembolsos solo cuando aplica la visita (por la revisión); con la venta cancelada no aplica nada; cobrada sin teléfono no se convierte;
       - un producto que no se vende en fracciones se cotiza sin decimales, y la hora sí los lleva (por la revisión);
       - otro negocio no la encuentra; la fecha prometida va de hoy a un año.
