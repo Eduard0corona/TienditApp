@@ -19,6 +19,7 @@ using FoodParkDigital.Infrastructure.Persistence.Interceptors;
 using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Infrastructure.Tests;
@@ -74,41 +75,58 @@ public class QuoteConversionSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task ARefundOfTheVisitAtTheSameTime_ShouldNotLetItsMoneyAlsoPayTheJob()
+    public async Task ARefundOfTheVisitSavedWhileConverting_ShouldUndoTheConversionWhole()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
         var (tenantId, quoteId, visitSaleId) = await SeedWithVisitAsync(database);
+        var refunded = false;
 
-        // The business gives the visit back in cash while the quote is converted: one of them stands.
-        var refund = RefundVisitAsync(database, tenantId, visitSaleId);
-        var conversion = ConvertAsync(database, tenantId, quoteId);
-        await Task.WhenAll(refund, conversion);
+        // The conversion read the sale of the visit with its 406 paid; right before it saves, the business gives them back in cash.
+        var conversion = await ConvertAsync(database, tenantId, quoteId,
+            new BeforeTheConversionSaves(async () => refunded = await RefundVisitAsync(database, tenantId, visitSaleId)));
 
+        Assert.True(refunded);
+        Assert.Equal(QuoteConversions.ChangedMeanwhileMessage, conversion.Error);
         await using var check = database.CreateContext(tenantId);
         var visitSale = await check.Orders.Include(o => o.Refunds).SingleAsync(o => o.Id == visitSaleId);
-        var refunds = visitSale.Refunds.ToList();
-        var job = await check.Orders.Include(o => o.Payments).SingleOrDefaultAsync(o => o.Id != visitSaleId);
-        // The 406 went one way only: back in cash, or to the balance and from it into the job.
-        Assert.Equal(406m, Assert.Single(refunds).Amount);
-        Assert.Equal(0m, visitSale.NetPaidAmount);
-        if (refunds[0].Method == OrderPaymentMethod.Cash)
-            Assert.Equal(0m, job?.PaidAmount ?? 0m);
-        else
-            Assert.Equal((OrderPaymentMethod.CustomerBalance, 406m), (refunds[0].Method, job!.PaidAmount));
-        Assert.Equal(0m, await check.CustomerBalanceEntries.SumAsync(e => (decimal?)e.Amount) ?? 0m);
-        // The one that lost says why: the cash refund collided, or the conversion says the sale of the visit changed.
-        Assert.True(await refund || (await conversion).IsSuccess);
-        if ((await conversion).IsFailure)
-            Assert.Equal(QuoteConversions.ChangedMeanwhileMessage, (await conversion).Error);
+        // Back in cash once, and nothing of the conversion stayed: no order, no balance, the quote waiting as it was.
+        Assert.Equal((OrderPaymentMethod.Cash, 406m), (Assert.Single(visitSale.Refunds).Method, visitSale.Refunds.Single().Amount));
+        Assert.Equal(1, await check.Orders.CountAsync());
+        Assert.Empty(await check.CustomerBalanceEntries.ToListAsync());
+        var quote = await check.Quotes.SingleAsync();
+        Assert.Equal(((Guid?)null, (decimal?)null), (quote.OrderId, quote.AppliedVisitCredit));
+    }
+
+    [SqlServerFact]
+    public async Task AConversionSavedWhileRefundingTheVisit_ShouldUndoTheRefund()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenantId, quoteId, visitSaleId) = await SeedWithVisitAsync(database);
+        Result<QuoteDto>? conversion = null;
+
+        // The business is giving the visit back in cash; right before it saves, the quote is converted with those 406.
+        var refunded = await RefundVisitAsync(database, tenantId, visitSaleId,
+            new SavedMeanwhile(async () => conversion = await ConvertAsync(database, tenantId, quoteId)));
+
+        Assert.False(refunded);
+        Assert.True(conversion!.IsSuccess, conversion.Error);
+        await using var check = database.CreateContext(tenantId);
+        var visitSale = await check.Orders.Include(o => o.Refunds).SingleAsync(o => o.Id == visitSaleId);
+        var job = await check.Orders.Include(o => o.Payments).SingleAsync(o => o.Id != visitSaleId);
+        // The 406 went to the balance and from it into the job, once; the cash refund collided and left nothing.
+        Assert.Equal((OrderPaymentMethod.CustomerBalance, 406m), (Assert.Single(visitSale.Refunds).Method, visitSale.Refunds.Single().Amount));
+        Assert.Equal(406m, job.PaidAmount);
+        Assert.Equal(0m, await check.CustomerBalanceEntries.SumAsync(e => e.Amount));
     }
 
     /// <summary>The business refunds the 406 of the visit's sale in cash, through the transaction of the pipeline.</summary>
-    private static async Task<bool> RefundVisitAsync(SqlServerTestDatabase database, Guid tenantId, Guid visitSaleId)
+    private static async Task<bool> RefundVisitAsync(
+        SqlServerTestDatabase database, Guid tenantId, Guid visitSaleId, params IInterceptor[] interceptors)
     {
         var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
         tenant.SetTenant(tenantId);
         await using var context = database.CreateProductionLikeContext(
-            tenant, new InMemoryApplicationDbContext.NullMediator(), new TenantSaveChangesInterceptor(tenant));
+            tenant, new InMemoryApplicationDbContext.NullMediator(), [new TenantSaveChangesInterceptor(tenant), .. interceptors]);
         var clock = new Clock();
         var sale = await context.Orders.Include(o => o.Items).Include(o => o.Payments).Include(o => o.Refunds).ThenInclude(r => r.Lines)
             .SingleAsync(o => o.Id == visitSaleId);
@@ -125,12 +143,13 @@ public class QuoteConversionSqlServerTests
     }
 
     /// <summary>One «Convertir en orden de servicio» in its own context, through the transaction of the pipeline.</summary>
-    private static async Task<Result<QuoteDto>> ConvertAsync(SqlServerTestDatabase database, Guid tenantId, Guid quoteId)
+    private static async Task<Result<QuoteDto>> ConvertAsync(
+        SqlServerTestDatabase database, Guid tenantId, Guid quoteId, params IInterceptor[] interceptors)
     {
         var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
         tenant.SetTenant(tenantId);
         await using var context = database.CreateProductionLikeContext(
-            tenant, new InMemoryApplicationDbContext.NullMediator(), new TenantSaveChangesInterceptor(tenant));
+            tenant, new InMemoryApplicationDbContext.NullMediator(), [new TenantSaveChangesInterceptor(tenant), .. interceptors]);
         var user = new Owner();
         var phones = new PhoneNormalizationService();
         var clock = new Clock();
@@ -188,6 +207,27 @@ public class QuoteConversionSqlServerTests
         seed.AddRange(tenant, settings, visit, visitSale, quote);
         await seed.SaveChangesAsync();
         return (tenant.Id, quote.Id, visitSale.Id);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="save"/> once, right before the conversion writes its order: an earlier save of the same request (the
+    /// customer it may record) passes untouched.
+    /// </summary>
+    private sealed class BeforeTheConversionSaves(Func<Task> save) : SaveChangesInterceptor
+    {
+        private bool _saved;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!_saved && eventData.Context!.ChangeTracker.Entries<Quote>().Any(e => e.Entity.OrderId != null))
+            {
+                _saved = true;
+                await save();
+            }
+
+            return result;
+        }
     }
 
     private sealed class Clock : IDateTimeProvider

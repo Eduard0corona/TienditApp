@@ -1745,10 +1745,11 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - la base rechaza una conversión que el agregado no escribe: de una versión no aceptada, a medias, aplicando la visita sin visita, más de lo fijado o más del total, y dos cotizaciones de una orden;
       - el rollback se detiene con 50053 y luego quita solo lo suyo; otra vez no hace nada.
       - Sin la guarda, falla.
-    - `QuoteConversionSqlServerTests` (3, nuevo):
+    - `QuoteConversionSqlServerTests` (4, nuevo):
       - cuatro «Convertir en orden de servicio» a la vez por el pipeline dejan una orden y avisan a las demás; sin atrapar el choque de versiones, falla;
       - tres a la vez con la visita la toman una sola vez: un reembolso de 406, un pago de 406 y el saldo en cero (por la revisión);
-      - una conversión contra un reembolso en efectivo de la visita: los 406 salen por un solo lado, y la que pierde lo dice (por la revisión; encontró que el choque con la venta decía «ya se convirtió»).
+      - un reembolso en efectivo de la visita guardado justo antes de que la conversión guarde: queda el reembolso, y la conversión se deshace entera y dice que la venta cambió (por la revisión; encontró que decía «ya se convirtió»);
+      - una conversión guardada justo antes de que el reembolso en efectivo guarde: queda la conversión con su pago, y el reembolso choca (por la revisión automática de la PR, que pidió forzar los dos órdenes).
     - `BeforeQuoteConversion` (nuevo): las pruebas de las migraciones anteriores guardan cotizaciones sin las columnas nuevas. `BeforeQuoteDeliveries` lo encadena, y `QuoteDeliveriesMigrationSqlServerTests` siembra con él.
   - **Application:**
     - `QuoteConversionFlowTests` (12, nuevo):
