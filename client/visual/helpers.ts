@@ -24,8 +24,13 @@ export async function settle(page: Page) {
     const loading = [...document.querySelectorAll('body *')].some((element) =>
       element.childElementCount === 0 && visible(element) && /^Cargando…?\.{0,3}$/.test(element.textContent?.trim() ?? ''));
     // An image not drawn at all (display: none, as the favorites past «Ver todos») never loads while lazy: it does not
-    // count. One drawn has its box even before it loads.
-    const pictures = [...document.images].every((image) => image.complete || image.getClientRects().length === 0);
+    // count. One drawn has its box even before it loads; a lazy one far below the screen loads when someone scrolls to
+    // it, so it is loaded now: the capture of the whole page shows it as whoever scrolls there sees it.
+    const pictures = [...document.images].every((image) => {
+      if (image.complete || image.getClientRects().length === 0) return true;
+      if (image.loading === 'lazy') image.loading = 'eager';
+      return false;
+    });
     return !spinning && !loading && pictures;
   }, null, { timeout: 20_000 });
   await page.evaluate(() => document.fonts.ready);

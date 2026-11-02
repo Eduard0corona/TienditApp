@@ -4,6 +4,21 @@
  */
 export const HOME_DELIVERY_INDUSTRY = 'Comida a domicilio';
 
+/** The trades that go to their customers' homes (Fase 29A). Same texts and order as the API's HomeTrades.All. */
+export const HOME_TRADES = [
+  'Carpintería',
+  'Herrería y soldadura',
+  'Electricista',
+  'Plomería',
+  'Aire acondicionado',
+  'Fumigación',
+  'Refrigeración y línea blanca',
+  'Cerrajería',
+  'Jardinería',
+  'Limpieza del hogar',
+  'Pintura e impermeabilización',
+];
+
 /** The giros a business can pick; the one picked is stored as written here. */
 export const INDUSTRY_OPTIONS = [
   'Alimentos y bebidas',
