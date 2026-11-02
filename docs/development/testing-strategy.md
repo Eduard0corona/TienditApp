@@ -1914,7 +1914,10 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `privateFiles.test.ts` (+1): el área nueva.
   - **.NET en total:** 4,580 pruebas (Domain 1,357; Application 2,068; WebApi 483; Infrastructure 672), también el build en Release. **Cliente en total:** 193 archivos y 1,467 pruebas.
   - **Primera visita:** 181,705 B (`master` en `8ecfa7f`: 181,605 B, +100 B). Las fotos se cargan con sus pantallas; los 100 B son la lista de precarga de la entrada, con los chunks compartidos nuevos, y la regla de las rutas privadas. El presupuesto sube de 181,700 B a 181,800 B.
-  - **Escenas:** pendiente.
+  - **Escenas:** contra la línea base de `master` en `8ecfa7f` (794 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - 793 salen iguales.
+    - **Cambia 1, a propósito:** la hoja de la solicitud (`oficios-solicitar-visita-datos-telefono`) suma «Fotos de lo que pasa».
+    - **4 nuevas:** la solicitud con dos fotos y su recibo con las fotos enviadas (en `oficios.spec.ts`), el enlace de la visita con fotos, «Ver lo que pasa» en la Agenda (`agenda-domicilio.spec.ts`) y la cotización con lo que pasa (`cotizaciones.spec.ts`). Pasaron tres corridas seguidas y salen iguales en la comparación completa.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
