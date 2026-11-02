@@ -149,7 +149,7 @@ function zoneOffsetMinutes(timeZone: string, at: Date): number {
 }
 
 /** The instant a wall clock in the business shows that date and time. */
-function businessWallTimeToInstant(date: string, time: string): Date {
+export function businessWallTimeToInstant(date: string, time: string): Date {
   if (!businessTimeZone) return new Date(`${date}T${time}`);
   const [year, month, day] = date.split('-').map(Number);
   const [hour, minute, second] = time.split(':').map(Number);
@@ -157,15 +157,6 @@ function businessWallTimeToInstant(date: string, time: string): Date {
   // The offset can change that day (summer time on the border): correct once with the offset at the result.
   const guess = wall - zoneOffsetMinutes(businessTimeZone, new Date(wall)) * 60_000;
   return new Date(wall - zoneOffsetMinutes(businessTimeZone, new Date(guess)) * 60_000);
-}
-
-/**
- * A time typed in a datetime-local field («2026-10-08T10:30»), read in the business's time zone (not the device's), as an
- * instant for the API (ISO).
- */
-export function businessDateTimeToIso(value: string): string {
-  const [date, time = '00:00'] = value.split('T');
-  return businessWallTimeToInstant(date, time.length === 5 ? `${time}:00` : time).toISOString();
 }
 
 /** When a business day starts, for "from" filters of the API (ISO). */
