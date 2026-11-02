@@ -107,6 +107,10 @@ public class VisitRouteStopDto
     public Guid? SaleOrderId { get; set; }
     /// <summary>Its sale was cancelled: it is charged again with another one.</summary>
     public bool SaleCancelled { get; set; }
+    /// <summary>The service order whose job it does (Fase 29F): charged in that order, never on its own. Null otherwise.</summary>
+    public Guid? WorkOrderId { get; set; }
+    /// <summary>The folio of that order; null for every other visit.</summary>
+    public string? WorkOrderNumber { get; set; }
 }
 
 /// <summary>
@@ -180,13 +184,18 @@ public class GetVisitRouteQueryHandler : IRequestHandler<GetVisitRouteQuery, Vis
                     References = x.Visit.References,
                     ZoneName = x.Visit.ZoneName,
                     Fee = x.Visit.Fee,
-                    SaleOrderId = x.SaleOrderId
+                    SaleOrderId = x.SaleOrderId,
+                    WorkOrderId = x.WorkOrderId
                 }
             })
             .ToListAsync(cancellationToken);
         var cancelled = await AppointmentSales.CancelledAsync(_context, visits.Select(x => x.Stop.SaleOrderId), cancellationToken);
+        var workOrders = await WorkAppointments.OrderNumbersAsync(_context, visits.Select(x => x.Stop.WorkOrderId), cancellationToken);
         foreach (var visit in visits)
+        {
             visit.Stop.SaleCancelled = visit.Stop.SaleOrderId is { } sale && cancelled.Contains(sale);
+            visit.Stop.WorkOrderNumber = visit.Stop.WorkOrderId is { } order ? workOrders.GetValueOrDefault(order) : null;
+        }
 
         // A team member of the team by their id; one written by hand (older appointments) by their name. Those nobody
         // attends yet go last.

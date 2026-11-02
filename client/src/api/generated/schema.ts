@@ -13681,6 +13681,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/quotes/{id}/work-appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ScheduleQuoteWorkRequest"];
+                    "text/json": components["schemas"]["ScheduleQuoteWorkRequest"];
+                    "application/*+json": components["schemas"]["ScheduleQuoteWorkRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDto"];
+                        "application/json": components["schemas"]["QuoteDto"];
+                        "text/json": components["schemas"]["QuoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/operational-summary": {
         parameters: {
             query?: never;
@@ -15635,6 +15680,9 @@ export interface components {
             saleCancelled: boolean;
             channel: components["schemas"]["AppointmentChannel"];
             cancelledByCustomer: boolean;
+            /** Format: uuid */
+            workOrderId?: string | null;
+            workOrderNumber?: string | null;
         };
         AppointmentDtoPaginatedList: {
             items: components["schemas"]["AppointmentDto"][];
@@ -18973,6 +19021,7 @@ export interface components {
             delivery?: components["schemas"]["OrderDeliveryDto"];
             visitCharge?: components["schemas"]["OrderVisitChargeDto"];
             quote?: components["schemas"]["OrderQuoteDto"];
+            workAppointments: components["schemas"]["WorkAppointmentDto"][];
             /** Format: uuid */
             branchId?: string | null;
             /** Format: date-time */
@@ -20632,6 +20681,7 @@ export interface components {
             /** Format: date-time */
             convertedAt?: string | null;
             canConvertToOrder: boolean;
+            canScheduleWork: boolean;
             /** Format: date-time */
             createdAt: string;
         };
@@ -20691,6 +20741,7 @@ export interface components {
             id: string;
             orderNumber: string;
             status: components["schemas"]["OrderStatus"];
+            workAppointments: components["schemas"]["WorkAppointmentDto"][];
         };
         /**
          * Format: int32
@@ -21125,6 +21176,15 @@ export interface components {
             kind: components["schemas"]["SpecialDayKind"];
             openings?: components["schemas"]["SpecialOpeningDto"][] | null;
             reason?: string | null;
+        };
+        ScheduleQuoteWorkRequest: {
+            /** Format: date-time */
+            startAt: string;
+            /** Format: date-time */
+            endAt: string;
+            /** Format: uuid */
+            staffUserId?: string | null;
+            notes?: string | null;
         };
         /**
          * Format: int32
@@ -22239,6 +22299,9 @@ export interface components {
             /** Format: uuid */
             saleOrderId?: string | null;
             saleCancelled: boolean;
+            /** Format: uuid */
+            workOrderId?: string | null;
+            workOrderNumber?: string | null;
         };
         VoidOrderRequest: {
             reason: string;
@@ -22260,6 +22323,17 @@ export interface components {
             displayPhoneNumber?: string | null;
             hasAccessToken: boolean;
             verifyToken?: string | null;
+        };
+        WorkAppointmentDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            startAt: string;
+            /** Format: date-time */
+            endAt: string;
+            staffName?: string | null;
+            status: components["schemas"]["AppointmentStatus"];
+            atCustomersAddress: boolean;
         };
         WriteOffCustomerAccountCommand: {
             /** Format: uuid */

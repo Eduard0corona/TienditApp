@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FoodParkDigital.Application.Appointments;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Utils;
@@ -147,6 +148,7 @@ internal static class QuoteAudit
     public const string SettingsUpdated = "QuoteSettingsUpdated";
     public const string WhatsAppTemplateChanged = "QuoteWhatsAppTemplateChanged";
     public const string Converted = "QuoteConverted";
+    public const string WorkScheduled = "QuoteWorkScheduled";
 
     public static AuditLog Create(Quote quote, string action, string? performedBy, object? extra = null)
         => new(
@@ -195,9 +197,15 @@ internal static class QuoteViews
                 .Select(o => new QuoteOrderDto { Id = o.Id, OrderNumber = o.OrderNumber, Status = o.Status })
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
+        var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(context, quote.TenantId, cancellationToken);
         var canConvert = quote.Status == QuoteStatus.Accepted && quote.OrderId is null
-            && TenantCapabilityRules.CanCreateOrderType(
-                await TenantCapabilityRules.ResolveCapabilitiesAsync(context, quote.TenantId, cancellationToken), OrderType.Service);
+            && TenantCapabilityRules.CanCreateOrderType(capabilities, OrderType.Service);
+        // The appointments that do its job (Fase 29F), and whether more can be agendadas now.
+        if (order is not null)
+            order.WorkAppointments = (await WorkAppointments.ForOrdersAsync(context, quote.TenantId, [order.Id], cancellationToken))
+                .GetValueOrDefault(order.Id) ?? [];
+        var canScheduleWork = order is not null && order.Status != OrderStatus.Cancelled
+            && TenantCapabilityRules.CanAccessAppointments(capabilities);
 
         return new QuoteDto
         {
@@ -254,7 +262,8 @@ internal static class QuoteViews
             WhatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(context, quote.TenantId, cancellationToken),
             Order = order,
             ConvertedAt = quote.ConvertedAt,
-            CanConvertToOrder = canConvert
+            CanConvertToOrder = canConvert,
+            CanScheduleWork = canScheduleWork
         };
     }
 

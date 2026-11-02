@@ -120,7 +120,7 @@ public class GetOrdersByBusinessQueryHandler : IRequestHandler<GetOrdersByBusine
             projectedQuery, request.PageNumber, request.PageSize, cancellationToken);
         result.Items.ApplyStateMetadata();
         // The accepted quote each service order came from (Fase 29E), so its detail opens it.
-        await OrderQuoteLinks.ApplyAsync(_context, result.Items, cancellationToken);
+        await OrderQuoteLinks.ApplyAsync(_context, _tenantService.TenantId, result.Items, cancellationToken);
         return result;
     }
 }
