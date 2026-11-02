@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,10 +7,12 @@ import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { getApiErrorMessage } from '../../api/errors';
 import { productsApi } from '../../api/productsApi';
 import { quotesApi, type Quote, type QuoteLineRequest } from '../../api/quotesApi';
+import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { QuoteReplyChannel, QuoteStatus } from '../../types';
+import { getAccess } from '../../utils/access';
 import { formatCalendarDate, formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import {
@@ -104,7 +106,9 @@ function QuoteDetail({ id }: { id: string }) {
   const toast = useToast();
   const { confirm } = useConfirm();
   const queryClient = useQueryClient();
-  const { tenant } = useTenant();
+  const { tenant, capabilities } = useTenant();
+  const { user } = useAuth();
+  const access = getAccess(user, capabilities);
   const replyTitleId = useId();
   const [form, setForm] = useState<DraftForm | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -118,6 +122,9 @@ function QuoteDetail({ id }: { id: string }) {
   const [pending, setPending] = useState<Action | null>(null);
   const [sendingBy, setSendingBy] = useState<QuoteChannel | null>(null);
   const [converting, setConverting] = useState(false);
+  // Converted from here: the link to the order takes the focus the button it replaces had.
+  const [justConverted, setJustConverted] = useState(false);
+  const orderLinkRef = useRef<HTMLAnchorElement>(null);
 
   const quoteQuery = useQuery({
     queryKey: ['quotes', 'detail', id],
@@ -127,6 +134,13 @@ function QuoteDetail({ id }: { id: string }) {
   });
   const quote = quoteQuery.data;
   const isDraft = quote?.status === QuoteStatus.Draft;
+
+  useEffect(() => {
+    if (justConverted && quote?.order) {
+      orderLinkRef.current?.focus();
+      setJustConverted(false);
+    }
+  }, [justConverted, quote?.order]);
 
   // The form follows what the server has while nothing is typed: a refresh never takes away what the person is writing.
   const [seen, setSeen] = useState<Quote | undefined>(undefined);
@@ -552,7 +566,7 @@ function QuoteDetail({ id }: { id: string }) {
               {quote.status === QuoteStatus.Accepted && (quote.order ? (
                 <p className="small mb-0" role="status">
                   Se convirtió en la orden {quote.order.orderNumber}.{' '}
-                  <Link to={`/orders?search=${encodeURIComponent(quote.order.orderNumber)}`}>Ver la orden</Link>
+                  <Link ref={orderLinkRef} to={`/orders?search=${encodeURIComponent(quote.order.orderNumber)}`}>Ver la orden</Link>
                 </p>
               ) : quote.canConvertToOrder ? (
                 <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setConverting(true)}>
@@ -560,7 +574,12 @@ function QuoteDetail({ id }: { id: string }) {
                 </button>
               ) : (
                 <p className="text-muted small mb-0">
-                  Para convertirla en una orden de servicio, tu negocio necesita las órdenes de servicio: se prenden en Configuración.
+                  {access.businessSettings ? (
+                    <>
+                      Para convertirla en una orden de servicio, activa el módulo «Servicios» en{' '}
+                      <Link to="/settings/business">Configuración › Negocio</Link>.
+                    </>
+                  ) : 'Para convertirla en una orden de servicio, pídele al dueño que active el módulo «Servicios» en Configuración › Negocio.'}
                 </p>
               ))}
 
@@ -616,9 +635,11 @@ function QuoteDetail({ id }: { id: string }) {
       {converting && (
         <ConvertQuoteDialog
           quote={quote}
+          canCharge={access.charge}
           onClose={() => setConverting(false)}
           onConverted={(converted) => {
             setConverting(false);
+            setJustConverted(true);
             show(converted);
             toast.success(`Se creó la orden de servicio ${converted.order?.orderNumber ?? ''}.`);
           }}

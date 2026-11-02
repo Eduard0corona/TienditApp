@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { SIZES, open, snap } from '../helpers';
+import { SIZES, dialog, open, snap } from '../helpers';
 import {
   ACCEPTED_QUOTE_ID,
   CONNECTED_QUOTE_ID,
@@ -78,9 +78,10 @@ test.describe('Cotización aceptada', () => {
     await page.setViewportSize(SIZES.desktop);
     await open(page, '/quotes/5d2a8f61-3c7e-4b9a-8e14-6f0b2c9d7a35');
     await page.getByRole('button', { name: 'Convertir en orden de servicio' }).click();
-    await expect(page.getByRole('dialog', { name: 'Convertir en orden de servicio' })).toBeVisible();
-    await expect(page.getByLabel('Para cuándo es el trabajo')).toBeVisible();
-    await snap(page, 'cotizacion-convertir-escritorio');
+    const form = await dialog(page, 'Convertir en orden de servicio');
+    await expect(form.getByLabel('Para cuándo es el trabajo')).toBeVisible();
+    // A dialog fits the screen: its dark backdrop covers the screen, not the page.
+    await snap(page, 'cotizacion-convertir-escritorio', { fullPage: false });
   });
 
   test('cotización convertida', async ({ page }) => {

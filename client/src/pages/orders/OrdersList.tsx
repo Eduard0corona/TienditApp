@@ -83,6 +83,14 @@ function getChannelOptions(withPlatforms: boolean) {
 }
 
 /** The platform charged the order in its app: nothing is left to collect from the courier. */
+/**
+ * What a charge, refund or void answers does not say which quote the order came from (Fase 29E); it never changes, so the
+ * order keeps the one it had.
+ */
+function withItsQuote(updated: OrderDto, previous: OrderDto): OrderDto {
+  return updated.quote ? updated : { ...updated, quote: previous.quote };
+}
+
 function chargedByPlatform(order: OrderDto): boolean {
   return isDeliveryPlatform(order.channel) && order.platformOrder?.collectedBy === PlatformCollectedBy.Platform;
 }
@@ -429,7 +437,7 @@ export default function OrdersList() {
         ? await ordersApi.voidOrder(order.id, request.data)
         : await ordersApi.refund(order.id, request.data);
       setRefundTarget(null);
-      if (selectedOrder?.id === updated.id) setSelectedOrder(updated);
+      if (selectedOrder?.id === updated.id) setSelectedOrder(withItsQuote(updated, selectedOrder));
       toast.success(request.mode === 'void'
         ? `Venta ${order.orderNumber} anulada.`
         : `Reembolso de ${formatMoney(request.data.amount)} registrado en ${order.orderNumber}.`);
@@ -467,7 +475,7 @@ export default function OrdersList() {
       if (updated) {
         // The change of this charge (the ticket adds up every payment of the order).
         setPaidReceipt({ order: updated, change: charge.change });
-        if (selectedOrder?.id === updated.id) setSelectedOrder(updated);
+        if (selectedOrder?.id === updated.id) setSelectedOrder(withItsQuote(updated, selectedOrder));
       }
       await loadOrders();
     } catch (err: unknown) {

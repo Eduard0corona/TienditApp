@@ -3,16 +3,19 @@ import userEvent from '@testing-library/user-event';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { productsApi } from '../../api/productsApi';
 import { quotesApi, type Quote } from '../../api/quotesApi';
+import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
-import { OutgoingMessageStatus, QuoteEmailFailure, QuoteReplyChannel, QuoteStatus } from '../../types';
+import { OutgoingMessageStatus, QuoteEmailFailure, QuoteReplyChannel, QuoteStatus, TenantCapability } from '../../types';
+import { setBusinessTimeZone } from '../../utils/dates';
 import QuoteDetail from './QuoteDetail';
 
 vi.mock('../../components/common/PageTitle', () => ({ default: ({ title }: { title: string }) => <h1>{title}</h1> }));
+vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: vi.fn() }));
@@ -72,6 +75,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+/** Who is signed in: an owner by default, or staff who take orders (and charge them, when said). */
+function signIn(role: string, permissions: string[] = ['ManageOrders', 'ChargeOrders']) {
+  vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role, permissions } } as unknown as ReturnType<typeof useAuth>);
+}
+
 function renderAt(id = 'q1') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -88,7 +96,10 @@ function renderAt(id = 'q1') {
 describe('QuoteDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useTenant).mockReturnValue({ tenant: { name: 'Plomería Ruiz' } } as unknown as ReturnType<typeof useTenant>);
+    vi.mocked(useTenant).mockReturnValue({
+      tenant: { name: 'Plomería Ruiz' }, capabilities: TenantCapability.Service | TenantCapability.Appointments,
+    } as unknown as ReturnType<typeof useTenant>);
+    signIn('TENANT_ADMIN');
     vi.mocked(useToast).mockReturnValue(toast as unknown as ReturnType<typeof useToast>);
     vi.mocked(useConfirm).mockReturnValue({ confirm: vi.fn().mockResolvedValue(true) } as unknown as ReturnType<typeof useConfirm>);
   });
@@ -406,30 +417,98 @@ describe('QuoteDetail', () => {
 
     await waitFor(() => expect(quotesApi.convertToOrder).toHaveBeenCalledWith('q1', null));
     expect(toast.success).toHaveBeenCalledWith('Se creó la orden de servicio ORD-000031.');
-    expect(await screen.findByRole('link', { name: 'Ver la orden' })).toHaveAttribute('href', '/orders?search=ORD-000031');
+    const orderLink = await screen.findByRole('link', { name: 'Ver la orden' });
+    expect(orderLink).toHaveAttribute('href', '/orders?search=ORD-000031');
+    // The link takes the focus of the button it replaced.
+    await waitFor(() => expect(orderLink).toHaveFocus());
     expect(screen.getByText('Lo que pagó por la visita quedó como pago de la orden.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Convertir en orden de servicio' })).not.toBeInTheDocument();
   });
 
-  it('sends when the job is promised, and keeps a refusal in the dialog', async () => {
-    vi.mocked(quotesApi.get).mockResolvedValue(sent({ status: QuoteStatus.Accepted, canConvertToOrder: true }));
+  it('sends when the job is promised in the business\'s time, and after a refusal shows the quote as it is now', async () => {
+    setBusinessTimeZone('America/Tijuana');
+    onTestFinished(() => setBusinessTimeZone(null));
+    const accepted = sent({ status: QuoteStatus.Accepted, canConvertToOrder: true });
+    vi.mocked(quotesApi.get).mockResolvedValueOnce(accepted).mockResolvedValue({
+      ...accepted, canConvertToOrder: false, order: { id: 'o1', orderNumber: 'ORD-000031', status: 4 },
+    } as Quote);
     vi.mocked(quotesApi.convertToOrder).mockRejectedValueOnce(refusal('Esta cotización ya se convirtió en una orden de servicio.'));
     renderAt();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Convertir en orden de servicio' }));
     const dialog = await screen.findByRole('dialog', { name: 'Convertir en orden de servicio' });
-    await userEvent.type(within(dialog).getByLabelText('Para cuándo es el trabajo'), '2026-10-08T10:30');
+    const promised = within(dialog).getByLabelText('Para cuándo es el trabajo');
+    expect(promised).toHaveAccessibleDescription('Opcional: la orden sale con esa fecha en el tablero de servicios.');
+    await userEvent.type(promised, '2026-10-08T10:30');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Convertir' }));
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Esta cotización ya se convirtió en una orden de servicio.');
-    expect(quotesApi.convertToOrder).toHaveBeenCalledWith('q1', new Date('2026-10-08T10:30').toISOString());
+    // 10:30 in Tijuana (UTC−7 in October), whatever the device's zone.
+    expect(quotesApi.convertToOrder).toHaveBeenCalledWith('q1', '2026-10-08T17:30:00.000Z');
+    // Someone else converted it: behind the dialog, the page already says so.
+    expect(await screen.findByRole('link', { name: 'Ver la orden', hidden: true })).toBeInTheDocument();
+  });
+
+  it('holds still while it converts', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({ status: QuoteStatus.Accepted, canConvertToOrder: true }));
+    const pending = deferred<Quote>();
+    vi.mocked(quotesApi.convertToOrder).mockReturnValue(pending.promise);
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Convertir en orden de servicio' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Convertir en orden de servicio' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Convertir' }));
+
+    expect(await within(dialog).findByRole('button', { name: 'Convirtiendo…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).getByLabelText('Para cuándo es el trabajo')).toBeDisabled();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Convertir en orden de servicio' })).toBeInTheDocument();
+    pending.resolve(sent({ status: QuoteStatus.Accepted, order: { id: 'o1', orderNumber: 'ORD-000031', status: 4 } }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('tells who cannot charge that applying the visit needs who can', async () => {
+    signIn('STAFF', ['ManageOrders']);
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({
+      status: QuoteStatus.Accepted, canConvertToOrder: true, visitCredit: { amount: 440.8, applies: true }, toPay: 719.2,
+    }));
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Convertir en orden de servicio' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Convertir en orden de servicio' });
+
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Aplicar lo que pagó por la visita es cobrar');
+    expect(within(dialog).getByRole('button', { name: 'Convertir' })).toBeDisabled();
+  });
+
+  it('says the visit covers at most the total of the job', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({
+      status: QuoteStatus.Accepted, canConvertToOrder: true, total: 300, visitCredit: { amount: 464, applies: true }, toPay: 0,
+    }));
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Convertir en orden de servicio' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Convertir en orden de servicio' }))
+      .toHaveTextContent('Lo que pagó por la visita ($300.00) queda como pago de la orden: falta cobrar $0.00.');
   });
 
   it('says how to turn it into an order when the business has no service orders', async () => {
     vi.mocked(quotesApi.get).mockResolvedValue(sent({ status: QuoteStatus.Accepted, canConvertToOrder: false }));
     renderAt();
 
-    expect(await screen.findByText(/tu negocio necesita las órdenes de servicio/)).toBeInTheDocument();
+    expect(await screen.findByText(/activa el módulo «Servicios» en/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Configuración › Negocio' })).toHaveAttribute('href', '/settings/business');
     expect(screen.queryByRole('button', { name: 'Convertir en orden de servicio' })).not.toBeInTheDocument();
+  });
+
+  it('tells the staff to ask the owner for service orders', async () => {
+    signIn('STAFF', ['ManageOrders']);
+    vi.mocked(quotesApi.get).mockResolvedValue(sent({ status: QuoteStatus.Accepted, canConvertToOrder: false }));
+    renderAt();
+
+    expect(await screen.findByText(/pídele al dueño que active el módulo «Servicios»/)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Configuración › Negocio' })).not.toBeInTheDocument();
   });
 });

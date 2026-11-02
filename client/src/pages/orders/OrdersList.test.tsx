@@ -399,6 +399,21 @@ describe('OrdersList', () => {
     expect(within(detail).getByText('−$100.00')).not.toHaveClass('text-decoration-line-through');
   });
 
+  it('opens the accepted quote a service order came from (Fase 29E)', async () => {
+    const user = userEvent.setup();
+    renderOrders(TenantCapability.Service, [order({
+      orderType: OrderType.Service, customerName: 'Valeria Ruiz', total: 4686.4, paidAmount: 464, balance: 4222.4,
+      items: [], taxBreakdown: [], statusHistory: [], servicePieces: [], allowedTransitions: [], refunds: [], payments: [],
+      quote: { id: 'q-11', number: 'COT-000011', revision: 2 },
+    } as Partial<OrderDto>)]);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+
+    expect(within(detail).getByRole('link', { name: 'COT-000011 · versión 2' })).toHaveAttribute('href', '/quotes/q-11');
+    expect(within(detail).getByText(/De la cotización/)).toBeInTheDocument();
+  });
+
   it('says the business charged an order the courier paid', async () => {
     const user = userEvent.setup();
     renderOrders(TenantCapability.Food, [rappiOrder({

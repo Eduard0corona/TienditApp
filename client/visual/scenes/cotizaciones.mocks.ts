@@ -136,12 +136,12 @@ const ACCEPTED = {
   ...SENT,
   id: ACCEPTED_ID,
   status: 2,
-  closedAt: '2026-10-05T15:10:00Z',
+  closedAt: '2026-10-04T18:10:00Z',
   replyChannel: 0,
   customerResponse: 'Adelante, el jueves en la mañana.',
   versions: [
     { id: 'replaced', revision: 1, status: 5, total: 5150.4, sentAt: '2026-10-03T15:00:00Z', closedAt: '2026-10-04T16:20:00Z' },
-    { id: ACCEPTED_ID, revision: 2, status: 2, total: 4686.4, sentAt: '2026-10-04T16:20:00Z', closedAt: '2026-10-05T15:10:00Z' },
+    { id: ACCEPTED_ID, revision: 2, status: 2, total: 4686.4, sentAt: '2026-10-04T16:20:00Z', closedAt: '2026-10-04T18:10:00Z' },
   ],
   canConvertToOrder: true,
 };
@@ -150,11 +150,11 @@ const CONVERTED = {
   ...ACCEPTED,
   id: CONVERTED_ID,
   canConvertToOrder: false,
-  convertedAt: '2026-10-05T15:20:00Z',
+  convertedAt: '2026-10-04T18:20:00Z',
   order: { id: 'order-calentador', orderNumber: 'ORD-000031', status: 4 },
   versions: [
     { id: 'replaced', revision: 1, status: 5, total: 5150.4, sentAt: '2026-10-03T15:00:00Z', closedAt: '2026-10-04T16:20:00Z' },
-    { id: CONVERTED_ID, revision: 2, status: 2, total: 4686.4, sentAt: '2026-10-04T16:20:00Z', closedAt: '2026-10-05T15:10:00Z' },
+    { id: CONVERTED_ID, revision: 2, status: 2, total: 4686.4, sentAt: '2026-10-04T16:20:00Z', closedAt: '2026-10-04T18:10:00Z' },
   ],
 };
 

@@ -159,6 +159,15 @@ function businessWallTimeToInstant(date: string, time: string): Date {
   return new Date(wall - zoneOffsetMinutes(businessTimeZone, new Date(guess)) * 60_000);
 }
 
+/**
+ * A time typed in a datetime-local field («2026-10-08T10:30»), read in the business's time zone (not the device's), as an
+ * instant for the API (ISO).
+ */
+export function businessDateTimeToIso(value: string): string {
+  const [date, time = '00:00'] = value.split('T');
+  return businessWallTimeToInstant(date, time.length === 5 ? `${time}:00` : time).toISOString();
+}
+
 /** When a business day starts, for "from" filters of the API (ISO). */
 export function businessDayStart(date: string): string {
   return businessWallTimeToInstant(date, '00:00:00').toISOString();
