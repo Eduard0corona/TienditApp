@@ -145,7 +145,6 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
         if (branch.IsFailure)
             return Result.Failure<QuoteDto>(branch.Error!);
         var businessType = await _context.Tenants
-            .IgnoreQueryFilters()
             .Where(t => t.Id == TenantId)
             .Select(t => t.BusinessType)
             .FirstAsync(cancellationToken);
