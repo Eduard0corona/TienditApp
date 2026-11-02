@@ -44,7 +44,7 @@ public class AuthorizationBehaviorTests
 
         Assert.Equal(
         [
-            "AcceptInvitationCommand", "ApplyOnlinePaymentCommand", "ApplyOnlinePaymentNotificationCommand", "ApplyWhatsAppStatusesCommand", "CancelPublicAppointmentCommand",
+            "AcceptInvitationCommand", "AddVisitProblemPhotoCommand", "ApplyOnlinePaymentCommand", "ApplyOnlinePaymentNotificationCommand", "ApplyWhatsAppStatusesCommand", "CancelPublicAppointmentCommand",
             "ChangeUnconfirmedPhoneCommand", "CheckInvoiceCancellationsCommand", "ConfirmEmailCommand", "ConfirmOnlineCheckoutCommand", "ConfirmPhoneCommand",
             "CreateOnlineCheckoutCommand",
             "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicAppointmentQuery", "GetPublicBookingQuery",

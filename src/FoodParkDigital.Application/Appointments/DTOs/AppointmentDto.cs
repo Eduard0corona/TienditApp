@@ -37,6 +37,12 @@ public class AppointmentDto
     public Guid? WorkOrderId { get; set; }
     /// <summary>The folio of that order, for the agenda; null for every other appointment.</summary>
     public string? WorkOrderNumber { get; set; }
+    /// <summary>
+    /// The photos of what happens the customer sent with a visit requested online (Fase 29H, ADR 0062), as the private paths
+    /// that open them (<c>/files/…</c>), in the order sent. The agenda's queries read them; the answer of a command leaves
+    /// them empty.
+    /// </summary>
+    public List<string> ProblemPhotos { get; set; } = [];
 
     public static AppointmentDto From(Appointment appointment) => new()
     {

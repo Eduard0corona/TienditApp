@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -34,6 +35,8 @@ public class GetAppointmentByIdQueryHandler : IRequestHandler<GetAppointmentById
         appointment.WorkOrderNumber = appointment.WorkOrderId is { } order
             ? (await WorkAppointments.OrderNumbersAsync(_context, [order], cancellationToken)).GetValueOrDefault(order)
             : null;
+        appointment.ProblemPhotos = (await VisitProblemPhotos.PathsAsync(_context, [appointment.Id], cancellationToken))
+            .GetValueOrDefault(appointment.Id) ?? [];
         return appointment;
     }
 }

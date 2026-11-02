@@ -72,7 +72,7 @@ public sealed class CrossTenantHomeVisitBookingSqlServerTests
         Assert.Equal(HttpStatusCode.OK, (await stranger.GetAsync($"/api/v1/public/menu/{mySlug}/home-visit")).StatusCode);
     }
 
-    private static object Request(string startAt, string postalCode) => new
+    internal static object Request(string startAt, string postalCode) => new
     {
         startAt,
         postalCode,
@@ -88,7 +88,7 @@ public sealed class CrossTenantHomeVisitBookingSqlServerTests
     };
 
     /// <summary>The first free time of the visit the request page offers this week or the next.</summary>
-    private static async Task<string> FirstFreeTimeAsync(HttpClient client, string slug)
+    internal static async Task<string> FirstFreeTimeAsync(HttpClient client, string slug)
     {
         string? from = null;
         for (var week = 0; week < 2; week++)
@@ -104,7 +104,7 @@ public sealed class CrossTenantHomeVisitBookingSqlServerTests
     }
 
     /// <returns>The slug of the business's menu, once it receives visits to a postal code, every day from 8 to 20.</returns>
-    private static async Task<string> ReceiveVisitsAsync(HttpClient owner, string postalCode, decimal fee, int chargePolicy)
+    internal static async Task<string> ReceiveVisitsAsync(HttpClient owner, string postalCode, decimal fee, int chargePolicy)
     {
         var slug = (await TwoBusinessesApi.ReadAsync(await owner.PutAsJsonAsync("/api/v1/auth/my-tenant/online-menu", new { mode = 1 })))
             .GetProperty("slug").GetString()!;

@@ -6,14 +6,17 @@ namespace FoodParkDigital.Application.Orders;
 
 /// <summary>
 /// Where order files are stored and which file references a payment or a service may keep: only files uploaded
-/// through the app for the same business (never an arbitrary link). Transfer receipts and service photos are private:
-/// their key is "orders/{tenantId}/{area}/{yyyyMM}/{guid}.{ext}" and the business keeps "/files/{key}", the API path
-/// that opens them for its members.
+/// through the app for the same business (never an arbitrary link). Transfer receipts, service photos and the photos of
+/// what happens a customer sends with a visit (Fase 29H) are private: their key is
+/// "orders/{tenantId}/{area}/{yyyyMM}/{guid}.{ext}" and the business keeps "/files/{key}", the API path that opens them
+/// for its members.
 /// </summary>
 public static class OrderUploadRules
 {
     public const string PaymentEvidenceArea = "payment-evidence";
     public const string ServiceIntakeArea = "service-intake";
+    /// <summary>The photos of what happens a customer sends with a visit requested online (Fase 29H, ADR 0062).</summary>
+    public const string VisitProblemArea = "visit-problem";
 
     /// <summary>The path of a private file under the API (also what the records keep).</summary>
     public const string PrivateFilePathPrefix = "/files/";
@@ -23,7 +26,7 @@ public static class OrderUploadRules
         @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.(?:webp|pdf|jpg|jpeg|png)";
 
     private static readonly Regex PrivateKeyPattern = new(
-        $@"^orders/(?<tenant>[0-9a-fA-F]{{8}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{12}})/(?<area>{PaymentEvidenceArea}|{ServiceIntakeArea})/\d{{6}}/{FileNamePattern}$",
+        $@"^orders/(?<tenant>[0-9a-fA-F]{{8}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{12}})/(?<area>{PaymentEvidenceArea}|{ServiceIntakeArea}|{VisitProblemArea})/\d{{6}}/{FileNamePattern}$",
         RegexOptions.CultureInvariant,
         TimeSpan.FromMilliseconds(100));
 
@@ -32,6 +35,9 @@ public static class OrderUploadRules
 
     public static string PaymentEvidenceFolder(Guid tenantId, DateTimeOffset now) =>
         $"orders/{tenantId}/{PaymentEvidenceArea}/{now:yyyyMM}";
+
+    public static string VisitProblemFolder(Guid tenantId, DateTimeOffset now) =>
+        $"orders/{tenantId}/{VisitProblemArea}/{now:yyyyMM}";
 
     public static string ToPrivateFilePath(string key) => PrivateFilePathPrefix + key;
 
