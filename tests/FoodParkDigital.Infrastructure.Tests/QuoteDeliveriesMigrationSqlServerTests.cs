@@ -50,7 +50,7 @@ public class QuoteDeliveriesMigrationSqlServerTests
             (tenantId, messageId) = (tenant.Id, notice.Id);
         }
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeQuoteConversion.CreateContext(database, tenantId);
         Assert.Null((await context.TenantSettings.SingleAsync()).QuoteWhatsAppTemplateId);
         var message = await context.OutgoingMessages.SingleAsync(m => m.Id == messageId);
         Assert.Equal((MessagePurpose.AppointmentNotice, (Guid?)null, (Guid?)null), (message.Purpose, message.QuoteId, message.RequestedByUserId));
@@ -63,7 +63,7 @@ public class QuoteDeliveriesMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var (tenantId, quote) = await SeedAsync(database);
 
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeQuoteConversion.CreateContext(database, tenantId))
         {
             context.OutgoingMessages.Add(OutgoingMessage.ForQuote(quote, "+525522107765", "Valeria", "Tu cotización", null, "es_MX", [],
                 Guid.NewGuid(), Today, Now));
@@ -71,7 +71,7 @@ public class QuoteDeliveriesMigrationSqlServerTests
             await context.SaveChangesAsync();
         }
 
-        await using var check = database.CreateContext(tenantId);
+        await using var check = BeforeQuoteConversion.CreateContext(database, tenantId);
         var withoutVersion = await Record.ExceptionAsync(() => check.Database.ExecuteSqlRawAsync(
             "UPDATE [OutgoingMessages] SET [QuoteId] = NULL WHERE [Purpose] = 6"));
         Assert.Contains("CK_OutgoingMessages_Quote", withoutVersion?.Message);
@@ -92,7 +92,7 @@ public class QuoteDeliveriesMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var (tenantId, quote) = await SeedAsync(database);
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeQuoteConversion.CreateContext(database, tenantId))
         {
             // An email still pending: it would be lost too.
             context.QuoteEmails.Add(QuoteEmail.Request(quote, "valeria@correo.mx", Guid.NewGuid(), Today, Now));
@@ -111,7 +111,7 @@ public class QuoteDeliveriesMigrationSqlServerTests
         {
             var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
             Assert.True(stopped is SqlException { Number: 50052 }, stopped?.Message ?? "it was not stopped");
-            await using var context = database.CreateContext(tenantId);
+            await using var context = BeforeQuoteConversion.CreateContext(database, tenantId);
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             await context.Database.ExecuteSqlRawAsync(cleanUp);
         }
@@ -139,7 +139,7 @@ public class QuoteDeliveriesMigrationSqlServerTests
         // Rolling back again does nothing, and forward again it starts empty.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenantId);
+        await using var forward = BeforeQuoteConversion.CreateContext(database, tenantId);
         Assert.Equal((0, (Guid?)null), (await forward.QuoteEmails.CountAsync(), (await forward.TenantSettings.SingleAsync()).QuoteWhatsAppTemplateId));
     }
 

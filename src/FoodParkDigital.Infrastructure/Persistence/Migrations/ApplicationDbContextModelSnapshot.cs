@@ -6327,7 +6327,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_Quotes_Conversion", "([OrderId] IS NULL AND [ConvertedAt] IS NULL AND [AppliedVisitCredit] IS NULL) OR ([OrderId] IS NOT NULL AND [ConvertedAt] IS NOT NULL AND [Status] = 2 AND ([AppliedVisitCredit] IS NULL OR ([AppliedVisitCredit] > 0 AND [VisitCreditAmount] IS NOT NULL AND [AppliedVisitCredit] <= [VisitCreditAmount] AND [AppliedVisitCredit] <= [Total])))");
 
-                            t.HasCheckConstraint("CK_Quotes_Reply", "([ReplyChannel] IS NULL AND [CustomerResponse] IS NULL AND [Status] NOT IN (2, 3)) OR ([ReplyChannel] IN (0, 1, 2, 3) AND [Status] IN (2, 3, 5))");
+                            t.HasCheckConstraint("CK_Quotes_Reply", "([ReplyChannel] IS NULL AND [CustomerResponse] IS NULL AND [Status] NOT IN (2, 3)) OR ([ReplyChannel] IN (0, 1, 2, 3, 4) AND [Status] IN (2, 3, 5))");
 
                             t.HasCheckConstraint("CK_Quotes_Revision", "[Revision] >= 1");
 
@@ -6908,6 +6908,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("PricesIncludeTax")
                         .HasColumnType("bit");
+
+                    b.Property<bool>("QuoteOnlineReplies")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("QuoteValidityDays")
                         .HasColumnType("int")
