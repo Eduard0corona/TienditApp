@@ -298,30 +298,6 @@ public class QuoteConversionFlowTests
         Assert.Equal(0, await shop.Context.Orders.IgnoreQueryFilters().CountAsync());
     }
 
-    private const int MinutesInADay = 24 * 60;
-
-    [Theory]
-    [InlineData(-2 * MinutesInADay)]
-    [InlineData(-MinutesInADay - 1)]
-    [InlineData(366 * MinutesInADay)]
-    public void APromiseInThePast_OrYearsAway_ShouldBeRefused(int minutes)
-    {
-        var result = PromiseFor(SalesTestFixture.Now.AddMinutes(minutes));
-
-        Assert.Contains(result.Errors, e => e.ErrorMessage == QuoteConversions.PromisedAtMessage);
-    }
-
-    [Theory]
-    // Today begins in the business's zone: up to a day before now in UTC.
-    [InlineData(-MinutesInADay)]
-    [InlineData(-23 * 60)]
-    [InlineData(0)]
-    [InlineData(3 * MinutesInADay)]
-    public void APromiseFromToday_ShouldBeAccepted(int minutes)
-    {
-        Assert.True(PromiseFor(SalesTestFixture.Now.AddMinutes(minutes)).IsValid);
-    }
-
     [Fact]
     public void APromiseAYearAway_ShouldBeAccepted_ButNotAMinuteLater_AndNoPromiseAtAll_Too()
     {
@@ -330,6 +306,30 @@ public class QuoteConversionFlowTests
         Assert.True(PromiseFor(aYearAway).IsValid);
         Assert.Contains(PromiseFor(aYearAway.AddMinutes(1)).Errors, e => e.ErrorMessage == QuoteConversions.PromisedAtMessage);
         Assert.True(PromiseFor(null).IsValid);
+    }
+
+    [Theory]
+    // Now is 11:00 in Mexico City (UTC−6): its today began at 06:00 UTC, and 05:59 is yesterday there.
+    [InlineData("America/Mexico_City", "2026-10-04T06:00:00Z", true)]
+    [InlineData("America/Mexico_City", "2026-10-04T05:59:00Z", false)]
+    // And 02:00 of the 5th in Tokyo (UTC+9): its today began at 15:00 UTC, two hours ago, and that still counts.
+    [InlineData("Asia/Tokyo", "2026-10-04T15:00:00Z", true)]
+    [InlineData("Asia/Tokyo", "2026-10-04T14:59:00Z", false)]
+    public async Task APromise_ShouldGoFromTheStartOfToday_WhereTheBusinessLivesItsDays(string timeZone, string promisedAt, bool accepted)
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.AcceptedAsync(new QuoteLineRequest { Description = "Mano de obra", Quantity = 1m, UnitPrice = 800m });
+        (await shop.Context.TenantSettings.SingleAsync()).SetTimeZone(timeZone);
+        await shop.Context.SaveChangesAsync();
+
+        var converted = await shop.ConvertAsync(quote.Id, DateTimeOffset.Parse(promisedAt, System.Globalization.CultureInfo.InvariantCulture));
+
+        Assert.True(converted.IsSuccess == accepted, converted.Error);
+        if (!accepted)
+        {
+            Assert.Equal(QuoteConversions.PromisedAtMessage, converted.Error);
+            Assert.Equal(0, await shop.Context.Orders.CountAsync());
+        }
     }
 
     private static FluentValidation.Results.ValidationResult PromiseFor(DateTimeOffset? promisedAt)

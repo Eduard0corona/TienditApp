@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders;
@@ -35,9 +36,9 @@ public class ConvertQuoteToOrderCommandValidator : AbstractValidator<ConvertQuot
     public ConvertQuoteToOrderCommandValidator(IDateTimeProvider clock)
     {
         RuleFor(x => x.Id).NotEmpty();
-        // A promise within a year: one in the past or years away is a typo.
+        // A promise within a year: one years away is a typo. One before today depends on the business's day (the handler).
         RuleFor(x => x.PromisedAt)
-            .Must(at => at is null || (at >= clock.UtcNow.AddDays(-1) && at <= clock.UtcNow.AddYears(1)))
+            .Must(at => at is null || at <= clock.UtcNow.AddYears(1))
             .WithMessage(QuoteConversions.PromisedAtMessage);
     }
 }
@@ -53,6 +54,18 @@ public static class QuoteConversions
     public const string ChangedMeanwhileMessage =
         "La cotización o la venta de su visita cambiaron al mismo tiempo: revisa la cotización y vuelve a intentarlo.";
     public const string TotalMismatchMessage = "La orden no sumaría lo que el cliente aceptó: revisa la cotización.";
+
+    /// <summary>
+    /// A promise goes from the start of today where the business lives its days: one before it, even hours ago in UTC,
+    /// is yesterday for the business, a typo.
+    /// </summary>
+    public static bool PromisedBeforeToday(DateTimeOffset? promisedAt, DateTimeOffset now, string? timeZone)
+    {
+        if (promisedAt is null)
+            return false;
+        var zone = TenantDateTimeResolver.Resolve(timeZone);
+        return promisedAt < TenantDateTimeResolver.StartOfLocalDayUtc(TimeZoneInfo.ConvertTime(now, zone).Date, zone);
+    }
 
     /// <summary>«No se pudo aplicar lo que se pagó de la visita: …» with the reason the sale of the visit gave.</summary>
     public static string VisitNotAppliedMessage(string reason) => $"No se pudo aplicar lo que se pagó de la visita: {reason}";
@@ -132,6 +145,16 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
         var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, TenantId, cancellationToken);
         if (!TenantCapabilityRules.CanCreateOrderType(capabilities, OrderType.Service))
             return Result.Failure<QuoteDto>(QuoteRules.NoServiceOrdersMessage);
+
+        if (request.PromisedAt is not null)
+        {
+            var timeZone = await _context.TenantSettings.AsNoTracking()
+                .Where(s => s.TenantId == TenantId)
+                .Select(s => s.TimeZone)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (QuoteConversions.PromisedBeforeToday(request.PromisedAt, _clock.UtcNow, timeZone))
+                return Result.Failure<QuoteDto>(QuoteConversions.PromisedAtMessage);
+        }
 
         // What the quote takes off for the visit now, never more than the job's total: read from the sale of the visit as it is
         // tracked to refund it, so a change of that sale meanwhile collides on its version when this is saved.
