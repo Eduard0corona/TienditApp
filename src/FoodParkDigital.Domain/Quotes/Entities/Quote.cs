@@ -11,7 +11,8 @@ namespace FoodParkDigital.Domain.Quotes.Entities;
 /// of a quote share its folio (<see cref="Number"/>) and count from 1 (<see cref="Revision"/>). A draft is edited; once sent
 /// it says the same forever: correcting it starts the next version, and when that one is sent this one is
 /// <see cref="QuoteStatus.Superseded"/>. A sent quote reads expired once its validity passed, and the business records whether
-/// the customer accepted or rejected it. The server works out its taxes and total: the browser never sends one.
+/// the customer accepted or rejected it. The server works out its taxes and total: the browser never sends one. An accepted
+/// version becomes the job once (Fase 29E): a service order with its lines (<see cref="OrderId"/>).
 /// </summary>
 public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
 {
@@ -75,6 +76,15 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>What the customer answered, in the business's words.</summary>
     public string? CustomerResponse { get; private set; }
 
+    /// <summary>The service order an accepted version became (Fase 29E); null until it becomes one.</summary>
+    public Guid? OrderId { get; private set; }
+    public DateTimeOffset? ConvertedAt { get; private set; }
+    /// <summary>
+    /// What was paid for the visit and became a payment of that order (<see cref="OrderId"/>); null when nothing was. From
+    /// then on it is what the quote takes off for the visit, whatever happens to the sale of the visit.
+    /// </summary>
+    public decimal? AppliedVisitCredit { get; private set; }
+
     public byte[] Version { get; private set; } = null!;
 
     public IReadOnlyCollection<QuoteLine> Lines => _lines.AsReadOnly();
@@ -110,10 +120,12 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
 
     /// <summary>
     /// What it takes off for the visit while its sale still has <paramref name="stillPaidForTheVisit"/> paid for it (after
-    /// what was refunded or returned; null once that sale was cancelled): what was fixed, never more than that.
+    /// what was refunded or returned; null once that sale was cancelled): what was fixed, never more than that. Once it became
+    /// a service order, what was applied to that order (<see cref="AppliedVisitCredit"/>): it left the sale of the visit then.
     /// </summary>
     public decimal VisitCreditStanding(decimal? stillPaidForTheVisit)
-        => VisitCreditAmount is { } credit && stillPaidForTheVisit is { } paid ? Math.Min(credit, Math.Max(0m, paid)) : 0m;
+        => OrderId is not null ? AppliedVisitCredit ?? 0m
+            : VisitCreditAmount is { } credit && stillPaidForTheVisit is { } paid ? Math.Min(credit, Math.Max(0m, paid)) : 0m;
 
     /// <summary>What is left to pay: the total less what it takes off for the visit (<see cref="VisitCreditStanding"/>).</summary>
     public decimal ToPay(decimal? stillPaidForTheVisit)
@@ -229,6 +241,28 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>The customer rejected it, while it is valid on the business's <paramref name="today"/>.</summary>
     public void Reject(DateOnly today, QuoteReplyChannel channel, string? response, DateTimeOffset now)
         => Close(QuoteStatus.Rejected, today, channel, response, now);
+
+    /// <summary>
+    /// The accepted version became the job (Fase 29E): the service order <paramref name="orderId"/>, once. What was paid for
+    /// the visit and became a payment of that order (<paramref name="appliedVisitCredit"/>, zero when nothing did) stays as
+    /// what it takes off: never more than what was fixed for the visit, nor than its total.
+    /// </summary>
+    public void ConvertToOrder(Guid orderId, decimal appliedVisitCredit, DateTimeOffset now)
+    {
+        if (Status != QuoteStatus.Accepted)
+            throw new DomainException(QuoteRules.NotAcceptedMessage);
+        if (OrderId is not null)
+            throw new DomainException(QuoteRules.AlreadyConvertedMessage);
+        if (orderId == Guid.Empty)
+            throw new ArgumentException("The order is required.", nameof(orderId));
+        if (appliedVisitCredit < 0 || appliedVisitCredit > (VisitCreditAmount ?? 0m) || appliedVisitCredit > Total)
+            throw new ArgumentOutOfRangeException(nameof(appliedVisitCredit), "What it applies is what it takes off for the visit, at most.");
+
+        OrderId = orderId;
+        ConvertedAt = now;
+        AppliedVisitCredit = appliedVisitCredit > 0 ? appliedVisitCredit : null;
+        UpdatedAt = now;
+    }
 
     private void Close(QuoteStatus status, DateOnly today, QuoteReplyChannel channel, string? response, DateTimeOffset now)
     {
