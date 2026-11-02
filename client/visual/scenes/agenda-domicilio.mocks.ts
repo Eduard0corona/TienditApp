@@ -1,4 +1,5 @@
-import { asOption, type DemoData } from '../fixtures';
+import { readFileSync } from 'node:fs';
+import { asOption, type DemoData, type SceneOptions } from '../fixtures';
 import { at, uuid } from '../mocks/data.mjs';
 
 // AppointmentStatus as the contract numbers it.
@@ -82,3 +83,31 @@ function withHomeVisits(data: DemoData) {
 }
 
 export const HOME_VISITS_DATA = asOption(withHomeVisits);
+
+const PROBLEM_PHOTO = (n: number) => `orders/{tenant}/visit-problem/202610/5c0f8a3e-1d2b-4c5d-8e9f-0a1b2c3d4f0${n}.webp`;
+
+/**
+ * Elena asked for her visit online and sent what happens with two photos (Fase 29H): the agenda says «Lo que pasa» and
+ * opens them, fetched with the session from the business's private files.
+ */
+function withProblemPhotos(data: DemoData) {
+  withHomeVisits(data);
+  const elena = data.appointments.find((appointment: { id: string }) => appointment.id === uuid('appt:visita-elena'));
+  Object.assign(elena, {
+    channel: 1,
+    notes: 'La cafetera gotea por abajo y ya no calienta el agua. Mandé foto de la fuga y de la placa.',
+    problemPhotos: [1, 2].map((n) => `/files/${PROBLEM_PHOTO(n).replace('{tenant}', data.TENANT_ID)}`),
+  });
+}
+
+/** The two photos of Elena's visit, as the private files answer them. */
+const problemPhotoFiles: NonNullable<SceneOptions['extraRoutes']> = () => [
+  ['GET', /^\/files\/orders\/[^/]+\/visit-problem\/202610\/[0-9a-f-]+0([12])\.webp$/, (match) => ({
+    status: 200,
+    contentType: 'image/png',
+    body: readFileSync(new URL(`../mocks/img/${match[1] === '1' ? 'fuga' : 'pared'}.png`, import.meta.url)),
+  })],
+];
+
+export const HOME_VISITS_WITH_PHOTOS_DATA = asOption(withProblemPhotos);
+export const PROBLEM_PHOTO_FILES = asOption(problemPhotoFiles);
