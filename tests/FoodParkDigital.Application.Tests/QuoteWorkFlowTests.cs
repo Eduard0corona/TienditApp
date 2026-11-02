@@ -261,6 +261,9 @@ public class QuoteWorkFlowTests
         var order = (await shop.ConvertAsync(quote.Id)).Value!.Order!;
         var luis = await shop.StaffAsync("Luis");
         Assert.True((await shop.ScheduleWorkAsync(quote.Id, JobStart, JobStart.AddHours(3), luis)).IsSuccess);
+        // A common visit the same day, of nobody: it is in the agenda and the route too, without an order.
+        var service = await shop.Fixture.AddProductAsync(shop.Tenant, "Revisión", 300m, unit: UnitType.Service);
+        var visit = await shop.ScheduledVisitAsync(service.Id, JobStart.AddHours(5));
 
         var detail = await new GetOrderByIdQueryHandler(shop.Context).Handle(new GetOrderByIdQuery(order.Id), CancellationToken.None);
         var agenda = await new GetAppointmentsQueryHandler(shop.Context)
@@ -273,8 +276,11 @@ public class QuoteWorkFlowTests
         Assert.Equal((order.Id, order.OrderNumber), (listed.WorkOrderId, listed.WorkOrderNumber));
         var stop = Assert.Single(route.Staff.SelectMany(s => s.Stops), s => s.WorkOrderId is not null);
         Assert.Equal((order.OrderNumber, 0m), (stop.WorkOrderNumber, stop.Fee));
-        // Every other appointment says no order.
-        Assert.All(agenda.Items.Where(a => a.Id != listed.Id), a => Assert.Equal(((Guid?)null, (string?)null), (a.WorkOrderId, a.WorkOrderNumber)));
+        // The common visit says no order, in the agenda and in the route.
+        var common = Assert.Single(agenda.Items, a => a.Id == visit.Id);
+        Assert.Equal(((Guid?)null, (string?)null), (common.WorkOrderId, common.WorkOrderNumber));
+        var commonStop = Assert.Single(route.Staff.SelectMany(s => s.Stops), s => s.AppointmentId == visit.Id);
+        Assert.Equal(((Guid?)null, (string?)null), (commonStop.WorkOrderId, commonStop.WorkOrderNumber));
     }
 
     [Fact]

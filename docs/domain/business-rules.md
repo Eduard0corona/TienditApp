@@ -801,7 +801,7 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - El trabajo de esa orden se agenda (Fase 29F): «Agendar el trabajo» en la cotización convertida, con quien maneja la agenda y toma pedidos en un negocio con agenda, mientras la orden no se cancele.
     - Cada cita es del equipo, con quién y cuándo (hasta 12 horas, también al moverla; un trabajo de varios días lleva varias citas), y respeta las reglas de la Agenda: la persona no tiene otra cita a la misma hora y entre visitas queda el traslado del negocio.
     - Va en la dirección de la visita de la que vino la cotización, sin cargo por ir; sin visita, va sin dirección y se le agrega en la Agenda, también sin cargo.
-    - Se cobra en su orden: no lleva venta propia ni se cotiza, y la Agenda y la Ruta del día abren su orden en lugar de «Cobrar».
+    - Se cobra en su orden: no lleva venta propia ni se cotiza; en lugar de «Cobrar», la Agenda dice en qué orden se cobra (y la abre para quien ve pedidos) y la Ruta del día dice su orden.
     - El cliente recibe el aviso y el recordatorio de la cita, nunca con cargo por visita; sin dirección, el aviso no le dice que vaya al negocio. La actividad guarda la orden, la cita, sus horas y quién la hace.
     - Las citas no mueven la orden: completarlas no la entrega, y cancelar la orden no las cancela ni detiene sus recordatorios.
 

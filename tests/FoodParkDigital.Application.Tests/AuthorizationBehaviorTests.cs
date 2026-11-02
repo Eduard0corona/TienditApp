@@ -141,12 +141,16 @@ public class AuthorizationBehaviorTests
         var agendaOnly = Staff(permissions: ["ManageAppointments"], capabilities: modules);
         var ordersOnly = Staff(permissions: ["ManageOrders"], capabilities: modules);
         var both = Staff(permissions: ["ManageAppointments", "ManageOrders"], capabilities: modules);
+        // A service business without the agenda module: the permissions are not enough.
+        var withoutTheAgenda = Staff(permissions: ["ManageAppointments", "ManageOrders"], capabilities: TenantCapability.Service);
         var job = new Quotes.ScheduleQuoteWorkCommand(Guid.NewGuid(), DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), null, null);
 
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
             Behavior<Quotes.ScheduleQuoteWorkCommand>(agendaOnly).Handle(job, Next, CancellationToken.None));
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
             Behavior<Quotes.ScheduleQuoteWorkCommand>(ordersOnly).Handle(job, Next, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<Quotes.ScheduleQuoteWorkCommand>(withoutTheAgenda).Handle(job, Next, CancellationToken.None));
         Assert.Equal("ok", await Behavior<Quotes.ScheduleQuoteWorkCommand>(both).Handle(job, Next, CancellationToken.None));
     }
 
