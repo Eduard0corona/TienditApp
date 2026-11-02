@@ -104,13 +104,16 @@ const buildForm = (): FormState => ({
 /** The answer of the server for a postal code: the zone and the charge, or why it does not go there. */
 type QuoteAnswer = { postalCode: string } & ({ zoneName: string; fee: number } | { message: string });
 
-/** The instant, in milliseconds, of a start or an end typed on the business's clock ("2026-10-05T10:30"), not the device's. */
-function instantOf(input: string): number {
-  return Date.parse(businessDateTimeToIso(input));
+/**
+ * The instant, in milliseconds, of a start or an end typed on the business's clock ("2026-10-05T10:30"), not the
+ * device's. An appointment being edited keeps its own while the field shows it (the hour the clock repeats).
+ */
+function instantOf(input: string, original?: string): number {
+  return Date.parse(businessDateTimeToIso(input, original));
 }
 
-function addMinutes(input: string, minutes: number): string {
-  return toBusinessDateTimeInput(instantOf(input) + minutes * 60_000);
+function addMinutes(input: string, minutes: number, original?: string): string {
+  return toBusinessDateTimeInput(instantOf(input, original) + minutes * 60_000);
 }
 
 /** Same minute: the server may answer with seconds or another offset notation. */
@@ -308,16 +311,18 @@ export default function AppointmentsList() {
       ...current,
       serviceProductId,
       // Changing the service keeps the start and moves the end to its duration.
-      endAt: current.startAt && serviceProductId !== OTHER_SERVICE ? addMinutes(current.startAt, durationOf(serviceProductId)) : current.endAt,
+      endAt: current.startAt && serviceProductId !== OTHER_SERVICE
+        ? addMinutes(current.startAt, durationOf(serviceProductId), editing?.startAt)
+        : current.endAt,
     }));
   };
 
   const changeStart = (startAt: string) => {
     setForm((current) => {
       const duration = current.startAt && current.endAt
-        ? Math.max(5, Math.round((instantOf(current.endAt) - instantOf(current.startAt)) / 60_000))
+        ? Math.max(5, Math.round((instantOf(current.endAt, editing?.endAt) - instantOf(current.startAt, editing?.startAt)) / 60_000))
         : durationOf(current.serviceProductId);
-      return { ...current, startAt, endAt: startAt ? addMinutes(startAt, duration) : current.endAt };
+      return { ...current, startAt, endAt: startAt ? addMinutes(startAt, duration, editing?.startAt) : current.endAt };
     });
   };
 
@@ -332,7 +337,7 @@ export default function AppointmentsList() {
       setFormError('Elige el servicio o escribe cuál es.');
       return;
     }
-    if (!form.startAt || !form.endAt || instantOf(form.endAt) <= instantOf(form.startAt)) {
+    if (!form.startAt || !form.endAt || instantOf(form.endAt, editing?.endAt) <= instantOf(form.startAt, editing?.startAt)) {
       setFormError('Indica el inicio y un fin posterior al inicio.');
       return;
     }
@@ -351,8 +356,8 @@ export default function AppointmentsList() {
       serviceProductId: usesCatalog ? form.serviceProductId : undefined,
       serviceName: usesCatalog ? undefined : form.serviceName.trim(),
       staffUserId: form.staffUserId || undefined,
-      startAt: businessDateTimeToIso(form.startAt),
-      endAt: businessDateTimeToIso(form.endAt),
+      startAt: businessDateTimeToIso(form.startAt, editing?.startAt),
+      endAt: businessDateTimeToIso(form.endAt, editing?.endAt),
       notes: form.notes.trim() || undefined,
       // The server finds the zone and sets the charge (at the same address it keeps the one agreed).
       visit: form.atHome
@@ -762,10 +767,10 @@ export default function AppointmentsList() {
               <textarea id="appointment-notes" className="form-control" rows={2} value={form.notes} onChange={(e) => setForm((x) => ({ ...x, notes: e.target.value }))} />
             </div>
           </div>
-          {editing && form.startAt && !sameMinute(editing.startAt, businessDateTimeToIso(form.startAt)) && (
+          {editing && form.startAt && !sameMinute(editing.startAt, businessDateTimeToIso(form.startAt, editing.startAt)) && (
             <div className="alert alert-info py-2 small mt-3 mb-0">Al guardar, el cliente recibe por WhatsApp el nuevo horario.</div>
           )}
-          {editing && sameMinute(editing.startAt, form.startAt ? businessDateTimeToIso(form.startAt) : editing.startAt)
+          {editing && sameMinute(editing.startAt, form.startAt ? businessDateTimeToIso(form.startAt, editing.startAt) : editing.startAt)
             && (editing.visit?.postalCode ?? '') !== (form.atHome ? form.postalCode.trim() : '') && (
             <div className="alert alert-info py-2 small mt-3 mb-0">Al guardar, el cliente recibe por WhatsApp el nuevo lugar.</div>
           )}

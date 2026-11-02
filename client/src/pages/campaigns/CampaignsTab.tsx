@@ -28,6 +28,8 @@ type Draft = {
   days: string;
   sendNow: boolean;
   scheduledAt: string;
+  /** The instant proposed: it stays that one while the field shows it. */
+  proposedAt: string;
 };
 
 function newDraft(templates: MessageTemplateDto[]): Draft {
@@ -41,6 +43,7 @@ function newDraft(templates: MessageTemplateDto[]): Draft {
     sendNow: true,
     // In an hour, on the business's clock: the list shows the campaign with it.
     scheduledAt: toBusinessDateTimeInput(later),
+    proposedAt: later.toISOString(),
   };
 }
 
@@ -125,7 +128,7 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
       await createMutation.mutateAsync({
         ...audienceRequest(draft),
         name: draft.name.trim(),
-        scheduledAt: draft.sendNow ? null : businessDateTimeToIso(draft.scheduledAt),
+        scheduledAt: draft.sendNow ? null : businessDateTimeToIso(draft.scheduledAt, draft.proposedAt),
       });
       toast.success(draft.sendNow ? 'Campaña en camino: se envía en segundo plano.' : 'Campaña programada.');
       setDraft(null);

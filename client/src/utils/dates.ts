@@ -166,8 +166,14 @@ export function businessDayEnd(date: string): string {
 /**
  * A datetime-local value ("2026-10-08T10:30") read as the business's wall clock, as the API wants it (ISO):
  * 10:30 typed for a business in Tijuana is 10:30 in Tijuana, whatever the zone of the device.
+ * `filledWith` is the instant the field started with: while it still shows it, it stays that one. The night the clock
+ * goes back repeats an hour, and a typed hour in it is the first time (as on the server, ADR 0012): without this, a
+ * field filled with the second time would move an hour back.
  */
-export function businessDateTimeToIso(value: string): string {
+export function businessDateTimeToIso(value: string, filledWith?: string | number | Date | null): string {
+  if (filledWith != null && toBusinessDateTimeInput(filledWith) === value) {
+    return new Date(Math.floor(toDate(filledWith).getTime() / 60_000) * 60_000).toISOString();
+  }
   const [date, time] = value.split('T');
   return businessWallTimeToInstant(date, time.length === 5 ? `${time}:00` : time).toISOString();
 }

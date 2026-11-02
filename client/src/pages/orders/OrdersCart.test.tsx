@@ -75,6 +75,19 @@ describe('OrdersCart service dates', () => {
     expect(serviceDetail?.promisedAt).toBe('2026-10-08T17:30:00.000Z');
   });
 
+  it('keeps the received date at the instant it started with in the hour the clock repeats', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 09:30 UTC on 1 November is 01:30 PST in Tijuana, the second time 01:30 comes that night.
+    vi.setSystemTime(new Date('2026-11-01T09:30:00.000Z'));
+    renderCart();
+    const user = await addTheRepair();
+
+    expect(screen.getByLabelText('Fecha de recepción')).toHaveValue('2026-11-01T01:30');
+    await user.click(screen.getByRole('button', { name: 'Registrar orden' }));
+
+    expect(vi.mocked(ordersApi.create).mock.calls[0][0].serviceDetail?.receivedAt).toBe('2026-11-01T09:30:00.000Z');
+  });
+
   it('starts the received date at the current hour of the business', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-08T17:30:00.000Z'));

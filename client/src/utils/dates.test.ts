@@ -88,6 +88,19 @@ describe('dates in the business time zone', () => {
     expect(businessDateTimeToIso(toBusinessDateTimeInput('2026-12-08T18:30:00.000Z'))).toBe('2026-12-08T18:30:00.000Z');
   });
 
+  it('keeps the instant a field started with while it shows it, also in the hour the clock repeats', () => {
+    // Tijuana goes back from 2:00 PDT to 1:00 PST on 1 November 2026: 01:30 is 08:30 UTC the first time, 09:30 the second.
+    setBusinessTimeZone('America/Tijuana');
+    expect(toBusinessDateTimeInput('2026-11-01T08:30:00Z')).toBe('2026-11-01T01:30');
+    expect(toBusinessDateTimeInput('2026-11-01T09:30:00Z')).toBe('2026-11-01T01:30');
+    // Typed, it is the first time, as on the server.
+    expect(businessDateTimeToIso('2026-11-01T01:30')).toBe('2026-11-01T08:30:00.000Z');
+    expect(businessDateTimeToIso('2026-11-01T01:30', null)).toBe('2026-11-01T08:30:00.000Z');
+    // Filled with the second time it stays there, to the minute; changed, it is read again.
+    expect(businessDateTimeToIso('2026-11-01T01:30', '2026-11-01T09:30:42.500Z')).toBe('2026-11-01T09:30:00.000Z');
+    expect(businessDateTimeToIso('2026-11-01T01:45', new Date('2026-11-01T09:30:00Z'))).toBe('2026-11-01T08:45:00.000Z');
+  });
+
   it('shows a calendar date as words without shifting it', () => {
     setBusinessTimeZone('America/Tijuana');
     expect(formatCalendarDate('2026-10-05')).toBe('5 de octubre de 2026');

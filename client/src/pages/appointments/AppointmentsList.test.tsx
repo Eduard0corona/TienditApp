@@ -327,6 +327,26 @@ describe('AppointmentsList', () => {
       expect(day).not.toHaveTextContent(/14\/10\/26/);
     });
 
+    it('keeps an appointment in the hour the clock repeats where it was when it is saved without moving it', async () => {
+      const user = userEvent.setup();
+      vi.mocked(appointmentsApi.update).mockResolvedValue({ data: appointment({}) } as never);
+      // 1 November: 01:30 PST to 02:30 PST, the second time 01:30 comes (the first is 08:30 UTC, still PDT).
+      renderAgenda([appointment({ startAt: '2026-11-01T09:30:00Z', endAt: '2026-11-01T10:30:00Z' })]);
+
+      await user.click(await screen.findByRole('button', { name: 'Editar o reprogramar la cita de Ana Ruiz' }));
+      const form = within(await screen.findByRole('dialog', { name: 'Editar o reprogramar la cita' }));
+      expect(form.getByLabelText('Inicio *')).toHaveValue('2026-11-01T01:30');
+      expect(form.queryByText(/el nuevo horario/)).not.toBeInTheDocument();
+      await user.click(form.getByRole('button', { name: 'Guardar cambios' }));
+
+      await waitFor(() => expect(appointmentsApi.update).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(appointmentsApi.update).mock.calls[0][1]).toEqual(expect.objectContaining({
+        startAt: '2026-11-01T09:30:00.000Z',
+        endAt: '2026-11-01T10:30:00.000Z',
+      }));
+      expect(toast.success).toHaveBeenCalledWith('Cita actualizada.');
+    });
+
     it('books the start typed as the clock of the business, and the end after its duration', async () => {
       const user = userEvent.setup();
       vi.mocked(appointmentsApi.create).mockResolvedValue({ data: appointment({}) } as never);

@@ -52,4 +52,22 @@ describe('CampaignsTab scheduled send', () => {
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0][0].scheduledAt).toBe('2026-10-10T01:00:00.000Z');
   });
+
+  it('schedules the hour it proposed when it falls in the hour the clock repeats', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 08:30 UTC on 1 November is 01:30 PDT in Tijuana; an hour later, 01:30 PST, the second time 01:30 comes.
+    vi.setSystemTime(new Date('2026-11-01T08:30:00.000Z'));
+    const user = userEvent.setup();
+    render(<CampaignsTab onCreateTemplate={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Nueva campaña' }));
+    const form = within(await screen.findByRole('dialog', { name: 'Nueva campaña' }));
+    await user.type(form.getByLabelText('Nombre'), 'Fin de semana');
+    await user.click(form.getByLabelText('Programar'));
+    expect(form.getByLabelText('Fecha y hora de envío')).toHaveValue('2026-11-01T01:30');
+    await user.click(form.getByRole('button', { name: 'Programar' }));
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0][0].scheduledAt).toBe('2026-11-01T09:30:00.000Z');
+  });
 });

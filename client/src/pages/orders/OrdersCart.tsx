@@ -97,8 +97,10 @@ export default function OrdersCart() {
   const [tableNumber, setTableNumber] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
   const [productSearch, setProductSearch] = useState('');
-  // Both dates are the business's wall clock, like the service board shows them, not the device's.
-  const [serviceReceivedAt, setServiceReceivedAt] = useState(() => toBusinessDateTimeInput(new Date()));
+  // Both dates are the business's wall clock, like the service board shows them, not the device's. The received date
+  // starts when the order was opened, and stays that instant while it shows it.
+  const [openedAt] = useState(() => new Date());
+  const [serviceReceivedAt, setServiceReceivedAt] = useState(() => toBusinessDateTimeInput(openedAt));
   const [servicePromisedAt, setServicePromisedAt] = useState('');
   const [servicePriority, setServicePriority] = useState(3);
   const [serviceIntakeNotes, setServiceIntakeNotes] = useState('');
@@ -426,7 +428,7 @@ export default function OrdersCart() {
       ...(resolvedOrderType === OrderTypeConst.Service
         ? {
             serviceDetail: {
-              receivedAt: serviceReceivedAt ? businessDateTimeToIso(serviceReceivedAt) : undefined,
+              receivedAt: serviceReceivedAt ? businessDateTimeToIso(serviceReceivedAt, openedAt) : undefined,
               promisedAt: servicePromisedAt ? businessDateTimeToIso(servicePromisedAt) : undefined,
               priority: servicePriority,
               intakeNotes: serviceIntakeNotes.trim() || undefined,

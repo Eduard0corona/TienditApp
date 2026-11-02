@@ -115,6 +115,18 @@ describe('inventory forms', () => {
       expect(toMovementRequest({ ...form, movementDate: '2026-10-07T21:15', lines: [line] }).request?.movementDate)
         .toBe('2026-10-08T04:15:00.000Z');
     });
+
+    it('keeps the instant a movement started with in the hour the clock repeats', () => {
+      setBusinessTimeZone('America/Tijuana');
+      vi.useFakeTimers({ toFake: ['Date'] });
+      // 09:30 UTC on 1 November is 01:30 PST in Tijuana, the second time 01:30 comes that night.
+      vi.setSystemTime(new Date('2026-11-01T09:30:00.000Z'));
+      const line = { ...buildEmptyMovementLineForm(), supplyItemId: 's1', inventoryLocationId: 'l1' };
+
+      const form = buildEmptyMovementForm();
+      expect(form.movementDate).toBe('2026-11-01T01:30');
+      expect(toMovementRequest({ ...form, lines: [line] }).request?.movementDate).toBe('2026-11-01T09:30:00.000Z');
+    });
   });
 
   it('keeps the waste of a recipe between 0 and 100 and previews what a line takes with it', () => {

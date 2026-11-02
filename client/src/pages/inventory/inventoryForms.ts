@@ -68,6 +68,8 @@ export interface MovementFormState {
   movementType: InventoryMovementType;
   movementReason: InventoryMovementReason;
   movementDate: string;
+  /** The instant the date started with: it stays that one while the field shows it. */
+  movementDateFilledWith: string;
   referenceNumber: string;
   externalReference: string;
   counterpartyName: string;
@@ -241,18 +243,22 @@ export const buildEmptyMovementLineForm = (): MovementLineFormState => ({
   notes: '',
 });
 
-export const buildEmptyMovementForm = (): MovementFormState => ({
-  movementType: InventoryMovementType.Entry,
-  movementReason: InventoryMovementReason.Purchase,
-  // The date and time of the movement are the business's clock, as the kardex shows them.
-  movementDate: toBusinessDateTimeInput(new Date()),
-  referenceNumber: '',
-  externalReference: '',
-  counterpartyName: '',
-  documentNumber: '',
-  notes: '',
-  lines: [buildEmptyMovementLineForm()],
-});
+export const buildEmptyMovementForm = (): MovementFormState => {
+  const now = new Date();
+  return {
+    movementType: InventoryMovementType.Entry,
+    movementReason: InventoryMovementReason.Purchase,
+    // The date and time of the movement are the business's clock, as the kardex shows them.
+    movementDate: toBusinessDateTimeInput(now),
+    movementDateFilledWith: now.toISOString(),
+    referenceNumber: '',
+    externalReference: '',
+    counterpartyName: '',
+    documentNumber: '',
+    notes: '',
+    lines: [buildEmptyMovementLineForm()],
+  };
+};
 
 export function toMovementRequest(form: MovementFormState): FormResult<CreateInventoryMovementRequest> {
   if (form.lines.length === 0) return { error: 'Debes agregar al menos un detalle.' };
@@ -271,7 +277,7 @@ export function toMovementRequest(form: MovementFormState): FormResult<CreateInv
     request: {
       movementType: form.movementType,
       movementReason: form.movementReason,
-      movementDate: form.movementDate ? businessDateTimeToIso(form.movementDate) : undefined,
+      movementDate: form.movementDate ? businessDateTimeToIso(form.movementDate, form.movementDateFilledWith) : undefined,
       referenceNumber: optional(form.referenceNumber),
       externalReference: optional(form.externalReference),
       counterpartyName: optional(form.counterpartyName),
