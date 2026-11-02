@@ -490,7 +490,13 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - En SQL Server, la parte de la comisión de cada pago se calcula con escala 6 antes de sumarse: con pagos parciales, un punto medio raro puede diferir un centavo del cálculo con toda la precisión.
     - Desde el primer pedido de plataforma no hay rollback de la base (error 50008), solo correcciones hacia adelante. No conviene publicar entre las 00:00 y las 00:45, hora del negocio (ver [migraciones](../development/database-migrations.md)).
     - El badge «En línea» de Pedidos usa el acento (`bg-primary-subtle`), algo que viene de antes; se dejó igual para no mover las líneas base.
-- Dependencia con avisos de seguridad (visto en la Fase 22F): `SixLabors.ImageSharp` 3.1.12 (`Directory.Packages.props`) tiene GHSA-j9gm-c75j-xc9q y GHSA-jjfr-hcj7-qf5w (altas) y GHSA-wmxv-xphr-5c9g (moderada), y `dotnet restore` las marca (NU1903, NU1902). Las tres están en el manejo de TIFF y se corrigen en la 4.1.2, una versión mayor. Hoy el riesgo es bajo: `ImageProcessingService` solo registra los decodificadores de JPEG, PNG, WebP y GIF, así que un TIFF subido se rechaza antes de decodificarse. Subirla, revisando su API y su licencia, va en un PR propio.
+- Resuelto en la Fase 29H: dependencia con avisos de seguridad (vista en la Fase 22F). `SixLabors.ImageSharp` pasó de la 3.1.12 a la 3.2.0 (`Directory.Packages.props`), en la misma versión mayor y con la misma licencia.
+  - La 3.1.12 tenía tres avisos de TIFF: GHSA-j9gm-c75j-xc9q y GHSA-jjfr-hcj7-qf5w (altos) y GHSA-wmxv-xphr-5c9g (moderado). `ImageProcessingService` ya rechazaba un TIFF antes de decodificarlo, porque solo registra los decodificadores de JPEG, PNG, WebP y GIF.
+  - Después salieron tres avisos más:
+    - GHSA-gwg2-r3hj-4w44 (moderado): el perfil de color ICC que trae un JPEG o un PNG pide la memoria que el archivo diga.
+    - GHSA-v76p-62qx-wwq2 (alto): un TIFF en mosaico con compresión de fax.
+    - GHSA-j3p4-wp97-rph4 (alto): `HistogramEqualization`, que no usamos.
+  - La 29H recibe fotos sin cuenta, así que subirla dejó de ser opcional. Con la 3.2.0, `dotnet restore` ya no marca ningún aviso de ImageSharp. Pasan las pruebas de imágenes de Infrastructure y Application y la suite completa.
 - Resuelto en la Fase 21: días especiales y horario real en WhatsApp ([ADR 0012](../adr/0012-special-days.md)).
   - El dueño marca por fecha los días que cierra o abre con otro horario (festivos, vacaciones, inventario), con un motivo que ven sus clientes y festivos sugeridos que nunca se aplican solos. Las fechas pasadas no cambian y cada cambio queda en la bitácora.
   - El menú en línea y su pedido los toman en cuenta, también sin horario de la semana, y el servidor escribe lo que dicen ("Cerrado · por Navidad · abre el sábado 26 a las 9:00"); en un día especial cerrado tampoco pide una mesa (decisión por omisión).
