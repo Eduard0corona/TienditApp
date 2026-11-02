@@ -47,6 +47,11 @@ public class QuoteConfiguration : IEntityTypeConfiguration<Quote>
                 "([VisitCreditSaleOrderId] IS NULL AND [VisitCreditAmount] IS NULL)"
                 + " OR ([VisitCreditSaleOrderId] IS NOT NULL AND [VisitCreditAmount] > 0 AND [AppointmentId] IS NOT NULL)");
             table.HasCheckConstraint("CK_Quotes_Totals", "[SubTotal] >= 0 AND [Tax] >= 0 AND [Total] = [SubTotal] + [Tax]");
+            table.HasCheckConstraint(
+                "CK_Quotes_Conversion",
+                "([OrderId] IS NULL AND [ConvertedAt] IS NULL AND [AppliedVisitCredit] IS NULL)"
+                + " OR ([OrderId] IS NOT NULL AND [ConvertedAt] IS NOT NULL AND [Status] = 2 AND ([AppliedVisitCredit] IS NULL"
+                + " OR ([AppliedVisitCredit] > 0 AND [VisitCreditAmount] IS NOT NULL AND [AppliedVisitCredit] <= [VisitCreditAmount] AND [AppliedVisitCredit] <= [Total])))");
         });
         builder.HasKey(x => x.Id);
 
@@ -61,6 +66,7 @@ public class QuoteConfiguration : IEntityTypeConfiguration<Quote>
         builder.Property(x => x.Tax).HasColumnType("decimal(18,2)");
         builder.Property(x => x.Total).HasColumnType("decimal(18,2)");
         builder.Property(x => x.VisitCreditAmount).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.AppliedVisitCredit).HasColumnType("decimal(18,2)");
         builder.Property(x => x.TrackingToken).HasMaxLength(Order.TrackingTokenLength).IsUnicode(false);
         builder.Property(x => x.ReplyChannel).HasConversion<int?>();
         builder.Property(x => x.CustomerResponse).HasMaxLength(QuoteRules.MaxResponseLength);
@@ -84,6 +90,11 @@ public class QuoteConfiguration : IEntityTypeConfiguration<Quote>
         builder.HasOne<Order>()
             .WithMany()
             .HasForeignKey(x => x.VisitCreditSaleOrderId)
+            .OnDelete(DeleteBehavior.Restrict);
+        // The service order it became (Fase 29E) stays while the quote points to it.
+        builder.HasOne<Order>()
+            .WithMany()
+            .HasForeignKey(x => x.OrderId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(x => x.Lines)
@@ -109,6 +120,11 @@ public class QuoteConfiguration : IEntityTypeConfiguration<Quote>
             .HasDatabaseName("IX_Quotes_TenantId_AppointmentId_First");
         builder.HasIndex(x => x.CustomerId).HasFilter("[CustomerId] IS NOT NULL");
         builder.HasIndex(x => x.VisitCreditSaleOrderId).HasFilter("[VisitCreditSaleOrderId] IS NOT NULL");
+        // An order comes from one quote at most; the order's detail finds its quote by it.
+        builder.HasIndex(x => x.OrderId)
+            .IsUnique()
+            .HasFilter("[OrderId] IS NOT NULL")
+            .HasDatabaseName("IX_Quotes_OrderId");
         builder.HasIndex(x => x.TrackingToken)
             .IsUnique()
             .HasFilter("[TrackingToken] IS NOT NULL")
