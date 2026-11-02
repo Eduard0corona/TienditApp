@@ -1848,9 +1848,9 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la misma respuesta no cambia nada y otra se rechaza; lo que registró el negocio no se muestra en el enlace;
     - aceptada descarta la corrección en borrador;
     - una versión corregida o vencida no se responde, y un enlace vencido o en otras mayúsculas no existe;
-    - apagada no se responde y se puede volver a encender; apagada, la respuesta que ya tiene sigue y una corregida dice que se corrigió (por la revisión);
+    - apagada no se responde y se puede volver a encender; apagada, la respuesta que ya tiene sigue, y una corregida o vencida dice lo que es (por las revisiones);
     - la misma respuesta guardada primero al mismo tiempo es la respuesta (por la revisión), y otra del negocio gana sin dejar nada del cliente;
-    - Requiere atención cuenta las aceptadas por convertir (urgentes las del enlace) y el filtro «Por convertir» lista las mismas; ni después de 30 días, ni para quien no toma pedidos, ni en un negocio sin órdenes de servicio (por la revisión);
+    - Requiere atención cuenta las aceptadas por convertir (urgentes las del enlace), no las rechazadas, y el filtro «Por convertir» lista las mismas; ni después de 30 días, ni para quien no toma pedidos, ni en un negocio sin órdenes de servicio (por las revisiones);
     - los validadores rechazan «Desde su enlace» del negocio y un mensaje largo, medido ya recortado (por la revisión automática).
   - `AuthorizationBehaviorTests`: la respuesta desde el enlace es una de las solicitudes anónimas.
   - **Mutaciones:** sin la regla de la opción apagada, la del orden de su mensaje, el descarte de correcciones, el mensaje del negocio oculto, `canReply` con la opción, lo urgente del enlace, el choque con el negocio, la misma respuesta al mismo tiempo o el módulo de órdenes en el aviso, falla al menos una prueba; sin el freno del rollback para la opción apagada, falla su prueba de migración.

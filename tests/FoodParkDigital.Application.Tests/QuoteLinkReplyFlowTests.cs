@@ -154,6 +154,10 @@ public class QuoteLinkReplyFlowTests
         var correction = (await Handler(fixture).Handle(new ReviseQuoteCommand(other.Id), CancellationToken.None)).Value!;
         await Handler(fixture).Handle(new SendQuoteCommand(correction.Id), CancellationToken.None);
         Assert.Equal(QuoteRules.ReplacedMessage, (await ReplyAsync(fixture, other.TrackingToken!, accepted: true, null))!.Error);
+        // And one that expired says it expired (it is still stored as sent).
+        var expiring = await SentAsync(fixture);
+        fixture.Clock.UtcNow = SalesTestFixture.Now.AddDays(25);
+        Assert.Equal(QuoteRules.ExpiredForCustomerMessage, (await ReplyAsync(fixture, expiring.TrackingToken!, accepted: true, null))!.Error);
     }
 
     [Fact]
@@ -204,6 +208,9 @@ public class QuoteLinkReplyFlowTests
         var recorded = await SentAsync(fixture);
         var converted = await SentAsync(fixture);
         var waiting = await SentAsync(fixture);
+        // Rejected from its link: closed, without an order and from the link, but nothing to convert.
+        var rejected = await SentAsync(fixture);
+        await ReplyAsync(fixture, rejected.TrackingToken!, accepted: false, null);
         await ReplyAsync(fixture, fromLink.TrackingToken!, accepted: true, null);
         await Handler(fixture).Handle(new RecordQuoteReplyCommand(recorded.Id, true, QuoteReplyChannel.WhatsApp, null), CancellationToken.None);
         await Handler(fixture).Handle(new RecordQuoteReplyCommand(converted.Id, true, QuoteReplyChannel.WhatsApp, null), CancellationToken.None);
