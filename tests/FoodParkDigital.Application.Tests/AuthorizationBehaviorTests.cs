@@ -135,6 +135,22 @@ public class AuthorizationBehaviorTests
     }
 
     [Fact]
+    public async Task TheJobOfAQuote_ShouldNeedTheAgenda_AndTakingOrders_WhichItsAnswerShows()
+    {
+        const TenantCapability modules = TenantCapability.Service | TenantCapability.Appointments;
+        var agendaOnly = Staff(permissions: ["ManageAppointments"], capabilities: modules);
+        var ordersOnly = Staff(permissions: ["ManageOrders"], capabilities: modules);
+        var both = Staff(permissions: ["ManageAppointments", "ManageOrders"], capabilities: modules);
+        var job = new Quotes.ScheduleQuoteWorkCommand(Guid.NewGuid(), DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), null, null);
+
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<Quotes.ScheduleQuoteWorkCommand>(agendaOnly).Handle(job, Next, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<Quotes.ScheduleQuoteWorkCommand>(ordersOnly).Handle(job, Next, CancellationToken.None));
+        Assert.Equal("ok", await Behavior<Quotes.ScheduleQuoteWorkCommand>(both).Handle(job, Next, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task InactiveMember_ShouldBeDeniedEvenWithThePermission()
     {
         var access = Staff(permissions: ["ManageCash"], active: false);

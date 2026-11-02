@@ -18,12 +18,16 @@ namespace FoodParkDigital.Application.Quotes;
 /// The business agenda the job of the service order an accepted quote became (Fase 29F, ADR 0053 point 17), or part of it:
 /// an appointment of the team with whom and when, at the place of the visit the quote came from when there was one. The job
 /// is charged in its order, so the appointment is never charged on its own. It takes more than one appointment when the
-/// job does.
+/// job does. It answers the whole quote, so besides the agenda it needs who takes orders, as every quote does.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageAppointments)]
 [RequiresCapability(TenantCapability.Appointments)]
 public record ScheduleQuoteWorkCommand(
-    Guid QuoteId, DateTimeOffset StartAt, DateTimeOffset EndAt, Guid? StaffUserId, string? Notes) : IRequest<Result<QuoteDto>>;
+    Guid QuoteId, DateTimeOffset StartAt, DateTimeOffset EndAt, Guid? StaffUserId, string? Notes)
+    : IRequest<Result<QuoteDto>>, IRequiresContentPermissions
+{
+    public IEnumerable<TenantPermission> RequiredPermissions() => [TenantPermission.ManageOrders];
+}
 
 public class ScheduleQuoteWorkCommandValidator : AbstractValidator<ScheduleQuoteWorkCommand>
 {
@@ -31,7 +35,8 @@ public class ScheduleQuoteWorkCommandValidator : AbstractValidator<ScheduleQuote
     {
         RuleFor(x => x.QuoteId).NotEmpty();
         RuleFor(x => x.EndAt).GreaterThan(x => x.StartAt).WithMessage(QuoteWork.EndAfterStartMessage);
-        RuleFor(x => x).Must(x => x.EndAt - x.StartAt <= QuoteWork.LongestAppointment).WithMessage(QuoteWork.TooLongMessage)
+        RuleFor(x => x).Must(x => x.EndAt - x.StartAt <= AppointmentWorkRules.LongestAppointment)
+            .WithMessage(AppointmentWorkRules.TooLongMessage)
             .When(x => x.EndAt > x.StartAt);
         RuleFor(x => x.StaffUserId).Must(id => id != Guid.Empty).When(x => x.StaffUserId is not null);
         RuleFor(x => x.Notes).MaximumLength(2000);
@@ -41,10 +46,7 @@ public class ScheduleQuoteWorkCommandValidator : AbstractValidator<ScheduleQuote
 /// <summary>The rules and messages of agendar the job of a quote.</summary>
 public static class QuoteWork
 {
-    /// <summary>A job that takes longer is agendado in more than one appointment, one per day.</summary>
-    public static readonly TimeSpan LongestAppointment = TimeSpan.FromHours(12);
     public const string EndAfterStartMessage = "El trabajo termina después de empezar.";
-    public const string TooLongMessage = "Una cita del trabajo dura hasta 12 horas: agenda los demás días en otra.";
     public const string NotConvertedMessage = "Primero convierte la cotización aceptada en su orden de servicio.";
     public const string OverlapMessage = "Ya existe una cita para ese colaborador en el horario seleccionado.";
 
@@ -114,7 +116,7 @@ public class ScheduleQuoteWorkCommandHandler : IRequestHandler<ScheduleQuoteWork
         {
             // The order's customer, or the phone as the quote wrote it when the order has none (a phone that did not read).
             appointment = Appointment.ForWork(
-                TenantId, order.Id, order.CustomerName ?? quote.CustomerName, order.CustomerPhone ?? quote.CustomerPhone,
+                TenantId, order.Id, order.CustomerName, order.CustomerPhone ?? quote.CustomerPhone,
                 serviceName, request.StartAt, request.EndAt, visit, resources.Value.StaffName, request.StaffUserId, request.Notes);
         }
         catch (DomainException ex)

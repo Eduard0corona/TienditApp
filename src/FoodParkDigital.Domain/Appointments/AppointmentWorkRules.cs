@@ -6,6 +6,9 @@ namespace FoodParkDigital.Domain.Appointments;
 /// </summary>
 public static class AppointmentWorkRules
 {
+    /// <summary>A job that takes longer is agendado in more than one appointment, one per day.</summary>
+    public static readonly TimeSpan LongestAppointment = TimeSpan.FromHours(12);
+    public const string TooLongMessage = "Una cita del trabajo dura hasta 12 horas: agenda los demás días en otra.";
     public const string ChargedInItsOrderMessage = "El trabajo de esta cita se cobra en su orden: no lleva venta aparte.";
     public const string NotQuotedMessage = "Una cita del trabajo de una orden no se cotiza: ese trabajo ya tiene su cotización.";
 

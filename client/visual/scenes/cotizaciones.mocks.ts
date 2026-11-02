@@ -146,6 +146,7 @@ const ACCEPTED = {
   canConvertToOrder: true,
 };
 
+// Without canScheduleWork on purpose: the scene of the 29E stays as it was; the job is in SCHEDULED (Fase 29F).
 const CONVERTED = {
   ...ACCEPTED,
   id: CONVERTED_ID,

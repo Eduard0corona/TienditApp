@@ -20,7 +20,8 @@
 -- escribe. /health/schema sigue sano. Volver a ella (redespliegue, o swap si el slot de staging
 -- está activo) funciona sin rollback.sql: una cita del trabajo se ve como una cita común; si con esa
 -- versión alguien intenta cobrarla, la base lo rechaza por [CK_Appointments_Work] y no se cobra dos
--- veces el trabajo.
+-- veces el trabajo. Esa versión sí deja cotizarla, y moverla a otra dirección le pone el cargo de la
+-- zona: al regresar, el aviso y la ruta no lo dicen y nada lo cobra.
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a

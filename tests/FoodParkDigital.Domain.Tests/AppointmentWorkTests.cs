@@ -122,6 +122,22 @@ public class AppointmentWorkTests
     }
 
     [Fact]
+    public void AWorkAppointment_ShouldLastUpTo12Hours_WhenAgendadoAndWhenMoved_WhileAnyOtherLastsWhatItLasts()
+    {
+        var work = Work();
+        var other = new Appointment(Business, "Valeria Ruiz", "+525522107765", "Retiro", Start, Start.AddHours(13));
+
+        Assert.Equal(AppointmentWorkRules.TooLongMessage, Assert.Throws<DomainException>(() => Appointment.ForWork(
+            Business, WorkOrder, "Valeria Ruiz", "+525522107765", "Trabajo", Start, Start.AddHours(12).AddMinutes(1), null)).Message);
+        Assert.Equal(AppointmentWorkRules.TooLongMessage, Assert.Throws<DomainException>(() => work.Update(
+            work.CustomerName, work.CustomerPhone, work.ServiceName, Start, Start.AddHours(12).AddMinutes(1), null, null)).Message);
+        work.Update(work.CustomerName, work.CustomerPhone, work.ServiceName, Start, Start.AddHours(12), null, null);
+        other.Update(other.CustomerName, other.CustomerPhone, other.ServiceName, Start, Start.AddHours(14), null, null);
+
+        Assert.Equal((Start.AddHours(12), Start.AddHours(14)), (work.EndAt, other.EndAt));
+    }
+
+    [Fact]
     public void AWorkAppointment_ShouldMoveConfirmAndClose_LikeAnyAppointmentOfTheTeam()
     {
         var appointment = Work(QuotedVisit().Visit);

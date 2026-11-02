@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Appointments;
 using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Appointments.Queries;
 using FoodParkDigital.Domain.Exceptions;
@@ -80,6 +81,20 @@ public class QuoteWorkFlowTests
         Assert.All(appointments, a => Assert.Null(a.Visit));
         // The order's customer, with the phone the conversion read.
         Assert.All(appointments, a => Assert.Equal(("Valeria Ruiz", "+525522107765"), (a.CustomerName, a.CustomerPhone)));
+    }
+
+    [Fact]
+    public async Task AnOrderWithoutAPhone_ShouldHaveItsJobAgendado_WithThePhoneAsTheQuoteWroteIt()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.AcceptedForAsync("555-1234", new QuoteLineRequest { Description = "Revisión", Quantity = 1m, UnitPrice = 500m });
+        var order = (await shop.ConvertAsync(quote.Id)).Value!.Order!;
+        Assert.Null((await shop.Context.Orders.AsNoTracking().SingleAsync(o => o.Id == order.Id)).CustomerPhone);
+
+        var scheduled = await shop.ScheduleWorkAsync(quote.Id, JobStart, JobStart.AddHours(2));
+
+        Assert.True(scheduled.IsSuccess, scheduled.Error);
+        Assert.Equal("555-1234", (await shop.Context.Appointments.AsNoTracking().SingleAsync()).CustomerPhone);
     }
 
     [Fact]
@@ -197,6 +212,45 @@ public class QuoteWorkFlowTests
         Assert.Contains("a domicilio (CP 72000)", notice.Body);
         Assert.DoesNotContain("Cargo por visita", notice.Body);
         Assert.DoesNotContain("Visita:", notice.Body);
+    }
+
+    [Fact]
+    public async Task AJobWithoutAnAddress_ShouldNotSendTheCustomerToTheBusiness()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var quote = await shop.AcceptedAsync(new QuoteLineRequest { Description = "Pintar la fachada", Quantity = 1m, UnitPrice = 9000m });
+        Assert.True((await shop.ConvertAsync(quote.Id)).IsSuccess);
+        await shop.ConnectWhatsAppAsync();
+
+        Assert.True((await shop.ScheduleWorkAsync(quote.Id, JobStart, JobStart.AddHours(8))).IsSuccess);
+
+        var notice = await shop.Context.OutgoingMessages.AsNoTracking().SingleAsync(m => m.Purpose == MessagePurpose.AppointmentNotice);
+        Assert.Contains($"tu cita de Trabajo de la cotización {quote.Number} el ", notice.Body);
+        Assert.Contains(" con ", notice.Body);
+        Assert.DoesNotContain(" en ", notice.Body.Split(" a las ")[1]);
+    }
+
+    [Fact]
+    public async Task AJobWhoseVisitGotAChargeElsewhere_ShouldStillNotSayItInItsNotice()
+    {
+        await using var shop = await Shop.OpenAsync(pricesIncludeTax: false, policy: HomeVisitChargePolicy.CreditedIfHired);
+        var (_, quote) = await shop.CreditedVisitQuoteAsync();
+        Assert.True((await shop.ConvertAsync(quote.Id)).IsSuccess);
+        var work = Assert.Single((await shop.ScheduleWorkAsync(quote.Id, JobStart, JobStart.AddHours(3))).Value!.Order!.WorkAppointments);
+        await shop.ConnectWhatsAppAsync();
+        // As the version before it would leave it after moving the address: a charge for the zone on the job's visit.
+        var appointment = await shop.Context.Appointments.SingleAsync(a => a.Id == work.Id);
+        shop.Context.Entry(appointment.Visit!).Property(v => v.Fee).CurrentValue = 150m;
+        await shop.Context.SaveChangesAsync();
+
+        Assert.True(await new AppointmentNotices(shop.Context, new PhoneNormalizationService(), shop.Fixture.Clock)
+            .QueueScheduledAsync(appointment, CancellationToken.None));
+        await shop.Context.SaveChangesAsync();
+
+        var notice = await shop.Context.OutgoingMessages.AsNoTracking()
+            .Where(m => m.Purpose == MessagePurpose.AppointmentNotice).OrderByDescending(m => m.NextAttemptAt).FirstAsync();
+        Assert.DoesNotContain("Cargo por visita", notice.Body);
+        Assert.DoesNotContain("$", notice.Body);
     }
 
     [Fact]

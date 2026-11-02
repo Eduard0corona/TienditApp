@@ -132,6 +132,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException("El servicio es obligatorio.");
         if (endAt <= startAt)
             throw new DomainException("La fecha de fin debe ser mayor a la fecha de inicio.");
+        if (IsWork && endAt - startAt > AppointmentWorkRules.LongestAppointment)
+            throw new DomainException(AppointmentWorkRules.TooLongMessage);
 
         CustomerName = customerName.Trim();
         CustomerPhone = customerPhone.Trim();
@@ -286,6 +288,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new ArgumentException("The order is required.", nameof(workOrderId));
         if (at is not null && at.TenantId != tenantId)
             throw new ArgumentException("The visit must be of the same business.", nameof(at));
+        if (endAt - startAt > AppointmentWorkRules.LongestAppointment)
+            throw new DomainException(AppointmentWorkRules.TooLongMessage);
 
         var appointment = new Appointment(
             tenantId, customerName, customerPhone, serviceName, startAt, endAt,

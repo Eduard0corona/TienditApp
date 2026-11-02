@@ -858,7 +858,7 @@ export default function OrdersList() {
                   {/* The appointments that do its job (Fase 29F); they are agendadas from its quote. */}
                   {selectedOrder.workAppointments && selectedOrder.workAppointments.length > 0 && (
                     <div className="mb-2">
-                      <WorkAppointmentList appointments={selectedOrder.workAppointments} />
+                      <WorkAppointmentList appointments={selectedOrder.workAppointments} canOpenAgenda={access.appointments} />
                     </div>
                   )}
                   {selectedOrder.taxBreakdown.filter((line) => line.taxAmount > 0).map((line) => (

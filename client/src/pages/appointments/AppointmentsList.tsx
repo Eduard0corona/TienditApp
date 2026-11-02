@@ -148,6 +148,8 @@ export default function AppointmentsList() {
   const canSell = getAccess(user, capabilities).sell;
   // «Cotizar» opens the quote of a visit (Fase 29C): for whoever takes orders.
   const canQuote = getAccess(user, capabilities).quotes;
+  // The order of the job of a quote (Fase 29F) opens for whoever sees orders.
+  const canOpenOrders = getAccess(user, capabilities).orders;
   const [quoting, setQuoting] = useState<string | null>(null);
   // Like the server's notices: with IVA included while the business is read.
   const pricesIncludeTax = tenant?.pricesIncludeTax ?? true;
@@ -271,8 +273,13 @@ export default function AppointmentsList() {
     : !shouldQuote ? { kind: 'none' }
     : quoteAnswer?.postalCode !== typedPostalCode ? { kind: 'loading' }
     : 'message' in quoteAnswer ? { kind: 'refused', message: quoteAnswer.message }
-    // A visit «Sin costo» requested online stays free wherever it moves (Fase 29B): the server charges nothing for the zone.
-    : { kind: 'quoted', zoneName: quoteAnswer.zoneName, fee: editing?.visit?.chargePolicy === HomeVisitChargePolicy.Free ? 0 : quoteAnswer.fee };
+    // A visit «Sin costo» requested online stays free wherever it moves (Fase 29B), and the job of an order charges nothing to
+    // go there (Fase 29F, charged in its order): the server charges nothing for the zone.
+    : {
+      kind: 'quoted',
+      zoneName: quoteAnswer.zoneName,
+      fee: editing?.workOrderId || editing?.visit?.chargePolicy === HomeVisitChargePolicy.Free ? 0 : quoteAnswer.fee,
+    };
 
   const serviceById = useMemo(() => new Map(services.map((service) => [service.id, service])), [services]);
 
@@ -607,11 +614,13 @@ export default function AppointmentsList() {
                 <td>
                   <div>{item.serviceName}</div>
                   <div className="text-muted small">{item.staffName || 'Sin asignar'}</div>
-                  {/* The job of an order (Fase 29F): charged in it, so it opens the order instead of «Cobrar». */}
+                  {/* The job of an order (Fase 29F): charged in it, so it opens the order (for whoever sees orders) instead of «Cobrar». */}
                   {item.workOrderNumber && (
                     <div className="text-muted small">
                       Se cobra en la orden{' '}
-                      <Link to={`/orders?search=${encodeURIComponent(item.workOrderNumber)}`}>{item.workOrderNumber}</Link>
+                      {canOpenOrders
+                        ? <Link to={`/orders?search=${encodeURIComponent(item.workOrderNumber)}`}>{item.workOrderNumber}</Link>
+                        : item.workOrderNumber}
                     </div>
                   )}
                 </td>

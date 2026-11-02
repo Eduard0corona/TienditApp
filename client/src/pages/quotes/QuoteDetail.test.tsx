@@ -455,12 +455,12 @@ describe('QuoteDetail', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Agendar el trabajo' }));
     const dialog = await screen.findByRole('dialog', { name: 'Agendar el trabajo' });
     expect(dialog).toHaveTextContent('En la dirección de la visita (CP 72000), sin cargo por ir. Se cobra en la orden ORD-000031, no aparte.');
-    await userEvent.type(within(dialog).getByLabelText('Empieza'), '2026-10-12T09:00');
+    await userEvent.type(within(dialog).getByLabelText('Inicio'), '2026-10-12T09:00');
     // The end takes two hours unless said; the person makes it three.
-    expect(within(dialog).getByLabelText('Termina')).toHaveValue('2026-10-12T11:00');
-    await userEvent.clear(within(dialog).getByLabelText('Termina'));
-    await userEvent.type(within(dialog).getByLabelText('Termina'), '2026-10-12T12:00');
-    const who = within(dialog).getByLabelText('Quién lo hace');
+    expect(within(dialog).getByLabelText('Fin')).toHaveValue('2026-10-12T11:00');
+    await userEvent.clear(within(dialog).getByLabelText('Fin'));
+    await userEvent.type(within(dialog).getByLabelText('Fin'), '2026-10-12T12:00');
+    const who = within(dialog).getByLabelText('Atiende');
     expect(within(who).queryByRole('option', { name: 'Ana Baja' })).not.toBeInTheDocument();
     await userEvent.selectOptions(who, 'luis');
     await userEvent.type(within(dialog).getByLabelText('Notas para el equipo'), ' Llevar la escalera ');
@@ -484,12 +484,63 @@ describe('QuoteDetail', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Agendar el trabajo' }));
     const dialog = await screen.findByRole('dialog', { name: 'Agendar el trabajo' });
-    await userEvent.type(within(dialog).getByLabelText('Empieza'), '2026-10-12T09:00');
+    await userEvent.type(within(dialog).getByLabelText('Inicio'), '2026-10-12T09:00');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Agendar' }));
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('La orden ORD-000031 se canceló: su trabajo ya no se agenda.');
-    // Behind the dialog the page already shows the quote as it is now: nothing left to agenda.
+    // Behind the dialog the page already shows the quote as it is now: nothing left to agenda, nor to try again.
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Agendar el trabajo', hidden: true })).not.toBeInTheDocument());
+    expect(within(dialog).getByRole('button', { name: 'Agendar' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    // The button it came from is gone: the order link takes the focus.
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Ver la orden' })).toHaveFocus());
+  });
+
+  it('keeps the length chosen when the start moves, asks for an end after the start, and holds still while it agendas', async () => {
+    setBusinessTimeZone('America/Mexico_City');
+    onTestFinished(() => setBusinessTimeZone(null));
+    vi.mocked(quotesApi.get).mockResolvedValue(converted({
+      order: { id: 'o1', orderNumber: 'ORD-000031', status: 4, workAppointments: [
+        { id: 'w1', startAt: '2026-10-12T15:00:00Z', endAt: '2026-10-12T18:30:00Z', staffName: null, status: 0, atCustomersAddress: false },
+      ] },
+    }));
+    vi.mocked(employeesApi.getAll).mockRejectedValue(new Error('403'));
+    const pending = deferred<Quote>();
+    vi.mocked(quotesApi.scheduleWork).mockReturnValue(pending.promise);
+    renderAt();
+
+    // Its appointments in the business's time: 9:00 to 12:30 in Mexico City on Monday the 12th.
+    const heading = await screen.findByRole('heading', { name: 'Citas del trabajo' });
+    const job = within(heading.parentElement!).getAllByRole('listitem')[0];
+    expect(job).toHaveTextContent(/lun 12 de oct, 9:00 a\.m\. a 12:30 p\.m\./);
+    expect(job).toHaveTextContent('Sin asignar');
+    await userEvent.click(screen.getByRole('button', { name: 'Agendar el trabajo' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Agendar el trabajo' });
+    // Without the team (only owners and admins list it), it says how it is assigned.
+    expect(await within(dialog).findByText('No pudimos traer al equipo: el trabajo queda sin asignar y se asigna después en la Agenda.'))
+      .toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Atiende')).toHaveAccessibleDescription(
+      'No pudimos traer al equipo: el trabajo queda sin asignar y se asigna después en la Agenda.');
+    await userEvent.type(within(dialog).getByLabelText('Inicio'), '2026-10-12T09:00');
+    await userEvent.clear(within(dialog).getByLabelText('Fin'));
+    await userEvent.type(within(dialog).getByLabelText('Fin'), '2026-10-12T08:00');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Agendar' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('El trabajo termina después de empezar.');
+    expect(quotesApi.scheduleWork).not.toHaveBeenCalled();
+
+    await userEvent.clear(within(dialog).getByLabelText('Fin'));
+    await userEvent.type(within(dialog).getByLabelText('Fin'), '2026-10-12T12:00');
+    await userEvent.clear(within(dialog).getByLabelText('Inicio'));
+    await userEvent.type(within(dialog).getByLabelText('Inicio'), '2026-10-13T10:00');
+    // Three hours chosen, moved to the next day: still three.
+    expect(within(dialog).getByLabelText('Fin')).toHaveValue('2026-10-13T13:00');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Agendar' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Agendando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).getByLabelText('Inicio')).toBeDisabled();
+    pending.resolve(converted());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Agendar el trabajo' })).not.toBeInTheDocument());
   });
 
   it('does not offer to agenda the job to whoever cannot manage the agenda', async () => {

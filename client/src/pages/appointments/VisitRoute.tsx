@@ -110,7 +110,9 @@ function PersonRoute({ person, pricesIncludeTax, canCharge, onCharge }: { person
             <div className="small">{stop.addressLine}</div>
             {stop.references && <div className="small text-muted">Ref.: {stop.references}</div>}
             <div className="small text-muted">
-              CP {stop.postalCode} · {stop.zoneName}{stop.workOrderNumber ? '' : ` · ${describeVisitFee(stop.fee, pricesIncludeTax)}`}
+              CP {stop.postalCode} · {stop.zoneName}
+              {/* The job of an order (Fase 29F) charges nothing for the visit: it is charged in its order. */}
+              {!stop.workOrderNumber && <> · {describeVisitFee(stop.fee, pricesIncludeTax)}</>}
             </div>
             <div className="d-flex flex-wrap gap-1 mt-1">
               <a

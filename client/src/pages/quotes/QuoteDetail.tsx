@@ -575,7 +575,9 @@ function QuoteDetail({ id }: { id: string }) {
                     <Link ref={orderLinkRef} to={`/orders?search=${encodeURIComponent(quote.order.orderNumber)}`}>Ver la orden</Link>
                   </p>
                   {/* The appointments that do its job (Fase 29F), and agendar more for whoever manages the agenda. */}
-                  {quote.order.workAppointments.length > 0 && <WorkAppointmentList appointments={quote.order.workAppointments} />}
+                  {quote.order.workAppointments.length > 0 && (
+                    <WorkAppointmentList appointments={quote.order.workAppointments} canOpenAgenda={access.appointments} />
+                  )}
                   {quote.canScheduleWork && access.appointments && (
                     <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setScheduling(true)}>
                       <i className="ri-calendar-schedule-line me-1" aria-hidden="true"></i>Agendar el trabajo
@@ -664,7 +666,11 @@ function QuoteDetail({ id }: { id: string }) {
         <Suspense fallback={null}>
           <ScheduleWorkDialog
             quote={quote}
-            onClose={() => setScheduling(false)}
+            onClose={() => {
+              setScheduling(false);
+              // Refused because nothing is left to agenda: the button it came from is gone, the order link takes the focus.
+              if (!quote.canScheduleWork) setJustConverted(true);
+            }}
             onScheduled={(scheduled) => {
               setScheduling(false);
               show(scheduled);

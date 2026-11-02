@@ -114,7 +114,7 @@ test.describe('Trabajo de la cotización', () => {
     await open(page, '/quotes/2f6c8a14-7d3b-4e9a-a5c2-9b1e0d4f7a83');
     await page.getByRole('button', { name: 'Agendar el trabajo' }).click();
     const form = await dialog(page, 'Agendar el trabajo');
-    await expect(form.getByLabel('Quién lo hace')).toBeVisible();
+    await expect(form.getByLabel('Atiende')).toBeVisible();
     await snap(page, 'cotizacion-agendar-trabajo-escritorio', { fullPage: false });
   });
 });
