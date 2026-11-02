@@ -974,6 +974,20 @@ La Fase 29G trae una migración, [`database/production/20261102151555_AddQuoteOn
 - **Volver a la versión anterior:** funciona sin tocar la base. El enlace deja de ofrecer la respuesta, y una cotización que el cliente respondió desde su enlace se ve aceptada o rechazada, sin decir por dónde.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50055 en cuanto un cliente respondió desde su enlace o un negocio apagó la opción; si no, quita la columna y deja `CK_Quotes_Reply` como antes.
 
+## Las fotos de lo que pasa en la solicitud de visita (Fase 29H)
+
+La Fase 29H trae una migración, [`database/production/20261102205836_AddAppointmentProblemPhotos`](../../database/production/20261102205836_AddAppointmentProblemPhotos). Su `apply.sql` va antes del merge.
+
+- **La migración:** agrega la tabla `AppointmentProblemPhotos`: una fila por foto, con su cita (se borra con ella), su lugar de 0 a 4 (único por cita: `CK_AppointmentProblemPhotos_Position` y `IX_AppointmentProblemPhotos_AppointmentId_Position`) y la llave de su archivo privado (única por negocio). No cambia datos ni tablas que ya existen.
+- **Mientras se publica:** la versión de `master` (la 29G) no conoce la tabla y sigue funcionando.
+- **Configuración:**
+  - Las fotos van al almacenamiento privado que ya existe (`FileStorage`, el contenedor `private-files` en Azure o `App_Data/private-files` en local), bajo `orders/{tenantId}/visit-problem/`. No hay variables nuevas ni evento nuevo en el outbox.
+  - La ruta anónima `POST /api/v1/public/appointments/tracking/photos` tiene su propio límite por IP (`public-upload`, 20 cada 10 minutos) y acepta un cuerpo de hasta 10 MB más el formulario. Un proxy delante de la app debe dejar pasar ese tamaño.
+  - Cada instancia decodifica a lo más dos fotos a la vez. Al escalar a más instancias, crece lo que se procesa a la vez, no la memoria de cada una.
+- **ImageSharp:** sigue en la 3.1.12. La 3.2.0 corrige sus avisos de seguridad, pero el build en Release falla sin una licencia de Six Labors (`SixLaborsLicenseKey`): subirla pide esa licencia como secreto del CI, del despliegue y del build de Docker (deuda técnica).
+- **Volver a la versión anterior:** funciona sin tocar la base. La solicitud y el enlace dejan de ofrecer las fotos, y las que ya se mandaron se quedan guardadas sin que el negocio las vea.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50056 en cuanto un cliente mandó una foto; si no, quita la tabla. Los archivos de las fotos no se borran.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
