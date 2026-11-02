@@ -172,6 +172,23 @@ public class QuoteConversionTests
     }
 
     [Fact]
+    public void AProductMadeNotSubjectAfterItWasQuotedWithIva_ShouldBeInvoicedAsSubjectToIt()
+    {
+        var notSubject = HeaterFiscal with { TaxObject = CfdiTaxObject.NotSubject };
+        var exempt = Guid.NewGuid();
+        var quote = Accepted(lines:
+        [
+            new QuoteLineInput(Heater, "Cambio de calentador", 1m, 1160m, VatRate.General),
+            new QuoteLineInput(exempt, "Material exento", 1m, 100m, VatRate.Exempt),
+        ]);
+
+        var lines = QuoteConversion.Lines(quote, new Dictionary<Guid, OrderLineFiscalData> { [Heater] = notSubject, [exempt] = notSubject });
+
+        // With IVA it is subject to it; exempt, it keeps what the product says.
+        Assert.Equal([CfdiTaxObject.Subject, CfdiTaxObject.NotSubject], lines.Select(l => l.Fiscal.TaxObject));
+    }
+
+    [Fact]
     public void ALongNameWithItsQuantity_ShouldFitInTheLine()
     {
         var name = QuoteConversion.WithQuantity(new string('x', QuoteRules.MaxDescriptionLength), 1234.567m);

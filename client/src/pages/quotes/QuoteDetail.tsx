@@ -635,7 +635,7 @@ function QuoteDetail({ id }: { id: string }) {
       {converting && (
         <ConvertQuoteDialog
           quote={quote}
-          canCharge={access.charge}
+          canApplyVisit={access.charge && access.refunds}
           onClose={() => setConverting(false)}
           onConverted={(converted) => {
             setConverting(false);

@@ -1,6 +1,7 @@
 using System.Globalization;
 using FoodParkDigital.Domain.Catalog;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Quotes.Entities;
@@ -45,7 +46,7 @@ public static class QuoteConversion
         foreach (var line in quote.Lines.OrderBy(line => line.Position))
         {
             var fromCatalog = line.ProductId is { } productId && catalog.ContainsKey(productId);
-            var fiscal = fromCatalog ? catalog[line.ProductId!.Value] : HandWrittenFiscal;
+            var fiscal = fromCatalog ? WithItsTax(catalog[line.ProductId!.Value], line.VatRate) : HandWrittenFiscal;
             var id = fromCatalog ? line.ProductId!.Value : line.Id;
 
             lines.Add(UnitTypeRules.IsValidQuantity(line.Quantity, fiscal.Unit)
@@ -55,6 +56,15 @@ public static class QuoteConversion
 
         return lines;
     }
+
+    /// <summary>
+    /// The codes of a product whose IVA the customer accepted: a product made «no objeto de impuesto» after it was quoted with
+    /// IVA invoices the line as subject to it, so the invoice adds up the IVA the order charges.
+    /// </summary>
+    private static OrderLineFiscalData WithItsTax(OrderLineFiscalData product, VatRate accepted)
+        => product.TaxObject == CfdiTaxObject.NotSubject && !accepted.IsExempt && accepted.Percent > 0
+            ? product with { TaxObject = CfdiTaxObject.Subject }
+            : product;
 
     /// <summary>«Tubo de cobre (3.5)», within the length of a line's name (<see cref="QuoteRules.MaxDescriptionLength"/>).</summary>
     public static string WithQuantity(string description, decimal quantity)

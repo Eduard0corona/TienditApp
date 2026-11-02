@@ -8,8 +8,11 @@ import { formatMoney } from '../../utils/money';
 
 interface ConvertQuoteDialogProps {
   quote: Quote;
-  /** Whether the person may charge: applying what was paid for the visit is a payment of the order (the server checks it). */
-  canCharge: boolean;
+  /**
+   * Whether the person may charge and refund: what was paid for the visit is given back by its sale and paid into the order
+   * (the server checks it).
+   */
+  canApplyVisit: boolean;
   onClose: () => void;
   /** It became its service order: the quote as the server has it now. */
   onConverted: (converted: Quote) => void;
@@ -20,7 +23,7 @@ interface ConvertQuoteDialogProps {
  * accepted, once. What was paid for the visit becomes a payment of the order, up to its total. When the job is promised is
  * optional, as in any service order, and is read in the business's time zone.
  */
-export default function ConvertQuoteDialog({ quote, canCharge, onClose, onConverted }: ConvertQuoteDialogProps) {
+export default function ConvertQuoteDialog({ quote, canApplyVisit, onClose, onConverted }: ConvertQuoteDialogProps) {
   const titleId = useId();
   const hintId = useId();
   const queryClient = useQueryClient();
@@ -29,7 +32,7 @@ export default function ConvertQuoteDialog({ quote, canCharge, onClose, onConver
   const lines = quote.lines.length;
   // What the order takes as paid: what is taken off for the visit, never more than the total.
   const credit = quote.visitCredit?.applies ? Math.min(quote.visitCredit.amount, quote.total) : 0;
-  const needsCharge = credit > 0 && !canCharge;
+  const needsCharge = credit > 0 && !canApplyVisit;
 
   const convert = useMutation({
     mutationFn: () => quotesApi.convertToOrder(quote.id, promisedAt ? businessDateTimeToIso(promisedAt) : null),
@@ -66,7 +69,7 @@ export default function ConvertQuoteDialog({ quote, canCharge, onClose, onConver
           )}
           {needsCharge && (
             <div className="alert alert-warning small" role="status">
-              Aplicar lo que pagó por la visita es cobrar: conviértela con alguien que pueda cobrar.
+              Lo que pagó por la visita pasa de su venta a la orden: conviértela con alguien que pueda cobrar y hacer reembolsos.
             </div>
           )}
           <fieldset disabled={convert.isPending}>

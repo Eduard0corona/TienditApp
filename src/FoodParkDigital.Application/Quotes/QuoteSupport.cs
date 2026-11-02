@@ -65,15 +65,19 @@ internal static class QuoteVisitCredits
     {
         if (quote.VisitCreditSaleOrderId is not { } saleId)
             return null;
-        var service = quote.AppointmentId is { } appointmentId
+        return await PaidForTheVisitAsync(
+            context, quote.TenantId, saleId, await VisitServiceAsync(context, quote, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>The service of the appointment of the visit a quote comes from, whose units its sale charged for the visit.</summary>
+    public static async Task<Guid?> VisitServiceAsync(IApplicationDbContext context, Quote quote, CancellationToken cancellationToken)
+        => quote.AppointmentId is { } appointmentId
             ? await context.Appointments
                 .AsNoTracking()
                 .Where(a => a.Id == appointmentId && a.TenantId == quote.TenantId)
                 .Select(a => a.ServiceProductId)
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
-        return await PaidForTheVisitAsync(context, quote.TenantId, saleId, service, cancellationToken);
-    }
 
     /// <summary>
     /// What a sale has paid for its visit: what it charges for it (the charge of its zone and the units of the service the
@@ -87,7 +91,16 @@ internal static class QuoteVisitCredits
             .AsNoTracking()
             .Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == saleId && o.TenantId == tenantId, cancellationToken);
-        if (sale is null || sale.Status == OrderStatus.Cancelled)
+        return sale is null ? null : PaidForTheVisit(sale, serviceProductId);
+    }
+
+    /// <summary>
+    /// What <paramref name="sale"/>, as loaded with its lines, has paid for its visit (see <see cref="PaidForTheVisitAsync"/>).
+    /// Null when it is cancelled.
+    /// </summary>
+    public static decimal? PaidForTheVisit(Order sale, Guid? serviceProductId)
+    {
+        if (sale.Status == OrderStatus.Cancelled)
             return null;
 
         var amounts = sale.Items

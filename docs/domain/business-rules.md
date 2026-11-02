@@ -794,7 +794,8 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - La aceptada se convierte en el trabajo una sola vez (Fase 29E): «Convertir en orden de servicio», con quien toma pedidos en un negocio con órdenes de servicio.
     - La orden es del negocio y empieza «Aceptada», con el cliente de la cotización, su política de precios con IVA y sus renglones al precio y con el IVA que el cliente aceptó, así que suma lo mismo; puede decir para cuándo se promete (de hoy a un año).
     - Un renglón escrito a mano, o cuyo producto ya no está, entra como unidad de servicio; una cantidad que su unidad no vende entra como una al importe del renglón, con la cantidad en el nombre.
-    - Lo que se pagó de la visita sale de su venta hacia la orden: la venta lo devuelve al saldo a favor de la cuenta de su teléfono y la orden se paga con él en el mismo momento, sin que nada entre ni salga de una caja. Necesita a quien puede cobrar, nunca pasa del total y la cotización lo descuenta desde entonces. Si esa venta se cobró sin teléfono o en línea, la cotización no se convierte.
+    - Lo que se pagó de la visita sale de su venta hacia la orden: la venta lo devuelve al saldo a favor de la cuenta de su teléfono y la orden se paga con él en el mismo momento, sin que nada entre ni salga de una caja. Necesita a quien puede cobrar y hacer reembolsos, nunca pasa del total y la cotización lo descuenta desde entonces. Si esa venta se cobró sin teléfono o en línea, la cotización no se convierte.
+    - Un renglón de un producto que no se vende en fracciones se cotiza sin decimales.
     - La actividad guarda el folio, la versión, el total, la orden y lo aplicado. Las citas para hacer el trabajo quedan para después.
 
 ## Cancelación y trazabilidad

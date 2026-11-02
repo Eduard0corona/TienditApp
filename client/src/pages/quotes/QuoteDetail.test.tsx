@@ -76,7 +76,7 @@ function deferred<T>() {
 }
 
 /** Who is signed in: an owner by default, or staff who take orders (and charge them, when said). */
-function signIn(role: string, permissions: string[] = ['ManageOrders', 'ChargeOrders']) {
+function signIn(role: string, permissions: string[] = ['ManageOrders', 'ChargeOrders', 'ProcessRefunds']) {
   vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role, permissions } } as unknown as ReturnType<typeof useAuth>);
 }
 
@@ -468,8 +468,8 @@ describe('QuoteDetail', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
-  it('tells who cannot charge that applying the visit needs who can', async () => {
-    signIn('STAFF', ['ManageOrders']);
+  it('tells who cannot charge and refund that applying the visit needs who can', async () => {
+    signIn('STAFF', ['ManageOrders', 'ChargeOrders']);
     vi.mocked(quotesApi.get).mockResolvedValue(sent({
       status: QuoteStatus.Accepted, canConvertToOrder: true, visitCredit: { amount: 440.8, applies: true }, toPay: 719.2,
     }));
@@ -478,7 +478,7 @@ describe('QuoteDetail', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Convertir en orden de servicio' }));
     const dialog = await screen.findByRole('dialog', { name: 'Convertir en orden de servicio' });
 
-    expect(within(dialog).getByRole('status')).toHaveTextContent('Aplicar lo que pagó por la visita es cobrar');
+    expect(within(dialog).getByRole('status')).toHaveTextContent('conviértela con alguien que pueda cobrar y hacer reembolsos');
     expect(within(dialog).getByRole('button', { name: 'Convertir' })).toBeDisabled();
   });
 

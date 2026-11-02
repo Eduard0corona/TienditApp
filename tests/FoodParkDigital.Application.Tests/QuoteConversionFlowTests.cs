@@ -165,7 +165,7 @@ public class QuoteConversionFlowTests
     }
 
     [Fact]
-    public async Task ApplyingTheVisit_ShouldNeedWhoMayCharge_AndConvertingWithoutIt_ShouldNot()
+    public async Task ApplyingTheVisit_ShouldNeedWhoMayChargeAndRefund_AndConvertingWithoutIt_ShouldNot()
     {
         await using var shop = await Shop.OpenAsync(pricesIncludeTax: false, policy: HomeVisitChargePolicy.CreditedIfHired);
         var (_, credited) = await shop.CreditedVisitQuoteAsync();
@@ -177,7 +177,11 @@ public class QuoteConversionFlowTests
         Assert.Equal(QuoteConversions.ChargeToApplyVisitMessage, refused.Message);
         var withoutVisit = await shop.ConvertAsync(plain.Id);
         Assert.True(withoutVisit.IsSuccess, withoutVisit.Error);
+        // Charging is not enough: the sale of the visit gives the money back, which is a refund.
         shop.Permissions = [nameof(TenantPermission.ManageOrders), nameof(TenantPermission.ChargeOrders)];
+        shop.Context.ChangeTracker.Clear();
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => shop.ConvertAsync(credited.Id));
+        shop.Permissions = [nameof(TenantPermission.ManageOrders), nameof(TenantPermission.ChargeOrders), nameof(TenantPermission.ProcessRefunds)];
         shop.Context.ChangeTracker.Clear();
         Assert.True((await shop.ConvertAsync(credited.Id)).IsSuccess);
     }
@@ -213,6 +217,22 @@ public class QuoteConversionFlowTests
         shop.Context.ChangeTracker.Clear();
         Assert.Equal(1, await shop.Context.Orders.CountAsync());
         Assert.Null((await shop.Context.Quotes.AsNoTracking().SingleAsync(q => q.Id == quote.Id)).OrderId);
+    }
+
+    [Fact]
+    public async Task AProductNotSoldInFractions_ShouldBeQuotedWhole()
+    {
+        await using var shop = await Shop.OpenAsync();
+        var heater = await shop.ProductAsync("Cambio de calentador", 1500m);
+        var hours = await shop.ProductAsync("Hora de técnico", 300m, unit: UnitType.Hour);
+
+        var fractional = await shop.SaveDraftAsync(
+            new QuoteLineRequest { ProductId = heater.Id, Description = "Cambio de calentador", Quantity = 1.5m, UnitPrice = 1160m });
+        var byTheHour = await shop.SaveDraftAsync(
+            new QuoteLineRequest { ProductId = hours.Id, Description = "Hora de técnico", Quantity = 2.5m, UnitPrice = 300m });
+
+        Assert.Equal(QuoteRules.WholeQuantityMessage("Cambio de calentador"), fractional.Error);
+        Assert.True(byTheHour.IsSuccess, byTheHour.Error);
     }
 
     [Fact]
@@ -289,10 +309,10 @@ public class QuoteConversionFlowTests
             return new Shop(fixture, tenant);
         }
 
-        public async Task<Product> ProductAsync(string name, decimal price, bool trackable = false)
+        public async Task<Product> ProductAsync(string name, decimal price, bool trackable = false, UnitType unit = UnitType.Service)
         {
             var category = new Category(Tenant.Id, "Servicios", null);
-            var product = new Product(Tenant.Id, category.Id, name, null, price, "MXN", unit: UnitType.Service, isTrackable: trackable);
+            var product = new Product(Tenant.Id, category.Id, name, null, price, "MXN", unit: unit, isTrackable: trackable);
             Context.AddRange(category, product);
             await Context.SaveChangesAsync();
             return product;
@@ -338,6 +358,16 @@ public class QuoteConversionFlowTests
             Assert.True(created.IsSuccess, created.Error);
             var sent = await SendAsync(created.Value!, [new QuoteLineRequest { Description = "Cambio de calentador", Quantity = 1m, UnitPrice = 1000m }]);
             return (sale.Value!, await AcceptAsync(sent));
+        }
+
+        /// <summary>A new draft for Valeria, saved with <paramref name="lines"/>: what the server answered.</summary>
+        public async Task<Result<QuoteDto>> SaveDraftAsync(params QuoteLineRequest[] lines)
+        {
+            var created = await new CreateQuoteCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, new FolioGenerator(Context), Fixture.Clock)
+                .Handle(new CreateQuoteCommand(null, null, "Valeria Ruiz", "5522107765", null), CancellationToken.None);
+            Assert.True(created.IsSuccess, created.Error);
+            return await Handler.Handle(new UpdateQuoteDraftCommand(created.Value!.Id, null, "Valeria Ruiz", "5522107765", null, 15, null,
+                [.. lines]), CancellationToken.None);
         }
 
         public Task<Result<QuoteDto>> ConvertAsync(Guid id, DateTimeOffset? promisedAt = null)

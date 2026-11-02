@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Catalog;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Quotes;
@@ -278,6 +279,9 @@ public class QuotesHandler :
                 {
                     var product = products[productId];
                     var description = string.IsNullOrWhiteSpace(line.Description) ? product.Name : line.Description;
+                    // A product not sold in fractions is quoted whole, as it is sold: its order takes its supplies by those units.
+                    if (!UnitTypeRules.IsValidQuantity(line.Quantity, product.Unit))
+                        throw new DomainException(QuoteRules.WholeQuantityMessage(description));
                     return new QuoteLineInput(productId, description, line.Quantity, line.UnitPrice, product.GetVatRate(sales.DefaultTaxRate));
                 }
                 // Written by hand: the business's IVA, as its services without a rate of their own.

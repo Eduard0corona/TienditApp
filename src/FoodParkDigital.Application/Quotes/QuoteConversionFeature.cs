@@ -49,7 +49,9 @@ public static class QuoteConversions
     /// <summary>The priority a service order starts with at the counter (1 low, 3 normal, 5 urgent).</summary>
     public const int NormalPriority = 3;
     public const string ChargeToApplyVisitMessage =
-        "Lo que se pagó de la visita se aplica como pago de la orden: conviértela con alguien que pueda cobrar.";
+        "Lo que se pagó de la visita pasa de su venta a la orden: conviértela con alguien que pueda cobrar y hacer reembolsos.";
+    public const string ChangedMeanwhileMessage =
+        "La cotización o la venta de su visita cambiaron al mismo tiempo: revisa la cotización y vuelve a intentarlo.";
     public const string TotalMismatchMessage = "La orden no sumaría lo que el cliente aceptó: revisa la cotización.";
 
     /// <summary>«No se pudo aplicar lo que se pagó de la visita: …» with the reason the sale of the visit gave.</summary>
@@ -73,7 +75,9 @@ public static class QuoteConversions
 /// <item>What was paid for the visit and the quote takes off (ADR 0053 point 14) leaves the sale of the visit for the order:
 /// that sale gives it back to the balance in favor of the account of its phone, and the order is paid with it at once (as
 /// «Saldo a favor», the invoice's «aplicación de anticipos»). Nothing enters or leaves a drawer and the balance ends as it
-/// was, so the business's revenue is the job's total. It needs who may charge.</item>
+/// was, so the business's revenue is the job's total. It is a refund and a payment: it needs who may charge and refund.
+/// What is applied is read from the sale of the visit as this request loads it to refund it, so a refund of that sale at the
+/// same time collides on its version instead of both taking the same money.</item>
 /// <item>The quote keeps its order and what it applied: a second conversion, also at the same time, collides on the quote's
 /// version and is undone whole.</item>
 /// </list>
@@ -129,11 +133,25 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
         if (!TenantCapabilityRules.CanCreateOrderType(capabilities, OrderType.Service))
             return Result.Failure<QuoteDto>(QuoteRules.NoServiceOrdersMessage);
 
-        // What the quote takes off for the visit now, never more than the job's total.
-        var stillPaid = await QuoteVisitCredits.StillPaidAsync(_context, quote, cancellationToken);
+        // What the quote takes off for the visit now, never more than the job's total: read from the sale of the visit as it is
+        // tracked to refund it, so a change of that sale meanwhile collides on its version when this is saved.
+        Order? visitSale = null;
+        if (quote.VisitCreditSaleOrderId is { } visitSaleId)
+        {
+            visitSale = await OrderRefundQueries.LoadForRefundAsync(_context, visitSaleId, cancellationToken);
+            if (visitSale is null || visitSale.TenantId != TenantId)
+                throw new EntityNotFoundException(nameof(Order), visitSaleId);
+        }
+        var stillPaid = visitSale is null
+            ? null
+            : QuoteVisitCredits.PaidForTheVisit(visitSale, await QuoteVisitCredits.VisitServiceAsync(_context, quote, cancellationToken));
         var applied = Math.Min(quote.VisitCreditStanding(stillPaid), quote.Total);
-        if (applied > 0 && !(await _access.GetPermissionsAsync(cancellationToken)).Contains(nameof(TenantPermission.ChargeOrders)))
-            throw new ForbiddenAccessException(QuoteConversions.ChargeToApplyVisitMessage);
+        if (applied > 0)
+        {
+            var permissions = await _access.GetPermissionsAsync(cancellationToken);
+            if (!permissions.Contains(nameof(TenantPermission.ChargeOrders)) || !permissions.Contains(nameof(TenantPermission.ProcessRefunds)))
+                throw new ForbiddenAccessException(QuoteConversions.ChargeToApplyVisitMessage);
+        }
 
         if (!_phones.TryNormalizeToE164(quote.CustomerPhone, CustomerPhoneOwnershipRules.DefaultCountry, out var phone))
             return Result.Failure<QuoteDto>(PhoneNumberRules.InvalidPhoneMessage);
@@ -192,7 +210,7 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
 
         if (applied > 0)
         {
-            var visitApplied = await ApplyVisitAsync(quote, order, applied, cancellationToken);
+            var visitApplied = await ApplyVisitAsync(quote, visitSale!, order, applied, cancellationToken);
             if (visitApplied is not null)
                 return Result.Failure<QuoteDto>(QuoteConversions.VisitNotAppliedMessage(visitApplied));
         }
@@ -219,8 +237,12 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
         }
         catch (DbUpdateConcurrencyException)
         {
-            // Converted, answered or corrected at the same time: the other one stands, and this one is undone whole.
-            return Result.Failure<QuoteDto>(QuoteRules.AlreadyConvertedMessage);
+            // The quote or the sale of its visit changed at the same time: the other change stands, and this one is undone
+            // whole. Converted by someone else, it says so.
+            var converted = await _context.Quotes
+                .AsNoTracking()
+                .AnyAsync(q => q.Id == quote.Id && q.TenantId == TenantId && q.OrderId != null, cancellationToken);
+            return Result.Failure<QuoteDto>(converted ? QuoteRules.AlreadyConvertedMessage : QuoteConversions.ChangedMeanwhileMessage);
         }
 
         return Result.Success(await QuoteViews.DescribeAsync(_context, quote,
@@ -231,12 +253,8 @@ public class ConvertQuoteToOrderCommandHandler : IRequestHandler<ConvertQuoteToO
     /// What was paid for the visit goes from its sale to the order: refunded to the balance in favor of the sale's phone and
     /// paid from it into the order, both now. Null once applied; otherwise why the sale of the visit could not give it back.
     /// </summary>
-    private async Task<string?> ApplyVisitAsync(Quote quote, Order order, decimal amount, CancellationToken cancellationToken)
+    private async Task<string?> ApplyVisitAsync(Quote quote, Order visitSale, Order order, decimal amount, CancellationToken cancellationToken)
     {
-        var visitSale = await OrderRefundQueries.LoadForRefundAsync(_context, quote.VisitCreditSaleOrderId!.Value, cancellationToken);
-        if (visitSale is null || visitSale.TenantId != TenantId)
-            throw new EntityNotFoundException(nameof(Order), quote.VisitCreditSaleOrderId!.Value);
-
         var refunds = new OrderRefundProcessor(_context, _currentUser, _cash, _inventory, _clock);
         var refund = await refunds.RefundAsync(visitSale, new OrderRefundInput(
             amount, OrderPaymentMethod.CustomerBalance, QuoteConversions.RefundReason(quote, order), RestockItems: false, [], null,

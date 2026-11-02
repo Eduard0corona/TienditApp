@@ -48,6 +48,7 @@ public static class QuoteRules
     // Fase 29E: the accepted version becomes the job.
     public const string NotAcceptedMessage = "Solo una cotización aceptada se convierte en una orden de servicio.";
     public const string AlreadyConvertedMessage = "Esta cotización ya se convirtió en una orden de servicio.";
+    public static string WholeQuantityMessage(string description) => $"«{description.Trim()}» no se vende en fracciones: la cantidad va sin decimales.";
     public const string NoServiceOrdersMessage =
         "Tu negocio no tiene órdenes de servicio: prende el módulo en Configuración para convertir la cotización.";
 

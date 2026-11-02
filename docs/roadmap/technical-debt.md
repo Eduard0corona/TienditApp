@@ -91,7 +91,10 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - No agenda las citas para hacer el trabajo: la orden lleva la fecha prometida, y la dirección sigue en la visita.
     - Un renglón escrito a mano entra con el id del renglón donde iría el producto, como un producto borrado después de la venta: lo más vendido de Inicio lo muestra por su nombre, como producto y no como servicio.
     - Lo pagado por una visita cobrada sin teléfono o en línea no puede pasar por el saldo a favor: esa cotización no se convierte y el negocio captura la orden en Vender.
-    - El saldo a favor por el que pasa lo de la visita es el del teléfono de la venta de la visita. Cancelar la orden pide primero devolver lo pagado, como en cualquier orden; devuelto al saldo a favor, queda en la cuenta del teléfono de la orden.
+    - El saldo a favor por el que pasa lo de la visita es el del teléfono de la venta de la visita. Si la cotización se corrigió a otro teléfono, la orden es de ese otro: devolverle algo después al saldo a favor lo deja en la cuenta del teléfono de la orden.
+    - Cancelar la orden pide primero devolver lo pagado, como en cualquier orden, y la cotización sigue ligada a la orden cancelada: el negocio captura la orden nueva en Vender.
+    - El reembolso al saldo a favor de la venta de la visita no lleva nota de crédito (ADR 0036): si esa venta ya estaba facturada, lo aplicado queda facturado dos veces hasta que el contador emite el egreso; si no, la factura global deja fuera esa venta.
+    - Un renglón de un producto que no se vende en fracciones guardado con decimales antes de la 29E entra como una al importe del renglón y saca los insumos de una.
   - El envío desde TienditApp (Fase 29D):
     - El correo de la cotización no lleva PDF (TienditApp no genera PDF): la cotización va en el cuerpo y en su enlace. «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó.
     - Sin plantilla aprobada en Meta, el WhatsApp solo llega a quien escribió en las últimas 24 horas, y no cae solo al correo cuando WhatsApp lo rechaza: el negocio lo ve en el historial y lo manda por correo.

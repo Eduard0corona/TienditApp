@@ -179,11 +179,15 @@ La cotización aceptada se convierte en el trabajo (punto 17): una orden de serv
     - una cantidad que su unidad no vende (3.5 de un servicio por pieza) entra como una al importe del renglón, con la cantidad en el nombre: «Tubo de cobre (3.5)».
   - **Lo que se pagó de la visita** («Se descuenta si contratas», punto 14) sale de la venta de la visita hacia la orden. La venta lo devuelve al saldo a favor de la cuenta de su teléfono y la orden se paga con él en el mismo momento: «Saldo a favor», que la factura declara como aplicación de anticipos.
     - Nada entra ni sale de una caja y el saldo queda como estaba, así que el negocio vende lo que vale el trabajo.
-    - Necesita a quien puede cobrar (`ChargeOrders`).
+    - Es un reembolso y un pago: necesita a quien puede cobrar y hacer reembolsos (`ChargeOrders` y `ProcessRefunds`).
     - Nunca aplica más que el total de la cotización.
+    - Lo aplicado se lee de la venta de la visita tal como se carga para reembolsarla: un reembolso de esa venta al mismo tiempo choca en su versión y solo uno de los dos se queda con el dinero.
     - Desde entonces la cotización descuenta lo aplicado (`AppliedVisitCredit`), pase lo que pase con la venta de la visita.
     - Si esa venta se cobró sin teléfono o en línea, no hay cuenta por donde pasar: la conversión lo dice y no cambia nada.
+    - Un reembolso al saldo a favor no lleva nota de crédito (ADR 0036): si la venta de la visita ya estaba facturada, el contador emite el egreso de lo aplicado; si no, la factura global la deja fuera, como a cualquier venta con un reembolso así.
   - La cotización guarda su orden y cuándo (`OrderId`, `ConvertedAt`). Dos conversiones a la vez chocan en la versión de la cotización: una queda y la otra se deshace entera, con su folio. La actividad guarda el folio, la versión, el total, la orden y lo aplicado, nunca datos del cliente.
+  - Una orden cancelada no regresa su cotización: queda ligada a ella y el negocio captura la orden nueva en Vender.
+  - Para que la orden saque los insumos por las unidades que vende, un renglón de un producto que no se vende en fracciones ya no se guarda con decimales en la cotización.
 - **La pantalla**: la cotización convertida dice en qué orden se convirtió y la abre, y el detalle de la orden abre su cotización.
 - **El rollback** se detiene (50053) en cuanto una cotización se convirtió.
 
