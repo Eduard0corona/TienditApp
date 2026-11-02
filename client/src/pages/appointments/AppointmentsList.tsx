@@ -26,7 +26,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
-import { formatInBusinessZone } from '../../utils/dates';
+import { businessDateTimeToIso, formatInBusinessZone, toBusinessDateTimeInput } from '../../utils/dates';
 import {
   VISIT_ADDRESS_LINE_REQUIRED_MESSAGE,
   VISIT_POSTAL_CODE_REQUIRED_MESSAGE,
@@ -98,15 +98,13 @@ const buildForm = (): FormState => ({
 /** The answer of the server for a postal code: the zone and the charge, or why it does not go there. */
 type QuoteAnswer = { postalCode: string } & ({ zoneName: string; fee: number } | { message: string });
 
-/** "2026-10-05T10:30" for a datetime-local input, in the device's time. */
-function toInputDateTime(value: string | Date): string {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+/** The instant, in milliseconds, of a start or an end typed on the business's clock ("2026-10-05T10:30"), not the device's. */
+function instantOf(input: string): number {
+  return Date.parse(businessDateTimeToIso(input));
 }
 
 function addMinutes(input: string, minutes: number): string {
-  return toInputDateTime(new Date(new Date(input).getTime() + minutes * 60_000));
+  return toBusinessDateTimeInput(instantOf(input) + minutes * 60_000);
 }
 
 /** Same minute: the server may answer with seconds or another offset notation. */
@@ -289,8 +287,8 @@ export default function AppointmentsList() {
       serviceProductId: item.serviceProductId ?? OTHER_SERVICE,
       serviceName: item.serviceName,
       staffUserId: item.staffUserId ?? '',
-      startAt: toInputDateTime(item.startAt),
-      endAt: toInputDateTime(item.endAt),
+      startAt: toBusinessDateTimeInput(item.startAt),
+      endAt: toBusinessDateTimeInput(item.endAt),
       notes: item.notes ?? '',
       atHome: Boolean(item.visit),
       postalCode: item.visit?.postalCode ?? '',
@@ -316,7 +314,7 @@ export default function AppointmentsList() {
   const changeStart = (startAt: string) => {
     setForm((current) => {
       const duration = current.startAt && current.endAt
-        ? Math.max(5, Math.round((new Date(current.endAt).getTime() - new Date(current.startAt).getTime()) / 60_000))
+        ? Math.max(5, Math.round((instantOf(current.endAt) - instantOf(current.startAt)) / 60_000))
         : durationOf(current.serviceProductId);
       return { ...current, startAt, endAt: startAt ? addMinutes(startAt, duration) : current.endAt };
     });
@@ -333,7 +331,7 @@ export default function AppointmentsList() {
       setFormError('Elige el servicio o escribe cuál es.');
       return;
     }
-    if (!form.startAt || !form.endAt || new Date(form.endAt) <= new Date(form.startAt)) {
+    if (!form.startAt || !form.endAt || instantOf(form.endAt) <= instantOf(form.startAt)) {
       setFormError('Indica el inicio y un fin posterior al inicio.');
       return;
     }
@@ -352,8 +350,8 @@ export default function AppointmentsList() {
       serviceProductId: usesCatalog ? form.serviceProductId : undefined,
       serviceName: usesCatalog ? undefined : form.serviceName.trim(),
       staffUserId: form.staffUserId || undefined,
-      startAt: new Date(form.startAt).toISOString(),
-      endAt: new Date(form.endAt).toISOString(),
+      startAt: businessDateTimeToIso(form.startAt),
+      endAt: businessDateTimeToIso(form.endAt),
       notes: form.notes.trim() || undefined,
       // The server finds the zone and sets the charge (at the same address it keeps the one agreed).
       visit: form.atHome
@@ -763,10 +761,10 @@ export default function AppointmentsList() {
               <textarea id="appointment-notes" className="form-control" rows={2} value={form.notes} onChange={(e) => setForm((x) => ({ ...x, notes: e.target.value }))} />
             </div>
           </div>
-          {editing && form.startAt && !sameMinute(editing.startAt, form.startAt) && (
+          {editing && form.startAt && !sameMinute(editing.startAt, businessDateTimeToIso(form.startAt)) && (
             <div className="alert alert-info py-2 small mt-3 mb-0">Al guardar, el cliente recibe por WhatsApp el nuevo horario.</div>
           )}
-          {editing && sameMinute(editing.startAt, form.startAt || editing.startAt)
+          {editing && sameMinute(editing.startAt, form.startAt ? businessDateTimeToIso(form.startAt) : editing.startAt)
             && (editing.visit?.postalCode ?? '') !== (form.atHome ? form.postalCode.trim() : '') && (
             <div className="alert alert-info py-2 small mt-3 mb-0">Al guardar, el cliente recibe por WhatsApp el nuevo lugar.</div>
           )}

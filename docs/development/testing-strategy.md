@@ -1726,14 +1726,18 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Las 5 nuevas (`cotizaciones.spec.ts`: la cotización con sus envíos en escritorio, teléfono y oscuro, el diálogo del correo y la plantilla de WhatsApp en Cotizaciones) pasaron dos corridas seguidas.
     - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
 
-- Fechas del servicio en la zona del negocio, después de la 29D:
-  - La Orden detallada leía la recepción y la promesa en la zona del dispositivo: con el negocio en Tijuana y la laptop en la hora del centro, las 10:30 de un día de octubre se guardaban como 16:30 UTC y el tablero mostraba 9:30 (8:30 en invierno). Ahora las lee como el reloj del negocio (`businessDateTimeToIso`), y la recepción empieza en la hora actual del negocio (`toBusinessDateTimeInput`).
-  - **Cliente:**
-    - `OrdersCart.test.tsx` (2, nuevo): con el negocio en Tijuana y el dispositivo en la hora del centro, la recepción de las 9:00 y la promesa de las 10:30 del 8 de octubre salen como `16:00` y `17:30` UTC; la recepción empieza en la hora del negocio (10:30, no 11:30) y vuelve tal cual, sin promesa si no se escribe. Las dos fallaron con el código anterior.
+- Fecha y hora escritas en la zona del negocio, después de la 29D:
+  - Los `datetime-local` se leían en la zona del dispositivo: con el negocio en Tijuana y la laptop en la hora del centro, las 10:30 de un día de octubre se guardaban como 16:30 UTC y el tablero mostraba 9:30 (8:30 en invierno). Ahora se leen como el reloj del negocio (`businessDateTimeToIso`) y los que empiezan llenos usan su hora actual (`toBusinessDateTimeInput`): la Orden detallada, la Agenda, Compras, los movimientos de inventario y las campañas. `toDateTimeLocalInput`, que daba la hora del dispositivo, se quita.
+  - **Cliente** (todas con el negocio en Tijuana y el dispositivo en la hora del centro; cada una falló con el código anterior):
+    - `OrdersCart.test.tsx` (2, nuevo): la recepción de las 9:00 y la promesa de las 10:30 del 8 de octubre salen como `16:00` y `17:30` UTC; la recepción empieza en la hora del negocio (10:30, no 11:30) y vuelve tal cual, sin promesa si no se escribe.
+    - `AppointmentsList.test.tsx` (+2): una cita nueva a las 10:00 se registra de `17:00` a `18:00` UTC, con el fin a su duración; una de 16:00 a 17:00 UTC se abre de 9:00 a 10:00, no avisa de un nuevo horario hasta que se mueve, y a las 12:30 se guarda de `19:30` a `20:30` UTC como reprogramada.
+    - `PurchaseOrdersList.test.tsx` (1, nuevo): la entrega esperada de las 10:30 sale como `17:30` UTC.
+    - `inventoryForms.test.ts` (+1): un movimiento empieza en la hora del negocio y manda la escrita como su reloj, también la de la noche que en UTC ya es el día siguiente.
+    - `CampaignsTab.test.tsx` (1, nuevo): «Programar» propone dentro de una hora en el reloj del negocio (11:30, no 12:30) y las 18:00 del 9 de octubre salen como `01:00` UTC del 10.
     - `dates.test.ts` (+2): la fecha y hora escritas en Tijuana en verano y en invierno, con segundos y en el centro; el instante en el campo, la medianoche como 00, la noche que todavía es el día anterior en Tijuana y una fecha que no es fecha.
-  - **Cliente en total:** 186 archivos y 1,382 pruebas.
-  - **Primera visita:** 181,507 B (`master` en `cfde7d4`: 181,367 B). Son +140 B de los dos helpers, que viven en `utils/dates.ts` con el resto de las fechas del negocio, que ya carga la primera visita. El presupuesto sube de 181,400 B a 181,600 B.
-  - **Escenas:** no se corrieron; no hay CSS global nuevo, y las de Orden detallada abren el carrito vacío, sin la recepción del servicio.
+  - **Cliente en total:** 188 archivos y 1,387 pruebas.
+  - **Primera visita:** 181,432 B (`master` en `cfde7d4`: 181,367 B). Son +65 B: los dos helpers, que viven en `utils/dates.ts` con el resto de las fechas del negocio y ya los carga la primera visita, menos `toDateTimeLocalInput`. El presupuesto sube de 181,400 B a 181,500 B.
+  - **Escenas:** no hay CSS global nuevo. Las que abren estos diálogos (`agenda-domicilio`, `catalogo-inventario`, `clientes-mensajes`, `caja-config`) corren con el demo sin zona del negocio, o con la del centro en `caja-config`, que es la del navegador de las escenas (`timezoneId`): la hora del negocio es la del dispositivo y sus fechas no cambian. Las de Orden detallada abren el carrito vacío, sin la recepción del servicio.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InventoryMovementReason, InventoryMovementType, UnitType } from '../../types';
-import { businessDayStart } from '../../utils/dates';
+import { businessDayStart, setBusinessTimeZone } from '../../utils/dates';
 import {
   buildEmptyLocationForm,
   buildEmptyMovementForm,
@@ -91,6 +91,29 @@ describe('inventory forms', () => {
       unitCost: 10,
       lotNumber: undefined,
       expirationDate: businessDayStart('2026-10-31'),
+    });
+  });
+
+  describe('with the business in Tijuana and the device on Mexico City time', () => {
+    afterEach(() => {
+      setBusinessTimeZone(null);
+      vi.unstubAllEnvs();
+      vi.useRealTimers();
+    });
+
+    it('starts a movement at the hour of the business and sends the one typed as its clock', () => {
+      // Tijuana is UTC-7 in October; Mexico City, UTC-6.
+      vi.stubEnv('TZ', 'America/Mexico_City');
+      setBusinessTimeZone('America/Tijuana');
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-08T17:30:00.000Z'));
+      const line = { ...buildEmptyMovementLineForm(), supplyItemId: 's1', inventoryLocationId: 'l1' };
+
+      const form = buildEmptyMovementForm();
+      expect(form.movementDate).toBe('2026-10-08T10:30');
+      expect(toMovementRequest({ ...form, lines: [line] }).request?.movementDate).toBe('2026-10-08T17:30:00.000Z');
+      expect(toMovementRequest({ ...form, movementDate: '2026-10-07T21:15', lines: [line] }).request?.movementDate)
+        .toBe('2026-10-08T04:15:00.000Z');
     });
   });
 

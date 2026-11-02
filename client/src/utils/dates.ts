@@ -119,12 +119,6 @@ export function calendarDaysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
 }
 
-/** Value for an <input type="datetime-local"> in local time. */
-export function toDateTimeLocalInput(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 /** Today's date in the business, as a date input wants it ("2026-10-05"). */
 export function getBusinessToday(now: Date = new Date()): string {
   // en-CA writes dates as yyyy-mm-dd.

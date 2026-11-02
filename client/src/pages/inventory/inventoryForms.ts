@@ -10,7 +10,7 @@ import {
   type UnitType,
   type UpsertProductRecipeRequest,
 } from '../../types';
-import { businessDayStart } from '../../utils/dates';
+import { businessDateTimeToIso, businessDayStart, toBusinessDateTimeInput } from '../../utils/dates';
 
 /** What a form gives: the request for the API, or the first problem to show. */
 export type FormResult<T> = { request: T; error?: undefined } | { request?: undefined; error: string };
@@ -241,20 +241,11 @@ export const buildEmptyMovementLineForm = (): MovementLineFormState => ({
   notes: '',
 });
 
-/** The value of a datetime-local input: the device's own date and time, to the minute. */
-export const toDateTimeLocalValue = (value: Date) => {
-  const year = value.getFullYear();
-  const month = `${value.getMonth() + 1}`.padStart(2, '0');
-  const day = `${value.getDate()}`.padStart(2, '0');
-  const hour = `${value.getHours()}`.padStart(2, '0');
-  const minute = `${value.getMinutes()}`.padStart(2, '0');
-  return `${year}-${month}-${day}T${hour}:${minute}`;
-};
-
 export const buildEmptyMovementForm = (): MovementFormState => ({
   movementType: InventoryMovementType.Entry,
   movementReason: InventoryMovementReason.Purchase,
-  movementDate: toDateTimeLocalValue(new Date()),
+  // The date and time of the movement are the business's clock, as the kardex shows them.
+  movementDate: toBusinessDateTimeInput(new Date()),
   referenceNumber: '',
   externalReference: '',
   counterpartyName: '',
@@ -280,7 +271,7 @@ export function toMovementRequest(form: MovementFormState): FormResult<CreateInv
     request: {
       movementType: form.movementType,
       movementReason: form.movementReason,
-      movementDate: form.movementDate ? new Date(form.movementDate).toISOString() : undefined,
+      movementDate: form.movementDate ? businessDateTimeToIso(form.movementDate) : undefined,
       referenceNumber: optional(form.referenceNumber),
       externalReference: optional(form.externalReference),
       counterpartyName: optional(form.counterpartyName),

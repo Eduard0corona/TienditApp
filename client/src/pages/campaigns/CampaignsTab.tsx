@@ -15,7 +15,7 @@ import {
 } from '../../types';
 
 type CampaignDto = Schemas['CampaignDto'];
-import { formatDateTime, toDateTimeLocalInput } from '../../utils/dates';
+import { businessDateTimeToIso, formatDateTime, toBusinessDateTimeInput } from '../../utils/dates';
 import { CAMPAIGN_STATUS, MESSAGE_STATUS, describeAudience } from './campaignLabels';
 
 const PAGE_SIZE = 10;
@@ -39,7 +39,8 @@ function newDraft(templates: MessageTemplateDto[]): Draft {
     minimumOrders: '1',
     days: '90',
     sendNow: true,
-    scheduledAt: toDateTimeLocalInput(later),
+    // In an hour, on the business's clock: the list shows the campaign with it.
+    scheduledAt: toBusinessDateTimeInput(later),
   };
 }
 
@@ -124,7 +125,7 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
       await createMutation.mutateAsync({
         ...audienceRequest(draft),
         name: draft.name.trim(),
-        scheduledAt: draft.sendNow ? null : new Date(draft.scheduledAt).toISOString(),
+        scheduledAt: draft.sendNow ? null : businessDateTimeToIso(draft.scheduledAt),
       });
       toast.success(draft.sendNow ? 'Campaña en camino: se envía en segundo plano.' : 'Campaña programada.');
       setDraft(null);
