@@ -30,6 +30,13 @@ public class AppointmentDto
     public AppointmentChannel Channel { get; set; }
     /// <summary>Its customer cancelled it from the account or the link (Fase 24D).</summary>
     public bool CancelledByCustomer { get; set; }
+    /// <summary>
+    /// The service order whose job it does (Fase 29F): charged in that order, so it is never charged on its own nor quoted.
+    /// Null for every other appointment.
+    /// </summary>
+    public Guid? WorkOrderId { get; set; }
+    /// <summary>The folio of that order, for the agenda; null for every other appointment.</summary>
+    public string? WorkOrderNumber { get; set; }
 
     public static AppointmentDto From(Appointment appointment) => new()
     {
@@ -56,7 +63,8 @@ public class AppointmentDto
         },
         SaleOrderId = appointment.SaleOrderId,
         Channel = appointment.Channel,
-        CancelledByCustomer = appointment.CancelledByCustomerAt != null
+        CancelledByCustomer = appointment.CancelledByCustomerAt != null,
+        WorkOrderId = appointment.WorkOrderId
     };
 
     /// <summary><see cref="From"/> written for SQL, for the lists.</summary>
@@ -85,7 +93,8 @@ public class AppointmentDto
         },
         SaleOrderId = x.SaleOrderId,
         Channel = x.Channel,
-        CancelledByCustomer = x.CancelledByCustomerAt != null
+        CancelledByCustomer = x.CancelledByCustomerAt != null,
+        WorkOrderId = x.WorkOrderId
     };
 }
 

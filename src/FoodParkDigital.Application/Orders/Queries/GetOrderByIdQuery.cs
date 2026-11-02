@@ -48,8 +48,8 @@ public class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery, Order
         var dto = order.ToDto();
         dto.ApplyStateMetadata();
         await OnlineRefundStatuses.ApplyAsync(_context, dto, cancellationToken);
-        // The accepted quote it came from (Fase 29E), to open it from the order.
-        await OrderQuoteLinks.ApplyAsync(_context, [dto], cancellationToken);
+        // The accepted quote it came from (Fase 29E), to open it from the order, and the appointments of its job (Fase 29F).
+        await OrderQuoteLinks.ApplyAsync(_context, order.TenantId, [dto], cancellationToken);
         return dto;
     }
 }

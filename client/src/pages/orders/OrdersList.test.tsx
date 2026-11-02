@@ -443,6 +443,36 @@ describe('OrdersList', () => {
       .findByRole('link', { name: 'COT-000011 · versión 2' })).toHaveAttribute('href', '/quotes/q-11');
   });
 
+  it('shows the appointments of the job of a service order, and keeps them after a refund (Fase 29F)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ViewOrders', 'ManageOrders', 'ProcessRefunds'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    const job = order({
+      orderType: OrderType.Service, customerName: 'Valeria Ruiz', total: 4686.4, paidAmount: 464, refundedAmount: 0, balance: 4222.4,
+      items: [], taxBreakdown: [], statusHistory: [], servicePieces: [], allowedTransitions: [], refunds: [], payments: [],
+      quote: { id: 'q-11', number: 'COT-000011', revision: 2 },
+      workAppointments: [
+        { id: 'w1', startAt: '2026-10-12T16:00:00Z', endAt: '2026-10-12T19:00:00Z', staffName: 'Luis Pérez', status: 1, atCustomersAddress: true },
+        { id: 'w2', startAt: '2026-10-13T16:00:00Z', endAt: '2026-10-13T18:00:00Z', staffName: null, status: 99, atCustomersAddress: false },
+      ],
+    } as Partial<OrderDto>);
+    renderOrders(TenantCapability.Service, [job]);
+    vi.mocked(ordersApi.refund).mockResolvedValue({ data: { ...job, refundedAmount: 100, quote: null, workAppointments: [] } } as never);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000001' }));
+    const detail = screen.getByRole('dialog', { name: 'Pedido ORD-000001' });
+    expect(within(detail).getByRole('heading', { name: 'Citas del trabajo' })).toBeInTheDocument();
+    expect(detail).toHaveTextContent('Luis Pérez · a domicilio');
+    expect(detail).toHaveTextContent('Sin asignar');
+    expect(within(detail).getByText('Cancelada')).toBeInTheDocument();
+    await user.click(within(detail).getByRole('button', { name: 'Reembolsar' }));
+    await user.click(screen.getByRole('button', { name: 'Registrar el reembolso' }));
+
+    await waitFor(() => expect(ordersApi.refund).toHaveBeenCalled());
+    expect(await within(screen.getByRole('dialog', { name: 'Pedido ORD-000001' })).findByText(/Luis Pérez · a domicilio/)).toBeInTheDocument();
+  });
+
   it('says the business charged an order the courier paid', async () => {
     const user = userEvent.setup();
     renderOrders(TenantCapability.Food, [rappiOrder({

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -28,6 +28,7 @@ import {
   replyChannelPhrase,
 } from '../../utils/quotes';
 import ConvertQuoteDialog from './ConvertQuoteDialog';
+import WorkAppointmentList from '../../components/appointments/WorkAppointmentList';
 import SendQuoteDialog, { type QuoteChannel } from './SendQuoteDialog';
 
 /** While a send is on its way, the detail asks for its outcome this often. */
@@ -96,6 +97,9 @@ type Action = 'save' | 'send' | 'revise' | 'discard' | 'reply';
  * version. Each send of the version stays in its history. The history lists every version of the quote. Accepted, it becomes
  * its service order once (Fase 29E) and then opens it. Each version opens fresh: nothing typed or shown on another one stays.
  */
+// Only whoever agendas a job opens it (Fase 29F): it loads apart, with the team it lists.
+const ScheduleWorkDialog = lazy(() => import('./ScheduleWorkDialog'));
+
 export default function QuoteDetailPage() {
   const { id = '' } = useParams();
   return <QuoteDetail key={id} id={id} />;
@@ -122,6 +126,7 @@ function QuoteDetail({ id }: { id: string }) {
   const [pending, setPending] = useState<Action | null>(null);
   const [sendingBy, setSendingBy] = useState<QuoteChannel | null>(null);
   const [converting, setConverting] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   // Converted from here: the link to the order takes the focus the button it replaces had.
   const [justConverted, setJustConverted] = useState(false);
   const orderLinkRef = useRef<HTMLAnchorElement>(null);
@@ -564,10 +569,21 @@ function QuoteDetail({ id }: { id: string }) {
               )}
 
               {quote.status === QuoteStatus.Accepted && (quote.order ? (
-                <p className="small mb-0" role="status">
-                  Se convirtió en la orden {quote.order.orderNumber}.{' '}
-                  <Link ref={orderLinkRef} to={`/orders?search=${encodeURIComponent(quote.order.orderNumber)}`}>Ver la orden</Link>
-                </p>
+                <>
+                  <p className="small mb-0" role="status">
+                    Se convirtió en la orden {quote.order.orderNumber}.{' '}
+                    <Link ref={orderLinkRef} to={`/orders?search=${encodeURIComponent(quote.order.orderNumber)}`}>Ver la orden</Link>
+                  </p>
+                  {/* The appointments that do its job (Fase 29F), and agendar more for whoever manages the agenda. */}
+                  {quote.order.workAppointments.length > 0 && (
+                    <WorkAppointmentList appointments={quote.order.workAppointments} canOpenAgenda={access.appointments} />
+                  )}
+                  {quote.canScheduleWork && access.appointments && (
+                    <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setScheduling(true)}>
+                      <i className="ri-calendar-schedule-line me-1" aria-hidden="true"></i>Agendar el trabajo
+                    </button>
+                  )}
+                </>
               ) : quote.canConvertToOrder ? (
                 <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setConverting(true)}>
                   <i className="ri-tools-line me-1" aria-hidden="true"></i>Convertir en orden de servicio
@@ -644,6 +660,24 @@ function QuoteDetail({ id }: { id: string }) {
             toast.success(`Se creó la orden de servicio ${converted.order?.orderNumber ?? ''}.`);
           }}
         />
+      )}
+
+      {scheduling && (
+        <Suspense fallback={null}>
+          <ScheduleWorkDialog
+            quote={quote}
+            onClose={() => {
+              setScheduling(false);
+              // Refused because nothing is left to agenda: the button it came from is gone, the order link takes the focus.
+              if (!quote.canScheduleWork) setJustConverted(true);
+            }}
+            onScheduled={(scheduled) => {
+              setScheduling(false);
+              show(scheduled);
+              toast.success('Se agendó el trabajo.');
+            }}
+          />
+        </Suspense>
       )}
 
       <Modal show={showReply} onHide={() => !busy && setShowReply(false)} centered aria-labelledby={replyTitleId}>

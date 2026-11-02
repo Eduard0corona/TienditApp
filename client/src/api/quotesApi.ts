@@ -17,6 +17,8 @@ export type QuoteEmail = Schemas['QuoteEmailDto'];
 export type QuoteWhatsApp = Schemas['QuoteWhatsAppDto'];
 export type QuoteWhatsAppTemplate = Schemas['QuoteWhatsAppTemplateDto'];
 export type QuoteOrder = Schemas['QuoteOrderDto'];
+export type WorkAppointment = Schemas['WorkAppointmentDto'];
+export type ScheduleQuoteWork = Schemas['ScheduleQuoteWorkRequest'];
 
 export const quotesApi = {
   list: (filter: QuoteListFilter, search: string, pageNumber: number, signal?: AbortSignal) =>
@@ -54,6 +56,13 @@ export const quotesApi = {
    */
   convertToOrder: (id: string, promisedAt: string | null) =>
     apiRequest('post', '/api/v1/quotes/{id}/order', { path: { id }, body: { promisedAt } }),
+
+  /**
+   * Agenda the job of the order the quote became (Fase 29F): an appointment of the team at the place of the visit, charged in
+   * that order. The quote comes back with the appointments of its job.
+   */
+  scheduleWork: (id: string, body: ScheduleQuoteWork) =>
+    apiRequest('post', '/api/v1/quotes/{id}/work-appointments', { path: { id }, body }),
 
   /** The WhatsApp template the quotes go out with, or TienditApp's text (null): owners and admins. */
   setWhatsAppTemplate: (templateId: string | null) =>

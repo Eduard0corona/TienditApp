@@ -231,6 +231,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
 
+                    b.Property<Guid?>("WorkOrderId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SaleOrderId");
@@ -239,6 +242,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_Appointments_TrackingToken")
                         .HasFilter("[TrackingToken] IS NOT NULL");
+
+                    b.HasIndex("WorkOrderId")
+                        .HasFilter("[WorkOrderId] IS NOT NULL");
 
                     b.HasIndex("CustomerUserId", "StartAt")
                         .HasFilter("[CustomerUserId] IS NOT NULL");
@@ -261,6 +267,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_Appointments_Channel", "[Channel] IN (0, 1)");
 
                             t.HasCheckConstraint("CK_Appointments_TrackingToken", "[TrackingToken] IS NULL OR LEN([TrackingToken]) = 43");
+
+                            t.HasCheckConstraint("CK_Appointments_Work", "[WorkOrderId] IS NULL OR ([SaleOrderId] IS NULL AND [Channel] = 0 AND [TrackingToken] IS NULL)");
                         });
                 });
 
@@ -7418,6 +7426,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
                         .WithMany()
                         .HasForeignKey("SaleOrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany()
+                        .HasForeignKey("WorkOrderId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

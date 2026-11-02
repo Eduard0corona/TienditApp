@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders;
+using FoodParkDigital.Domain.Appointments;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Catalog;
@@ -601,6 +602,9 @@ public class CreateQuoteCommandHandler : IRequestHandler<CreateQuoteCommand, Res
                 // A visit open or done: a cancelled one, one the customer missed or a request not accepted yet is not quoted.
                 if (appointment.Visit is null)
                     return Result.Failure<QuoteDto>(QuoteRules.NotAVisitMessage);
+                // The job of an order (Fase 29F) already has its quote: the one of that order.
+                if (appointment.IsWork)
+                    return Result.Failure<QuoteDto>(AppointmentWorkRules.NotQuotedMessage);
                 if (appointment.Status is AppointmentStatus.Cancelled or AppointmentStatus.NoShow)
                     return Result.Failure<QuoteDto>(QuoteRules.VisitClosedMessage);
                 if (appointment.Status == AppointmentStatus.Requested)

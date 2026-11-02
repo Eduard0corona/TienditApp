@@ -69,8 +69,12 @@ public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery,
             request.PageSize,
             cancellationToken);
         var cancelled = await AppointmentSales.CancelledAsync(_context, page.Items.Select(x => x.SaleOrderId), cancellationToken);
+        var workOrders = await WorkAppointments.OrderNumbersAsync(_context, page.Items.Select(x => x.WorkOrderId), cancellationToken);
         foreach (var appointment in page.Items)
+        {
             appointment.SaleCancelled = appointment.SaleOrderId is { } sale && cancelled.Contains(sale);
+            appointment.WorkOrderNumber = appointment.WorkOrderId is { } order ? workOrders.GetValueOrDefault(order) : null;
+        }
         return page;
     }
 }

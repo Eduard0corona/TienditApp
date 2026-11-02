@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -148,6 +148,8 @@ export default function AppointmentsList() {
   const canSell = getAccess(user, capabilities).sell;
   // «Cotizar» opens the quote of a visit (Fase 29C): for whoever takes orders.
   const canQuote = getAccess(user, capabilities).quotes;
+  // The order of the job of a quote (Fase 29F) opens for whoever sees orders.
+  const canOpenOrders = getAccess(user, capabilities).orders;
   const [quoting, setQuoting] = useState<string | null>(null);
   // Like the server's notices: with IVA included while the business is read.
   const pricesIncludeTax = tenant?.pricesIncludeTax ?? true;
@@ -271,8 +273,13 @@ export default function AppointmentsList() {
     : !shouldQuote ? { kind: 'none' }
     : quoteAnswer?.postalCode !== typedPostalCode ? { kind: 'loading' }
     : 'message' in quoteAnswer ? { kind: 'refused', message: quoteAnswer.message }
-    // A visit «Sin costo» requested online stays free wherever it moves (Fase 29B): the server charges nothing for the zone.
-    : { kind: 'quoted', zoneName: quoteAnswer.zoneName, fee: editing?.visit?.chargePolicy === HomeVisitChargePolicy.Free ? 0 : quoteAnswer.fee };
+    // A visit «Sin costo» requested online stays free wherever it moves (Fase 29B), and the job of an order charges nothing to
+    // go there (Fase 29F, charged in its order): the server charges nothing for the zone.
+    : {
+      kind: 'quoted',
+      zoneName: quoteAnswer.zoneName,
+      fee: editing?.workOrderId || editing?.visit?.chargePolicy === HomeVisitChargePolicy.Free ? 0 : quoteAnswer.fee,
+    };
 
   const serviceById = useMemo(() => new Map(services.map((service) => [service.id, service])), [services]);
 
@@ -455,13 +462,13 @@ export default function AppointmentsList() {
     }
   };
 
-  /** What a closed appointment offers, with «Cotizar» beside it when it is a visit done. */
+  /** What a closed appointment offers, with «Cotizar» beside it when it is a visit done (never the job of an order). */
   const withQuote = (item: AppointmentDto, action: ReactNode) => {
     const quoteAction = quoteButton(item);
     return quoteAction ? <div className="d-flex gap-1 justify-content-center align-items-center">{action}{quoteAction}</div> : action;
   };
 
-  const quoteButton = (item: AppointmentDto) => (canQuote && item.visit
+  const quoteButton = (item: AppointmentDto) => (canQuote && item.visit && !item.workOrderId
     && (item.status === AppointmentStatusConst.Completed || !isClosed(item.status)) ? (
       <button
         type="button"
@@ -607,6 +614,15 @@ export default function AppointmentsList() {
                 <td>
                   <div>{item.serviceName}</div>
                   <div className="text-muted small">{item.staffName || 'Sin asignar'}</div>
+                  {/* The job of an order (Fase 29F): charged in it, so it opens the order (for whoever sees orders) instead of «Cobrar». */}
+                  {item.workOrderNumber && (
+                    <div className="text-muted small">
+                      Se cobra en la orden{' '}
+                      {canOpenOrders
+                        ? <Link to={`/orders?search=${encodeURIComponent(item.workOrderNumber)}`}>{item.workOrderNumber}</Link>
+                        : item.workOrderNumber}
+                    </div>
+                  )}
                 </td>
                 <td>
                   <div>{formatSlot(item)}</div>

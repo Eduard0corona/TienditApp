@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Appointments;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.OnlinePayments.Enums;
@@ -31,6 +32,11 @@ public class OrderDto
     public OrderVisitChargeDto? VisitCharge { get; set; }
     /// <summary>The accepted quote the service order came from (Fase 29E); null for any other order.</summary>
     public OrderQuoteDto? Quote { get; set; }
+    /// <summary>
+    /// The appointments that do the job of a service order that came from a quote (Fase 29F), in the order of their time,
+    /// cancelled ones included; empty otherwise.
+    /// </summary>
+    public List<WorkAppointmentDto> WorkAppointments { get; set; } = [];
     /// <summary>Branch where the sale was made.</summary>
     public Guid? BranchId { get; set; }
     /// <summary>When the device captured it without connection; the sale reached the server later.</summary>

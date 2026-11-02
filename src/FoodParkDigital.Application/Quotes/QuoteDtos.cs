@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Appointments;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Quotes;
 
@@ -124,6 +125,11 @@ public class QuoteDto
     /// paid for the visit also needs who may charge, which the server checks.
     /// </summary>
     public bool CanConvertToOrder { get; set; }
+    /// <summary>
+    /// The job of the order it became can be agendado now (Fase 29F): converted, its order not cancelled, in a business with
+    /// the agenda. Agendarlo also needs who may manage the agenda, which the server checks.
+    /// </summary>
+    public bool CanScheduleWork { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
 
@@ -133,6 +139,8 @@ public class QuoteOrderDto
     public Guid Id { get; set; }
     public string OrderNumber { get; set; } = null!;
     public OrderStatus Status { get; set; }
+    /// <summary>The appointments that do its job (Fase 29F), in the order of their time, cancelled ones included.</summary>
+    public List<WorkAppointmentDto> WorkAppointments { get; set; } = [];
 }
 
 /// <summary>How the business's quotes are valid.</summary>

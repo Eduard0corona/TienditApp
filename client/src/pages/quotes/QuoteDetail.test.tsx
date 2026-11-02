@@ -4,6 +4,7 @@ import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { employeesApi } from '../../api/employeesApi';
 import { productsApi } from '../../api/productsApi';
 import { quotesApi, type Quote } from '../../api/quotesApi';
 import { useAuth } from '../../hooks/useAuth';
@@ -20,10 +21,11 @@ vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: vi.fn() }));
 vi.mock('../../api/productsApi', () => ({ productsApi: { getAll: vi.fn() } }));
+vi.mock('../../api/employeesApi', () => ({ employeesApi: { getAll: vi.fn() } }));
 vi.mock('../../api/quotesApi', () => ({
   quotesApi: {
     get: vi.fn(), updateDraft: vi.fn(), send: vi.fn(), revise: vi.fn(), discard: vi.fn(), reply: vi.fn(),
-    sendByEmail: vi.fn(), sendByWhatsApp: vi.fn(), convertToOrder: vi.fn(),
+    sendByEmail: vi.fn(), sendByWhatsApp: vi.fn(), convertToOrder: vi.fn(), scheduleWork: vi.fn(),
   },
 }));
 
@@ -405,7 +407,7 @@ describe('QuoteDetail', () => {
     vi.mocked(quotesApi.get).mockResolvedValue(accepted);
     vi.mocked(quotesApi.convertToOrder).mockResolvedValue({
       ...accepted, canConvertToOrder: false, convertedAt: '2026-10-05T18:00:00Z',
-      order: { id: 'o1', orderNumber: 'ORD-000031', status: 4 },
+      order: { id: 'o1', orderNumber: 'ORD-000031', status: 4, workAppointments: [] },
     } as Quote);
     renderAt();
 
@@ -425,12 +427,148 @@ describe('QuoteDetail', () => {
     expect(screen.queryByRole('button', { name: 'Convertir en orden de servicio' })).not.toBeInTheDocument();
   });
 
+  /** A quote converted into ORD-000031, from the visit at 72000, whose job can be agendado. */
+  function converted(overrides: Partial<Quote> = {}) {
+    return sent({
+      status: QuoteStatus.Accepted, canConvertToOrder: false, canScheduleWork: true, convertedAt: '2026-10-05T18:00:00Z',
+      appointment: { id: 'a1', startAt: '2026-10-03T16:00:00Z', serviceName: 'Visita y diagnóstico', postalCode: '72000' },
+      order: { id: 'o1', orderNumber: 'ORD-000031', status: 4, workAppointments: [] },
+      ...overrides,
+    } as Partial<Quote>);
+  }
+
+  it('agenda the job of its order in the business\'s time, with who does it, and then lists it', async () => {
+    setBusinessTimeZone('America/Tijuana');
+    onTestFinished(() => setBusinessTimeZone(null));
+    vi.mocked(quotesApi.get).mockResolvedValue(converted());
+    vi.mocked(employeesApi.getAll).mockResolvedValue({ data: { items: [
+      { userId: 'luis', firstName: 'Luis', lastName: 'Pérez', isActive: true },
+      { userId: 'baja', firstName: 'Ana', lastName: 'Baja', isActive: false },
+    ] } } as unknown as Awaited<ReturnType<typeof employeesApi.getAll>>);
+    vi.mocked(quotesApi.scheduleWork).mockResolvedValue(converted({
+      order: { id: 'o1', orderNumber: 'ORD-000031', status: 4, workAppointments: [
+        { id: 'w1', startAt: '2026-10-12T16:00:00Z', endAt: '2026-10-12T19:00:00Z', staffName: 'Luis Pérez', status: 1, atCustomersAddress: true },
+      ] },
+    }));
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Agendar el trabajo' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Agendar el trabajo' });
+    expect(dialog).toHaveTextContent('En la dirección de la visita (CP 72000), sin cargo por ir. Se cobra en la orden ORD-000031, no aparte.');
+    await userEvent.type(within(dialog).getByLabelText('Inicio'), '2026-10-12T09:00');
+    // The end takes two hours unless said; the person makes it three.
+    expect(within(dialog).getByLabelText('Fin')).toHaveValue('2026-10-12T11:00');
+    await userEvent.clear(within(dialog).getByLabelText('Fin'));
+    await userEvent.type(within(dialog).getByLabelText('Fin'), '2026-10-12T12:00');
+    const who = within(dialog).getByLabelText('Atiende');
+    expect(within(who).queryByRole('option', { name: 'Ana Baja' })).not.toBeInTheDocument();
+    await userEvent.selectOptions(who, 'luis');
+    await userEvent.type(within(dialog).getByLabelText('Notas para el equipo'), ' Llevar la escalera ');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Agendar' }));
+
+    // 9:00 and 12:00 in Tijuana (UTC−7 in October), whatever the device's zone.
+    await waitFor(() => expect(quotesApi.scheduleWork).toHaveBeenCalledWith('q1', {
+      startAt: '2026-10-12T16:00:00.000Z', endAt: '2026-10-12T19:00:00.000Z', staffUserId: 'luis', notes: 'Llevar la escalera',
+    }));
+    expect(toast.success).toHaveBeenCalledWith('Se agendó el trabajo.');
+    expect(await screen.findByRole('heading', { name: 'Citas del trabajo' })).toBeInTheDocument();
+    expect(screen.getByText(/Luis Pérez · a domicilio/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ver en la Agenda' })).toHaveAttribute('href', '/appointments');
+  });
+
+  it('says what refused the job, shows the quote as it is now, and offers it only to whoever manages the agenda', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValueOnce(converted()).mockResolvedValue(converted({ canScheduleWork: false }));
+    vi.mocked(employeesApi.getAll).mockResolvedValue({ data: { items: [] } } as unknown as Awaited<ReturnType<typeof employeesApi.getAll>>);
+    vi.mocked(quotesApi.scheduleWork).mockRejectedValueOnce(refusal('La orden ORD-000031 se canceló: su trabajo ya no se agenda.'));
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Agendar el trabajo' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Agendar el trabajo' });
+    await userEvent.type(within(dialog).getByLabelText('Inicio'), '2026-10-12T09:00');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Agendar' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('La orden ORD-000031 se canceló: su trabajo ya no se agenda.');
+    // Behind the dialog the page already shows the quote as it is now: nothing left to agenda, nor to try again.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Agendar el trabajo', hidden: true })).not.toBeInTheDocument());
+    expect(within(dialog).getByRole('button', { name: 'Agendar' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    // The button it came from is gone: the order link takes the focus.
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Ver la orden' })).toHaveFocus());
+  });
+
+  it('keeps the length chosen when the start moves, asks for an end after the start, and holds still while it agendas', async () => {
+    setBusinessTimeZone('America/Mexico_City');
+    onTestFinished(() => setBusinessTimeZone(null));
+    vi.mocked(quotesApi.get).mockResolvedValue(converted({
+      order: { id: 'o1', orderNumber: 'ORD-000031', status: 4, workAppointments: [
+        { id: 'w1', startAt: '2026-10-12T15:00:00Z', endAt: '2026-10-12T18:30:00Z', staffName: null, status: 0, atCustomersAddress: false },
+      ] },
+    }));
+    vi.mocked(employeesApi.getAll).mockRejectedValue(new Error('403'));
+    const pending = deferred<Quote>();
+    vi.mocked(quotesApi.scheduleWork).mockReturnValue(pending.promise);
+    renderAt();
+
+    // Its appointments in the business's time: 9:00 to 12:30 in Mexico City on Monday the 12th.
+    const heading = await screen.findByRole('heading', { name: 'Citas del trabajo' });
+    const job = within(heading.parentElement!).getAllByRole('listitem')[0];
+    expect(job).toHaveTextContent(/lun 12 de oct, 9:00 a\.m\. a 12:30 p\.m\./);
+    expect(job).toHaveTextContent('Sin asignar');
+    await userEvent.click(screen.getByRole('button', { name: 'Agendar el trabajo' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Agendar el trabajo' });
+    // Without the team (only owners and admins list it), it says how it is assigned.
+    expect(await within(dialog).findByText('No pudimos traer al equipo: el trabajo queda sin asignar y se asigna después en la Agenda.'))
+      .toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Atiende')).toHaveAccessibleDescription(
+      'No pudimos traer al equipo: el trabajo queda sin asignar y se asigna después en la Agenda.');
+    await userEvent.type(within(dialog).getByLabelText('Inicio'), '2026-10-12T09:00');
+    await userEvent.clear(within(dialog).getByLabelText('Fin'));
+    await userEvent.type(within(dialog).getByLabelText('Fin'), '2026-10-12T08:00');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Agendar' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('El trabajo termina después de empezar.');
+    expect(quotesApi.scheduleWork).not.toHaveBeenCalled();
+
+    await userEvent.clear(within(dialog).getByLabelText('Fin'));
+    await userEvent.type(within(dialog).getByLabelText('Fin'), '2026-10-12T12:00');
+    await userEvent.clear(within(dialog).getByLabelText('Inicio'));
+    await userEvent.type(within(dialog).getByLabelText('Inicio'), '2026-10-13T10:00');
+    // Three hours chosen, moved to the next day: still three.
+    expect(within(dialog).getByLabelText('Fin')).toHaveValue('2026-10-13T13:00');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Agendar' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Agendando…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(within(dialog).getByLabelText('Inicio')).toBeDisabled();
+    pending.resolve(converted());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Agendar el trabajo' })).not.toBeInTheDocument());
+  });
+
+  it('does not offer to agenda the job to whoever cannot manage the agenda', async () => {
+    signIn('TENANT_STAFF', ['ManageOrders']);
+    vi.mocked(quotesApi.get).mockResolvedValue(converted({ appointment: undefined }));
+    renderAt();
+
+    expect(await screen.findByRole('link', { name: 'Ver la orden' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Agendar el trabajo' })).not.toBeInTheDocument();
+  });
+
+  it('agenda a job without a visit, telling where the address goes', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValue(converted({ appointment: undefined }));
+    vi.mocked(employeesApi.getAll).mockResolvedValue({ data: { items: [] } } as unknown as Awaited<ReturnType<typeof employeesApi.getAll>>);
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Agendar el trabajo' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Agendar el trabajo' })).toHaveTextContent(
+      'La cotización no vino de una visita: si el trabajo es a domicilio, agrega la dirección después en la Agenda.');
+  });
+
   it('sends when the job is promised in the business\'s time, and after a refusal shows the quote as it is now', async () => {
     setBusinessTimeZone('America/Tijuana');
     onTestFinished(() => setBusinessTimeZone(null));
     const accepted = sent({ status: QuoteStatus.Accepted, canConvertToOrder: true });
     vi.mocked(quotesApi.get).mockResolvedValueOnce(accepted).mockResolvedValue({
-      ...accepted, canConvertToOrder: false, order: { id: 'o1', orderNumber: 'ORD-000031', status: 4 },
+      ...accepted, canConvertToOrder: false, order: { id: 'o1', orderNumber: 'ORD-000031', status: 4, workAppointments: [] },
     } as Quote);
     vi.mocked(quotesApi.convertToOrder).mockRejectedValueOnce(refusal('Esta cotización ya se convirtió en una orden de servicio.'));
     renderAt();
@@ -464,7 +602,7 @@ describe('QuoteDetail', () => {
     expect(within(dialog).getByLabelText('Para cuándo es el trabajo')).toBeDisabled();
     await userEvent.keyboard('{Escape}');
     expect(screen.getByRole('dialog', { name: 'Convertir en orden de servicio' })).toBeInTheDocument();
-    pending.resolve(sent({ status: QuoteStatus.Accepted, order: { id: 'o1', orderNumber: 'ORD-000031', status: 4 } }));
+    pending.resolve(sent({ status: QuoteStatus.Accepted, order: { id: 'o1', orderNumber: 'ORD-000031', status: 4, workAppointments: [] } }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 

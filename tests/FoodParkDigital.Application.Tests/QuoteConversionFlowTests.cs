@@ -22,6 +22,8 @@ using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Quotes;
@@ -398,7 +400,8 @@ public class QuoteConversionFlowTests
             => Task.FromResult(permissions().Contains(permission.ToString()));
     }
 
-    private sealed class Shop : IAsyncDisposable
+    /// <summary>A trade with service orders and the agenda; the job of its quotes is agendado too (Fase 29F).</summary>
+    internal sealed class Shop : IAsyncDisposable
     {
         private Shop(SalesTestFixture fixture, Tenant tenant)
         {
@@ -515,6 +518,44 @@ public class QuoteConversionFlowTests
 
         public Task<QuoteDto> GetAsync(Guid id) => Handler.Handle(new GetQuoteQuery(id), CancellationToken.None);
 
+        /// <summary>Agendar the job of the order the quote became (Fase 29F).</summary>
+        public Task<Result<QuoteDto>> ScheduleWorkAsync(
+            Guid quoteId, DateTimeOffset startAt, DateTimeOffset endAt, Guid? staffUserId = null, string? notes = null)
+            => new ScheduleQuoteWorkCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, Fixture.Clock,
+                    new AppointmentNotices(Context, new PhoneNormalizationService(), Fixture.Clock))
+                .Handle(new ScheduleQuoteWorkCommand(quoteId, startAt, endAt, staffUserId, notes), CancellationToken.None);
+
+        /// <summary>An active member of the team of <paramref name="tenantId"/> (this one, unless said).</summary>
+        public async Task<Guid> StaffAsync(string firstName, Guid? tenantId = null)
+        {
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                Email = $"{firstName.ToLowerInvariant()}.{Guid.NewGuid():N}@negocio.test",
+                UserName = $"{firstName.ToLowerInvariant()}.{Guid.NewGuid():N}@negocio.test",
+                FirstName = firstName,
+                LastName = "Pérez",
+                Role = UserRole.Staff,
+                IsActive = true
+            };
+            Context.Users.Add(user);
+            Context.TenantUsers.Add(new TenantUser(tenantId ?? Tenant.Id, user.Id, TenantUserRole.Staff));
+            await Context.SaveChangesAsync();
+            return user.Id;
+        }
+
+        public async Task ConnectWhatsAppAsync()
+        {
+            var config = new WhatsAppConfig(Tenant.Id);
+            config.Update(true, "token", "123456", "waba", "+52 55 0000 0000");
+            Context.WhatsAppConfigs.Add(config);
+            await Context.SaveChangesAsync();
+        }
+
+        /// <summary>A visit the team scheduled at 72000 for Valeria, with the service, starting <paramref name="startAt"/>.</summary>
+        public Task<AppointmentDto> ScheduledVisitAsync(Guid serviceId, DateTimeOffset startAt, Guid? staffUserId = null)
+            => VisitAsync(serviceId, startAt, staffUserId);
+
         private async Task<QuoteDto> SendAsync(QuoteDto draft, List<QuoteLineRequest> lines)
         {
             var updated = await Handler.Handle(new UpdateQuoteDraftCommand(draft.Id, draft.CustomerId, draft.CustomerName, draft.CustomerPhone,
@@ -533,10 +574,10 @@ public class QuoteConversionFlowTests
             return accepted.Value!;
         }
 
-        /// <summary>A visit the team scheduled at 72000 for Valeria tomorrow, with the service.</summary>
-        private async Task<AppointmentDto> VisitAsync(Guid serviceId)
+        /// <summary>A visit the team scheduled at 72000 for Valeria tomorrow (unless said), with the service.</summary>
+        private async Task<AppointmentDto> VisitAsync(Guid serviceId, DateTimeOffset? at = null, Guid? staffUserId = null)
         {
-            var startAt = SalesTestFixture.Now.AddDays(1);
+            var startAt = at ?? SalesTestFixture.Now.AddDays(1);
             var created = await new CreateAppointmentCommandHandler(Context, Fixture.TenantService, Fixture.CurrentUser, Fixture.Clock,
                     new AppointmentNotices(Context, new PhoneNormalizationService(), Fixture.Clock))
                 .Handle(new CreateAppointmentCommand
@@ -544,6 +585,7 @@ public class QuoteConversionFlowTests
                     CustomerName = "Valeria Ruiz",
                     CustomerPhone = "5522107765",
                     ServiceProductId = serviceId,
+                    StaffUserId = staffUserId,
                     StartAt = startAt,
                     EndAt = startAt.AddHours(1),
                     Visit = new AppointmentVisitInput { PostalCode = "72000", AddressLine = "Av. Juárez 123, Col. Centro" }

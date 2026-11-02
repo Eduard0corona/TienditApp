@@ -161,4 +161,41 @@ public sealed class CrossTenantQuoteSqlServerTests
         Assert.Equal(HttpStatusCode.BadRequest, again.StatusCode);
         Assert.Contains("ya se convirtió", await again.Content.ReadAsStringAsync());
     }
+
+    [SqlServerFact]
+    public async Task TheJobOfAnOrder_ShouldBeAgendadoOnlyByItsBusiness_AndSeenOnlyByIt()
+    {
+        var mine = await _api.SignUpAsync("trabajo-a");
+        var theirs = await _api.SignUpAsync("trabajo-b");
+        var draft = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/quotes",
+            new { customerName = "Valeria Ruiz", customerPhone = "5522107765" }));
+        var id = draft.GetProperty("id").GetGuid();
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"/api/v1/quotes/{id}", new
+        {
+            customerName = "Valeria Ruiz",
+            customerPhone = "5522107765",
+            validityDays = 15,
+            lines = new[] { new { productId = (Guid?)null, description = "Pintar la fachada", quantity = 1m, unitPrice = 9000m } }
+        }));
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"/api/v1/quotes/{id}/send", null));
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/reply", new { accepted = true, channel = 0 }));
+        var converted = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/order", new { }));
+        var orderId = converted.GetProperty("order").GetProperty("id").GetGuid();
+        Assert.True(converted.GetProperty("canScheduleWork").GetBoolean());
+        var startAt = DateTimeOffset.UtcNow.Date.AddDays(7).AddHours(16);
+        var job = new { startAt, endAt = startAt.AddHours(8), notes = "Llevar andamio" };
+
+        // The other business does not agenda the job of an order that is not its own.
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/work-appointments", job)).StatusCode);
+
+        var scheduled = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/work-appointments", job));
+        var appointmentId = scheduled.GetProperty("order").GetProperty("workAppointments")[0].GetProperty("id").GetGuid();
+        // The appointment and the order that shows it are the business's; the other business sees neither.
+        var appointment = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/appointments/{appointmentId}"));
+        Assert.Equal(orderId, appointment.GetProperty("workOrderId").GetGuid());
+        var order = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/orders/{orderId}"));
+        Assert.Equal(appointmentId, order.GetProperty("workAppointments")[0].GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1/appointments/{appointmentId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1/orders/{orderId}")).StatusCode);
+    }
 }

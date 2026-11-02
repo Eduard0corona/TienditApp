@@ -100,14 +100,17 @@ public sealed class AppointmentNotices
             .FirstOrDefaultAsync(cancellationToken);
         var businessName = await CampaignLauncher.BusinessNameAsync(_context, appointment.TenantId, cancellationToken);
         var local = MessageValues.ToLocal(appointment.StartAt, settings?.TimeZone);
+        // The job of an order without an address yet (Fase 29F) does not send the customer to the business.
         var place = appointment.Visit is { } visit
             ? $"a domicilio (CP {visit.PostalCode}) con {businessName}"
-            : $"en {businessName}";
+            : appointment.IsWork ? $"con {businessName}" : $"en {businessName}";
         var body = $"Hola {MessageValues.FirstName(appointment.CustomerName)}, "
             + describe(appointment.ServiceName, place, MessageValues.FormatDate(local), MessageValues.FormatTime(local));
         // The visit charges like the business's prices: with IVA added when they do not include it (ADR 0018).
         var taxNote = settings?.PricesIncludeTax == false ? " más IVA." : ".";
-        if (withVisitFee && appointment.Visit is { ChargePolicy: { } policy } toQuote)
+        // The job of an order is charged in it (Fase 29F): its notice never says a charge for going there.
+        var saysCharge = withVisitFee && !appointment.IsWork;
+        if (saysCharge && appointment.Visit is { ChargePolicy: { } policy } toQuote)
         {
             // A visit to quote: its service and going there, as the request page said it (Fase 29B), or nothing «Sin costo».
             var servicePrice = policy == HomeVisitChargePolicy.Free || appointment.ServiceProductId is not { } serviceId
@@ -120,7 +123,7 @@ public sealed class AppointmentNotices
             var cost = HomeVisitCharge.To(policy, servicePrice, toQuote.Fee);
             body += cost > 0 ? $" Visita: {OrderStatusLabels.FormatMoney(cost)}{taxNote}" : " La visita es sin costo.";
         }
-        else if (withVisitFee && appointment.Visit is { Fee: > 0 } charged)
+        else if (saysCharge && appointment.Visit is { Fee: > 0 } charged)
         {
             body += $" Cargo por visita: {OrderStatusLabels.FormatMoney(charged.Fee)}{taxNote}";
         }

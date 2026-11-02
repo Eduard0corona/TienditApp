@@ -954,6 +954,16 @@ La Fase 29E trae una migración, [`database/production/20261102014702_AddQuoteCo
 - **Volver a la versión anterior:** funciona sin tocar la base. Las órdenes, los reembolsos al saldo a favor y los pagos con él que dejó una conversión siguen siendo comunes; la cotización deja de decir en qué orden se convirtió hasta regresar a esta versión, y mientras tanto vuelve a calcular lo que descuenta de la visita con lo que su venta sigue teniendo pagado. Eso es cero, salvo cuando la visita costó más que el trabajo: entonces la cotización convertida muestra como descuento lo que sobró y un «Por pagar» que ya no corresponde a nada, porque la orden quedó pagada completa. Se corrige solo al regresar a esta versión.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50053 en cuanto una cotización se convirtió; si no, quita lo que agregó.
 
+## Agendar el trabajo de la cotización convertida (Fase 29F)
+
+La Fase 29F trae una migración, [`database/production/20261102073115_AddAppointmentWorkOrder`](../../database/production/20261102073115_AddAppointmentWorkOrder). Su `apply.sql` va antes del merge.
+
+- **La migración:** agrega a `Appointments` la columna nula `WorkOrderId` (la orden de servicio cuyo trabajo hace la cita, con su llave a `Orders` y el índice filtrado `IX_Appointments_WorkOrderId`). `CK_Appointments_Work` repite lo que garantiza el agregado: una cita del trabajo no lleva venta, es del negocio y no tiene enlace. No cambia datos.
+- **Mientras se publica:** la versión de `master` (la 29E) no conoce la columna ni la escribe, y sigue funcionando.
+- **Sin configuración nueva:** las citas del trabajo usan la agenda, el traslado entre visitas y los avisos por WhatsApp que ya existen; no hay evento nuevo en el outbox.
+- **Volver a la versión anterior:** funciona sin tocar la base. Una cita del trabajo se ve como una cita común; si alguien intenta cobrarla con esa versión, la base lo rechaza (`CK_Appointments_Work`) y el trabajo no se cobra dos veces. Esa versión sí deja cotizarla, y moverla a otra dirección le pone el cargo de la zona; al regresar a esta versión vuelve a decir de qué orden es, y su aviso y la ruta no dicen ese cargo ni nada lo cobra.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50054 en cuanto una cita hace el trabajo de una orden; si no, quita lo que agregó.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

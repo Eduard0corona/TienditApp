@@ -190,7 +190,8 @@ public class QuoteConversionMigrationSqlServerTests
         quote.Send(Today, new string('q', 43), null, Now);
         quote.Accept(Today, QuoteReplyChannel.WhatsApp, null, Now);
         var order = Order(tenant.Id, "ORD-000002", "Cambio de calentador", 1160m);
-        await using var seed = database.CreateContext(tenant.Id);
+        // Its appointments, as the version of this migration saves them (without what later versions added).
+        await using var seed = BeforeAppointmentWork.CreateContext(database, tenant.Id);
         seed.AddRange(tenant, settings, visit, visitSale, quote, order);
         await seed.SaveChangesAsync();
         return (tenant.Id, quote.Id, order.Id);

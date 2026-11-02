@@ -31,7 +31,7 @@ import {
   type OrderDto,
   type ProductDto,
 } from '../../types';
-import { CANCELLED_SALE_MESSAGE, ALREADY_SOLD_MESSAGE } from '../../utils/homeVisits';
+import { CANCELLED_SALE_MESSAGE, CHARGED_IN_ITS_ORDER_MESSAGE, ALREADY_SOLD_MESSAGE } from '../../utils/homeVisits';
 import { ROUND_STOCK_WARNING_TITLE } from '../../utils/stockWarnings';
 import SellPage from './SellPage';
 
@@ -1446,6 +1446,15 @@ describe('SellPage with a platform order and no connection', () => {
       renderAt('/sell?appointment=a1');
 
       await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(CANCELLED_SALE_MESSAGE));
+      expect(ticket().queryByText(/Cobro de la cita/)).not.toBeInTheDocument();
+    });
+
+    it('does not bring the job of an order, which is charged in that order (Fase 29F)', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);
+      vi.mocked(appointmentsApi.getById).mockResolvedValue({ data: { ...appointment, workOrderId: 'o9', workOrderNumber: 'ORD-000031' } } as never);
+      renderAt('/sell?appointment=a1');
+
+      await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(CHARGED_IN_ITS_ORDER_MESSAGE));
       expect(ticket().queryByText(/Cobro de la cita/)).not.toBeInTheDocument();
     });
 

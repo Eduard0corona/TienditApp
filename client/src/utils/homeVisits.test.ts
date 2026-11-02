@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AppointmentStatus } from '../types';
 import {
   ACCEPT_BEFORE_CHARGING_MESSAGE,
+  CHARGED_IN_ITS_ORDER_MESSAGE,
   ALREADY_SOLD_MESSAGE,
   CANCELLED_SALE_MESSAGE,
   NO_SHOW_SALE_MESSAGE,
@@ -60,6 +61,9 @@ describe('texts', () => {
     expect(appointmentSaleProblem({ status: AppointmentStatus.Scheduled })).toBeNull();
     // A request booked online (Fase 24D) is accepted before it is charged.
     expect(appointmentSaleProblem({ status: AppointmentStatus.Requested })).toBe(ACCEPT_BEFORE_CHARGING_MESSAGE);
+    // The job of an order (Fase 29F) is charged in that order, never here.
+    expect(appointmentSaleProblem({ status: AppointmentStatus.Scheduled, workOrderId: 'o9' })).toBe(CHARGED_IN_ITS_ORDER_MESSAGE);
+    expect(appointmentSaleProblem({ status: AppointmentStatus.Completed, workOrderId: 'o9' })).toBe(CHARGED_IN_ITS_ORDER_MESSAGE);
   });
 });
 

@@ -103,6 +103,16 @@ public class QuotesController : ControllerBase
         Guid id, [FromBody] ConvertQuoteToOrderRequest? request, CancellationToken cancellationToken)
         => Answer(await _mediator.Send(new ConvertQuoteToOrderCommand(id, request?.PromisedAt), cancellationToken));
 
+    /// <summary>
+    /// Agenda the job of the order the quote became (Fase 29F): an appointment of the team at the place of the visit, charged
+    /// in that order. The quote comes back with the appointments of its job.
+    /// </summary>
+    [HttpPost("{id:guid}/work-appointments")]
+    public async Task<ActionResult<QuoteDto>> ScheduleWork(
+        Guid id, [FromBody] ScheduleQuoteWorkRequest request, CancellationToken cancellationToken)
+        => Answer(await _mediator.Send(new ScheduleQuoteWorkCommand(
+            id, request.StartAt, request.EndAt, request.StaffUserId, request.Notes), cancellationToken));
+
     private ActionResult Answer<T>(Result<T> result)
         => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
 }
@@ -132,6 +142,15 @@ public class ConvertQuoteToOrderRequest
 {
     /// <summary>When the business promises the job, as in any service order; optional.</summary>
     public DateTimeOffset? PromisedAt { get; init; }
+}
+
+public class ScheduleQuoteWorkRequest
+{
+    public DateTimeOffset StartAt { get; init; }
+    public DateTimeOffset EndAt { get; init; }
+    /// <summary>Who does it (an active member of the team); optional.</summary>
+    public Guid? StaffUserId { get; init; }
+    public string? Notes { get; init; }
 }
 
 public class RecordQuoteReplyRequest

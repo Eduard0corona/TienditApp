@@ -31,6 +31,9 @@ public class GetAppointmentByIdQueryHandler : IRequestHandler<GetAppointmentById
             ?? throw new EntityNotFoundException("Appointment", request.Id);
         appointment.SaleCancelled = appointment.SaleOrderId is { } sale
             && (await AppointmentSales.CancelledAsync(_context, [sale], cancellationToken)).Contains(sale);
+        appointment.WorkOrderNumber = appointment.WorkOrderId is { } order
+            ? (await WorkAppointments.OrderNumbersAsync(_context, [order], cancellationToken)).GetValueOrDefault(order)
+            : null;
         return appointment;
     }
 }

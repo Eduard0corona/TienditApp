@@ -58,6 +58,7 @@ import { describeOnlineDispute, describeOnlineRefund, isDisputeRefund } from '..
 import { getApiErrorMessage } from '../../api/errors';
 import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 import { quoteFolio } from '../../utils/quotes';
+import WorkAppointmentList from '../../components/appointments/WorkAppointmentList';
 
 const ALL_STATUSES: OrderStatus[] = [0, 1, 2, 3, 4, 5, 6, 7, 99];
 
@@ -88,7 +89,7 @@ function getChannelOptions(withPlatforms: boolean) {
  * order keeps the one it had.
  */
 function withItsQuote(updated: OrderDto, previous: OrderDto): OrderDto {
-  return updated.quote ? updated : { ...updated, quote: previous.quote };
+  return updated.quote ? updated : { ...updated, quote: previous.quote, workAppointments: previous.workAppointments };
 }
 
 function chargedByPlatform(order: OrderDto): boolean {
@@ -853,6 +854,12 @@ export default function OrdersList() {
                       De la cotización{' '}
                       <Link to={`/quotes/${selectedOrder.quote.id}`}>{quoteFolio(selectedOrder.quote.number, selectedOrder.quote.revision)}</Link>
                     </p>
+                  )}
+                  {/* The appointments that do its job (Fase 29F); they are agendadas from its quote. */}
+                  {selectedOrder.workAppointments && selectedOrder.workAppointments.length > 0 && (
+                    <div className="mb-2">
+                      <WorkAppointmentList appointments={selectedOrder.workAppointments} canOpenAgenda={access.appointments} />
+                    </div>
                   )}
                   {selectedOrder.taxBreakdown.filter((line) => line.taxAmount > 0).map((line) => (
                     <p className="mb-1 small text-muted" key={`${line.ratePercent}-${line.isExempt}`}>

@@ -145,6 +145,46 @@ describe('AppointmentsList', () => {
     expect(await screen.findByText('Cotización abierta')).toBeInTheDocument();
   });
 
+  it('opens the order of the job of a quote instead of charging or quoting it (Fase 29F)', async () => {
+    renderAgenda([
+      appointment({
+        ...AT_HOME, id: 'a5', customerName: 'Valeria', serviceName: 'Trabajo de la cotización COT-000012',
+        visit: { ...AT_HOME.visit!, fee: 0 }, workOrderId: 'o9', workOrderNumber: 'ORD-000031',
+      }),
+    ]);
+
+    const job = (await screen.findByText('Valeria')).closest('tr')!;
+    expect(within(job).getByText('Trabajo de la cotización COT-000012')).toBeInTheDocument();
+    expect(within(job).getByRole('link', { name: 'ORD-000031' })).toHaveAttribute('href', '/orders?search=ORD-000031');
+    expect(job).toHaveTextContent('Se cobra en la orden ORD-000031');
+    expect(screen.queryByRole('button', { name: 'Cobrar la cita de Valeria' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cotizar la visita de Valeria' })).not.toBeInTheDocument();
+  });
+
+  it('says the job of an order charges nothing to go elsewhere, and names its order without a link to whoever sees no orders', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ManageAppointments'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    vi.mocked(quoteVisit).mockImplementation(((postalCode: string) => Promise.resolve({ postalCode, zoneName: 'Norte', fee: 150 })) as never);
+    renderAgenda([
+      appointment({
+        ...AT_HOME, id: 'a5', customerName: 'Valeria', serviceName: 'Trabajo de la cotización COT-000012',
+        visit: { ...AT_HOME.visit!, fee: 0 }, workOrderId: 'o9', workOrderNumber: 'ORD-000031',
+      }),
+    ]);
+
+    const job = (await screen.findByText('Valeria')).closest('tr')!;
+    expect(job).toHaveTextContent('Se cobra en la orden ORD-000031');
+    expect(within(job).queryByRole('link', { name: 'ORD-000031' })).not.toBeInTheDocument();
+    await user.click(within(job).getByRole('button', { name: 'Editar o reprogramar la cita de Valeria' }));
+    const form = within(await screen.findByRole('dialog', { name: /cita/i }));
+    await user.clear(form.getByLabelText('Código postal *'));
+    await user.type(form.getByLabelText('Código postal *'), '72100');
+
+    expect(await form.findByText('Zona Norte · Visita sin cargo')).toBeInTheDocument();
+  });
+
   it('offers no quote to whoever does not take orders', async () => {
     vi.mocked(useAuth).mockReturnValue({
       user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ManageAppointments'] },

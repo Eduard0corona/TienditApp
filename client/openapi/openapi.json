@@ -16527,6 +16527,65 @@
         }
       }
     },
+    "/api/v1/quotes/{id}/work-appointments": {
+      "post": {
+        "tags": [
+          "Quotes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleQuoteWorkRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleQuoteWorkRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleQuoteWorkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reports/operational-summary": {
       "get": {
         "tags": [
@@ -19149,6 +19208,15 @@
           },
           "cancelledByCustomer": {
             "type": "boolean"
+          },
+          "workOrderId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "workOrderNumber": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -30288,6 +30356,7 @@
           "taxBreakdown",
           "tipTotal",
           "total",
+          "workAppointments",
           "writeOffs",
           "writtenOffAmount"
         ],
@@ -30354,6 +30423,12 @@
           },
           "quote": {
             "$ref": "#/components/schemas/OrderQuoteDto"
+          },
+          "workAppointments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkAppointmentDto"
+            }
           },
           "branchId": {
             "type": "string",
@@ -35765,6 +35840,7 @@
       "QuoteDto": {
         "required": [
           "canConvertToOrder",
+          "canScheduleWork",
           "createdAt",
           "customerName",
           "customerPhone",
@@ -35922,6 +35998,9 @@
             "nullable": true
           },
           "canConvertToOrder": {
+            "type": "boolean"
+          },
+          "canScheduleWork": {
             "type": "boolean"
           },
           "createdAt": {
@@ -36089,7 +36168,8 @@
         "required": [
           "id",
           "orderNumber",
-          "status"
+          "status",
+          "workAppointments"
         ],
         "type": "object",
         "properties": {
@@ -36102,6 +36182,12 @@
           },
           "status": {
             "$ref": "#/components/schemas/OrderStatus"
+          },
+          "workAppointments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkAppointmentDto"
+            }
           }
         },
         "additionalProperties": false
@@ -37556,6 +37642,33 @@
             "nullable": true
           },
           "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ScheduleQuoteWorkRequest": {
+        "required": [
+          "endAt",
+          "startAt"
+        ],
+        "type": "object",
+        "properties": {
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "staffUserId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "notes": {
             "type": "string",
             "nullable": true
           }
@@ -41495,6 +41608,15 @@
           },
           "saleCancelled": {
             "type": "boolean"
+          },
+          "workOrderId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "workOrderNumber": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -41570,6 +41692,41 @@
           "verifyToken": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkAppointmentDto": {
+        "required": [
+          "atCustomersAddress",
+          "endAt",
+          "id",
+          "startAt",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "staffName": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/AppointmentStatus"
+          },
+          "atCustomersAddress": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
