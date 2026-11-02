@@ -13636,6 +13636,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/quotes/{id}/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ConvertQuoteToOrderRequest"];
+                    "text/json": components["schemas"]["ConvertQuoteToOrderRequest"];
+                    "application/*+json": components["schemas"]["ConvertQuoteToOrderRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteDto"];
+                        "application/json": components["schemas"]["QuoteDto"];
+                        "text/json": components["schemas"]["QuoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/operational-summary": {
         parameters: {
             query?: never;
@@ -16307,6 +16352,10 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        ConvertQuoteToOrderRequest: {
+            /** Format: date-time */
+            promisedAt?: string | null;
+        };
         CourierOrderDto: {
             /** Format: uuid */
             orderId: string;
@@ -18923,6 +18972,7 @@ export interface components {
             platformOrder?: components["schemas"]["OrderPlatformDto"];
             delivery?: components["schemas"]["OrderDeliveryDto"];
             visitCharge?: components["schemas"]["OrderVisitChargeDto"];
+            quote?: components["schemas"]["OrderQuoteDto"];
             /** Format: uuid */
             branchId?: string | null;
             /** Format: date-time */
@@ -19162,6 +19212,13 @@ export interface components {
             externalOrderNumber: string;
             externalOrderId?: string | null;
             collectedBy: components["schemas"]["PlatformCollectedBy"];
+        };
+        OrderQuoteDto: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: int32 */
+            revision: number;
         };
         OrderRefundDto: {
             /** Format: uuid */
@@ -20571,6 +20628,10 @@ export interface components {
             emails: components["schemas"]["QuoteEmailDto"][];
             whatsApps: components["schemas"]["QuoteWhatsAppDto"][];
             whatsAppConnected: boolean;
+            order?: components["schemas"]["QuoteOrderDto"];
+            /** Format: date-time */
+            convertedAt?: string | null;
+            canConvertToOrder: boolean;
             /** Format: date-time */
             createdAt: string;
         };
@@ -20625,6 +20686,12 @@ export interface components {
          * @enum {integer}
          */
         QuoteListFilter: 0 | 1 | 2 | 3 | 4 | 5;
+        QuoteOrderDto: {
+            /** Format: uuid */
+            id: string;
+            orderNumber: string;
+            status: components["schemas"]["OrderStatus"];
+        };
         /**
          * Format: int32
          * @enum {integer}

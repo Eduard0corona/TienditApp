@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Application.Orders;
@@ -64,15 +65,19 @@ internal static class QuoteVisitCredits
     {
         if (quote.VisitCreditSaleOrderId is not { } saleId)
             return null;
-        var service = quote.AppointmentId is { } appointmentId
+        return await PaidForTheVisitAsync(
+            context, quote.TenantId, saleId, await VisitServiceAsync(context, quote, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>The service of the appointment of the visit a quote comes from, whose units its sale charged for the visit.</summary>
+    public static async Task<Guid?> VisitServiceAsync(IApplicationDbContext context, Quote quote, CancellationToken cancellationToken)
+        => quote.AppointmentId is { } appointmentId
             ? await context.Appointments
                 .AsNoTracking()
                 .Where(a => a.Id == appointmentId && a.TenantId == quote.TenantId)
                 .Select(a => a.ServiceProductId)
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
-        return await PaidForTheVisitAsync(context, quote.TenantId, saleId, service, cancellationToken);
-    }
 
     /// <summary>
     /// What a sale has paid for its visit: what it charges for it (the charge of its zone and the units of the service the
@@ -86,7 +91,16 @@ internal static class QuoteVisitCredits
             .AsNoTracking()
             .Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == saleId && o.TenantId == tenantId, cancellationToken);
-        if (sale is null || sale.Status == OrderStatus.Cancelled)
+        return sale is null ? null : PaidForTheVisit(sale, serviceProductId);
+    }
+
+    /// <summary>
+    /// What <paramref name="sale"/>, as loaded with its lines, has paid for its visit (see <see cref="PaidForTheVisitAsync"/>).
+    /// Null when it is cancelled.
+    /// </summary>
+    public static decimal? PaidForTheVisit(Order sale, Guid? serviceProductId)
+    {
+        if (sale.Status == OrderStatus.Cancelled)
             return null;
 
         var amounts = sale.Items
@@ -132,6 +146,7 @@ internal static class QuoteAudit
     public const string Rejected = "QuoteRejected";
     public const string SettingsUpdated = "QuoteSettingsUpdated";
     public const string WhatsAppTemplateChanged = "QuoteWhatsAppTemplateChanged";
+    public const string Converted = "QuoteConverted";
 
     public static AuditLog Create(Quote quote, string action, string? performedBy, object? extra = null)
         => new(
@@ -172,6 +187,17 @@ internal static class QuoteViews
         var sends = await QuoteDeliveries.LatestAsync(context, quote, cancellationToken);
         var status = quote.StatusOn(today);
         var draft = versions.FirstOrDefault(v => v.Status == QuoteStatus.Draft);
+        // The service order it became (Fase 29E), or whether it can become one now.
+        var order = quote.OrderId is { } orderId
+            ? await context.Orders
+                .AsNoTracking()
+                .Where(o => o.Id == orderId && o.TenantId == quote.TenantId)
+                .Select(o => new QuoteOrderDto { Id = o.Id, OrderNumber = o.OrderNumber, Status = o.Status })
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+        var canConvert = quote.Status == QuoteStatus.Accepted && quote.OrderId is null
+            && TenantCapabilityRules.CanCreateOrderType(
+                await TenantCapabilityRules.ResolveCapabilitiesAsync(context, quote.TenantId, cancellationToken), OrderType.Service);
 
         return new QuoteDto
         {
@@ -225,7 +251,10 @@ internal static class QuoteViews
             CreatedAt = quote.CreatedAt,
             Emails = sends.Emails,
             WhatsApps = sends.WhatsApps,
-            WhatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(context, quote.TenantId, cancellationToken)
+            WhatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(context, quote.TenantId, cancellationToken),
+            Order = order,
+            ConvertedAt = quote.ConvertedAt,
+            CanConvertToOrder = canConvert
         };
     }
 

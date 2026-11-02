@@ -151,7 +151,8 @@ public class QuoteDeliveriesMigrationSqlServerTests
         var quote = Quote.Start(tenant.Id, Folios.QuoteNumber(1), new QuoteCustomer(null, "Valeria", "5522107765", null), null, true, 15, Now);
         quote.ReplaceLines([new QuoteLineInput(null, "Cambio de calentador", 1m, 1160m, VatRate.General)], Now);
         quote.Send(Today, new string('q', 43), null, Now);
-        await using var seed = database.CreateContext(tenant.Id);
+        // On a database at this migration: the columns of what came after it do not exist yet.
+        await using var seed = BeforeQuoteConversion.CreateContext(database, tenant.Id);
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Service | TenantCapability.Appointments), quote);
         await seed.SaveChangesAsync();
         return (tenant.Id, quote);

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,10 +7,12 @@ import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { getApiErrorMessage } from '../../api/errors';
 import { productsApi } from '../../api/productsApi';
 import { quotesApi, type Quote, type QuoteLineRequest } from '../../api/quotesApi';
+import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { QuoteReplyChannel, QuoteStatus } from '../../types';
+import { getAccess } from '../../utils/access';
 import { formatCalendarDate, formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import {
@@ -25,6 +27,7 @@ import {
   quoteWhatsAppUrl,
   replyChannelPhrase,
 } from '../../utils/quotes';
+import ConvertQuoteDialog from './ConvertQuoteDialog';
 import SendQuoteDialog, { type QuoteChannel } from './SendQuoteDialog';
 
 /** While a send is on its way, the detail asks for its outcome this often. */
@@ -90,8 +93,8 @@ type Action = 'save' | 'send' | 'revise' | 'discard' | 'reply';
  * A version of a quote (Fase 29C, ADR 0053). A draft is edited here and the server totals it when saved; sent, it says the
  * same forever: it goes to the customer by email or by WhatsApp from TienditApp (Fase 29D; by WhatsApp from the phone while
  * the business has not connected its own), the business records what they answered, and correcting it starts the next
- * version. Each send of the version stays in its history. The history lists every version of the quote. Each version opens fresh: nothing
- * typed or shown on another one stays.
+ * version. Each send of the version stays in its history. The history lists every version of the quote. Accepted, it becomes
+ * its service order once (Fase 29E) and then opens it. Each version opens fresh: nothing typed or shown on another one stays.
  */
 export default function QuoteDetailPage() {
   const { id = '' } = useParams();
@@ -103,7 +106,9 @@ function QuoteDetail({ id }: { id: string }) {
   const toast = useToast();
   const { confirm } = useConfirm();
   const queryClient = useQueryClient();
-  const { tenant } = useTenant();
+  const { tenant, capabilities } = useTenant();
+  const { user } = useAuth();
+  const access = getAccess(user, capabilities);
   const replyTitleId = useId();
   const [form, setForm] = useState<DraftForm | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -116,6 +121,10 @@ function QuoteDetail({ id }: { id: string }) {
   // One action at a time: every button waits for the one running, and the draft's fields too.
   const [pending, setPending] = useState<Action | null>(null);
   const [sendingBy, setSendingBy] = useState<QuoteChannel | null>(null);
+  const [converting, setConverting] = useState(false);
+  // Converted from here: the link to the order takes the focus the button it replaces had.
+  const [justConverted, setJustConverted] = useState(false);
+  const orderLinkRef = useRef<HTMLAnchorElement>(null);
 
   const quoteQuery = useQuery({
     queryKey: ['quotes', 'detail', id],
@@ -125,6 +134,13 @@ function QuoteDetail({ id }: { id: string }) {
   });
   const quote = quoteQuery.data;
   const isDraft = quote?.status === QuoteStatus.Draft;
+
+  useEffect(() => {
+    if (justConverted && quote?.order) {
+      orderLinkRef.current?.focus();
+      setJustConverted(false);
+    }
+  }, [justConverted, quote?.order]);
 
   // The form follows what the server has while nothing is typed: a refresh never takes away what the person is writing.
   const [seen, setSeen] = useState<Quote | undefined>(undefined);
@@ -460,6 +476,9 @@ function QuoteDetail({ id }: { id: string }) {
               {quote.visitCredit && !quote.visitCredit.applies && (
                 <p className="text-muted small mt-1 mb-0">La venta de la visita se canceló o se reembolsó: ya no se descuenta.</p>
               )}
+              {quote.order && quote.visitCredit?.applies && (
+                <p className="text-muted small mt-1 mb-0">Lo que pagó por la visita quedó como pago de la orden.</p>
+              )}
             </div>
           </div>
 
@@ -544,6 +563,26 @@ function QuoteDetail({ id }: { id: string }) {
                 </button>
               )}
 
+              {quote.status === QuoteStatus.Accepted && (quote.order ? (
+                <p className="small mb-0" role="status">
+                  Se convirtió en la orden {quote.order.orderNumber}.{' '}
+                  <Link ref={orderLinkRef} to={`/orders?search=${encodeURIComponent(quote.order.orderNumber)}`}>Ver la orden</Link>
+                </p>
+              ) : quote.canConvertToOrder ? (
+                <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setConverting(true)}>
+                  <i className="ri-tools-line me-1" aria-hidden="true"></i>Convertir en orden de servicio
+                </button>
+              ) : (
+                <p className="text-muted small mb-0">
+                  {access.businessSettings ? (
+                    <>
+                      Para convertirla en una orden de servicio, activa el módulo «Servicios» en{' '}
+                      <Link to="/settings/business">Configuración › Negocio</Link>.
+                    </>
+                  ) : 'Para convertirla en una orden de servicio, pídele al dueño que active el módulo «Servicios» en Configuración › Negocio.'}
+                </p>
+              ))}
+
               {(quote.status === QuoteStatus.Accepted || quote.status === QuoteStatus.Rejected) && quote.replyChannel != null && (
                 <p className="small mb-0">
                   {quote.status === QuoteStatus.Accepted ? 'Aceptó' : 'Rechazó'} {replyChannelPhrase(quote.replyChannel)}
@@ -589,6 +628,20 @@ function QuoteDetail({ id }: { id: string }) {
             setSendingBy(null);
             toast.success(sent);
             void queryClient.invalidateQueries({ queryKey: ['quotes', 'detail', id] });
+          }}
+        />
+      )}
+
+      {converting && (
+        <ConvertQuoteDialog
+          quote={quote}
+          canApplyVisit={access.charge && access.refunds}
+          onClose={() => setConverting(false)}
+          onConverted={(converted) => {
+            setConverting(false);
+            setJustConverted(true);
+            show(converted);
+            toast.success(`Se creó la orden de servicio ${converted.order?.orderNumber ?? ''}.`);
           }}
         />
       )}

@@ -16468,6 +16468,65 @@
         }
       }
     },
+    "/api/v1/quotes/{id}/order": {
+      "post": {
+        "tags": [
+          "Quotes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConvertQuoteToOrderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConvertQuoteToOrderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConvertQuoteToOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reports/operational-summary": {
       "get": {
         "tags": [
@@ -21497,6 +21556,17 @@
           "hasNextPage": {
             "type": "boolean",
             "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConvertQuoteToOrderRequest": {
+        "type": "object",
+        "properties": {
+          "promisedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -30282,6 +30352,9 @@
           "visitCharge": {
             "$ref": "#/components/schemas/OrderVisitChargeDto"
           },
+          "quote": {
+            "$ref": "#/components/schemas/OrderQuoteDto"
+          },
           "branchId": {
             "type": "string",
             "format": "uuid",
@@ -31074,6 +31147,28 @@
           },
           "collectedBy": {
             "$ref": "#/components/schemas/PlatformCollectedBy"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrderQuoteDto": {
+        "required": [
+          "id",
+          "number",
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -35669,6 +35764,7 @@
       },
       "QuoteDto": {
         "required": [
+          "canConvertToOrder",
           "createdAt",
           "customerName",
           "customerPhone",
@@ -35815,6 +35911,17 @@
             }
           },
           "whatsAppConnected": {
+            "type": "boolean"
+          },
+          "order": {
+            "$ref": "#/components/schemas/QuoteOrderDto"
+          },
+          "convertedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "canConvertToOrder": {
             "type": "boolean"
           },
           "createdAt": {
@@ -35977,6 +36084,27 @@
           "Discarded",
           "All"
         ]
+      },
+      "QuoteOrderDto": {
+        "required": [
+          "id",
+          "orderNumber",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          }
+        },
+        "additionalProperties": false
       },
       "QuoteReplyChannel": {
         "enum": [

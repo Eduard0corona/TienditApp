@@ -1741,6 +1741,63 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Primera visita:** 181,462 B (`master` en `cfde7d4`: 181,367 B). Son +95 B: los dos helpers, que viven en `utils/dates.ts` con el resto de las fechas del negocio y ya los carga la primera visita, menos `toDateTimeLocalInput`. El presupuesto sube de 181,400 B a 181,500 B.
   - **Escenas:** no hay CSS global nuevo. Las que abren estos diálogos, la lista de la Agenda y Reportes (`agenda-domicilio`, `citas-en-linea`, `catalogo-inventario`, `clientes-mensajes`, `caja-config`) corren con el demo sin zona del negocio, o con la del centro en `caja-config`, que es la del navegador de las escenas (`timezoneId`): la hora del negocio es la del dispositivo y sus fechas no cambian. Las de Orden detallada abren el carrito vacío, sin la recepción del servicio. Contra la línea base de `master` en `cfde7d4`, con el Chromium del contenedor en `VISUAL_CHROMIUM`, las 275 escenas de esos archivos y de `vender-pedidos` salen iguales con los `datetime-local`, las 185 de `agenda-domicilio`, `citas-en-linea`, `clientes-mensajes` y `caja-config` con el «hoy» de la Agenda y Reportes, y las 42 de `clientes-mensajes` con el del chat. Conservar el instante con que empezó un campo no cambia lo que se muestra, solo lo que se manda, y no se volvieron a correr.
 
+- Fase 29E, la cotización aceptada se convierte en una orden de servicio ([ADR 0053](../adr/0053-home-visit-quotes.md), punto 17):
+  - **Domain:**
+    - `QuoteConversionTests` (15, nuevo):
+      - solo una versión aceptada se convierte, y una vez;
+      - lo aplicado de la visita queda como lo que descuenta aunque su venta ya no tenga nada pagado, y sin visita aplicada no descuenta nada;
+      - no aplica más de lo fijado, ni del total aunque la visita costara más (por la revisión automática), ni sin visita;
+      - un renglón del catálogo conserva su producto y claves al precio aceptado;
+      - uno a mano, o sin producto, es una unidad de servicio con el id del renglón;
+      - una cantidad que su unidad no vende va como una al importe del renglón, y la hora conserva la suya;
+      - el nombre con la cantidad cabe en el renglón;
+      - la orden suma lo mismo que la cotización, con y sin IVA incluido, con tasas de 16, 8 y exento;
+      - un producto que dejó de ser objeto de impuesto después de cotizarse con IVA se factura como objeto de impuesto (por la revisión).
+    - Sin la regla de lo aplicado, fallan dos.
+  - **Infrastructure:**
+    - `QuoteConversionMigrationSqlServerTests` (3, nuevo):
+      - la versión anterior sigue guardando cotizaciones sobre las columnas nuevas;
+      - la base rechaza una conversión que el agregado no escribe: de una versión no aceptada, a medias (también lo aplicado sin orden), aplicando cero o menos, aplicando la visita de una aceptada sin visita (sin la guarda del NULL, falla), más de lo fijado o más del total, y dos cotizaciones de una orden;
+      - el rollback se detiene con 50053 y luego quita solo lo suyo; otra vez no hace nada.
+      - Sin la guarda, falla.
+    - `QuoteConversionSqlServerTests` (4, nuevo):
+      - cuatro «Convertir en orden de servicio» a la vez por el pipeline dejan una orden y avisan a las demás; sin atrapar el choque de versiones, falla;
+      - tres a la vez con la visita la toman una sola vez: un reembolso de 406, un pago de 406 y el saldo en cero (por la revisión);
+      - un reembolso en efectivo de la visita guardado justo antes de que la conversión guarde: queda el reembolso, y la conversión se deshace entera y dice que la venta cambió (por la revisión; encontró que decía «ya se convirtió»);
+      - una conversión guardada justo antes de que el reembolso en efectivo guarde: queda la conversión con su pago, y el reembolso choca (por la revisión automática de la PR, que pidió forzar los dos órdenes).
+    - `BeforeQuoteConversion` (nuevo): las pruebas de las migraciones anteriores guardan cotizaciones sin las columnas nuevas. `BeforeQuoteDeliveries` lo encadena, y `QuoteDeliveriesMigrationSqlServerTests` siembra con él.
+  - **Application:**
+    - `QuoteConversionFlowTests` (17, nuevo):
+      - la orden del negocio, «Aceptada», con el cliente, los renglones a los precios aceptados (no a los del catálogo de hoy), el renglón a mano como servicio, la cantidad con decimales en su nombre, la fecha prometida, la nota de ingreso, la pieza del servicio con seguimiento y el total de la cotización;
+      - la actividad sin datos del cliente; el detalle de la orden y la lista de órdenes abren su cotización;
+      - conserva la política de IVA de la cotización aunque el negocio cambió la suya;
+      - solo la aceptada y una vez; un negocio sin órdenes de servicio no la convierte;
+      - lo pagado de la visita pasa de su venta al saldo a favor y paga la orden, sin movimiento de caja y con el saldo en cero, y la cotización lo sigue descontando;
+      - una visita que costó más que el trabajo paga la orden completa y el resto se queda en su venta (por la revisión automática);
+      - necesita a quien puede cobrar y hacer reembolsos solo cuando aplica la visita (por la revisión); con la venta cancelada no aplica nada; cobrada sin teléfono no se convierte;
+      - un producto que no se vende en fracciones se cotiza sin decimales, y la hora sí los lleva (por la revisión);
+      - un borrador cuyos servicios con seguimiento darían 501 piezas no se guarda, y uno de 500 sí (un servicio sin seguimiento no cuenta); un servicio que empezó a llevar seguimiento después de aceptada da sus 500 piezas, y con 600 la orden va sin piezas y lo dice en sus notas de ingreso (por la revisión automática);
+      - una cotización cuyo teléfono no se lee se convierte igual: sin teléfono, o con el de la venta de su visita (por la revisión automática);
+      - otro negocio no la encuentra;
+      - la fecha prometida va del inicio de hoy en la zona del negocio (Ciudad de México y Tokio, un minuto antes y justo en el límite) a un año exacto, y un minuto después se rechaza (los límites y la zona del negocio, por la revisión automática).
+    - Sin el permiso de cobrar, o con la política de IVA del negocio en lugar de la de la cotización, fallan.
+  - **WebApi:**
+    - `CrossTenantQuoteSqlServerTests` (+1): el otro negocio no la convierte ni ve su orden; la orden abre su cotización; la segunda vez responde 400.
+  - **Cliente:**
+    - `QuoteDetail.test.tsx` (+7):
+      - convertir la aceptada desde el diálogo con lo de la visita como pago, el aviso, el enlace a la orden y el foco en él;
+      - la fecha prometida en la zona del negocio, descrita como opcional, y después de un rechazo la página como está ahora;
+      - el diálogo quieto mientras convierte; el aviso a quien no puede cobrar y hacer reembolsos; la visita sin pasar del total;
+      - sin órdenes de servicio, dónde se activa el módulo (o que lo pida al dueño). Todo por la revisión, salvo el primero.
+    - `OrdersList.test.tsx` (+2): el detalle de una orden de servicio abre su cotización, y la conserva después de un reembolso cuya respuesta no la trae (por la revisión automática).
+  - **.NET en total:** 4,504 pruebas (Domain 1,334; Application 2,027; WebApi 480; Infrastructure 663). **Cliente en total:** 189 archivos y 1,405 pruebas (con los de la fecha y hora en la zona del negocio).
+  - **Primera visita:** 181,467 B (`master` en `744632b`: 181,462 B, +5 B). El diálogo y el enlace van en pantallas que se cargan aparte; los +5 B son los dos chunks compartidos más que la entrada precarga con la pantalla de órdenes, la del enlace a su cotización. La hora escrita en el diálogo se lee con `businessDateTimeToIso` de `utils/dates.ts`, el de la fecha y hora en la zona del negocio. El presupuesto (181,500 B) no cambia.
+  - **Escenas:** contra la línea base de `master` en `744632b` (784 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - 769 salen iguales.
+    - **Ninguna cambia.**
+    - Las 5 nuevas (`cotizaciones.spec.ts`: la aceptada en escritorio, teléfono y oscuro, el diálogo de convertir y la convertida) pasaron dos corridas seguidas.
+    - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

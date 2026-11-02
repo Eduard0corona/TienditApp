@@ -791,7 +791,13 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
     - solo una versión enviada y vigente (al pedirlo y al salir), 5 veces al día por medio y 300 cotizaciones al día por negocio y medio, y cada envío queda en su historial con dónde va (enviándose, enviado, entregado, leído o por qué no se envió).
   - Con «Se descuenta si contratas» (la política acordada con la visita; si la agendó el equipo, la del negocio), la cotización de una visita cobrada resta lo que la venta cobró por la visita (el cargo de la zona y las unidades del servicio de la cita que no se devolvieron, con IVA, hasta lo pagado): «Por pagar». Se fija al enviarla, nunca resta más de lo que esa venta sigue teniendo pagado por la visita si después se reembolsa o se devuelve el servicio, y deja de aplicar si se cancela o se reembolsa completa.
   - El negocio registra si el cliente la aceptó o la rechazó, por dónde y lo que dijo. La actividad guarda la cotización, su versión, su total y por dónde, nunca lo que dijo ni sus datos.
-  - Convertir la aceptada en una orden de servicio o en citas llega en la Fase 29E.
+  - La aceptada se convierte en el trabajo una sola vez (Fase 29E): «Convertir en orden de servicio», con quien toma pedidos en un negocio con órdenes de servicio.
+    - La orden es del negocio y empieza «Aceptada», con el cliente de la cotización, su política de precios con IVA y sus renglones al precio y con el IVA que el cliente aceptó, así que suma lo mismo; puede decir para cuándo se promete (de hoy a un año; hoy empieza a la medianoche de la zona horaria del negocio).
+    - Un renglón escrito a mano, o cuyo producto ya no está, entra como unidad de servicio; una cantidad que su unidad no vende entra como una al importe del renglón, con la cantidad en el nombre.
+    - Lo que se pagó de la visita sale de su venta hacia la orden: la venta lo devuelve al saldo a favor de la cuenta de su teléfono y la orden se paga con él en el mismo momento, sin que nada entre ni salga de una caja. Necesita a quien puede cobrar y hacer reembolsos, nunca pasa del total y la cotización lo descuenta desde entonces. Si esa venta se cobró sin teléfono o en línea, la cotización no se convierte.
+    - Un renglón de un producto que no se vende en fracciones se cotiza sin decimales.
+    - Un borrador cuyos servicios con seguimiento darían más piezas de las que genera una orden (500) no se guarda. Si el servicio empezó a llevar seguimiento después de aceptada, la orden va sin piezas y sus notas de ingreso lo dicen.
+    - La actividad guarda el folio, la versión, el total, la orden y lo aplicado. Las citas para hacer el trabajo quedan para después.
 
 ## Cancelación y trazabilidad
 

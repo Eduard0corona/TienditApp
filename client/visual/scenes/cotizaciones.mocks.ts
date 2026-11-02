@@ -127,6 +127,37 @@ const CONNECTED = {
   ],
 };
 
+// Fase 29E: Valeria accepted the second version by WhatsApp; it becomes the job, a service order with what she paid for the
+// visit as its payment. Then it says which order it became.
+const ACCEPTED_ID = '5d2a8f61-3c7e-4b9a-8e14-6f0b2c9d7a35';
+const CONVERTED_ID = '8b4e1d73-9a2c-4f6e-b5d8-2c7a0e9f4b16';
+
+const ACCEPTED = {
+  ...SENT,
+  id: ACCEPTED_ID,
+  status: 2,
+  closedAt: '2026-10-04T18:10:00Z',
+  replyChannel: 0,
+  customerResponse: 'Adelante, el jueves en la mañana.',
+  versions: [
+    { id: 'replaced', revision: 1, status: 5, total: 5150.4, sentAt: '2026-10-03T15:00:00Z', closedAt: '2026-10-04T16:20:00Z' },
+    { id: ACCEPTED_ID, revision: 2, status: 2, total: 4686.4, sentAt: '2026-10-04T16:20:00Z', closedAt: '2026-10-04T18:10:00Z' },
+  ],
+  canConvertToOrder: true,
+};
+
+const CONVERTED = {
+  ...ACCEPTED,
+  id: CONVERTED_ID,
+  canConvertToOrder: false,
+  convertedAt: '2026-10-04T18:20:00Z',
+  order: { id: 'order-calentador', orderNumber: 'ORD-000031', status: 4 },
+  versions: [
+    { id: 'replaced', revision: 1, status: 5, total: 5150.4, sentAt: '2026-10-03T15:00:00Z', closedAt: '2026-10-04T16:20:00Z' },
+    { id: CONVERTED_ID, revision: 2, status: 2, total: 4686.4, sentAt: '2026-10-04T16:20:00Z', closedAt: '2026-10-04T18:10:00Z' },
+  ],
+};
+
 const WHATSAPP_TEMPLATES = [
   { id: 'tpl-cotizacion', name: 'Cotización lista', body: 'Hola {nombre}: {negocio} te manda la cotización {folio} por {monto}, vale hasta el {fecha}. Mírala aquí: {enlace}', providerTemplateName: 'cotizacion_lista' },
 ];
@@ -137,6 +168,8 @@ const quotesRoutes: ExtraRoutes = (_data, { ok, paginate }) => [
   ['GET', new RegExp(`^/quotes/${DRAFT_ID}$`), () => ok(DRAFT)],
   ['GET', new RegExp(`^/quotes/${SENT_ID}$`), () => ok(SENT)],
   ['GET', new RegExp(`^/quotes/${CONNECTED_ID}$`), () => ok(CONNECTED)],
+  ['GET', new RegExp(`^/quotes/${ACCEPTED_ID}$`), () => ok(ACCEPTED)],
+  ['GET', new RegExp(`^/quotes/${CONVERTED_ID}$`), () => ok(CONVERTED)],
 ];
 
 /** The same business once it connected its WhatsApp and picked the template of its quotes. */
@@ -184,6 +217,8 @@ const publicQuoteRoutes: ExtraRoutes = (data, helpers) => [
 export const DRAFT_QUOTE_ID = DRAFT_ID;
 export const SENT_QUOTE_ID = SENT_ID;
 export const CONNECTED_QUOTE_ID = CONNECTED_ID;
+export const ACCEPTED_QUOTE_ID = ACCEPTED_ID;
+export const CONVERTED_QUOTE_ID = CONVERTED_ID;
 export const PLUMBER_QUOTES = asOption(plumber);
 export const QUOTES_ROUTES = asOption(quotesRoutes);
 export const QUOTES_WITH_WHATSAPP_ROUTES = asOption(quotesWithWhatsAppRoutes);

@@ -6167,10 +6167,16 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<decimal?>("AppliedVisitCredit")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<Guid?>("AppointmentId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("ConvertedAt")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -6209,6 +6215,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(40)
                         .IsUnicode(false)
                         .HasColumnType("varchar(40)");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<bool>("PricesIncludeTax")
                         .HasColumnType("bit");
@@ -6274,6 +6283,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("CustomerId")
                         .HasFilter("[CustomerId] IS NOT NULL");
 
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Quotes_OrderId")
+                        .HasFilter("[OrderId] IS NOT NULL");
+
                     b.HasIndex("TrackingToken")
                         .IsUnique()
                         .HasDatabaseName("IX_Quotes_TrackingToken")
@@ -6302,6 +6316,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("Quotes", null, t =>
                         {
                             t.HasCheckConstraint("CK_Quotes_ClosedAt", "([Status] IN (0, 1) AND [ClosedAt] IS NULL) OR ([Status] IN (2, 3, 5, 6) AND [ClosedAt] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Quotes_Conversion", "([OrderId] IS NULL AND [ConvertedAt] IS NULL AND [AppliedVisitCredit] IS NULL) OR ([OrderId] IS NOT NULL AND [ConvertedAt] IS NOT NULL AND [Status] = 2 AND ([AppliedVisitCredit] IS NULL OR ([AppliedVisitCredit] > 0 AND [VisitCreditAmount] IS NOT NULL AND [AppliedVisitCredit] <= [VisitCreditAmount] AND [AppliedVisitCredit] <= [Total])))");
 
                             t.HasCheckConstraint("CK_Quotes_Reply", "([ReplyChannel] IS NULL AND [CustomerResponse] IS NULL AND [Status] NOT IN (2, 3)) OR ([ReplyChannel] IN (0, 1, 2, 3) AND [Status] IN (2, 3, 5))");
 
@@ -8412,6 +8428,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("FoodParkDigital.Domain.Tenants.Entities.Tenant", null)
                         .WithMany()

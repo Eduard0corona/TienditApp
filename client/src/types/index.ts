@@ -1665,6 +1665,8 @@ export interface OrderDto {
   delivery?: OrderDeliveryDto | null;
   /** The sale of an appointment at the customer's address: what it charged for the visit (Fase 22E). */
   visitCharge?: OrderVisitChargeDto | null;
+  /** The accepted quote the service order came from (Fase 29E), to open it. */
+  quote?: OrderQuoteDto | null;
   paidAmount: number;
   balance: number;
   /** Money given back; payments are never edited. */
@@ -1723,6 +1725,13 @@ export interface OrderVisitChargeDto {
   zoneName: string;
   fee: number;
   feeTaxRate: number;
+}
+
+/** The accepted quote a service order came from (Fase 29E): its folio and version. */
+export interface OrderQuoteDto {
+  id: string;
+  number: string;
+  revision: number;
 }
 
 /** Where an order goes and what it charged for it (Fase 22C); the fee is in the order's total and IVA breakdown. */

@@ -125,4 +125,40 @@ public sealed class CrossTenantQuoteSqlServerTests
         Assert.Empty((await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync("/api/v1/quotes/settings")))
             .GetProperty("whatsAppTemplates").EnumerateArray());
     }
+
+    [SqlServerFact]
+    public async Task TheJobOfAQuote_ShouldBeOnlyItsBusinesses_AndBecomeOneOrderOnce()
+    {
+        var mine = await _api.SignUpAsync("convierte-a");
+        var theirs = await _api.SignUpAsync("convierte-b");
+        var draft = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync("/api/v1/quotes",
+            new { customerName = "Valeria Ruiz", customerPhone = "5522107765" }));
+        var id = draft.GetProperty("id").GetGuid();
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync($"/api/v1/quotes/{id}", new
+        {
+            customerName = "Valeria Ruiz",
+            customerPhone = "5522107765",
+            validityDays = 15,
+            lines = new[] { new { productId = (Guid?)null, description = "Cambio de calentador", quantity = 1m, unitPrice = 1160m } }
+        }));
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsync($"/api/v1/quotes/{id}/send", null));
+        var accepted = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/reply",
+            new { accepted = true, channel = 0 }));
+        Assert.True(accepted.GetProperty("canConvertToOrder").GetBoolean());
+
+        // The other business does not turn it into an order of its own.
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/order", new { })).StatusCode);
+
+        var converted = await TwoBusinessesApi.ReadAsync(await mine.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/order", new { }));
+        var orderId = converted.GetProperty("order").GetProperty("id").GetGuid();
+        Assert.False(converted.GetProperty("canConvertToOrder").GetBoolean());
+        // Its order is the business's, and opens its quote; the other business does not see it.
+        var order = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync($"/api/v1/orders/{orderId}"));
+        Assert.Equal((1160m, id), (order.GetProperty("total").GetDecimal(), order.GetProperty("quote").GetProperty("id").GetGuid()));
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1/orders/{orderId}")).StatusCode);
+        // Once.
+        var again = await mine.Client.PostAsJsonAsync($"/api/v1/quotes/{id}/order", new { });
+        Assert.Equal(HttpStatusCode.BadRequest, again.StatusCode);
+        Assert.Contains("ya se convirtió", await again.Content.ReadAsStringAsync());
+    }
 }

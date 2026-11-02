@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Catalog;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Quotes;
@@ -268,6 +269,13 @@ public class QuotesHandler :
             .ToDictionaryAsync(p => p.Id, cancellationToken);
         if (products.Count != productIds.Count)
             return Result.Failure<QuoteDto>(ProductNotFoundMessage);
+        // Its order gives a piece per unit of each trackable service: once accepted, a quote past what an order generates
+        // could only become an order without them.
+        var pieces = QuoteConversions.ServicePieces(request.Lines
+            .Where(line => line.ProductId is not null)
+            .Select(line => (products[line.ProductId!.Value], line.Quantity)));
+        if (pieces > OrderLimits.MaxServicePiecesPerOrder)
+            return Result.Failure<QuoteDto>(QuoteConversions.TooManyPiecesMessage(pieces));
 
         var now = _clock.UtcNow;
         try
@@ -278,6 +286,9 @@ public class QuotesHandler :
                 {
                     var product = products[productId];
                     var description = string.IsNullOrWhiteSpace(line.Description) ? product.Name : line.Description;
+                    // A product not sold in fractions is quoted whole, as it is sold: its order takes its supplies by those units.
+                    if (!UnitTypeRules.IsValidQuantity(line.Quantity, product.Unit))
+                        throw new DomainException(QuoteRules.WholeQuantityMessage(description));
                     return new QuoteLineInput(productId, description, line.Quantity, line.UnitPrice, product.GetVatRate(sales.DefaultTaxRate));
                 }
                 // Written by hand: the business's IVA, as its services without a rate of their own.

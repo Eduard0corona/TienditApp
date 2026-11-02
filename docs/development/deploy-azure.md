@@ -944,6 +944,16 @@ La Fase 29D trae una migración, [`database/production/20261101181148_AddQuoteDe
 - **Volver a la versión anterior:** funciona sin tocar la base; desaparecen los envíos desde TienditApp y el historial queda guardado. Un WhatsApp de una cotización que siguiera pendiente lo manda esa versión como cualquier mensaje, salvo a quien se dio de baja.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50052 en cuanto se mandó una cotización desde TienditApp o un negocio eligió una plantilla para ellas; si no, quita lo que agregó.
 
+## Convertir la cotización aceptada en orden de servicio (Fase 29E)
+
+La Fase 29E trae una migración, [`database/production/20261102014702_AddQuoteConversion`](../../database/production/20261102014702_AddQuoteConversion). Su `apply.sql` va antes del merge.
+
+- **La migración:** agrega a `Quotes` tres columnas nulas: `OrderId` (la orden de servicio en que se convirtió la versión aceptada, con su llave a `Orders` y el índice único filtrado `IX_Quotes_OrderId`), `ConvertedAt` y `AppliedVisitCredit` (lo que se pagó de la visita y quedó como pago de la orden). `CK_Quotes_Conversion` repite lo que garantiza el agregado. No cambia datos.
+- **Mientras se publica:** la versión de `master` (la 29D) no conoce las columnas ni las escribe, y sigue funcionando.
+- **Sin configuración nueva:** la conversión usa las órdenes de servicio, el saldo a favor y el folio de órdenes que ya existen; no hay evento nuevo en el outbox.
+- **Volver a la versión anterior:** funciona sin tocar la base. Las órdenes, los reembolsos al saldo a favor y los pagos con él que dejó una conversión siguen siendo comunes; la cotización deja de decir en qué orden se convirtió hasta regresar a esta versión, y mientras tanto vuelve a calcular lo que descuenta de la visita con lo que su venta sigue teniendo pagado. Eso es cero, salvo cuando la visita costó más que el trabajo: entonces la cotización convertida muestra como descuento lo que sobró y un «Por pagar» que ya no corresponde a nada, porque la orden quedó pagada completa. Se corrige solo al regresar a esta versión.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50053 en cuanto una cotización se convirtió; si no, quita lo que agregó.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

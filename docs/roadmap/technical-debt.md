@@ -87,7 +87,15 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - Una visita pedida en línea que el equipo pasa al local y luego otra vez a domicilio pierde cómo se cobraba: vuelve a ser una visita del equipo, con el cargo de la zona.
   - El aviso de la cita aceptada dice lo que cuesta la visita con el precio de hoy de su servicio, como lo cobrará la venta; el precio no queda congelado en la cita (solo el cargo de la zona).
   - Con el código anterior (rollback del despliegue), mover a otra dirección una visita «Sin costo» pedida en línea falla: la restricción de la base no deja cobrarle la zona.
-  - La aceptada no se convierte en orden de servicio ni en citas (Fase 29E): una orden solo lleva renglones del catálogo con su precio, y la cotización los tiene escritos a mano con su precio y su IVA.
+  - La conversión en orden de servicio (Fase 29E):
+    - No agenda las citas para hacer el trabajo: la orden lleva la fecha prometida, y la dirección sigue en la visita.
+    - Un renglón escrito a mano entra con el id del renglón donde iría el producto, como un producto borrado después de la venta: lo más vendido de Inicio lo muestra por su nombre, como producto y no como servicio.
+    - Lo pagado por una visita cobrada sin teléfono o en línea no puede pasar por el saldo a favor: esa cotización no se convierte y el negocio captura la orden en Vender.
+    - El saldo a favor por el que pasa lo de la visita es el del teléfono de la venta de la visita. Si la cotización se corrigió a otro teléfono, la orden es de ese otro: devolverle algo después al saldo a favor lo deja en la cuenta del teléfono de la orden.
+    - Cancelar la orden pide primero devolver lo pagado, como en cualquier orden, y la cotización sigue ligada a la orden cancelada: el negocio captura la orden nueva en Vender.
+    - El reembolso al saldo a favor de la venta de la visita no lleva nota de crédito (ADR 0036): si esa venta ya estaba facturada, lo aplicado queda facturado dos veces hasta que el contador emite el egreso; si no, la factura global deja fuera esa venta.
+    - Un renglón de un producto que no se vende en fracciones guardado con decimales antes de la 29E entra como una al importe del renglón y saca los insumos de una.
+    - Una cotización aceptada cuyos servicios con seguimiento darían más de 500 piezas (guardada antes de la 29E, o con un servicio que empezó a llevar seguimiento después) se convierte sin piezas: TienditApp no agrega piezas a una orden ya creada, así que esa orden se sigue completa, no pieza por pieza.
   - El envío desde TienditApp (Fase 29D):
     - El correo de la cotización no lleva PDF (TienditApp no genera PDF): la cotización va en el cuerpo y en su enlace. «Enviado» quiere decir que el servidor de correo lo tomó, no que llegó.
     - Sin plantilla aprobada en Meta, el WhatsApp solo llega a quien escribió en las últimas 24 horas, y no cae solo al correo cuando WhatsApp lo rechaza: el negocio lo ve en el historial y lo manda por correo.
@@ -105,6 +113,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La 29B suma 124 B a la primera visita (de 180,866 a 180,990 B, contra `master` en `4172896`): la ruta de la página de la solicitud en `App.tsx` y el nombre de su pantalla, que se carga aparte con el selector de día y hora que comparte con la de agendar. El presupuesto sube de 181,000 a 181,200 B.
   - La 29C suma 345 B a la primera visita (de 180,990 a 181,335 B, contra `master` en `c00bc18`): las rutas de Cotizaciones, su detalle y el enlace público en `App.tsx` (las tres pantallas se cargan aparte), Pedidos como sección con la pestaña Cotizaciones y la regla de acceso. El presupuesto sube de 181,200 a 181,400 B.
   - La 29D suma 32 B a la primera visita (de 181,335 a 181,367 B, contra `master` en `f15f043`): los valores nuevos de los enums; el diálogo y el historial van en el detalle. El presupuesto no cambia.
+  - La 29E suma 5 B a la primera visita (de 181,462 a 181,467 B, contra `master` en `744632b`): el diálogo y el enlace van en pantallas que se cargan aparte, y los 5 B son los dos chunks compartidos más que la entrada precarga con la pantalla de órdenes. El presupuesto (181,500 B) no cambia.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.

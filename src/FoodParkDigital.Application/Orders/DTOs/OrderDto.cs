@@ -29,6 +29,8 @@ public class OrderDto
     public OrderDeliveryDto? Delivery { get; set; }
     /// <summary>The charge for the visit of the appointment it sells (Fase 22E); null for any other order.</summary>
     public OrderVisitChargeDto? VisitCharge { get; set; }
+    /// <summary>The accepted quote the service order came from (Fase 29E); null for any other order.</summary>
+    public OrderQuoteDto? Quote { get; set; }
     /// <summary>Branch where the sale was made.</summary>
     public Guid? BranchId { get; set; }
     /// <summary>When the device captured it without connection; the sale reached the server later.</summary>
@@ -103,6 +105,14 @@ public class OrderPlatformDto
     public string? ExternalOrderId { get; set; }
     /// <summary>The platform, in its app, or the business, when the courier pays on pickup.</summary>
     public PlatformCollectedBy CollectedBy { get; set; }
+}
+
+/// <summary>The accepted quote a service order came from (Fase 29E): its folio and version, to open it.</summary>
+public class OrderQuoteDto
+{
+    public Guid Id { get; set; }
+    public string Number { get; set; } = null!;
+    public int Revision { get; set; }
 }
 
 /// <summary>

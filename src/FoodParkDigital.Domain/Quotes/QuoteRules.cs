@@ -45,6 +45,13 @@ public static class QuoteRules
     public const string VisitClosedMessage = "Esa visita se canceló o el cliente no estuvo: no se cotiza.";
     public const string VisitRequestedMessage = "Acepta primero la solicitud de la visita en la Agenda.";
 
+    // Fase 29E: the accepted version becomes the job.
+    public const string NotAcceptedMessage = "Solo una cotización aceptada se convierte en una orden de servicio.";
+    public const string AlreadyConvertedMessage = "Esta cotización ya se convirtió en una orden de servicio.";
+    public static string WholeQuantityMessage(string description) => $"«{description.Trim()}» no se vende en fracciones: la cantidad va sin decimales.";
+    public const string NoServiceOrdersMessage =
+        "Tu negocio no tiene órdenes de servicio: prende el módulo en Configuración para convertir la cotización.";
+
     /// <summary>How many times a version is sent by email, and by WhatsApp, in 24 hours (Fase 29D, ADR 0053 point 16).</summary>
     public const int MaxSendsPerQuoteVersion = 5;
     /// <summary>How many quotes a business sends by email, and by WhatsApp, in 24 hours.</summary>

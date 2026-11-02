@@ -28,6 +28,7 @@ internal static class BeforeQuoteDeliveries
             messages.Metadata.RemoveForeignKey(foreignKey);
         messages.Ignore(m => m.QuoteId);
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.QuoteWhatsAppTemplateId);
+        BeforeQuoteConversion.Ignore(modelBuilder);
     }
 
     private sealed class Context(

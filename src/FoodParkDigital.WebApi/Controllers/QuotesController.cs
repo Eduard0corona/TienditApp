@@ -94,6 +94,15 @@ public class QuotesController : ControllerBase
         Guid id, [FromBody] SendQuoteByWhatsAppRequest request, CancellationToken cancellationToken)
         => Answer(await _mediator.Send(new SendQuoteByWhatsAppCommand(id, request.Phone), cancellationToken));
 
+    /// <summary>
+    /// The accepted version becomes its service order (Fase 29E), once, at the accepted prices; what was paid for the visit
+    /// becomes a payment of the order.
+    /// </summary>
+    [HttpPost("{id:guid}/order")]
+    public async Task<ActionResult<QuoteDto>> ConvertToOrder(
+        Guid id, [FromBody] ConvertQuoteToOrderRequest? request, CancellationToken cancellationToken)
+        => Answer(await _mediator.Send(new ConvertQuoteToOrderCommand(id, request?.PromisedAt), cancellationToken));
+
     private ActionResult Answer<T>(Result<T> result)
         => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
 }
@@ -117,6 +126,12 @@ public class SendQuoteByEmailRequest
 public class SendQuoteByWhatsAppRequest
 {
     public string Phone { get; init; } = null!;
+}
+
+public class ConvertQuoteToOrderRequest
+{
+    /// <summary>When the business promises the job, as in any service order; optional.</summary>
+    public DateTimeOffset? PromisedAt { get; init; }
 }
 
 public class RecordQuoteReplyRequest

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import ChannelBadge from '../../components/common/ChannelBadge';
@@ -57,6 +57,7 @@ import { getWriteOffReasonLabel } from '../../utils/writeOffReasons';
 import { describeOnlineDispute, describeOnlineRefund, isDisputeRefund } from '../../utils/onlineRefunds';
 import { getApiErrorMessage } from '../../api/errors';
 import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
+import { quoteFolio } from '../../utils/quotes';
 
 const ALL_STATUSES: OrderStatus[] = [0, 1, 2, 3, 4, 5, 6, 7, 99];
 
@@ -82,6 +83,14 @@ function getChannelOptions(withPlatforms: boolean) {
 }
 
 /** The platform charged the order in its app: nothing is left to collect from the courier. */
+/**
+ * What a charge, refund or void answers does not say which quote the order came from (Fase 29E); it never changes, so the
+ * order keeps the one it had.
+ */
+function withItsQuote(updated: OrderDto, previous: OrderDto): OrderDto {
+  return updated.quote ? updated : { ...updated, quote: previous.quote };
+}
+
 function chargedByPlatform(order: OrderDto): boolean {
   return isDeliveryPlatform(order.channel) && order.platformOrder?.collectedBy === PlatformCollectedBy.Platform;
 }
@@ -428,7 +437,7 @@ export default function OrdersList() {
         ? await ordersApi.voidOrder(order.id, request.data)
         : await ordersApi.refund(order.id, request.data);
       setRefundTarget(null);
-      if (selectedOrder?.id === updated.id) setSelectedOrder(updated);
+      if (selectedOrder?.id === updated.id) setSelectedOrder(withItsQuote(updated, selectedOrder));
       toast.success(request.mode === 'void'
         ? `Venta ${order.orderNumber} anulada.`
         : `Reembolso de ${formatMoney(request.data.amount)} registrado en ${order.orderNumber}.`);
@@ -466,7 +475,7 @@ export default function OrdersList() {
       if (updated) {
         // The change of this charge (the ticket adds up every payment of the order).
         setPaidReceipt({ order: updated, change: charge.change });
-        if (selectedOrder?.id === updated.id) setSelectedOrder(updated);
+        if (selectedOrder?.id === updated.id) setSelectedOrder(withItsQuote(updated, selectedOrder));
       }
       await loadOrders();
     } catch (err: unknown) {
@@ -837,6 +846,12 @@ export default function OrdersList() {
                     <p className="mb-1 small">
                       Incluye el cargo por visita a domicilio ({selectedOrder.visitCharge.zoneName}):{' '}
                       <span className="ta-money">{formatMoney(selectedOrder.visitCharge.fee)}</span>
+                    </p>
+                  )}
+                  {selectedOrder.quote && (
+                    <p className="mb-1 small">
+                      De la cotización{' '}
+                      <Link to={`/quotes/${selectedOrder.quote.id}`}>{quoteFolio(selectedOrder.quote.number, selectedOrder.quote.revision)}</Link>
                     </p>
                   )}
                   {selectedOrder.taxBreakdown.filter((line) => line.taxAmount > 0).map((line) => (
