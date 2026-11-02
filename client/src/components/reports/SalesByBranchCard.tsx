@@ -6,13 +6,7 @@ import { useActiveBranches } from '../../hooks/useWorkingBranch';
 import { formatMoney } from '../../utils/money';
 import BranchPicker from '../branches/BranchPicker';
 import './SalesByBranchCard.css';
-import { formatCalendarDate } from '../../utils/dates';
-
-function toInputDate(date: Date) {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
-}
+import { formatCalendarDate, getBusinessToday } from '../../utils/dates';
 
 function shortDay(isoDate: string) {
   return formatCalendarDate(isoDate, { day: 'numeric', month: 'short' });
@@ -23,9 +17,10 @@ function shortDay(isoDate: string) {
  * Closed days come from the daily summary; today is computed at the moment.
  */
 export default function SalesByBranchCard() {
-  const today = new Date();
-  const [from, setFrom] = useState(toInputDate(new Date(today.getFullYear(), today.getMonth(), 1)));
-  const [to, setTo] = useState(toInputDate(today));
+  // The month so far in the business's days, not the device's (like sales by channel).
+  const today = getBusinessToday();
+  const [from, setFrom] = useState(`${today.slice(0, 8)}01`);
+  const [to, setTo] = useState(today);
   const [branchId, setBranchId] = useState('');
   const branches = useActiveBranches();
   const report = useQuery({

@@ -300,6 +300,31 @@ describe('AppointmentsList', () => {
     afterEach(() => {
       setBusinessTimeZone(null);
       vi.unstubAllEnvs();
+      vi.useRealTimers();
+    });
+
+    it('opens the upcoming ones at the start of the business day, not the device day', async () => {
+      // 06:30 UTC on the 14th: 00:30 of the 14th on the device, still 23:30 of the 13th in Tijuana.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-14T06:30:00.000Z'));
+      renderAgenda([]);
+
+      await waitFor(() => expect(listCalls()[0]).toEqual(expect.objectContaining({ fromDate: '2026-10-13T07:00:00.000Z' })));
+    });
+
+    it('shows the day an appointment ends when it ends after the midnight of the business', async () => {
+      // 23:00 of the 13th to 00:30 of the 14th in Tijuana (the same day, 00:00 to 01:30, on the device); the other
+      // one is 9:00 to 10:00 of the 14th.
+      renderAgenda([
+        appointment({ id: 'n1', customerName: 'Noche', startAt: '2026-10-14T06:00:00Z', endAt: '2026-10-14T07:30:00Z' }),
+        appointment({ id: 'd1', customerName: 'Día' }),
+      ]);
+
+      const late = (await screen.findByText('Noche')).closest('tr')!;
+      expect(late).toHaveTextContent(/13 de oct · 11:00 p\.\s?m\. a 14\/10\/26/);
+      const day = screen.getByText('Día').closest('tr')!;
+      expect(day).toHaveTextContent(/14 de oct · 09:00 a\.\s?m\. a 10:00 a\.\s?m\./);
+      expect(day).not.toHaveTextContent(/14\/10\/26/);
     });
 
     it('books the start typed as the clock of the business, and the end after its duration', async () => {

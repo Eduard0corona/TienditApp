@@ -26,7 +26,13 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
-import { businessDateTimeToIso, formatInBusinessZone, toBusinessDateTimeInput } from '../../utils/dates';
+import {
+  businessDateTimeToIso,
+  businessDayStart,
+  formatInBusinessZone,
+  getBusinessToday,
+  toBusinessDateTimeInput,
+} from '../../utils/dates';
 import {
   VISIT_ADDRESS_LINE_REQUIRED_MESSAGE,
   VISIT_POSTAL_CODE_REQUIRED_MESSAGE,
@@ -112,16 +118,11 @@ function sameMinute(a: string, b: string): boolean {
   return Math.floor(new Date(a).getTime() / 60_000) === Math.floor(new Date(b).getTime() / 60_000);
 }
 
-function startOfToday(): Date {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-}
-
 function formatSlot(item: AppointmentDto): string {
   const start = new Date(item.startAt);
   const end = new Date(item.endAt);
-  const sameDay = start.toDateString() === end.toDateString();
+  // The same day of the business: an appointment past its midnight shows the date it ends.
+  const sameDay = toBusinessDateTimeInput(start).slice(0, 10) === toBusinessDateTimeInput(end).slice(0, 10);
   const day = formatInBusinessZone(start, { weekday: 'short', day: 'numeric', month: 'short' });
   const from = formatInBusinessZone(start, { hour: '2-digit', minute: '2-digit' });
   const to = sameDay
@@ -182,7 +183,7 @@ export default function AppointmentsList() {
     if (view === 'route') return;
     setLoading(true);
     try {
-      // Upcoming opens with today, the soonest first; history reads from the newest back.
+      // Upcoming opens with the business's today, the soonest first; history reads from the newest back.
       const params: {
         status?: AppointmentStatus;
         search?: string;
@@ -192,7 +193,7 @@ export default function AppointmentsList() {
         pageNumber: number;
         pageSize: number;
       } = view === 'upcoming'
-        ? { pageNumber, pageSize, fromDate: startOfToday().toISOString() }
+        ? { pageNumber, pageSize, fromDate: businessDayStart(getBusinessToday()) }
         : { pageNumber, pageSize, toDate: new Date().toISOString() };
       if (statusFilter !== '') params.status = Number(statusFilter) as AppointmentStatus;
       if (search) params.search = search;
