@@ -302,6 +302,14 @@ public class TenantSettings : BaseEntity, ITenantScoped
     }
 
     /// <summary>
+    /// Whether the customer accepts or rejects a quote from its link (Fase 29G, ADR 0061). On by default; off, the link only
+    /// shows the quote and how to answer the business, and the business records the answer as before.
+    /// </summary>
+    public bool QuoteOnlineReplies { get; private set; } = true;
+
+    public void SetQuoteOnlineReplies(bool enabled) => QuoteOnlineReplies = enabled;
+
+    /// <summary>
     /// The WhatsApp template the quotes go out with (Fase 29D, ADR 0053 point 16), approved in Meta so it reaches whoever has
     /// not written in 24 hours; null for TienditApp's text.
     /// </summary>

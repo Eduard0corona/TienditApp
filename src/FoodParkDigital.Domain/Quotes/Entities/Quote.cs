@@ -234,13 +234,52 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
         UpdatedAt = now;
     }
 
-    /// <summary>The customer accepted it, while it is valid on the business's <paramref name="today"/>.</summary>
+    /// <summary>
+    /// The business records that the customer accepted it, while it is valid on the business's <paramref name="today"/>.
+    /// Never <see cref="QuoteReplyChannel.Link"/>: that one only the customer answers (<see cref="ReplyFromLink"/>).
+    /// </summary>
     public void Accept(DateOnly today, QuoteReplyChannel channel, string? response, DateTimeOffset now)
-        => Close(QuoteStatus.Accepted, today, channel, response, now);
+        => Close(QuoteStatus.Accepted, today, RecordedByTheBusiness(channel), response, now);
 
-    /// <summary>The customer rejected it, while it is valid on the business's <paramref name="today"/>.</summary>
+    /// <summary>The business records that the customer rejected it, as <see cref="Accept"/>.</summary>
     public void Reject(DateOnly today, QuoteReplyChannel channel, string? response, DateTimeOffset now)
-        => Close(QuoteStatus.Rejected, today, channel, response, now);
+        => Close(QuoteStatus.Rejected, today, RecordedByTheBusiness(channel), response, now);
+
+    private static QuoteReplyChannel RecordedByTheBusiness(QuoteReplyChannel channel)
+        => channel == QuoteReplyChannel.Link ? throw new DomainException(QuoteRules.LinkChannelMessage) : channel;
+
+    /// <summary>
+    /// The customer answered from the quote's link (Fase 29G, ADR 0061), while this version is sent and valid on the
+    /// business's <paramref name="today"/>. Once: the answer it already has (from its link or as the business recorded it)
+    /// changes nothing (false), another one is refused, and so is a version the business replaced or one that expired.
+    /// </summary>
+    /// <returns>Whether the quote changed: false when it already had this answer.</returns>
+    public bool ReplyFromLink(bool accepted, DateOnly today, string? response, DateTimeOffset now)
+    {
+        var answer = accepted ? QuoteStatus.Accepted : QuoteStatus.Rejected;
+        if (Status == answer)
+            return false;
+
+        switch (StatusOn(today))
+        {
+            case QuoteStatus.Sent:
+                break;
+            case QuoteStatus.Superseded:
+                throw new DomainException(QuoteRules.ReplacedMessage);
+            case QuoteStatus.Expired:
+                throw new DomainException(QuoteRules.ExpiredForCustomerMessage);
+            case QuoteStatus.Accepted or QuoteStatus.Rejected:
+                throw new DomainException(QuoteRules.AnsweredAlreadyMessage);
+            default:
+                throw new DomainException(QuoteRules.NotSentMessage);
+        }
+        var trimmed = string.IsNullOrWhiteSpace(response) ? null : response.Trim();
+        if (trimmed?.Length > QuoteRules.MaxResponseLength)
+            throw new DomainException(QuoteRules.CustomerResponseTooLongMessage);
+
+        Close(answer, today, QuoteReplyChannel.Link, trimmed, now);
+        return true;
+    }
 
     /// <summary>
     /// The accepted version became the job (Fase 29E): the service order <paramref name="orderId"/>, once. What was paid for
