@@ -88,6 +88,7 @@ public interface IApplicationDbContext
     DbSet<PurchaseOrder> PurchaseOrders { get; }
     DbSet<PurchaseOrderLine> PurchaseOrderLines { get; }
     DbSet<Quote> Quotes { get; }
+    DbSet<QuoteEmail> QuoteEmails { get; }
     DbSet<CashSession> CashSessions { get; }
     DbSet<CashTransaction> CashTransactions { get; }
     DbSet<AuditLog> AuditLogs { get; }

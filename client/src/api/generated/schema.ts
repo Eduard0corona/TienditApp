@@ -13341,6 +13341,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/quotes/settings/whatsapp-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetQuoteWhatsAppTemplateCommand"];
+                    "text/json": components["schemas"]["SetQuoteWhatsAppTemplateCommand"];
+                    "application/*+json": components["schemas"]["SetQuoteWhatsAppTemplateCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteSettingsDto"];
+                        "application/json": components["schemas"]["QuoteSettingsDto"];
+                        "text/json": components["schemas"]["QuoteSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/quotes/{id}/send": {
         parameters: {
             query?: never;
@@ -13493,6 +13536,96 @@ export interface paths {
                         "text/plain": components["schemas"]["QuoteDto"];
                         "application/json": components["schemas"]["QuoteDto"];
                         "text/json": components["schemas"]["QuoteDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes/{id}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SendQuoteByEmailRequest"];
+                    "text/json": components["schemas"]["SendQuoteByEmailRequest"];
+                    "application/*+json": components["schemas"]["SendQuoteByEmailRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteEmailDto"];
+                        "application/json": components["schemas"]["QuoteEmailDto"];
+                        "text/json": components["schemas"]["QuoteEmailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes/{id}/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SendQuoteByWhatsAppRequest"];
+                    "text/json": components["schemas"]["SendQuoteByWhatsAppRequest"];
+                    "application/*+json": components["schemas"]["SendQuoteByWhatsAppRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteWhatsAppDto"];
+                        "application/json": components["schemas"]["QuoteWhatsAppDto"];
+                        "text/json": components["schemas"]["QuoteWhatsAppDto"];
                     };
                 };
             };
@@ -18323,7 +18456,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        MessagePurpose: 0 | 1 | 2 | 3 | 4 | 5;
+        MessagePurpose: 0 | 1 | 2 | 3 | 4 | 5 | 6;
         MessageTemplateDto: {
             /** Format: uuid */
             id: string;
@@ -20435,9 +20568,33 @@ export interface components {
             /** Format: uuid */
             draftRevisionId?: string | null;
             versions: components["schemas"]["QuoteVersionDto"][];
+            emails: components["schemas"]["QuoteEmailDto"][];
+            whatsApps: components["schemas"]["QuoteWhatsAppDto"][];
+            whatsAppConnected: boolean;
             /** Format: date-time */
             createdAt: string;
         };
+        QuoteEmailDto: {
+            /** Format: uuid */
+            id: string;
+            to: string;
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            sentAt?: string | null;
+            /** Format: date-time */
+            failedAt?: string | null;
+            failure?: components["schemas"]["QuoteEmailFailure"];
+            /** Format: int32 */
+            failedAttempts: number;
+            /** Format: date-time */
+            lastFailedAttemptAt?: string | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        QuoteEmailFailure: 0 | 1 | 2 | 3;
         QuoteLineDto: {
             /** Format: int32 */
             position: number;
@@ -20479,6 +20636,10 @@ export interface components {
             pricesIncludeTax: boolean;
             /** Format: double */
             defaultTaxRate: number;
+            whatsAppConnected: boolean;
+            /** Format: uuid */
+            whatsAppTemplateId?: string | null;
+            whatsAppTemplates: components["schemas"]["QuoteWhatsAppTemplateDto"][];
         };
         /**
          * Format: int32
@@ -20539,6 +20700,30 @@ export interface components {
             /** Format: double */
             amount: number;
             applies: boolean;
+        };
+        QuoteWhatsAppDto: {
+            /** Format: uuid */
+            id: string;
+            phone: string;
+            /** Format: date-time */
+            requestedAt: string;
+            status: components["schemas"]["OutgoingMessageStatus"];
+            /** Format: date-time */
+            sentAt?: string | null;
+            /** Format: date-time */
+            deliveredAt?: string | null;
+            /** Format: date-time */
+            readAt?: string | null;
+            /** Format: int32 */
+            attempts: number;
+            error?: string | null;
+        };
+        QuoteWhatsAppTemplateDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            body: string;
+            providerTemplateName?: string | null;
         };
         RatingSummaryDto: {
             /** Format: int32 */
@@ -20949,6 +21134,12 @@ export interface components {
             /** Format: date-time */
             lastPurchaseFrom?: string | null;
         };
+        SendQuoteByEmailRequest: {
+            email: string;
+        };
+        SendQuoteByWhatsAppRequest: {
+            phone: string;
+        };
         SendWhatsAppMessageCommand: {
             phoneNumber: string;
             message: string;
@@ -21135,6 +21326,10 @@ export interface components {
         };
         SetProductOptionGroupsRequest: {
             groups: components["schemas"]["ProductOptionGroupInput"][];
+        };
+        SetQuoteWhatsAppTemplateCommand: {
+            /** Format: uuid */
+            templateId?: string | null;
         };
         SetSelfInvoicingRequest: {
             on: boolean;

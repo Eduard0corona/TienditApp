@@ -210,6 +210,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
     public DbSet<Quote> Quotes => Set<Quote>();
+    public DbSet<QuoteEmail> QuoteEmails => Set<QuoteEmail>();
     public DbSet<CashSession> CashSessions => Set<CashSession>();
     public DbSet<CashTransaction> CashTransactions => Set<CashTransaction>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();

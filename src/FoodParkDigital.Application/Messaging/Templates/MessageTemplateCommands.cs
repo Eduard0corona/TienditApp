@@ -49,10 +49,14 @@ public static class MessageTemplateLimits
     public const string InvoiceManagersOnlyMessage =
         "Solo el dueño o un administrador escribe las plantillas de facturas.";
 
+    public const string QuoteManagersOnlyMessage =
+        "Solo el dueño o un administrador escribe las plantillas de cotizaciones.";
+
     /// <summary>
     /// What a reminder of the fiado (Fase 26C, ADR 0035) or the notice before it comes due (Fase 26E) says to the customers
     /// who owe is the owner's decision, like turning them on: managing campaigns is not enough to write or change one. So is
-    /// the text that goes with the business's CFDI (Fase 28M), like choosing it in Configuración › Facturación.
+    /// the text that goes with the business's CFDI (Fase 28M), like choosing it in Configuración › Facturación, and the text of
+    /// its quotes (Fase 29D), like choosing it in Cotizaciones.
     /// </summary>
     public static async Task EnsureCanWriteAsync(MessagePurpose purpose, CurrentAccessContext access, CancellationToken cancellationToken)
     {
@@ -60,6 +64,8 @@ public static class MessageTemplateLimits
             throw new ForbiddenAccessException(CreditReminderManagersOnlyMessage);
         if (purpose == MessagePurpose.CfdiDocument && !await access.IsTenantManagerAsync(cancellationToken))
             throw new ForbiddenAccessException(InvoiceManagersOnlyMessage);
+        if (purpose == MessagePurpose.QuoteDocument && !await access.IsTenantManagerAsync(cancellationToken))
+            throw new ForbiddenAccessException(QuoteManagersOnlyMessage);
     }
 }
 
@@ -80,7 +86,7 @@ public class CreateMessageTemplateCommandValidator : AbstractValidator<CreateMes
         RuleFor(x => x.Name).NotEmpty().MaximumLength(MessageTemplate.MaxNameLength);
         RuleFor(x => x.Purpose)
             .Must(purpose => purpose is MessagePurpose.Campaign or MessagePurpose.AppointmentReminder or MessagePurpose.CreditReminder
-                or MessagePurpose.CreditDueSoon or MessagePurpose.CfdiDocument)
+                or MessagePurpose.CreditDueSoon or MessagePurpose.CfdiDocument or MessagePurpose.QuoteDocument)
             .WithMessage(MessageTemplate.TemplatePurposeError);
         RuleFor(x => x.Body).NotEmpty().MaximumLength(MessageTemplate.MaxBodyLength);
         RuleFor(x => x.ProviderTemplateName).MaximumLength(MessageTemplate.MaxProviderTemplateNameLength);

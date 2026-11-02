@@ -301,6 +301,20 @@ public class TenantSettings : BaseEntity, ITenantScoped
         QuoteValidityDays = days;
     }
 
+    /// <summary>
+    /// The WhatsApp template the quotes go out with (Fase 29D, ADR 0053 point 16), approved in Meta so it reaches whoever has
+    /// not written in 24 hours; null for TienditApp's text.
+    /// </summary>
+    public Guid? QuoteWhatsAppTemplateId { get; private set; }
+
+    /// <summary>The template the next quotes go by WhatsApp with, or TienditApp's text (null).</summary>
+    public void UseQuoteWhatsAppTemplate(Guid? templateId)
+    {
+        if (templateId == Guid.Empty)
+            throw new DomainException("Elige una plantilla o el texto de TienditApp.");
+        QuoteWhatsAppTemplateId = templateId;
+    }
+
     /// <summary>A trade starts receiving visits to quote when it signs up (ADR 0053), with or without its zones and hours yet.</summary>
     public void StartReceivingHomeVisits() => HomeVisitRequestsEnabled = true;
 

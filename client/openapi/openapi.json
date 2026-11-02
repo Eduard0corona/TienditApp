@@ -16123,6 +16123,54 @@
         }
       }
     },
+    "/api/v1/quotes/settings/whatsapp-template": {
+      "put": {
+        "tags": [
+          "Quotes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetQuoteWhatsAppTemplateCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetQuoteWhatsAppTemplateCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetQuoteWhatsAppTemplateCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/quotes/{id}/send": {
       "post": {
         "tags": [
@@ -16295,6 +16343,124 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/QuoteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/quotes/{id}/email": {
+      "post": {
+        "tags": [
+          "Quotes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendQuoteByEmailRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendQuoteByEmailRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendQuoteByEmailRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteEmailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteEmailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteEmailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/quotes/{id}/whatsapp": {
+      "post": {
+        "tags": [
+          "Quotes"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendQuoteByWhatsAppRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendQuoteByWhatsAppRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendQuoteByWhatsAppRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteWhatsAppDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteWhatsAppDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteWhatsAppDto"
                 }
               }
             }
@@ -28484,7 +28650,8 @@
           2,
           3,
           4,
-          5
+          5,
+          6
         ],
         "type": "integer",
         "format": "int32",
@@ -28494,7 +28661,8 @@
           "AppointmentNotice",
           "CreditReminder",
           "CreditDueSoon",
-          "CfdiDocument"
+          "CfdiDocument",
+          "QuoteDocument"
         ]
       },
       "MessageTemplateDto": {
@@ -35504,6 +35672,7 @@
           "createdAt",
           "customerName",
           "customerPhone",
+          "emails",
           "id",
           "lines",
           "number",
@@ -35516,7 +35685,9 @@
           "toPay",
           "total",
           "validityDays",
-          "versions"
+          "versions",
+          "whatsAppConnected",
+          "whatsApps"
         ],
         "type": "object",
         "properties": {
@@ -35631,12 +35802,88 @@
               "$ref": "#/components/schemas/QuoteVersionDto"
             }
           },
+          "emails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteEmailDto"
+            }
+          },
+          "whatsApps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteWhatsAppDto"
+            }
+          },
+          "whatsAppConnected": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
           }
         },
         "additionalProperties": false
+      },
+      "QuoteEmailDto": {
+        "required": [
+          "failedAttempts",
+          "id",
+          "requestedAt",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "failedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "failure": {
+            "$ref": "#/components/schemas/QuoteEmailFailure"
+          },
+          "failedAttempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastFailedAttemptAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuoteEmailFailure": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Rejected",
+          "NotConfigured",
+          "NotDelivered",
+          "NoLongerValid"
+        ]
       },
       "QuoteLineDto": {
         "required": [
@@ -35751,7 +35998,9 @@
         "required": [
           "defaultTaxRate",
           "pricesIncludeTax",
-          "validityDays"
+          "validityDays",
+          "whatsAppConnected",
+          "whatsAppTemplates"
         ],
         "type": "object",
         "properties": {
@@ -35765,6 +36014,20 @@
           "defaultTaxRate": {
             "type": "number",
             "format": "double"
+          },
+          "whatsAppConnected": {
+            "type": "boolean"
+          },
+          "whatsAppTemplateId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "whatsAppTemplates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteWhatsAppTemplateDto"
+            }
           }
         },
         "additionalProperties": false
@@ -35963,6 +36226,81 @@
           },
           "applies": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuoteWhatsAppDto": {
+        "required": [
+          "attempts",
+          "id",
+          "phone",
+          "requestedAt",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OutgoingMessageStatus"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "deliveredAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "readAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuoteWhatsAppTemplateDto": {
+        "required": [
+          "body",
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "providerTemplateName": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -37362,6 +37700,30 @@
         },
         "additionalProperties": false
       },
+      "SendQuoteByEmailRequest": {
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendQuoteByWhatsAppRequest": {
+        "required": [
+          "phone"
+        ],
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "SendWhatsAppMessageCommand": {
         "required": [
           "message",
@@ -38013,6 +38375,17 @@
             "items": {
               "$ref": "#/components/schemas/ProductOptionGroupInput"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetQuoteWhatsAppTemplateCommand": {
+        "type": "object",
+        "properties": {
+          "templateId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false

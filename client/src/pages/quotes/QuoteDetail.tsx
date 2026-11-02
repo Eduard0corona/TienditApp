@@ -15,15 +15,20 @@ import { formatCalendarDate, formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import {
   REPLY_CHANNELS,
+  hasPendingSends,
   quoteFolio,
   quoteLink,
-  quoteMailUrl,
   quoteMessage,
+  quoteSends,
   quoteStatusChip,
   quoteStatusLabel,
   quoteWhatsAppUrl,
   replyChannelPhrase,
 } from '../../utils/quotes';
+import SendQuoteDialog, { type QuoteChannel } from './SendQuoteDialog';
+
+/** While a send is on its way, the detail asks for its outcome this often. */
+const PENDING_REFRESH_MS = 30_000;
 
 interface LineForm {
   key: string;
@@ -83,8 +88,9 @@ type Action = 'save' | 'send' | 'revise' | 'discard' | 'reply';
 
 /**
  * A version of a quote (Fase 29C, ADR 0053). A draft is edited here and the server totals it when saved; sent, it says the
- * same forever: its link goes to the customer by WhatsApp or by email, the business records what they answered, and
- * correcting it starts the next version. The history lists every version of the quote. Each version opens fresh: nothing
+ * same forever: it goes to the customer by email or by WhatsApp from TienditApp (Fase 29D; by WhatsApp from the phone while
+ * the business has not connected its own), the business records what they answered, and correcting it starts the next
+ * version. Each send of the version stays in its history. The history lists every version of the quote. Each version opens fresh: nothing
  * typed or shown on another one stays.
  */
 export default function QuoteDetailPage() {
@@ -109,8 +115,14 @@ function QuoteDetail({ id }: { id: string }) {
     { accepted: true, channel: QuoteReplyChannel.WhatsApp, response: '' });
   // One action at a time: every button waits for the one running, and the draft's fields too.
   const [pending, setPending] = useState<Action | null>(null);
+  const [sendingBy, setSendingBy] = useState<QuoteChannel | null>(null);
 
-  const quoteQuery = useQuery({ queryKey: ['quotes', 'detail', id], queryFn: ({ signal }) => quotesApi.get(id, signal), enabled: !!id });
+  const quoteQuery = useQuery({
+    queryKey: ['quotes', 'detail', id],
+    queryFn: ({ signal }) => quotesApi.get(id, signal),
+    enabled: !!id,
+    refetchInterval: (query) => (query.state.data && hasPendingSends(query.state.data) ? PENDING_REFRESH_MS : false),
+  });
   const quote = quoteQuery.data;
   const isDraft = quote?.status === QuoteStatus.Draft;
 
@@ -216,7 +228,8 @@ function QuoteDetail({ id }: { id: string }) {
   if (quoteQuery.isLoading || (quote && !form)) {
     return <div className="text-center py-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Cargando</span></div></div>;
   }
-  if (quoteQuery.error || !quote || !form) {
+  // A refresh that fails keeps what was loaded: only the first load shows the error instead of the quote.
+  if (!quote || !form) {
     return (
       <>
         <PageTitle title="Cotización" parent={{ label: 'Cotizaciones', to: '/quotes' }} />
@@ -228,8 +241,9 @@ function QuoteDetail({ id }: { id: string }) {
   const folio = quoteFolio(quote.number, quote.revision);
   const link = quote.trackingToken ? quoteLink(quote.trackingToken) : null;
   const message = link ? quoteMessage(quote, tenant?.name ?? '', link) : '';
-  const whatsApp = link ? quoteWhatsAppUrl(quote.customerPhone, message) : null;
-  const mail = link ? quoteMailUrl(quote.customerEmail, `Cotización ${folio}`, message) : null;
+  // Without its own WhatsApp connected, the business sends it from its phone.
+  const whatsApp = link && !quote.whatsAppConnected ? quoteWhatsAppUrl(quote.customerPhone, message) : null;
+  const sends = quoteSends(quote);
   const busy = pending !== null;
   const canReply = quote.status === QuoteStatus.Sent;
   const canRevise = (quote.status === QuoteStatus.Sent || quote.status === QuoteStatus.Expired || quote.status === QuoteStatus.Rejected)
@@ -243,6 +257,9 @@ function QuoteDetail({ id }: { id: string }) {
       <PageTitle title={`Cotización ${folio}`} parent={{ label: 'Cotizaciones', to: '/quotes' }} />
 
       {error && <div className="alert alert-danger" role="alert">{error}</div>}
+      {quoteQuery.isRefetchError && (
+        <p className="text-muted small" role="status">No se pudo actualizar la cotización: TienditApp lo vuelve a intentar.</p>
+      )}
       {quote.draftRevisionId && (
         <div className="alert alert-info" role="status">
           Hay una corrección en borrador. <Link to={`/quotes/${quote.draftRevisionId}`}>Abrir la corrección</Link>
@@ -486,18 +503,34 @@ function QuoteDetail({ id }: { id: string }) {
                       Registrar respuesta
                     </button>
                   )}
-                  {whatsApp && (
+                  {quote.whatsAppConnected ? (
+                    <button type="button" className="btn btn-light" disabled={busy} onClick={() => setSendingBy('whatsapp')}>
+                      <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Enviar por WhatsApp
+                    </button>
+                  ) : whatsApp && (
                     <a className="btn btn-light" href={whatsApp} target="_blank" rel="noreferrer">
                       <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Enviar por WhatsApp
                     </a>
                   )}
-                  {mail && (
-                    <a className="btn btn-light" href={mail}>
-                      <i className="ri-mail-line me-1" aria-hidden="true"></i>Enviar por correo
-                    </a>
-                  )}
+                  <button type="button" className="btn btn-light" disabled={busy} onClick={() => setSendingBy('email')}>
+                    <i className="ri-mail-line me-1" aria-hidden="true"></i>Enviar por correo
+                  </button>
                   {quote.trackingToken && <CopyTrackingLink token={quote.trackingToken} path="/cotizacion" />}
                 </>
+              )}
+
+              {sends.length > 0 && (
+                <div>
+                  <h2 className="h6 mb-1">Envíos de esta versión</h2>
+                  <ul className="list-unstyled small mb-0" aria-live="polite" aria-atomic="false">
+                    {sends.map((line) => (
+                      <li key={line.key} className={line.state === 'failed' ? 'text-danger' : 'text-muted'}>
+                        <i className={`${line.channel === 'email' ? 'ri-mail-line' : 'ri-whatsapp-line'} me-1`} aria-hidden="true"></i>
+                        {line.text}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
 
               {canRevise && (
@@ -546,6 +579,19 @@ function QuoteDetail({ id }: { id: string }) {
           )}
         </div>
       </div>
+
+      {sendingBy && (
+        <SendQuoteDialog
+          quote={quote}
+          channel={sendingBy}
+          onClose={() => setSendingBy(null)}
+          onSent={(sent) => {
+            setSendingBy(null);
+            toast.success(sent);
+            void queryClient.invalidateQueries({ queryKey: ['quotes', 'detail', id] });
+          }}
+        />
+      )}
 
       <Modal show={showReply} onHide={() => !busy && setShowReply(false)} centered aria-labelledby={replyTitleId}>
         <form

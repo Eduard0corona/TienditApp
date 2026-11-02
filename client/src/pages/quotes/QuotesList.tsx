@@ -51,6 +51,8 @@ export default function QuotesList() {
   const [form, setForm] = useState<NewQuoteForm>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [validity, setValidity] = useState<string | null>(null);
+  // The template picked and not saved yet ('' for TienditApp's text); null while untouched.
+  const [template, setTemplate] = useState<string | null>(null);
 
   const quotesQuery = useQuery({
     queryKey: ['quotes', filter, search, pageNumber],
@@ -82,9 +84,21 @@ export default function QuotesList() {
     onError: (err) => toast.error(getApiErrorMessage(err, 'No se pudo guardar la vigencia.')),
   });
 
+  const saveTemplate = useMutation({
+    mutationFn: (templateId: string) => quotesApi.setWhatsAppTemplate(templateId || null),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['quotes', 'settings'], settings);
+      setTemplate(null);
+      toast.success('Listo: así salen tus cotizaciones por WhatsApp.');
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err, 'No se pudo guardar la plantilla.')),
+  });
+
   const page = quotesQuery.data;
   const settings = settingsQuery.data;
   const validityDays = validity ?? String(settings?.validityDays ?? '');
+  const templateId = template ?? settings?.whatsAppTemplateId ?? '';
+  const savedTemplate = settings?.whatsAppTemplates.find((t) => t.id === settings.whatsAppTemplateId);
 
   const openNew = () => {
     setForm(EMPTY_FORM);
@@ -212,6 +226,54 @@ export default function QuotesList() {
                   Guardar vigencia
                 </button>
               </form>
+            )}
+
+            {settings.whatsAppConnected && (
+              <>
+                <h2 className="h6 mt-3 mb-1">Mensaje de WhatsApp</h2>
+                <p className="text-muted small mb-2">
+                  Tus cotizaciones salen del WhatsApp de tu negocio con{' '}
+                  {savedTemplate ? `la plantilla «${savedTemplate.name}»` : 'el texto de TienditApp'}.
+                  {!savedTemplate?.providerTemplateName && ' Sin una plantilla aprobada en Meta, solo llegan a quien te escribió en las últimas 24 horas.'}
+                </p>
+                {isAdmin && (
+                  <form
+                    className="d-flex flex-wrap align-items-end gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      saveTemplate.mutate(templateId);
+                    }}
+                  >
+                    <div>
+                      <label className="form-label small mb-1" htmlFor="quotes-template">Plantilla</label>
+                      <select
+                        id="quotes-template"
+                        className="form-select form-select-sm"
+                        value={templateId}
+                        onChange={(e) => setTemplate(e.target.value)}
+                      >
+                        <option value="">Texto de TienditApp</option>
+                        {settings.whatsAppTemplates.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}{t.providerTemplateName ? ' (aprobada en Meta)' : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      className="btn btn-sm btn-light"
+                      disabled={saveTemplate.isPending || template === null || templateId === (settings.whatsAppTemplateId ?? '')}
+                    >
+                      Guardar plantilla
+                    </button>
+                  </form>
+                )}
+                {isAdmin && settings.whatsAppTemplates.length === 0 && (
+                  <p className="text-muted small mt-2 mb-0">
+                    Para usar la tuya, crea una plantilla «Cotización por WhatsApp» en{' '}
+                    <Link to="/campaigns?tab=templates">Campañas › Plantillas</Link>.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>

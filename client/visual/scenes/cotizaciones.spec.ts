@@ -1,10 +1,12 @@
 import { expect, test } from '../fixtures';
 import { SIZES, open, snap } from '../helpers';
 import {
+  CONNECTED_QUOTE_ID,
   DRAFT_QUOTE_ID,
   PLUMBER_QUOTES,
   PUBLIC_QUOTE_ROUTES,
   QUOTES_ROUTES,
+  QUOTES_WITH_WHATSAPP_ROUTES,
   QUOTE_LINK,
   REPLACED_QUOTE_LINK,
   SENT_QUOTE_ID,
@@ -53,6 +55,42 @@ test.describe('Cotizaciones', () => {
   });
 });
 
+// Fase 29D: the business connected its WhatsApp, so the quote goes from TienditApp by WhatsApp and by email, each send with
+// where it is; and the owner picks the template its quotes go with.
+test.describe('Cotizaciones desde TienditApp', () => {
+  test.use({ prepareData: PLUMBER_QUOTES, extraRoutes: QUOTES_WITH_WHATSAPP_ROUTES });
+
+  for (const look of LOOKS) {
+    test.describe(look.suffix, () => {
+      test.use({ colorMode: look.colorMode, viewport: look.viewport });
+
+      test(`cotización con sus envíos ${look.suffix}`, async ({ page }) => {
+        await open(page, '/quotes/3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63');
+        await expect(page.getByRole('button', { name: 'Enviar por WhatsApp' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Envíos de esta versión' })).toBeVisible();
+        await snap(page, `cotizacion-envios-${look.suffix}`);
+      });
+    });
+  }
+
+  test('enviar cotización por correo', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/quotes/3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63');
+    await page.getByRole('button', { name: 'Enviar por correo' }).click();
+    await expect(page.getByRole('dialog', { name: 'Enviar por correo' })).toBeVisible();
+    await expect(page.getByLabel('Correo del cliente')).toHaveValue('administracion@amsterdam210.mx');
+    await snap(page, 'cotizacion-enviar-correo-escritorio');
+  });
+
+  test('plantilla de WhatsApp de las cotizaciones', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/quotes');
+    await expect(page.getByRole('heading', { name: 'Mensaje de WhatsApp' })).toBeVisible();
+    await expect(page.getByLabel('Plantilla')).toHaveValue('tpl-cotizacion');
+    await snap(page, 'cotizaciones-plantilla-whatsapp-escritorio');
+  });
+});
+
 test.describe('Cotización del enlace', () => {
   test.use({ signedIn: false, extraRoutes: PUBLIC_QUOTE_ROUTES });
 
@@ -93,5 +131,7 @@ test.describe('Cotización del enlace', () => {
 
 // The ids are written out so the route coverage (coverage.spec.ts) reads them; the mocks answer the same ones.
 test('the scenes open the quotes the mocks answer', () => {
-  expect([DRAFT_QUOTE_ID, SENT_QUOTE_ID]).toEqual(['7a3f1c52-2d4b-4e6a-9c1f-0b8e5d2a7c41', '0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58']);
+  expect([DRAFT_QUOTE_ID, SENT_QUOTE_ID, CONNECTED_QUOTE_ID]).toEqual([
+    '7a3f1c52-2d4b-4e6a-9c1f-0b8e5d2a7c41', '0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58', '3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63',
+  ]);
 });

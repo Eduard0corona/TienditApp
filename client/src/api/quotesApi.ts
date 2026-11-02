@@ -13,6 +13,9 @@ export type UpdateQuoteDraft = Schemas['UpdateQuoteDraftRequest'];
 export type CreateQuote = Schemas['CreateQuoteCommand'];
 export type QuoteReply = Schemas['RecordQuoteReplyRequest'];
 export type PublicQuote = Schemas['PublicQuoteDto'];
+export type QuoteEmail = Schemas['QuoteEmailDto'];
+export type QuoteWhatsApp = Schemas['QuoteWhatsAppDto'];
+export type QuoteWhatsAppTemplate = Schemas['QuoteWhatsAppTemplateDto'];
 
 export const quotesApi = {
   list: (filter: QuoteListFilter, search: string, pageNumber: number, signal?: AbortSignal) =>
@@ -37,6 +40,16 @@ export const quotesApi = {
   discard: (id: string) => apiRequest('post', '/api/v1/quotes/{id}/discard', { path: { id } }),
 
   reply: (id: string, body: QuoteReply) => apiRequest('post', '/api/v1/quotes/{id}/reply', { path: { id }, body }),
+
+  /** Sends a valid sent version by email from TienditApp, in the name of the business (Fase 29D). */
+  sendByEmail: (id: string, email: string) => apiRequest('post', '/api/v1/quotes/{id}/email', { path: { id }, body: { email } }),
+
+  /** Sends a valid sent version by WhatsApp from the business's number (Fase 29D). */
+  sendByWhatsApp: (id: string, phone: string) => apiRequest('post', '/api/v1/quotes/{id}/whatsapp', { path: { id }, body: { phone } }),
+
+  /** The WhatsApp template the quotes go out with, or TienditApp's text (null): owners and admins. */
+  setWhatsAppTemplate: (templateId: string | null) =>
+    apiRequest('put', '/api/v1/quotes/settings/whatsapp-template', { body: { templateId } }),
 };
 
 export const publicQuoteApi = {

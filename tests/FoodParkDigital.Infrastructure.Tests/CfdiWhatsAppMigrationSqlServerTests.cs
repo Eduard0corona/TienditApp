@@ -113,7 +113,8 @@ public class CfdiWhatsAppMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var seed = await SeedAsync(database);
         var message = CfdiMessage(seed.Invoice, "+525598765432", null);
-        await using (var context = database.CreateContext(seed.TenantId))
+        // The queue of this database has none of what came after it (the quote a message carries, Fase 29D).
+        await using (var context = BeforeQuoteDeliveries.CreateContext(database, seed.TenantId))
         {
             context.OutgoingMessages.Add(message);
             await context.SaveChangesAsync();
@@ -156,7 +157,7 @@ public class CfdiWhatsAppMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the CFDI's message is saved.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(seed.TenantId);
+        await using var forward = BeforeQuoteDeliveries.CreateContext(database, seed.TenantId);
         forward.OutgoingMessages.Add(CfdiMessage(seed.Invoice, "+525598765432", null));
         await forward.SaveChangesAsync();
         Assert.Equal(1, await forward.OutgoingMessages.CountAsync(m => m.CfdiId == seed.Invoice.Id));

@@ -925,6 +925,25 @@ La Fase 28H trae una migración, [`database/production/20261026201123_AddIssuedC
 - **Volver a la versión anterior:** funciona sin tocar la base; solo desaparece Reportes › CFDI emitidos, y los índices se quedan sin estorbar.
 - **Dejar también la base como estaba:** el `rollback.sql` borra los cuatro índices y no toca datos; ejecutarlo otra vez no hace nada.
 
+## Mandar la cotización desde TienditApp (Fase 29D)
+
+La Fase 29D trae una migración, [`database/production/20261101181148_AddQuoteDeliveries`](../../database/production/20261101181148_AddQuoteDeliveries). Su `apply.sql` va antes del merge.
+
+- **La migración:** agrega la tabla `QuoteEmails` (cada correo de una cotización con su resultado), la columna `OutgoingMessages.QuoteId` (la versión que lleva un WhatsApp de una cotización) con su llave y dos índices filtrados, y la columna `TenantSettings.QuoteWhatsAppTemplateId`. Vuelve a crear `CK_OutgoingMessages_Cfdi` para que el WhatsApp de una cotización también diga quién lo pidió, y agrega `CK_OutgoingMessages_Quote`. No cambia datos.
+- **Mientras se publica:** la versión de `master` (la 29C) no conoce la tabla ni las columnas y sigue funcionando: los mensajes que encola cumplen las dos restricciones.
+- **El correo de una cotización** (`QuoteEmailRequestedEvent`) va por el outbox. Si en los segundos en que corren las dos versiones, o después de volver a la anterior, el worker de la 29C toma uno, no conoce el evento y lo aparta (`Unknown event type` en el log, y `background-queues` Degraded un día): el correo queda «Enviándose» en su cotización. Para mandarlo, ya con esta versión publicada, regresa a pendientes los mensajes apartados de ese tipo:
+
+  ```sql
+  UPDATE OutboxMessages SET DeadLetteredAt = NULL, Attempts = 0, LastError = NULL, NextAttemptAt = SYSDATETIMEOFFSET()
+  WHERE Type = 'FoodParkDigital.Domain.Quotes.Events.QuoteEmailRequestedEvent'
+    AND DeadLetteredAt IS NOT NULL AND LastError LIKE 'Unknown event type%';
+  ```
+
+  Si para entonces la versión ya no está vigente, el correo termina como «no se envió» en lugar de salir.
+- **Sin configuración nueva:** el correo usa el proveedor de correo de la plataforma, como la factura (Fase 28E); el WhatsApp, el que conectó cada negocio en Configuración › WhatsApp.
+- **Volver a la versión anterior:** funciona sin tocar la base; desaparecen los envíos desde TienditApp y el historial queda guardado. Un WhatsApp de una cotización que siguiera pendiente lo manda esa versión como cualquier mensaje, salvo a quien se dio de baja.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50052 en cuanto se mandó una cotización desde TienditApp o un negocio eligió una plantilla para ellas; si no, quita lo que agregó.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

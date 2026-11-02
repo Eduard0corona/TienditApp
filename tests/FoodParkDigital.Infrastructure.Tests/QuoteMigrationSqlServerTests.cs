@@ -15,7 +15,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// <summary>
 /// AddQuotes (Fase 29C, ADR 0053): the quotes and how long a business keeps them valid. The version before it keeps saving
 /// businesses over the new column, which stays at 15 days; rolling back stops with error 50051 once a business has a quote or
-/// picked another validity, and otherwise drops only what it added, and a second run does nothing.
+/// picked another validity, and otherwise drops only what it added, and a second run does nothing. Its database has none of
+/// what came after it (<see cref="BeforeQuoteDeliveries"/>).
 /// </summary>
 public class QuoteMigrationSqlServerTests
 {
@@ -41,7 +42,7 @@ public class QuoteMigrationSqlServerTests
             tenantId = tenant.Id;
         }
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeQuoteDeliveries.CreateContext(database, tenantId);
         Assert.Equal(15, (await context.TenantSettings.SingleAsync()).QuoteValidityDays);
     }
 
@@ -51,7 +52,7 @@ public class QuoteMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenantId = await SeedAsync(database);
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeQuoteDeliveries.CreateContext(database, tenantId))
         {
             // A draft alone: it would be lost too.
             context.Quotes.Add(Quote.Start(tenantId, Folios.QuoteNumber(1),
@@ -68,13 +69,13 @@ public class QuoteMigrationSqlServerTests
         {
             var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
             Assert.True(stopped is SqlException { Number: 50051 }, stopped?.Message ?? "it was not stopped");
-            await using var context = database.CreateContext(tenantId);
+            await using var context = BeforeQuoteDeliveries.CreateContext(database, tenantId);
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             await context.Database.ExecuteSqlRawAsync(cleanUp);
         }
 
         await MigrateAsync(database, BeforeMigration);
-        await using (var context = database.CreateContext())
+        await using (var context = BeforeQuoteDeliveries.CreateContext(database))
         {
             Assert.Equal(BeforeMigration, await LatestMigrationAsync(context));
             Assert.Equal(0, await context.Database.SqlQuery<int>($"""
@@ -94,7 +95,7 @@ public class QuoteMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the column is back at 15 days.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenantId);
+        await using var forward = BeforeQuoteDeliveries.CreateContext(database, tenantId);
         Assert.Equal((15, 0), ((await forward.TenantSettings.SingleAsync()).QuoteValidityDays, await forward.Quotes.CountAsync()));
     }
 
@@ -102,7 +103,7 @@ public class QuoteMigrationSqlServerTests
     {
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant($"Plomería {slug}", slug, BusinessType.Service, $"{slug}@demo.com");
-        await using var seed = database.CreateContext(tenant.Id);
+        await using var seed = BeforeQuoteDeliveries.CreateContext(database, tenant.Id);
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Service | TenantCapability.Appointments));
         await seed.SaveChangesAsync();
         return tenant.Id;

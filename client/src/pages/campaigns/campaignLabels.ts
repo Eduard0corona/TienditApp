@@ -71,3 +71,12 @@ export const CFDI_PLACEHOLDER_HELP: Record<string, string> = {
   fecha: 'Día en que se emitió',
   enlace: 'Enlace para descargar el XML y el PDF (90 días)',
 };
+
+export const QUOTE_PLACEHOLDER_HELP: Record<string, string> = {
+  nombre: 'Nombre del cliente de la cotización',
+  negocio: 'Nombre de tu negocio',
+  folio: '«COT-000123», o «COT-000123 v2» desde su segunda versión',
+  monto: 'Lo que paga el cliente (el total menos la visita que se descuenta)',
+  fecha: 'Último día en que vale',
+  enlace: 'Enlace para ver la cotización (hasta 30 días después de vencer)',
+};

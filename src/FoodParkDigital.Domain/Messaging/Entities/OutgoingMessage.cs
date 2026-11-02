@@ -6,6 +6,8 @@ using FoodParkDigital.Domain.Fiscal.Entities;
 using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Quotes;
+using FoodParkDigital.Domain.Quotes.Entities;
 
 namespace FoodParkDigital.Domain.Messaging.Entities;
 
@@ -97,8 +99,13 @@ public class OutgoingMessage : AuditableEntity, ITenantScoped
     public Guid? CfdiId { get; private set; }
     /// <summary>The invoice of the order the CFDI belongs to (the CFDI itself, when it is the invoice).</summary>
     public Guid? OrderInvoiceId { get; private set; }
-    /// <summary>Who asked for a CFDI's message with «Enviar por WhatsApp»; null when TienditApp queued it on its own.</summary>
+    /// <summary>
+    /// Who asked for a CFDI's message with «Enviar por WhatsApp» (null when TienditApp queued it on its own), or for a quote's
+    /// with «Mandar por WhatsApp».
+    /// </summary>
     public Guid? RequestedByUserId { get; private set; }
+    /// <summary>The version of a quote it carries (Fase 29D); null for any other purpose.</summary>
+    public Guid? QuoteId { get; private set; }
     /// <summary>
     /// The link of a CFDI's message to download its XML and its PDF (<see cref="CfdiLinkLifetime"/> after it was queued),
     /// unique: whoever has it gets those two files, nothing else.
@@ -151,6 +158,39 @@ public class OutgoingMessage : AuditableEntity, ITenantScoped
             OrderInvoiceId = orderInvoiceId,
             RequestedByUserId = requestedByUserId,
             LinkToken = linkToken
+        };
+    }
+
+    /// <summary>
+    /// The message of the version <paramref name="quote"/>, sent and valid on the business's <paramref name="today"/>, to
+    /// <paramref name="phone"/> (Fase 29D, ADR 0053 point 16): its text (the business's template, or TienditApp's) already
+    /// carries the quote's own link, asked for by <paramref name="requestedByUserId"/>.
+    /// </summary>
+    public static OutgoingMessage ForQuote(
+        Quote quote,
+        string? phone,
+        string? recipientName,
+        string body,
+        string? providerTemplateName,
+        string languageCode,
+        IReadOnlyCollection<string> parameters,
+        Guid requestedByUserId,
+        DateOnly today,
+        DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(quote);
+        QuoteRules.EnsureSendable(quote, today);
+        if (!InvoiceWhatsApp.IsPhone(phone))
+            throw new DomainException(InvoiceWhatsApp.InvalidMessage);
+        if (requestedByUserId == Guid.Empty)
+            throw new DomainException("El envío necesita quién lo pide.");
+
+        return new OutgoingMessage(
+            quote.TenantId, MessagePurpose.QuoteDocument, phone, recipientName, body, providerTemplateName, languageCode, parameters, now)
+        {
+            CreatedAt = now,
+            QuoteId = quote.Id,
+            RequestedByUserId = requestedByUserId
         };
     }
 

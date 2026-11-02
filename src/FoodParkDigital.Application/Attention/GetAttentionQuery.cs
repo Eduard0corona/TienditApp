@@ -136,6 +136,7 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
             var since = now.AddHours(-24);
             var failed = await _context.OutgoingMessages.AsNoTracking()
                 .CountAsync(m => m.Status == OutgoingMessageStatus.Failed && m.Purpose != MessagePurpose.CfdiDocument
+                    && m.Purpose != MessagePurpose.QuoteDocument
                     && (m.UpdatedAt ?? m.CreatedAt) >= since, cancellationToken);
             Add(AttentionKeys.FailedMessages, failed, failed);
         }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Audit.Entities;
@@ -130,6 +131,7 @@ internal static class QuoteAudit
     public const string Accepted = "QuoteAccepted";
     public const string Rejected = "QuoteRejected";
     public const string SettingsUpdated = "QuoteSettingsUpdated";
+    public const string WhatsAppTemplateChanged = "QuoteWhatsAppTemplateChanged";
 
     public static AuditLog Create(Quote quote, string action, string? performedBy, object? extra = null)
         => new(
@@ -167,6 +169,7 @@ internal static class QuoteViews
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
         var stillPaid = await QuoteVisitCredits.StillPaidAsync(context, quote, cancellationToken);
+        var sends = await QuoteDeliveries.LatestAsync(context, quote, cancellationToken);
         var status = quote.StatusOn(today);
         var draft = versions.FirstOrDefault(v => v.Status == QuoteStatus.Draft);
 
@@ -219,7 +222,10 @@ internal static class QuoteViews
                 SentAt = v.SentAt,
                 ClosedAt = v.ClosedAt
             }).ToList(),
-            CreatedAt = quote.CreatedAt
+            CreatedAt = quote.CreatedAt,
+            Emails = sends.Emails,
+            WhatsApps = sends.WhatsApps,
+            WhatsAppConnected = await CampaignRules.IsWhatsAppConnectedAsync(context, quote.TenantId, cancellationToken)
         };
     }
 

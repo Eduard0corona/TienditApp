@@ -98,11 +98,54 @@ function plumber(data: DemoData) {
   data.tenant.pricesIncludeTax = false;
 }
 
+// Fase 29D: the business connected its WhatsApp, so the quotes go from TienditApp. Condominio Ámsterdam's quote was sent by
+// email (it arrived), by WhatsApp (read), and once more by email, still on its way.
+const CONNECTED_ID = '3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63';
+
+const CONNECTED = {
+  ...SENT,
+  id: CONNECTED_ID,
+  number: 'COT-000009',
+  revision: 1,
+  customerName: 'Condominio Ámsterdam 210',
+  customerPhone: '5598761234',
+  customerEmail: 'administracion@amsterdam210.mx',
+  appointment: null,
+  visitCredit: null,
+  toPay: 4686.4,
+  validUntil: '2026-10-08',
+  sentAt: '2026-09-23T18:00:00Z',
+  versions: [{ id: CONNECTED_ID, revision: 1, status: 1, total: 4686.4, sentAt: '2026-09-23T18:00:00Z', closedAt: null }],
+  whatsAppConnected: true,
+  emails: [
+    { id: 'mail-2', to: 'administracion@amsterdam210.mx', requestedAt: '2026-10-04T16:40:00Z', failedAttempts: 1, lastFailedAttemptAt: '2026-10-04T16:40:10Z' },
+    { id: 'mail-1', to: 'administracion@amsterdam210.mx', requestedAt: '2026-09-23T18:05:00Z', sentAt: '2026-09-23T18:05:04Z', failedAttempts: 0 },
+  ],
+  whatsApps: [
+    { id: 'wa-2', phone: '+525598760000', requestedAt: '2026-10-01T15:00:00Z', status: 2, sentAt: null, attempts: 1, error: 'El número no tiene WhatsApp.' },
+    { id: 'wa-1', phone: '+525598761234', requestedAt: '2026-09-23T18:02:00Z', status: 1, sentAt: '2026-09-23T18:02:03Z', deliveredAt: '2026-09-23T18:02:05Z', readAt: '2026-09-23T18:30:00Z', attempts: 0 },
+  ],
+};
+
+const WHATSAPP_TEMPLATES = [
+  { id: 'tpl-cotizacion', name: 'Cotización lista', body: 'Hola {nombre}: {negocio} te manda la cotización {folio} por {monto}, vale hasta el {fecha}. Mírala aquí: {enlace}', providerTemplateName: 'cotizacion_lista' },
+];
+
 const quotesRoutes: ExtraRoutes = (_data, { ok, paginate }) => [
   ['GET', /^\/quotes$/, (_match, query) => ok(paginate(SUMMARIES, query, 20))],
-  ['GET', /^\/quotes\/settings$/, () => ok({ validityDays: 15, pricesIncludeTax: false, defaultTaxRate: 16 })],
+  ['GET', /^\/quotes\/settings$/, () => ok({ validityDays: 15, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: false, whatsAppTemplates: [] })],
   ['GET', new RegExp(`^/quotes/${DRAFT_ID}$`), () => ok(DRAFT)],
   ['GET', new RegExp(`^/quotes/${SENT_ID}$`), () => ok(SENT)],
+  ['GET', new RegExp(`^/quotes/${CONNECTED_ID}$`), () => ok(CONNECTED)],
+];
+
+/** The same business once it connected its WhatsApp and picked the template of its quotes. */
+const quotesWithWhatsAppRoutes: ExtraRoutes = (data, helpers) => [
+  ['GET', /^\/quotes\/settings$/, () => helpers.ok({
+    validityDays: 15, pricesIncludeTax: false, defaultTaxRate: 16, whatsAppConnected: true, whatsAppTemplateId: 'tpl-cotizacion',
+    whatsAppTemplates: WHATSAPP_TEMPLATES,
+  })],
+  ...quotesRoutes(data, helpers),
 ];
 
 /** What the customer reads: the folio, the lines, the IVA on top, the visit taken off and until when. */
@@ -140,6 +183,8 @@ const publicQuoteRoutes: ExtraRoutes = (data, helpers) => [
 
 export const DRAFT_QUOTE_ID = DRAFT_ID;
 export const SENT_QUOTE_ID = SENT_ID;
+export const CONNECTED_QUOTE_ID = CONNECTED_ID;
 export const PLUMBER_QUOTES = asOption(plumber);
 export const QUOTES_ROUTES = asOption(quotesRoutes);
+export const QUOTES_WITH_WHATSAPP_ROUTES = asOption(quotesWithWhatsAppRoutes);
 export const PUBLIC_QUOTE_ROUTES = asOption(publicQuoteRoutes);
