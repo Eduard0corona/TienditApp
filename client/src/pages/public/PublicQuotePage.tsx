@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getApiErrorMessage } from '../../api/errors';
+import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
 import { publicQuoteApi, type PublicQuote } from '../../api/quotesApi';
 import PageTitle from '../../components/common/PageTitle';
 import { QuoteStatus } from '../../types';
@@ -51,8 +51,9 @@ export default function PublicQuotePage() {
     enabled: token.length > 0,
     retry: false,
   });
-  // A link that stopped opening (refetched after an answer) shows only why, never the quote it no longer opens.
-  const quote = quoteQuery.error ? undefined : quoteQuery.data;
+  // A link that stopped opening (404, refetched after an answer) shows only why, never the quote it no longer opens; any other
+  // failed refresh keeps the quote on screen under its alert.
+  const quote = getApiErrorStatus(quoteQuery.error) === 404 ? undefined : quoteQuery.data;
   const folio = quote ? quoteFolio(quote.number, quote.revision) : '';
   // Fase 29G: why the answer was not taken stays on the page of that link, also once the answer can no longer be given there.
   const [refusal, setRefusal] = useState<{ token: string; message: string } | null>(null);

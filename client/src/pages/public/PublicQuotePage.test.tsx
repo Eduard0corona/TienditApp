@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -186,6 +186,23 @@ describe('PublicQuotePage', () => {
     expect(await screen.findByRole('link', { name: 'Responder al negocio' })).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Este negocio recibe la respuesta por mensaje o en persona');
     expect(screen.queryByRole('button', { name: 'No la acepto' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the quote and why the answer was refused when reading it again fails for another reason', async () => {
+    const headers = new AxiosHeaders();
+    vi.mocked(apiRequest).mockResolvedValueOnce(quote({ canReply: true }) as never)
+      .mockRejectedValueOnce(new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+        status: 409, data: { detail: 'La cotización acaba de cambiar: ábrela otra vez para ver cómo quedó.' }, statusText: '', headers, config: { headers },
+      } as AxiosResponse))
+      .mockRejectedValueOnce(new AxiosError('Network Error', 'ERR_NETWORK', { headers }));
+    renderPage(`/cotizacion#${LINK}`);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Aceptar la cotización' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, la acepto' }));
+
+    await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2));
+    expect(screen.getByRole('heading', { name: 'Cotización COT-000007' })).toBeInTheDocument();
+    expect(screen.getByText(/La cotización acaba de cambiar/)).toBeInTheDocument();
   });
 
   it('says only that the link no longer opens when it expired while answering', async () => {

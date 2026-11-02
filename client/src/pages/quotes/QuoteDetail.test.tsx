@@ -171,6 +171,8 @@ describe('QuoteDetail', () => {
   });
 
   it('records what the customer answered and how', async () => {
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    onTestFinished(() => invalidate.mockRestore());
     vi.mocked(quotesApi.get).mockResolvedValue(sent());
     vi.mocked(quotesApi.reply).mockResolvedValue(sent({
       status: QuoteStatus.Accepted, replyChannel: QuoteReplyChannel.Phone, customerResponse: 'Sí, el jueves', closedAt: '2026-10-05T17:00:00Z',
@@ -186,6 +188,24 @@ describe('QuoteDetail', () => {
     await waitFor(() => expect(quotesApi.reply).toHaveBeenCalledWith('q1', { accepted: true, channel: QuoteReplyChannel.Phone, response: 'Sí, el jueves' }));
     expect(await screen.findByText(/Aceptó por teléfono/)).toBeInTheDocument();
     expect(screen.getByText('«Sí, el jueves»')).toBeInTheDocument();
+    // «Requiere atención» counts the accepted ones still to convert (Fase 29G): the answer refreshes it.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['attention'] });
+  });
+
+  it('shows how the quote stands when recording an answer is refused because the customer answered from the link (Fase 29G)', async () => {
+    vi.mocked(quotesApi.get).mockResolvedValueOnce(sent()).mockResolvedValue(sent({
+      status: QuoteStatus.Accepted, replyChannel: QuoteReplyChannel.Link, customerResponse: 'Los espero', closedAt: '2026-10-05T17:00:00Z',
+    }));
+    vi.mocked(quotesApi.reply).mockRejectedValue(refusal('Solo se registra la respuesta de una cotización enviada.'));
+    renderAt();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Registrar respuesta' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Respuesta del cliente' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar respuesta' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Solo se registra la respuesta de una cotización enviada.');
+    expect(await screen.findByText(/Aceptó desde su enlace/)).toBeInTheDocument();
+    expect(quotesApi.get).toHaveBeenCalledTimes(2);
   });
 
   it('corrects an expired quote as its one main action', async () => {
