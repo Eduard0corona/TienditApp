@@ -1879,11 +1879,12 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la base guarda cada lugar una vez, ninguno después del quinto y cada archivo una vez por negocio, y las fotos se van con su cita;
     - el rollback se detiene con 50056 mientras hay fotos y luego quita solo la tabla.
     - `BeforeAppointmentProblemPhotos` (nuevo), que `BeforeQuoteOnlineReplies` encadena.
-    - `ImageProcessingService` decodifica ya reducido y con 8 bits por canal; sus pruebas siguen en verde con ImageSharp 3.1.12.
+    - `ImageProcessingServiceWebpTests` (13, nuevo, por la revisión): una foto se guarda como WebP dentro de 2048 px, también con un lado justo en el límite y el otro pasado, y derecha como la tomó la cámara, sin sus metadatos. Una foto más chica, o la captura de un comprobante, se guarda en su tamaño: decodificar ya reducido la ampliaba (640×480 salía en 2048×1536), también las fotos de un servicio y los comprobantes.
+    - Las pruebas de `ImageProcessingService` siguen en verde con ImageSharp 3.1.12.
   - **Application:** `VisitProblemPhotoFlowTests` (13, nuevo):
     - la foto llega desde el enlace con otro negocio en contexto, se guarda privada como WebP de 2048 px sin metadatos, la ven la Agenda y su detalle, se abre para el negocio, y el enlace dice cuántas;
-    - hasta 5, y la sexta se rechaza antes de leer su archivo;
-    - desde su hora, rechazada o en el local se rechaza sin guardar nada; un enlace desconocido, en otras mayúsculas o vencido no existe;
+    - hasta 5, y la sexta se rechaza sin leer ni decodificar su archivo (por la revisión: antes no se comprobaba);
+    - desde su hora, rechazada o en el local se rechaza sin decodificar ni guardar nada; un enlace desconocido, en otras mayúsculas o vencido no existe;
     - lo que no es una foto se rechaza por lo que es;
     - con dos fotos decodificándose ya, la tercera se rechaza para mandarla otra vez;
     - dos al mismo tiempo toman lugares distintos y nunca hacen una sexta; otra falla de la base no se reintenta;
@@ -1896,9 +1897,10 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - `AuthorizationBehaviorTests`: la foto desde el enlace es una de las solicitudes anónimas.
   - **WebApi:** `CrossTenantVisitProblemPhotosSqlServerTests` (1, nuevo):
     - la foto sin cuenta dice cuántas, nunca la foto ni datos del cliente;
+    - la foto no cambia la `rowversion` de la cita (por la revisión: la prueba en memoria no lo comprobaba);
     - su negocio la ve en la Agenda y la abre con `sandbox` y `no-store`; el otro negocio no la ve ni la abre, y sin sesión no se abre;
-    - un enlace que no existe, lo que no es una foto, una sin archivo, una de más de 10 MB y un cuerpo pasado del límite no se toman (por la revisión).
-  - **Mutaciones:** sin la hora de la visita, el tope de 5, el rechazo antes de leer, el recuento antes de escribir, la fila de la foto en la descarga, la compuerta, la recodificación, lo que recibe el enlace, las notas solo en línea, el freno del rollback o el reintento solo por el lugar, falla al menos una prueba. Sin el caso del trabajo de una cotización ninguna falla: esa cita nunca es en línea, y el canal ya la rechaza.
+    - un enlace que no existe, lo que no es una foto, una sin archivo, una de más de 10 MB y un cuerpo pasado del límite no se toman (por la revisión). El cuerpo pasado del límite se detiene al leer el formulario, antes del validador.
+  - **Mutaciones:** sin la hora de la visita, el tope de 5, el rechazo antes de leer, el recuento antes de escribir, la fila de la foto en la descarga, la compuerta, la recodificación, lo que recibe el enlace, las notas solo en línea, el freno del rollback, el reintento solo por el lugar, el tope del cuerpo, la cita sin tocar o decodificar reducida solo la foto más grande, falla al menos una prueba (los tres últimos, por la revisión). Sin el caso del trabajo de una cotización ninguna falla: esa cita nunca es en línea, y el canal ya la rechaza.
   - **Cliente:**
     - `problemPhotos.test.ts` (5, nuevo): qué fotos caben y por qué no las otras, el tipo vacío con nombre de foto, una vista previa por foto que se suelta al quitarla, y las fotos en palabras.
     - `ProblemPhotos.test.tsx` (5, nuevo):
@@ -1908,12 +1910,12 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - sin más cuando la página dice que ya no recibe;
       - cada foto de la solicitud va una vez, también en StrictMode y al volver a mostrarse (por la revisión).
     - `PublicHomeVisitPage.test.tsx` (+1): elige, ve y quita fotos en la solicitud, y se mandan con el enlace al guardarla.
-    - `AppointmentTrackingPage.test.tsx` (+2): cuántas mandó y agregar desde el enlace, con la cita al día; sin fotos para una cita que ya no las recibe.
+    - `AppointmentTrackingPage.test.tsx` (+4): cuántas mandó y agregar desde el enlace, con la cita al día; sin fotos para una cita que ya no las recibe; y, por la revisión, la visita como la tiene el servidor al abrir el enlace después de mandar fotos desde el recibo, y cancelada al volver después de mandar una foto y cancelar. Usan una caché como la de la aplicación (30 s): con la de las pruebas la respuesta vieja no se notaba.
     - `AppointmentsList.test.tsx` (+1): «Ver lo que pasa» con el texto y las fotos de una visita en línea, nunca en una del equipo.
     - `QuoteDetail.test.tsx` (+3): lo que pasa y sus fotos en la cotización, nada para una visita del equipo, y solo las rutas privadas del negocio.
     - `privateFiles.test.ts` (+1): el área nueva.
-  - **.NET en total:** 4,580 pruebas (Domain 1,357; Application 2,068; WebApi 483; Infrastructure 672), también el build en Release. **Cliente en total:** 193 archivos y 1,467 pruebas.
-  - **Primera visita:** 181,705 B (`master` en `8ecfa7f`: 181,605 B, +100 B). Las fotos se cargan con sus pantallas; los 100 B son la lista de precarga de la entrada, con los chunks compartidos nuevos, y la regla de las rutas privadas. El presupuesto sube de 181,700 B a 181,800 B.
+  - **.NET en total:** 4,593 pruebas (Domain 1,357; Application 2,068; WebApi 483; Infrastructure 685), también el build en Release. **Cliente en total:** 193 archivos y 1,469 pruebas.
+  - **Primera visita:** 181,719 B (`master` en `8ecfa7f`: 181,605 B, +114 B). Las fotos se cargan con sus pantallas; los 114 B son la lista de precarga de la entrada, con los chunks compartidos nuevos, y la regla de las rutas privadas. Las correcciones de la revisión suman 14 B, los nombres nuevos de los chunks que cambiaron en esa lista. El presupuesto sube de 181,700 B a 181,800 B.
   - **Escenas:** contra la línea base de `master` en `8ecfa7f` (794 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
     - 793 salen iguales.
     - **Cambia 1, a propósito:** la hoja de la solicitud (`oficios-solicitar-visita-datos-telefono`) suma «Fotos de lo que pasa».

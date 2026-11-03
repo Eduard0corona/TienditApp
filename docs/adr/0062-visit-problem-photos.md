@@ -20,6 +20,7 @@ Tomé las decisiones de la Fase 29H con la autorización permanente del dueño d
    - **Se mandan después de guardar la solicitud**, una por una y con el enlace de la solicitud como llave ([ADR 0023](0023-order-tracking.md)), igual que el seguimiento. La solicitud no espera a las fotos: si una falla, la visita ya está pedida y el recibo dice cuál no se envió.
    - **Desde el enlace de la visita** (`/cita`) el cliente agrega más o reintenta las que fallaron, mientras la visita las reciba.
    - **Las fotos que van en camino siguen** si el cliente pasa del recibo al enlace: los dos muestran las mismas, y el navegador pregunta antes de cerrar la página mientras falta alguna. Reintentar está para las que fallaron por la conexión o el servidor; cuando el servidor rechaza una, la página lee otra vez cómo está la visita.
+   - **El enlace lee la visita al abrirse** y toma solo las respuestas a las fotos que llegan mientras se muestra: una de antes puede ser vieja, porque el negocio pudo aceptar, rechazar o el cliente cancelar desde entonces.
 2. **Cuándo se reciben:** solo una visita a domicilio que el cliente pidió en línea, no una cita en el local, una visita que agendó el equipo o el trabajo de una cotización ([ADR 0053](0053-home-visit-quotes.md), punto 17).
    - La visita debe estar por confirmar o agendada, y su hora no debe haber llegado.
    - **Cada visita tiene hasta 5 fotos.** El agregado lo revisa (`Appointment.AddProblemPhoto`), y la base guarda cada lugar una sola vez y ninguno después del quinto, así que dos fotos mandadas a la vez nunca hacen una sexta.
@@ -38,7 +39,7 @@ Tomé las decisiones de la Fase 29H con la autorización permanente del dueño d
    - **Solo abre un archivo que una foto del negocio guarda.** Otro negocio, otra área o un archivo suelto responden como si no existieran.
 6. **El cliente ve cuántas mandó** («Mandaste 3 fotos de lo que pasa») y la vista previa mientras las sube, pero no las vuelve a ver desde el servidor.
 7. **ImageSharp sigue en la 3.1.12.** La 3.2.0 corrige los seis avisos (cuatro de TIFF, uno del perfil ICC y uno de `HistogramEqualization`), pero falla al compilar en Release sin una licencia de Six Labors. Conseguirla es decisión del dueño del producto (deuda técnica).
-   - **Mientras, cada foto se decodifica ya reducida** al tamaño en que se guarda (un JPEG se decodifica escalado) y con 8 bits por canal. Una foto grande o un PNG de 16 bits nunca ocupan la memoria de su tamaño completo.
+   - **Mientras, una foto más grande que el tamaño en que se guarda se decodifica ya reducida** (un JPEG se decodifica escalado), y todas con 8 bits por canal. Una foto grande o un PNG de 16 bits nunca ocupan la memoria de su tamaño completo, y una más chica se guarda en su tamaño, nunca ampliada.
    - **Lo demás que la cubre:** el tope de 50 megapíxeles, que se revisa antes de decodificar; el límite por IP; las 5 fotos por visita; y las dos fotos a la vez por instancia.
 8. **La migración** `20261102205836_AddAppointmentProblemPhotos`:
    - agrega la tabla `AppointmentProblemPhotos`: la cita (se borra con ella), el lugar de la foto de 0 a 4 (único por cita) y la llave de su archivo (única por negocio);
