@@ -1,11 +1,11 @@
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicMenuApi } from '../../api/publicMenuApi';
 import { queryClient } from '../../api/queryClient';
 import { resetLinkUploads } from '../../hooks/useProblemPhotoUploads';
-import { ProblemPhotosSender } from './ProblemPhotos';
+import { ProblemPhotosPicker, ProblemPhotosSender } from './ProblemPhotos';
 
 vi.mock('../../api/publicMenuApi', () => ({ publicMenuApi: { addAppointmentPhoto: vi.fn(), trackAppointment: vi.fn() } }));
 
@@ -53,6 +53,21 @@ describe('ProblemPhotosSender (Fase 29H)', () => {
       [[LINK, 'fuga.jpg'], [LINK, 'pared.jpg'], [LINK, 'techo.jpg'], [LINK, 'pared.jpg'], [LINK, 'techo.jpg']]);
     expect(screen.queryByRole('button', { name: /Reintentar/ })).not.toBeInTheDocument();
     expect(screen.getByText(/Listo/)).toHaveFocus();
+  });
+
+  it('keeps the focus on «Agregar más fotos» after removing one of five, once it takes one again (por la revisión automática)', async () => {
+    const user = userEvent.setup();
+    function Picker() {
+      const [photos, setPhotos] = useState(['fuga', 'pared', 'techo', 'piso', 'tubo'].map(picked));
+      return <ProblemPhotosPicker photos={photos} onChange={setPhotos} businessName="Plomería Hernández" />;
+    }
+    render(<Picker />);
+    expect(screen.getByRole('button', { name: /Agregar más fotos/ })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Quitar la foto 3' }));
+
+    expect(screen.getAllByRole('img')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: /Agregar más fotos/ })).toHaveFocus();
   });
 
   it('has the account’s appointments read again with each photo the server takes, open or not (por la revisión)', async () => {

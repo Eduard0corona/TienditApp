@@ -73,6 +73,13 @@ export function ProblemPhotosPicker({ photos, onChange, businessName, disabled =
   const id = useId();
   const [refused, setRefused] = useState<string | null>(null);
   const add = useRef<HTMLButtonElement>(null);
+  // The removed photo's button goes away with it: «Agregar» takes the focus once painted, when it takes one again.
+  const focusAdd = useRef(false);
+  useEffect(() => {
+    if (!focusAdd.current) return;
+    focusAdd.current = false;
+    add.current?.focus();
+  }, [photos]);
 
   return (
     <div className="mb-2" role="group" aria-labelledby={`${id}-label`} aria-describedby={`${id}-hint`}>
@@ -94,9 +101,8 @@ export function ProblemPhotosPicker({ photos, onChange, businessName, disabled =
                 onClick={() => {
                   forgetPreview(photo.file);
                   setRefused(null);
+                  focusAdd.current = true;
                   onChange(photos.filter((item) => item.id !== photo.id));
-                  // The button that had the focus goes away: «Agregar» keeps it.
-                  add.current?.focus();
                 }}
               >
                 <i className="ri-close-line" aria-hidden="true"></i>

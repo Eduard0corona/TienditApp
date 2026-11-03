@@ -1904,21 +1904,22 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Mutaciones:** sin la hora de la visita, el tope de 5, el rechazo antes de leer, el recuento antes de escribir, la fila de la foto en la descarga, la compuerta, la recodificación, lo que recibe el enlace, las notas solo en línea, el freno del rollback, el reintento solo por el lugar, el tope del cuerpo, la cita sin tocar o decodificar reducida solo la foto más grande, falla al menos una prueba (los tres últimos, por la revisión). Sin el caso del trabajo de una cotización ninguna falla: esa cita nunca es en línea, y el canal ya la rechaza.
   - **Cliente:**
     - `problemPhotos.test.ts` (5, nuevo): qué fotos caben y por qué no las otras, el tipo vacío con nombre de foto, una vista previa por foto que se suelta al quitarla, y las fotos en palabras.
-    - `ProblemPhotos.test.tsx` (6, nuevo):
+    - `ProblemPhotos.test.tsx` (7, nuevo):
       - una a la vez, con su estado, y Reintentar solo para la conexión o el servidor, que se queda con el foco;
       - rechazada, lee otra vez la visita y ya no ofrece más, y la rechazada se quita;
       - un enlace que dejó de abrir detiene las demás;
       - sin más cuando la página dice que ya no recibe;
       - cada foto de la solicitud va una vez, también en StrictMode y al volver a mostrarse (por la revisión);
-      - con cada foto que llega, Mis citas se vuelve a leer (por la revisión automática).
+      - con cada foto que llega, Mis citas se vuelve a leer (por la revisión automática);
+      - al quitar una de cinco fotos, el foco queda en «Agregar más fotos» cuando vuelve a recibir una (por la revisión automática).
     - `useProblemPhotoUploads.test.ts` (1, nuevo, por la revisión automática): el navegador pregunta antes de cerrar mientras cualquier enlace sigue mandando fotos, no solo hasta que termina el primero.
     - `PublicHomeVisitPage.test.tsx` (+1): elige, ve y quita fotos en la solicitud, y se mandan con el enlace al guardarla.
     - `AppointmentTrackingPage.test.tsx` (+4): cuántas mandó y agregar desde el enlace, con la cita al día; sin fotos para una cita que ya no las recibe; y, por la revisión, la visita como la tiene el servidor al abrir el enlace después de mandar fotos desde el recibo, y cancelada al volver después de mandar una foto y cancelar. Usan una caché como la de la aplicación (30 s): con la de las pruebas la respuesta vieja no se notaba.
     - `AppointmentsList.test.tsx` (+1): «Ver lo que pasa» con el texto y las fotos de una visita en línea, nunca en una del equipo.
     - `QuoteDetail.test.tsx` (+3): lo que pasa y sus fotos en la cotización, nada para una visita del equipo, y solo las rutas privadas del negocio.
     - `privateFiles.test.ts` (+1): el área nueva.
-  - **.NET en total:** 4,595 pruebas (Domain 1,357; Application 2,068; WebApi 484; Infrastructure 686, con la de formatos que trajo `master` en la PR #153), también el build en Release. **Cliente en total:** 194 archivos y 1,471 pruebas.
-  - **Primera visita:** 181,707 B (`master` en `8ecfa7f`: 181,605 B, +102 B). Las fotos se cargan con sus pantallas; los 102 B son la lista de precarga de la entrada, con los chunks compartidos nuevos, y la regla de las rutas privadas. Con cada corrección de la revisión la cifra se movió unos bytes, por los nombres de los chunks que cambian en esa lista. El presupuesto sube de 181,700 B a 181,800 B.
+  - **.NET en total:** 4,595 pruebas (Domain 1,357; Application 2,068; WebApi 484; Infrastructure 686, con la de formatos que trajo `master` en la PR #153), también el build en Release. **Cliente en total:** 194 archivos y 1,472 pruebas.
+  - **Primera visita:** 181,708 B (`master` en `8ecfa7f`: 181,605 B, +103 B). Las fotos se cargan con sus pantallas; los 103 B son la lista de precarga de la entrada, con los chunks compartidos nuevos, y la regla de las rutas privadas. Con cada corrección de la revisión la cifra se movió unos bytes, por los nombres de los chunks que cambian en esa lista. El presupuesto sube de 181,700 B a 181,800 B.
   - **Escenas:** contra la línea base de `master` en `8ecfa7f` (794 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
     - 793 salen iguales.
     - **Cambia 1, a propósito:** la hoja de la solicitud (`oficios-solicitar-visita-datos-telefono`) suma «Fotos de lo que pasa».
