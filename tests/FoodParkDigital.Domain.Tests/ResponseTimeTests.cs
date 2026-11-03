@@ -96,7 +96,8 @@ public class ResponseTimeTests
     {
         var now = new DateTimeOffset(2027, 3, 1, 17, 0, 0, TimeSpan.Zero);
 
-        Assert.Equal(now.AddDays(-ResponseTimes.WindowDays), ResponseTimes.Since(now));
+        Assert.Equal(90, ResponseTimes.WindowDays);
+        Assert.Equal(new DateTimeOffset(2026, 12, 1, 17, 0, 0, TimeSpan.Zero), ResponseTimes.Since(now));
     }
 
     [Fact]
