@@ -984,7 +984,7 @@ La Fase 29H trae una migración, [`database/production/20261102205836_AddAppoint
   - Las fotos van al almacenamiento privado que ya existe (`FileStorage`, el contenedor `private-files` en Azure o `App_Data/private-files` en local), bajo `orders/{tenantId}/visit-problem/`. No hay variables nuevas ni evento nuevo en el outbox.
   - La ruta anónima `POST /api/v1/public/appointments/tracking/photos` tiene su propio límite por IP (`public-upload`, 20 cada 10 minutos) y acepta un cuerpo de hasta 10 MB más el formulario. Un proxy delante de la app debe dejar pasar ese tamaño.
   - Cada instancia decodifica a lo más dos fotos a la vez. Al escalar a más instancias, crece lo que se procesa a la vez, no la memoria de cada una.
-- **ImageSharp:** sigue en la 3.1.12. La 3.2.0 corrige sus avisos de seguridad, pero el build en Release falla sin una licencia de Six Labors (`SixLaborsLicenseKey`): subirla pide esa licencia como secreto del CI, del despliegue y del build de Docker (deuda técnica).
+- **ImageSharp:** sigue en la 3.1.12, por la decisión del 2026-11-03 de quedarse mientras ningún aviso sea alcanzable (deuda técnica). Una versión que los corrige pide una clave de Six Labors (`SixLaborsLicenseKey`) como secreto del CI, del despliegue y del build de Docker.
 - **Volver a la versión anterior:** funciona sin tocar la base. La solicitud y el enlace dejan de ofrecer las fotos, y las que ya se mandaron se quedan guardadas sin que el negocio las vea.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50056 en cuanto un cliente mandó una foto; si no, quita la tabla. Los archivos de las fotos no se borran.
 

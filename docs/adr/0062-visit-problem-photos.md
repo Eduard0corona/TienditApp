@@ -10,7 +10,7 @@ Desde la Fase 29B ([ADR 0053](0053-home-visit-quotes.md), punto 11) el cliente p
 
 La ADR 0053 dejó las fotos para después porque «necesitan una subida pública validada, privada por negocio y con límite por solicitud, y esta etapa no abre subidas anónimas». Hasta esta fase, TienditApp no recibía archivos de alguien sin sesión: las fotos de un servicio ([ADR 0024](0024-service-photos.md)) y los comprobantes las sube el equipo del negocio.
 
-Al preparar la fase, `dotnet restore` marcaba seis avisos de seguridad en `SixLabors.ImageSharp` 3.1.12, la librería que decodifica las imágenes. Tres eran nuevos y no estaban en la deuda técnica, y uno afecta el perfil de color ICC que traen los JPEG y PNG. La 3.2.0 los corrige, pero exige una licencia de Six Labors para compilar en Release.
+Al preparar la fase, `dotnet restore` marcaba seis avisos de seguridad en `SixLabors.ImageSharp` 3.1.12, la librería que decodifica las imágenes. Tres eran nuevos y no estaban en la deuda técnica, y uno está en la lectura del perfil de color ICC que pueden traer los JPEG y PNG. La 3.2.0 los corrige, pero exige una clave de Six Labors para compilar en Release.
 
 Tomé las decisiones de la Fase 29H con la autorización permanente del dueño del producto, sin esperar su respuesta a cada una.
 
@@ -39,7 +39,7 @@ Tomé las decisiones de la Fase 29H con la autorización permanente del dueño d
    - **Se abren con la sesión** por `/api/v1/files/…`, para quien lleva la agenda o cotiza (`ManageAppointments` o `ManageOrders`, con el módulo de agenda o de órdenes de servicio).
    - **Solo abre un archivo que una foto del negocio guarda.** Otro negocio, otra área o un archivo suelto responden como si no existieran.
 6. **El cliente ve cuántas mandó** («Mandaste 3 fotos de lo que pasa») y la vista previa mientras las sube, pero no las vuelve a ver desde el servidor.
-7. **ImageSharp sigue en la 3.1.12.** La 3.2.0 corrige los seis avisos (cuatro de TIFF, uno del perfil ICC y uno de `HistogramEqualization`), pero falla al compilar en Release sin una licencia de Six Labors. Conseguirla es decisión del dueño del producto (deuda técnica).
+7. **ImageSharp sigue en la 3.1.12.** La 29H probó la 3.2.0, que corrige los seis avisos, y el build en Release falla sin una clave de Six Labors. El 2026-11-03 se decidió quedarse en la 3.1.12 mientras ninguno sea alcanzable ([deuda técnica](../roadmap/technical-debt.md)): cinco están en TIFF, que no se decodifica, y el del perfil ICC solo se alcanza al leer sus entradas, que la app no pide.
    - **Mientras, un JPEG más grande que el tamaño en que se guarda se decodifica ya reducido**, que es casi toda foto de un teléfono, y toda foto con 8 bits por canal (un PNG de 16 bits ocupa la mitad).
    - **Un PNG o un WebP grande se decodifica completo** y luego se reduce: ImageSharp 3.1 no lo escala al leerlo. Lo acotan el tope de 50 megapíxeles y las dos fotos a la vez.
    - **Una foto más chica se guarda en su tamaño**, nunca ampliada.
