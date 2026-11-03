@@ -147,7 +147,8 @@ public class GetPublicBookingQueryHandler : IRequestHandler<GetPublicBookingQuer
 
         var services = await OnlineBookingCalendar.BookableServices(_context)
             .AsNoTracking()
-            .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
+            // The Id breaks ties: the same first 100 as Explorar finds (Fase 29I).
+            .OrderBy(p => p.SortOrder).ThenBy(p => p.Name).ThenBy(p => p.Id)
             .Take(OnlineBookingCalendar.MaxServices)
             .Select(p => new { p.Id, p.Name, p.Description, p.PriceAmount, p.PreparationTimeMinutes, p.ImageUrl })
             .ToListAsync(cancellationToken);

@@ -66,11 +66,16 @@ public class PublicDirectoryServiceDto
     public string Name { get; set; } = null!;
     /// <summary>Its price; for <see cref="PublicDirectoryServiceKind.HomeVisit"/>, what it starts at («desde»).</summary>
     public decimal Price { get; set; }
-    /// <summary>How long it takes, as its booking page or its store says; null when its store says nothing.</summary>
+    /// <summary>How long it takes, as its booking page says it (an hour without one); null for one at home: its store does not say.</summary>
     public int? DurationMinutes { get; set; }
-    /// <summary>Its photo, 256 px wide; none without one.</summary>
+    /// <summary>Its photo, 256 px wide, as its booking page shows it; none without one, nor for one at home.</summary>
     public string? ImageUrl { get; set; }
     public PublicDirectoryServiceKind Kind { get; set; }
+    /// <summary>
+    /// With the customer's postal code, for one at home: whether its business goes there, as its card says. Null without a
+    /// postal code or for one booked online.
+    /// </summary>
+    public bool? VisitsPostalCode { get; set; }
     /// <summary>
     /// Its store writes «más IVA» after its price: a service that receives visits of a business that writes its prices
     /// without IVA. Its booking page never does.
@@ -116,11 +121,14 @@ public sealed class PublicProductIndex
     public const int MaxServices = 10_000;
 
     /// <summary>
-    /// A business with at most this many bookable services is read whole: its booking page (<see cref="OnlineBookingCalendar.MaxServices"/>)
-    /// and its store (<see cref="PublicHomeVisitsDto.MaxServices"/>) show them all. One with more is read on its own, each
-    /// list cut as its page cuts it.
+    /// The most bookable services of a business read whole, with the others of its batch: every page it has shows them all
+    /// (its booking page <see cref="OnlineBookingCalendar.MaxServices"/>, its store <see cref="PublicHomeVisitsDto.MaxServices"/>).
+    /// One with more is read on its own, each list cut as its page cuts it.
     /// </summary>
-    internal const int WholeServices = PublicHomeVisitsDto.MaxServices;
+    internal static int WholeServices(PublicDirectoryBusinessDto business)
+        => business.ReceivesVisits
+            ? Math.Min(PublicHomeVisitsDto.MaxServices, business.BooksOnline ? OnlineBookingCalendar.MaxServices : int.MaxValue)
+            : OnlineBookingCalendar.MaxServices;
 
     private readonly IReadOnlyList<Entry> _entries;
     private readonly IReadOnlyList<ServiceEntry> _services;
@@ -216,7 +224,19 @@ public sealed class PublicProductIndex
             }
         }
 
-        var services = await ServicesAsync(context, snapshot, businesses, cancellationToken, logger);
+        // The services never take the products with them: without them, a search answers with the products until the next
+        // snapshot.
+        List<ServiceEntry> services;
+        try
+        {
+            services = await ServicesAsync(context, snapshot, businesses, cancellationToken, logger);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Explorar could not read the services of its businesses: its searches answer without them until the next snapshot.");
+            services = [];
+        }
+
         return new PublicProductIndex(snapshot.BuiltAt, entries, services);
     }
 
@@ -269,20 +289,25 @@ public sealed class PublicProductIndex
                 listed[row.Id] = (row, wasBooked || booked, wasVisited || visited);
             }
 
-            var whole = sizes.Where(business => business.Services <= WholeServices).Select(business => business.TenantId).ToList();
+            bool Whole(Guid tenantId, int services) => services <= WholeServices(businesses[tenantId].entry.Business);
+            var whole = sizes.Where(business => Whole(business.TenantId, business.Services)).Select(business => business.TenantId).ToList();
             if (whole.Count > 0)
             {
-                foreach (var row in await Rows(Bookable(whole)).ToListAsync(cancellationToken))
+                // In one order, so the businesses Explorar shows last are the ones left out past the limit, always the same.
+                var all = Bookable(whole).OrderBy(p => p.TenantId).ThenBy(p => p.SortOrder).ThenBy(p => p.Name).ThenBy(p => p.Id);
+                foreach (var row in await Rows(all).ToListAsync(cancellationToken))
                     List(row, booked: true, visited: !row.IsVisit);
             }
 
-            foreach (var large in sizes.Where(business => business.Services > WholeServices))
+            foreach (var large in sizes.Where(business => !Whole(business.TenantId, business.Services)))
             {
                 var business = businesses[large.TenantId].entry.Business;
                 if (business.BooksOnline)
                 {
                     // The booking page's cut (GetPublicBookingQuery): by its order, before who attends.
-                    var page = Bookable([large.TenantId]).OrderBy(p => p.SortOrder).ThenBy(p => p.Name).Take(OnlineBookingCalendar.MaxServices);
+                    var page = Bookable([large.TenantId])
+                        .OrderBy(p => p.SortOrder).ThenBy(p => p.Name).ThenBy(p => p.Id)
+                        .Take(OnlineBookingCalendar.MaxServices);
                     foreach (var row in await Rows(page).ToListAsync(cancellationToken))
                         List(row, booked: true, visited: false);
                 }
@@ -302,34 +327,28 @@ public sealed class PublicProductIndex
             foreach (var (row, booked, visited) in listed.Values.OrderBy(service => businesses[service.Row.TenantId].position))
             {
                 var (business, position) = businesses[row.TenantId];
-                PublicDirectoryServiceKind kind;
-                int? minutes;
                 if (business.Business.BooksOnline && booked && row.Offered)
                 {
-                    kind = PublicDirectoryServiceKind.BooksOnline;
-                    minutes = (int)OnlineBookingRules.ServiceDuration(row.PreparationTimeMinutes).TotalMinutes;
+                    // As its booking page shows it: its length (an hour without one), its photo and its description.
+                    entries.Add(new ServiceEntry(
+                        business,
+                        position,
+                        row.Id,
+                        row.Name,
+                        row.PriceAmount,
+                        (int)OnlineBookingRules.ServiceDuration(row.PreparationTimeMinutes).TotalMinutes,
+                        ProductImageUrlsDto.FromBaseUrl(row.ImageUrl)?.Small,
+                        PublicDirectoryServiceKind.BooksOnline,
+                        PublicDirectorySnapshot.Comparable(row.Name),
+                        PublicDirectorySnapshot.Comparable($"{row.Name} {row.Description}")));
                 }
                 else if (business.Business.ReceivesVisits && visited)
                 {
-                    kind = PublicDirectoryServiceKind.HomeVisit;
-                    minutes = row.PreparationTimeMinutes;
+                    // As its store shows it: its name and what it starts at, nothing else (no length, photo or description).
+                    var name = PublicDirectorySnapshot.Comparable(row.Name);
+                    entries.Add(new ServiceEntry(
+                        business, position, row.Id, row.Name, row.PriceAmount, null, null, PublicDirectoryServiceKind.HomeVisit, name, name));
                 }
-                else
-                {
-                    continue;
-                }
-
-                entries.Add(new ServiceEntry(
-                    business,
-                    position,
-                    row.Id,
-                    row.Name,
-                    row.PriceAmount,
-                    minutes,
-                    ProductImageUrlsDto.FromBaseUrl(row.ImageUrl)?.Small,
-                    kind,
-                    PublicDirectorySnapshot.Comparable(row.Name),
-                    PublicDirectorySnapshot.Comparable($"{row.Name} {row.Description}")));
             }
 
             if (entries.Count > MaxServices)
@@ -414,12 +433,13 @@ public sealed class PublicProductIndex
     /// <summary>
     /// The services whose name or description has every word, of the businesses of <paramref name="category"/> (Fase 29I),
     /// as the products: those whose name has them first, then by the order of Explorar and by name; at most
-    /// <see cref="MaxPerBusiness"/> of one business and <see cref="MaxResults"/> in all.
+    /// <see cref="MaxPerBusiness"/> of one business and <see cref="MaxResults"/> in all. One at home is found by its name
+    /// only, as its store shows it.
     /// </summary>
     /// <param name="near">With the customer's position: the nearest businesses first, each with how far it is.</param>
     /// <param name="unreached">
-    /// With the customer's postal code: the businesses that receive visits and do not go there. Their services go after the
-    /// rest, as their cards do.
+    /// With the customer's postal code (empty when none of the businesses found misses it): the businesses that receive visits
+    /// and do not go there. Their services at home go after the rest, as their cards do, and say so. Null without a postal code.
     /// </param>
     public List<PublicDirectoryServiceDto> SearchServices(
         IReadOnlyCollection<string> words, BusinessCategory? category, PublicDirectoryNearby? near = null, IReadOnlySet<Guid>? unreached = null)
@@ -451,6 +471,9 @@ public sealed class PublicProductIndex
                 DurationMinutes = service.DurationMinutes,
                 ImageUrl = service.ImageUrl,
                 Kind = service.Kind,
+                VisitsPostalCode = service.Kind == PublicDirectoryServiceKind.HomeVisit && unreached is not null
+                    ? !unreached.Contains(business.TenantId)
+                    : null,
                 AddsTax = service.Kind == PublicDirectoryServiceKind.HomeVisit && !business.Business.PricesIncludeTax,
                 BusinessName = business.Business.Name,
                 BusinessSlug = business.Business.Slug,

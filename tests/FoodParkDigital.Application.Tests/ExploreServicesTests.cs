@@ -36,7 +36,7 @@ public class ExploreServicesTests
         await ServiceAsync(fixture, salon, "Corte de cabello", 150m, minutes: 45, description: "Lavado y PEINADO incluidos", image: "/uploads/products/sol/corte");
         await ServiceAsync(fixture, salon, "Tinte", 600m);
         var plumber = await TradeAsync(fixture, "plomeria-hernandez", "Plomería Hernández");
-        await ServiceAsync(fixture, plumber, "Reparación de fugas", 350m, minutes: 90, description: "Tubería y llaves");
+        await ServiceAsync(fixture, plumber, "Reparación de fugas", 350m, minutes: 90, description: "Tubería y llaves", image: "/uploads/products/plomero/fuga");
         await ServiceAsync(fixture, plumber, "Destape de drenaje", 500m);
 
         var corte = Assert.Single((await SearchAsync(fixture, "CORTE")).Services);
@@ -53,11 +53,16 @@ public class ExploreServicesTests
         Assert.Equal(corte.Id, peinado.Id);
         // Without a length, the booking page books it for an hour.
         Assert.Equal(60, tinte.DurationMinutes);
-        // At home: the price it starts at, as its store says it, and nothing it does not say.
+        // At home: its name and the price it starts at, as its store says it, and nothing it does not say: no length, no photo,
+        // and found by its name only.
         Assert.Equal(
-            ("Reparación de fugas", 350m, 90, PublicDirectoryServiceKind.HomeVisit, "plomeria-hernandez"),
-            (fuga.Name, fuga.Price, fuga.DurationMinutes, fuga.Kind, fuga.BusinessSlug));
-        Assert.Null(drenaje.DurationMinutes);
+            ("Reparación de fugas", 350m, PublicDirectoryServiceKind.HomeVisit, "plomeria-hernandez"),
+            (fuga.Name, fuga.Price, fuga.Kind, fuga.BusinessSlug));
+        Assert.Equal(((int?)null, (string?)null), (fuga.DurationMinutes, fuga.ImageUrl));
+        Assert.Empty((await SearchAsync(fixture, "tuberia")).Services);
+        Assert.Equal("Destape de drenaje", drenaje.Name);
+        // Without the customer's postal code, nothing is said about going there.
+        Assert.Null(fuga.VisitsPostalCode);
         // Its store writes «más IVA» only when the business writes its prices without it; the booking page never does.
         Assert.Equal((false, false), (corte.AddsTax, fuga.AddsTax));
         var electrician = await TradeAsync(fixture, "electrica-luz", "Eléctrica Luz", pricesIncludeTax: false);
@@ -140,11 +145,52 @@ public class ExploreServicesTests
         var near = await TradeAsync(fixture, "b-plomeria-cerca", "B Plomería Cerca", zones: [("Centro", 50m, ["72000"])]);
         await ServiceAsync(fixture, near, "Reparación de fugas", 350m);
 
+        // A trade with a shop that books online and does not go there either: what it books at its shop does not go last;
+        // what it only quotes at home (nobody books it online) does.
+        var shop = await TradeAsync(fixture, "c-plomeria-taller", "C Plomería Taller", zones: [("Sur", 50m, ["72200"])], mainBranch: BranchServiceMode.Premises);
+        (await SettingsAsync(fixture, shop)).UpdateOnlineBooking(true, 1);
+        var atTheShop = await ServiceAsync(fixture, shop, "Revisión de fugas en el taller", 200m);
+        await ServiceAsync(fixture, shop, "Fugas en casa", 400m);
+        await StaffAsync(fixture, shop, "Ana", [atTheShop.Id]);
+        await fixture.Context.SaveChangesAsync();
+
         var anywhere = await SearchAsync(fixture, "fugas");
         var at72000 = await Handler(fixture).Handle(new GetPublicDirectoryQuery(Search: "fugas", PostalCode: "72000"), CancellationToken.None);
 
-        Assert.Equal(["a-plomeria-lejos", "b-plomeria-cerca"], anywhere.Services.Select(s => s.BusinessSlug));
-        Assert.Equal(["b-plomeria-cerca", "a-plomeria-lejos"], at72000.Services.Select(s => s.BusinessSlug));
+        Assert.Equal(
+            ["Fugas de agua", "Reparación de fugas", "Fugas en casa", "Revisión de fugas en el taller"],
+            anywhere.Services.Select(s => s.Name));
+        Assert.Equal(
+            [
+                ("Reparación de fugas", PublicDirectoryServiceKind.HomeVisit, (bool?)true),
+                ("Revisión de fugas en el taller", PublicDirectoryServiceKind.BooksOnline, null),
+                ("Fugas de agua", PublicDirectoryServiceKind.HomeVisit, false),
+                ("Fugas en casa", PublicDirectoryServiceKind.HomeVisit, false)
+            ],
+            at72000.Services.Select(s => (s.Name, s.Kind, s.VisitsPostalCode)));
+    }
+
+    [Fact]
+    public async Task Search_ShouldPutFirstTheServicesThatSayItInTheirName_AndStopAtTwelve()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        // Explorar shows the first salon first: its service says it in its description only.
+        var first = await SalonAsync(fixture, "a-estetica", "A Estética");
+        await ServiceAsync(fixture, first, "Lavado y secado", 120m, description: "Con corte de puntas");
+        foreach (var letter in "bcde")
+        {
+            var salon = await SalonAsync(fixture, $"{letter}-estetica", $"{char.ToUpperInvariant(letter)} Estética");
+            foreach (var name in new[] { "Corte dama", "Corte caballero", "Corte niño" })
+                await ServiceAsync(fixture, salon, name, 150m);
+        }
+
+        var found = (await SearchAsync(fixture, "corte")).Services;
+
+        Assert.Equal(12, found.Count);
+        Assert.DoesNotContain(found, s => s.Name == "Lavado y secado");
+        Assert.Equal("b-estetica", found[0].BusinessSlug);
+        // Past the twelve named so, the one of its description: «lavado» finds it by its name.
+        Assert.Equal("Lavado y secado", Assert.Single((await SearchAsync(fixture, "puntas")).Services).Name);
     }
 
     [Fact]
@@ -155,13 +201,20 @@ public class ExploreServicesTests
         var salon = await SalonAsync(fixture, "estetica-sol", "Estética Sol");
         for (var n = 0; n < 100; n++)
             await ServiceAsync(fixture, salon, $"Servicio {n:000}", 100m, sortOrder: n, save: false);
-        await ServiceAsync(fixture, salon, "Ultimo zz29i", 100m, sortOrder: 500, save: false);
+        var last = await ServiceAsync(fixture, salon, "Ultimo zz29i", 100m, sortOrder: 500, save: false);
         await ServiceAsync(fixture, salon, "Primero zz29i", 100m, sortOrder: -1, save: false);
-        // More than its store shows: the 50 featured first.
+        await fixture.Context.SaveChangesAsync();
+        // Someone does the one past the cut, and another the first: the page cuts before who attends, as its booking page.
+        await StaffAsync(fixture, salon, "Ana", [last.Id]);
+        await StaffAsync(fixture, salon, "Bety", [(await fixture.Context.Products.SingleAsync(p => p.Name == "Primero zz29i")).Id]);
+        // More than its store shows: the 50 featured first, never the visit, even featured.
         var plumber = await TradeAsync(fixture, "plomeria-hernandez", "Plomería Hernández");
         for (var n = 0; n < 50; n++)
             await ServiceAsync(fixture, plumber, $"Trabajo {n:000}", 300m, featured: true, save: false);
         await ServiceAsync(fixture, plumber, "Sin destacar zz29i", 300m, save: false);
+        var visit = await ServiceAsync(fixture, plumber, "Visita zz29i", 150m, featured: true, sortOrder: -5, save: false);
+        await fixture.Context.SaveChangesAsync();
+        (await SettingsAsync(fixture, plumber)).UpdateHomeVisitRequests(true, visit.Id, HomeVisitChargePolicy.Charged);
         await fixture.Context.SaveChangesAsync();
 
         var found = (await SearchAsync(fixture, "zz29i")).Services;

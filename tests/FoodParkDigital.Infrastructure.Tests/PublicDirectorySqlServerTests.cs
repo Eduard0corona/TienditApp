@@ -110,7 +110,8 @@ public class PublicDirectorySqlServerTests
         Product? visitService = null;
         if (visit is not null)
         {
-            visitService = new Product(tenant.Id, category.Id, visit, null, 150m, "MXN", preparationTimeMinutes: 60, unit: UnitType.Service);
+            // Featured and first by its order: only being the visit keeps it off its store.
+            visitService = new Product(tenant.Id, category.Id, visit, null, 150m, "MXN", preparationTimeMinutes: 60, sortOrder: -5, isFeatured: true, unit: UnitType.Service);
             context.Products.Add(visitService);
         }
         if (booksOnline)

@@ -249,32 +249,28 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
         var found = (near?.Entries ?? inCategory)
             .Where(entry => words.All(entry.SearchText.Contains))
             .ToList();
-        var postalCode = DeliveryZone.NormalizePostalCode(request.PostalCode);
-        // A trade that does not go to the postal code is no use to the customer, so it goes after the rest (a stable order:
-        // «Cerca de mí» and the order of Explorar stay within each part). Only the businesses found that receive visits are
-        // asked for their zones here; nothing is read when none does.
-        var visiting = postalCode is null ? [] : found.Where(entry => entry.Business.ReceivesVisits).ToList();
-        if (visiting.Count > 0)
-        {
-            var visitZones = (await PublicDirectoryCards.ZonesAtAsync(_context, visiting, postalCode, cancellationToken))!;
-            found = found.OrderBy(entry => entry.Business.ReceivesVisits && !visitZones.ContainsKey(entry.TenantId) ? 1 : 0).ToList();
-        }
         var pageSize = Math.Clamp(request.PageSize, 1, GetPublicDirectoryQuery.MaxPageSize);
         var pageNumber = Math.Max(1, request.PageNumber);
+        // The products and services of a search come with its first page; the index of the snapshot is read only when there is one.
+        var index = words.Length == 0 || pageNumber > 1 ? null : await IndexAsync(snapshot, cancellationToken);
+        var postalCode = DeliveryZone.NormalizePostalCode(request.PostalCode);
+        // A trade that does not go to the postal code is no use to the customer, so it goes after the rest (a stable order:
+        // «Cerca de mí» and the order of Explorar stay within each part), and so do its services at home (Fase 29I). Only the
+        // businesses found that receive visits, and those whose services at home were found, are asked for their zones, in
+        // one read; nothing is read when none does.
+        var visiting = postalCode is null ? [] : found.Where(entry => entry.Business.ReceivesVisits).ToList();
+        var visitingWith = postalCode is null || index is null ? [] : index.VisitingWith(words, request.Category);
+        var asked = visiting.Concat(visitingWith).DistinctBy(entry => entry.TenantId).ToList();
+        var visitZones = asked.Count > 0 ? (await PublicDirectoryCards.ZonesAtAsync(_context, asked, postalCode, cancellationToken))! : null;
+        if (visiting.Count > 0)
+            found = found.OrderBy(entry => entry.Business.ReceivesVisits && !visitZones!.ContainsKey(entry.TenantId) ? 1 : 0).ToList();
         var page = found.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
         // What each card of the page says about delivering and visiting there: the zones of the page only.
         var businesses = await PublicDirectoryCards.WithDeliveryToAsync(_context, page, postalCode, cancellationToken, near?.DistanceKm);
-        // The products and services of a search come with its first page; the index of the snapshot is read only when there is one.
-        var index = words.Length == 0 || pageNumber > 1 ? null : await IndexAsync(snapshot, cancellationToken);
         var products = index?.Search(words, request.Category, near) ?? [];
-        // A trade that does not go to the postal code: its services go after the rest, as its card does (Fase 29I).
-        var visitingWith = postalCode is null || index is null ? [] : index.VisitingWith(words, request.Category);
-        IReadOnlySet<Guid>? unreached = null;
-        if (visitingWith.Count > 0)
-        {
-            var zones = (await PublicDirectoryCards.ZonesAtAsync(_context, visitingWith, postalCode, cancellationToken))!;
-            unreached = visitingWith.Where(entry => !zones.ContainsKey(entry.TenantId)).Select(entry => entry.TenantId).ToHashSet();
-        }
+        IReadOnlySet<Guid>? unreached = postalCode is null
+            ? null
+            : visitingWith.Where(entry => !visitZones!.ContainsKey(entry.TenantId)).Select(entry => entry.TenantId).ToHashSet();
         var services = index?.SearchServices(words, request.Category, near, unreached) ?? [];
 
         return new PublicDirectoryDto
