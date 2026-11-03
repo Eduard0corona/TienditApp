@@ -24,11 +24,14 @@ export default function AppointmentTrackingPage() {
   const toast = useToast();
   const [cancelling, setCancelling] = useState(false);
   const photosId = useId();
-  // The photos going with this link (also from the receipt): the visit as the server answers each one is the one shown.
+  // The photos going with this link (also from the receipt): the visit as the server answers each one while the page shows
+  // is the one shown. An answer from before is old: the visit may have changed since, and the page reads it itself.
   const uploads = useProblemPhotoUploads(token);
-  useEffect(() => {
-    if (uploads.latest) queryClient.setQueryData(['public', 'appointment', token], uploads.latest);
-  }, [uploads.latest, queryClient, token]);
+  const { store } = uploads;
+  useEffect(
+    () => store.onAnswer((latest) => queryClient.setQueryData(['public', 'appointment', token], latest)),
+    [store, queryClient, token],
+  );
   const queryKey = ['public', 'appointment', token];
   const appointmentQuery = useQuery({
     queryKey,

@@ -33,6 +33,7 @@ const NO_UPLOADS: PhotoUploads = { photos: [], latest: null, closed: false };
 class LinkUploads {
   private state: PhotoUploads = NO_UPLOADS;
   private readonly listeners = new Set<() => void>();
+  private readonly answerListeners = new Set<(latest: CustomerAppointment) => void>();
   private running = false;
   private readonly token: string;
 
@@ -48,6 +49,17 @@ class LinkUploads {
   };
 
   getSnapshot = () => this.state;
+
+  /**
+   * Calls back with each answer of the server from now on: the visit after a photo it took, or read again after one it
+   * refused. Never one from before, which a screen opened later reads for itself.
+   */
+  onAnswer = (listener: (latest: CustomerAppointment) => void) => {
+    this.answerListeners.add(listener);
+    return () => {
+      this.answerListeners.delete(listener);
+    };
+  };
 
   /** Queues the photos not queued before: the same pick shown twice goes once. */
   enqueue(photos: PickedPhoto[]) {
@@ -81,6 +93,11 @@ class LinkUploads {
     this.set({ photos: this.state.photos.map((photo) => (photo.id === id ? { ...photo, ...change } : photo)) });
   }
 
+  private answered(latest: CustomerAppointment) {
+    this.set({ latest });
+    for (const listener of this.answerListeners) listener(latest);
+  }
+
   private async run() {
     if (this.running) return;
     this.running = true;
@@ -96,7 +113,7 @@ class LinkUploads {
         try {
           const latest = await publicMenuApi.addAppointmentPhoto(this.token, file);
           this.mark(id, { status: 'sent' });
-          this.set({ latest });
+          this.answered(latest);
         } catch (err: unknown) {
           const status = getApiErrorStatus(err);
           const retryable = status === undefined || status === 429 || status >= 500;
@@ -117,7 +134,7 @@ class LinkUploads {
 
   private async readAgain() {
     try {
-      this.set({ latest: await publicMenuApi.trackAppointment(this.token) });
+      this.answered(await publicMenuApi.trackAppointment(this.token));
     } catch (err: unknown) {
       if (getApiErrorStatus(err) === 404) this.set({ closed: true });
     }
