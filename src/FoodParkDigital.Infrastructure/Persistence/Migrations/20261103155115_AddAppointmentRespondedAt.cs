@@ -22,7 +22,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                 table: "Appointments",
                 column: "CreatedAt",
                 filter: "[Channel] = 1")
-                .Annotation("SqlServer:Include", new[] { "TenantId", "RespondedAt", "Status", "StartAt" });
+                .Annotation("SqlServer:Include", new[] { "TenantId", "RespondedAt", "Status", "StartAt", "CancelledByCustomerAt" });
         }
 
         /// <inheritdoc />

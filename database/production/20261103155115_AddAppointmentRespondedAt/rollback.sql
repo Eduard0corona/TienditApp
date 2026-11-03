@@ -1,8 +1,8 @@
 ﻿-- =====================================================================================
--- TienditApp (FoodParkDigital): revierte la Fase 29J, 20261103145039_AddAppointmentRespondedAt,
+-- TienditApp (FoodParkDigital): revierte la Fase 29J, 20261103155115_AddAppointmentRespondedAt,
 -- hasta la migración anterior, 20261102205836_AddAppointmentProblemPhotos.
 -- Generado el 2026-11-03 con `dotnet ef migrations script
--- 20261103145039_AddAppointmentRespondedAt 20261102205836_AddAppointmentProblemPhotos --idempotent`
+-- 20261103155115_AddAppointmentRespondedAt 20261102205836_AddAppointmentProblemPhotos --idempotent`
 -- (EF Core 10.0.12). Debajo del bloque SET, el contenido es el que genera EF, sin cambios.
 --
 -- Borra el índice y la columna [Appointments].[RespondedAt]: se pierde cuándo se respondió cada
@@ -26,7 +26,7 @@ GO
 BEGIN TRANSACTION;
 IF EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261103145039_AddAppointmentRespondedAt'
+    WHERE [MigrationId] = N'20261103155115_AddAppointmentRespondedAt'
 )
 BEGIN
     DROP INDEX [IX_Appointments_OnlineRequests_CreatedAt] ON [Appointments];
@@ -34,7 +34,7 @@ END;
 
 IF EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261103145039_AddAppointmentRespondedAt'
+    WHERE [MigrationId] = N'20261103155115_AddAppointmentRespondedAt'
 )
 BEGIN
     DECLARE @var nvarchar(max);
@@ -48,11 +48,11 @@ END;
 
 IF EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261103145039_AddAppointmentRespondedAt'
+    WHERE [MigrationId] = N'20261103155115_AddAppointmentRespondedAt'
 )
 BEGIN
     DELETE FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261103145039_AddAppointmentRespondedAt';
+    WHERE [MigrationId] = N'20261103155115_AddAppointmentRespondedAt';
 END;
 
 COMMIT;

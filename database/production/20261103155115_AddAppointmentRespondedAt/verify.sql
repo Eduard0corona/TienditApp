@@ -8,7 +8,7 @@ SET NOCOUNT ON;
 -- 1. Antes: últimas migraciones aplicadas. Con master desplegado (la Fase 29I, sin migración), la
 --    más reciente es 20261102205836_AddAppointmentProblemPhotos. Si es anterior, revisa primero el
 --    verify.sql de su carpeta: apply.sql también aplica las que falten. Después:
---    20261103145039_AddAppointmentRespondedAt.
+--    20261103155115_AddAppointmentRespondedAt.
 SELECT TOP (5) [MigrationId], [ProductVersion]
 FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;

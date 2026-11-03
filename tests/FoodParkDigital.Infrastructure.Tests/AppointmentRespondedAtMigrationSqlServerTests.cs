@@ -22,7 +22,7 @@ public class AppointmentRespondedAtMigrationSqlServerTests
 {
     // The migration right before AddAppointmentRespondedAt, where its rollback.sql takes the database.
     private const string BeforeMigration = "20261102205836_AddAppointmentProblemPhotos";
-    private const string Migration = "20261103145039_AddAppointmentRespondedAt";
+    private const string Migration = "20261103155115_AddAppointmentRespondedAt";
     private const string IndexName = "IX_Appointments_OnlineRequests_CreatedAt";
     private static readonly DateTimeOffset Start = new(2026, 11, 9, 16, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset Now = new(2026, 11, 3, 15, 0, 0, TimeSpan.Zero);

@@ -6,8 +6,8 @@ namespace FoodParkDigital.Domain.Tests;
 
 /// <summary>
 /// How soon a business answers its requests online (Fase 29J, ADR 0064): the moment it accepts or declines one is kept once,
-/// and Explorar sums them up as the soonest time that holds at least half of them, from three requests, with those let pass
-/// as the slowest.
+/// and Explorar sums them up as the soonest time that holds at least half of them, from three requests of the last 90 days
+/// since Fase 29J, with the slowest last.
 /// </summary>
 public class ResponseTimeTests
 {
@@ -72,19 +72,24 @@ public class ResponseTimeTests
         Assert.Null(ofTheTeam.RespondedAt);
     }
 
-    [Theory]
-    [InlineData(0, ResponseTime.WithinAnHour)]
-    [InlineData(60, ResponseTime.WithinAnHour)]
-    [InlineData(61, ResponseTime.WithinThreeHours)]
-    [InlineData(180, ResponseTime.WithinThreeHours)]
-    [InlineData(181, ResponseTime.WithinTwelveHours)]
-    [InlineData(720, ResponseTime.WithinTwelveHours)]
-    [InlineData(721, ResponseTime.WithinADay)]
-    [InlineData(1440, ResponseTime.WithinADay)]
-    [InlineData(1441, ResponseTime.Slower)]
-    public void Of_ShouldPutEachAnswerWithinItsLimit(int minutes, ResponseTime expected)
+    [Fact]
+    public void Limits_ShouldBeWholeHours_EachLongerThanTheOneBefore()
     {
-        Assert.Equal(expected, ResponseTimes.Of(TimeSpan.FromMinutes(minutes)));
+        // The database adds whole hours to when a request arrived: a fraction would be cut.
+        Assert.Equal([1, 3, 12, 24], ResponseTimes.LimitHours);
+        Assert.Equal(Enum.GetValues<ResponseTime>().Length - 1, ResponseTimes.LimitHours.Count);
+    }
+
+    [Fact]
+    public void Since_ShouldBeTheLast90Days_ButNeverBeforeFase29J()
+    {
+        var later = new DateTimeOffset(2027, 3, 1, 17, 0, 0, TimeSpan.Zero);
+        var soon = new DateTimeOffset(2026, 11, 20, 17, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal(later.AddDays(-ResponseTimes.WindowDays), ResponseTimes.Since(later));
+        // Before Fase 29J nothing kept when a request was answered: its earlier requests do not count, answered or not.
+        Assert.Equal(new DateTimeOffset(2026, 11, 3, 0, 0, 0, TimeSpan.Zero), ResponseTimes.Since(soon));
+        Assert.Equal(ResponseTimes.CountedSince, ResponseTimes.Since(soon));
     }
 
     [Fact]

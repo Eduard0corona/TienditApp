@@ -27,6 +27,8 @@ public class PublicDirectorySqlServerTests
 {
     // Sunday 2026-10-04 at 11:00 in Mexico City.
     private static readonly DateTimeOffset Now = new(2026, 10, 4, 17, 0, 0, TimeSpan.Zero);
+    // Well past Fase 29J and its first 90 days, for how soon each business answers.
+    private static readonly DateTimeOffset Later = new(2027, 3, 1, 17, 0, 0, TimeSpan.Zero);
 
     [SqlServerFact]
     public async Task Directory_ShouldReadEveryBusinessFromItsOwnRows()
@@ -84,45 +86,61 @@ public class PublicDirectorySqlServerTests
     }
 
     [SqlServerFact]
-    public async Task Directory_ShouldSumUpHowSoonEachBusinessAnswers_FromItsOwnRequests()
+    public async Task Category_ShouldSumUpHowSoonEachBusinessAnswers_FromItsOwnRequests_AndPutTheQuickerFirst()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
-        var slow = await SeedServicesAsync(database, "a-lenta", BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
-        await SeedRequestsAsync(database, slow, TimeSpan.FromHours(30), TimeSpan.FromHours(30), TimeSpan.FromHours(30));
-        // Within an hour to the second, and two of three: the third it let pass.
-        var quick = await SeedServicesAsync(database, "b-rapida", BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
-        await SeedRequestsAsync(database, quick, TimeSpan.FromHours(1), TimeSpan.FromMinutes(59), null);
-        await SeedServicesAsync(database, "c-nueva", BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
+        var minute = TimeSpan.FromMinutes(1);
+        async Task<Guid> SalonAsync(string slug) => await SeedServicesAsync(database, slug, BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
+        // Under an hour by a minute, twice; the third it let pass.
+        await SeedRequestsAsync(database, await SalonAsync("b-rapida"), TimeSpan.FromHours(1) - minute, TimeSpan.FromHours(1) - minute, null);
+        // Exactly the limit is not under it: an hour, three hours, twelve hours and a day.
+        await SeedRequestsAsync(database, await SalonAsync("e-una-hora"), TimeSpan.FromHours(1), TimeSpan.FromHours(1), TimeSpan.FromHours(3) - minute);
+        await SeedRequestsAsync(database, await SalonAsync("h-tres-horas"), TimeSpan.FromHours(3), TimeSpan.FromHours(3), TimeSpan.FromHours(3));
+        await SeedRequestsAsync(database, await SalonAsync("i-doce-horas"), TimeSpan.FromHours(12), TimeSpan.FromHours(12), TimeSpan.FromHours(12));
+        await SeedRequestsAsync(database, await SalonAsync("j-un-dia"), TimeSpan.FromDays(1), TimeSpan.FromDays(1), TimeSpan.FromDays(1));
+        await SalonAsync("c-nueva");
         // Quick, but before the last 90 days: as if it had none.
-        var old = await SeedServicesAsync(database, "d-vieja", BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
-        await SeedRequestsAsync(database, old, ResponseTimes.WindowDays + 1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        await SeedRequestsAsync(database, await SalonAsync("d-vieja"), ResponseTimes.WindowDays + 1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        // Answered within minutes, but once their time began.
+        await SeedRequestsAsync(database, await SalonAsync("f-tarde"), 3, startsAfter: TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
+        // Three quick answers, and four that waited a day unanswered: two still waiting, two cancelled by their customer.
+        var silent = await SalonAsync("g-sin-respuesta");
+        await SeedRequestsAsync(database, silent, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        await SeedUnansweredAsync(database, silent, null, null, TimeSpan.FromHours(25), TimeSpan.FromHours(26));
 
         await using var context = database.CreateContext();
-        var directory = await new GetPublicDirectoryQueryHandler(context, new FixedClock(), new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance)
-            .Handle(new GetPublicDirectoryQuery(), CancellationToken.None);
+        var handler = new GetPublicDirectoryQueryHandler(context, new FixedClock(Later), new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance);
+        var category = await handler.Handle(new GetPublicDirectoryQuery(BusinessCategory.Services), CancellationToken.None);
 
         Assert.Equal(
-            [("b-rapida", ResponseTime.WithinAnHour), ("c-nueva", null), ("d-vieja", null), ("a-lenta", (ResponseTime?)null)],
-            directory.Businesses.Items.Select(b => (b.Slug, b.ResponseTime)));
+            [
+                ("b-rapida", ResponseTime.WithinAnHour), ("e-una-hora", ResponseTime.WithinThreeHours),
+                ("c-nueva", null), ("d-vieja", null), ("h-tres-horas", ResponseTime.WithinTwelveHours),
+                ("i-doce-horas", ResponseTime.WithinADay),
+                ("f-tarde", null), ("g-sin-respuesta", null), ("j-un-dia", (ResponseTime?)null)
+            ],
+            category.Businesses.Items.Select(b => (b.Slug, b.ResponseTime)));
     }
 
     private enum Drawer { None, MainBranch, OtherBranch, BeforeBranches }
 
     /// <summary>Requests online that arrived three days ago, each answered after its wait, or let pass when it has none.</summary>
     private static Task SeedRequestsAsync(SqlServerTestDatabase database, Guid tenantId, params TimeSpan?[] waits)
-        => SeedRequestsAsync(database, tenantId, 3, waits);
+        => SeedRequestsAsync(database, tenantId, 3, null, waits);
 
-    private static async Task SeedRequestsAsync(SqlServerTestDatabase database, Guid tenantId, int arrivedDaysAgo, params TimeSpan?[] waits)
+    private static Task SeedRequestsAsync(SqlServerTestDatabase database, Guid tenantId, int arrivedDaysAgo, params TimeSpan?[] waits)
+        => SeedRequestsAsync(database, tenantId, arrivedDaysAgo, null, waits);
+
+    /// <param name="startsAfter">When each one begins after it arrived; in two days without it, or an hour ago if let pass.</param>
+    private static async Task SeedRequestsAsync(
+        SqlServerTestDatabase database, Guid tenantId, int arrivedDaysAgo, TimeSpan? startsAfter, params TimeSpan?[] waits)
     {
         await using var context = database.CreateContext(tenantId);
-        var arrivedAt = Now.AddDays(-arrivedDaysAgo);
+        var arrivedAt = Later.AddDays(-arrivedDaysAgo);
         foreach (var wait in waits)
         {
-            // One let pass began an hour ago; the others are in two days.
-            var start = wait is null ? Now.AddHours(-1) : Now.AddDays(2);
-            var request = Appointment.RequestOnline(
-                tenantId, "Valeria", "+525522107765", Guid.NewGuid(), "Corte", start, start.AddHours(1), null, null, Guid.NewGuid(),
-                (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43]);
+            var start = startsAfter is { } after ? arrivedAt + after : wait is null ? Later.AddHours(-1) : Later.AddDays(2);
+            var request = Request(tenantId, start);
             request.CreatedAt = arrivedAt;
             if (wait is { } waited)
                 request.Accept(arrivedAt + waited);
@@ -130,6 +148,36 @@ public class PublicDirectorySqlServerTests
         }
         await context.SaveChangesAsync();
     }
+
+    /// <summary>
+    /// Requests for two days from now that have waited so far unanswered, or (without a wait) that their customer cancelled
+    /// after 30 hours without an answer.
+    /// </summary>
+    private static async Task SeedUnansweredAsync(SqlServerTestDatabase database, Guid tenantId, params TimeSpan?[] waitedSoFar)
+    {
+        await using var context = database.CreateContext(tenantId);
+        foreach (var waited in waitedSoFar)
+        {
+            var request = Request(tenantId, Later.AddDays(2));
+            if (waited is { } still)
+            {
+                request.CreatedAt = Later - still;
+            }
+            else
+            {
+                // Cancelled by its customer after 30 hours without an answer, three days ago.
+                request.CreatedAt = Later.AddDays(-3);
+                request.CancelByCustomer(request.CreatedAt.AddHours(30));
+            }
+            context.Appointments.Add(request);
+        }
+        await context.SaveChangesAsync();
+    }
+
+    private static Appointment Request(Guid tenantId, DateTimeOffset start)
+        => Appointment.RequestOnline(
+            tenantId, "Valeria", "+525522107765", Guid.NewGuid(), "Corte", start, start.AddHours(1), null, null, Guid.NewGuid(),
+            (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43]);
 
     /// <summary>A business that books online or receives visits, with its weekly hours, its zone and its services.</summary>
     private static async Task<Guid> SeedServicesAsync(
@@ -220,8 +268,8 @@ public class PublicDirectorySqlServerTests
         await context.SaveChangesAsync();
     }
 
-    private sealed class FixedClock : IDateTimeProvider
+    private sealed class FixedClock(DateTimeOffset? utcNow = null) : IDateTimeProvider
     {
-        public DateTimeOffset UtcNow => Now;
+        public DateTimeOffset UtcNow { get; } = utcNow ?? Now;
     }
 }

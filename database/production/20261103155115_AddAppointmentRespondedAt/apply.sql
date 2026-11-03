@@ -1,17 +1,18 @@
 ﻿-- =====================================================================================
 -- TienditApp (FoodParkDigital): migraciones para producción (SQL Server / Azure SQL).
--- Generado el 2026-11-03 con `dotnet ef migrations script 0 20261103145039_AddAppointmentRespondedAt --idempotent`
+-- Generado el 2026-11-03 con `dotnet ef migrations script 0 20261103155115_AddAppointmentRespondedAt --idempotent`
 -- (EF Core 10.0.12) desde la rama claude/amazing-babbage-175ks9 (Fase 29J, sobre master con la Fase 29I).
 -- Debajo del bloque SET, el contenido es el que genera EF, sin cambios.
 --
 -- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory]. En una base que
 -- ya tiene 20261102205836_AddAppointmentProblemPhotos (lo que exige master hoy; la Fase 29I no trajo
--- migración) solo ejecuta 20261103145039_AddAppointmentRespondedAt, cuándo responde el negocio una
+-- migración) solo ejecuta 20261103155115_AddAppointmentRespondedAt, cuándo responde el negocio una
 -- solicitud en línea (ADR 0064):
 --   - [Appointments].[RespondedAt]: columna nueva, datetimeoffset NULL. Las citas que ya existen
 --     quedan en NULL: no se sabe cuándo se respondieron las de antes.
 --   - [IX_Appointments_OnlineRequests_CreatedAt]: índice nuevo de las solicitudes en línea
---     ([Channel] = 1) por su llegada, para el resumen que lee Explorar.
+--     ([Channel] = 1) por su llegada, con lo que lee el resumen de Explorar (negocio, respuesta,
+--     estado, hora y cancelación del cliente).
 -- No cambia datos.
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
 -- vacía): revisa antes el verify.sql de database/production/20261102205836_AddAppointmentProblemPhotos.
@@ -9851,7 +9852,7 @@ GO
 BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261103145039_AddAppointmentRespondedAt'
+    WHERE [MigrationId] = N'20261103155115_AddAppointmentRespondedAt'
 )
 BEGIN
     ALTER TABLE [Appointments] ADD [RespondedAt] datetimeoffset NULL;
@@ -9859,19 +9860,19 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261103145039_AddAppointmentRespondedAt'
+    WHERE [MigrationId] = N'20261103155115_AddAppointmentRespondedAt'
 )
 BEGIN
-    EXEC(N'CREATE INDEX [IX_Appointments_OnlineRequests_CreatedAt] ON [Appointments] ([CreatedAt]) INCLUDE ([TenantId], [RespondedAt], [Status], [StartAt]) WHERE [Channel] = 1');
+    EXEC(N'CREATE INDEX [IX_Appointments_OnlineRequests_CreatedAt] ON [Appointments] ([CreatedAt]) INCLUDE ([TenantId], [RespondedAt], [Status], [StartAt], [CancelledByCustomerAt]) WHERE [Channel] = 1');
 END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261103145039_AddAppointmentRespondedAt'
+    WHERE [MigrationId] = N'20261103155115_AddAppointmentRespondedAt'
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261103145039_AddAppointmentRespondedAt', N'10.0.12');
+    VALUES (N'20261103155115_AddAppointmentRespondedAt', N'10.0.12');
 END;
 
 COMMIT;

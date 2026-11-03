@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261103145039_AddAppointmentRespondedAt")]
+    [Migration("20261103155115_AddAppointmentRespondedAt")]
     partial class AddAppointmentRespondedAt
     {
         /// <inheritdoc />
@@ -242,12 +242,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CreatedAt")
-                        .HasDatabaseName("IX_Appointments_OnlineRequests_CreatedAt")
-                        .HasFilter("[Channel] = 1");
-
-                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("CreatedAt"), new[] { "TenantId", "RespondedAt", "Status", "StartAt" });
-
                     b.HasIndex("SaleOrderId");
 
                     b.HasIndex("TrackingToken")
@@ -273,6 +267,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "Status");
 
                     b.HasIndex("TenantId", "StaffUserId", "StartAt");
+
+                    b.HasIndex(new[] { "CreatedAt" }, "IX_Appointments_OnlineRequests_CreatedAt")
+                        .HasFilter("[Channel] = 1");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex(new[] { "CreatedAt" }, "IX_Appointments_OnlineRequests_CreatedAt"), new[] { "TenantId", "RespondedAt", "Status", "StartAt", "CancelledByCustomerAt" });
 
                     b.ToTable("Appointments", null, t =>
                         {

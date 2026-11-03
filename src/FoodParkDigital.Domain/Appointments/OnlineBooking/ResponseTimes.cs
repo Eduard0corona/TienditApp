@@ -7,15 +7,16 @@ public enum ResponseTime
     WithinThreeHours = 1,
     WithinTwelveHours = 2,
     WithinADay = 3,
-    /// <summary>More than a day, or not at all: Explorar says nothing and puts it after the rest of its group.</summary>
+    /// <summary>A day or more, or not before its time: Explorar says nothing and puts it after the rest of its group.</summary>
     Slower = 4
 }
 
 /// <summary>
 /// How long the customers of a business waited for an answer to the requests they made online (Fase 29J, ADR 0064): an
-/// appointment booked online (Fase 24D) or a visit requested (Fase 29B), from when it arrived until the business accepted
-/// or declined it. One the business let pass (its time began unanswered) is the slowest; one still waiting, or that its
-/// customer cancelled first, does not count yet.
+/// appointment booked online (Fase 24D) or a visit requested (Fase 29B), from when it arrived until the business accepted or
+/// declined it, before its time began. The slowest are those answered once their time began or let pass (its time began
+/// unanswered), and those that waited a day without an answer, still waiting or cancelled by their customer: their wait is
+/// already a day or more. One that has waited less than a day, or that its customer cancelled sooner, does not count yet.
 /// </summary>
 public static class ResponseTimes
 {
@@ -26,36 +27,39 @@ public static class ResponseTimes
     public const int MinRequests = 3;
 
     /// <summary>
+    /// The first day whose requests count: before Fase 29J nothing kept when a request was answered, so the earlier ones are
+    /// left out, answered or not, rather than counting only those never answered.
+    /// </summary>
+    public static readonly DateTimeOffset CountedSince = new(2026, 11, 3, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
     /// Where a business without enough requests goes in the order of Explorar: with those that answer within 12 hours, so a
     /// new one, or one that takes no requests, is neither ahead of the quick ones nor behind the slow ones.
     /// </summary>
     public const ResponseTime UnknownOrder = ResponseTime.WithinTwelveHours;
 
-    /// <summary>The upper limit of each <see cref="ResponseTime"/> but the last, in its order.</summary>
-    public static readonly IReadOnlyList<TimeSpan> Limits =
-        [TimeSpan.FromHours(1), TimeSpan.FromHours(3), TimeSpan.FromHours(12), TimeSpan.FromDays(1)];
+    /// <summary>
+    /// The limit each <see cref="ResponseTime"/> but the last stays under, in its order: a wait of exactly an hour is not
+    /// within an hour. Whole hours, which the database adds to when a request arrived.
+    /// </summary>
+    public static readonly IReadOnlyList<int> LimitHours = [1, 3, 12, 24];
 
-    /// <summary>The <see cref="ResponseTime"/> of one answer, after its customer waited <paramref name="waited"/>.</summary>
-    public static ResponseTime Of(TimeSpan waited)
+    /// <summary>Since when the requests count at <paramref name="now"/>: the last <see cref="WindowDays"/> days, from <see cref="CountedSince"/>.</summary>
+    public static DateTimeOffset Since(DateTimeOffset now)
     {
-        for (var i = 0; i < Limits.Count; i++)
-        {
-            if (waited <= Limits[i])
-                return (ResponseTime)i;
-        }
-
-        return ResponseTime.Slower;
+        var window = now.AddDays(-WindowDays);
+        return window > CountedSince ? window : CountedSince;
     }
 
     /// <summary>
-    /// Within what it answers: the soonest <see cref="ResponseTime"/> that holds at least half of its requests, those let pass
-    /// as the slowest. Null with fewer than <see cref="MinRequests"/>.
+    /// Within what it answers: the soonest <see cref="ResponseTime"/> that holds at least half of its requests, the slowest
+    /// counted last. Null with fewer than <see cref="MinRequests"/>.
     /// </summary>
-    /// <param name="counts">How many requests answered within each <see cref="ResponseTime"/>, in its order; the last one
-    /// also counts those let pass.</param>
+    /// <param name="counts">How many requests within each <see cref="ResponseTime"/>, in its order; the last one counts the
+    /// slowest.</param>
     public static ResponseTime? Typical(IReadOnlyList<int> counts)
     {
-        if (counts.Count != Limits.Count + 1)
+        if (counts.Count != LimitHours.Count + 1)
             throw new ArgumentException("One count for each response time.", nameof(counts));
         if (counts.Any(count => count < 0))
             throw new ArgumentOutOfRangeException(nameof(counts), "A count is never negative.");
@@ -67,7 +71,7 @@ public static class ResponseTimes
         // At least half: the request in the middle, the faster one of the two in the middle when they are even.
         var half = (total + 1) / 2;
         var sofar = 0;
-        for (var i = 0; i < counts.Count; i++)
+        for (var i = 0; i < LimitHours.Count; i++)
         {
             sofar += counts[i];
             if (sofar >= half)
@@ -81,6 +85,6 @@ public static class ResponseTimes
     public static ResponseTime? Shown(ResponseTime? typical)
         => typical is ResponseTime.Slower ? null : typical;
 
-    /// <summary>Its place in the order of Explorar within its group: the quickest first, one without enough requests in the middle.</summary>
+    /// <summary>Its place in the order of a category of Explorar within its group: the quickest first, one without enough requests in the middle.</summary>
     public static int Order(ResponseTime? typical) => (int)(typical ?? UnknownOrder);
 }
