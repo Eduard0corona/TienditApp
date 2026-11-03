@@ -1,10 +1,9 @@
 // Phase 24A endpoints for the fake backend: Explorar, the directory of businesses (GET /public/directory, with the
 // customer's postal code since the 24B, the products a search finds since the 24F and «Cerca de mí» since the 24G), and
 // how the demo business shows there (GET and PUT /auth/my-tenant/directory). The directory is `data.directory`, in the
-// order the API answers it (taking orders first, then open, then closed; within each, those that answer sooner first
-// since the 29J), its products `data.directoryProducts` and how
-// far each business is from the customer of the scenes `data.directoryDistances`; a scene file changes them in its
-// `prepareData`.
+// order the API answers it (taking orders first, then open, then closed, each by name; on the page of a category, since
+// the 29J, those of each group that answer sooner first), its products `data.directoryProducts` and how far each
+// business is from the customer of the scenes `data.directoryDistances`; a scene file changes them in its `prepareData`.
 
 // BusinessCategory, BusinessTheme and DirectoryVisibility as the contract numbers them.
 const FOOD = 0;
