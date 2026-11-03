@@ -363,12 +363,13 @@ describe('ExplorePage', () => {
     renderPage('/explorar?q=corte');
 
     const services = within(await screen.findByRole('region', { name: 'Servicios' }));
-    // Booked online: it opens on its booking page, chosen, with its price and length.
+    // Booked online: it opens on its booking page, chosen, with its price and length, never «más IVA».
     const corte = services.getByRole('link', { name: /^Corte de cabello/ });
     expect(corte).toHaveAttribute('href', '/m/estetica-sol/agendar?servicio=s1');
     expect(within(corte).getByText(/Agenda en línea/)).toBeInTheDocument();
     expect(within(corte).getByText('$150.00')).toBeInTheDocument();
-    expect(within(corte).getByText('45 min')).toBeInTheDocument();
+    expect(within(corte).getByText('· 45 min')).toBeInTheDocument();
+    expect(within(corte).queryByText('más IVA')).not.toBeInTheDocument();
     // At home: it opens the store of its business, from what it starts at, as its store says it.
     const fugas = services.getByRole('link', { name: /^Reparación de fugas/ });
     expect(fugas).toHaveAttribute('href', '/m/plomeria-hernandez');
@@ -376,10 +377,36 @@ describe('ExplorePage', () => {
     expect(within(fugas).getByText(/2\.4 km/)).toBeInTheDocument();
     expect(within(fugas).getByText('desde $350.00')).toBeInTheDocument();
     expect(within(fugas).getByText('más IVA')).toBeInTheDocument();
-    // No business by that name and no product, but services: not the page that says nothing was found.
+    // Its store says no length: nor does its row.
+    expect(within(fugas).queryByText(/^· \d/)).not.toBeInTheDocument();
+    // No business by that name and no product, but services: those are the results, not the page that says nothing was found.
     expect(screen.queryByRole('region', { name: 'Productos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Negocios' })).not.toBeInTheDocument();
     expect(screen.queryByText(/No encontramos/)).not.toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Buscar negocios, productos y servicios' })).toHaveValue('corte');
+  });
+
+  it('shows the products, then the services, then the businesses, and says which trade does not go to the postal code (Fase 29I)', async () => {
+    api.getDirectory.mockResolvedValue(directory([business({ name: 'Estética Sol', slug: 'estetica-sol', booksOnline: true })], {
+      products: [product({ name: 'Cera para el cabello' })],
+      services: [service({
+        id: 's3', name: 'Corte de tubería', kind: PublicDirectoryServiceKind.HomeVisit, durationMinutes: null,
+        businessName: 'Plomería Lejos', businessSlug: 'plomeria-lejos', visitsPostalCode: false,
+      })],
+    }));
+
+    renderPage('/explorar?q=corte');
+
+    const services = await screen.findByRole('region', { name: 'Servicios' });
+    const products = screen.getByRole('region', { name: 'Productos' });
+    const businesses = screen.getByRole('region', { name: 'Negocios' });
+    expect(products.compareDocumentPosition(services) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(services.compareDocumentPosition(businesses) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // With services or products, «Negocios» says its name.
+    expect(within(businesses).getByRole('heading', { name: 'Negocios' })).not.toHaveClass('visually-hidden');
+    const tuberia = within(services).getByRole('link', { name: /^Corte de tubería/ });
+    expect(within(tuberia).getByText(/No va a tu código postal/)).toBeInTheDocument();
+    expect(within(tuberia).queryByText(/Visita a domicilio/)).not.toBeInTheDocument();
   });
 
   it('puts the cover of each business across its card', async () => {

@@ -18,7 +18,8 @@ function servicePath(service: DirectoryService): string {
 
 /**
  * The services a search of Explorar found (Fase 29I, ADR 0063), after its products: each as the page of its business says
- * it, booked online at its price and length, or at the customer's home from what it starts at, with the business it is at.
+ * it, booked online at its price and length, or at the customer's home from what it starts at (whether it goes to the
+ * customer's postal code, with one), with the business it is at.
  */
 export default function DirectoryServices({ services }: { services: DirectoryService[] }) {
   const titleId = useId();
@@ -44,12 +45,15 @@ export default function DirectoryServices({ services }: { services: DirectorySer
                   <span className="dp-business">
                     {service.businessName}
                     {service.distanceKm != null && ` · ${formatDistance(service.distanceKm)}`}
-                    <span className="dp-taking"> · {atHome ? 'Visita a domicilio' : 'Agenda en línea'}</span>
+                    {/* With the customer's postal code, a trade that does not go there says so, as its card does. */}
+                    {service.visitsPostalCode === false
+                      ? ' · No va a tu código postal'
+                      : <span className="dp-taking"> · {atHome ? 'Visita a domicilio' : 'Agenda en línea'}</span>}
                   </span>
                   <span className="dp-price-row">
                     <span className="ta-money dp-price">{atHome ? 'desde ' : ''}{formatMoney(service.price)}</span>
                     {service.addsTax && <span className="dp-tax">más IVA</span>}
-                    {service.durationMinutes != null && <span className="dp-tax">{describeDuration(service.durationMinutes)}</span>}
+                    {service.durationMinutes != null && <span className="dp-tax">· {describeDuration(service.durationMinutes)}</span>}
                   </span>
                 </span>
               </Link>

@@ -34914,6 +34914,10 @@
           "kind": {
             "$ref": "#/components/schemas/PublicDirectoryServiceKind"
           },
+          "visitsPostalCode": {
+            "type": "boolean",
+            "nullable": true
+          },
           "addsTax": {
             "type": "boolean"
           },

@@ -20426,6 +20426,7 @@ export interface components {
             durationMinutes?: number | null;
             imageUrl?: string | null;
             kind: components["schemas"]["PublicDirectoryServiceKind"];
+            visitsPostalCode?: boolean | null;
             addsTax: boolean;
             businessName: string;
             businessSlug: string;
