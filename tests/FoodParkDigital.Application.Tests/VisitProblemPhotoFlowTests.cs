@@ -59,10 +59,8 @@ public class VisitProblemPhotoFlowTests
         }
         var photo = await fixture.Context.AppointmentProblemPhotos.IgnoreQueryFilters().SingleAsync();
         Assert.Equal((tenant.Id, visit.Id, 0, key), (photo.TenantId, photo.AppointmentId, photo.Position, photo.FileKey));
-        // The visit itself is as it was.
+        // That the appointment stays as it was, its rowversion too, is read on SQL Server (CrossTenantVisitProblemPhotosSqlServerTests).
         fixture.Context.ChangeTracker.Clear();
-        var unchanged = await fixture.Context.Appointments.IgnoreQueryFilters().SingleAsync(a => a.Id == visit.Id);
-        Assert.Null(unchanged.UpdatedAt);
 
         // The business sees it in its agenda and opens it; the link shows only how many.
         fixture.TenantService.SetTenant(tenant.Id);
@@ -85,15 +83,19 @@ public class VisitProblemPhotoFlowTests
         var tenant = await TradeAsync(fixture);
         await RequestedAsync(fixture, tenant.Id);
         var storage = new MemoryPrivateStorage();
+        var images = new CountingImages();
 
         Result<CustomerAppointmentDto>? last = null;
         for (var n = 0; n < HomeVisitRules.MaxProblemPhotos; n++)
-            last = await SendAsync(fixture, storage, Token, Jpeg(40, 30));
-        var sixth = await SendAsync(fixture, storage, Token, Jpeg(40, 30));
+            last = await SendAsync(fixture, storage, Token, Jpeg(40, 30), images: images);
+        await using var sixthPhoto = Jpeg(40, 30);
+        var sixth = await SendAsync(fixture, storage, Token, sixthPhoto, images: images);
 
         Assert.True(last!.IsSuccess, last.Error);
         Assert.Equal((5, false), (last.Value!.ProblemPhotos, last.Value.CanAddPhotos));
         Assert.Equal(HomeVisitRules.ProblemPhotosFullMessage, sixth!.Error);
+        // Refused before its file is read: the sixth is neither read nor decoded.
+        Assert.Equal((5, 0L), (images.Decoded, sixthPhoto.Position));
         Assert.Equal(5, storage.Files.Count);
         Assert.Equal([0, 1, 2, 3, 4],
             await fixture.Context.AppointmentProblemPhotos.IgnoreQueryFilters().OrderBy(p => p.Position).Select(p => p.Position).ToListAsync());
@@ -113,12 +115,15 @@ public class VisitProblemPhotoFlowTests
         fixture.Context.Appointments.Add(atTheBusiness);
         await fixture.Context.SaveChangesAsync();
         var storage = new MemoryPrivateStorage();
+        var images = new CountingImages();
 
-        Assert.Equal(HomeVisitRules.ProblemPhotosClosedMessage, (await SendAsync(fixture, storage, new string('d', 43), Jpeg(40, 30)))!.Error);
-        Assert.Equal(HomeVisitRules.ProblemPhotosNotAVisitMessage, (await SendAsync(fixture, storage, new string('b', 43), Jpeg(40, 30)))!.Error);
+        Assert.Equal(HomeVisitRules.ProblemPhotosClosedMessage, (await SendAsync(fixture, storage, new string('d', 43), Jpeg(40, 30), images: images))!.Error);
+        Assert.Equal(HomeVisitRules.ProblemPhotosNotAVisitMessage, (await SendAsync(fixture, storage, new string('b', 43), Jpeg(40, 30), images: images))!.Error);
         fixture.Clock.UtcNow = visit.StartAt;
-        Assert.Equal(HomeVisitRules.ProblemPhotosClosedMessage, (await SendAsync(fixture, storage, Token, Jpeg(40, 30)))!.Error);
+        Assert.Equal(HomeVisitRules.ProblemPhotosClosedMessage, (await SendAsync(fixture, storage, Token, Jpeg(40, 30), images: images))!.Error);
 
+        // Refused before decoding anything.
+        Assert.Equal(0, images.Decoded);
         Assert.Empty(storage.Files);
         Assert.Equal(0, await fixture.Context.AppointmentProblemPhotos.IgnoreQueryFilters().CountAsync());
         var tracked = await new GetPublicAppointmentQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
@@ -359,9 +364,10 @@ public class VisitProblemPhotoFlowTests
     }
 
     private static Task<Result<CustomerAppointmentDto>?> SendAsync(
-        SalesTestFixture fixture, IPrivateFileStorage storage, string token, Stream photo, PublicPhotoGate? gate = null)
+        SalesTestFixture fixture, IPrivateFileStorage storage, string token, Stream photo, PublicPhotoGate? gate = null,
+        IImageNormalizationService? images = null)
         => new AddVisitProblemPhotoCommandHandler(
-                fixture.Context, fixture.TenantService, fixture.Clock, storage, new ImageProcessingService(), gate ?? new PublicPhotoGate())
+                fixture.Context, fixture.TenantService, fixture.Clock, storage, images ?? new ImageProcessingService(), gate ?? new PublicPhotoGate())
             .Handle(new AddVisitProblemPhotoCommand { Token = token, FileStream = photo, FileSize = photo.Length }, CancellationToken.None);
 
     private static Task<Result<PrivateFileDownload>> OpenAsync(SalesTestFixture fixture, IPrivateFileStorage storage, string key)
@@ -381,6 +387,20 @@ public class VisitProblemPhotoFlowTests
         image.SaveAsJpeg(stream);
         stream.Position = 0;
         return stream;
+    }
+
+    /// <summary>The real decoding, counting each photo it decodes.</summary>
+    private sealed class CountingImages : IImageNormalizationService
+    {
+        private readonly ImageProcessingService _images = new();
+
+        public int Decoded { get; private set; }
+
+        public Task<Stream> NormalizeToWebpAsync(Stream imageStream, int maxDimension, CancellationToken cancellationToken = default)
+        {
+            Decoded++;
+            return _images.NormalizeToWebpAsync(imageStream, maxDimension, cancellationToken);
+        }
     }
 
     /// <summary>The visit fills up while the photo is decoded.</summary>

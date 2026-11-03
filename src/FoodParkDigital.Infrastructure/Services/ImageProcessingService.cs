@@ -77,18 +77,13 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
         int maxDimension,
         CancellationToken cancellationToken = default)
     {
-        // Decoded already within the size it is kept at (a JPEG decodes scaled, which is most phone photos) and with 8 bits per
-        // channel: a large photo, or a 16-bit PNG, never takes the memory of its full size (Fase 29H, also for photos sent
-        // without an account).
-        var options = new DecoderOptions
-        {
-            Configuration = DecoderOptions.Configuration,
-            MaxFrames = DecoderOptions.MaxFrames,
-            TargetSize = new Size(maxDimension, maxDimension)
-        };
-        using var image = await LoadAsync(imageStream, cancellationToken, options, rgba32: true);
+        // A larger photo is decoded already within the size it is kept at (a JPEG decodes scaled, which is most phone photos),
+        // and every one with 8 bits per channel: a large photo, or a 16-bit PNG, never takes the memory of its full size (Fase
+        // 29H, also for photos sent without an account).
+        using var image = await LoadAsync(imageStream, cancellationToken, decodeWithin: maxDimension, rgba32: true);
         image.Mutate(ctx =>
         {
+            // The decoder leaves a side at the limit as it is, and the other may still be past it.
             var size = ctx.GetCurrentSize();
             if (size.Width > maxDimension || size.Height > maxDimension)
             {
@@ -125,10 +120,13 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
         return output.ToArray();
     }
 
+    /// <param name="decodeWithin">
+    /// The longest side to decode an image past it within (<see cref="DecoderOptions.TargetSize"/>). An image within it is
+    /// decoded as it is: the decoder fits any image to the target, enlarging a smaller one too.
+    /// </param>
     private static async Task<Image> LoadAsync(
-        Stream stream, CancellationToken cancellationToken, DecoderOptions? options = null, bool rgba32 = false)
+        Stream stream, CancellationToken cancellationToken, int? decodeWithin = null, bool rgba32 = false)
     {
-        options ??= DecoderOptions;
         var seekable = stream;
         if (!stream.CanSeek)
         {
@@ -139,10 +137,19 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
         try
         {
             seekable.Position = 0;
-            var info = await Image.IdentifyAsync(options, seekable, cancellationToken);
+            var info = await Image.IdentifyAsync(DecoderOptions, seekable, cancellationToken);
             if ((long)info.Width * info.Height > MaxPixels)
                 throw new DomainException("La imagen es demasiado grande (máximo 50 megapíxeles).");
 
+            // A square box: the stored size is before the EXIF orientation, which turns the image after decoding.
+            var options = decodeWithin is { } longest && (info.Width > longest || info.Height > longest)
+                ? new DecoderOptions
+                {
+                    Configuration = DecoderOptions.Configuration,
+                    MaxFrames = DecoderOptions.MaxFrames,
+                    TargetSize = new Size(longest, longest)
+                }
+                : DecoderOptions;
             seekable.Position = 0;
             var image = rgba32
                 ? await Image.LoadAsync<Rgba32>(options, seekable, cancellationToken)

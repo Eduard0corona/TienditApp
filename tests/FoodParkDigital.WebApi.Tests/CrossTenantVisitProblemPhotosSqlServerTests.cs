@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Infrastructure.Tests.Support;
+using Microsoft.EntityFrameworkCore;
 using static FoodParkDigital.WebApi.Tests.CrossTenantHomeVisitBookingSqlServerTests;
 
 namespace FoodParkDigital.WebApi.Tests;
@@ -36,10 +37,13 @@ public sealed class CrossTenantVisitProblemPhotosSqlServerTests
         var receipt = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync(
             $"/api/v1/public/menu/{slug}/home-visits", Request(await FirstFreeTimeAsync(stranger, slug), "72000")));
         var token = receipt.GetProperty("trackingToken").GetString()!;
+        var before = await VersionAsync(mine.TenantId);
 
         var sent = await TwoBusinessesApi.ReadAsync(await stranger.PostAsync(Photos, Form(token, TwoBusinessesApi.TinyPng, "image/png", "fuga.png")));
 
         Assert.Equal((1, true), (sent.GetProperty("problemPhotos").GetInt32(), sent.GetProperty("canAddPhotos").GetBoolean()));
+        // The photo changes nothing of the appointment, not even its rowversion: it never conflicts with the business deciding it.
+        Assert.Equal(before, await VersionAsync(mine.TenantId));
         // The link shows neither the photo nor who the customer is.
         Assert.DoesNotContain("/files/", sent.GetRawText());
         Assert.DoesNotContain("5522107765", sent.GetRawText());
@@ -75,10 +79,16 @@ public sealed class CrossTenantVisitProblemPhotosSqlServerTests
         Assert.Equal(HttpStatusCode.BadRequest, heavy.StatusCode);
         Assert.Contains(VisitProblemPhotos.TooLargeMessage, await heavy.Content.ReadAsStringAsync());
         var huge = await stranger.PostAsync(Photos, Form(token, new byte[VisitProblemPhotos.MaxFileBytes + 512 * 1024], "image/jpeg", "enorme.jpg"));
-        Assert.False(huge.IsSuccessStatusCode, $"answered {(int)huge.StatusCode}");
+        Assert.Equal(HttpStatusCode.BadRequest, huge.StatusCode);
+        // Stopped by the form's limit while reading: the validator, which answers by the size of a file read whole, never ran.
+        Assert.DoesNotContain(VisitProblemPhotos.TooLargeMessage, await huge.Content.ReadAsStringAsync());
         var tracked = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/appointments/tracking", new { token }));
         Assert.Equal(1, tracked.GetProperty("problemPhotos").GetInt32());
     }
+
+    /// <summary>The rowversion of the only appointment of the business.</summary>
+    private Task<byte[]> VersionAsync(Guid tenantId)
+        => _api.QueryAsync(tenantId, context => context.Appointments.Select(a => a.Version).SingleAsync());
 
     private static MultipartFormDataContent Form(string token, byte[] file, string contentType, string fileName)
     {
