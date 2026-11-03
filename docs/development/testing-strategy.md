@@ -1963,7 +1963,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **WebApi:** `CrossTenantDirectoryResponseTimeSqlServerTests` (1, nuevo): por la API, las solicitudes que un cliente manda en la página de citas y que el equipo acepta o rechaza en su agenda son lo que dice su tarjeta; las de otro negocio, que espera, no. `TenantFilterBypassAllowlistTests`: la lectura suma una a `PublicDirectoryFeature.cs` (5).
   - **Mutaciones:** sin el orden en la categoría, sin contar las que dejó pasar, sin «antes de su hora», sin las que esperan un día, sin las canceladas tras un día, contando las de menos de un día, sin el corte del 3 de noviembre o sin revisar que el negocio agenda, falla al menos una prueba.
   - **Cliente:** `responseTime.test.ts` (3, nuevo): cada tramo con su texto y nada con un día o más o sin él. `DirectoryBusinessCard.test.tsx` (+2): la tarjeta lo dice, y sin él no dice nada.
-  - **.NET en total:** PENDIENTE. **Cliente en total:** 195 archivos y 1,480 pruebas.
+  - **.NET en total:** 4,630 pruebas (Domain 1,372; Application 2,080; WebApi 487; Infrastructure 691), también el build en Release. **Cliente en total:** 195 archivos y 1,480 pruebas.
   - **Primera visita:** 181,772 B (`master` en `f4e33a1`: 181,725 B, +47 B): el enum `ResponseTime` del contrato va en la entrada con los demás enums generados; la etiqueta se carga con Explorar. El presupuesto sube de 181,800 B a 181,900 B.
   - **Revisiones independientes** (servidor y cliente), sin bloqueos; se corrigió:
     - las solicitudes sin respuesta de antes de la fase contaban y las respondidas no: ahora cuentan desde el 3 de noviembre de 2026;
