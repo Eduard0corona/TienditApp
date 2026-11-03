@@ -92,6 +92,12 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>When the customer cancelled it from the account or the link (Fase 24D); null otherwise.</summary>
     public DateTimeOffset? CancelledByCustomerAt { get; private set; }
     /// <summary>
+    /// When the business accepted or declined it as a request online (Fase 29J, ADR 0064): how long its customer waited for
+    /// an answer, which Explorar sums up. Null for one the team booked, one still waiting or cancelled by its customer first,
+    /// and every request answered before Fase 29J. Set once: a request is answered once.
+    /// </summary>
+    public DateTimeOffset? RespondedAt { get; private set; }
+    /// <summary>
     /// Where the customer gets the quote of a visit they requested online (Fase 29B, ADR 0053 point 11), when they gave it:
     /// one plain address (<see cref="InvoiceEmailAddress"/>). Null otherwise. Theirs: it never goes in the activity or a log.
     /// </summary>
@@ -327,14 +333,16 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         if (EndAt <= now)
             throw new DomainException(OnlineBookingRules.RequestTimePassedMessage);
         Status = AppointmentStatus.Scheduled;
+        RespondedAt = now;
     }
 
     /// <summary>The business declines a request: it is cancelled and its time is free again.</summary>
-    public void Decline()
+    public void Decline(DateTimeOffset now)
     {
         if (Status != AppointmentStatus.Requested)
             throw new DomainException(OnlineBookingRules.NotRequestedMessage);
         Status = AppointmentStatus.Cancelled;
+        RespondedAt = now;
     }
 
     /// <summary>

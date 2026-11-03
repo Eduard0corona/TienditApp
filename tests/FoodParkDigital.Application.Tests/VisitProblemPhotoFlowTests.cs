@@ -108,7 +108,7 @@ public class VisitProblemPhotoFlowTests
         var tenant = await TradeAsync(fixture);
         var visit = await RequestedAsync(fixture, tenant.Id);
         var declined = await RequestedAsync(fixture, tenant.Id, token: new string('d', 43), start: SalesTestFixture.Now.AddDays(4));
-        declined.Decline();
+        declined.Decline(SalesTestFixture.Now);
         var atTheBusiness = Appointment.RequestOnline(
             tenant.Id, "Valeria", "5522107765", Guid.NewGuid(), "Revisión", SalesTestFixture.Now.AddDays(2), SalesTestFixture.Now.AddDays(2).AddHours(1),
             null, null, Guid.NewGuid(), new string('b', 43));
