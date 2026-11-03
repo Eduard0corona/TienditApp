@@ -35,7 +35,7 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
    - Con menos de un día: «Suele responder en menos de una hora», «… de 3 horas», «… de 12 horas» o «… de un día», después de lo que dice de la visita o la entrega.
    - Con un día o más, con menos de 3 solicitudes, o cuando el negocio ya no agenda en línea ni recibe visitas: nada. Explorar no publica lo malo de un negocio.
    - La API tampoco manda «un día o más»: `responseTime` es nulo.
-4. **Cómo ordena:** en la página de una categoría, dentro de cada grupo, primero los que responden antes. Uno sin suficientes solicitudes, o que no recibe solicitudes, va en medio, con los de menos de 12 horas; después de los de un día o más. Los empates siguen por nombre.
+4. **Cómo ordena:** en la página de una categoría, dentro de cada grupo, primero los que responden antes. Uno sin suficientes solicitudes, o que no recibe solicitudes, va en medio, con los de menos de 12 horas: antes de los de menos de un día y de los de un día o más. Los empates siguen por nombre.
    - El grupo manda: uno abierto que no agenda va después de los que agendan, por pronto que responda.
    - **La lista de todos los negocios y «Cerca de mí» no cambian.** La lista mezcla restaurantes que no reciben solicitudes con salones y oficios, y no tiene sentido compararlos; «Cerca de mí» sigue por distancia.
    - **Los productos y servicios de una búsqueda** siguen el orden general de Explorar, también en una categoría.
