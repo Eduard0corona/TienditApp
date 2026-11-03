@@ -1,10 +1,13 @@
 import { ResponseTime } from '../api/generated/enums';
 
-const LABELS: Partial<Record<ResponseTime, string>> = {
-  [ResponseTime.WithinAnHour]: 'Responde en menos de 1 hora',
-  [ResponseTime.WithinThreeHours]: 'Responde en menos de 3 horas',
-  [ResponseTime.WithinTwelveHours]: 'Responde en menos de 12 horas',
-  [ResponseTime.WithinADay]: 'Responde en menos de un día',
+/** The times the card says: every one but the slowest, which it never says. */
+type ShownTime = Exclude<ResponseTime, typeof ResponseTime.Slower>;
+
+const LABELS: Record<ShownTime, string> = {
+  [ResponseTime.WithinAnHour]: 'Suele responder en menos de una hora',
+  [ResponseTime.WithinThreeHours]: 'Suele responder en menos de 3 horas',
+  [ResponseTime.WithinTwelveHours]: 'Suele responder en menos de 12 horas',
+  [ResponseTime.WithinADay]: 'Suele responder en menos de un día',
 };
 
 /**
@@ -12,5 +15,5 @@ const LABELS: Partial<Record<ResponseTime, string>> = {
  * within what it answered at least half of them, as the server sums it up. Nothing without enough requests or past a day.
  */
 export function responseTimeLabel(responseTime: ResponseTime | null | undefined): string | null {
-  return responseTime == null ? null : (LABELS[responseTime] ?? null);
+  return responseTime == null || responseTime === ResponseTime.Slower ? null : LABELS[responseTime];
 }

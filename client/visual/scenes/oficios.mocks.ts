@@ -12,7 +12,7 @@ const CREDITED_IF_HIRED = 2;
 const card = (name: string, slug: string, overrides: Record<string, unknown>) => ({
   name, slug, logoUrl: null, coverImageUrl: null, category: HOME_REPAIRS, description: null, theme: 0, city: 'Ciudad de México',
   deliveryOnly: false, deliveryAvailable: false, acceptsOrders: false, ordersPaused: false, statusLabel: null,
-  statusDetail: null, closed: false, pricesIncludeTax: true, booksOnline: false, receivesVisits: true,
+  statusDetail: null, closed: false, pricesIncludeTax: true, booksOnline: false, receivesVisits: true, responseTime: null,
   ...overrides,
 });
 

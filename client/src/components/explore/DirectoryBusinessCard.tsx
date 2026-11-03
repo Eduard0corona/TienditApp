@@ -82,11 +82,6 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
                 <i className="ri-calendar-event-line" aria-hidden="true"></i>Agenda en línea
               </span>
             )}
-            {answers && (
-              <span className="dc-badge dc-badge-menu">
-                <i className="ri-time-line" aria-hidden="true"></i>{answers}
-              </span>
-            )}
             {visit && (
               <span className={`dc-badge ${visit.reaches ? 'dc-badge-info' : 'dc-badge-menu'}`}>
                 <i className={visit.reaches ? 'ri-price-tag-3-line' : 'ri-map-pin-line'} aria-hidden="true"></i>{visit.text}
@@ -95,6 +90,11 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
             {delivery && (
               <span className={`dc-badge ${delivery.reaches ? 'dc-badge-info' : 'dc-badge-menu'}`}>
                 <i className={delivery.reaches ? 'ri-e-bike-2-line' : 'ri-map-pin-line'} aria-hidden="true"></i>{delivery.text}
+              </span>
+            )}
+            {answers && (
+              <span className="dc-badge dc-badge-menu">
+                <i className="ri-time-line" aria-hidden="true"></i>{answers}
               </span>
             )}
           </p>

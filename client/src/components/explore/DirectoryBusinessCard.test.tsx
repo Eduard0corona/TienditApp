@@ -45,12 +45,12 @@ describe('DirectoryBusinessCard', () => {
 
   it('says how soon it answers the requests made online, and nothing without it (Fase 29J)', () => {
     renderCard(business({ name: 'Plomería Hernández', receivesVisits: true, responseTime: ResponseTime.WithinThreeHours }));
-    expect(screen.getByRole('link')).toHaveTextContent('Responde en menos de 3 horas');
+    expect(screen.getByRole('link')).toHaveTextContent('Suele responder en menos de 3 horas');
   });
 
-  it('says nothing of how soon it answers without enough requests or past a day (Fase 29J)', () => {
+  it('says nothing of how soon it answers when the server sends none (Fase 29J)', () => {
     renderCard(business({ booksOnline: true, responseTime: undefined }));
-    expect(screen.getByRole('link')).not.toHaveTextContent('Responde');
+    expect(screen.getByRole('link')).not.toHaveTextContent('Suele responder');
   });
 
   it('shows a trade as what it is: visits to quote and what one costs at the postal code, never a menu (Fase 29A)', () => {

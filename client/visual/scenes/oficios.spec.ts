@@ -48,8 +48,6 @@ test.describe('Oficios en Explorar', () => {
   });
 });
 
-// A search finds services (Fase 29I, ADR 0063): «corte» finds two services of a salon that books online, at their price and
-// length, and one of the carpenter, from what it starts at and with IVA on top; the salon is also found by its description.
 // Fase 29J (ADR 0064): how soon each trade answers the requests made online, on its card.
 test.describe('Oficios que responden pronto', () => {
   test.use({ signedIn: false, prepareData: OFICIOS_QUE_RESPONDEN });
@@ -58,14 +56,16 @@ test.describe('Oficios que responden pronto', () => {
     test(`oficios que responden ${look.suffix}`, async ({ page }) => {
       await page.setViewportSize(look.viewport);
       await open(page, '/explorar/hogar-y-reparaciones');
-      await expect(page.getByRole('link', { name: /^Plomería Hernández/ })).toContainText('Responde en menos de 1 hora');
-      await expect(page.getByRole('link', { name: /^Carpintería Don José/ })).toContainText('Responde en menos de 12 horas');
-      await expect(page.getByRole('link', { name: /^Cerrajería Pérez/ })).not.toContainText('Responde');
+      await expect(page.getByRole('link', { name: /^Plomería Hernández/ })).toContainText('Suele responder en menos de una hora');
+      await expect(page.getByRole('link', { name: /^Carpintería Don José/ })).toContainText('Suele responder en menos de 12 horas');
+      await expect(page.getByRole('link', { name: /^Cerrajería Pérez/ })).not.toContainText('Suele responder');
       await snap(page, `oficios-explorar-respuesta-${look.suffix}`);
     });
   }
 });
 
+// A search finds services (Fase 29I, ADR 0063): «corte» finds two services of a salon that books online, at their price and
+// length, and one of the carpenter, from what it starts at and with IVA on top; the salon is also found by its description.
 test.describe('Servicios en Explorar', () => {
   test.use({ signedIn: false, prepareData: SERVICIOS_EN_EXPLORAR });
 
