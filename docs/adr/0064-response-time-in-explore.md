@@ -25,7 +25,7 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
      - la que se respondió cuando la hora que pidió el cliente ya había empezado;
      - la que el negocio dejó pasar: esa hora empezó sin respuesta, aunque luego la haya movido;
      - la que lleva un día o más sin respuesta, aunque su hora sea días después;
-     - la que el cliente canceló después de esperar un día sin respuesta.
+     - la que el cliente canceló después de esperar un día sin respuesta, si la creó esta versión (guarda la hora pedida): una de antes pudo haberse aceptado sin guardar cuándo.
    - **No cuentan todavía:** una que espera desde hace menos de un día, para una hora que no ha llegado, y una que el cliente canceló antes de un día.
    - **No cuentan:** una cita que agendó el equipo, y lo que se decidió antes de la primera respuesta que TienditApp guardó (el despliegue de la Fase 29J).
      - Cada solicitud se decide en un momento: la rápida cuando se respondió; la lenta cuando llegó a su límite sin respuesta (la hora que pidió el cliente o un día después de llegar, lo que pase primero).

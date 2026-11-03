@@ -4,9 +4,12 @@ using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Delivery;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -201,6 +204,49 @@ public class ExploreResponseTimeTests
     }
 
     [Fact]
+    public async Task ATradeThatOnlyReceivesVisits_ShouldSayHowSoonItAnswersTheVisitsRequested()
+    {
+        await using var fixture = Fixture();
+        var (plumber, zone) = await TradeAsync(fixture, "plomeria", "Plomería Hernández");
+        for (var n = 0; n < 3; n++)
+        {
+            var arrivedAt = Now.AddDays(-3);
+            var visit = Appointment.RequestHomeVisit(
+                plumber.Id, "Valeria", "+525522107765", null, HomeVisitRules.DefaultVisitName, Now.AddDays(2), Now.AddDays(2).AddHours(1),
+                "Gotea el calentador", null, DeliveryAddress.ForVisit("72000", "Av. Juárez 123", null), zone,
+                HomeVisitChargePolicy.Charged, null, Guid.NewGuid(), (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43]);
+            visit.CreatedAt = arrivedAt;
+            visit.Accept(arrivedAt.AddMinutes(20));
+            fixture.Context.Appointments.Add(visit);
+        }
+        await fixture.Context.SaveChangesAsync();
+
+        Assert.Equal(ResponseTime.WithinAnHour, (await CardsAsync(fixture))["plomeria"].ResponseTime);
+    }
+
+    [Fact]
+    public async Task WhatAnEarlierVersionAccepted_ShouldNotCount_ThoughItsCustomerCancelsAfterADay()
+    {
+        await using var fixture = Fixture();
+        var salon = await SalonAsync(fixture, "sol", "Estética Sol");
+        for (var n = 0; n < 3; n++)
+            await AnsweredAsync(fixture, salon, TimeSpan.FromMinutes(10));
+        // Accepted within minutes by the version before Fase 29J, which kept neither the answer nor the time asked for, and
+        // cancelled by its customer days later: it was not waiting (three quick ones of seven would not be half).
+        for (var n = 0; n < 4; n++)
+        {
+            var accepted = await RequestAsync(fixture, salon, Now.AddDays(-3));
+            accepted.Accept(Now.AddDays(-3).AddMinutes(10));
+            fixture.Context.Entry(accepted).Property(nameof(Appointment.RespondedAt)).CurrentValue = null;
+            fixture.Context.Entry(accepted).Property(nameof(Appointment.RequestedStartAt)).CurrentValue = null;
+            accepted.CancelByCustomer(Now.AddDays(-1));
+        }
+        await fixture.Context.SaveChangesAsync();
+
+        Assert.Equal(ResponseTime.WithinAnHour, (await CardsAsync(fixture))["sol"].ResponseTime);
+    }
+
+    [Fact]
     public async Task ACategory_ShouldPutFirstWhoAnswersSooner_WithinItsGroup_AndTheUnknownInTheMiddle()
     {
         await using var fixture = Fixture();
@@ -278,6 +324,22 @@ public class ExploreResponseTimeTests
             fixture.Context.Products.Add(new Product(tenant.Id, category.Id, "Shampoo", null, 90m, "MXN"));
         await fixture.Context.SaveChangesAsync();
         return tenant;
+    }
+
+    /// <summary>A plumber that only receives visits, in a zone of the 72000, without booking online.</summary>
+    private static async Task<(Tenant Tenant, DeliveryZone Zone)> TradeAsync(SalesTestFixture fixture, string slug, string name)
+    {
+        var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, slug: slug);
+        tenant.Update(name, $"{slug}@demo.com", null, null);
+        tenant.SetDirectoryProfile(BusinessCategory.HomeRepairs, null);
+        var settings = await fixture.Context.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == tenant.Id);
+        settings.StartReceivingHomeVisits();
+        settings.UpdateOnlineMenu(OnlineMenuMode.MenuOnly);
+        settings.SetOpeningHours(OpeningHours.Create(EveryDay.Select(d => new OpeningInterval(d, TimeOnly.MinValue, new TimeOnly(23, 59)))));
+        var zone = new DeliveryZone(tenant.Id, new DeliveryZoneFields("Centro", 50m, 0m, null, ["72000"]));
+        fixture.Context.DeliveryZones.Add(zone);
+        await fixture.Context.SaveChangesAsync();
+        return (tenant, zone);
     }
 
     /// <summary>A request online that arrived <paramref name="arrivedAt"/>, for two days from now unless said, still waiting.</summary>

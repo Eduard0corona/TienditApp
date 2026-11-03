@@ -696,6 +696,9 @@ public sealed class PublicDirectorySnapshot
                 a.RespondedAt,
                 a.Status,
                 a.CancelledByCustomerAt,
+                // Made by this version: one cancelled by its customer without an answer was still waiting (an earlier
+                // version could have accepted it without keeping when).
+                Kept = a.RequestedStartAt != null,
                 AskedFor = a.RequestedStartAt ?? a.StartAt,
                 ADayLater = a.CreatedAt.AddHours(aDay)
             })
@@ -706,6 +709,7 @@ public sealed class PublicDirectorySnapshot
                 a.RespondedAt,
                 a.Status,
                 a.CancelledByCustomerAt,
+                a.Kept,
                 a.AskedFor,
                 Limit = a.AskedFor < a.ADayLater ? a.AskedFor : a.ADayLater
             })
@@ -715,7 +719,7 @@ public sealed class PublicDirectorySnapshot
                 || (a.Limit <= utcNow && a.Limit >= keptSince
                     && (a.RespondedAt >= a.Limit
                         || (a.RespondedAt == null && a.Status == AppointmentStatus.Requested)
-                        || (a.RespondedAt == null && a.CancelledByCustomerAt >= a.Limit))))
+                        || (a.RespondedAt == null && a.Kept && a.CancelledByCustomerAt >= a.Limit))))
             .GroupBy(a => a.TenantId)
             .Select(g => new
             {
