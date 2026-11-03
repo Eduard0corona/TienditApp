@@ -39,7 +39,9 @@ Tomé las decisiones de la Fase 29H con la autorización permanente del dueño d
    - **Solo abre un archivo que una foto del negocio guarda.** Otro negocio, otra área o un archivo suelto responden como si no existieran.
 6. **El cliente ve cuántas mandó** («Mandaste 3 fotos de lo que pasa») y la vista previa mientras las sube, pero no las vuelve a ver desde el servidor.
 7. **ImageSharp sigue en la 3.1.12.** La 3.2.0 corrige los seis avisos (cuatro de TIFF, uno del perfil ICC y uno de `HistogramEqualization`), pero falla al compilar en Release sin una licencia de Six Labors. Conseguirla es decisión del dueño del producto (deuda técnica).
-   - **Mientras, una foto más grande que el tamaño en que se guarda se decodifica ya reducida** (un JPEG se decodifica escalado), y todas con 8 bits por canal. Una foto grande o un PNG de 16 bits nunca ocupan la memoria de su tamaño completo, y una más chica se guarda en su tamaño, nunca ampliada.
+   - **Mientras, un JPEG más grande que el tamaño en que se guarda se decodifica ya reducido**, que es casi toda foto de un teléfono, y toda foto con 8 bits por canal (un PNG de 16 bits ocupa la mitad).
+   - **Un PNG o un WebP grande se decodifica completo** y luego se reduce: ImageSharp 3.1 no lo escala al leerlo. Lo acotan el tope de 50 megapíxeles y las dos fotos a la vez.
+   - **Una foto más chica se guarda en su tamaño**, nunca ampliada.
    - **Lo demás que la cubre:** el tope de 50 megapíxeles, que se revisa antes de decodificar; el límite por IP; las 5 fotos por visita; y las dos fotos a la vez por instancia.
 8. **La migración** `20261102205836_AddAppointmentProblemPhotos`:
    - agrega la tabla `AppointmentProblemPhotos`: la cita (se borra con ella), el lugar de la foto de 0 a 4 (único por cita) y la llave de su archivo (única por negocio);

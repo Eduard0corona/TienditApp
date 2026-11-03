@@ -77,9 +77,9 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
         int maxDimension,
         CancellationToken cancellationToken = default)
     {
-        // A larger photo is decoded already within the size it is kept at (a JPEG decodes scaled, which is most phone photos),
-        // and every one with 8 bits per channel: a large photo, or a 16-bit PNG, never takes the memory of its full size (Fase
-        // 29H, also for photos sent without an account).
+        // A larger JPEG, which is most phone photos, is decoded already within the size it is kept at; a PNG or a WebP decodes
+        // whole and is then reduced (ImageSharp 3.1 does not scale them while reading), within the 50-megapixel cap. Every one
+        // is decoded with 8 bits per channel, so a 16-bit PNG takes half (Fase 29H, also for photos sent without an account).
         using var image = await LoadAsync(imageStream, cancellationToken, decodeWithin: maxDimension, rgba32: true);
         image.Mutate(ctx =>
         {
