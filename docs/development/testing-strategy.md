@@ -1867,6 +1867,64 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Las 2 nuevas (`cotizaciones.spec.ts`: aceptar desde el enlace y la aceptada desde el enlace, en teléfono) pasaron dos corridas seguidas.
     - 10 no se pudieron comparar y fallan igual con el build de `master`: las de la tienda en teléfono.
 
+- Fase 29H, las fotos de lo que pasa en la solicitud de visita ([ADR 0062](../adr/0062-visit-problem-photos.md)):
+  - **Domain:** `VisitProblemPhotoTests` (7, nuevo):
+    - la foto toma el siguiente lugar de su visita sin cambiar la cita;
+    - hasta 5, y la sexta se rechaza;
+    - se recibe por confirmar o agendada antes de su hora, y no desde su hora ni rechazada, cancelada, en curso, terminada o sin el cliente;
+    - solo una visita pedida en línea: no una cita en el local, una visita del equipo, el trabajo de una cotización ni una visita que pasó al local;
+    - necesita la llave de su archivo.
+  - **Infrastructure:** `AppointmentProblemPhotosMigrationSqlServerTests` (3, nuevo):
+    - la versión anterior sigue tomando y aceptando solicitudes;
+    - la base guarda cada lugar una vez, ninguno después del quinto y cada archivo una vez por negocio, y las fotos se van con su cita;
+    - el rollback se detiene con 50056 mientras hay fotos y luego quita solo la tabla.
+    - `BeforeAppointmentProblemPhotos` (nuevo), que `BeforeQuoteOnlineReplies` encadena.
+    - `ImageProcessingServiceWebpTests` (13, nuevo, por la revisión): una foto se guarda como WebP dentro de 2048 px, también con un lado justo en el límite y el otro pasado, y derecha como la tomó la cámara, sin sus metadatos. Una foto más chica, o la captura de un comprobante, se guarda en su tamaño: decodificar ya reducido la ampliaba (640×480 salía en 2048×1536), también las fotos de un servicio y los comprobantes.
+    - Las pruebas de `ImageProcessingService` siguen en verde con ImageSharp 3.1.12.
+  - **Application:** `VisitProblemPhotoFlowTests` (13, nuevo):
+    - la foto llega desde el enlace con otro negocio en contexto, se guarda privada como WebP de 2048 px sin metadatos, la ven la Agenda y su detalle, se abre para el negocio, y el enlace dice cuántas;
+    - hasta 5, y la sexta se rechaza sin leer ni decodificar su archivo (por la revisión: antes no se comprobaba);
+    - desde su hora, rechazada o en el local se rechaza sin decodificar ni guardar nada; un enlace desconocido, en otras mayúsculas o vencido no existe;
+    - lo que no es una foto se rechaza por lo que es;
+    - con dos fotos decodificándose ya, la tercera se rechaza para mandarla otra vez;
+    - dos al mismo tiempo toman lugares distintos y nunca hacen una sexta; otra falla de la base no se reintenta;
+    - llena mientras se leía, se rechaza sin escribir el archivo (por la revisión);
+    - solo abre la foto de una foto del negocio: no un archivo suelto, de otro negocio u otra área;
+    - la cotización de la visita trae lo que pasa y sus fotos; la de una visita del equipo, no;
+    - Mis citas dice cuántas fotos, en cada negocio (por la revisión);
+    - la descarga es para quien lleva la agenda o cotiza (por la revisión);
+    - el validador toma hasta 10 MB con su enlace.
+  - `AuthorizationBehaviorTests`: la foto desde el enlace es una de las solicitudes anónimas.
+  - **WebApi:** `CrossTenantVisitProblemPhotosSqlServerTests` (2, nuevo):
+    - la foto sin cuenta dice cuántas, nunca la foto ni datos del cliente;
+    - la foto no cambia la `rowversion` de la cita (por la revisión: la prueba en memoria no lo comprobaba);
+    - su negocio la ve en la Agenda y la abre con `sandbox` y `no-store`; el otro negocio no la ve ni la abre, y sin sesión no se abre;
+    - un enlace que no existe, lo que no es una foto, una sin archivo, una de más de 10 MB y un cuerpo pasado del límite no se toman (por la revisión). El cuerpo pasado del límite se detiene al leer el formulario, antes del validador.
+    - Mis citas, con la sesión de una cuenta de cliente y sin negocio en contexto, cuenta las 5 fotos de su visita y ya no ofrece más (por la revisión, que temía el filtro por negocio en el conteo: `IgnoreQueryFilters` vale para toda la consulta, y el conteo se acota además al negocio de la cita).
+  - **Mutaciones:** sin la hora de la visita, el tope de 5, el rechazo antes de leer, el recuento antes de escribir, la fila de la foto en la descarga, la compuerta, la recodificación, lo que recibe el enlace, las notas solo en línea, el freno del rollback, el reintento solo por el lugar, el tope del cuerpo, la cita sin tocar o decodificar reducida solo la foto más grande, falla al menos una prueba (los tres últimos, por la revisión). Sin el caso del trabajo de una cotización ninguna falla: esa cita nunca es en línea, y el canal ya la rechaza.
+  - **Cliente:**
+    - `problemPhotos.test.ts` (5, nuevo): qué fotos caben y por qué no las otras, el tipo vacío con nombre de foto, una vista previa por foto que se suelta al quitarla, y las fotos en palabras.
+    - `ProblemPhotos.test.tsx` (7, nuevo):
+      - una a la vez, con su estado, y Reintentar solo para la conexión o el servidor, que se queda con el foco;
+      - rechazada, lee otra vez la visita y ya no ofrece más, y la rechazada se quita;
+      - un enlace que dejó de abrir detiene las demás;
+      - sin más cuando la página dice que ya no recibe;
+      - cada foto de la solicitud va una vez, también en StrictMode y al volver a mostrarse (por la revisión);
+      - con cada foto que llega, Mis citas se vuelve a leer (por la revisión automática);
+      - al quitar una de cinco fotos, el foco queda en «Agregar más fotos» cuando vuelve a recibir una (por la revisión automática).
+    - `useProblemPhotoUploads.test.ts` (1, nuevo, por la revisión automática): el navegador pregunta antes de cerrar mientras cualquier enlace sigue mandando fotos, no solo hasta que termina el primero.
+    - `PublicHomeVisitPage.test.tsx` (+1): elige, ve y quita fotos en la solicitud, y se mandan con el enlace al guardarla.
+    - `AppointmentTrackingPage.test.tsx` (+4): cuántas mandó y agregar desde el enlace, con la cita al día; sin fotos para una cita que ya no las recibe; y, por la revisión, la visita como la tiene el servidor al abrir el enlace después de mandar fotos desde el recibo, y cancelada al volver después de mandar una foto y cancelar. Usan una caché como la de la aplicación (30 s): con la de las pruebas la respuesta vieja no se notaba.
+    - `AppointmentsList.test.tsx` (+1): «Ver lo que pasa» con el texto y las fotos de una visita en línea, nunca en una del equipo.
+    - `QuoteDetail.test.tsx` (+3): lo que pasa y sus fotos en la cotización, nada para una visita del equipo, y solo las rutas privadas del negocio.
+    - `privateFiles.test.ts` (+1): el área nueva.
+  - **.NET en total:** 4,595 pruebas (Domain 1,357; Application 2,068; WebApi 484; Infrastructure 686, con la de formatos que trajo `master` en la PR #153), también el build en Release. **Cliente en total:** 194 archivos y 1,472 pruebas.
+  - **Primera visita:** 181,708 B (`master` en `8ecfa7f`: 181,605 B, +103 B). Las fotos se cargan con sus pantallas; los 103 B son la lista de precarga de la entrada, con los chunks compartidos nuevos, y la regla de las rutas privadas. Con cada corrección de la revisión la cifra se movió unos bytes, por los nombres de los chunks que cambian en esa lista. El presupuesto sube de 181,700 B a 181,800 B.
+  - **Escenas:** contra la línea base de `master` en `8ecfa7f` (794 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - 793 salen iguales.
+    - **Cambia 1, a propósito:** la hoja de la solicitud (`oficios-solicitar-visita-datos-telefono`) suma «Fotos de lo que pasa».
+    - **4 nuevas:** la solicitud con dos fotos y su recibo con las fotos enviadas (en `oficios.spec.ts`), el enlace de la visita con fotos, «Ver lo que pasa» en la Agenda (`agenda-domicilio.spec.ts`) y la cotización con lo que pasa (`cotizaciones.spec.ts`). Pasaron tres corridas seguidas y salen iguales en la comparación completa.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

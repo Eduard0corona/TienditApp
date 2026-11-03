@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { asOption, type DemoData, type SceneOptions } from '../fixtures';
 import { publicRoutes } from './publico-cuenta-marco.mocks';
 
@@ -259,6 +260,27 @@ export const ACCEPTED_QUOTE_ID = ACCEPTED_ID;
 export const CONVERTED_QUOTE_ID = CONVERTED_ID;
 export const SCHEDULED_QUOTE_ID = SCHEDULED_ID;
 export const PLUMBER_QUOTES = asOption(plumber);
+/**
+ * Valeria's sent quote with what she said happens and her two photos (Fase 29H): it opens them with the session from the
+ * business's private files.
+ */
+const quoteWithProblemRoutes: ExtraRoutes = (data, helpers) => {
+  const photo = (n: number) => `/files/orders/${data.TENANT_ID}/visit-problem/202610/7a1c4e2f-9b3d-4c5e-8f6a-1b2c3d4e5f0${n}.webp`;
+  return [
+    ['GET', new RegExp(`^/quotes/${SENT_ID}$`), () => helpers.ok({
+      ...SENT,
+      appointment: { ...APPOINTMENT, problem: 'Gotea el calentador desde ayer en la noche.', problemPhotos: [photo(1), photo(2)] },
+    })],
+    ['GET', /^\/files\/orders\/[^/]+\/visit-problem\/202610\/[0-9a-f-]+0([12])\.webp$/, (match) => ({
+      status: 200,
+      contentType: 'image/png',
+      body: readFileSync(new URL(`../mocks/img/${match[1] === '1' ? 'fuga' : 'pared'}.png`, import.meta.url)),
+    })],
+    ...quotesRoutes(data, helpers),
+  ];
+};
+
 export const QUOTES_ROUTES = asOption(quotesRoutes);
+export const QUOTE_WITH_PROBLEM_ROUTES = asOption(quoteWithProblemRoutes);
 export const QUOTES_WITH_WHATSAPP_ROUTES = asOption(quotesWithWhatsAppRoutes);
 export const PUBLIC_QUOTE_ROUTES = asOption(publicQuoteRoutes);

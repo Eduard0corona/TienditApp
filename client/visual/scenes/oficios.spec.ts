@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap, snapElement } from '../helpers';
-import { OFICIOS_EN_EXPLORAR, PLOMERO_EN_CONFIGURACION, TIENDA_DE_PLOMERIA, VISITA_DE_PLOMERIA } from './oficios.mocks';
+import {
+  ENLACE_CON_FOTOS, OFICIOS_EN_EXPLORAR, PLOMERO_EN_CONFIGURACION, TIENDA_DE_PLOMERIA, VISIT_LINK, VISITA_CON_FOTOS, VISITA_DE_PLOMERIA,
+} from './oficios.mocks';
 
 // Oficios a domicilio (Fase 29A, ADR 0053): the trades that go to their customers' homes to quote look like what they
 // are. In Explorar, «Hogar y reparaciones» lists a plumber, a carpenter and a locksmith that receive visits: their cards
@@ -129,5 +132,48 @@ test.describe('Solicitar una visita', () => {
     await expect(page.getByRole('heading', { name: '¡Solicitud enviada!' })).toBeVisible();
     await expect(page.getByText('A domicilio · CP 06700')).toBeVisible();
     await snap(page, 'oficios-solicitar-visita-enviada-telefono');
+  });
+});
+
+// Fase 29H: the photos of what happens, picked in the request and sent with its link; more from the visit's link.
+const PHOTO = (name: string) => ({
+  name,
+  mimeType: 'image/png',
+  buffer: readFileSync(new URL(`../mocks/img/${name}`, import.meta.url)),
+});
+
+test.describe('Fotos de lo que pasa', () => {
+  test.use({ signedIn: false, extraRoutes: VISITA_CON_FOTOS });
+
+  test('solicitar visita con fotos', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/m/plomeria-hernandez/visita');
+    await page.getByLabel('Código postal').fill('06700');
+    await page.getByRole('button', { name: '10:00 a. m.' }).click();
+    await page.getByRole('button', { name: 'Continuar · Lun 5 · 10:00 a. m.' }).click();
+    const sheet = await dialog(page, 'Tu visita');
+    await sheet.getByLabel('¿Qué pasa?').fill('Gotea el calentador desde ayer en la noche.');
+    await sheet.getByTestId('problem-photos-input').setInputFiles([PHOTO('fuga.png'), PHOTO('pared.png')]);
+    await expect(sheet.getByRole('img', { name: 'Foto 2 de lo que pasa' })).toBeVisible();
+    await sheet.getByLabel('Dirección').fill('Colima 120, Roma Norte');
+    await sheet.getByLabel('Tu nombre').fill('Valeria Ruiz');
+    await sheet.getByLabel('Teléfono (WhatsApp)').fill('55 2210 7765');
+    await snapElement(sheet, 'oficios-solicitar-visita-fotos-telefono');
+
+    await sheet.getByRole('button', { name: 'Solicitar visita' }).click();
+    await expect(page.getByText('Listo: se mandaron 2 fotos.')).toBeVisible();
+    await snap(page, 'oficios-solicitar-visita-fotos-enviadas-telefono');
+  });
+});
+
+test.describe('Fotos desde el enlace de la visita', () => {
+  test.use({ signedIn: false, extraRoutes: ENLACE_CON_FOTOS });
+
+  test('enlace de la visita con fotos', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/cita#${VISIT_LINK}`);
+    await expect(page.getByText('Mandaste 2 fotos de lo que pasa')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Agregar más fotos' })).toBeVisible();
+    await snap(page, 'oficios-enlace-visita-fotos-telefono');
   });
 });

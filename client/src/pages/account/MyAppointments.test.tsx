@@ -33,6 +33,8 @@ function appointment(overrides: Partial<CustomerAppointment> = {}): CustomerAppo
     businessSlug: 'barberia-luis',
     businessContactPhone: null,
     address: null,
+    problemPhotos: 0,
+    canAddPhotos: false,
     ...overrides,
   };
 }

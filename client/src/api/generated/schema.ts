@@ -11921,6 +11921,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/appointments/tracking/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "multipart/form-data": {
+                        Token?: string;
+                        /** Format: binary */
+                        File?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAppointmentDto"];
+                        "application/json": components["schemas"]["CustomerAppointmentDto"];
+                        "text/json": components["schemas"]["CustomerAppointmentDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/cfdi": {
         parameters: {
             query?: never;
@@ -15726,6 +15771,7 @@ export interface components {
             /** Format: uuid */
             workOrderId?: string | null;
             workOrderNumber?: string | null;
+            problemPhotos: string[];
         };
         AppointmentDtoPaginatedList: {
             items: components["schemas"]["AppointmentDto"][];
@@ -17131,6 +17177,9 @@ export interface components {
             address?: string | null;
             visit?: components["schemas"]["CustomerVisitDto"];
             staffName?: string | null;
+            /** Format: int32 */
+            problemPhotos: number;
+            canAddPhotos: boolean;
         };
         CustomerAppointmentDtoPaginatedList: {
             items: components["schemas"]["CustomerAppointmentDto"][];
@@ -20688,6 +20737,8 @@ export interface components {
             startAt: string;
             serviceName: string;
             postalCode?: string | null;
+            problem?: string | null;
+            problemPhotos: string[];
         };
         QuoteDto: {
             /** Format: uuid */

@@ -4,6 +4,7 @@ import ReviewButton from '../reviews/ReviewButton';
 import { AppointmentStatus } from '../../types';
 import { endSentence } from '../../utils/dates';
 import { addressMapUrl, bookingPath, customerAppointmentChip, homeVisitPath, upperFirst } from '../../utils/onlineBooking';
+import { photoCount } from '../../utils/problemPhotos';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 
 interface CustomerAppointmentCardProps {
@@ -55,6 +56,12 @@ export default function CustomerAppointmentCard({
           <p className="small mb-1">
             <i className="ri-home-gear-line me-1" aria-hidden="true"></i>
             A domicilio · CP {appointment.visit.postalCode}
+          </p>
+        )}
+        {appointment.visit && appointment.problemPhotos > 0 && (
+          <p className="small mb-1">
+            <i className="ri-image-line me-1" aria-hidden="true"></i>
+            Mandaste {photoCount(appointment.problemPhotos)} de lo que pasa
           </p>
         )}
         {appointment.address && (

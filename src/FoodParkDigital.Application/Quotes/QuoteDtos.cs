@@ -75,6 +75,13 @@ public class QuoteAppointmentDto
     public string ServiceName { get; set; } = null!;
     /// <summary>Where the visit was, by postal code; null for an appointment at the business.</summary>
     public string? PostalCode { get; set; }
+    /// <summary>
+    /// What happens, in the customer's words, when they requested the visit online (Fase 29H, ADR 0062); null for a visit the
+    /// team arranged, whose notes are the team's.
+    /// </summary>
+    public string? Problem { get; set; }
+    /// <summary>The photos of what happens the customer sent with it, as the private paths that open them, in the order sent.</summary>
+    public List<string> ProblemPhotos { get; set; } = [];
 }
 
 /// <summary>A version of a quote, for the business (Fase 29C, ADR 0053).</summary>

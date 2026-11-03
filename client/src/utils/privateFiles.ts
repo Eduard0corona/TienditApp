@@ -1,6 +1,7 @@
-// A transfer receipt or a service photo of the business: "orders/{tenant}/{area}/{yyyyMM}/{guid}.{ext}".
+// A transfer receipt, a service photo or a photo of what happens a customer sent with a visit (Fase 29H) of the business:
+// "orders/{tenant}/{area}/{yyyyMM}/{guid}.{ext}".
 const PRIVATE_KEY =
-  /(?:^|\/)(orders\/[0-9a-fA-F-]{36}\/(?:payment-evidence|service-intake)\/\d{6}\/[0-9a-fA-F-]{36}\.(?:webp|pdf|jpg|jpeg|png))$/;
+  /(?:^|\/)(orders\/[0-9a-fA-F-]{36}\/(?:payment-evidence|service-intake|visit-problem)\/\d{6}\/[0-9a-fA-F-]{36}\.(?:webp|pdf|jpg|jpeg|png))$/;
 
 /**
  * The API path of a private file of the business, from what a record keeps: "/files/{key}" or the public address the

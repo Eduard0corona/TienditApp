@@ -146,6 +146,17 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(10),
                 QueueLimit = 0
             }));
+    // The photos of what happens a customer sends with a visit requested online (Fase 29H): up to five per visit, sent again
+    // when one fails; each is a large body that is decoded.
+    options.AddPolicy(PublicAppointmentsController.PhotosRateLimitPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 200 : 20,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0
+            }));
     options.AddPolicy("public-order", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",

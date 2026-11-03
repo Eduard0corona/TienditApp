@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
-import { HOME_VISITS_DATA, RICARDO_VISIT_ID } from './agenda-domicilio.mocks';
+import { HOME_VISITS_DATA, HOME_VISITS_WITH_PHOTOS_DATA, PROBLEM_PHOTO_FILES, RICARDO_VISIT_ID } from './agenda-domicilio.mocks';
 import { SELL_ROUTES } from './vender-pedidos.mocks';
 
 // Services at the customer's address (Fase 22E): the agenda's visits, the new appointment with the charge of its zone,
@@ -126,5 +126,19 @@ test.describe('Agenda a domicilio', () => {
     await page.getByLabel('Traslado entre citas (minutos)').fill('45');
     await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toBeEnabled();
     await snap(page, 'zonas-entrega-visitas-escritorio');
+  });
+});
+
+// Fase 29H: what the customer said happens and their photos, in the agenda of the business.
+test.describe('Lo que pasa en la Agenda', () => {
+  test.use({ prepareData: HOME_VISITS_WITH_PHOTOS_DATA, extraRoutes: PROBLEM_PHOTO_FILES });
+
+  test('lo que pasa de una visita pedida en línea', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await openHomeVisits(page);
+    await page.getByRole('button', { name: 'Ver lo que pasa · 2 fotos, en la visita de Elena Vargas' }).click();
+    const problem = await dialog(page, 'Lo que pasa');
+    await expect(problem.getByRole('link', { name: 'Abrir foto 2 de lo que pasa' }).locator('img')).toBeVisible();
+    await snapDialog(page, 'agenda-lo-que-pasa-escritorio');
   });
 });

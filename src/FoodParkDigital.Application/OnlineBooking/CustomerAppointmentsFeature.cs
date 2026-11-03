@@ -44,6 +44,13 @@ public class CustomerAppointmentDto
     /// business gave them none.
     /// </summary>
     public string? StaffName { get; set; }
+    /// <summary>The photos of what happens the customer sent with a visit requested online (Fase 29H, ADR 0062); never the photos.</summary>
+    public int ProblemPhotos { get; set; }
+    /// <summary>
+    /// The customer may still send one more from the link: a visit requested online, waiting or agendada, before its time,
+    /// with fewer than five.
+    /// </summary>
+    public bool CanAddPhotos { get; set; }
 }
 
 /// <summary>
@@ -121,7 +128,11 @@ public static class CustomerAppointments
                 .Select(s => s.Name)
                 .FirstOrDefault(),
             appointment.Visit == null ? null : appointment.Visit.PostalCode,
-            appointment.Visit == null ? null : appointment.Visit.ChargePolicy);
+            appointment.Visit == null ? null : appointment.Visit.ChargePolicy,
+            appointment.WorkOrderId != null,
+            // Bounded by the appointment's business, like its staff: Mis citas reads across businesses (IgnoreQueryFilters
+            // applies to the whole query).
+            context.AppointmentProblemPhotos.Count(p => p.TenantId == appointment.TenantId && p.AppointmentId == appointment.Id));
 
     internal static CustomerAppointmentDto ToDto(Row row, DateTimeOffset now)
     {
@@ -142,7 +153,10 @@ public static class CustomerAppointments
             BusinessContactPhone = row.BusinessContactPhone,
             Address = row.VisitPostalCode is null ? AddressText.ForCustomers(row.MainBranch) : null,
             Visit = row.VisitPostalCode is null ? null : new CustomerVisitDto { PostalCode = row.VisitPostalCode, ChargePolicy = row.VisitChargePolicy },
-            StaffName = row.StaffName
+            StaffName = row.StaffName,
+            ProblemPhotos = row.ProblemPhotos,
+            CanAddPhotos = HomeVisitRules.ProblemPhotoRefusal(
+                row.Channel, row.VisitPostalCode is not null, row.IsWork, row.Status, row.StartAt, row.ProblemPhotos, now) is null
         };
     }
 
@@ -161,7 +175,9 @@ public static class CustomerAppointments
         Domain.Branches.Entities.Branch? MainBranch,
         string? StaffName,
         string? VisitPostalCode,
-        HomeVisitChargePolicy? VisitChargePolicy);
+        HomeVisitChargePolicy? VisitChargePolicy,
+        bool IsWork,
+        int ProblemPhotos);
 }
 
 /// <summary>

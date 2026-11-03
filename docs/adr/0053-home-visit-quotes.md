@@ -222,7 +222,7 @@ El trabajo de la orden en que se convirtió la cotización se agenda (punto 17):
 11. **El cliente pide una hora exacta** (decisión 4). Escribe su código postal (una zona activa debe llegar a él), elige el día, una hora libre y, si el negocio elige quién agenda en línea ([ADR 0032](0032-online-booking-staff.md)), con quién.
     - Las horas salen de `BookingSlots` con la duración del servicio de la visita (una hora sin ella). Se suma el traslado del negocio (`HomeVisitTravelMinutes`) antes y después de cada visita, contra todas las citas de esa persona, como en la agenda ([ADR 0020](0020-home-visits.md)).
     - Escribe qué pasa (hasta 500 caracteres), su dirección y referencias (`DeliveryAddress`; una cuenta usa sus direcciones guardadas), su nombre, su teléfono y, si quiere, su correo para recibir la cotización.
-    - Las fotos del problema quedan para después: necesitan una subida pública validada, privada por negocio y con límite por solicitud, y esta etapa no abre subidas anónimas.
+    - Las fotos del problema quedan para después: necesitan una subida pública validada, privada por negocio y con límite por solicitud, y esta etapa no abre subidas anónimas. Llegaron en la Fase 29H, hasta 5 por visita y mandadas con el enlace de la solicitud ([ADR 0062](0062-visit-problem-photos.md)).
 12. **La solicitud es una cita «Por confirmar» con su visita** (`Appointment` en `Requested`, con `AppointmentVisit`). Usa la llave de la solicitud, el candado por negocio, el límite de 3 por teléfono, el enlace de seguimiento, Mis citas y el aviso por WhatsApp de la [ADR 0025](0025-online-booking.md).
     - En este modo no aplica `NoPremises`.
     - El cargo por visita sale de la política: «Sin costo» lo deja en cero.
@@ -254,7 +254,7 @@ El trabajo de la orden en que se convirtió la cotización se agenda (punto 17):
 ### Después
 
 - Que el cliente acepte la cotización desde su enlace, con un anticipo por Mercado Pago ([ADR 0031](0031-online-payments.md)). La respuesta sin anticipo llegó en la Fase 29G ([ADR 0061](0061-quote-replies-from-link.md)); el anticipo sigue pendiente.
-- Fotos del problema en la solicitud.
+- Fotos del problema en la solicitud: llegaron en la Fase 29H ([ADR 0062](0062-visit-problem-photos.md)).
 - PDF de la cotización y documento adjunto por WhatsApp.
 - El tiempo de respuesta del negocio como criterio de orden en Explorar.
 - Que la búsqueda de Explorar encuentre los servicios de estos negocios: hoy busca solo los productos del menú ([ADR 0028](0028-product-search-and-favorites.md)).

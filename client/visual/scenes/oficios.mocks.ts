@@ -190,7 +190,47 @@ const plumberVisit: ExtraRoutes = (data, { ok }) => [
   })],
 ];
 
+/**
+ * The visit as its link shows it (Fase 29H): «Por confirmar» at 06700, with the photos of what happens the customer sent
+ * (`sent`, counted again with each one that arrives) and whether it takes more.
+ */
+function visitOfTheLink(sent: number) {
+  return {
+    id: 'visita-plomeria',
+    serviceName: 'Visita y diagnóstico',
+    startAt: '2026-10-05T16:00:00Z',
+    endAt: '2026-10-05T17:00:00Z',
+    dateLabel: 'lunes 5 de octubre',
+    timeLabel: '10:00 a. m.',
+    status: 5,
+    statusLabel: 'Por confirmar',
+    canCancel: true,
+    businessName: 'Plomería Hernández',
+    businessSlug: 'plomeria-hernandez',
+    businessContactPhone: '5512345678',
+    address: null,
+    visit: { postalCode: '06700', chargePolicy: CREDITED_IF_HIRED },
+    staffName: null,
+    problemPhotos: sent,
+    canAddPhotos: sent < 5,
+  };
+}
+
+/** The visit's link with its photos: each one sent takes the next place, up to five (Fase 29H). */
+const visitPhotos = (sentBefore: number): ExtraRoutes => (data, helpers) => {
+  let sent = sentBefore;
+  return [
+    ...plumberVisit(data, helpers),
+    ['POST', /^\/public\/appointments\/tracking$/, () => helpers.ok(visitOfTheLink(sent))],
+    ['POST', /^\/public\/appointments\/tracking\/photos$/, () => helpers.ok(visitOfTheLink(++sent))],
+  ];
+};
+
 export const OFICIOS_EN_EXPLORAR = asOption(tradesInExplore);
 export const PLOMERO_EN_CONFIGURACION = asOption(plumberSettings);
 export const TIENDA_DE_PLOMERIA = asOption(plumberStore);
 export const VISITA_DE_PLOMERIA = asOption(plumberVisit);
+/** The request with photos of what happens, none sent yet (Fase 29H). */
+export const VISITA_CON_FOTOS = asOption(visitPhotos(0));
+/** The link of a visit that already has two photos and takes three more (Fase 29H). */
+export const ENLACE_CON_FOTOS = asOption(visitPhotos(2));

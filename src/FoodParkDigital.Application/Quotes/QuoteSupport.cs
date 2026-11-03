@@ -4,7 +4,9 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Messaging.Campaigns;
+using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.Orders;
+using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -221,10 +223,14 @@ internal static class QuoteViews
                     Id = a.Id,
                     StartAt = a.StartAt,
                     ServiceName = a.ServiceName,
-                    PostalCode = a.Visit != null ? a.Visit.PostalCode : null
+                    PostalCode = a.Visit != null ? a.Visit.PostalCode : null,
+                    Problem = a.Channel == AppointmentChannel.Online ? a.Notes : null
                 })
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
+        if (appointment is not null)
+            appointment.ProblemPhotos = (await VisitProblemPhotos.PathsAsync(context, [appointment.Id], cancellationToken))
+                .GetValueOrDefault(appointment.Id) ?? [];
         var stillPaid = await QuoteVisitCredits.StillPaidAsync(context, quote, cancellationToken);
         var sends = await QuoteDeliveries.LatestAsync(context, quote, cancellationToken);
         var status = quote.StatusOn(today);

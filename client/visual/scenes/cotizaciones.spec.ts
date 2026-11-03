@@ -1,18 +1,8 @@
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
 import {
-  ACCEPTED_QUOTE_ID,
-  ANSWERED_QUOTE_LINK,
-  CONNECTED_QUOTE_ID,
-  CONVERTED_QUOTE_ID,
-  DRAFT_QUOTE_ID,
-  PLUMBER_QUOTES,
-  PUBLIC_QUOTE_ROUTES,
-  QUOTES_ROUTES,
-  QUOTES_WITH_WHATSAPP_ROUTES,
-  QUOTE_LINK,
-  REPLACED_QUOTE_LINK,
-  SCHEDULED_QUOTE_ID,
+  ACCEPTED_QUOTE_ID, ANSWERED_QUOTE_LINK, CONNECTED_QUOTE_ID, CONVERTED_QUOTE_ID, DRAFT_QUOTE_ID, PLUMBER_QUOTES, PUBLIC_QUOTE_ROUTES,
+  QUOTES_ROUTES, QUOTES_WITH_WHATSAPP_ROUTES, QUOTE_LINK, QUOTE_WITH_PROBLEM_ROUTES, REPLACED_QUOTE_LINK, SCHEDULED_QUOTE_ID,
   SENT_QUOTE_ID,
 } from './cotizaciones.mocks';
 
@@ -213,6 +203,19 @@ test.describe('Cotización del enlace', () => {
 });
 
 // The ids are written out so the route coverage (coverage.spec.ts) reads them; the mocks answer the same ones.
+// Fase 29H: the quote of a visit says what the customer said happens, with the photos they sent.
+test.describe('Lo que pasa en la cotización', () => {
+  test.use({ prepareData: PLUMBER_QUOTES, extraRoutes: QUOTE_WITH_PROBLEM_ROUTES });
+
+  test('cotización con lo que pasa y sus fotos', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/quotes/0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58');
+    const problem = page.getByRole('region', { name: 'Lo que pasa' });
+    await expect(problem.getByRole('link', { name: 'Abrir foto 2 de lo que pasa' }).locator('img')).toBeVisible();
+    await snap(page, 'cotizacion-lo-que-pasa-escritorio');
+  });
+});
+
 test('the scenes open the quotes the mocks answer', () => {
   expect([DRAFT_QUOTE_ID, SENT_QUOTE_ID, CONNECTED_QUOTE_ID, ACCEPTED_QUOTE_ID, CONVERTED_QUOTE_ID, SCHEDULED_QUOTE_ID]).toEqual([
     '7a3f1c52-2d4b-4e6a-9c1f-0b8e5d2a7c41', '0c9d2e71-5b3a-4f8e-a6d4-3e1b7c9f2a58', '3e7b9c14-8f2a-4d6b-b1e5-7a0c4f9d2e63',

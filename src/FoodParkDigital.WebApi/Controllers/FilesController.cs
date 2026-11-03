@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.WebApi.Errors;
@@ -9,8 +10,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
-/// Private files of the business (transfer receipts and service photos), streamed to members with the right
-/// permission. The client fetches them with its session; they are never public links.
+/// Private files of the business (transfer receipts, service photos and the photos of what happens customers send with
+/// their visits), streamed to members with the right permission. The client fetches them with its session; they are never
+/// public links.
 /// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
@@ -30,9 +32,12 @@ public class FilesController : ControllerBase
         if (!OrderUploadRules.TryParsePrivateKey(key, out _, out var area))
             return this.ApiError(StatusCodes.Status404NotFound, GetPrivateOrderFileQueryHandler.NotFoundError);
 
-        IRequest<Result<PrivateFileDownload>> query = area == OrderUploadRules.PaymentEvidenceArea
-            ? new GetPaymentEvidenceFileQuery(key)
-            : new GetServicePhotoFileQuery(key);
+        IRequest<Result<PrivateFileDownload>> query = area switch
+        {
+            OrderUploadRules.PaymentEvidenceArea => new GetPaymentEvidenceFileQuery(key),
+            OrderUploadRules.VisitProblemArea => new GetVisitProblemPhotoFileQuery(key),
+            _ => new GetServicePhotoFileQuery(key)
+        };
         var result = await _mediator.Send(query, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status404NotFound, result.Error);

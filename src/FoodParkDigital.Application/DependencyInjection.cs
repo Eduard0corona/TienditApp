@@ -14,6 +14,7 @@ using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.PublicDirectory;
+using FoodParkDigital.Application.OnlineBooking;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,6 +51,8 @@ public static class DependencyInjection
         services.AddScoped<IOrderCashService, OrderCashService>();
         services.AddScoped<CurrentAccessContext>();
         services.AddScoped<ISupportAccessAudit, SupportAccessAudit>();
+        // The photos customers send without an account are decoded a couple at a time per instance (Fase 29H).
+        services.AddSingleton<PublicPhotoGate>();
 
         // Messaging: used by the use cases and by the messaging worker, in the business's scope.
         services.AddScoped<MessagingConsentService>();

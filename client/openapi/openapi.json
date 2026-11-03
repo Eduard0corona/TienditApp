@@ -14316,6 +14316,61 @@
         }
       }
     },
+    "/api/v1/public/appointments/tracking/photos": {
+      "post": {
+        "tags": [
+          "PublicAppointments"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Token": {
+                    "type": "string"
+                  },
+                  "File": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "Token": {
+                  "style": "form"
+                },
+                "File": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAppointmentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAppointmentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAppointmentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/cfdi": {
       "post": {
         "tags": [
@@ -19187,6 +19242,7 @@
           "customerPhone",
           "endAt",
           "id",
+          "problemPhotos",
           "saleCancelled",
           "serviceName",
           "startAt",
@@ -19265,6 +19321,12 @@
           "workOrderNumber": {
             "type": "string",
             "nullable": true
+          },
+          "problemPhotos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -23955,10 +24017,12 @@
         "required": [
           "businessName",
           "businessSlug",
+          "canAddPhotos",
           "canCancel",
           "dateLabel",
           "endAt",
           "id",
+          "problemPhotos",
           "serviceName",
           "startAt",
           "status",
@@ -24017,6 +24081,13 @@
           "staffName": {
             "type": "string",
             "nullable": true
+          },
+          "problemPhotos": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "canAddPhotos": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -35904,6 +35975,7 @@
       "QuoteAppointmentDto": {
         "required": [
           "id",
+          "problemPhotos",
           "serviceName",
           "startAt"
         ],
@@ -35923,6 +35995,16 @@
           "postalCode": {
             "type": "string",
             "nullable": true
+          },
+          "problem": {
+            "type": "string",
+            "nullable": true
+          },
+          "problemPhotos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false

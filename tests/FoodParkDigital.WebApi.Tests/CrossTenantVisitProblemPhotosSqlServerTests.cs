@@ -1,0 +1,123 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using FoodParkDigital.Application.OnlineBooking;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
+using FoodParkDigital.Infrastructure.Tests.Support;
+using Microsoft.EntityFrameworkCore;
+using static FoodParkDigital.WebApi.Tests.CrossTenantHomeVisitBookingSqlServerTests;
+
+namespace FoodParkDigital.WebApi.Tests;
+
+/// <summary>
+/// The photos of what happens a customer sends with a visit requested online (Fase 29H, ADR 0062) through the API: anonymous,
+/// with the link of the request in the form; the answer says how many, never the photos or who the customer is; only its
+/// business sees them in its agenda and opens them with its session, and the other business, or no session, never does.
+/// </summary>
+[Collection(TwoBusinessesCollection.Name)]
+public sealed class CrossTenantVisitProblemPhotosSqlServerTests
+{
+    private const string Photos = "/api/v1/public/appointments/tracking/photos";
+
+    private readonly TwoBusinessesApi _api;
+
+    public CrossTenantVisitProblemPhotosSqlServerTests(TwoBusinessesApi api)
+    {
+        _api = api;
+    }
+
+    [SqlServerFact]
+    public async Task APhotoSentFromTheLink_ShouldBeSeenAndOpenedOnlyByItsBusiness()
+    {
+        var mine = await _api.SignUpAsync("fotos-a");
+        var theirs = await _api.SignUpAsync("fotos-b");
+        var slug = await ReceiveVisitsAsync(mine.Client, "72000", 50m, chargePolicy: 1);
+        using var stranger = _api.AnonymousClient();
+        var receipt = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync(
+            $"/api/v1/public/menu/{slug}/home-visits", Request(await FirstFreeTimeAsync(stranger, slug), "72000")));
+        var token = receipt.GetProperty("trackingToken").GetString()!;
+        var before = await VersionAsync(mine.TenantId);
+
+        var sent = await TwoBusinessesApi.ReadAsync(await stranger.PostAsync(Photos, Form(token, TwoBusinessesApi.TinyPng, "image/png", "fuga.png")));
+
+        Assert.Equal((1, true), (sent.GetProperty("problemPhotos").GetInt32(), sent.GetProperty("canAddPhotos").GetBoolean()));
+        // The photo changes nothing of the appointment, not even its rowversion: it never conflicts with the business deciding it.
+        Assert.Equal(before, await VersionAsync(mine.TenantId));
+        // The link shows neither the photo nor who the customer is.
+        Assert.DoesNotContain("/files/", sent.GetRawText());
+        Assert.DoesNotContain("5522107765", sent.GetRawText());
+        Assert.DoesNotContain("Juárez", sent.GetRawText());
+
+        // Its agenda has it, and its session opens it as an image never rendered as a page.
+        var request = Assert.Single((await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync("/api/v1/appointments?status=5")))
+            .GetProperty("items").EnumerateArray());
+        var path = Assert.Single(request.GetProperty("problemPhotos").EnumerateArray()).GetString()!;
+        Assert.StartsWith("/files/orders/", path);
+        var opened = await mine.Client.GetAsync($"/api/v1{path}");
+        Assert.Equal(HttpStatusCode.OK, opened.StatusCode);
+        Assert.Equal("image/webp", opened.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("sandbox", opened.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Contains("no-store", opened.Headers.CacheControl?.ToString());
+
+        // The other business does not see it nor open it; without a session nothing opens.
+        Assert.Empty((await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync("/api/v1/appointments?status=5")))
+            .GetProperty("items").EnumerateArray());
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync($"/api/v1{path}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await stranger.GetAsync($"/api/v1{path}")).StatusCode);
+
+        // A link that does not exist, or what is not a photo, takes nothing.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await stranger.PostAsync(Photos, Form(new string('z', 43), TwoBusinessesApi.TinyPng, "image/png", "fuga.png"))).StatusCode);
+        var html = await stranger.PostAsync(Photos, Form(token, Encoding.UTF8.GetBytes("<html><script>alert(1)</script></html>"), "image/png", "fuga.png"));
+        Assert.Equal(HttpStatusCode.BadRequest, html.StatusCode);
+        Assert.Contains("Manda una foto JPG, PNG o WebP.", await html.Content.ReadAsStringAsync());
+        var nothing = await stranger.PostAsync(Photos, new MultipartFormDataContent { { new StringContent(token), "token" } });
+        Assert.Equal(HttpStatusCode.BadRequest, nothing.StatusCode);
+        // More than 10 MB: refused by its size, and a body past the form's limit is not read at all.
+        var heavy = await stranger.PostAsync(Photos, Form(token, new byte[VisitProblemPhotos.MaxFileBytes + 1], "image/jpeg", "grande.jpg"));
+        Assert.Equal(HttpStatusCode.BadRequest, heavy.StatusCode);
+        Assert.Contains(VisitProblemPhotos.TooLargeMessage, await heavy.Content.ReadAsStringAsync());
+        var huge = await stranger.PostAsync(Photos, Form(token, new byte[VisitProblemPhotos.MaxFileBytes + 512 * 1024], "image/jpeg", "enorme.jpg"));
+        Assert.Equal(HttpStatusCode.BadRequest, huge.StatusCode);
+        // Stopped by the form's limit while reading: the validator, which answers by the size of a file read whole, never ran.
+        Assert.DoesNotContain(VisitProblemPhotos.TooLargeMessage, await huge.Content.ReadAsStringAsync());
+        var tracked = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/appointments/tracking", new { token }));
+        Assert.Equal(1, tracked.GetProperty("problemPhotos").GetInt32());
+    }
+
+    [SqlServerFact]
+    public async Task MyAppointments_ShouldCountThePhotosOfAVisit_WithNoBusinessInContext()
+    {
+        var business = await _api.SignUpAsync("fotos-cuenta");
+        var slug = await ReceiveVisitsAsync(business.Client, "72000", 50m, chargePolicy: 1);
+        var customer = await _api.SignUpCustomerAsync("fotos-valeria");
+        using var stranger = _api.AnonymousClient();
+        var receipt = await TwoBusinessesApi.ReadAsync(await customer.Client.PostAsJsonAsync(
+            $"/api/v1/public/menu/{slug}/home-visits", Request(await FirstFreeTimeAsync(stranger, slug), "72000")));
+        Assert.True(receipt.GetProperty("linkedToAccount").GetBoolean());
+        var token = receipt.GetProperty("trackingToken").GetString()!;
+        for (var n = 0; n < HomeVisitRules.MaxProblemPhotos; n++)
+            await TwoBusinessesApi.ReadAsync(await stranger.PostAsync(Photos, Form(token, TwoBusinessesApi.TinyPng, "image/png", "fuga.png")));
+
+        // The account reads its appointments of every business, with no business in context: the visit counts its photos.
+        var mine = Assert.Single((await TwoBusinessesApi.ReadAsync(await customer.Client.GetAsync("/api/v1/me/appointments")))
+            .GetProperty("items").EnumerateArray());
+
+        Assert.Equal((5, false), (mine.GetProperty("problemPhotos").GetInt32(), mine.GetProperty("canAddPhotos").GetBoolean()));
+        // Read on their own with no business in context, the photos show none: they are counted within the account's query.
+        Assert.Equal(0, await _api.QueryAsync(Guid.Empty, context => context.AppointmentProblemPhotos.CountAsync()));
+    }
+
+    /// <summary>The rowversion of the only appointment of the business.</summary>
+    private Task<byte[]> VersionAsync(Guid tenantId)
+        => _api.QueryAsync(tenantId, context => context.Appointments.Select(a => a.Version).SingleAsync());
+
+    private static MultipartFormDataContent Form(string token, byte[] file, string contentType, string fileName)
+    {
+        var content = new ByteArrayContent(file);
+        content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        return new MultipartFormDataContent { { new StringContent(token), "token" }, { content, "file", fileName } };
+    }
+}

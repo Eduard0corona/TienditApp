@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import VisitProblem from '../../components/appointments/VisitProblem';
 import { appointmentsApi } from '../../api/appointmentsApi';
 import { employeesApi } from '../../api/employeesApi';
 import { quoteVisit } from '../../api/homeVisits';
@@ -26,6 +27,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
+import { photoCount } from '../../utils/problemPhotos';
 import {
   businessDateTimeToIso,
   businessDayStart,
@@ -121,6 +123,12 @@ function sameMinute(a: string, b: string): boolean {
   return Math.floor(new Date(a).getTime() / 60_000) === Math.floor(new Date(b).getTime() / 60_000);
 }
 
+/** «Ver lo que pasa · 2 fotos», or «Ver lo que pasa» when the customer only wrote it. */
+function problemLabel(item: AppointmentDto): string {
+  const photos = item.problemPhotos?.length ?? 0;
+  return photos > 0 ? `Ver lo que pasa · ${photoCount(photos)}` : 'Ver lo que pasa';
+}
+
 function formatSlot(item: AppointmentDto): string {
   const start = new Date(item.startAt);
   const end = new Date(item.endAt);
@@ -176,6 +184,8 @@ export default function AppointmentsList() {
 
   const [editing, setEditing] = useState<AppointmentDto | null>(null);
   const [showModal, setShowModal] = useState(false);
+  // What the customer said happens, with their photos (Fase 29H), of the visit opened.
+  const [problemOf, setProblemOf] = useState<AppointmentDto | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [form, setForm] = useState<FormState>(buildForm());
@@ -614,6 +624,17 @@ export default function AppointmentsList() {
                 <td>
                   <div>{item.serviceName}</div>
                   <div className="text-muted small">{item.staffName || 'Sin asignar'}</div>
+                  {/* A visit requested online carries what the customer said happens and their photos (Fase 29H). */}
+                  {item.visit && item.channel === AppointmentChannel.Online && (item.notes || (item.problemPhotos?.length ?? 0) > 0) && (
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm p-0 text-start"
+                      onClick={() => setProblemOf(item)}
+                      aria-label={`${problemLabel(item)}, en la visita de ${item.customerName}`}
+                    >
+                      {problemLabel(item)}
+                    </button>
+                  )}
                   {/* The job of an order (Fase 29F): charged in it, so it opens the order (for whoever sees orders) instead of «Cobrar». */}
                   {item.workOrderNumber && (
                     <div className="text-muted small">
@@ -720,6 +741,21 @@ export default function AppointmentsList() {
           )}
         </div>
       </div>
+
+      <Modal show={problemOf !== null} onHide={() => setProblemOf(null)} centered aria-labelledby={`${titleId}-problem`}>
+        <Modal.Header closeButton>
+          <Modal.Title id={`${titleId}-problem`} as="h2" className="h5">Lo que pasa</Modal.Title>
+        </Modal.Header>
+        {problemOf && (
+          <Modal.Body>
+            <p className="text-muted small mb-2">{problemOf.customerName} · {formatSlot(problemOf)}</p>
+            <VisitProblem problem={problemOf.notes} photos={problemOf.problemPhotos ?? []} />
+          </Modal.Body>
+        )}
+        <Modal.Footer>
+          <button type="button" className="btn btn-light" onClick={() => setProblemOf(null)}>Cerrar</button>
+        </Modal.Footer>
+      </Modal>
 
       <Modal show={showModal} onHide={() => !saving && setShowModal(false)} centered aria-labelledby={titleId}>
         <Modal.Header closeButton>

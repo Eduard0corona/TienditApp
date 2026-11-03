@@ -437,6 +437,31 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         Status = AppointmentStatus.Completed;
     }
 
+    /// <summary>
+    /// Why this visit takes no more photos of what happens from its link, or null when it takes one more (Fase 29H, ADR 0062):
+    /// see <see cref="HomeVisitRules.ProblemPhotoRefusal"/>. Read before the file, so a refused photo costs nothing.
+    /// </summary>
+    /// <param name="photosSoFar">How many it already has.</param>
+    public string? ProblemPhotoRefusal(int photosSoFar, DateTimeOffset now)
+        => HomeVisitRules.ProblemPhotoRefusal(Channel, IsHomeVisit, IsWork, Status, StartAt, photosSoFar, now);
+
+    /// <summary>
+    /// The customer sends a photo of what happens from the link of the visit they requested (Fase 29H, ADR 0062). It takes the
+    /// next place among its photos; it changes nothing of the appointment, so it never conflicts with the business deciding
+    /// the request. The base keeps each place once, so two photos sent at once never make one more than allowed.
+    /// </summary>
+    /// <param name="photosSoFar">How many it already has.</param>
+    /// <param name="fileKey">The key of the private file already saved for this business.</param>
+    public AppointmentProblemPhoto AddProblemPhoto(int photosSoFar, string fileKey, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(fileKey) || fileKey.Length > AppointmentProblemPhoto.MaxFileKeyLength)
+            throw new ArgumentException("The key of the file is required and short.", nameof(fileKey));
+        if (ProblemPhotoRefusal(photosSoFar, now) is { } refusal)
+            throw new DomainException(refusal);
+
+        return new AppointmentProblemPhoto(TenantId, Id, photosSoFar, fileKey, now);
+    }
+
     private void EnsureOpen()
     {
         if (IsClosed)

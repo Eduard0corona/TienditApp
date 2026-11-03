@@ -84,6 +84,7 @@ public interface IApplicationDbContext
     DbSet<Appointment> Appointments { get; }
     DbSet<OnlineBookingStaff> OnlineBookingStaff { get; }
     DbSet<AppointmentVisit> AppointmentVisits { get; }
+    DbSet<AppointmentProblemPhoto> AppointmentProblemPhotos { get; }
     DbSet<Supplier> Suppliers { get; }
     DbSet<PurchaseOrder> PurchaseOrders { get; }
     DbSet<PurchaseOrderLine> PurchaseOrderLines { get; }

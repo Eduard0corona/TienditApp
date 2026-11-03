@@ -9,14 +9,19 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
 /// Following and cancelling an appointment booked online with the link of its receipt (Fase 24D, ADR 0025), without an
-/// account. The link travels in the body, never in the path or the query: request telemetry keeps URLs. Rate limited per IP
-/// like the public menu.
+/// account, and sending the photos of what happens with a visit requested online (Fase 29H, ADR 0062). The link travels in
+/// the body, never in the path or the query: request telemetry keeps URLs. Rate limited per IP like the public menu.
 /// </summary>
 [ApiController]
 [Route("api/v1/public/appointments/tracking")]
 [AllowAnonymous]
 public class PublicAppointmentsController : ControllerBase
 {
+    /// <summary>The rate limit of the photos of a visit, per IP (Fase 29H).</summary>
+    public const string PhotosRateLimitPolicy = "public-upload";
+    // A photo up to 10 MB with the link and the form around it.
+    private const long PhotoBodyLimit = VisitProblemPhotos.MaxFileBytes + 64 * 1024;
+
     private readonly IMediator _mediator;
 
     public PublicAppointmentsController(IMediator mediator)
@@ -43,10 +48,53 @@ public class PublicAppointmentsController : ControllerBase
             return this.ApiError(StatusCodes.Status404NotFound, result.Error);
         return Ok(result.Value);
     }
+
+    /// <summary>
+    /// A photo of what happens for the visit of the link (Fase 29H): one per request, up to five per visit, while the visit
+    /// waits or is agendada and before its time. Answers the appointment with how many photos it has.
+    /// </summary>
+    [HttpPost("photos")]
+    [Consumes("multipart/form-data")]
+    [EnableRateLimiting(PhotosRateLimitPolicy)]
+    [RequestSizeLimit(PhotoBodyLimit)]
+    [RequestFormLimits(MultipartBodyLengthLimit = PhotoBodyLimit)]
+    public async Task<ActionResult<CustomerAppointmentDto>> AddPhoto([FromForm] PublicAppointmentPhotoRequest request, CancellationToken cancellationToken)
+    {
+        if (request.File is null || request.File.Length == 0)
+            return this.ApiError(StatusCodes.Status400BadRequest, "Elige la foto que quieres mandar.");
+
+        await using var stream = request.File.OpenReadStream();
+        var result = await _mediator.Send(new AddVisitProblemPhotoCommand
+        {
+            Token = request.Token,
+            FileStream = stream,
+            FileSize = request.File.Length
+        }, cancellationToken);
+        if (result is null)
+            return this.ApiError(StatusCodes.Status404NotFound, CustomerAppointments.NotFoundMessage);
+        if (result.IsFailure)
+        {
+            // Too many photos being read right now: the customer sends it again in a moment.
+            var status = result.Error == VisitProblemPhotos.BusyMessage
+                ? StatusCodes.Status429TooManyRequests
+                : StatusCodes.Status400BadRequest;
+            return this.ApiError(status, result.Error);
+        }
+        return Ok(result.Value);
+    }
 }
 
 public class PublicAppointmentRequest
 {
     /// <summary>The link of the receipt (the fragment of /cita#token).</summary>
     public string Token { get; init; } = null!;
+}
+
+/// <summary>A photo of what happens for the visit of a link (Fase 29H), as a form: the link and the file.</summary>
+public class PublicAppointmentPhotoRequest
+{
+    /// <summary>The link of the receipt (the fragment of /cita#token).</summary>
+    public string Token { get; init; } = null!;
+    /// <summary>The photo: JPG, PNG or WebP, up to 10 MB.</summary>
+    public IFormFile File { get; init; } = null!;
 }
