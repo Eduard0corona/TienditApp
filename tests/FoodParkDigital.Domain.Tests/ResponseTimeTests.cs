@@ -60,6 +60,17 @@ public class ResponseTimeTests
     }
 
     [Fact]
+    public void ARequest_ShouldKeepTheTimeItsCustomerAskedFor_ThoughTheBusinessMovesIt()
+    {
+        var appointment = Request();
+
+        appointment.Update("Valeria", "+525522107765", "Corte de cabello", Start.AddDays(1), Start.AddDays(1).AddHours(1), null, null);
+
+        Assert.Equal((Start.AddDays(1), (DateTimeOffset?)Start), (appointment.StartAt, appointment.RequestedStartAt));
+        Assert.Null(new Appointment(Business, "Valeria", "5522107765", "Corte", Start, Start.AddHours(1)).RequestedStartAt);
+    }
+
+    [Fact]
     public void WhatTheBusinessDidNotAnswer_ShouldKeepNoAnswer()
     {
         var cancelled = Request();

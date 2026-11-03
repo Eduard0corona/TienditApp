@@ -107,6 +107,21 @@ public class PublicDirectorySqlServerTests
         var silent = await SalonAsync("g-sin-respuesta");
         await SeedRequestsAsync(database, silent, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
         await SeedUnansweredAsync(database, silent, null, null, TimeSpan.FromHours(25), TimeSpan.FromHours(26));
+        // Let pass, then moved to another time and accepted at once: still after the time its customer asked for.
+        var moved = await SalonAsync("k-movida");
+        await using (var seed = database.CreateContext(moved))
+        {
+            for (var n = 0; n < 3; n++)
+            {
+                var asked = Later.AddDays(-2);
+                var request = Request(moved, asked);
+                request.CreatedAt = asked.AddHours(-2);
+                request.Update("Valeria", "+525522107765", "Corte", Later.AddDays(1), Later.AddDays(1).AddHours(1), null, null);
+                request.Accept(asked.AddHours(1));
+                seed.Appointments.Add(request);
+            }
+            await seed.SaveChangesAsync();
+        }
 
         await using var context = database.CreateContext();
         var handler = new GetPublicDirectoryQueryHandler(context, new FixedClock(Later), new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance);
@@ -117,7 +132,7 @@ public class PublicDirectorySqlServerTests
                 ("b-rapida", ResponseTime.WithinAnHour), ("e-una-hora", ResponseTime.WithinThreeHours),
                 ("c-nueva", null), ("d-vieja", null), ("h-tres-horas", ResponseTime.WithinTwelveHours),
                 ("i-doce-horas", ResponseTime.WithinADay),
-                ("f-tarde", null), ("g-sin-respuesta", null), ("j-un-dia", (ResponseTime?)null)
+                ("f-tarde", null), ("g-sin-respuesta", null), ("j-un-dia", null), ("k-movida", (ResponseTime?)null)
             ],
             category.Businesses.Items.Select(b => (b.Slug, b.ResponseTime)));
     }

@@ -18,11 +18,12 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
 
 ## Decisión
 
-1. **Qué se mide:** las solicitudes en línea, es decir, una cita agendada en línea (Fase 24D) o una visita pedida en línea (Fase 29B). Cuenta el tiempo desde que llega hasta que el negocio la acepta o la rechaza antes de su hora.
+1. **Qué se mide:** las solicitudes en línea, es decir, una cita agendada en línea (Fase 24D) o una visita pedida en línea (Fase 29B). Cuenta el tiempo desde que llega hasta que el negocio la acepta o la rechaza antes de la hora que pidió el cliente.
    - **La cita guarda cuándo se respondió** (`Appointment.RespondedAt`). Lo ponen `Accept` y `Decline`, desde la Agenda o desde su estado, una sola vez; un intento rechazado no lo pone.
+   - **Y la hora que pidió el cliente** (`Appointment.RequestedStartAt`), que no cambia cuando el negocio mueve la cita: dejarla pasar y moverla después no la vuelve rápida.
    - **Las más lentas** son las que ya esperaron un día o más, o ya no sirven:
-     - la que se respondió cuando su hora ya había empezado;
-     - la que el negocio dejó pasar: su hora empezó sin respuesta;
+     - la que se respondió cuando la hora que pidió el cliente ya había empezado;
+     - la que el negocio dejó pasar: esa hora empezó sin respuesta, aunque luego la haya movido;
      - la que lleva un día o más sin respuesta, aunque su hora sea días después;
      - la que el cliente canceló después de esperar un día sin respuesta.
    - **No cuentan todavía:** una que espera desde hace menos de un día, para una hora que no ha llegado, y una que el cliente canceló antes de un día.
@@ -37,9 +38,9 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
    - **La lista de todos los negocios y «Cerca de mí» no cambian.** La lista mezcla restaurantes que no reciben solicitudes con salones y oficios, y no tiene sentido compararlos; «Cerca de mí» sigue por distancia.
    - **Los productos y servicios de una búsqueda** siguen el orden general de Explorar, también en una categoría.
 5. **Dónde vive:**
-   - **En la foto de Explorar,** que se arma cada 30 segundos como mucho. Una consulta entre negocios cuenta por tramo las solicitudes de cada negocio listado; lee la llegada, la respuesta, el estado, la hora y la cancelación, nunca quién la hizo. Está en la lista de lecturas permitidas.
+   - **En la foto de Explorar,** que se arma cada 30 segundos como mucho. Una consulta entre negocios cuenta por tramo las solicitudes de cada negocio listado; lee la llegada, la respuesta, el estado, la hora pedida y la actual y la cancelación, nunca quién la hizo. Está en la lista de lecturas permitidas.
    - **Si esa consulta falla,** Explorar sigue sin el dato hasta la siguiente foto: nadie dice cuánto tarda y todos van en medio.
-   - **La migración** `AddAppointmentRespondedAt` agrega la columna (NULL en las citas que existen) y un índice de las solicitudes en línea por su llegada, con lo que lee la consulta. Su `apply.sql` va antes del merge.
+   - **La migración** `AddAppointmentRespondedAt` agrega las dos columnas (NULL en las citas que existen) y un índice de las solicitudes en línea por su llegada, con lo que lee la consulta. Su `apply.sql` va antes del merge. Una solicitud de antes, sin la hora pedida, se mide con su hora.
 6. **Fuera de esta fase:**
    - **Decirlo en la tienda, en la página de citas o en la solicitud de visita.**
    - **Mostrarle al negocio su propio tiempo** (la vista previa de su tarjeta en Configuración lo deja fuera).
@@ -60,7 +61,6 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
   - **Se puede manipular:** cualquiera manda una solicitud con cualquier teléfono, con el tope por teléfono y por IP de la [ADR 0025](0025-online-booking.md).
     - Un negocio puede pedirse citas a sí mismo y aceptarlas al momento.
     - Un competidor puede mandarle solicitudes que nadie va a atender.
-  - **Mover la hora de una solicitud** que espera recorre el momento en que cuenta como dejada pasar; si espera un día, cuenta igual.
   - **Un cambio tarda** hasta 30 segundos en verse, como la foto de Explorar.
 - **Decisión por omisión** (sin preferencia expresa del dueño):
   - los tramos y el «al menos la mitad»;
@@ -68,4 +68,4 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
   - las más lentas;
   - nada en la tarjeta con un día o más;
   - el orden solo en las categorías, con el negocio sin suficientes solicitudes en medio.
-- **Reversibilidad:** volver a la versión anterior funciona sin tocar la base: Explorar deja de decirlo y cada categoría ordena por nombre. El `rollback.sql` borra la columna y su índice y pierde las horas guardadas, sin cambiar ninguna cita.
+- **Reversibilidad:** volver a la versión anterior funciona sin tocar la base: Explorar deja de decirlo y cada categoría ordena por nombre. El `rollback.sql` borra las columnas y su índice y pierde las horas guardadas, sin cambiar ninguna cita.

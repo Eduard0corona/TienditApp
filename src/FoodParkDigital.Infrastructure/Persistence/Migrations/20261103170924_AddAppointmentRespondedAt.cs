@@ -12,6 +12,12 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<DateTimeOffset>(
+                name: "RequestedStartAt",
+                table: "Appointments",
+                type: "datetimeoffset",
+                nullable: true);
+
+            migrationBuilder.AddColumn<DateTimeOffset>(
                 name: "RespondedAt",
                 table: "Appointments",
                 type: "datetimeoffset",
@@ -22,7 +28,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                 table: "Appointments",
                 column: "CreatedAt",
                 filter: "[Channel] = 1")
-                .Annotation("SqlServer:Include", new[] { "TenantId", "RespondedAt", "Status", "StartAt", "CancelledByCustomerAt" });
+                .Annotation("SqlServer:Include", new[] { "TenantId", "RespondedAt", "Status", "StartAt", "RequestedStartAt", "CancelledByCustomerAt" });
         }
 
         /// <inheritdoc />
@@ -30,6 +36,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_Appointments_OnlineRequests_CreatedAt",
+                table: "Appointments");
+
+            migrationBuilder.DropColumn(
+                name: "RequestedStartAt",
                 table: "Appointments");
 
             migrationBuilder.DropColumn(

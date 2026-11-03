@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 /// <summary>
-/// The model without what Fase 29J added (when the business answered a request online, and the index Explorar reads it by):
+/// The model without what Fase 29J added (when the business answered a request online, the time its customer asked for, and
+/// the index Explorar reads them by):
 /// the app as deployed before it, and what a test needs on a database migrated to an earlier migration, where the column does
 /// not exist yet.
 /// </summary>
@@ -26,6 +27,7 @@ internal static class BeforeAppointmentRespondedAt
         if (index is not null)
             appointment.Metadata.RemoveIndex(index);
         appointment.Ignore(a => a.RespondedAt);
+        appointment.Ignore(a => a.RequestedStartAt);
     }
 
     private sealed class Context(

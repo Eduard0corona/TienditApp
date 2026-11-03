@@ -73,6 +73,17 @@ public class ExploreResponseTimeTests
         var late = await SalonAsync(fixture, "tarde", "Estética Tarde");
         for (var n = 0; n < 3; n++)
             await AnsweredAsync(fixture, late, TimeSpan.FromMinutes(20), startsAfter: TimeSpan.FromMinutes(10));
+        // Let pass and then moved to another time: accepted at once, or still waiting, they stay let pass.
+        var moved = await SalonAsync(fixture, "movida", "Estética Movida");
+        for (var n = 0; n < 3; n++)
+            await AnsweredAsync(fixture, moved, TimeSpan.FromMinutes(5));
+        for (var n = 0; n < 4; n++)
+        {
+            var lapsed = await RequestAsync(fixture, moved, Now.AddHours(-5), startAt: Now.AddHours(-3));
+            lapsed.Update("Valeria", "+525522107765", "Corte", Now.AddDays(1), Now.AddDays(1).AddHours(1), null, null);
+            if (n % 2 == 0)
+                lapsed.Accept(Now.AddHours(-1));
+        }
         // Three quick answers each, and four that are already a day or more: three of seven is not half.
         // Still waiting after a day, for a time days ahead.
         var waiting = await SalonAsync(fixture, "espera", "Estética Espera");
@@ -102,6 +113,8 @@ public class ExploreResponseTimeTests
         var found = await CardsAsync(fixture);
 
         Assert.Null(found["tarde"].ResponseTime);
+        // Counted by their new time, two would be quick and the other two would not count yet: within an hour.
+        Assert.Null(found["movida"].ResponseTime);
         Assert.Null(found["espera"].ResponseTime);
         Assert.Null(found["cancelada"].ResponseTime);
         Assert.Equal(ResponseTime.WithinAnHour, found["pronto"].ResponseTime);

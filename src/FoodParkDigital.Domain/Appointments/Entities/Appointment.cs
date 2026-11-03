@@ -98,6 +98,12 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public DateTimeOffset? RespondedAt { get; private set; }
     /// <summary>
+    /// The time its customer asked for when the request arrived online (Fase 29J, ADR 0064): its answer is due before it,
+    /// even once the business moves the appointment to another time. Null for one the team booked and for requests from
+    /// before Fase 29J.
+    /// </summary>
+    public DateTimeOffset? RequestedStartAt { get; private set; }
+    /// <summary>
     /// Where the customer gets the quote of a visit they requested online (Fase 29B, ADR 0053 point 11), when they gave it:
     /// one plain address (<see cref="InvoiceEmailAddress"/>). Null otherwise. Theirs: it never goes in the activity or a log.
     /// </summary>
@@ -204,7 +210,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             Channel = AppointmentChannel.Online,
             CustomerUserId = customerUserId,
             ClientRequestId = clientRequestId,
-            TrackingToken = trackingToken
+            TrackingToken = trackingToken,
+            RequestedStartAt = startAt
         };
         return appointment;
     }
@@ -264,7 +271,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             CustomerUserId = customerUserId,
             ClientRequestId = clientRequestId,
             TrackingToken = trackingToken,
-            CustomerEmail = InvoiceEmailAddress.Normalize(customerEmail)
+            CustomerEmail = InvoiceEmailAddress.Normalize(customerEmail),
+            RequestedStartAt = startAt
         };
         appointment.Visit = new AppointmentVisit(tenantId, appointment.Id, address, zone.Name, zone.Fee, chargePolicy);
         return appointment;

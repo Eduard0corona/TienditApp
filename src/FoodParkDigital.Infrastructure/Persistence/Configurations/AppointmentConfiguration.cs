@@ -99,6 +99,6 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
         // requests online of the last days, with what it needs. Named, so no other index on CreatedAt takes its filter.
         builder.HasIndex(x => x.CreatedAt, "IX_Appointments_OnlineRequests_CreatedAt")
             .HasFilter("[Channel] = 1")
-            .IncludeProperties(x => new { x.TenantId, x.RespondedAt, x.Status, x.StartAt, x.CancelledByCustomerAt });
+            .IncludeProperties(x => new { x.TenantId, x.RespondedAt, x.Status, x.StartAt, x.RequestedStartAt, x.CancelledByCustomerAt });
     }
 }

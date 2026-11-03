@@ -8,17 +8,18 @@ SET NOCOUNT ON;
 -- 1. Antes: últimas migraciones aplicadas. Con master desplegado (la Fase 29I, sin migración), la
 --    más reciente es 20261102205836_AddAppointmentProblemPhotos. Si es anterior, revisa primero el
 --    verify.sql de su carpeta: apply.sql también aplica las que falten. Después:
---    20261103155115_AddAppointmentRespondedAt.
+--    20261103170924_AddAppointmentRespondedAt.
 SELECT TOP (5) [MigrationId], [ProductVersion]
 FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;
 
--- 2. Después: la columna [Appointments].[RespondedAt] (datetimeoffset, admite NULL) y el índice
---    [IX_Appointments_OnlineRequests_CreatedAt], filtrado a las solicitudes en línea. Antes de
---    aplicar y después de rollback.sql no devuelven filas.
+-- 2. Después: las columnas [Appointments].[RespondedAt] y [RequestedStartAt] (datetimeoffset,
+--    admiten NULL) y el índice [IX_Appointments_OnlineRequests_CreatedAt], filtrado a las
+--    solicitudes en línea. Antes de aplicar y después de rollback.sql no devuelven filas.
 SELECT c.[name] AS [Columna], TYPE_NAME(c.[user_type_id]) AS [Tipo], c.[is_nullable] AS [Nulo]
 FROM sys.columns c
-WHERE c.[object_id] = OBJECT_ID(N'dbo.Appointments') AND c.[name] = N'RespondedAt';
+WHERE c.[object_id] = OBJECT_ID(N'dbo.Appointments') AND c.[name] IN (N'RespondedAt', N'RequestedStartAt')
+ORDER BY c.[name];
 
 SELECT i.[name] AS [Indice], i.[has_filter] AS [Filtrado], i.[filter_definition] AS [Filtro]
 FROM sys.indexes i

@@ -679,12 +679,23 @@ public sealed class PublicDirectorySnapshot
         var since = ResponseTimes.Since(utcNow);
         int anHour = ResponseTimes.LimitHours[0], threeHours = ResponseTimes.LimitHours[1];
         int twelveHours = ResponseTimes.LimitHours[2], aDay = ResponseTimes.LimitHours[3];
+        // Its time is the one its customer asked for: moving the appointment after letting it pass does not undo it. One from
+        // before Fase 29J has only its own.
         var counted = await requests
+            .Select(a => new
+            {
+                a.TenantId,
+                a.CreatedAt,
+                a.RespondedAt,
+                a.Status,
+                a.CancelledByCustomerAt,
+                AskedFor = a.RequestedStartAt ?? a.StartAt
+            })
             .Where(a => a.CreatedAt >= since
                 && (a.RespondedAt != null
                     || (a.Status == AppointmentStatus.Requested
-                        && (a.StartAt <= utcNow || a.CreatedAt.AddHours(aDay) <= utcNow)
-                        && a.StartAt >= keptSince && a.CreatedAt.AddHours(aDay) >= keptSince)
+                        && (a.AskedFor <= utcNow || a.CreatedAt.AddHours(aDay) <= utcNow)
+                        && a.AskedFor >= keptSince && a.CreatedAt.AddHours(aDay) >= keptSince)
                     || (a.CancelledByCustomerAt != null && a.CancelledByCustomerAt >= a.CreatedAt.AddHours(aDay)
                         && a.CreatedAt.AddHours(aDay) >= keptSince))
                 && listed.Any(t => t.Id == a.TenantId))
@@ -693,11 +704,11 @@ public sealed class PublicDirectorySnapshot
             {
                 TenantId = g.Key,
                 Requests = g.Count(),
-                // Answered before its time, in less than each limit.
-                WithinAnHour = g.Count(a => a.RespondedAt < a.StartAt && a.RespondedAt < a.CreatedAt.AddHours(anHour)),
-                WithinThreeHours = g.Count(a => a.RespondedAt < a.StartAt && a.RespondedAt < a.CreatedAt.AddHours(threeHours)),
-                WithinTwelveHours = g.Count(a => a.RespondedAt < a.StartAt && a.RespondedAt < a.CreatedAt.AddHours(twelveHours)),
-                WithinADay = g.Count(a => a.RespondedAt < a.StartAt && a.RespondedAt < a.CreatedAt.AddHours(aDay))
+                // Answered before the time asked for, in less than each limit.
+                WithinAnHour = g.Count(a => a.RespondedAt < a.AskedFor && a.RespondedAt < a.CreatedAt.AddHours(anHour)),
+                WithinThreeHours = g.Count(a => a.RespondedAt < a.AskedFor && a.RespondedAt < a.CreatedAt.AddHours(threeHours)),
+                WithinTwelveHours = g.Count(a => a.RespondedAt < a.AskedFor && a.RespondedAt < a.CreatedAt.AddHours(twelveHours)),
+                WithinADay = g.Count(a => a.RespondedAt < a.AskedFor && a.RespondedAt < a.CreatedAt.AddHours(aDay))
             })
             .ToListAsync(cancellationToken);
         return counted.ToDictionary(

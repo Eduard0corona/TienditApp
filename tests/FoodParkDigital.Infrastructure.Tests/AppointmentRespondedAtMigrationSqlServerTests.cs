@@ -14,15 +14,15 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// AddAppointmentRespondedAt (Fase 29J, ADR 0064): when the business answered a request online. The appointments that exist
-/// keep no answer time, the version before it keeps taking and answering requests (without keeping when), and rolling back
-/// drops only the column and its index, never an appointment.
+/// AddAppointmentRespondedAt (Fase 29J, ADR 0064): when the business answered a request online, and the time its customer asked
+/// for. The appointments that exist keep neither, the version before it keeps taking and answering requests (without keeping
+/// them), and rolling back drops only the columns and their index, never an appointment.
 /// </summary>
 public class AppointmentRespondedAtMigrationSqlServerTests
 {
     // The migration right before AddAppointmentRespondedAt, where its rollback.sql takes the database.
     private const string BeforeMigration = "20261102205836_AddAppointmentProblemPhotos";
-    private const string Migration = "20261103155115_AddAppointmentRespondedAt";
+    private const string Migration = "20261103170924_AddAppointmentRespondedAt";
     private const string IndexName = "IX_Appointments_OnlineRequests_CreatedAt";
     private static readonly DateTimeOffset Start = new(2026, 11, 9, 16, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset Now = new(2026, 11, 3, 15, 0, 0, TimeSpan.Zero);
@@ -53,6 +53,7 @@ public class AppointmentRespondedAtMigrationSqlServerTests
         await using var context = database.CreateContext(tenantId);
         var appointments = await context.Appointments.AsNoTracking().OrderBy(a => a.Channel).ToListAsync();
         Assert.Equal([(ofTheTeamId, (DateTimeOffset?)null), (answeredId, null)], appointments.Select(a => (a.Id, a.RespondedAt)));
+        Assert.All(appointments, a => Assert.Null(a.RequestedStartAt));
         Assert.Equal(AppointmentStatus.Scheduled, appointments.Single(a => a.Id == answeredId).Status);
         Assert.Equal("([Channel]=(1))", await IndexFilterAsync(context));
 
@@ -64,7 +65,8 @@ public class AppointmentRespondedAtMigrationSqlServerTests
         request.Decline(answeredAt);
         await context.SaveChangesAsync();
         await using var check = database.CreateContext(tenantId);
-        Assert.Equal(answeredAt, (await check.Appointments.AsNoTracking().SingleAsync(a => a.Id == request.Id)).RespondedAt);
+        var kept = await check.Appointments.AsNoTracking().SingleAsync(a => a.Id == request.Id);
+        Assert.Equal((answeredAt, (DateTimeOffset?)Start), (kept.RespondedAt, kept.RequestedStartAt));
     }
 
     [SqlServerFact]
@@ -112,6 +114,7 @@ public class AppointmentRespondedAtMigrationSqlServerTests
         {
             Assert.Equal(BeforeMigration, await LatestMigrationAsync(context));
             Assert.Null(await context.Database.SqlQuery<int?>($"SELECT COL_LENGTH(N'dbo.Appointments', N'RespondedAt') AS [Value]").SingleAsync());
+            Assert.Null(await context.Database.SqlQuery<int?>($"SELECT COL_LENGTH(N'dbo.Appointments', N'RequestedStartAt') AS [Value]").SingleAsync());
             Assert.Null(await IndexFilterAsync(context));
             // The appointment stays as it was.
             var accepted = await context.Appointments.AsNoTracking().SingleAsync(a => a.Id == request.Id);
