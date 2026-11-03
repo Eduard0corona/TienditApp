@@ -20397,6 +20397,7 @@ export interface components {
             businesses: components["schemas"]["PublicDirectoryBusinessDtoPaginatedList"];
             postalCode?: string | null;
             products: components["schemas"]["PublicDirectoryProductDto"][];
+            services: components["schemas"]["PublicDirectoryServiceDto"][];
         };
         PublicDirectoryProductDto: {
             /** Format: uuid */
@@ -20415,6 +20416,28 @@ export interface components {
             /** Format: double */
             distanceKm?: number | null;
         };
+        PublicDirectoryServiceDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: double */
+            price: number;
+            /** Format: int32 */
+            durationMinutes?: number | null;
+            imageUrl?: string | null;
+            kind: components["schemas"]["PublicDirectoryServiceKind"];
+            addsTax: boolean;
+            businessName: string;
+            businessSlug: string;
+            theme: components["schemas"]["BusinessTheme"];
+            /** Format: double */
+            distanceKm?: number | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PublicDirectoryServiceKind: 0 | 1;
         PublicHomeVisitCoverageDto: {
             postalCode: string;
             covered: boolean;

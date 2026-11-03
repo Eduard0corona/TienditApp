@@ -5,6 +5,8 @@ export type PublicDirectory = Schemas['PublicDirectoryDto'];
 export type DirectoryBusiness = Schemas['PublicDirectoryBusinessDto'];
 /** A product a search of Explorar found (Fase 24F), with the business it is at. */
 export type DirectoryProduct = Schemas['PublicDirectoryProductDto'];
+/** A service a search of Explorar found (Fase 29I): booked online, or quoted after a visit; with the business it is at. */
+export type DirectoryService = Schemas['PublicDirectoryServiceDto'];
 export type DirectoryProfile = Schemas['DirectoryProfileDto'];
 export type UpdateDirectoryProfile = Schemas['UpdateDirectoryProfileRequest'];
 

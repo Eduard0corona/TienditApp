@@ -170,6 +170,41 @@ function searchProducts(data, businesses, words) {
     });
 }
 
+/**
+ * The services with every word in their name or description, of the businesses shown (Fase 29I), as the API answers them:
+ * those of a trade that does not go to the postal code last, then those whose name has them first, by the order of
+ * Explorar and by name; three of a business and twelve in all. `data.directoryServices` holds them by the slug of their
+ * business, with `kind` 0 (booked online) or 1 (at home, «desde»); none unless a scene sets them.
+ */
+function searchServices(data, businesses, words, postalCode) {
+  const position = new Map(businesses.map((business, index) => [business.slug, index]));
+  const perBusiness = new Map();
+  const unreached = (item) => (item.kind === 1 && postalCode && !data.directoryVisits?.[item.slug]?.[postalCode] ? 1 : 0);
+  return (data.directoryServices ?? [])
+    .filter((item) => position.has(item.slug))
+    .filter((item) => words.every((word) => comparable(`${item.name} ${item.description ?? ''}`).includes(word)))
+    .map((item) => ({
+      item, text: comparable(item.name), last: unreached(item),
+      byName: words.every((word) => comparable(item.name).includes(word)) ? 0 : 1,
+    }))
+    .sort((a, b) => a.last - b.last || a.byName - b.byName || position.get(a.item.slug) - position.get(b.item.slug)
+      || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0))
+    .filter(({ item }) => {
+      const shown = perBusiness.get(item.slug) ?? 0;
+      perBusiness.set(item.slug, shown + 1);
+      return shown < 3;
+    })
+    .slice(0, 12)
+    .map(({ item }) => {
+      const business = businesses[position.get(item.slug)];
+      return {
+        id: item.id, name: item.name, price: item.price, durationMinutes: item.durationMinutes ?? null,
+        imageUrl: item.imageUrl ?? null, kind: item.kind, addsTax: item.kind === 1 && !business.pricesIncludeTax,
+        businessName: business.name, businessSlug: business.slug, theme: business.theme, distanceKm: business.distanceKm ?? null,
+      };
+    });
+}
+
 export function phase24aRoutes(data, { ok, paginate }) {
   data.directory ??= demoDirectory();
   data.directoryProducts ??= demoDirectoryProducts();
@@ -197,6 +232,7 @@ export function phase24aRoutes(data, { ok, paginate }) {
         })),
         businesses: paginate(withDeliveryTo(data, found, q.get('postalCode')), q, 24),
         products: words.length > 0 && firstPage ? searchProducts(data, ordered, words) : [],
+        services: words.length > 0 && firstPage ? searchServices(data, ordered, words, q.get('postalCode')) : [],
         postalCode: q.get('postalCode') || null,
       });
     }],

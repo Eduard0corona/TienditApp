@@ -47,6 +47,34 @@ function tradesInExplore(data: DemoData) {
   };
 }
 
+// BusinessCategory and PublicDirectoryServiceKind as the contract numbers them.
+const BEAUTY = 7;
+const BOOKS_ONLINE = 0;
+const HOME_VISIT = 1;
+
+/**
+ * A search finds services (Fase 29I): with the trades of Explorar, a salon that books online, and the services each page
+ * shows. «corte» finds two of the salon, booked at their price and length, and one of the carpenter, from what it starts
+ * at and with IVA on top, as its store says it; the salon is also found by its own description.
+ */
+function servicesInExplore(data: DemoData) {
+  tradesInExplore(data);
+  data.directory = [
+    card('Estética Sol', 'estetica-sol', {
+      category: BEAUTY, description: 'Cortes, tintes y peinados.', receivesVisits: false, booksOnline: true, theme: TALAVERA,
+      statusLabel: 'Abierto', statusDetail: 'cierra a las 20:00',
+    }),
+    ...data.directory,
+  ];
+  data.directoryServices = [
+    { id: 'ds-corte', slug: 'estetica-sol', kind: BOOKS_ONLINE, name: 'Corte de cabello', description: 'Lavado y peinado incluidos', price: 180, durationMinutes: 45 },
+    { id: 'ds-corte-barba', slug: 'estetica-sol', kind: BOOKS_ONLINE, name: 'Corte y barba', price: 250, durationMinutes: 60 },
+    { id: 'ds-tinte', slug: 'estetica-sol', kind: BOOKS_ONLINE, name: 'Tinte completo', price: 650, durationMinutes: 120 },
+    { id: 'ds-madera', slug: 'carpinteria-don-jose', kind: HOME_VISIT, name: 'Corte de madera a la medida', description: 'Tableros y repisas', price: 300 },
+    { id: 'ds-fuga', slug: 'plomeria-hernandez', kind: HOME_VISIT, name: 'Reparar fuga de agua', price: 450, durationMinutes: 60 },
+  ];
+}
+
 /** The services of the plumber: its visit and the work it quotes, with IVA on top. */
 const PLUMBER_SERVICES = [
   { id: 'svc-visita', name: 'Visita y diagnóstico', price: 200, durationMinutes: 60 },
@@ -227,6 +255,7 @@ const visitPhotos = (sentBefore: number): ExtraRoutes => (data, helpers) => {
 };
 
 export const OFICIOS_EN_EXPLORAR = asOption(tradesInExplore);
+export const SERVICIOS_EN_EXPLORAR = asOption(servicesInExplore);
 export const PLOMERO_EN_CONFIGURACION = asOption(plumberSettings);
 export const TIENDA_DE_PLOMERIA = asOption(plumberStore);
 export const VISITA_DE_PLOMERIA = asOption(plumberVisit);

@@ -71,6 +71,11 @@ public class PublicDirectoryServiceDto
     /// <summary>Its photo, 256 px wide; none without one.</summary>
     public string? ImageUrl { get; set; }
     public PublicDirectoryServiceKind Kind { get; set; }
+    /// <summary>
+    /// Its store writes «más IVA» after its price: a service that receives visits of a business that writes its prices
+    /// without IVA. Its booking page never does.
+    /// </summary>
+    public bool AddsTax { get; set; }
     public string BusinessName { get; set; } = null!;
     /// <summary>Its store: /m/{slug}.</summary>
     public string BusinessSlug { get; set; } = null!;
@@ -446,6 +451,7 @@ public sealed class PublicProductIndex
                 DurationMinutes = service.DurationMinutes,
                 ImageUrl = service.ImageUrl,
                 Kind = service.Kind,
+                AddsTax = service.Kind == PublicDirectoryServiceKind.HomeVisit && !business.Business.PricesIncludeTax,
                 BusinessName = business.Business.Name,
                 BusinessSlug = business.Business.Slug,
                 Theme = business.Business.Theme,

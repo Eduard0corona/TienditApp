@@ -5,6 +5,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { publicDirectoryApi, type DirectoryBusiness, type DirectorySearch, type PublicDirectory } from '../../api/publicDirectoryApi';
 import DirectoryBusinessCard from '../../components/explore/DirectoryBusinessCard';
 import DirectoryProducts from '../../components/explore/DirectoryProducts';
+import DirectoryServices from '../../components/explore/DirectoryServices';
 import FavoriteBusinesses from '../../components/explore/FavoriteBusinesses';
 import FavoriteButton from '../../components/explore/FavoriteButton';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
@@ -191,7 +192,7 @@ function NearMeChip({ near, onToggle, onRetry }: { near: NearMe; onToggle: () =>
  * postal code each card says whether it delivers there, and a cart left without sending is a tap away (Fase 24B). A
  * search also finds the products of the menus, and a customer keeps the businesses they like, first on the page
  * (Fase 24F) and not again in the list below. «Cerca de mí» (?cerca=1) shows the nearest first, each card saying how far
- * it is (Fase 24G).
+ * it is (Fase 24G). A search finds the services of those that book online or go to homes too (Fase 29I).
  */
 export default function ExplorePage() {
   const searchId = useId();
@@ -303,6 +304,9 @@ export default function ExplorePage() {
   const first = directory.data;
   const firstItems = (first?.businesses.items ?? []).filter((business) => !inFavorites.has(business.slug));
   const products = first?.products ?? [];
+  const services = first?.services ?? [];
+  // What a search found besides businesses: its products and its services (Fase 29I).
+  const items = products.length + services.length;
   const total = first?.businesses.totalCount ?? 0;
   // The favorites that show in Explorar are among its businesses: the list counts without them, and «Ver más» without
   // those past the pages shown. One not found yet may be in a page on its way: until it arrives, it counts there (the
@@ -329,13 +333,13 @@ export default function ExplorePage() {
         <h1 id="explore-title" className="ex-title">{category ? category.label : 'Compra en los negocios de tu ciudad'}</h1>
         <p className="ex-lead">Pide en línea a los que reciben pedidos ahora, o mira el menú de los demás.</p>
         <form className="ex-search" role="search" onSubmit={(event) => event.preventDefault()}>
-          <label className="visually-hidden" htmlFor={searchId}>Buscar negocios y productos</label>
+          <label className="visually-hidden" htmlFor={searchId}>Buscar negocios, productos y servicios</label>
           <i className="ri-search-line ex-search-icon" aria-hidden="true"></i>
           <input
             id={searchId}
             type="search"
             className="form-control"
-            placeholder="Busca un negocio o un producto"
+            placeholder="Busca un negocio, producto o servicio"
             maxLength={MAX_SEARCH}
             autoComplete="off"
             enterKeyHint="search"
@@ -387,15 +391,16 @@ export default function ExplorePage() {
       {favoritesFirst && <FavoriteBusinesses favorites={favorites} />}
 
       {products.length > 0 && <DirectoryProducts products={products} />}
+      {services.length > 0 && <DirectoryServices services={services} />}
 
-      {/* Products found and no business: the products are the results. Every business among the favorites: those are. */}
-      {!(directory.isSuccess && ((total === 0 && products.length > 0) || (total > 0 && listed === 0))) && (
+      {/* Products or services found and no business: those are the results. Every business among the favorites: those are. */}
+      {!(directory.isSuccess && ((total === 0 && items > 0) || (total > 0 && listed === 0))) && (
         <section
           className="ex-results"
           aria-labelledby="explore-results"
           aria-busy={directory.isLoading || (directory.isPlaceholderData && directory.isFetching)}
         >
-          <h2 id="explore-results" className={products.length > 0 ? 'ex-section-title' : 'visually-hidden'}>Negocios</h2>
+          <h2 id="explore-results" className={items > 0 ? 'ex-section-title' : 'visually-hidden'}>Negocios</h2>
           <p className="ex-count" aria-live="polite">{directory.isSuccess && listed > 0 ? countLabel(listed) : ''}</p>
 
           {directory.isLoading && (
@@ -413,7 +418,7 @@ export default function ExplorePage() {
             </div>
           )}
 
-          {directory.isSuccess && total === 0 && products.length === 0 && (
+          {directory.isSuccess && total === 0 && items === 0 && (
             <div className="ex-empty">
               <i className="ri-store-2-line" aria-hidden="true"></i>
               {query.trim() ? (

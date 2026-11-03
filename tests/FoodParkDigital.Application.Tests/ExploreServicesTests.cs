@@ -58,6 +58,11 @@ public class ExploreServicesTests
             ("Reparación de fugas", 350m, 90, PublicDirectoryServiceKind.HomeVisit, "plomeria-hernandez"),
             (fuga.Name, fuga.Price, fuga.DurationMinutes, fuga.Kind, fuga.BusinessSlug));
         Assert.Null(drenaje.DurationMinutes);
+        // Its store writes «más IVA» only when the business writes its prices without it; the booking page never does.
+        Assert.Equal((false, false), (corte.AddsTax, fuga.AddsTax));
+        var electrician = await TradeAsync(fixture, "electrica-luz", "Eléctrica Luz", pricesIncludeTax: false);
+        await ServiceAsync(fixture, electrician, "Instalación de contactos", 300m);
+        Assert.True(Assert.Single((await SearchAsync(fixture, "contactos")).Services).AddsTax);
         // A service is never a product, and the businesses still answer by their own name.
         Assert.Empty((await SearchAsync(fixture, "corte")).Products);
         Assert.Equal("estetica-sol", Assert.Single((await SearchAsync(fixture, "sol")).Businesses.Items).Slug);
@@ -185,9 +190,10 @@ public class ExploreServicesTests
         string slug,
         string name,
         (string Name, decimal Fee, string[] PostalCodes)[]? zones = null,
-        BranchServiceMode mainBranch = BranchServiceMode.DeliveryOnly)
+        BranchServiceMode mainBranch = BranchServiceMode.DeliveryOnly,
+        bool pricesIncludeTax = true)
     {
-        var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, pricesIncludeTax: true, slug: slug);
+        var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, pricesIncludeTax: pricesIncludeTax, slug: slug);
         tenant.Update(name, $"{slug}@demo.com", null, null);
         tenant.SetBusinessInfo(null, null, HomeTrades.Plumbing, null, null);
         tenant.SetDirectoryProfile(BusinessCategory.HomeRepairs, null);

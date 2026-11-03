@@ -506,6 +506,12 @@ export const ProductCatalogItemType = {
 } as const;
 export type ProductCatalogItemType = (typeof ProductCatalogItemType)[keyof typeof ProductCatalogItemType];
 
+export const PublicDirectoryServiceKind = {
+  BooksOnline: 0,
+  HomeVisit: 1,
+} as const;
+export type PublicDirectoryServiceKind = (typeof PublicDirectoryServiceKind)[keyof typeof PublicDirectoryServiceKind];
+
 export const PurchaseOrderStatus = {
   Draft: 0,
   Sent: 1,
