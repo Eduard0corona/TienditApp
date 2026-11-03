@@ -1947,6 +1947,23 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Cambian 19, a propósito:** solo el texto del buscador, «Busca un negocio, producto o servicio». Cada una mide lo mismo y la diferencia es una franja de 15 px dentro del campo: Explorar (5), «Cerca de mí» (4), Explorar como cliente y con favoritos (4), con código postal (2), los oficios en Explorar (3) y con calificación (1).
     - **2 nuevas:** «Servicios en Explorar» en escritorio y teléfono (`oficios.spec.ts`, `/explorar?q=corte`): los dos servicios del salón con su duración y el del carpintero «desde» y con «más IVA», sin duración. Pasaron dos corridas seguidas contra el mismo build y salen iguales en la comparación completa.
 
+- Fase 29J, cuánto tarda en responder cada negocio ([ADR 0064](../adr/0064-response-time-in-explore.md)):
+  - **Domain:** `ResponseTimeTests` (22, nuevo): aceptar o rechazar guarda cuándo, una sola vez, y un intento rechazado no lo guarda; una cancelada por su cliente, una que espera o una del equipo no tiene hora; cada espera cae en su tramo (los límites exactos incluidos); el tramo de un negocio es el más corto que reúne al menos la mitad, desde 3, con las que dejó pasar como las más lentas; la tarjeta no dice «más de un día» y uno sin suficientes va en medio del orden. `OnlineBookingTests` y `VisitProblemPhotoTests`: rechazar recibe la hora.
+  - **Application:** `ExploreResponseTimeTests` (3, nuevo):
+    - lo que dice cada tarjeta: menos de 1 hora con dos de tres (una rechazada), nada con dos, menos de 3 horas con una que dejó pasar, nada pasado un día ni con la mayoría sin respuesta;
+    - solo cuentan las solicitudes en línea de los últimos 90 días, respondidas o que dejó pasar, de su propio negocio: no las que esperan, las que el cliente canceló, las del equipo ni las de otro negocio;
+    - el orden dentro del grupo: el rápido, los que no tienen suficientes con el de 12 horas por nombre, el de un día y el lento; uno abierto que ya no agenda va después de los que agendan, aunque responda al momento.
+  - **Infrastructure:**
+    - `AppointmentRespondedAtMigrationSqlServerTests` (3, nuevo): las citas que existen quedan sin hora y el índice filtra las solicitudes en línea; la versión anterior sigue respondiendo solicitudes (sin guardar cuándo); revertir quita solo la columna y el índice, otra vez no hace nada, y hacia adelante guarda la hora al tick. Las pruebas de la 29H (`AppointmentProblemPhotosMigrationSqlServerTests`) leen su base con el modelo de su día (`BeforeAppointmentRespondedAt`).
+    - `PublicDirectorySqlServerTests` (+1): la consulta agrupada en SQL Server, con la espera de una hora exacta dentro de «menos de 1 hora» y las solicitudes de hace más de 90 días fuera.
+    - Los scripts de `database/production` se probaron en SQL Server: aplicar, `verify.sql`, aplicar otra vez, revertir dos veces (la segunda con la caché de planes vacía) y aplicar de nuevo.
+  - **WebApi:** `CrossTenantDirectoryResponseTimeSqlServerTests` (1, nuevo): por la API, las solicitudes que un cliente manda en la página de citas y que el equipo acepta o rechaza en su agenda son lo que dice su tarjeta; las de otro negocio, que espera, no. `TenantFilterBypassAllowlistTests`: la lectura suma una a `PublicDirectoryFeature.cs` (5).
+  - **Mutaciones:** sin el orden por respuesta o sin contar las solicitudes que dejó pasar, falla al menos una prueba.
+  - **Cliente:** `responseTime.test.ts` (3, nuevo): cada tramo con su texto y nada pasado un día o sin él. `DirectoryBusinessCard.test.tsx` (+2): la tarjeta lo dice, y sin él no dice nada.
+  - **.NET en total:** PENDIENTE. **Cliente en total:** 195 archivos y 1,480 pruebas.
+  - **Primera visita:** 181,789 B (`master` en `f4e33a1`: 181,725 B, +64 B): la etiqueta y sus textos van con la tarjeta de Explorar. El presupuesto sube de 181,800 B a 181,900 B.
+  - **Escenas:** PENDIENTE.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

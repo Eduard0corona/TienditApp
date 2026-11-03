@@ -521,7 +521,8 @@ Productos y favoritos en Explorar (Fase 24F, [ADR 0028](../adr/0028-product-sear
 - **La tarjeta de Explorar** (`components/explore/DirectoryBusinessCard`):
   - lleva arriba la portada de su tienda (`coverImageUrl`, la variante de 512 px; `.dc-cover` con los colores del tema sin ella) y el logo sobre el borde;
   - con `action`, envuelve la tarjeta-enlace y la acción en `.dc-wrap`, así el corazón no queda dentro del enlace;
-  - la vista previa de Configuración (`components/settings/DirectoryCard`) pasa la portada del negocio (`coverImages.medium`).
+  - la vista previa de Configuración (`components/settings/DirectoryCard`) pasa la portada del negocio (`coverImages.medium`);
+  - desde la Fase 29J dice «Responde en menos de …» con el `responseTime` que manda el servidor (`utils/responseTime`), en una etiqueta neutra; sin él no dice nada.
 - **Los productos encontrados** (`components/explore/DirectoryProducts`):
   - una región «Productos» antes de los negocios;
   - cada fila enlaza a `/m/{slug}?producto={id}`, con foto o inicial (los colores del negocio), «· Pide en línea», el precio con el de antes tachado y «más IVA» cuando `addsTax`;
