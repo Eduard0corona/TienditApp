@@ -17,6 +17,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="SixLabors.ImageSharp" />
+    <!-- Security pin of a transitive package of Microsoft.Data.SqlClient, not used by this code: see Directory.Packages.props. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>
 
   <ItemGroup>
