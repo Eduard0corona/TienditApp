@@ -1940,7 +1940,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Cliente:**
     - `ExplorePage.test.tsx` (+2): la sección «Servicios», el que se agenda abre su página de citas con el servicio elegido y su duración, y el de una visita su tienda, «desde» y con «más IVA»; sin negocios ni productos, los servicios son los resultados; el orden Productos, Servicios y Negocios, con «Negocios» a la vista, y «No va a tu código postal». La búsqueda dice «Buscar negocios, productos y servicios».
     - `PublicBookingPage.test.tsx` (+1): el enlace con un servicio que ya no se agenda lo dice y ofrece los demás.
-  - **.NET en total:** 4,602 pruebas (Domain 1,357; Application 2,073; WebApi 485; Infrastructure 687). **Cliente en total:** 194 archivos y 1,475 pruebas.
+  - **.NET en total:** 4,603 pruebas (Domain 1,357; Application 2,074; WebApi 485; Infrastructure 687), también el build en Release. **Cliente en total:** 194 archivos y 1,475 pruebas.
   - **Primera visita:** 181,725 B (`master` en `1c7feaa`: 181,708 B, +17 B): la sección se carga con Explorar; los 17 B son la lista de precarga de la entrada. Con las correcciones de la revisión la cifra se movió unos bytes. El presupuesto (181,800 B) no cambia.
   - **Escenas:** PENDIENTE.
 
