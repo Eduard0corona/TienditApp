@@ -526,7 +526,11 @@ Productos y favoritos en Explorar (Fase 24F, [ADR 0028](../adr/0028-product-sear
   - una región «Productos» antes de los negocios;
   - cada fila enlaza a `/m/{slug}?producto={id}`, con foto o inicial (los colores del negocio), «· Pide en línea», el precio con el de antes tachado y «más IVA» cuando `addsTax`;
   - con productos y sin negocios, no se muestra la región «Negocios» ni la página que dice que no se encontró nada;
-  - el buscador se llama «Buscar negocios y productos».
+  - el buscador se llama «Buscar negocios, productos y servicios» (Fase 29I).
+- **Los servicios encontrados** (`components/explore/DirectoryServices`, Fase 29I): una región «Servicios» después de «Productos», con los estilos de `DirectoryProducts.css`:
+  - el que se agenda (`kind` 0) enlaza a `/m/{slug}/agendar?servicio={id}`, con foto o inicial, «Agenda en línea», su precio y «· duración»;
+  - el de una visita (`kind` 1) enlaza a la tienda, con la inicial, «Visita a domicilio» (o «No va a tu código postal» cuando `visitsPostalCode` es `false`), «desde» su precio y «más IVA» cuando `addsTax`;
+  - los negocios cuentan como resultado con productos o servicios; `PublicBookingPage` avisa cuando el servicio del enlace ya no se agenda.
 - **El corazón** (`components/explore/FavoriteButton` con `hooks/useFavoriteBusinesses`):
   - **Según quién lo ve:**
     - cliente: un botón con nombre fijo («Guardar {negocio} en tus favoritos») y `aria-pressed`;

@@ -370,9 +370,9 @@ El menú en línea se ve y se usa como una tienda de Rappi o Uber Eats ([ADR 002
   - **A dónde lleva:** abre la tienda en la hoja del producto, con lo que el menú diga en ese momento. Si el menú ya no lo muestra, abre solo el menú.
 - **Buscar servicios** (Fase 29I, [ADR 0063](../adr/0063-explore-finds-services.md)): la búsqueda también muestra «Servicios», después de «Productos».
   - **Cuáles:** solo los que una página del negocio ya muestra. De uno que agenda en línea, los de su página de citas (los primeros 100 por su orden y, si dice quién atiende, los que alguien hace). De uno que recibe visitas, los de su tienda (los primeros 50, los destacados primero, nunca la visita). Uno de las dos páginas sale una vez, como de la agenda.
-  - **Qué compara, cuántos y en qué orden:** como los productos. Con el código postal del cliente, los de un oficio que no va ahí quedan al final.
-  - **Qué dice cada uno:** el que se agenda, su precio, su duración (una hora si no la tiene) y «Agenda en línea»; el de una visita, «desde» su precio, «más IVA» si el negocio escribe sus precios sin IVA, su duración si la tiene y «Visita a domicilio».
-  - **A dónde lleva:** el que se agenda abre la página de citas con el servicio elegido; el de una visita, la tienda, donde se pide la visita.
+  - **Qué compara, cuántos y en qué orden:** como los productos, pero el de una visita solo con su nombre (su tienda no muestra la descripción). Con el código postal del cliente, los de visita de un oficio que no va ahí quedan al final y dicen «No va a tu código postal».
+  - **Qué dice cada uno:** el que se agenda, su foto, su precio, su duración (una hora si no la tiene) y «Agenda en línea»; el de una visita, como su tienda: «desde» su precio, «más IVA» si el negocio escribe sus precios sin IVA y «Visita a domicilio», sin duración ni foto.
+  - **A dónde lleva:** el que se agenda abre la página de citas con el servicio elegido (si ya no se agenda, la página lo dice y ofrece los demás); el de una visita, la tienda, donde se pide la visita.
 - **Favoritos:**
   - **Quién:** solo una cuenta de cliente guarda negocios, con el corazón de su tarjeta en Explorar o el de la portada de su tienda (no en una mesa). Un visitante va a entrar y regresa; el equipo de un negocio no ve el corazón.
   - **Cuántos:** hasta 100. Para agregar otro hay que quitar uno.
