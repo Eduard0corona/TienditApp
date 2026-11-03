@@ -1925,6 +1925,22 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Cambia 1, a propósito:** la hoja de la solicitud (`oficios-solicitar-visita-datos-telefono`) suma «Fotos de lo que pasa».
     - **4 nuevas:** la solicitud con dos fotos y su recibo con las fotos enviadas (en `oficios.spec.ts`), el enlace de la visita con fotos, «Ver lo que pasa» en la Agenda (`agenda-domicilio.spec.ts`) y la cotización con lo que pasa (`cotizaciones.spec.ts`). Pasaron tres corridas seguidas y salen iguales en la comparación completa.
 
+- Fase 29I, Explorar encuentra los servicios ([ADR 0063](../adr/0063-explore-finds-services.md)):
+  - **Application:** `ExploreServicesTests` (5, nuevo):
+    - encuentra los servicios de quien agenda en línea y de quien recibe visitas, por cualquier palabra de su nombre o descripción y sin acentos; el que se agenda con su precio y su duración (una hora sin ella) y el de una visita «desde», con «más IVA» solo si el negocio escribe sus precios sin IVA; un servicio nunca es un producto;
+    - solo los que una página muestra: no los de un negocio que no agenda, uno apagado o de una categoría apagada, uno que nadie atiende cuando dice quién, ni la visita misma; uno de las dos páginas, como de la agenda;
+    - 3 de un negocio, solo con palabras, en la primera página y en la categoría pedida;
+    - con código postal, los de un oficio que no va ahí al final;
+    - solo los primeros de cada página por su orden: 100 de la agenda y 50 de la tienda, los destacados primero.
+    - `ExploreProductsAndFavoritesTests`: con el índice que no se pudo armar, tampoco hay servicios.
+  - **Infrastructure:** `PublicDirectorySqlServerTests` (+1): los cortes de la agenda y de la tienda, sin la visita, leídos en SQL Server con los negocios de cada servicio.
+  - **WebApi:** `CrossTenantDirectoryServicesSqlServerTests` (1, nuevo): por la API y sin cuenta, los servicios del salón que agenda y del plomero que visita, cada uno con su negocio y su tipo; no el de una tienda cuyo menú está en Explorar pero no agenda. `TenantFilterBypassAllowlistTests`: la lectura de los servicios suma una a `PublicProductSearch.cs`.
+  - **Mutaciones:** sin quién atiende, con la visita, sin el corte de la agenda o de la tienda, sin el código postal, sin revisar que el negocio agenda en línea o sin el tope por negocio, falla al menos una prueba.
+  - **Cliente:** `ExplorePage.test.tsx` (+1): la sección «Servicios», el que se agenda abre su página de citas con el servicio elegido y el de una visita su tienda, «desde» y con «más IVA»; sin negocios ni productos, los servicios son los resultados. La búsqueda dice «Buscar negocios, productos y servicios».
+  - **.NET en total:** 4,602 pruebas (Domain 1,357; Application 2,073; WebApi 485; Infrastructure 687). **Cliente en total:** 194 archivos y 1,473 pruebas.
+  - **Primera visita:** 181,729 B (`master` en `1c7feaa`: 181,708 B, +21 B): la sección se carga con Explorar; los 21 B son la lista de precarga de la entrada. El presupuesto (181,800 B) no cambia.
+  - **Escenas:** PENDIENTE.
+
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

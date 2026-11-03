@@ -2,6 +2,7 @@
 
 - Estado: Aceptada
 - Fecha: 2026-10-18
+- Continuada por: [ADR 0063](0063-explore-finds-services.md) (la búsqueda también encuentra los servicios, Fase 29I).
 
 ## Contexto
 

@@ -131,7 +131,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - «Vencida» no se guarda: una enviada se lee vencida con el día del negocio. Un reporte que lea la base directo ve «Enviada» hasta que alguien la responde o la corrige.
   - Las citas en línea siguen sin ser a domicilio (`OnlineBookingBlocker.NoPremises`): a domicilio se pide la visita, no otro servicio.
   - El aviso de la dirección es por negocio, no por sucursal; descartado no vuelve aunque después prenda el interruptor. Un negocio que lo descartó y sigue con local publica su dirección.
-  - «Cerca de mí» no ordena a estos negocios, y la búsqueda de Explorar no encuentra sus servicios (solo los productos del menú).
+  - «Cerca de mí» no ordena a estos negocios. Desde la 29I la búsqueda de Explorar encuentra sus servicios ([ADR 0063](../adr/0063-explore-finds-services.md)), pero un servicio de visita abre la tienda, no un enlace propio.
   - La tarjeta de Configuración no calcula lo que costaría la visita con cambios sin guardar: dice lo de hoy y pide guardar.
   - La lista de servicios a elegir como visita trae los primeros 100 por nombre (el elegido siempre sale); la tienda, hasta 300 códigos postales y 50 servicios.
   - La 29A suma 156 B a la primera visita (de 180,710 a 180,866 B, contra `master` en `1d238ff`) y sube el presupuesto a 181,000 B.
@@ -142,6 +142,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La 29F suma 62 B a la primera visita (de 181,467 a 181,529 B, contra `master` en `7013d87`): el diálogo de agendar se carga aparte, y los 62 B son la lista de precarga de la entrada, con tres chunks compartidos nuevos (la lista de citas del trabajo, los estados de una cita y la API del equipo). El presupuesto sube de 181,500 a 181,600 B.
   - La 29G suma 76 B a la primera visita (de 181,529 a 181,605 B, contra `master` en `38d0560`): el aviso de «Cotizaciones aceptadas por convertir» va en la entrada con la campana, y el filtro «Por convertir» y los valores nuevos de los enums también; el panel para responder se carga con la página del enlace. El presupuesto sube de 181,600 a 181,700 B.
   - La 29H suma 103 B a la primera visita (de 181,605 a 181,708 B, contra `master` en `8ecfa7f`): las fotos se cargan con sus pantallas, y los 103 B son la lista de precarga de la entrada, con los chunks compartidos nuevos (las fotos para mandar con su cola, sus reglas y «Lo que pasa» del negocio), y la regla de las rutas privadas con el área nueva. El presupuesto sube de 181,700 a 181,800 B.
+  - La 29I suma 21 B a la primera visita (de 181,708 a 181,729 B, contra `master` en `1c7feaa`): la sección «Servicios» se carga con Explorar, y los 21 B son la lista de precarga de la entrada. El presupuesto (181,800 B) no cambia.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.
@@ -162,7 +163,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - **La búsqueda de productos:**
     - su índice vive en la memoria de cada instancia y se rearma con la foto de Explorar (cada 30 segundos como mucho, cuando alguien busca);
     - con varias instancias, cada una arma el suyo;
-    - lee hasta 20,000 productos (los primeros 500 de cada menú, en el orden de Explorar); más allá hará falta un índice de texto en la base (full-text de SQL Server o un servicio de búsqueda);
+    - lee hasta 20,000 productos (los primeros 500 de cada menú, en el orden de Explorar) y, desde la 29I, hasta 10,000 servicios (los que muestra la página de citas o la tienda de cada negocio, [ADR 0063](../adr/0063-explore-finds-services.md)); más allá hará falta un índice de texto en la base (full-text de SQL Server o un servicio de búsqueda);
     - compara texto: sin sinónimos, errores de dedo, plurales ni cercanía.
   - **Los títulos y el orden del menú** se escriben en dos lugares que deben coincidir:
     - `PublicDirectorySnapshot.InMenuOrder` / `ThenInMenuOrder` (las mismas llaves);

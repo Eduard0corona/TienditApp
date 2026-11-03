@@ -257,7 +257,7 @@ El trabajo de la orden en que se convirtió la cotización se agenda (punto 17):
 - Fotos del problema en la solicitud: llegaron en la Fase 29H ([ADR 0062](0062-visit-problem-photos.md)).
 - PDF de la cotización y documento adjunto por WhatsApp.
 - El tiempo de respuesta del negocio como criterio de orden en Explorar.
-- Que la búsqueda de Explorar encuentre los servicios de estos negocios: hoy busca solo los productos del menú ([ADR 0028](0028-product-search-and-favorites.md)).
+- Que la búsqueda de Explorar encuentre los servicios de estos negocios: llegó en la Fase 29I ([ADR 0063](0063-explore-finds-services.md)).
 
 ## Consecuencias
 
