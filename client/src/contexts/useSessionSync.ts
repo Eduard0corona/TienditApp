@@ -16,9 +16,15 @@ export function broadcastSessionChange(message: SessionMessage) {
   channel?.close();
 }
 
-/** Starts over from the home page: loaded lists, hub groups and drafts belong to the previous tenant. */
+/**
+ * Where a tenant change starts over: the start of the job (App.tsx). Not /, which shows the page for businesses while
+ * the session is checked.
+ */
+export const TENANT_CHANGE_START_PATH = '/inicio';
+
+/** Starts over from the start of the job: loaded lists, hub groups and drafts belong to the previous tenant. */
 export function reloadForTenantChange() {
-  window.location.assign('/');
+  window.location.assign(TENANT_CHANGE_START_PATH);
 }
 
 /**

@@ -5,6 +5,7 @@ import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import HomeRedirect from './components/common/HomeRedirect';
 import AccessRoute from './components/common/AccessRoute';
+import { TENANT_CHANGE_START_PATH } from './contexts/useSessionSync';
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const Register = lazy(() => import('./pages/auth/Register'));
@@ -107,6 +108,9 @@ export default function App() {
                 its own address shows it to whoever has a session too. */}
             <Route path="/" element={<HomeRedirect visitor={<BusinessLandingPage />} />} />
             <Route path="/negocios" element={<BusinessLandingPage />} />
+            {/* Where a switch of business starts over (useSessionSync): a spinner while the session is checked, then the
+                start of the job in the new business; at / the page for businesses would show meanwhile. */}
+            <Route path={TENANT_CHANGE_START_PATH} element={<HomeRedirect />} />
             {/* The public menu of a business, opened from its link or QR (no sign-in). */}
             <Route path="/m/:slug" element={<PublicMenuPage />} />
             {/* Its booking page (Fase 24D): a service, a day and a free time, without signing in. */}
