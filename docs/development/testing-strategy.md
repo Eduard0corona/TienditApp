@@ -1895,11 +1895,12 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la descarga es para quien lleva la agenda o cotiza (por la revisión);
     - el validador toma hasta 10 MB con su enlace.
   - `AuthorizationBehaviorTests`: la foto desde el enlace es una de las solicitudes anónimas.
-  - **WebApi:** `CrossTenantVisitProblemPhotosSqlServerTests` (1, nuevo):
+  - **WebApi:** `CrossTenantVisitProblemPhotosSqlServerTests` (2, nuevo):
     - la foto sin cuenta dice cuántas, nunca la foto ni datos del cliente;
     - la foto no cambia la `rowversion` de la cita (por la revisión: la prueba en memoria no lo comprobaba);
     - su negocio la ve en la Agenda y la abre con `sandbox` y `no-store`; el otro negocio no la ve ni la abre, y sin sesión no se abre;
     - un enlace que no existe, lo que no es una foto, una sin archivo, una de más de 10 MB y un cuerpo pasado del límite no se toman (por la revisión). El cuerpo pasado del límite se detiene al leer el formulario, antes del validador.
+    - Mis citas, con la sesión de una cuenta de cliente y sin negocio en contexto, cuenta las 5 fotos de su visita y ya no ofrece más (por la revisión, que temía el filtro por negocio en el conteo: `IgnoreQueryFilters` vale para toda la consulta, y el conteo se acota además al negocio de la cita).
   - **Mutaciones:** sin la hora de la visita, el tope de 5, el rechazo antes de leer, el recuento antes de escribir, la fila de la foto en la descarga, la compuerta, la recodificación, lo que recibe el enlace, las notas solo en línea, el freno del rollback, el reintento solo por el lugar, el tope del cuerpo, la cita sin tocar o decodificar reducida solo la foto más grande, falla al menos una prueba (los tres últimos, por la revisión). Sin el caso del trabajo de una cotización ninguna falla: esa cita nunca es en línea, y el canal ya la rechaza.
   - **Cliente:**
     - `problemPhotos.test.ts` (5, nuevo): qué fotos caben y por qué no las otras, el tipo vacío con nombre de foto, una vista previa por foto que se suelta al quitarla, y las fotos en palabras.
@@ -1914,7 +1915,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `AppointmentsList.test.tsx` (+1): «Ver lo que pasa» con el texto y las fotos de una visita en línea, nunca en una del equipo.
     - `QuoteDetail.test.tsx` (+3): lo que pasa y sus fotos en la cotización, nada para una visita del equipo, y solo las rutas privadas del negocio.
     - `privateFiles.test.ts` (+1): el área nueva.
-  - **.NET en total:** 4,593 pruebas (Domain 1,357; Application 2,068; WebApi 483; Infrastructure 685), también el build en Release. **Cliente en total:** 193 archivos y 1,469 pruebas.
+  - **.NET en total:** 4,594 pruebas (Domain 1,357; Application 2,068; WebApi 484; Infrastructure 685), también el build en Release. **Cliente en total:** 193 archivos y 1,469 pruebas.
   - **Primera visita:** 181,719 B (`master` en `8ecfa7f`: 181,605 B, +114 B). Las fotos se cargan con sus pantallas; los 114 B son la lista de precarga de la entrada, con los chunks compartidos nuevos, y la regla de las rutas privadas. Las correcciones de la revisión suman 14 B, los nombres nuevos de los chunks que cambiaron en esa lista. El presupuesto sube de 181,700 B a 181,800 B.
   - **Escenas:** contra la línea base de `master` en `8ecfa7f` (794 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
     - 793 salen iguales.

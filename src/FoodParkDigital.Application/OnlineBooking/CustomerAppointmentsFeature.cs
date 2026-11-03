@@ -130,7 +130,9 @@ public static class CustomerAppointments
             appointment.Visit == null ? null : appointment.Visit.PostalCode,
             appointment.Visit == null ? null : appointment.Visit.ChargePolicy,
             appointment.WorkOrderId != null,
-            context.AppointmentProblemPhotos.Count(p => p.AppointmentId == appointment.Id));
+            // Bounded by the appointment's business, like its staff: Mis citas reads across businesses (IgnoreQueryFilters
+            // applies to the whole query).
+            context.AppointmentProblemPhotos.Count(p => p.TenantId == appointment.TenantId && p.AppointmentId == appointment.Id));
 
     internal static CustomerAppointmentDto ToDto(Row row, DateTimeOffset now)
     {

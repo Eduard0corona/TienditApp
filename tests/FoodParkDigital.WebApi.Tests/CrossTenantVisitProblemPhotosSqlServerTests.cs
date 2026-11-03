@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using FoodParkDigital.Application.OnlineBooking;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using static FoodParkDigital.WebApi.Tests.CrossTenantHomeVisitBookingSqlServerTests;
@@ -84,6 +85,29 @@ public sealed class CrossTenantVisitProblemPhotosSqlServerTests
         Assert.DoesNotContain(VisitProblemPhotos.TooLargeMessage, await huge.Content.ReadAsStringAsync());
         var tracked = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/appointments/tracking", new { token }));
         Assert.Equal(1, tracked.GetProperty("problemPhotos").GetInt32());
+    }
+
+    [SqlServerFact]
+    public async Task MyAppointments_ShouldCountThePhotosOfAVisit_WithNoBusinessInContext()
+    {
+        var business = await _api.SignUpAsync("fotos-cuenta");
+        var slug = await ReceiveVisitsAsync(business.Client, "72000", 50m, chargePolicy: 1);
+        var customer = await _api.SignUpCustomerAsync("fotos-valeria");
+        using var stranger = _api.AnonymousClient();
+        var receipt = await TwoBusinessesApi.ReadAsync(await customer.Client.PostAsJsonAsync(
+            $"/api/v1/public/menu/{slug}/home-visits", Request(await FirstFreeTimeAsync(stranger, slug), "72000")));
+        Assert.True(receipt.GetProperty("linkedToAccount").GetBoolean());
+        var token = receipt.GetProperty("trackingToken").GetString()!;
+        for (var n = 0; n < HomeVisitRules.MaxProblemPhotos; n++)
+            await TwoBusinessesApi.ReadAsync(await stranger.PostAsync(Photos, Form(token, TwoBusinessesApi.TinyPng, "image/png", "fuga.png")));
+
+        // The account reads its appointments of every business, with no business in context: the visit counts its photos.
+        var mine = Assert.Single((await TwoBusinessesApi.ReadAsync(await customer.Client.GetAsync("/api/v1/me/appointments")))
+            .GetProperty("items").EnumerateArray());
+
+        Assert.Equal((5, false), (mine.GetProperty("problemPhotos").GetInt32(), mine.GetProperty("canAddPhotos").GetBoolean()));
+        // Read on their own with no business in context, the photos show none: they are counted within the account's query.
+        Assert.Equal(0, await _api.QueryAsync(Guid.Empty, context => context.AppointmentProblemPhotos.CountAsync()));
     }
 
     /// <summary>The rowversion of the only appointment of the business.</summary>
