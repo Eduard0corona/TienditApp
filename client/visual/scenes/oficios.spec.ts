@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap, snapElement } from '../helpers';
 import {
-  ENLACE_CON_FOTOS, OFICIOS_EN_EXPLORAR, PLOMERO_EN_CONFIGURACION, TIENDA_DE_PLOMERIA, VISIT_LINK, VISITA_CON_FOTOS, VISITA_DE_PLOMERIA,
+  ENLACE_CON_FOTOS, OFICIOS_EN_EXPLORAR, PLOMERO_EN_CONFIGURACION, SERVICIOS_EN_EXPLORAR, TIENDA_DE_PLOMERIA, VISIT_LINK, VISITA_CON_FOTOS,
+  VISITA_DE_PLOMERIA,
 } from './oficios.mocks';
 
 // Oficios a domicilio (Fase 29A, ADR 0053): the trades that go to their customers' homes to quote look like what they
@@ -45,6 +46,23 @@ test.describe('Oficios en Explorar', () => {
     await expect(page.getByText('No va a tu código postal')).toBeVisible();
     await snap(page, 'oficios-explorar-codigo-postal-telefono');
   });
+});
+
+// A search finds services (Fase 29I, ADR 0063): «corte» finds two services of a salon that books online, at their price and
+// length, and one of the carpenter, from what it starts at and with IVA on top; the salon is also found by its description.
+test.describe('Servicios en Explorar', () => {
+  test.use({ signedIn: false, prepareData: SERVICIOS_EN_EXPLORAR });
+
+  for (const look of LOOKS) {
+    test(`servicios en explorar ${look.suffix}`, async ({ page }) => {
+      await page.setViewportSize(look.viewport);
+      await open(page, '/explorar?q=corte');
+      const services = page.getByRole('region', { name: 'Servicios' });
+      await expect(services.getByRole('link', { name: /^Corte de madera a la medida/ })).toBeVisible();
+      await expect(services.getByText('desde $300.00')).toBeVisible();
+      await snap(page, `oficios-explorar-servicios-${look.suffix}`);
+    });
+  }
 });
 
 test.describe('Tienda de un oficio', () => {

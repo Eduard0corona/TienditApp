@@ -274,6 +274,10 @@ export default function PublicBookingPage() {
       {!service ? (
         <main className="pm-main pb-main">
           {noticeAlert}
+          {/* A link that chose a service the page no longer books (Explorar, Fase 29I): says so, and the others stay. */}
+          {serviceId && (
+            <div className="alert alert-warning mt-3 mb-0" role="status">Ese servicio ya no se agenda en línea: elige otro.</div>
+          )}
           <h2 className="pm-section-title">Elige el servicio</h2>
           <div className="pm-items">
             {data.services.map((item) => (

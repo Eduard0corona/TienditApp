@@ -34789,7 +34789,8 @@
         "required": [
           "businesses",
           "categories",
-          "products"
+          "products",
+          "services"
         ],
         "type": "object",
         "properties": {
@@ -34810,6 +34811,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PublicDirectoryProductDto"
+            }
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicDirectoryServiceDto"
             }
           }
         },
@@ -34870,6 +34877,78 @@
           }
         },
         "additionalProperties": false
+      },
+      "PublicDirectoryServiceDto": {
+        "required": [
+          "addsTax",
+          "businessName",
+          "businessSlug",
+          "id",
+          "kind",
+          "name",
+          "price",
+          "theme"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PublicDirectoryServiceKind"
+          },
+          "visitsPostalCode": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "addsTax": {
+            "type": "boolean"
+          },
+          "businessName": {
+            "type": "string"
+          },
+          "businessSlug": {
+            "type": "string"
+          },
+          "theme": {
+            "$ref": "#/components/schemas/BusinessTheme"
+          },
+          "distanceKm": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicDirectoryServiceKind": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "BooksOnline",
+          "HomeVisit"
+        ]
       },
       "PublicHomeVisitCoverageDto": {
         "required": [

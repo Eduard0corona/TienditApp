@@ -374,6 +374,17 @@ describe('PublicBookingPage', () => {
     await waitFor(() => expect(api.getBookingSlots).toHaveBeenLastCalledWith('barberia-luis', 's1', undefined, undefined, expect.anything()));
   });
 
+  it('says when the service a link chose is no longer booked, and offers the others (Fase 29I)', async () => {
+    const user = userEvent.setup();
+    api.getBooking.mockResolvedValue(booking() as never);
+    renderPage(undefined, '/m/barberia-luis/agendar?servicio=ya-no');
+
+    expect(await screen.findByText('Ese servicio ya no se agenda en línea: elige otro.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Corte de cabello/ }));
+
+    expect(screen.queryByText(/ya no se agenda/)).not.toBeInTheDocument();
+  });
+
   it('says so when the business does not book online', async () => {
     api.getBooking.mockRejectedValue({ isAxiosError: true, response: { status: 404, data: {} } });
     renderPage();

@@ -988,6 +988,13 @@ La Fase 29H trae una migración, [`database/production/20261102205836_AddAppoint
 - **Volver a la versión anterior:** funciona sin tocar la base. La solicitud y el enlace dejan de ofrecer las fotos, y las que ya se mandaron se quedan guardadas sin que el negocio las vea.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50056 en cuanto un cliente mandó una foto; si no, quita la tabla. Los archivos de las fotos no se borran.
 
+## Explorar encuentra los servicios (Fase 29I)
+
+La Fase 29I no trae migración ni configuración nueva ([ADR 0063](../adr/0063-explore-finds-services.md)).
+
+- **Memoria:** el índice de búsqueda de Explorar, que vive en la memoria de cada instancia, suma hasta 10,000 servicios a sus 20,000 productos. Se rearma con la foto de Explorar, cada 30 segundos como mucho, cuando alguien busca.
+- **Volver a la versión anterior:** funciona sin tocar nada; Explorar vuelve a buscar solo negocios y productos.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

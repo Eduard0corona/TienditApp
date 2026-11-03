@@ -127,7 +127,7 @@ public sealed class CrossTenantOnlineBookingSqlServerTests
     }
 
     /// <returns>The slug of the business's menu and a service it books online.</returns>
-    private static async Task<(string Slug, Guid Service)> BookingAsync(HttpClient owner, string serviceName)
+    internal static async Task<(string Slug, Guid Service)> BookingAsync(HttpClient owner, string serviceName)
     {
         var slug = (await TwoBusinessesApi.ReadAsync(await owner.PutAsJsonAsync("/api/v1/auth/my-tenant/online-menu", new { mode = 1 })))
             .GetProperty("slug").GetString()!;

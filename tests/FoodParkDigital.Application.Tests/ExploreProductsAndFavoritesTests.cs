@@ -190,6 +190,8 @@ public class ExploreProductsAndFavoritesTests
             .Handle(new GetPublicDirectoryQuery(Search: "cafe"), CancellationToken.None);
 
         Assert.Empty(found.Products);
+        // The services come from the same index (Fase 29I).
+        Assert.Empty(found.Services);
         Assert.Equal("cafe-luna", Assert.Single(found.Businesses.Items).Slug);
     }
 
