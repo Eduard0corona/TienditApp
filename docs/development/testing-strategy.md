@@ -1916,7 +1916,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `AppointmentsList.test.tsx` (+1): «Ver lo que pasa» con el texto y las fotos de una visita en línea, nunca en una del equipo.
     - `QuoteDetail.test.tsx` (+3): lo que pasa y sus fotos en la cotización, nada para una visita del equipo, y solo las rutas privadas del negocio.
     - `privateFiles.test.ts` (+1): el área nueva.
-  - **.NET en total:** 4,594 pruebas (Domain 1,357; Application 2,068; WebApi 484; Infrastructure 685), también el build en Release. **Cliente en total:** 193 archivos y 1,470 pruebas.
+  - **.NET en total:** 4,595 pruebas (Domain 1,357; Application 2,068; WebApi 484; Infrastructure 686, con la de formatos que trajo `master` en la PR #153), también el build en Release. **Cliente en total:** 193 archivos y 1,470 pruebas.
   - **Primera visita:** 181,717 B (`master` en `8ecfa7f`: 181,605 B, +112 B). Las fotos se cargan con sus pantallas; los 112 B son la lista de precarga de la entrada, con los chunks compartidos nuevos, y la regla de las rutas privadas. Las correcciones de la revisión suman 12 B, los nombres nuevos de los chunks que cambiaron en esa lista. El presupuesto sube de 181,700 B a 181,800 B.
   - **Escenas:** contra la línea base de `master` en `8ecfa7f` (794 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
     - 793 salen iguales.
