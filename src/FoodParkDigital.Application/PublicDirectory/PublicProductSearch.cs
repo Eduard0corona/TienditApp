@@ -1,7 +1,10 @@
+using FoodParkDigital.Application.Appointments.HomeVisits;
+using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -41,8 +44,45 @@ public class PublicDirectoryProductDto
     public decimal? DistanceKm { get; set; }
 }
 
+/// <summary>Where a service a search of Explorar found is had (Fase 29I, ADR 0063).</summary>
+public enum PublicDirectoryServiceKind
+{
+    /// <summary>Booked online at the business: it opens on its booking page, chosen (/m/{slug}/agendar?servicio={id}).</summary>
+    BooksOnline = 0,
+    /// <summary>
+    /// Quoted after a visit to the customer's home: its price is what it starts at, and it opens the store of its business,
+    /// where the visit is requested.
+    /// </summary>
+    HomeVisit = 1
+}
+
 /// <summary>
-/// The products of every business of a snapshot of Explorar, as their menus show them, to search by words: built from the
+/// A service a search of Explorar found (Fase 29I, ADR 0063): only what the booking page or the store of its business
+/// already shows, and the business it is at.
+/// </summary>
+public class PublicDirectoryServiceDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = null!;
+    /// <summary>Its price; for <see cref="PublicDirectoryServiceKind.HomeVisit"/>, what it starts at («desde»).</summary>
+    public decimal Price { get; set; }
+    /// <summary>How long it takes, as its booking page or its store says; null when its store says nothing.</summary>
+    public int? DurationMinutes { get; set; }
+    /// <summary>Its photo, 256 px wide; none without one.</summary>
+    public string? ImageUrl { get; set; }
+    public PublicDirectoryServiceKind Kind { get; set; }
+    public string BusinessName { get; set; } = null!;
+    /// <summary>Its store: /m/{slug}.</summary>
+    public string BusinessSlug { get; set; } = null!;
+    /// <summary>The colors of its store, for a service without a photo.</summary>
+    public BusinessTheme Theme { get; set; }
+    /// <summary>With the customer's position: how far its business is, as its card says.</summary>
+    public decimal? DistanceKm { get; set; }
+}
+
+/// <summary>
+/// The products of every business of a snapshot of Explorar, as their menus show them, and the services of those that book
+/// online or receive visits, as their booking page or their store show them (Fase 29I), to search by words: built from the
 /// snapshot when a search first needs it, and rebuilt with the next snapshot (<see cref="PublicProductIndexCache"/>).
 /// </summary>
 public sealed class PublicProductIndex
@@ -64,12 +104,27 @@ public sealed class PublicProductIndex
     /// <summary>The products of one business one search returns, so a search shows several businesses.</summary>
     public const int MaxPerBusiness = 3;
 
-    private readonly IReadOnlyList<Entry> _entries;
+    /// <summary>
+    /// The most services one index reads (Fase 29I); past it, those of the businesses Explorar shows last are left out (and
+    /// logged). A search returns at most <see cref="MaxResults"/> of them, <see cref="MaxPerBusiness"/> of one business.
+    /// </summary>
+    public const int MaxServices = 10_000;
 
-    private PublicProductIndex(DateTimeOffset builtFor, IReadOnlyList<Entry> entries)
+    /// <summary>
+    /// A business with at most this many bookable services is read whole: its booking page (<see cref="OnlineBookingCalendar.MaxServices"/>)
+    /// and its store (<see cref="PublicHomeVisitsDto.MaxServices"/>) show them all. One with more is read on its own, each
+    /// list cut as its page cuts it.
+    /// </summary>
+    internal const int WholeServices = PublicHomeVisitsDto.MaxServices;
+
+    private readonly IReadOnlyList<Entry> _entries;
+    private readonly IReadOnlyList<ServiceEntry> _services;
+
+    private PublicProductIndex(DateTimeOffset builtFor, IReadOnlyList<Entry> entries, IReadOnlyList<ServiceEntry> services)
     {
         BuiltFor = builtFor;
         _entries = entries;
+        _services = services;
     }
 
     /// <summary>When the snapshot it was built from was built.</summary>
@@ -156,7 +211,131 @@ public sealed class PublicProductIndex
             }
         }
 
-        return new PublicProductIndex(snapshot.BuiltAt, entries);
+        var services = await ServicesAsync(context, snapshot, businesses, cancellationToken, logger);
+        return new PublicProductIndex(snapshot.BuiltAt, entries, services);
+    }
+
+    /// <summary>
+    /// Reads the services of the snapshot's businesses that book online or receive visits (Fase 29I), as their pages show
+    /// them: of one that books online, those its booking page offers (the first <see cref="OnlineBookingCalendar.MaxServices"/>
+    /// bookable ones, and of them those someone attends while it says who does, Fase 24J); of one that receives visits, those
+    /// its store shows as reference prices (the first <see cref="PublicHomeVisitsDto.MaxServices"/>, never the visit itself).
+    /// A service on both opens on its booking page. Like the products, one read spans the businesses, each service with its
+    /// own business and only the columns its pages already show.
+    /// </summary>
+    private static async Task<List<ServiceEntry>> ServicesAsync(
+        IApplicationDbContext context,
+        PublicDirectorySnapshot snapshot,
+        IReadOnlyDictionary<Guid, (PublicDirectorySnapshot.Entry entry, int position)> businesses,
+        CancellationToken cancellationToken,
+        ILogger? logger)
+    {
+        // The bookable services of some businesses, read before any business is in context (the filters are left out for
+        // the whole read, the subqueries too): each with whether its booking page offers it now and whether it is the visit.
+        var offered = OnlineBookingCalendar.OfferedServices(context).Select(p => p.Id);
+        IQueryable<Product> Bookable(IReadOnlyCollection<Guid> tenantIds) => OnlineBookingCalendar.BookableServices(context)
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => tenantIds.Contains(p.TenantId));
+        IQueryable<ServiceRow> Rows(IQueryable<Product> services) => services.Select(p => new ServiceRow(
+            p.Id,
+            p.TenantId,
+            p.Name,
+            p.Description,
+            p.PriceAmount,
+            p.PreparationTimeMinutes,
+            p.ImageUrl,
+            offered.Contains(p.Id),
+            context.TenantSettings.Any(s => s.TenantId == p.TenantId && s.HomeVisitServiceId == p.Id)));
+
+        var entries = new List<ServiceEntry>();
+        var showing = snapshot.Entries.Where(entry => entry.Business.BooksOnline || entry.Business.ReceivesVisits).Select(entry => entry.TenantId);
+        foreach (var batch in showing.Chunk(BusinessesPerRead))
+        {
+            var sizes = await Bookable(batch)
+                .GroupBy(p => p.TenantId)
+                .Select(services => new { TenantId = services.Key, Services = services.Count() })
+                .ToListAsync(cancellationToken);
+            // Each service with the lists of its business it is on: its booking page, its store.
+            var listed = new Dictionary<Guid, (ServiceRow Row, bool Booked, bool Visited)>();
+            void List(ServiceRow row, bool booked, bool visited)
+            {
+                var (_, wasBooked, wasVisited) = listed.GetValueOrDefault(row.Id);
+                listed[row.Id] = (row, wasBooked || booked, wasVisited || visited);
+            }
+
+            var whole = sizes.Where(business => business.Services <= WholeServices).Select(business => business.TenantId).ToList();
+            if (whole.Count > 0)
+            {
+                foreach (var row in await Rows(Bookable(whole)).ToListAsync(cancellationToken))
+                    List(row, booked: true, visited: !row.IsVisit);
+            }
+
+            foreach (var large in sizes.Where(business => business.Services > WholeServices))
+            {
+                var business = businesses[large.TenantId].entry.Business;
+                if (business.BooksOnline)
+                {
+                    // The booking page's cut (GetPublicBookingQuery): by its order, before who attends.
+                    var page = Bookable([large.TenantId]).OrderBy(p => p.SortOrder).ThenBy(p => p.Name).Take(OnlineBookingCalendar.MaxServices);
+                    foreach (var row in await Rows(page).ToListAsync(cancellationToken))
+                        List(row, booked: true, visited: false);
+                }
+
+                if (business.ReceivesVisits)
+                {
+                    // The store's cut (PublicHomeVisits): the featured first, never the visit.
+                    var store = Bookable([large.TenantId])
+                        .Where(p => !context.TenantSettings.Any(s => s.TenantId == p.TenantId && s.HomeVisitServiceId == p.Id))
+                        .OrderByDescending(p => p.IsFeatured).ThenBy(p => p.SortOrder).ThenBy(p => p.Name).ThenBy(p => p.Id)
+                        .Take(PublicHomeVisitsDto.MaxServices);
+                    foreach (var row in await Rows(store).ToListAsync(cancellationToken))
+                        List(row, booked: false, visited: true);
+                }
+            }
+
+            foreach (var (row, booked, visited) in listed.Values.OrderBy(service => businesses[service.Row.TenantId].position))
+            {
+                var (business, position) = businesses[row.TenantId];
+                PublicDirectoryServiceKind kind;
+                int? minutes;
+                if (business.Business.BooksOnline && booked && row.Offered)
+                {
+                    kind = PublicDirectoryServiceKind.BooksOnline;
+                    minutes = (int)OnlineBookingRules.ServiceDuration(row.PreparationTimeMinutes).TotalMinutes;
+                }
+                else if (business.Business.ReceivesVisits && visited)
+                {
+                    kind = PublicDirectoryServiceKind.HomeVisit;
+                    minutes = row.PreparationTimeMinutes;
+                }
+                else
+                {
+                    continue;
+                }
+
+                entries.Add(new ServiceEntry(
+                    business,
+                    position,
+                    row.Id,
+                    row.Name,
+                    row.PriceAmount,
+                    minutes,
+                    ProductImageUrlsDto.FromBaseUrl(row.ImageUrl)?.Small,
+                    kind,
+                    PublicDirectorySnapshot.Comparable(row.Name),
+                    PublicDirectorySnapshot.Comparable($"{row.Name} {row.Description}")));
+            }
+
+            if (entries.Count > MaxServices)
+            {
+                logger?.LogWarning("Explorar searches more than {MaxServices} services: those of the businesses it shows last are left out.", MaxServices);
+                entries.RemoveRange(MaxServices, entries.Count - MaxServices);
+                break;
+            }
+        }
+
+        return entries;
     }
 
     /// <summary>
@@ -212,6 +391,73 @@ public sealed class PublicProductIndex
         return products;
     }
 
+    /// <summary>
+    /// The businesses whose services that receive visits have every word, in <paramref name="category"/> (Fase 29I): with the
+    /// customer's postal code, a search asks them whether they go there (<see cref="SearchServices"/>).
+    /// </summary>
+    internal IReadOnlyList<PublicDirectorySnapshot.Entry> VisitingWith(IReadOnlyCollection<string> words, BusinessCategory? category)
+        => words.Count == 0
+            ? []
+            : _services
+                .Where(service => service.Kind == PublicDirectoryServiceKind.HomeVisit)
+                .Where(service => category is null || service.Business.Business.Category == category)
+                .Where(service => words.All(service.SearchText.Contains))
+                .Select(service => service.Business)
+                .DistinctBy(business => business.TenantId)
+                .ToList();
+
+    /// <summary>
+    /// The services whose name or description has every word, of the businesses of <paramref name="category"/> (Fase 29I),
+    /// as the products: those whose name has them first, then by the order of Explorar and by name; at most
+    /// <see cref="MaxPerBusiness"/> of one business and <see cref="MaxResults"/> in all.
+    /// </summary>
+    /// <param name="near">With the customer's position: the nearest businesses first, each with how far it is.</param>
+    /// <param name="unreached">
+    /// With the customer's postal code: the businesses that receive visits and do not go there. Their services go after the
+    /// rest, as their cards do.
+    /// </param>
+    public List<PublicDirectoryServiceDto> SearchServices(
+        IReadOnlyCollection<string> words, BusinessCategory? category, PublicDirectoryNearby? near = null, IReadOnlySet<Guid>? unreached = null)
+    {
+        if (words.Count == 0)
+            return [];
+
+        var found = _services
+            .Where(service => category is null || service.Business.Business.Category == category)
+            .Where(service => words.All(service.SearchText.Contains))
+            .OrderBy(service => service.Kind == PublicDirectoryServiceKind.HomeVisit && unreached?.Contains(service.Business.TenantId) == true ? 1 : 0)
+            .ThenBy(service => words.All(service.NameText.Contains) ? 0 : 1)
+            .ThenBy(service => near is null ? service.Position : near.Position.GetValueOrDefault(service.Business.TenantId, int.MaxValue))
+            .ThenBy(service => service.NameText, StringComparer.Ordinal);
+        var perBusiness = new Dictionary<Guid, int>();
+        var services = new List<PublicDirectoryServiceDto>();
+        foreach (var service in found)
+        {
+            var business = service.Business;
+            var shown = perBusiness.GetValueOrDefault(business.TenantId);
+            if (shown == MaxPerBusiness)
+                continue;
+            perBusiness[business.TenantId] = shown + 1;
+            services.Add(new PublicDirectoryServiceDto
+            {
+                Id = service.ServiceId,
+                Name = service.Name,
+                Price = service.Price,
+                DurationMinutes = service.DurationMinutes,
+                ImageUrl = service.ImageUrl,
+                Kind = service.Kind,
+                BusinessName = business.Business.Name,
+                BusinessSlug = business.Business.Slug,
+                Theme = business.Business.Theme,
+                DistanceKm = near is not null && near.DistanceKm.TryGetValue(business.TenantId, out var km) ? km : null
+            });
+            if (services.Count == MaxResults)
+                break;
+        }
+
+        return services;
+    }
+
     /// <summary>A product as the index reads it: the columns its menu shows, and the IVA of its business.</summary>
     private sealed record ProductRow(
         Guid Id,
@@ -224,6 +470,36 @@ public sealed class PublicProductIndex
         decimal? TaxRate,
         bool IsTaxExempt,
         decimal DefaultTaxRate);
+
+    /// <summary>
+    /// A bookable service as the index reads it: the columns its pages show, whether its booking page offers it now and
+    /// whether it is the visit of its business.
+    /// </summary>
+    private sealed record ServiceRow(
+        Guid Id,
+        Guid TenantId,
+        string Name,
+        string? Description,
+        decimal PriceAmount,
+        int? PreparationTimeMinutes,
+        string? ImageUrl,
+        bool Offered,
+        bool IsVisit);
+
+    /// <param name="Position">Its business's place in Explorar.</param>
+    /// <param name="NameText">Its name as a search compares it.</param>
+    /// <param name="SearchText">Its name and description as a search compares them.</param>
+    private sealed record ServiceEntry(
+        PublicDirectorySnapshot.Entry Business,
+        int Position,
+        Guid ServiceId,
+        string Name,
+        decimal Price,
+        int? DurationMinutes,
+        string? ImageUrl,
+        PublicDirectoryServiceKind Kind,
+        string NameText,
+        string SearchText);
 
     /// <param name="Position">Its business's place in Explorar: those taking orders now first.</param>
     /// <param name="AddsTax">The order adds IVA to its price.</param>

@@ -1,9 +1,11 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.PublicDirectory;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Tenants;
@@ -59,7 +61,68 @@ public class PublicDirectorySqlServerTests
         Assert.Equal(5, directory.Categories.Single(c => c.Category == BusinessCategory.Food).Count);
     }
 
+    [SqlServerFact]
+    public async Task Search_ShouldReadTheServicesOfEveryBusinessFromItsOwnRows_AsTheirPagesCutThem()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        // More services than its booking page shows: it books the first 100 by its order (Fase 29I).
+        await SeedServicesAsync(database, "estetica-sol", BranchServiceMode.Premises, booksOnline: true, services:
+            [.. Enumerable.Range(0, 100).Select(n => ($"Servicio {n:000}", n, false)), ("Primero sqlsrv29i", -1, false), ("Ultimo sqlsrv29i", 500, false)]);
+        // More than its store shows: the 50 featured first, never the visit.
+        await SeedServicesAsync(database, "plomeria-hernandez", BranchServiceMode.DeliveryOnly, receivesVisits: true, visit: "Visita sqlsrv29i", services:
+            [.. Enumerable.Range(0, 50).Select(n => ($"Trabajo {n:000}", 0, true)), ("Fugas sqlsrv29i", 0, true), ("Sin destacar sqlsrv29i", 0, false)]);
+
+        await using var context = database.CreateContext();
+        var found = await new GetPublicDirectoryQueryHandler(context, new FixedClock(), new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance)
+            .Handle(new GetPublicDirectoryQuery(Search: "sqlsrv29i"), CancellationToken.None);
+
+        Assert.Equal(
+            [("Fugas sqlsrv29i", PublicDirectoryServiceKind.HomeVisit, "plomeria-hernandez"), ("Primero sqlsrv29i", PublicDirectoryServiceKind.BooksOnline, "estetica-sol")],
+            found.Services.Select(s => (s.Name, s.Kind, s.BusinessSlug)).OrderBy(s => s.Name));
+    }
+
     private enum Drawer { None, MainBranch, OtherBranch, BeforeBranches }
+
+    /// <summary>A business that books online or receives visits, with its weekly hours, its zone and its services.</summary>
+    private static async Task SeedServicesAsync(
+        SqlServerTestDatabase database,
+        string slug,
+        BranchServiceMode mainBranch,
+        (string Name, int SortOrder, bool Featured)[] services,
+        bool booksOnline = false,
+        bool receivesVisits = false,
+        string? visit = null)
+    {
+        var tenant = new Tenant($"Negocio {slug}", slug, BusinessType.Service, $"{slug}@demo.com");
+        await using var context = database.CreateContext(tenant.Id);
+        var settings = new TenantSettings(tenant.Id, TenantCapability.Service | TenantCapability.Appointments);
+        settings.UpdateOnlineMenu(OnlineMenuMode.MenuOnly);
+        settings.SetDirectoryListing(true);
+        settings.SetOpeningHours(OpeningHours.Create(Enum.GetValues<DayOfWeek>()
+            .Select(day => new OpeningInterval(day, new TimeOnly(8, 0), new TimeOnly(20, 0)))));
+        var main = new Branch(tenant.Id, "Matriz", "MATRIZ", new BranchContact(AddressLine1: "5 de Mayo 10", City: "Puebla"),
+            isDefault: true, serviceMode: mainBranch);
+        var category = new Category(tenant.Id, "Servicios", null);
+        context.AddRange(tenant, settings, main, category);
+        context.Products.AddRange(services.Select(service => new Product(
+            tenant.Id, category.Id, service.Name, null, 300m, "MXN", preparationTimeMinutes: 60,
+            sortOrder: service.SortOrder, isFeatured: service.Featured, unit: UnitType.Service)));
+        Product? visitService = null;
+        if (visit is not null)
+        {
+            visitService = new Product(tenant.Id, category.Id, visit, null, 150m, "MXN", preparationTimeMinutes: 60, unit: UnitType.Service);
+            context.Products.Add(visitService);
+        }
+        if (booksOnline)
+            settings.UpdateOnlineBooking(true, 1);
+        if (receivesVisits)
+        {
+            settings.StartReceivingHomeVisits();
+            settings.UpdateHomeVisitRequests(true, visitService?.Id, HomeVisitChargePolicy.Charged);
+            context.DeliveryZones.Add(new DeliveryZone(tenant.Id, new DeliveryZoneFields("Centro", 30m, 0m, null, ["72000"])));
+        }
+        await context.SaveChangesAsync();
+    }
 
     private static async Task SeedAsync(
         SqlServerTestDatabase database,

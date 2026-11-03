@@ -47,6 +47,14 @@ public class PublicDirectoryDto
     /// <see cref="PublicProductIndex.MaxPerBusiness"/> of one business. Empty without a search or on another page.
     /// </summary>
     public List<PublicDirectoryProductDto> Products { get; set; } = new();
+
+    /// <summary>
+    /// With a search, on its first page (Fase 29I, ADR 0063): the services of the businesses of the category that book
+    /// online or receive visits, as their booking page or their store show them, whose name or description has every word;
+    /// at most <see cref="PublicProductIndex.MaxResults"/> and <see cref="PublicProductIndex.MaxPerBusiness"/> of one
+    /// business. Empty without a search or on another page.
+    /// </summary>
+    public List<PublicDirectoryServiceDto> Services { get; set; } = new();
 }
 
 public class PublicDirectoryCategoryDto
@@ -256,32 +264,43 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
         var page = found.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
         // What each card of the page says about delivering and visiting there: the zones of the page only.
         var businesses = await PublicDirectoryCards.WithDeliveryToAsync(_context, page, postalCode, cancellationToken, near?.DistanceKm);
-        // The products of a search come with its first page; the index of the snapshot is read only when there is one.
-        var products = words.Length == 0 || pageNumber > 1 ? [] : await SearchProductsAsync(snapshot, words, request.Category, near, cancellationToken);
+        // The products and services of a search come with its first page; the index of the snapshot is read only when there is one.
+        var index = words.Length == 0 || pageNumber > 1 ? null : await IndexAsync(snapshot, cancellationToken);
+        var products = index?.Search(words, request.Category, near) ?? [];
+        // A trade that does not go to the postal code: its services go after the rest, as its card does (Fase 29I).
+        var visitingWith = postalCode is null || index is null ? [] : index.VisitingWith(words, request.Category);
+        IReadOnlySet<Guid>? unreached = null;
+        if (visitingWith.Count > 0)
+        {
+            var zones = (await PublicDirectoryCards.ZonesAtAsync(_context, visitingWith, postalCode, cancellationToken))!;
+            unreached = visitingWith.Where(entry => !zones.ContainsKey(entry.TenantId)).Select(entry => entry.TenantId).ToHashSet();
+        }
+        var services = index?.SearchServices(words, request.Category, near, unreached) ?? [];
 
         return new PublicDirectoryDto
         {
             Categories = snapshot.Categories.ToList(),
             Businesses = new PaginatedList<PublicDirectoryBusinessDto>(businesses, found.Count, pageNumber, pageSize),
             PostalCode = postalCode,
-            Products = products
+            Products = products,
+            Services = services
         };
     }
 
-    /// <summary>The products of a search; none when their index could not be built: the businesses still answer.</summary>
-    private async Task<List<PublicDirectoryProductDto>> SearchProductsAsync(
-        PublicDirectorySnapshot snapshot, string[] words, BusinessCategory? category, PublicDirectoryNearby? near, CancellationToken cancellationToken)
+    /// <summary>
+    /// The index of the products and services of the snapshot; none when it could not be built: the businesses still answer.
+    /// </summary>
+    private async Task<PublicProductIndex?> IndexAsync(PublicDirectorySnapshot snapshot, CancellationToken cancellationToken)
     {
         try
         {
-            var index = await _products.GetAsync(
+            return await _products.GetAsync(
                 snapshot, (current, ct) => PublicProductIndex.BuildAsync(_context, current, ct, _logger), cancellationToken);
-            return index?.Search(words, category, near) ?? [];
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            _logger.LogWarning(ex, "Explorar could not read the products of its businesses: this search answers with the businesses only.");
-            return [];
+            _logger.LogWarning(ex, "Explorar could not read the products and services of its businesses: this search answers with the businesses only.");
+            return null;
         }
     }
 }

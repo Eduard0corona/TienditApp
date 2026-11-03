@@ -91,8 +91,9 @@ public class TenantFilterBypassAllowlistTests
         // the business of the one it decides on, which it then enters to write the change and its audit entry (Fase 24H).
         ["src/FoodParkDigital.Application/Reviews/PlatformReviewsFeature.cs"] = 2,
         // Its search reads the products the menus of those businesses show, each with its own business and only what its
-        // menu already shows (Fase 24F).
-        ["src/FoodParkDigital.Application/PublicDirectory/PublicProductSearch.cs"] = 1,
+        // menu already shows (Fase 24F); and the services their booking page or their store show, with whether someone
+        // attends each and which one is the visit, each with its own business (Fase 29I).
+        ["src/FoodParkDigital.Application/PublicDirectory/PublicProductSearch.cs"] = 2,
         // The memberships of the account itself (by its user id), in every business: its old avatars live in their folders.
         ["src/FoodParkDigital.Application/Identity/AvatarFiles.cs"] = 1,
         // Customers shared by businesses (registered accounts and temporary customers looked up by phone).
