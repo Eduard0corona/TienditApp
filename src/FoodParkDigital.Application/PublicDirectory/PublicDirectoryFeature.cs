@@ -11,7 +11,9 @@ using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
+using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
@@ -120,6 +122,12 @@ public class PublicDirectoryBusinessDto
 
     /// <summary>How its customers rate it (Fase 24H): its published reviews and their average; null without reviews.</summary>
     public RatingSummaryDto? Rating { get; set; }
+
+    /// <summary>
+    /// How soon it answers the requests its customers make online (Fase 29J, ADR 0064): within what it answered at least half
+    /// of those of the last 90 days. Null with fewer than three, or when it takes more than a day: the card says nothing.
+    /// </summary>
+    public ResponseTime? ResponseTime { get; set; }
 
     /// <summary>
     /// It receives visits to quote now (Fase 29A, ADR 0053): its card speaks of visits, never of orders or the drawer,
@@ -607,16 +615,65 @@ public sealed class PublicDirectorySnapshot
                 .ToListAsync(cancellationToken))
             .ToDictionary(r => r.TenantId, r => RatingSummaryDto.From(r.Count, r.Stars));
 
+        var responses = await ResponseTimesAsync(context, listed, utcNow, cancellationToken);
+
+        // Within its group, the businesses that answer sooner first, and one without enough requests in the middle (Fase 29J).
         var entries = rows
             .Select(row => ToEntry(row, specialDays[row.Id], utcNow))
             .Where(entry => entry is not null)
             .Select(entry => entry!)
             .OrderBy(entry => entry.Rank)
+            .ThenBy(entry => ResponseTimes.Order(responses.GetValueOrDefault(entry.TenantId)))
             .ThenBy(entry => entry.Business.Name, Names)
             .ToList();
         foreach (var entry in entries)
+        {
             entry.Business.Rating = ratings.GetValueOrDefault(entry.TenantId);
+            entry.Business.ResponseTime = ResponseTimes.Shown(responses.GetValueOrDefault(entry.TenantId));
+        }
         return new PublicDirectorySnapshot(utcNow, entries);
+    }
+
+    /// <summary>
+    /// How soon each business listed answers its requests online (Fase 29J, ADR 0064): one row per business, its requests of
+    /// the last <see cref="ResponseTimes.WindowDays"/> days counted by how long their customers waited for an answer. One it
+    /// let pass (its time began unanswered) counts as the slowest; one still waiting, or cancelled by its customer first, does
+    /// not count. Only the businesses with any are in it.
+    /// </summary>
+    internal static async Task<Dictionary<Guid, ResponseTime?>> ResponseTimesAsync(
+        IApplicationDbContext context, IQueryable<Tenant> listed, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        var since = utcNow.AddDays(-ResponseTimes.WindowDays);
+        double anHour = ResponseTimes.Limits[0].TotalHours, threeHours = ResponseTimes.Limits[1].TotalHours;
+        double twelveHours = ResponseTimes.Limits[2].TotalHours, aDay = ResponseTimes.Limits[3].TotalHours;
+        var counted = await context.Appointments
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(a => a.Channel == AppointmentChannel.Online
+                && a.CreatedAt >= since
+                && (a.RespondedAt != null || (a.Status == AppointmentStatus.Requested && a.StartAt <= utcNow))
+                && listed.Any(t => t.Id == a.TenantId))
+            .GroupBy(a => a.TenantId)
+            .Select(g => new
+            {
+                TenantId = g.Key,
+                Requests = g.Count(),
+                WithinAnHour = g.Count(a => a.RespondedAt != null && a.RespondedAt <= a.CreatedAt.AddHours(anHour)),
+                WithinThreeHours = g.Count(a => a.RespondedAt != null && a.RespondedAt <= a.CreatedAt.AddHours(threeHours)),
+                WithinTwelveHours = g.Count(a => a.RespondedAt != null && a.RespondedAt <= a.CreatedAt.AddHours(twelveHours)),
+                WithinADay = g.Count(a => a.RespondedAt != null && a.RespondedAt <= a.CreatedAt.AddHours(aDay))
+            })
+            .ToListAsync(cancellationToken);
+        return counted.ToDictionary(
+            row => row.TenantId,
+            row => ResponseTimes.Typical(
+            [
+                row.WithinAnHour,
+                row.WithinThreeHours - row.WithinAnHour,
+                row.WithinTwelveHours - row.WithinThreeHours,
+                row.WithinADay - row.WithinTwelveHours,
+                row.Requests - row.WithinADay
+            ]));
     }
 
     /// <summary>

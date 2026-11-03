@@ -1,6 +1,8 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.PublicDirectory;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
@@ -19,7 +21,7 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// <summary>
 /// Explorar on SQL Server, as a public request reads it: without a business in context, every read spans all of them
 /// filtered by its own business, and the open drawer, the main branch, the special days, the zones and the products a
-/// menu shows are worked out per business in one query.
+/// menu shows are worked out per business in one query, as how soon each one answers its requests online (Fase 29J).
 /// </summary>
 public class PublicDirectorySqlServerTests
 {
@@ -81,10 +83,56 @@ public class PublicDirectorySqlServerTests
             found.Services.Select(s => (s.Name, s.Kind, s.BusinessSlug)).OrderBy(s => s.Name));
     }
 
+    [SqlServerFact]
+    public async Task Directory_ShouldSumUpHowSoonEachBusinessAnswers_FromItsOwnRequests()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var slow = await SeedServicesAsync(database, "a-lenta", BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
+        await SeedRequestsAsync(database, slow, TimeSpan.FromHours(30), TimeSpan.FromHours(30), TimeSpan.FromHours(30));
+        // Within an hour to the second, and two of three: the third it let pass.
+        var quick = await SeedServicesAsync(database, "b-rapida", BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
+        await SeedRequestsAsync(database, quick, TimeSpan.FromHours(1), TimeSpan.FromMinutes(59), null);
+        await SeedServicesAsync(database, "c-nueva", BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
+        // Quick, but before the last 90 days: as if it had none.
+        var old = await SeedServicesAsync(database, "d-vieja", BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
+        await SeedRequestsAsync(database, old, ResponseTimes.WindowDays + 1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+
+        await using var context = database.CreateContext();
+        var directory = await new GetPublicDirectoryQueryHandler(context, new FixedClock(), new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance)
+            .Handle(new GetPublicDirectoryQuery(), CancellationToken.None);
+
+        Assert.Equal(
+            [("b-rapida", ResponseTime.WithinAnHour), ("c-nueva", null), ("d-vieja", null), ("a-lenta", (ResponseTime?)null)],
+            directory.Businesses.Items.Select(b => (b.Slug, b.ResponseTime)));
+    }
+
     private enum Drawer { None, MainBranch, OtherBranch, BeforeBranches }
 
+    /// <summary>Requests online that arrived three days ago, each answered after its wait, or let pass when it has none.</summary>
+    private static Task SeedRequestsAsync(SqlServerTestDatabase database, Guid tenantId, params TimeSpan?[] waits)
+        => SeedRequestsAsync(database, tenantId, 3, waits);
+
+    private static async Task SeedRequestsAsync(SqlServerTestDatabase database, Guid tenantId, int arrivedDaysAgo, params TimeSpan?[] waits)
+    {
+        await using var context = database.CreateContext(tenantId);
+        var arrivedAt = Now.AddDays(-arrivedDaysAgo);
+        foreach (var wait in waits)
+        {
+            // One let pass began an hour ago; the others are in two days.
+            var start = wait is null ? Now.AddHours(-1) : Now.AddDays(2);
+            var request = Appointment.RequestOnline(
+                tenantId, "Valeria", "+525522107765", Guid.NewGuid(), "Corte", start, start.AddHours(1), null, null, Guid.NewGuid(),
+                (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43]);
+            request.CreatedAt = arrivedAt;
+            if (wait is { } waited)
+                request.Accept(arrivedAt + waited);
+            context.Appointments.Add(request);
+        }
+        await context.SaveChangesAsync();
+    }
+
     /// <summary>A business that books online or receives visits, with its weekly hours, its zone and its services.</summary>
-    private static async Task SeedServicesAsync(
+    private static async Task<Guid> SeedServicesAsync(
         SqlServerTestDatabase database,
         string slug,
         BranchServiceMode mainBranch,
@@ -123,6 +171,7 @@ public class PublicDirectorySqlServerTests
             context.DeliveryZones.Add(new DeliveryZone(tenant.Id, new DeliveryZoneFields("Centro", 30m, 0m, null, ["72000"])));
         }
         await context.SaveChangesAsync();
+        return tenant.Id;
     }
 
     private static async Task SeedAsync(

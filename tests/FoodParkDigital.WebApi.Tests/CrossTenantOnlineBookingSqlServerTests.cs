@@ -15,7 +15,7 @@ namespace FoodParkDigital.WebApi.Tests;
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantOnlineBookingSqlServerTests
 {
-    private const string Tracking = "/api/v1/public/appointments/tracking";
+    internal const string Tracking = "/api/v1/public/appointments/tracking";
     private const string Settings = "/api/v1/appointments/online-booking";
 
     private readonly TwoBusinessesApi _api;
@@ -151,7 +151,7 @@ public sealed class CrossTenantOnlineBookingSqlServerTests
         return (slug, service);
     }
 
-    private static async Task<DateTimeOffset> FirstFreeAsync(HttpClient client, string slug, Guid service, Guid? staffId = null)
+    internal static async Task<DateTimeOffset> FirstFreeAsync(HttpClient client, string slug, Guid service, Guid? staffId = null)
     {
         var week = await TwoBusinessesApi.ReadAsync(await client.GetAsync(
             $"/api/v1/public/menu/{slug}/booking/slots?serviceId={service}" + (staffId is null ? "" : $"&staffId={staffId}")));
@@ -161,7 +161,7 @@ public sealed class CrossTenantOnlineBookingSqlServerTests
             .First();
     }
 
-    private static object Request(Guid service, DateTimeOffset startAt, string phone, Guid? staffId = null) => new
+    internal static object Request(Guid service, DateTimeOffset startAt, string phone, Guid? staffId = null) => new
     {
         serviceProductId = service,
         startAt,
