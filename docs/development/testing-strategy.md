@@ -1942,7 +1942,10 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `PublicBookingPage.test.tsx` (+1): el enlace con un servicio que ya no se agenda lo dice y ofrece los demás.
   - **.NET en total:** 4,603 pruebas (Domain 1,357; Application 2,074; WebApi 485; Infrastructure 687), también el build en Release. **Cliente en total:** 194 archivos y 1,475 pruebas.
   - **Primera visita:** 181,725 B (`master` en `1c7feaa`: 181,708 B, +17 B): la sección se carga con Explorar; los 17 B son la lista de precarga de la entrada. Con las correcciones de la revisión la cifra se movió unos bytes. El presupuesto (181,800 B) no cambia.
-  - **Escenas:** PENDIENTE.
+  - **Escenas:** contra la línea base de `master` en `1c7feaa` (794 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - 775 salen iguales.
+    - **Cambian 19, a propósito:** solo el texto del buscador, «Busca un negocio, producto o servicio». Cada una mide lo mismo y la diferencia es una franja de 15 px dentro del campo: Explorar (5), «Cerca de mí» (4), Explorar como cliente y con favoritos (4), con código postal (2), los oficios en Explorar (3) y con calificación (1).
+    - **2 nuevas:** «Servicios en Explorar» en escritorio y teléfono (`oficios.spec.ts`, `/explorar?q=corte`): los dos servicios del salón con su duración y el del carpintero «desde» y con «más IVA», sin duración. Pasaron dos corridas seguidas contra el mismo build y salen iguales en la comparación completa.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
