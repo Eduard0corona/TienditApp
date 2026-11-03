@@ -1972,7 +1972,9 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - un negocio que dejó de agendar seguía diciendo cuánto tarda;
     - el orden cambiaba la lista de todos y lo que entra al índice de búsqueda: ahora solo ordena en las categorías;
     - el texto dice «Suele responder en menos de …», con límites estrictos.
-  - **Escenas:** PENDIENTE.
+  - **Escenas:** contra la línea base de `master` en `f4e33a1` (796 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - Las 796 salen iguales: ninguna escena existente recibe el tiempo de respuesta, y la lista y las categorías de la API simulada ya venían en el orden del servidor.
+    - **2 nuevas:** «oficios que responden» en escritorio y teléfono (`oficios.spec.ts`, `/explorar/hogar-y-reparaciones`): el plomero «Suele responder en menos de una hora», el carpintero «… de 12 horas» y el cerrajero sin decir nada, después de lo que dice la visita. Pasaron dos corridas seguidas contra el mismo build y salen iguales en la comparación completa.
 
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
