@@ -132,8 +132,12 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - Las citas en línea siguen sin ser a domicilio (`OnlineBookingBlocker.NoPremises`): a domicilio se pide la visita, no otro servicio.
   - El aviso de la dirección es por negocio, no por sucursal; descartado no vuelve aunque después prenda el interruptor. Un negocio que lo descartó y sigue con local publica su dirección.
   - «Cerca de mí» no ordena a estos negocios. Desde la 29I la búsqueda de Explorar encuentra sus servicios ([ADR 0063](../adr/0063-explore-finds-services.md)), pero un servicio de visita abre la tienda, no un enlace propio.
-  - El tiempo de respuesta de la 29J ([ADR 0064](../adr/0064-response-time-in-explore.md)) empieza vacío: las solicitudes respondidas antes no tienen la hora. Cuenta horas de reloj, no de su horario; solo lo dice la tarjeta de Explorar (no la tienda, la página de citas ni la solicitud), y el negocio no ve el suyo.
-  - Siguen pendientes, por decisiones del dueño del producto, el anticipo al aceptar la cotización (cuánto y qué pasa con un pago tardío) y el PDF de la cotización (qué biblioteca y con qué licencia: PDFsharp pasó a AGPL-3.0 en su versión 6.5).
+  - El tiempo de respuesta de la 29J ([ADR 0064](../adr/0064-response-time-in-explore.md)):
+    - empieza vacío: cuenta desde el 3 de noviembre de 2026;
+    - cuenta horas de reloj, no de su horario;
+    - se puede inflar (el negocio se pide citas y las acepta) o hundir (solicitudes falsas sin atender): cualquiera manda solicitudes con cualquier teléfono;
+    - solo lo dice la tarjeta de Explorar (no la tienda, la página de citas ni la solicitud), solo ordena en las categorías, y el negocio no ve el suyo.
+  - Siguen pendientes, por decisiones del dueño del producto, el anticipo al aceptar la cotización (cuánto y qué pasa con un pago tardío) y el PDF de la cotización: qué biblioteca y con qué licencia. PDFsharp, la que se consideró, declara `AGPL-3.0-only` en su paquete 6.5.0 de NuGet y pide una licencia al crear un documento (revisado el 2026-11-03).
   - La tarjeta de Configuración no calcula lo que costaría la visita con cambios sin guardar: dice lo de hoy y pide guardar.
   - La lista de servicios a elegir como visita trae los primeros 100 por nombre (el elegido siempre sale); la tienda, hasta 300 códigos postales y 50 servicios.
   - La 29A suma 156 B a la primera visita (de 180,710 a 180,866 B, contra `master` en `1d238ff`) y sube el presupuesto a 181,000 B.
@@ -145,7 +149,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - La 29G suma 76 B a la primera visita (de 181,529 a 181,605 B, contra `master` en `38d0560`): el aviso de «Cotizaciones aceptadas por convertir» va en la entrada con la campana, y el filtro «Por convertir» y los valores nuevos de los enums también; el panel para responder se carga con la página del enlace. El presupuesto sube de 181,600 a 181,700 B.
   - La 29H suma 103 B a la primera visita (de 181,605 a 181,708 B, contra `master` en `8ecfa7f`): las fotos se cargan con sus pantallas, y los 103 B son la lista de precarga de la entrada, con los chunks compartidos nuevos (las fotos para mandar con su cola, sus reglas y «Lo que pasa» del negocio), y la regla de las rutas privadas con el área nueva. El presupuesto sube de 181,700 a 181,800 B.
   - La 29I suma 17 B a la primera visita (de 181,708 a 181,725 B, contra `master` en `1c7feaa`): la sección «Servicios» se carga con Explorar, y los 17 B son la lista de precarga de la entrada. El presupuesto (181,800 B) no cambia.
-  - La 29J suma 64 B a la primera visita (de 181,725 a 181,789 B, contra `master` en `f4e33a1`): la etiqueta «Responde en menos de …» y sus textos van con la tarjeta de Explorar, que es la entrada de los clientes. El presupuesto sube de 181,800 a 181,900 B.
+  - La 29J suma 47 B a la primera visita (de 181,725 a 181,772 B, contra `master` en `f4e33a1`): el enum `ResponseTime` del contrato va en la entrada con los demás enums generados; la etiqueta y sus textos se cargan con Explorar. El presupuesto sube de 181,800 a 181,900 B.
 - El menú en línea con la forma de las apps de entrega (Fase 24E, [ADR 0026](../adr/0026-store-like-delivery-apps.md)):
   - Un negocio sin portada ni fotos se ve con sus colores y las iniciales de sus productos, y «Destacados» no aparece. Es correcto, pero menos vistoso que con fotos: depende de que el dueño las suba.
   - Explorar sigue con las tarjetas de la 24A: no muestra la portada.

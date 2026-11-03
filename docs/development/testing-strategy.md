@@ -1948,20 +1948,30 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **2 nuevas:** «Servicios en Explorar» en escritorio y teléfono (`oficios.spec.ts`, `/explorar?q=corte`): los dos servicios del salón con su duración y el del carpintero «desde» y con «más IVA», sin duración. Pasaron dos corridas seguidas contra el mismo build y salen iguales en la comparación completa.
 
 - Fase 29J, cuánto tarda en responder cada negocio ([ADR 0064](../adr/0064-response-time-in-explore.md)):
-  - **Domain:** `ResponseTimeTests` (22, nuevo): aceptar o rechazar guarda cuándo, una sola vez, y un intento rechazado no lo guarda; una cancelada por su cliente, una que espera o una del equipo no tiene hora; cada espera cae en su tramo (los límites exactos incluidos); el tramo de un negocio es el más corto que reúne al menos la mitad, desde 3, con las que dejó pasar como las más lentas; la tarjeta no dice «más de un día» y uno sin suficientes va en medio del orden. `OnlineBookingTests` y `VisitProblemPhotoTests`: rechazar recibe la hora.
-  - **Application:** `ExploreResponseTimeTests` (3, nuevo):
-    - lo que dice cada tarjeta: menos de 1 hora con dos de tres (una rechazada), nada con dos, menos de 3 horas con una que dejó pasar, nada pasado un día ni con la mayoría sin respuesta;
-    - solo cuentan las solicitudes en línea de los últimos 90 días, respondidas o que dejó pasar, de su propio negocio: no las que esperan, las que el cliente canceló, las del equipo ni las de otro negocio;
-    - el orden dentro del grupo: el rápido, los que no tienen suficientes con el de 12 horas por nombre, el de un día y el lento; uno abierto que ya no agenda va después de los que agendan, aunque responda al momento.
+  - **Domain:** `ResponseTimeTests` (15, nuevo): aceptar o rechazar guarda cuándo, una sola vez, y un intento rechazado no lo guarda; una cancelada por su cliente, una que espera o una del equipo no tiene hora; los límites son horas enteras (la base las suma a la llegada); cuentan los últimos 90 días, nunca antes del 3 de noviembre de 2026; el tramo de un negocio es el más corto que reúne al menos la mitad, desde 3, con las más lentas al final; la tarjeta no dice «un día o más» y uno sin suficientes va en medio del orden. `OnlineBookingTests` y `VisitProblemPhotoTests`: rechazar recibe la hora.
+  - **Application:** `ExploreResponseTimeTests` (6, nuevo):
+    - lo que dice cada tarjeta: menos de una hora con dos de tres (una rechazada), nada con dos, menos de 3 horas con una que dejó pasar, nada con un día o más ni con la mayoría sin respuesta;
+    - las más lentas: respondidas cuando su hora ya había empezado, las que esperan un día o más y las que su cliente canceló después de un día; las de menos de un día todavía no cuentan;
+    - solo cuentan las solicitudes en línea de los últimos 90 días, de su propio negocio y mientras agenda en línea: no las del equipo, las de otro negocio ni las de uno que dejó de agendar;
+    - las de antes del 3 de noviembre de 2026 no cuentan, respondidas o no;
+    - en una categoría, el orden dentro del grupo: el rápido, los que no tienen suficientes con el de 12 horas por nombre, el de un día y el lento, y uno abierto que ya no agenda en su grupo; la lista de todos sigue por nombre;
+    - cambiar el estado de una solicitud en la Agenda también guarda cuándo se respondió.
   - **Infrastructure:**
     - `AppointmentRespondedAtMigrationSqlServerTests` (3, nuevo): las citas que existen quedan sin hora y el índice filtra las solicitudes en línea; la versión anterior sigue respondiendo solicitudes (sin guardar cuándo); revertir quita solo la columna y el índice, otra vez no hace nada, y hacia adelante guarda la hora al tick. Las pruebas de la 29H (`AppointmentProblemPhotosMigrationSqlServerTests`) leen su base con el modelo de su día (`BeforeAppointmentRespondedAt`).
-    - `PublicDirectorySqlServerTests` (+1): la consulta agrupada en SQL Server, con la espera de una hora exacta dentro de «menos de 1 hora» y las solicitudes de hace más de 90 días fuera.
+    - `PublicDirectorySqlServerTests` (+1): la consulta agrupada en SQL Server con cada límite exacto (una hora, 3, 12 y 24 horas ya no son «menos de»), las respondidas después de empezar su hora, las que esperan o se cancelaron después de un día, las de hace más de 90 días fuera, y el orden de la categoría.
     - Los scripts de `database/production` se probaron en SQL Server: aplicar, `verify.sql`, aplicar otra vez, revertir dos veces (la segunda con la caché de planes vacía) y aplicar de nuevo.
   - **WebApi:** `CrossTenantDirectoryResponseTimeSqlServerTests` (1, nuevo): por la API, las solicitudes que un cliente manda en la página de citas y que el equipo acepta o rechaza en su agenda son lo que dice su tarjeta; las de otro negocio, que espera, no. `TenantFilterBypassAllowlistTests`: la lectura suma una a `PublicDirectoryFeature.cs` (5).
-  - **Mutaciones:** sin el orden por respuesta o sin contar las solicitudes que dejó pasar, falla al menos una prueba.
-  - **Cliente:** `responseTime.test.ts` (3, nuevo): cada tramo con su texto y nada pasado un día o sin él. `DirectoryBusinessCard.test.tsx` (+2): la tarjeta lo dice, y sin él no dice nada.
+  - **Mutaciones:** sin el orden en la categoría, sin contar las que dejó pasar, sin «antes de su hora», sin las que esperan un día, sin las canceladas tras un día, contando las de menos de un día, sin el corte del 3 de noviembre o sin revisar que el negocio agenda, falla al menos una prueba.
+  - **Cliente:** `responseTime.test.ts` (3, nuevo): cada tramo con su texto y nada con un día o más o sin él. `DirectoryBusinessCard.test.tsx` (+2): la tarjeta lo dice, y sin él no dice nada.
   - **.NET en total:** PENDIENTE. **Cliente en total:** 195 archivos y 1,480 pruebas.
-  - **Primera visita:** 181,789 B (`master` en `f4e33a1`: 181,725 B, +64 B): la etiqueta y sus textos van con la tarjeta de Explorar. El presupuesto sube de 181,800 B a 181,900 B.
+  - **Primera visita:** 181,772 B (`master` en `f4e33a1`: 181,725 B, +47 B): el enum `ResponseTime` del contrato va en la entrada con los demás enums generados; la etiqueta se carga con Explorar. El presupuesto sube de 181,800 B a 181,900 B.
+  - **Revisiones independientes** (servidor y cliente), sin bloqueos; se corrigió:
+    - las solicitudes sin respuesta de antes de la fase contaban y las respondidas no: ahora cuentan desde el 3 de noviembre de 2026;
+    - responder tarde borraba la que se dejó pasar, y las que esperaban días no contaban;
+    - un fallo de la consulta tumbaba Explorar;
+    - un negocio que dejó de agendar seguía diciendo cuánto tarda;
+    - el orden cambiaba la lista de todos y lo que entra al índice de búsqueda: ahora solo ordena en las categorías;
+    - el texto dice «Suele responder en menos de …», con límites estrictos.
   - **Escenas:** PENDIENTE.
 
 - Escenas estables, después de la 24A:
