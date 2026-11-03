@@ -697,7 +697,8 @@ public sealed class PublicDirectorySnapshot
                 a.Status,
                 a.CancelledByCustomerAt,
                 // Made by this version: one cancelled by its customer without an answer was still waiting (an earlier
-                // version could have accepted it without keeping when).
+                // version could have accepted it without keeping when). One it made and an earlier version accepted, during
+                // a return to it, still counts as slow if its customer cancels it past its limit (ADR 0064).
                 Kept = a.RequestedStartAt != null,
                 AskedFor = a.RequestedStartAt ?? a.StartAt,
                 ADayLater = a.CreatedAt.AddHours(aDay)

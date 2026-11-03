@@ -134,6 +134,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - «Cerca de mí» no ordena a estos negocios. Desde la 29I la búsqueda de Explorar encuentra sus servicios ([ADR 0063](../adr/0063-explore-finds-services.md)), pero un servicio de visita abre la tienda, no un enlace propio.
   - El tiempo de respuesta de la 29J ([ADR 0064](../adr/0064-response-time-in-explore.md)):
     - empieza vacío: cuenta desde la primera respuesta guardada, y una vuelta a la versión anterior responde sin guardar la hora;
+    - una solicitud de esta versión que la anterior acepta a tiempo cuenta como lenta si su cliente la cancela después de su límite: haría falta guardar si la cita seguía sin respuesta al cancelarse;
     - cuenta horas de reloj, no de su horario;
     - se puede inflar (el negocio se pide citas y las acepta) o hundir (solicitudes falsas sin atender): cualquiera manda solicitudes con cualquier teléfono;
     - solo lo dice la tarjeta de Explorar (no la tienda, la página de citas ni la solicitud), solo ordena en las categorías, y el negocio no ve el suyo.

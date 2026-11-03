@@ -59,6 +59,7 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
 - **Lo que limita:**
   - **Empieza vacío:** cuenta desde la primera respuesta guardada, así que la tarjeta no dice nada hasta que un negocio tiene 3 solicitudes desde el despliegue.
   - **Una vuelta a la versión anterior** responde sin guardar la hora: lo que se deje pasar mientras corre sí cuenta, y lo que responda no.
+    - Una solicitud que creó esta versión y que la anterior aceptó a tiempo cuenta como lenta si su cliente la cancela después de su límite: con lo que guarda la cita no se distingue de una que seguía sin respuesta.
   - **Las horas son de reloj, no de su horario:** una solicitud de las 11 de la noche que se responde a las 9 de la mañana tardó 10 horas.
   - **Se puede manipular:** cualquiera manda una solicitud con cualquier teléfono, con el tope por teléfono y por IP de la [ADR 0025](0025-online-booking.md).
     - Un negocio puede pedirse citas a sí mismo y aceptarlas al momento.
