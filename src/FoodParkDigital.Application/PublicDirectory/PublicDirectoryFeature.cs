@@ -664,20 +664,29 @@ public sealed class PublicDirectorySnapshot
     /// (still waiting, or cancelled by their customer); one that has waited less, or that its customer cancelled sooner, does
     /// not count yet. Only the businesses with any are in it, and nothing of who made them is read.
     /// </summary>
+    /// <remarks>
+    /// Answers are kept since the first one TienditApp kept (Fase 29J deployed): before it, and while an earlier version runs,
+    /// an answer keeps no time and does not count. So one that became slow (its time began, or its day passed) before that
+    /// first answer does not count either: counting only those would make a business slower than it was.
+    /// </remarks>
     internal static async Task<Dictionary<Guid, ResponseTime?>> ResponseTimesAsync(
         IApplicationDbContext context, IQueryable<Tenant> listed, DateTimeOffset utcNow, CancellationToken cancellationToken)
     {
+        var requests = context.Appointments.IgnoreQueryFilters().AsNoTracking().Where(a => a.Channel == AppointmentChannel.Online);
+        if (await requests.MinAsync(a => a.RespondedAt, cancellationToken) is not { } keptSince)
+            return [];
+
         var since = ResponseTimes.Since(utcNow);
         int anHour = ResponseTimes.LimitHours[0], threeHours = ResponseTimes.LimitHours[1];
         int twelveHours = ResponseTimes.LimitHours[2], aDay = ResponseTimes.LimitHours[3];
-        var counted = await context.Appointments
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(a => a.Channel == AppointmentChannel.Online
-                && a.CreatedAt >= since
+        var counted = await requests
+            .Where(a => a.CreatedAt >= since
                 && (a.RespondedAt != null
-                    || (a.Status == AppointmentStatus.Requested && (a.StartAt <= utcNow || a.CreatedAt.AddHours(aDay) <= utcNow))
-                    || (a.CancelledByCustomerAt != null && a.CancelledByCustomerAt >= a.CreatedAt.AddHours(aDay)))
+                    || (a.Status == AppointmentStatus.Requested
+                        && (a.StartAt <= utcNow || a.CreatedAt.AddHours(aDay) <= utcNow)
+                        && a.StartAt >= keptSince && a.CreatedAt.AddHours(aDay) >= keptSince)
+                    || (a.CancelledByCustomerAt != null && a.CancelledByCustomerAt >= a.CreatedAt.AddHours(aDay)
+                        && a.CreatedAt.AddHours(aDay) >= keptSince))
                 && listed.Any(t => t.Id == a.TenantId))
             .GroupBy(a => a.TenantId)
             .Select(g => new

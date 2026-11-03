@@ -18,8 +18,8 @@ namespace FoodParkDigital.Application.Tests;
 
 /// <summary>
 /// How soon a business answers in Explorar (Fase 29J, ADR 0064): its card says within what it answered at least half of the
-/// requests its customers made online in the last 90 days since Fase 29J, from three and less than a day. The slowest are
-/// those answered once their time began or let pass, and those that waited a day without an answer. In a category, the
+/// requests its customers made online in the last 90 days, from three and less than a day. The slowest are those answered
+/// once their time began or let pass, and those that waited a day without an answer, since the first answer kept. In a category, the
 /// businesses of each group that answer sooner go first, one without enough requests in the middle.
 /// </summary>
 public class ExploreResponseTimeTests
@@ -146,18 +146,37 @@ public class ExploreResponseTimeTests
     }
 
     [Fact]
-    public async Task Card_ShouldNotCountTheRequestsFromBeforeFase29J_AnsweredOrNot()
+    public async Task WhatBecameSlowBeforeTheFirstAnswerKept_ShouldNotCount()
     {
-        await using var fixture = Fixture(new DateTimeOffset(2026, 11, 20, 17, 0, 0, TimeSpan.Zero));
-        var salon = await SalonAsync(fixture, "sol", "Estética Sol");
-        // Before Fase 29J nothing kept when a request was answered: those let pass then do not count against it either
-        // (three quick answers of seven would not be half).
+        var deployedAt = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        await using var fixture = Fixture(deployedAt.AddDays(5));
+        var salon = await SalonAsync(fixture, "a-sol", "A Sol");
+        await SalonAsync(fixture, "b-luna", "B Luna");
+        // Let pass while the version before Fase 29J ran, which kept no answers (those it answered do not count either).
         for (var n = 0; n < 4; n++)
-            await RequestAsync(fixture, salon, new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero), startAt: new DateTimeOffset(2026, 11, 2, 12, 0, 0, TimeSpan.Zero));
-        for (var n = 0; n < 3; n++)
-            await AnsweredAsync(fixture, salon, TimeSpan.FromMinutes(15), arrivedDaysAgo: 5, clock: fixture.Clock.UtcNow);
+            await RequestAsync(fixture, salon, deployedAt.AddDays(-14), startAt: deployedAt.AddDays(-13));
+        // Their day passed then too, though their time is still ahead, or their customers cancelled after it.
+        for (var n = 0; n < 4; n++)
+        {
+            await RequestAsync(fixture, salon, deployedAt.AddDays(-3), startAt: deployedAt.AddDays(20));
+            var cancelled = await RequestAsync(fixture, salon, deployedAt.AddDays(-5), startAt: deployedAt.AddDays(20));
+            cancelled.CancelByCustomer(deployedAt.AddDays(-5).AddHours(30));
+        }
+        await fixture.Context.SaveChangesAsync();
 
-        Assert.Equal(ResponseTime.WithinAnHour, (await CardsAsync(fixture))["sol"].ResponseTime);
+        // Nothing kept yet, nothing counts: it is not slow, it goes by name with the other one without requests.
+        Assert.Equal(["a-sol", "b-luna"], await CategoryAsync(fixture));
+
+        // From the first answer kept on: three quick ones of seven would not be half, of three they are.
+        for (var n = 0; n < 3; n++)
+            await AnsweredAsync(fixture, salon, TimeSpan.FromMinutes(15), arrivedDaysAgo: 0, clock: deployedAt.AddHours(n));
+        Assert.Equal(ResponseTime.WithinAnHour, (await CardsAsync(fixture))["a-sol"].ResponseTime);
+
+        // Those let pass after it count: three quick ones of seven are not half, and it goes after the one without requests.
+        for (var n = 0; n < 4; n++)
+            await RequestAsync(fixture, salon, deployedAt.AddDays(1), startAt: deployedAt.AddDays(2));
+        Assert.Null((await CardsAsync(fixture))["a-sol"].ResponseTime);
+        Assert.Equal(["b-luna", "a-sol"], await CategoryAsync(fixture));
     }
 
     [Fact]
@@ -276,6 +295,10 @@ public class ExploreResponseTimeTests
 
     private static GetPublicDirectoryQueryHandler Handler(SalesTestFixture fixture)
         => new(fixture.Context, fixture.Clock, new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance);
+
+    private static async Task<List<string>> CategoryAsync(SalesTestFixture fixture)
+        => (await Handler(fixture).Handle(new GetPublicDirectoryQuery(BusinessCategory.Beauty), CancellationToken.None))
+            .Businesses.Items.Select(b => b.Slug).ToList();
 
     private static async Task<Dictionary<string, PublicDirectoryBusinessDto>> CardsAsync(SalesTestFixture fixture)
         => (await Handler(fixture).Handle(new GetPublicDirectoryQuery(), CancellationToken.None))

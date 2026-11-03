@@ -6,8 +6,8 @@ namespace FoodParkDigital.Domain.Tests;
 
 /// <summary>
 /// How soon a business answers its requests online (Fase 29J, ADR 0064): the moment it accepts or declines one is kept once,
-/// and Explorar sums them up as the soonest time that holds at least half of them, from three requests of the last 90 days
-/// since Fase 29J, with the slowest last.
+/// and Explorar sums them up as the soonest time that holds at least half of them, from three requests of the last 90 days,
+/// with the slowest last.
 /// </summary>
 public class ResponseTimeTests
 {
@@ -81,15 +81,11 @@ public class ResponseTimeTests
     }
 
     [Fact]
-    public void Since_ShouldBeTheLast90Days_ButNeverBeforeFase29J()
+    public void Since_ShouldBeTheLast90Days()
     {
-        var later = new DateTimeOffset(2027, 3, 1, 17, 0, 0, TimeSpan.Zero);
-        var soon = new DateTimeOffset(2026, 11, 20, 17, 0, 0, TimeSpan.Zero);
+        var now = new DateTimeOffset(2027, 3, 1, 17, 0, 0, TimeSpan.Zero);
 
-        Assert.Equal(later.AddDays(-ResponseTimes.WindowDays), ResponseTimes.Since(later));
-        // Before Fase 29J nothing kept when a request was answered: its earlier requests do not count, answered or not.
-        Assert.Equal(new DateTimeOffset(2026, 11, 3, 0, 0, 0, TimeSpan.Zero), ResponseTimes.Since(soon));
-        Assert.Equal(ResponseTimes.CountedSince, ResponseTimes.Since(soon));
+        Assert.Equal(now.AddDays(-ResponseTimes.WindowDays), ResponseTimes.Since(now));
     }
 
     [Fact]

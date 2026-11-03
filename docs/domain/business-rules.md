@@ -230,7 +230,7 @@ Los clientes encuentran los negocios por categoría y compran en el menú de cad
   - **Qué cuenta:** las solicitudes en línea (citas agendadas en línea y visitas pedidas) de los últimos 90 días, desde que llegan hasta que el negocio las acepta o las rechaza antes de su hora.
   - **Las más lentas:** la que se respondió cuando su hora ya había empezado, la que el negocio dejó pasar, la que lleva un día o más sin respuesta y la que el cliente canceló después de esperar un día. Una que espera desde hace menos de un día, o que el cliente canceló antes, todavía no cuenta.
   - **Qué dice la tarjeta:** desde 3 solicitudes, el tramo más corto que reúne al menos la mitad: «Suele responder en menos de una hora», «… de 3 horas», «… de 12 horas» o «… de un día». Con un día o más, con menos de 3 solicitudes o si ya no agenda en línea ni recibe visitas, no dice nada.
-  - **Desde cuándo:** cuentan las solicitudes llegadas desde el 3 de noviembre de 2026 (la Fase 29J); de las anteriores no se sabe cuándo se respondieron.
+  - **Desde cuándo:** desde la primera respuesta que TienditApp guardó (el despliegue de la Fase 29J). Antes de ella las respuestas no guardan su hora, así que tampoco cuenta lo que se volvió lento entonces.
 - **Quién entra por `/`:** los visitantes y los clientes llegan a Explorar. El equipo de un negocio entra a su trabajo, y desde Explorar regresa con «Mi negocio».
 
 ## Comprar con tu cuenta (Fase 24B)

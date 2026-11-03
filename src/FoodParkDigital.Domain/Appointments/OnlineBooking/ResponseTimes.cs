@@ -17,6 +17,8 @@ public enum ResponseTime
 /// declined it, before its time began. The slowest are those answered once their time began or let pass (its time began
 /// unanswered), and those that waited a day without an answer, still waiting or cancelled by their customer: their wait is
 /// already a day or more. One that has waited less than a day, or that its customer cancelled sooner, does not count yet.
+/// Before the first answer TienditApp kept (Fase 29J deployed), answers were not kept: what became slow before it does not
+/// count, as those answered then do not.
 /// </summary>
 public static class ResponseTimes
 {
@@ -25,12 +27,6 @@ public static class ResponseTimes
 
     /// <summary>Fewer requests than these say nothing, like fewer than three reviews (Fase 24H).</summary>
     public const int MinRequests = 3;
-
-    /// <summary>
-    /// The first day whose requests count: before Fase 29J nothing kept when a request was answered, so the earlier ones are
-    /// left out, answered or not, rather than counting only those never answered.
-    /// </summary>
-    public static readonly DateTimeOffset CountedSince = new(2026, 11, 3, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>
     /// Where a business without enough requests goes in the order of Explorar: with those that answer within 12 hours, so a
@@ -44,12 +40,8 @@ public static class ResponseTimes
     /// </summary>
     public static readonly IReadOnlyList<int> LimitHours = [1, 3, 12, 24];
 
-    /// <summary>Since when the requests count at <paramref name="now"/>: the last <see cref="WindowDays"/> days, from <see cref="CountedSince"/>.</summary>
-    public static DateTimeOffset Since(DateTimeOffset now)
-    {
-        var window = now.AddDays(-WindowDays);
-        return window > CountedSince ? window : CountedSince;
-    }
+    /// <summary>Since when the requests count at <paramref name="now"/>: those that arrived in the last <see cref="WindowDays"/> days.</summary>
+    public static DateTimeOffset Since(DateTimeOffset now) => now.AddDays(-WindowDays);
 
     /// <summary>
     /// Within what it answers: the soonest <see cref="ResponseTime"/> that holds at least half of its requests, the slowest

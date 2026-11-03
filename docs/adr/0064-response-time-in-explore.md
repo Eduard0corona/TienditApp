@@ -26,7 +26,7 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
      - la que lleva un día o más sin respuesta, aunque su hora sea días después;
      - la que el cliente canceló después de esperar un día sin respuesta.
    - **No cuentan todavía:** una que espera desde hace menos de un día, para una hora que no ha llegado, y una que el cliente canceló antes de un día.
-   - **No cuentan:** una cita que agendó el equipo, y las solicitudes que llegaron antes del 3 de noviembre de 2026 (la Fase 29J), respondidas o no. De esas no se sabe cuándo se respondieron, y contar solo las que se quedaron sin respuesta sería injusto.
+   - **No cuentan:** una cita que agendó el equipo, y lo que pasó antes de la primera respuesta que TienditApp guardó (el despliegue de la Fase 29J). Antes de ella, y mientras corre una versión anterior, una respuesta no guarda su hora y no cuenta; por eso tampoco cuenta una que se volvió lenta antes (su hora empezó o pasó su día): contar solo esas haría a un negocio más lento de lo que fue.
 2. **Cómo se resume:** se toman las solicitudes de los últimos 90 días y, desde 3 (como las reseñas, [ADR 0030](0030-business-reviews.md)), se elige el tramo más corto que reúne al menos la mitad: menos de 1 hora, menos de 3 horas, menos de 12 horas, menos de un día, o más. «Menos de» es estricto: una hora exacta ya no es «menos de una hora».
 3. **Qué dice la tarjeta:**
    - Con menos de un día: «Suele responder en menos de una hora», «… de 3 horas», «… de 12 horas» o «… de un día», después de lo que dice de la visita o la entrega.
@@ -54,7 +54,8 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
   - En cada categoría, Explorar pone primero, dentro de cada grupo, a los que responden antes, en lugar del orden alfabético.
   - El negocio tiene una razón para responder sus solicitudes.
 - **Lo que limita:**
-  - **Empieza vacío:** cuenta desde el 3 de noviembre de 2026, así que la tarjeta no dice nada hasta que un negocio tiene 3 solicitudes desde entonces.
+  - **Empieza vacío:** cuenta desde la primera respuesta guardada, así que la tarjeta no dice nada hasta que un negocio tiene 3 solicitudes desde el despliegue.
+  - **Una vuelta a la versión anterior** responde sin guardar la hora: lo que se deje pasar mientras corre sí cuenta, y lo que responda no.
   - **Las horas son de reloj, no de su horario:** una solicitud de las 11 de la noche que se responde a las 9 de la mañana tardó 10 horas.
   - **Se puede manipular:** cualquiera manda una solicitud con cualquier teléfono, con el tope por teléfono y por IP de la [ADR 0025](0025-online-booking.md).
     - Un negocio puede pedirse citas a sí mismo y aceptarlas al momento.
