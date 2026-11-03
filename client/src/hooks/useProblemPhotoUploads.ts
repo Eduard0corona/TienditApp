@@ -104,7 +104,7 @@ class LinkUploads {
   private async run() {
     if (this.running) return;
     this.running = true;
-    window.addEventListener('beforeunload', warnBeforeLeaving);
+    startSending();
     try {
       for (let next = this.firstWaiting(); next; next = this.firstWaiting()) {
         const { id, file } = next;
@@ -127,7 +127,7 @@ class LinkUploads {
       }
     } finally {
       this.running = false;
-      window.removeEventListener('beforeunload', warnBeforeLeaving);
+      stopSending();
     }
   }
 
@@ -152,6 +152,17 @@ function warnBeforeLeaving(event: BeforeUnloadEvent) {
   event.returnValue = '';
 }
 
+// The links sending now: the browser asks while any does, not only until the first one finishes.
+let sending = 0;
+
+function startSending() {
+  if (sending++ === 0) window.addEventListener('beforeunload', warnBeforeLeaving);
+}
+
+function stopSending() {
+  if (--sending === 0) window.removeEventListener('beforeunload', warnBeforeLeaving);
+}
+
 const stores = new Map<string, LinkUploads>();
 
 /** The uploads of a link, the same for every screen that shows it. */
@@ -167,6 +178,8 @@ export function linkUploads(token: string): LinkUploads {
 /** Forgets every link's uploads (for tests: in the app they live while the page does). */
 export function resetLinkUploads() {
   stores.clear();
+  sending = 0;
+  window.removeEventListener('beforeunload', warnBeforeLeaving);
 }
 
 /** The photos going to the visit of a link, and how they went. */
