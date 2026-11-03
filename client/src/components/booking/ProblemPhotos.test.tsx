@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicMenuApi } from '../../api/publicMenuApi';
+import { queryClient } from '../../api/queryClient';
 import { resetLinkUploads } from '../../hooks/useProblemPhotoUploads';
 import { ProblemPhotosSender } from './ProblemPhotos';
 
@@ -52,6 +53,17 @@ describe('ProblemPhotosSender (Fase 29H)', () => {
       [[LINK, 'fuga.jpg'], [LINK, 'pared.jpg'], [LINK, 'techo.jpg'], [LINK, 'pared.jpg'], [LINK, 'techo.jpg']]);
     expect(screen.queryByRole('button', { name: /Reintentar/ })).not.toBeInTheDocument();
     expect(screen.getByText(/Listo/)).toHaveFocus();
+  });
+
+  it('has the account’s appointments read again with each photo the server takes, open or not (por la revisión)', async () => {
+    const upcoming = ['me', 'appointments', 'upcoming'];
+    queryClient.setQueryData(upcoming, { items: [] });
+    api.addAppointmentPhoto.mockResolvedValueOnce(visit(1)).mockResolvedValueOnce(visit(2));
+    render(<ProblemPhotosSender token={LINK} sent={0} canAdd initial={[picked('fuga'), picked('pared')]} />);
+
+    expect(await screen.findByText('Listo: se mandaron 2 fotos.')).toBeInTheDocument();
+    expect(queryClient.getQueryState(upcoming)?.isInvalidated).toBe(true);
+    queryClient.clear();
   });
 
   it('reads the visit again after a refusal, and offers no more once it takes none: the refused one only goes away', async () => {

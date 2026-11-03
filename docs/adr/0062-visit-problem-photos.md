@@ -21,6 +21,7 @@ Tomé las decisiones de la Fase 29H con la autorización permanente del dueño d
    - **Desde el enlace de la visita** (`/cita`) el cliente agrega más o reintenta las que fallaron, mientras la visita las reciba.
    - **Las fotos que van en camino siguen** si el cliente pasa del recibo al enlace: los dos muestran las mismas, y el navegador pregunta antes de cerrar la página mientras falta alguna. Reintentar está para las que fallaron por la conexión o el servidor; cuando el servidor rechaza una, la página lee otra vez cómo está la visita.
    - **El enlace lee la visita al abrirse** y toma solo las respuestas a las fotos que llegan mientras se muestra: una de antes puede ser vieja, porque el negocio pudo aceptar, rechazar o el cliente cancelar desde entonces.
+   - **Mis citas se vuelve a leer** con cada foto que llega: en ese momento si está abierta, o la próxima vez que se abra.
 2. **Cuándo se reciben:** solo una visita a domicilio que el cliente pidió en línea, no una cita en el local, una visita que agendó el equipo o el trabajo de una cotización ([ADR 0053](0053-home-visit-quotes.md), punto 17).
    - La visita debe estar por confirmar o agendada, y su hora no debe haber llegado.
    - **Cada visita tiene hasta 5 fotos.** El agregado lo revisa (`Appointment.AddProblemPhoto`), y la base guarda cada lugar una sola vez y ninguno después del quinto, así que dos fotos mandadas a la vez nunca hacen una sexta.

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { getApiErrorMessage, getApiErrorStatus } from '../api/errors';
 import { publicMenuApi, type CustomerAppointment } from '../api/publicMenuApi';
+import { queryClient } from '../api/queryClient';
 import type { PickedPhoto } from '../utils/problemPhotos';
 
 export type UploadStatus = 'waiting' | 'sending' | 'sent' | 'failed';
@@ -96,6 +97,8 @@ class LinkUploads {
   private answered(latest: CustomerAppointment) {
     this.set({ latest });
     for (const listener of this.answerListeners) listener(latest);
+    // Mis citas says how many photos each visit has: it reads again now if it shows, or the next time it does.
+    void queryClient.invalidateQueries({ queryKey: ['me', 'appointments'] });
   }
 
   private async run() {
