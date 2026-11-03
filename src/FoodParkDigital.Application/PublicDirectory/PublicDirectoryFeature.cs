@@ -665,14 +665,20 @@ public sealed class PublicDirectorySnapshot
     /// not count yet. Only the businesses with any are in it, and nothing of who made them is read.
     /// </summary>
     /// <remarks>
-    /// Answers are kept since the first one TienditApp kept (Fase 29J deployed): before it, and while an earlier version runs,
-    /// an answer keeps no time and does not count. So one that became slow (its time began, or its day passed) before that
-    /// first answer does not count either: counting only those would make a business slower than it was.
+    /// Each request counts by the moment it was decided: a quick answer when it was answered, a slow one when it reached its
+    /// limit unanswered (the time its customer asked for, or a day after it arrived, whichever came first). Answers are kept
+    /// since the first one TienditApp kept for the businesses listed (Fase 29J deployed): before it, and while an earlier
+    /// version runs, an answer keeps no time and does not count. So one that reached its limit before that first answer does
+    /// not count either, answered later or not: counting only those would make a business slower than it was, and answering
+    /// what was left behind would make it slower still.
     /// </remarks>
     internal static async Task<Dictionary<Guid, ResponseTime?>> ResponseTimesAsync(
         IApplicationDbContext context, IQueryable<Tenant> listed, DateTimeOffset utcNow, CancellationToken cancellationToken)
     {
-        var requests = context.Appointments.IgnoreQueryFilters().AsNoTracking().Where(a => a.Channel == AppointmentChannel.Online);
+        var requests = context.Appointments
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(a => a.Channel == AppointmentChannel.Online && listed.Any(t => t.Id == a.TenantId));
         if (await requests.MinAsync(a => a.RespondedAt, cancellationToken) is not { } keptSince)
             return [];
 
@@ -682,6 +688,7 @@ public sealed class PublicDirectorySnapshot
         // Its time is the one its customer asked for: moving the appointment after letting it pass does not undo it. One from
         // before Fase 29J has only its own.
         var counted = await requests
+            .Where(a => a.CreatedAt >= since)
             .Select(a => new
             {
                 a.TenantId,
@@ -689,16 +696,26 @@ public sealed class PublicDirectorySnapshot
                 a.RespondedAt,
                 a.Status,
                 a.CancelledByCustomerAt,
-                AskedFor = a.RequestedStartAt ?? a.StartAt
+                AskedFor = a.RequestedStartAt ?? a.StartAt,
+                ADayLater = a.CreatedAt.AddHours(aDay)
             })
-            .Where(a => a.CreatedAt >= since
-                && (a.RespondedAt != null
-                    || (a.Status == AppointmentStatus.Requested
-                        && (a.AskedFor <= utcNow || a.CreatedAt.AddHours(aDay) <= utcNow)
-                        && a.AskedFor >= keptSince && a.CreatedAt.AddHours(aDay) >= keptSince)
-                    || (a.CancelledByCustomerAt != null && a.CancelledByCustomerAt >= a.CreatedAt.AddHours(aDay)
-                        && a.CreatedAt.AddHours(aDay) >= keptSince))
-                && listed.Any(t => t.Id == a.TenantId))
+            .Select(a => new
+            {
+                a.TenantId,
+                a.CreatedAt,
+                a.RespondedAt,
+                a.Status,
+                a.CancelledByCustomerAt,
+                a.AskedFor,
+                Limit = a.AskedFor < a.ADayLater ? a.AskedFor : a.ADayLater
+            })
+            // Answered before its limit, or past it once TienditApp kept answers: answered late, still waiting, or cancelled by
+            // its customer after it.
+            .Where(a => a.RespondedAt < a.Limit
+                || (a.Limit <= utcNow && a.Limit >= keptSince
+                    && (a.RespondedAt >= a.Limit
+                        || (a.RespondedAt == null && a.Status == AppointmentStatus.Requested)
+                        || (a.RespondedAt == null && a.CancelledByCustomerAt >= a.Limit))))
             .GroupBy(a => a.TenantId)
             .Select(g => new
             {

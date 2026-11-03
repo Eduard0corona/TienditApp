@@ -27,7 +27,9 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
      - la que lleva un día o más sin respuesta, aunque su hora sea días después;
      - la que el cliente canceló después de esperar un día sin respuesta.
    - **No cuentan todavía:** una que espera desde hace menos de un día, para una hora que no ha llegado, y una que el cliente canceló antes de un día.
-   - **No cuentan:** una cita que agendó el equipo, y lo que pasó antes de la primera respuesta que TienditApp guardó (el despliegue de la Fase 29J). Antes de ella, y mientras corre una versión anterior, una respuesta no guarda su hora y no cuenta; por eso tampoco cuenta una que se volvió lenta antes (su hora empezó o pasó su día): contar solo esas haría a un negocio más lento de lo que fue.
+   - **No cuentan:** una cita que agendó el equipo, y lo que se decidió antes de la primera respuesta que TienditApp guardó (el despliegue de la Fase 29J).
+     - Cada solicitud se decide en un momento: la rápida cuando se respondió; la lenta cuando llegó a su límite sin respuesta (la hora que pidió el cliente o un día después de llegar, lo que pase primero).
+     - Antes de esa primera respuesta, y mientras corre una versión anterior, una respuesta no guarda su hora y no cuenta. Por eso tampoco cuenta una que llegó a su límite antes, aunque se responda después: contar solo esas haría a un negocio más lento de lo que fue, y responder lo que quedó atrasado lo haría más lento todavía.
 2. **Cómo se resume:** se toman las solicitudes de los últimos 90 días y, desde 3 (como las reseñas, [ADR 0030](0030-business-reviews.md)), se elige el tramo más corto que reúne al menos la mitad: menos de 1 hora, menos de 3 horas, menos de 12 horas, menos de un día, o más. «Menos de» es estricto: una hora exacta ya no es «menos de una hora».
 3. **Qué dice la tarjeta:**
    - Con menos de un día: «Suele responder en menos de una hora», «… de 3 horas», «… de 12 horas» o «… de un día», después de lo que dice de la visita o la entrega.
@@ -38,7 +40,7 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
    - **La lista de todos los negocios y «Cerca de mí» no cambian.** La lista mezcla restaurantes que no reciben solicitudes con salones y oficios, y no tiene sentido compararlos; «Cerca de mí» sigue por distancia.
    - **Los productos y servicios de una búsqueda** siguen el orden general de Explorar, también en una categoría.
 5. **Dónde vive:**
-   - **En la foto de Explorar,** que se arma cada 30 segundos como mucho. Una consulta entre negocios cuenta por tramo las solicitudes de cada negocio listado; lee la llegada, la respuesta, el estado, la hora pedida y la actual y la cancelación, nunca quién la hizo. Está en la lista de lecturas permitidas.
+   - **En la foto de Explorar,** que se arma cada 30 segundos como mucho. Una lectura entre negocios, solo de los negocios listados, busca la primera respuesta guardada y cuenta por tramo las solicitudes de cada uno; lee la llegada, la respuesta, el estado, la hora pedida y la actual y la cancelación, nunca quién la hizo. Está en la lista de lecturas permitidas.
    - **Si esa consulta falla,** Explorar sigue sin el dato hasta la siguiente foto: nadie dice cuánto tarda y todos van en medio.
    - **La migración** `AddAppointmentRespondedAt` agrega las dos columnas (NULL en las citas que existen) y un índice de las solicitudes en línea por su llegada, con lo que lee la consulta. Su `apply.sql` va antes del merge. Una solicitud de antes, sin la hora pedida, se mide con su hora.
 6. **Fuera de esta fase:**

@@ -169,11 +169,14 @@ public class ExploreResponseTimeTests
         for (var n = 0; n < 4; n++)
             await RequestAsync(fixture, salon, deployedAt.AddDays(-14), startAt: deployedAt.AddDays(-13));
         // Their day passed then too, though their time is still ahead, or their customers cancelled after it.
+        var leftBehind = new List<Appointment>();
         for (var n = 0; n < 4; n++)
         {
-            await RequestAsync(fixture, salon, deployedAt.AddDays(-3), startAt: deployedAt.AddDays(20));
+            leftBehind.Add(await RequestAsync(fixture, salon, deployedAt.AddDays(-3), startAt: deployedAt.AddDays(20)));
             var cancelled = await RequestAsync(fixture, salon, deployedAt.AddDays(-5), startAt: deployedAt.AddDays(20));
             cancelled.CancelByCustomer(deployedAt.AddDays(-5).AddHours(30));
+            // Arrived hours before the first answer kept, for a time that began just before it: its day had not passed.
+            await RequestAsync(fixture, salon, deployedAt.AddHours(-6), startAt: deployedAt);
         }
         await fixture.Context.SaveChangesAsync();
 
@@ -183,6 +186,11 @@ public class ExploreResponseTimeTests
         // From the first answer kept on: three quick ones of seven would not be half, of three they are.
         for (var n = 0; n < 3; n++)
             await AnsweredAsync(fixture, salon, TimeSpan.FromMinutes(15), arrivedDaysAgo: 0, clock: deployedAt.AddHours(n));
+        Assert.Equal(ResponseTime.WithinAnHour, (await CardsAsync(fixture))["a-sol"].ResponseTime);
+        // Answering what was left behind does not make it slower: those were already late before the first answer kept.
+        foreach (var request in leftBehind)
+            request.Decline(deployedAt.AddDays(1));
+        await fixture.Context.SaveChangesAsync();
         Assert.Equal(ResponseTime.WithinAnHour, (await CardsAsync(fixture))["a-sol"].ResponseTime);
 
         // Those let pass after it count: three quick ones of seven are not half, and it goes after the one without requests.
