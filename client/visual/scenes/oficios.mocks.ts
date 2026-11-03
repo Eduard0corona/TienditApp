@@ -47,6 +47,24 @@ function tradesInExplore(data: DemoData) {
   };
 }
 
+// ResponseTime as the contract numbers it.
+const WITHIN_AN_HOUR = 0;
+const WITHIN_TWELVE_HOURS = 2;
+
+/**
+ * How soon each trade answers (Fase 29J): the plumber answered most requests within an hour and the carpenter within 12
+ * hours; the locksmith has too few requests, and its card says nothing. The server puts the quicker ones first.
+ */
+function tradesThatAnswer(data: DemoData) {
+  tradesInExplore(data);
+  const answers: Record<string, number> = {
+    'plomeria-hernandez': WITHIN_AN_HOUR,
+    'carpinteria-don-jose': WITHIN_TWELVE_HOURS,
+  };
+  data.directory = (data.directory as DemoData[]).map((business) =>
+    business.slug in answers ? { ...business, responseTime: answers[business.slug as string] } : business);
+}
+
 // BusinessCategory and PublicDirectoryServiceKind as the contract numbers them.
 const BEAUTY = 7;
 const BOOKS_ONLINE = 0;
@@ -255,6 +273,7 @@ const visitPhotos = (sentBefore: number): ExtraRoutes => (data, helpers) => {
 };
 
 export const OFICIOS_EN_EXPLORAR = asOption(tradesInExplore);
+export const OFICIOS_QUE_RESPONDEN = asOption(tradesThatAnswer);
 export const SERVICIOS_EN_EXPLORAR = asOption(servicesInExplore);
 export const PLOMERO_EN_CONFIGURACION = asOption(plumberSettings);
 export const TIENDA_DE_PLOMERIA = asOption(plumberStore);

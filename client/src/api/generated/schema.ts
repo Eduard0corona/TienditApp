@@ -20371,6 +20371,7 @@ export interface components {
             /** Format: double */
             distanceKm?: number | null;
             rating?: components["schemas"]["RatingSummaryDto"];
+            responseTime?: components["schemas"]["ResponseTime"];
             receivesVisits: boolean;
             visitChargePolicy?: components["schemas"]["HomeVisitChargePolicy"];
             visitPrice?: components["schemas"]["HomeVisitPriceDto"];
@@ -21189,6 +21190,11 @@ export interface components {
             code: string;
             newPassword: string;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        ResponseTime: 0 | 1 | 2 | 3 | 4;
         ReturnCustomerBalanceCommand: {
             /** Format: uuid */
             customerId?: string | null;

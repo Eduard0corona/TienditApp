@@ -567,6 +567,15 @@ export const ReceivablesSort = {
 } as const;
 export type ReceivablesSort = (typeof ReceivablesSort)[keyof typeof ReceivablesSort];
 
+export const ResponseTime = {
+  WithinAnHour: 0,
+  WithinThreeHours: 1,
+  WithinTwelveHours: 2,
+  WithinADay: 3,
+  Slower: 4,
+} as const;
+export type ResponseTime = (typeof ResponseTime)[keyof typeof ResponseTime];
+
 export const ReviewConcern = {
   Offensive: 1,
   PersonalData: 2,

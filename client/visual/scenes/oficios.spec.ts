@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap, snapElement } from '../helpers';
 import {
-  ENLACE_CON_FOTOS, OFICIOS_EN_EXPLORAR, PLOMERO_EN_CONFIGURACION, SERVICIOS_EN_EXPLORAR, TIENDA_DE_PLOMERIA, VISIT_LINK, VISITA_CON_FOTOS,
+  ENLACE_CON_FOTOS, OFICIOS_EN_EXPLORAR, OFICIOS_QUE_RESPONDEN, PLOMERO_EN_CONFIGURACION, SERVICIOS_EN_EXPLORAR, TIENDA_DE_PLOMERIA, VISIT_LINK, VISITA_CON_FOTOS,
   VISITA_DE_PLOMERIA,
 } from './oficios.mocks';
 
@@ -50,6 +50,22 @@ test.describe('Oficios en Explorar', () => {
 
 // A search finds services (Fase 29I, ADR 0063): «corte» finds two services of a salon that books online, at their price and
 // length, and one of the carpenter, from what it starts at and with IVA on top; the salon is also found by its description.
+// Fase 29J (ADR 0064): how soon each trade answers the requests made online, on its card.
+test.describe('Oficios que responden pronto', () => {
+  test.use({ signedIn: false, prepareData: OFICIOS_QUE_RESPONDEN });
+
+  for (const look of LOOKS) {
+    test(`oficios que responden ${look.suffix}`, async ({ page }) => {
+      await page.setViewportSize(look.viewport);
+      await open(page, '/explorar/hogar-y-reparaciones');
+      await expect(page.getByRole('link', { name: /^Plomería Hernández/ })).toContainText('Responde en menos de 1 hora');
+      await expect(page.getByRole('link', { name: /^Carpintería Don José/ })).toContainText('Responde en menos de 12 horas');
+      await expect(page.getByRole('link', { name: /^Cerrajería Pérez/ })).not.toContainText('Responde');
+      await snap(page, `oficios-explorar-respuesta-${look.suffix}`);
+    });
+  }
+});
+
 test.describe('Servicios en Explorar', () => {
   test.use({ signedIn: false, prepareData: SERVICIOS_EN_EXPLORAR });
 

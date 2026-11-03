@@ -34710,6 +34710,9 @@
           "rating": {
             "$ref": "#/components/schemas/RatingSummaryDto"
           },
+          "responseTime": {
+            "$ref": "#/components/schemas/ResponseTime"
+          },
           "receivesVisits": {
             "type": "boolean"
           },
@@ -37529,6 +37532,24 @@
           }
         },
         "additionalProperties": false
+      },
+      "ResponseTime": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "WithinAnHour",
+          "WithinThreeHours",
+          "WithinTwelveHours",
+          "WithinADay",
+          "Slower"
+        ]
       },
       "ReturnCustomerBalanceCommand": {
         "required": [

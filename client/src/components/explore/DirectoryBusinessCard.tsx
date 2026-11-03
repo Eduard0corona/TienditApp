@@ -4,6 +4,7 @@ import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
 import { categoryInfo, deliveryToPostalCode, orderStatus, visitToPostalCode } from '../../utils/businessCategories';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import { formatDistance } from '../../utils/geo';
+import { responseTimeLabel } from '../../utils/responseTime';
 import { formatAverage, ratingDescription } from '../../utils/reviews';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 import './DirectoryBusinessCard.css';
@@ -22,8 +23,8 @@ interface DirectoryBusinessCardProps {
  * (Fase 24B) it says whether it delivers there and what it costs, and a business that books appointments online says so
  * (Fase 24D), with the customer's position how far it is (Fase 24G), and its rating from three reviews (Fase 24H). One
  * that receives visits to quote (Fase 29A) says so instead of speaking of orders, with what the visit costs and, with the
- * postal code, whether it goes there. The whole card opens its menu; an action (the heart) sits over its corner, outside
- * the link.
+ * postal code, whether it goes there. It says how soon it answers the requests made online (Fase 29J). The whole card opens
+ * its menu; an action (the heart) sits over its corner, outside the link.
  */
 export default function DirectoryBusinessCard({ business, preview = false, action }: DirectoryBusinessCardProps) {
   const theme = getBusinessTheme(business.theme);
@@ -37,6 +38,7 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
   const average = business.rating?.average;
   const delivery = deliveryToPostalCode(business);
   const visit = visitToPostalCode(business);
+  const answers = responseTimeLabel(business.responseTime);
   const place = [
     categoryInfo(business.category)?.label,
     business.deliveryOnly ? 'Solo a domicilio' : business.city,
@@ -78,6 +80,11 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
             {business.booksOnline && (
               <span className="dc-badge dc-badge-info">
                 <i className="ri-calendar-event-line" aria-hidden="true"></i>Agenda en línea
+              </span>
+            )}
+            {answers && (
+              <span className="dc-badge dc-badge-menu">
+                <i className="ri-time-line" aria-hidden="true"></i>{answers}
               </span>
             )}
             {visit && (
