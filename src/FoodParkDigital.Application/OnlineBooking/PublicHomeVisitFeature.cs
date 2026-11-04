@@ -132,7 +132,8 @@ public class GetPublicHomeVisitQueryHandler : IRequestHandler<GetPublicHomeVisit
             Price = HomeVisitPriceDto.From(HomeVisitCharge.Starting(settings.HomeVisitChargePolicy, visit.Price, zoneFees))!,
             Staff = staff.Select(person => new PublicBookingStaffDto { Id = person.Id, Name = person.Name }).ToList(),
             ResponseTime = await PublicResponseTime.ShownAsync(
-                _directory, _context, _dateTimeProvider.UtcNow, tenant.Id, takesRequests: true, _logger, cancellationToken)
+                _directory, _context, _dateTimeProvider.UtcNow, tenant.Id, takesRequests: settings.ListedInDirectory, _logger,
+                cancellationToken)
         };
     }
 }

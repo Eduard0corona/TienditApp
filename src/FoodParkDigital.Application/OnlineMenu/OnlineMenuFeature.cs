@@ -180,7 +180,7 @@ public class PublicMenuDto
     public RatingSummaryDto? Rating { get; set; }
     /// <summary>
     /// How soon it answers its requests online (Fase 29K, ADR 0065), as its card in Explorar says it: while it books online
-    /// or receives visits, Explorar lists it and it answers within a day. Null otherwise.
+    /// or receives visits, Explorar lists it and it answers within a day. Null otherwise, and at a table.
     /// </summary>
     public ResponseTime? ResponseTime { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
@@ -471,8 +471,11 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             BooksOnline = booksOnline,
             HomeVisits = homeVisits,
             Rating = await ReviewRules.SummaryAsync(_context, cancellationToken),
+            // Not at a table, where only the order is requested.
             ResponseTime = await PublicResponseTime.ShownAsync(
-                _directory, _context, utcNow, tenant.Id, booksOnline || homeVisits is not null, _logger, cancellationToken),
+                _directory, _context, utcNow, tenant.Id,
+                settings.ListedInDirectory && string.IsNullOrWhiteSpace(request.Table) && (booksOnline || homeVisits is not null),
+                _logger, cancellationToken),
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto

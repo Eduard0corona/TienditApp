@@ -201,7 +201,8 @@ public class GetPublicBookingQueryHandler : IRequestHandler<GetPublicBookingQuer
             }).ToList(),
             Staff = staff.Select(person => new PublicBookingStaffDto { Id = person.Id, Name = person.Name }).ToList(),
             ResponseTime = await PublicResponseTime.ShownAsync(
-                _directory, _context, _dateTimeProvider.UtcNow, tenant.Id, takesRequests: true, _logger, cancellationToken)
+                _directory, _context, _dateTimeProvider.UtcNow, tenant.Id, takesRequests: business.Settings.ListedInDirectory, _logger,
+                cancellationToken)
         };
     }
 }

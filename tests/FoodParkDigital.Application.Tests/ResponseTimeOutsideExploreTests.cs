@@ -1,11 +1,14 @@
+using System.Linq.Expressions;
 using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using static FoodParkDigital.Application.Tests.ExploreResponseTimeTests;
 
@@ -75,6 +78,38 @@ public class ResponseTimeOutsideExploreTests
         var menu = await StoreAsync(fixture, "cerro", cache);
         Assert.False(menu!.BooksOnline);
         Assert.Null(menu.ResponseTime);
+
+        // Hidden from Explorar after the snapshot listed it: its pages read it as it is now too.
+        var quick = await SalonAsync(fixture, "rapida", "Estética Rápida", product: true);
+        for (var n = 0; n < 3; n++)
+            await AnsweredAsync(fixture, quick, TimeSpan.FromMinutes(10));
+        cache = new PublicDirectoryCache();
+        Assert.Equal(ResponseTime.WithinAnHour, (await StoreAsync(fixture, "rapida", cache))!.ResponseTime);
+        (await SettingsAsync(fixture, quick)).SetDirectoryListing(false);
+        await fixture.Context.SaveChangesAsync();
+        Assert.Null((await StoreAsync(fixture, "rapida", cache))!.ResponseTime);
+        Assert.Null((await BookingAsync(fixture, "rapida", cache))!.ResponseTime);
+
+        var (plumber, _) = await TradeAsync(fixture, "plomeria", "Plomería Hernández");
+        for (var n = 0; n < 3; n++)
+            await AnsweredAsync(fixture, plumber, TimeSpan.FromMinutes(10));
+        cache = new PublicDirectoryCache();
+        Assert.Equal(ResponseTime.WithinAnHour, (await VisitAsync(fixture, "plomeria", cache))!.ResponseTime);
+        (await SettingsAsync(fixture, plumber)).SetDirectoryListing(false);
+        await fixture.Context.SaveChangesAsync();
+        Assert.Null((await VisitAsync(fixture, "plomeria", cache))!.ResponseTime);
+    }
+
+    [Fact]
+    public async Task AStoreAtATable_ShouldNotSayIt_OnlyTheOrderIsRequestedThere()
+    {
+        await using var fixture = Fixture();
+        var salon = await SalonAsync(fixture, "rapida", "Estética Rápida", product: true);
+        for (var n = 0; n < 3; n++)
+            await AnsweredAsync(fixture, salon, TimeSpan.FromMinutes(20));
+
+        Assert.Equal(ResponseTime.WithinAnHour, (await StoreAsync(fixture, "rapida"))!.ResponseTime);
+        Assert.Null((await StoreAsync(fixture, "rapida", table: "Mesa 4"))!.ResponseTime);
     }
 
     [Fact]
@@ -123,6 +158,13 @@ public class ResponseTimeOutsideExploreTests
     }
 
     [Fact]
+    public void ThePages_ShouldTakeA10MinuteSnapshot_AndLeaveAFailedRebuildAloneAMinute()
+    {
+        Assert.Equal(TimeSpan.FromMinutes(10), PublicResponseTime.MaxAge);
+        Assert.Equal(TimeSpan.FromMinutes(1), PublicDirectoryCache.FailureBackoff);
+    }
+
+    [Fact]
     public async Task ASnapshotThatCannotBeRead_ShouldLeaveThePageWithoutIt()
     {
         await using var fixture = Fixture();
@@ -134,6 +176,107 @@ public class ResponseTimeOutsideExploreTests
             new PublicDirectoryCache(), broken.Context, Now, salon.Id, NullLogger.Instance, CancellationToken.None);
 
         Assert.Null(entry);
+        // Its own time limit too (a cancellation the page did not ask for).
+        Assert.Null(await EntryAsync(new PublicDirectoryCache(), Now, (_, _) => throw new OperationCanceledException()));
+    }
+
+    [Fact]
+    public async Task ACustomerWhoLeaves_ShouldCancelThePage()
+    {
+        using var left = new CancellationTokenSource();
+        await left.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => PublicResponseTime.EntryAsync(
+            new PublicDirectoryCache(), Now, Guid.NewGuid(), (now, _) => Task.FromResult(Empty(now)), PublicResponseTime.MaxAge,
+            NullLogger.Instance, left.Token));
+    }
+
+    [Fact]
+    public async Task AFailedRebuild_ShouldBeLeftAloneAMinute_ByThePagesThatFollow()
+    {
+        var cache = new PublicDirectoryCache();
+        var builds = 0;
+        Task<PublicDirectorySnapshot> Failing(DateTimeOffset now, CancellationToken ct)
+        {
+            builds++;
+            throw new InvalidOperationException("La base no responde.");
+        }
+
+        Assert.Null(await EntryAsync(cache, Now, Failing));
+        Assert.Null(await EntryAsync(cache, Now + PublicDirectoryCache.FailureBackoff - TimeSpan.FromSeconds(1), Failing));
+        Assert.Equal(1, builds);
+
+        Assert.Null(await EntryAsync(cache, Now + PublicDirectoryCache.FailureBackoff, Failing));
+        Assert.Equal(2, builds);
+        // Explorar itself still rebuilds it, and one that works ends the wait.
+        await cache.GetAsync(Now + PublicDirectoryCache.FailureBackoff, (now, _) => Task.FromResult(Empty(now)), CancellationToken.None);
+        builds = 0;
+        await EntryAsync(cache, Now + PublicDirectoryCache.FailureBackoff + PublicResponseTime.MaxAge, (now, _) =>
+        {
+            builds++;
+            return Task.FromResult(Empty(now));
+        });
+        Assert.Equal(1, builds);
+    }
+
+    [Fact]
+    public async Task ARebuildThatWorks_ShouldEndTheWaitOfTheOneThatFailed()
+    {
+        var cache = new PublicDirectoryCache();
+        var oneSecond = TimeSpan.FromSeconds(1);
+        var builds = 0;
+        Task<PublicDirectorySnapshot> Working(DateTimeOffset now, CancellationToken ct)
+        {
+            builds++;
+            return Task.FromResult(Empty(now));
+        }
+
+        await PublicResponseTime.EntryAsync(
+            cache, Now, Guid.NewGuid(), (_, _) => throw new InvalidOperationException("La base no responde."), oneSecond,
+            NullLogger.Instance, CancellationToken.None);
+        await cache.GetAsync(Now.AddSeconds(1), Working, CancellationToken.None);
+        // Older than the second this page takes, well within the minute after the failure: it rebuilds it.
+        await PublicResponseTime.EntryAsync(cache, Now.AddSeconds(3), Guid.NewGuid(), Working, oneSecond, NullLogger.Instance, CancellationToken.None);
+
+        Assert.Equal(2, builds);
+    }
+
+    [Fact]
+    public async Task ASnapshotThatCouldNotReadHowSoonTheyAnswer_ShouldSayItForNobody()
+    {
+        await using var fixture = SalesTestFixture.Create(null, new FailingResponseTimes());
+        fixture.Clock.UtcNow = Now;
+        var salon = await SalonAsync(fixture, "rapida", "Estética Rápida");
+        for (var n = 0; n < 3; n++)
+            await AnsweredAsync(fixture, salon, TimeSpan.FromMinutes(20));
+
+        var snapshot = await PublicDirectorySnapshot.BuildAsync(fixture.Context, Now, CancellationToken.None);
+
+        Assert.False(snapshot.ResponseTimesRead);
+        Assert.Null(Assert.Single(snapshot.Entries).Business.ResponseTime);
+        Assert.Equal((false, (ResponseTime?)null), await ProfileAsync(fixture, salon));
+        Assert.Null((await StoreAsync(fixture, "rapida"))!.ResponseTime);
+    }
+
+    [Fact]
+    public async Task APage_ShouldNotWaitInLine_WhileAnotherRebuildsTheSnapshot()
+    {
+        var cache = new PublicDirectoryCache();
+        var release = new TaskCompletionSource<PublicDirectorySnapshot>();
+        var first = EntryAsync(cache, Now, (_, _) => release.Task);
+        var builds = 0;
+
+        // It answers at once: waiting for the first would never end, since the first waits for this test.
+        var second = await EntryAsync(cache, Now, (now, _) =>
+        {
+            builds++;
+            return Task.FromResult(Empty(now));
+        }).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Null(second);
+        Assert.Equal(0, builds);
+        release.SetResult(Empty(Now));
+        await first;
     }
 
     [Fact]
@@ -170,6 +313,13 @@ public class ResponseTimeOutsideExploreTests
         await fixture.Context.SaveChangesAsync();
         Assert.Equal((false, (ResponseTime?)null), await ProfileAsync(fixture, quick, cache));
 
+        // A snapshot that could not read how soon its businesses answer: its owner reads nothing, not «not enough».
+        var read = await PublicDirectorySnapshot.BuildAsync(fixture.Context, Now, CancellationToken.None);
+        var unread = new PublicDirectoryCache();
+        await unread.GetAsync(
+            Now, (now, _) => Task.FromResult(new PublicDirectorySnapshot(now, read.Entries, responseTimesRead: false)), CancellationToken.None);
+        Assert.Equal((false, (ResponseTime?)null), await ProfileAsync(fixture, slow, unread));
+
         // Saving its card answers with it too.
         fixture.TenantService.SetTenant(slow.Id);
         var saved = await new UpdateDirectoryProfileCommandHandler(
@@ -180,14 +330,49 @@ public class ResponseTimeOutsideExploreTests
         Assert.Equal((true, (ResponseTime?)ResponseTime.Slower), (saved.Value!.CountsRequests, saved.Value.ResponseTime));
     }
 
+    private static PublicDirectorySnapshot Empty(DateTimeOffset builtAt) => new(builtAt, []);
+
+    /// <summary>Fails the read of how soon the businesses answer (the first answer kept, its MIN), and nothing else.</summary>
+    private sealed class FailingResponseTimes : IQueryExpressionInterceptor
+    {
+        public Expression QueryCompilationStarting(Expression queryExpression, QueryExpressionEventData eventData)
+            => new FirstAnswerKept().Finds(queryExpression)
+                ? throw new InvalidOperationException("La base no responde.")
+                : queryExpression;
+
+        private sealed class FirstAnswerKept : ExpressionVisitor
+        {
+            private bool _found;
+
+            public bool Finds(Expression expression)
+            {
+                Visit(expression);
+                return _found;
+            }
+
+            protected override Expression VisitMethodCall(MethodCallExpression node)
+            {
+                if (node.Method.Name == nameof(Queryable.Min)
+                    && node.Arguments[0].Type.GetGenericArguments().FirstOrDefault() == typeof(Appointment))
+                    _found = true;
+                return base.VisitMethodCall(node);
+            }
+        }
+    }
+
+    private static Task<PublicDirectorySnapshot.Entry?> EntryAsync(
+        PublicDirectoryCache cache, DateTimeOffset utcNow, Func<DateTimeOffset, CancellationToken, Task<PublicDirectorySnapshot>> build)
+        => PublicResponseTime.EntryAsync(cache, utcNow, Guid.NewGuid(), build, PublicResponseTime.MaxAge, NullLogger.Instance, CancellationToken.None);
+
     private static Task<TenantSettings> SettingsAsync(SalesTestFixture fixture, Tenant tenant)
         => fixture.Context.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == tenant.Id);
 
-    private static Task<PublicMenuDto?> StoreAsync(SalesTestFixture fixture, string slug, PublicDirectoryCache? cache = null)
+    private static Task<PublicMenuDto?> StoreAsync(
+        SalesTestFixture fixture, string slug, PublicDirectoryCache? cache = null, string? table = null)
         => new GetPublicMenuQueryHandler(
                 fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off, cache ?? new PublicDirectoryCache(),
                 NullLogger<GetPublicMenuQueryHandler>.Instance)
-            .Handle(new GetPublicMenuQuery(slug), CancellationToken.None);
+            .Handle(new GetPublicMenuQuery(slug, table), CancellationToken.None);
 
     private static Task<PublicBookingDto?> BookingAsync(SalesTestFixture fixture, string slug, PublicDirectoryCache? cache = null)
         => new GetPublicBookingQueryHandler(
@@ -195,9 +380,9 @@ public class ResponseTimeOutsideExploreTests
                 NullLogger<GetPublicBookingQueryHandler>.Instance)
             .Handle(new GetPublicBookingQuery(slug), CancellationToken.None);
 
-    private static Task<PublicHomeVisitDto?> VisitAsync(SalesTestFixture fixture, string slug)
+    private static Task<PublicHomeVisitDto?> VisitAsync(SalesTestFixture fixture, string slug, PublicDirectoryCache? cache = null)
         => new GetPublicHomeVisitQueryHandler(
-                fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(),
+                fixture.Context, fixture.TenantService, fixture.Clock, cache ?? new PublicDirectoryCache(),
                 NullLogger<GetPublicHomeVisitQueryHandler>.Instance)
             .Handle(new GetPublicHomeVisitQuery(slug), CancellationToken.None);
 

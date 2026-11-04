@@ -96,7 +96,8 @@ public class GetDirectoryProfileQueryHandler : IRequestHandler<GetDirectoryProfi
             ? Result.Failure<DirectoryProfileDto>("Negocio no encontrado.")
             : Result.Success(await DirectoryProfile.ReadAsync(
                 _context, tenant, tenant.Settings, cancellationToken,
-                await PublicResponseTime.EntryAsync(_directory, _context, _dateTimeProvider.UtcNow, tenant.Id, _logger, cancellationToken)));
+                ct => PublicResponseTime.EntryAsync(
+                    _directory, _context, _dateTimeProvider.UtcNow, tenant.Id, _logger, ct, PublicDirectoryCache.Lifetime)));
     }
 }
 
@@ -193,7 +194,8 @@ public class UpdateDirectoryProfileCommandHandler : IRequestHandler<UpdateDirect
 
         return Result.Success(await DirectoryProfile.ReadAsync(
             _context, tenant, settings, cancellationToken,
-            await PublicResponseTime.EntryAsync(_directory, _context, _dateTimeProvider.UtcNow, tenant.Id, _logger, cancellationToken)));
+            ct => PublicResponseTime.EntryAsync(
+                _directory, _context, _dateTimeProvider.UtcNow, tenant.Id, _logger, ct, PublicDirectoryCache.Lifetime)));
     }
 }
 
@@ -239,15 +241,16 @@ public class DismissHomeVisitAddressNoticeCommandHandler : IRequestHandler<Dismi
 internal static class DirectoryProfile
 {
     /// <summary>The profile and why Explorar lists the business or not, in the order its owner would fix it.</summary>
-    /// <param name="entry">
-    /// The business in the snapshot of Explorar (<see cref="PublicResponseTime.EntryAsync"/>): how soon it answers.
+    /// <param name="readEntry">
+    /// Reads the business in the snapshot of Explorar (PublicResponseTime.EntryAsync): how soon it answers. Read only while
+    /// Explorar counts its requests.
     /// </param>
     public static async Task<DirectoryProfileDto> ReadAsync(
         IApplicationDbContext context,
         Tenant tenant,
         TenantSettings? settings,
         CancellationToken cancellationToken,
-        PublicDirectorySnapshot.Entry? entry = null)
+        Func<CancellationToken, Task<PublicDirectorySnapshot.Entry?>>? readEntry = null)
     {
         var listed = settings?.ListedInDirectory ?? true;
         var visibility = tenant.Status != TenantStatus.Active ? DirectoryVisibility.Inactive
@@ -264,8 +267,12 @@ internal static class DirectoryProfile
             Visibility = visibility,
             HomeVisitAddressNotice = await HomeVisitAddressNotice.ShowsAsync(context, tenant, settings, cancellationToken)
         };
-        // As Explorar counts them: while it lists the business now, from its snapshot (PublicResponseTime.MaxAge).
-        if (visibility == DirectoryVisibility.Shown && entry is { Business: var card } && (card.BooksOnline || card.ReceivesVisits))
+        // Explorar counts its requests while it lists the business and it books online or receives visits, both as they are
+        // now; how soon it answers comes from the snapshot, as fresh as Explorar's. One that cannot be read says nothing.
+        if (readEntry is not null
+            && visibility == DirectoryVisibility.Shown
+            && await TakesRequestsAsync(context, tenant, settings!, cancellationToken)
+            && await readEntry(cancellationToken) is { } entry)
         {
             profile.CountsRequests = true;
             profile.ResponseTime = entry.ResponseTime;
@@ -279,10 +286,16 @@ internal static class DirectoryProfile
     /// </summary>
     private static async Task<bool> ShowsSomethingAsync(
         IApplicationDbContext context, Tenant tenant, TenantSettings settings, CancellationToken cancellationToken)
-    {
-        if (await PublicDirectorySnapshot.MenuProducts(context).AnyAsync(p => p.TenantId == tenant.Id, cancellationToken))
-            return true;
+        => await PublicDirectorySnapshot.MenuProducts(context).AnyAsync(p => p.TenantId == tenant.Id, cancellationToken)
+            || await TakesRequestsAsync(context, tenant, settings, cancellationToken);
 
+    /// <summary>
+    /// It takes requests online: it books appointments online now (Fase 24D) or receives visits to quote (Fase 29A), as
+    /// Explorar counts them (Fase 29J).
+    /// </summary>
+    private static async Task<bool> TakesRequestsAsync(
+        IApplicationDbContext context, Tenant tenant, TenantSettings settings, CancellationToken cancellationToken)
+    {
         var capabilities = TenantCapabilityRules.NormalizeCapabilities(settings.Capabilities, tenant.BusinessType);
         var hasWeeklyHours = settings.OpeningHours is not null;
         if (settings.OnlineBookingEnabled
