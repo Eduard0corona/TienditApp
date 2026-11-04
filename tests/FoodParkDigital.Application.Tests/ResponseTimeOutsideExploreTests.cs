@@ -122,16 +122,17 @@ public class ResponseTimeOutsideExploreTests
         var cache = new PublicDirectoryCache();
         Assert.Equal(ResponseTime.WithinAnHour, (await StoreAsync(fixture, "rapida", cache))!.ResponseTime);
 
-        // Four slow ones later: within an hour is no longer half.
+        // Four answered in two hours later: within an hour is no longer half, within three hours is.
         for (var n = 0; n < 4; n++)
-            await AnsweredAsync(fixture, salon, TimeSpan.FromHours(30));
+            await AnsweredAsync(fixture, salon, TimeSpan.FromHours(2));
 
         fixture.Clock.UtcNow = Now + PublicResponseTime.MaxAge - TimeSpan.FromSeconds(1);
         Assert.Equal(ResponseTime.WithinAnHour, (await StoreAsync(fixture, "rapida", cache))!.ResponseTime);
         Assert.Equal(ResponseTime.WithinAnHour, (await BookingAsync(fixture, "rapida", cache))!.ResponseTime);
 
+        // Only a snapshot rebuilt says it.
         fixture.Clock.UtcNow = Now + PublicResponseTime.MaxAge;
-        Assert.Null((await StoreAsync(fixture, "rapida", cache))!.ResponseTime);
+        Assert.Equal(ResponseTime.WithinThreeHours, (await StoreAsync(fixture, "rapida", cache))!.ResponseTime);
     }
 
     [Fact]
