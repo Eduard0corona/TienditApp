@@ -95,5 +95,10 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
             .IsUnique()
             .HasFilter("[TrackingToken] IS NOT NULL")
             .HasDatabaseName("IX_Appointments_TrackingToken");
+        // Fase 29J (ADR 0064): how soon each business answers, which the snapshot of Explorar reads for all of them from the
+        // requests online of the last days, with what it needs. Named, so no other index on CreatedAt takes its filter.
+        builder.HasIndex(x => x.CreatedAt, "IX_Appointments_OnlineRequests_CreatedAt")
+            .HasFilter("[Channel] = 1")
+            .IncludeProperties(x => new { x.TenantId, x.RespondedAt, x.Status, x.StartAt, x.RequestedStartAt, x.CancelledByCustomerAt });
     }
 }

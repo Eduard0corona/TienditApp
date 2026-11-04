@@ -76,7 +76,7 @@ public class VisitProblemPhotoTests
     public void AddProblemPhoto_ShouldBeRefused_FromItsTime_AndOnceClosedOrInService()
     {
         var declined = Requested();
-        declined.Decline();
+        declined.Decline(Before);
         var cancelled = Requested();
         cancelled.CancelByCustomer(Before);
         var inService = Requested();

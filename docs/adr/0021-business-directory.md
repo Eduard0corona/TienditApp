@@ -51,7 +51,7 @@ La Fase 24A abre TienditApp a los clientes. Un cliente ve los negocios registrad
    - Los filtros por categoría y búsqueda (nombre, descripción y ciudad, sin acentos ni mayúsculas) y las páginas de 24 (hasta 48) se aplican sobre esa foto.
    - La foto se rehace con su propio límite de 30 segundos, no con el de la petición: un cliente que se va o cambia la búsqueda no la deja a medias para los demás.
    - Cuando hay más negocios que el tope, el log lo avisa.
-   - El orden pone primero a los que reciben pedidos, luego a los abiertos y al final a los cerrados, y dentro de cada grupo los ordena por nombre.
+   - El orden pone primero a los que reciben pedidos, luego a los abiertos y al final a los cerrados, y dentro de cada grupo los ordena por nombre. Desde la Fase 29J, en la página de una categoría, dentro de cada grupo van primero los que responden antes sus solicitudes en línea ([ADR 0064](0064-response-time-in-explore.md)).
    - Una caja que se abre o un cambio del dueño se ven en Explorar en menos de 30 segundos. El menú siempre responde al momento, y es el que acepta el pedido.
 
 ## Consecuencias

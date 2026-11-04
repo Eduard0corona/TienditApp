@@ -995,6 +995,17 @@ La Fase 29I no trae migración ni configuración nueva ([ADR 0063](../adr/0063-e
 - **Memoria:** el índice de búsqueda de Explorar, que vive en la memoria de cada instancia, suma hasta 10,000 servicios a sus 20,000 productos. Se rearma con la foto de Explorar, cada 30 segundos como mucho, cuando alguien busca.
 - **Volver a la versión anterior:** funciona sin tocar nada; Explorar vuelve a buscar solo negocios y productos.
 
+## Cuánto tarda en responder cada negocio (Fase 29J)
+
+La Fase 29J trae una migración, [`database/production/20261103170924_AddAppointmentRespondedAt`](../../database/production/20261103170924_AddAppointmentRespondedAt). Su `apply.sql` va antes del merge ([ADR 0064](../adr/0064-response-time-in-explore.md)).
+
+- **La migración:** agrega a `Appointments` las columnas `RespondedAt` y `RequestedStartAt` (`datetimeoffset`, nulas: las citas que existen quedan sin ellas) y el índice `IX_Appointments_OnlineRequests_CreatedAt`, filtrado a las solicitudes en línea (`[Channel] = 1`), con lo que lee la foto de Explorar. No cambia datos.
+- **Mientras se publica:** la versión de `master` (la 29I) no conoce la columna y guarda NULL en ella; sigue funcionando. Lo que esa versión responda no guarda la hora, así que Explorar cuenta desde la primera respuesta guardada, sin importar cuándo se aplique el `apply.sql`.
+- **Sin `apply.sql`:** la versión nueva lee `RespondedAt` y `RequestedStartAt` con cada cita, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva:** la foto de Explorar hace una consulta más, agrupada por negocio, cada 30 segundos como mucho cuando alguien la abre; si falla, Explorar sigue sin el dato.
+- **Volver a la versión anterior:** funciona sin tocar la base. Explorar deja de decir cuánto tarda cada negocio y ordena cada grupo solo por nombre.
+- **Dejar también la base como estaba:** el `rollback.sql` quita el índice y las dos columnas; se pierden las horas guardadas, sin cambiar ninguna cita.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

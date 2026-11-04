@@ -65,7 +65,7 @@ public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppoi
         }
         else if (entity.IsRequest && request.NewStatus == AppointmentStatus.Cancelled)
         {
-            entity.Decline();
+            entity.Decline(_clock?.UtcNow ?? DateTimeOffset.UtcNow);
             noticeQueued = await _notices.QueueDeclinedAsync(entity, cancellationToken);
         }
         else

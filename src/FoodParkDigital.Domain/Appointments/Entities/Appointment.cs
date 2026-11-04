@@ -92,6 +92,18 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>When the customer cancelled it from the account or the link (Fase 24D); null otherwise.</summary>
     public DateTimeOffset? CancelledByCustomerAt { get; private set; }
     /// <summary>
+    /// When the business accepted or declined it as a request online (Fase 29J, ADR 0064): how long its customer waited for
+    /// an answer, which Explorar sums up. Null for one the team booked, one still waiting or cancelled by its customer first,
+    /// and every request answered before Fase 29J. Set once: a request is answered once.
+    /// </summary>
+    public DateTimeOffset? RespondedAt { get; private set; }
+    /// <summary>
+    /// The time its customer asked for when the request arrived online (Fase 29J, ADR 0064): its answer is due before it,
+    /// even once the business moves the appointment to another time. Null for one the team booked and for requests from
+    /// before Fase 29J.
+    /// </summary>
+    public DateTimeOffset? RequestedStartAt { get; private set; }
+    /// <summary>
     /// Where the customer gets the quote of a visit they requested online (Fase 29B, ADR 0053 point 11), when they gave it:
     /// one plain address (<see cref="InvoiceEmailAddress"/>). Null otherwise. Theirs: it never goes in the activity or a log.
     /// </summary>
@@ -198,7 +210,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             Channel = AppointmentChannel.Online,
             CustomerUserId = customerUserId,
             ClientRequestId = clientRequestId,
-            TrackingToken = trackingToken
+            TrackingToken = trackingToken,
+            RequestedStartAt = startAt
         };
         return appointment;
     }
@@ -258,7 +271,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             CustomerUserId = customerUserId,
             ClientRequestId = clientRequestId,
             TrackingToken = trackingToken,
-            CustomerEmail = InvoiceEmailAddress.Normalize(customerEmail)
+            CustomerEmail = InvoiceEmailAddress.Normalize(customerEmail),
+            RequestedStartAt = startAt
         };
         appointment.Visit = new AppointmentVisit(tenantId, appointment.Id, address, zone.Name, zone.Fee, chargePolicy);
         return appointment;
@@ -327,14 +341,16 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         if (EndAt <= now)
             throw new DomainException(OnlineBookingRules.RequestTimePassedMessage);
         Status = AppointmentStatus.Scheduled;
+        RespondedAt = now;
     }
 
     /// <summary>The business declines a request: it is cancelled and its time is free again.</summary>
-    public void Decline()
+    public void Decline(DateTimeOffset now)
     {
         if (Status != AppointmentStatus.Requested)
             throw new DomainException(OnlineBookingRules.NotRequestedMessage);
         Status = AppointmentStatus.Cancelled;
+        RespondedAt = now;
     }
 
     /// <summary>

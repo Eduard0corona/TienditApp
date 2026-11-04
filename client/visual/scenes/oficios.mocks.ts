@@ -12,7 +12,7 @@ const CREDITED_IF_HIRED = 2;
 const card = (name: string, slug: string, overrides: Record<string, unknown>) => ({
   name, slug, logoUrl: null, coverImageUrl: null, category: HOME_REPAIRS, description: null, theme: 0, city: 'Ciudad de México',
   deliveryOnly: false, deliveryAvailable: false, acceptsOrders: false, ordersPaused: false, statusLabel: null,
-  statusDetail: null, closed: false, pricesIncludeTax: true, booksOnline: false, receivesVisits: true,
+  statusDetail: null, closed: false, pricesIncludeTax: true, booksOnline: false, receivesVisits: true, responseTime: null,
   ...overrides,
 });
 
@@ -45,6 +45,24 @@ function tradesInExplore(data: DemoData) {
     'plomeria-hernandez': { '06700': { amount: 400, isStarting: false } },
     'carpinteria-don-jose': { '06700': { amount: 250, isStarting: false } },
   };
+}
+
+// ResponseTime as the contract numbers it.
+const WITHIN_AN_HOUR = 0;
+const WITHIN_TWELVE_HOURS = 2;
+
+/**
+ * How soon each trade answers (Fase 29J): the plumber answered most requests within an hour and the carpenter within 12
+ * hours; the locksmith has too few requests, and its card says nothing. The server puts the quicker ones first.
+ */
+function tradesThatAnswer(data: DemoData) {
+  tradesInExplore(data);
+  const answers: Record<string, number> = {
+    'plomeria-hernandez': WITHIN_AN_HOUR,
+    'carpinteria-don-jose': WITHIN_TWELVE_HOURS,
+  };
+  data.directory = (data.directory as DemoData[]).map((business) =>
+    business.slug in answers ? { ...business, responseTime: answers[business.slug as string] } : business);
 }
 
 // BusinessCategory and PublicDirectoryServiceKind as the contract numbers them.
@@ -255,6 +273,7 @@ const visitPhotos = (sentBefore: number): ExtraRoutes => (data, helpers) => {
 };
 
 export const OFICIOS_EN_EXPLORAR = asOption(tradesInExplore);
+export const OFICIOS_QUE_RESPONDEN = asOption(tradesThatAnswer);
 export const SERVICIOS_EN_EXPLORAR = asOption(servicesInExplore);
 export const PLOMERO_EN_CONFIGURACION = asOption(plumberSettings);
 export const TIENDA_DE_PLOMERIA = asOption(plumberStore);

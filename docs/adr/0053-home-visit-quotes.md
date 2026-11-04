@@ -255,8 +255,8 @@ El trabajo de la orden en que se convirtió la cotización se agenda (punto 17):
 
 - Que el cliente acepte la cotización desde su enlace, con un anticipo por Mercado Pago ([ADR 0031](0031-online-payments.md)). La respuesta sin anticipo llegó en la Fase 29G ([ADR 0061](0061-quote-replies-from-link.md)); el anticipo sigue pendiente.
 - Fotos del problema en la solicitud: llegaron en la Fase 29H ([ADR 0062](0062-visit-problem-photos.md)).
-- PDF de la cotización y documento adjunto por WhatsApp.
-- El tiempo de respuesta del negocio como criterio de orden en Explorar.
+- PDF de la cotización y documento adjunto por WhatsApp. Sigue pendiente: necesita que el dueño elija una biblioteca de PDF y su licencia. La que se consideró en la Fase 29J, PDFsharp, declara `AGPL-3.0-only` en su paquete 6.5.0 de NuGet y pide una licencia al crear un documento (revisado el 2026-11-03).
+- El tiempo de respuesta del negocio como criterio de orden en Explorar: llegó en la Fase 29J ([ADR 0064](0064-response-time-in-explore.md)).
 - Que la búsqueda de Explorar encuentre los servicios de estos negocios: llegó en la Fase 29I ([ADR 0063](0063-explore-finds-services.md)).
 
 ## Consecuencias

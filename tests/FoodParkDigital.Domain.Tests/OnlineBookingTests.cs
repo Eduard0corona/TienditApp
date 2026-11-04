@@ -135,7 +135,7 @@ public class OnlineBookingTests
 
         Assert.Equal(OnlineBookingRules.NotRequestedMessage,
             Assert.Throws<DomainException>(() => appointment.Accept(Local(Monday, "08:00"))).Message);
-        Assert.Equal(OnlineBookingRules.NotRequestedMessage, Assert.Throws<DomainException>(appointment.Decline).Message);
+        Assert.Equal(OnlineBookingRules.NotRequestedMessage, Assert.Throws<DomainException>(() => appointment.Decline(Local(Monday, "08:00"))).Message);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class OnlineBookingTests
     {
         var appointment = Request();
 
-        appointment.Decline();
+        appointment.Decline(Local(Monday, "08:00"));
 
         Assert.Equal(AppointmentStatus.Cancelled, appointment.Status);
         Assert.True(appointment.IsClosed);
@@ -243,7 +243,7 @@ public class OnlineBookingTests
     public void CancelByCustomer_ShouldRefuse_AClosedAppointment()
     {
         var appointment = Request();
-        appointment.Decline();
+        appointment.Decline(Local(Monday, "08:00"));
 
         var error = Assert.Throws<DomainException>(() => appointment.CancelByCustomer(Local(Monday, "08:00")));
 

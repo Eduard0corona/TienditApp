@@ -11,7 +11,9 @@ using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
+using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
@@ -120,6 +122,13 @@ public class PublicDirectoryBusinessDto
 
     /// <summary>How its customers rate it (Fase 24H): its published reviews and their average; null without reviews.</summary>
     public RatingSummaryDto? Rating { get; set; }
+
+    /// <summary>
+    /// How soon it answers the requests its customers make online (Fase 29J, ADR 0064): within what it answered at least half
+    /// of those of the last 90 days. Null with fewer than three, when it takes a day or more, or when it no longer books online
+    /// nor receives visits: the card says nothing.
+    /// </summary>
+    public ResponseTime? ResponseTime { get; set; }
 
     /// <summary>
     /// It receives visits to quote now (Fase 29A, ADR 0053): its card speaks of visits, never of orders or the drawer,
@@ -244,6 +253,11 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
         var inCategory = snapshot.Entries
             .Where(entry => request.Category is null || entry.Business.Category == request.Category)
             .ToList();
+        // In a category, the businesses of each group that answer their requests sooner first, and one without enough in the
+        // middle (Fase 29J), by name otherwise (a stable order). Everything else keeps the order of Explorar: the whole list mixes
+        // businesses that take no requests, and the products and services of a search follow it.
+        if (request.Category is not null)
+            inCategory = inCategory.OrderBy(entry => entry.Rank).ThenBy(entry => ResponseTimes.Order(entry.ResponseTime)).ToList();
         // «Cerca de mí» orders every business of the category, so the products of a search follow the same order.
         var near = request.Near() is { } position ? PublicDirectoryNearby.Order(inCategory, position) : null;
         var found = (near?.Entries ?? inCategory)
@@ -505,13 +519,18 @@ public sealed class PublicDirectorySnapshot
     /// The price of the service it picked as its visit while it is bookable (Fase 29A), to say what the visit to a postal
     /// code costs; never in the card.
     /// </param>
+    /// <param name="ResponseTime">
+    /// How soon it answers its requests online (Fase 29J), slower ones included, while it books online or receives visits:
+    /// its place in a category. The card says it only within a day.
+    /// </param>
     internal sealed record Entry(
         Guid TenantId,
         PublicDirectoryBusinessDto Business,
         string SearchText,
         int Rank,
         GeoPoint? Location = null,
-        decimal? VisitServicePrice = null);
+        decimal? VisitServicePrice = null,
+        ResponseTime? ResponseTime = null);
 
     /// <summary>
     /// Reads every business Explorar lists: a public request has no business, so these reads span all of them, each
@@ -607,16 +626,123 @@ public sealed class PublicDirectorySnapshot
                 .ToListAsync(cancellationToken))
             .ToDictionary(r => r.TenantId, r => RatingSummaryDto.From(r.Count, r.Stars));
 
+        // How soon each one answers (Fase 29J) never takes Explorar with it: without it, every business is in the middle.
+        Dictionary<Guid, ResponseTime?> responses;
+        try
+        {
+            responses = await ResponseTimesAsync(context, listed, utcNow, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Explorar could not read how soon its businesses answer: it says nothing of it until the next snapshot.");
+            responses = [];
+        }
+
         var entries = rows
             .Select(row => ToEntry(row, specialDays[row.Id], utcNow))
             .Where(entry => entry is not null)
             .Select(entry => entry!)
             .OrderBy(entry => entry.Rank)
             .ThenBy(entry => entry.Business.Name, Names)
+            // Only one that takes requests now: one that stopped booking online says nothing of them.
+            .Select(entry => entry.Business.BooksOnline || entry.Business.ReceivesVisits
+                ? entry with { ResponseTime = responses.GetValueOrDefault(entry.TenantId) }
+                : entry)
             .ToList();
         foreach (var entry in entries)
+        {
             entry.Business.Rating = ratings.GetValueOrDefault(entry.TenantId);
+            entry.Business.ResponseTime = ResponseTimes.Shown(entry.ResponseTime);
+        }
         return new PublicDirectorySnapshot(utcNow, entries);
+    }
+
+    /// <summary>
+    /// How soon each business listed answers its requests online (Fase 29J, ADR 0064): one row per business, its requests
+    /// since <see cref="ResponseTimes.Since"/> counted by how long their customers waited for an answer before their time
+    /// began. The slowest are those answered once their time began or let pass, and those that waited a day without an answer
+    /// (still waiting, or cancelled by their customer); one that has waited less, or that its customer cancelled sooner, does
+    /// not count yet. Only the businesses with any are in it, and nothing of who made them is read.
+    /// </summary>
+    /// <remarks>
+    /// Each request counts by the moment it was decided: a quick answer when it was answered, a slow one when it reached its
+    /// limit unanswered (the time its customer asked for, or a day after it arrived, whichever came first). Answers are kept
+    /// since the first one TienditApp kept for the businesses listed (Fase 29J deployed): before it, and while an earlier
+    /// version runs, an answer keeps no time and does not count. So one that reached its limit before that first answer does
+    /// not count either, answered later or not: counting only those would make a business slower than it was, and answering
+    /// what was left behind would make it slower still.
+    /// </remarks>
+    internal static async Task<Dictionary<Guid, ResponseTime?>> ResponseTimesAsync(
+        IApplicationDbContext context, IQueryable<Tenant> listed, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        var requests = context.Appointments
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(a => a.Channel == AppointmentChannel.Online && listed.Any(t => t.Id == a.TenantId));
+        if (await requests.MinAsync(a => a.RespondedAt, cancellationToken) is not { } keptSince)
+            return [];
+
+        var since = ResponseTimes.Since(utcNow);
+        int anHour = ResponseTimes.LimitHours[0], threeHours = ResponseTimes.LimitHours[1];
+        int twelveHours = ResponseTimes.LimitHours[2], aDay = ResponseTimes.LimitHours[3];
+        // Its time is the one its customer asked for: moving the appointment after letting it pass does not undo it. One from
+        // before Fase 29J has only its own.
+        var counted = await requests
+            .Where(a => a.CreatedAt >= since)
+            .Select(a => new
+            {
+                a.TenantId,
+                a.CreatedAt,
+                a.RespondedAt,
+                a.Status,
+                a.CancelledByCustomerAt,
+                // Made by this version: one cancelled by its customer without an answer was still waiting (an earlier
+                // version could have accepted it without keeping when). One it made and an earlier version accepted, during
+                // a return to it, still counts as slow if its customer cancels it past its limit (ADR 0064).
+                Kept = a.RequestedStartAt != null,
+                AskedFor = a.RequestedStartAt ?? a.StartAt,
+                ADayLater = a.CreatedAt.AddHours(aDay)
+            })
+            .Select(a => new
+            {
+                a.TenantId,
+                a.CreatedAt,
+                a.RespondedAt,
+                a.Status,
+                a.CancelledByCustomerAt,
+                a.Kept,
+                a.AskedFor,
+                Limit = a.AskedFor < a.ADayLater ? a.AskedFor : a.ADayLater
+            })
+            // Answered before its limit, or past it once TienditApp kept answers: answered late, still waiting, or cancelled by
+            // its customer after it.
+            .Where(a => a.RespondedAt < a.Limit
+                || (a.Limit <= utcNow && a.Limit >= keptSince
+                    && (a.RespondedAt >= a.Limit
+                        || (a.RespondedAt == null && a.Status == AppointmentStatus.Requested)
+                        || (a.RespondedAt == null && a.Kept && a.CancelledByCustomerAt >= a.Limit))))
+            .GroupBy(a => a.TenantId)
+            .Select(g => new
+            {
+                TenantId = g.Key,
+                Requests = g.Count(),
+                // Answered before the time asked for, in less than each limit.
+                WithinAnHour = g.Count(a => a.RespondedAt < a.AskedFor && a.RespondedAt < a.CreatedAt.AddHours(anHour)),
+                WithinThreeHours = g.Count(a => a.RespondedAt < a.AskedFor && a.RespondedAt < a.CreatedAt.AddHours(threeHours)),
+                WithinTwelveHours = g.Count(a => a.RespondedAt < a.AskedFor && a.RespondedAt < a.CreatedAt.AddHours(twelveHours)),
+                WithinADay = g.Count(a => a.RespondedAt < a.AskedFor && a.RespondedAt < a.CreatedAt.AddHours(aDay))
+            })
+            .ToListAsync(cancellationToken);
+        return counted.ToDictionary(
+            row => row.TenantId,
+            row => ResponseTimes.Typical(
+            [
+                row.WithinAnHour,
+                row.WithinThreeHours - row.WithinAnHour,
+                row.WithinTwelveHours - row.WithinThreeHours,
+                row.WithinADay - row.WithinTwelveHours,
+                row.Requests - row.WithinADay
+            ]));
     }
 
     /// <summary>

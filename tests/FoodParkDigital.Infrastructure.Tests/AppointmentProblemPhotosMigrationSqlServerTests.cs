@@ -18,7 +18,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// AddAppointmentProblemPhotos (Fase 29H, ADR 0062): the photos of what happens a customer sends with a visit requested online.
 /// The version before it keeps taking and deciding requests; the database keeps each place of a visit once and none past the
 /// fifth, and the photos go with their appointment; rolling back stops with error 50056 once a customer sent a photo, and
-/// otherwise drops only the table.
+/// otherwise drops only the table. The database at AddAppointmentProblemPhotos is read with the model of its day, without the
+/// answer time of Fase 29J.
 /// </summary>
 public class AppointmentProblemPhotosMigrationSqlServerTests
 {
@@ -49,7 +50,7 @@ public class AppointmentProblemPhotosMigrationSqlServerTests
             (tenantId, appointmentId) = (tenant.Id, request.Id);
         }
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeAppointmentRespondedAt.CreateContext(database, tenantId);
         Assert.Equal(AppointmentStatus.Scheduled, (await context.Appointments.SingleAsync(a => a.Id == appointmentId)).Status);
         Assert.Equal(0, await context.AppointmentProblemPhotos.CountAsync());
     }
@@ -61,7 +62,7 @@ public class AppointmentProblemPhotosMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var (tenantId, appointmentId) = await SeedAsync(database, photos: 1);
 
-        await using var check = database.CreateContext(tenantId);
+        await using var check = BeforeAppointmentRespondedAt.CreateContext(database, tenantId);
         var photo = await check.AppointmentProblemPhotos.AsNoTracking().SingleAsync();
         Assert.Equal((appointmentId, 0), (photo.AppointmentId, photo.Position));
 
@@ -88,7 +89,7 @@ public class AppointmentProblemPhotosMigrationSqlServerTests
 
         var stopped = await Record.ExceptionAsync(() => MigrateAsync(database, BeforeMigration));
         Assert.True(stopped is SqlException { Number: 50056 }, stopped?.Message ?? "it was not stopped");
-        await using (var context = database.CreateContext(tenantId))
+        await using (var context = BeforeAppointmentRespondedAt.CreateContext(database, tenantId))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Equal(2, await context.AppointmentProblemPhotos.CountAsync());
@@ -108,7 +109,7 @@ public class AppointmentProblemPhotosMigrationSqlServerTests
         // Rolling back again does nothing, and forward again the visit takes photos.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenantId);
+        await using var forward = BeforeAppointmentRespondedAt.CreateContext(database, tenantId);
         var again = await forward.Appointments.SingleAsync(a => a.Id == appointmentId);
         forward.AppointmentProblemPhotos.Add(again.AddProblemPhoto(0, Key(tenantId), Now));
         await forward.SaveChangesAsync();
@@ -137,7 +138,7 @@ public class AppointmentProblemPhotosMigrationSqlServerTests
     {
         var (tenant, settings, zone) = Business();
         var request = Request(tenant.Id, zone);
-        await using var seed = database.CreateContext(tenant.Id);
+        await using var seed = BeforeAppointmentRespondedAt.CreateContext(database, tenant.Id);
         seed.AddRange(tenant, settings, zone, request);
         for (var n = 0; n < photos; n++)
             seed.AppointmentProblemPhotos.Add(request.AddProblemPhoto(n, Key(tenant.Id), Now));

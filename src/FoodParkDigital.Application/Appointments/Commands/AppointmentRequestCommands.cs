@@ -73,7 +73,7 @@ public class AppointmentRequestCommandHandler :
     public async Task<Result<AppointmentDto>> Handle(DeclineAppointmentRequestCommand request, CancellationToken cancellationToken)
     {
         var appointment = await FindAsync(request.AppointmentId, cancellationToken);
-        appointment.Decline();
+        appointment.Decline(_clock.UtcNow);
         return await SaveAsync(appointment, await _notices.QueueDeclinedAsync(appointment, cancellationToken), cancellationToken);
     }
 
