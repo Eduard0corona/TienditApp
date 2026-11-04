@@ -523,7 +523,7 @@ Productos y favoritos en Explorar (Fase 24F, [ADR 0028](../adr/0028-product-sear
   - con `action`, envuelve la tarjeta-enlace y la acción en `.dc-wrap`, así el corazón no queda dentro del enlace;
   - la vista previa de Configuración (`components/settings/DirectoryCard`) pasa la portada del negocio (`coverImages.medium`);
   - desde la Fase 29J dice «Suele responder en menos de …» con el `responseTime` que manda el servidor (`utils/responseTime`), en una etiqueta neutra después de la visita o la entrega; sin él no dice nada.
-  - desde la Fase 29K la vista previa de Configuración lo dice con el `responseTime` del perfil mientras `countsRequests`, y debajo `ownResponseTimeNote` le dice al dueño dónde lo leen, que tarda un día o más o que le faltan solicitudes. La tienda (`components/store/StoreHero`, una píldora fija), la página de citas y la solicitud de visita (bajo el nombre del negocio) usan el mismo `responseTimeLabel`.
+  - desde la Fase 29K la vista previa de Configuración lo dice con el `responseTime` del perfil mientras `countsRequests`, y debajo `ownResponseTimeNote` le dice al dueño dónde lo leen, que tarda un día o más o que le faltan solicitudes. La tienda (`components/store/StoreHero`, una píldora fija que no sale en una mesa), la página de citas y la solicitud de visita (bajo el nombre del negocio) usan el mismo `responseTimeLabel`. Desde la 29K lleva `ri-chat-check-line`, también en la tarjeta, para no repetir el reloj del horario.
 - **Los productos encontrados** (`components/explore/DirectoryProducts`):
   - una región «Productos» antes de los negocios;
   - cada fila enlaza a `/m/{slug}?producto={id}`, con foto o inicial (los colores del negocio), «· Pide en línea», el precio con el de antes tachado y «más IVA» cuando `addsTax`;

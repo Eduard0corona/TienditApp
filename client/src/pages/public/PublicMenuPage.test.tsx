@@ -251,12 +251,24 @@ describe('PublicMenuPage', () => {
     expect(await screen.findByText('Suele responder en menos de 3 horas')).toBeInTheDocument();
   });
 
-  it('says nothing of how soon it answers without it, or past a day', async () => {
-    api.getMenu.mockResolvedValue(menu({ booksOnline: true, responseTime: ResponseTime.Slower }));
+  it.each([
+    ['without it', undefined],
+    ['past a day', ResponseTime.Slower],
+  ])('says nothing of how soon it answers %s', async (_case, responseTime) => {
+    api.getMenu.mockResolvedValue(menu({ booksOnline: true, responseTime }));
 
     renderPage();
 
     expect(await screen.findByRole('heading', { name: 'Café Luna' })).toBeInTheDocument();
+    expect(screen.queryByText(/Suele responder/)).not.toBeInTheDocument();
+  });
+
+  it('says nothing of how soon it answers at a table, where only the order is requested', async () => {
+    api.getMenu.mockResolvedValue(menu({ booksOnline: true, responseTime: ResponseTime.WithinAnHour }));
+
+    renderPage('/m/cafe-luna?mesa=Mesa%204');
+
+    expect(await screen.findByText('Pedido para Mesa 4')).toBeInTheDocument();
     expect(screen.queryByText(/Suele responder/)).not.toBeInTheDocument();
   });
 

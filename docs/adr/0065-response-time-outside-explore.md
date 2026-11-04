@@ -17,9 +17,9 @@ Tomé las decisiones de la Fase 29K con la autorización permanente del dueño d
 ## Decisión
 
 1. **Dónde lo lee el cliente:**
-   - **La tienda** (`/m/{slug}`) lo dice entre sus píldoras, junto a la información y la calificación.
+   - **La tienda** (`/m/{slug}`) lo dice entre sus píldoras, junto a la información y la calificación. En una mesa (su QR con `?mesa=`) no lo dice: ahí solo se pide la orden, y se leería como el tiempo de esa orden.
    - **La página de citas** (`/m/{slug}/agendar`) y **la solicitud de visita** (`/m/{slug}/visita`) lo dicen bajo el nombre del negocio.
-   - El texto es el de la tarjeta: «Suele responder en menos de una hora», «… de 3 horas», «… de 12 horas» o «… de un día».
+   - El texto es el de la tarjeta: «Suele responder en menos de una hora», «… de 3 horas», «… de 12 horas» o «… de un día». Lleva un ícono de mensaje respondido, también en la tarjeta, para no confundirse con el reloj del horario que va al lado en la tienda.
 2. **De dónde sale:** de la foto de Explorar, con las mismas reglas ([ADR 0064](0064-response-time-in-explore.md)); no hay otra consulta ni migración.
    - Por eso solo lo dice un negocio que Explorar lista, que recibe solicitudes y que responde en menos de un día. La API manda `responseTime` en `PublicMenuDto`, `PublicBookingDto` y `PublicHomeVisitDto`, nulo en los demás casos.
    - **Una foto de hasta 10 minutos.** Explorar la rearma cada 30 segundos; estas páginas leen un solo negocio de ella y aceptan una de hasta 10 minutos (`PublicResponseTime.MaxAge`), y solo la rearman si es más vieja. Una tienda abierta desde un enlace casi nunca espera a que se arme.
@@ -29,9 +29,9 @@ Tomé las decisiones de la Fase 29K con la autorización permanente del dueño d
 3. **Qué lee el dueño** en «Cómo te ven en TienditApp»:
    - **La vista previa** de su tarjeta dice cuánto tarda, como la ven sus clientes.
    - **Una nota debajo**, mientras Explorar cuenta sus solicitudes (lo lista, y agenda en línea o recibe visitas):
-     - con un tramo de menos de un día: dónde lo leen sus clientes (su tarjeta, su tienda y donde le piden citas o visitas);
-     - con un día o más: «Sueles tardar un día o más en responder tus solicitudes en línea, así que tu tarjeta no lo dice.»;
-     - sin suficientes: «Cuando tengas 3 solicitudes en línea de los últimos 90 días, tu tarjeta dirá en cuánto sueles responder.»
+     - con un tramo de menos de un día: que se calcula con sus solicitudes en línea de los últimos 90 días y dónde lo leen sus clientes (su tarjeta, su tienda y donde le piden citas o visitas);
+     - con un día o más: «Sueles tardar un día o más en responder tus solicitudes en línea, así que tus clientes no lo leen.»;
+     - sin suficientes: «Todavía no contamos 3 solicitudes en línea para saber en cuánto sueles responder: una cuenta cuando la respondes, o cuando llega su hora o pasa un día sin respuesta.» No dice cuántas tiene: cuentan desde la primera respuesta guardada ([ADR 0064](0064-response-time-in-explore.md)) y una que espera desde hace menos de un día todavía no.
    - La API manda `countsRequests` y `responseTime` en el perfil del directorio (`DirectoryProfileDto`), con «un día o más» incluido: el dueño lo ve, sus clientes no.
 4. **Fuera de esta fase:**
    - **Contar las cotizaciones:** cuánto tarda en mandar la cotización después de la visita.
@@ -49,6 +49,7 @@ Tomé las decisiones de la Fase 29K con la autorización permanente del dueño d
   - **Un negocio que no aparece en Explorar** no lo dice en ninguna página: la foto solo tiene a los listados.
   - **Un cambio tarda hasta 10 minutos** en verse en estas páginas, y hasta 30 segundos en Explorar. Ocultarse de Explorar puede seguir diciéndolo en la tienda hasta 10 minutos.
   - **La primera tienda que se abre** con la foto vencida espera a que se arme, como Explorar.
+  - **Un restaurante que recibe pedidos y agenda en línea** lo dice entre sus píldoras, cerca de «A domicilio» y «Para recoger»: el texto no aclara que habla de las citas, no del pedido.
   - Lo demás es lo de la [ADR 0064](0064-response-time-in-explore.md): horas de reloj, empieza vacío y se puede manipular.
 - **Decisión por omisión** (sin preferencia expresa del dueño):
   - los 10 minutos de foto para estas páginas;

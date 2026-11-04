@@ -24,8 +24,8 @@ export function responseTimeLabel(responseTime: ResponseTime | null | undefined)
  */
 export function ownResponseTimeNote(responseTime: ResponseTime | null | undefined): string {
   if (responseTime == null)
-    return 'Cuando tengas 3 solicitudes en línea de los últimos 90 días, tu tarjeta dirá en cuánto sueles responder.';
+    return 'Todavía no contamos 3 solicitudes en línea para saber en cuánto sueles responder: una cuenta cuando la respondes, o cuando llega su hora o pasa un día sin respuesta.';
   if (responseTime === ResponseTime.Slower)
-    return 'Sueles tardar un día o más en responder tus solicitudes en línea, así que tu tarjeta no lo dice.';
-  return 'Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas, por tus solicitudes en línea de los últimos 90 días.';
+    return 'Sueles tardar un día o más en responder tus solicitudes en línea, así que tus clientes no lo leen.';
+  return 'Lo calculamos con tus solicitudes en línea de los últimos 90 días. Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas.';
 }

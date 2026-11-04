@@ -56,8 +56,9 @@ export default function StoreHero({
   const kind = menu.category === BusinessCategory.Other ? undefined : categoryInfo(menu.category)?.label;
   const line = [kind, menu.description].filter(Boolean).join(' · ');
   const cover = menu.coverImageUrl;
-  // How soon it answers its requests online, as its card in Explorar says it (Fase 29K).
-  const answers = responseTimeLabel(menu.responseTime);
+  // How soon it answers its requests online, as its card in Explorar says it (Fase 29K); not at a table, where nothing
+  // is requested but the order.
+  const answers = tableLabel ? null : responseTimeLabel(menu.responseTime);
   const shared = shareNotice === 'Enlace copiado';
 
   useEffect(() => {
@@ -165,7 +166,7 @@ export default function StoreHero({
               <span className="pm-pill static"><i className="ri-e-bike-2-line" aria-hidden="true"></i>Solo a domicilio</span>
             )}
             {answers && (
-              <span className="pm-pill static"><i className="ri-time-line" aria-hidden="true"></i>{answers}</span>
+              <span className="pm-pill static"><i className="ri-chat-check-line" aria-hidden="true"></i>{answers}</span>
             )}
           </div>
         )}

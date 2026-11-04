@@ -273,7 +273,7 @@ export default function PublicBookingPage() {
           <div className="small text-muted">Agenda tu cita</div>
           {/* How soon it answers, as its card in Explorar says it (Fase 29K). */}
           {answers && (
-            <div className="small text-muted"><i className="ri-time-line me-1" aria-hidden="true"></i>{answers}</div>
+            <div className="small text-muted"><i className="ri-chat-check-line me-1" aria-hidden="true"></i>{answers}</div>
           )}
         </div>
       </header>

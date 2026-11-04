@@ -130,6 +130,13 @@ describe('PublicBookingPage', () => {
     expect(await screen.findByText('Suele responder en menos de una hora')).toBeInTheDocument();
   });
 
+  it('says nothing of how soon it answers without it', async () => {
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: /Corte de cabello/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Suele responder/)).not.toBeInTheDocument();
+  });
+
   it('books a service at a free time as a guest and gives the link of the appointment', async () => {
     const user = userEvent.setup();
     api.requestAppointment.mockResolvedValue(receipt() as never);
