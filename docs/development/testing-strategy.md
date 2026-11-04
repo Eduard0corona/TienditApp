@@ -1977,6 +1977,30 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - Las 796 salen iguales: ninguna escena existente recibe el tiempo de respuesta, y la lista y las categorías de la API simulada ya venían en el orden del servidor.
     - **2 nuevas:** «oficios que responden» en escritorio y teléfono (`oficios.spec.ts`, `/explorar/hogar-y-reparaciones`): el plomero «Suele responder en menos de una hora», el carpintero «… de 12 horas» y el cerrajero sin decir nada, después de lo que dice la visita. Pasaron dos corridas seguidas contra el mismo build y salen iguales en la comparación completa.
 
+- Fase 29K, cuánto tarda en responder fuera de Explorar ([ADR 0065](../adr/0065-response-time-outside-explore.md)):
+  - **Application:** `ResponseTimeOutsideExploreTests` (13, nuevo):
+    - la tienda, la página de citas y la solicitud de visita dicen lo que dice la tarjeta (un salón y un plomero);
+    - nada con un día o más, con menos de 3, oculto de Explorar, en una mesa, o cuando dejó de agendar u ocultó su tarjeta después de la foto (tienda, citas y visita lo revisan en el momento);
+    - aceptan una foto de hasta 10 minutos y rearman la más vieja; los 10 minutos y el minuto tras un fallo, fijos;
+    - la foto armada desde una tienda que ya fijó su negocio es la de Explorar para todos;
+    - una foto que no se puede leer, o el límite de su rearmado, deja la página sin el dato; un cliente que se va la cancela; tras un fallo ninguna página reintenta durante un minuto, y un rearmado que funciona termina la espera; una página no espera en fila mientras otra rearma;
+    - una foto que no pudo leer cuánto tardan los negocios no lo dice a nadie (un interceptor que falla esa lectura);
+    - el dueño lee su tramo, también un día o más, mientras Explorar cuenta sus solicitudes (como está ahora): nada para el que no agenda ni recibe visitas, para el oculto (también después de la foto) ni con una foto que no leyó los tiempos; guardar su tarjeta responde con él.
+    - Las pruebas que arman la tienda, las citas, la visita o el perfil reciben la caché de la foto y el registro.
+  - **Mutaciones:** sin revisar en el momento que aparece, agenda o recibe visitas, sin la mesa, con el tramo sin filtrar para el cliente o filtrado para el dueño, sin la marca de los tiempos leídos (al armar o al leer), con otros 10 minutos, sin el minuto tras un fallo o sin borrarlo al rearmar, esperando en fila, tragándose la cancelación del cliente o dejando pasar el límite del rearmado, falla al menos una prueba.
+  - **Cliente:** `responseTime.test.ts` (+1): las notas del dueño. `PublicMenuPage.test.tsx` (+4): la píldora en la tienda, nada sin el dato, con un día o más ni en una mesa. `PublicBookingPage.test.tsx` (+2) y `PublicHomeVisitPage.test.tsx` (+2): bajo el nombre, y nada sin el dato. `DirectoryCard.test.tsx` (+1): la vista previa y la nota con un tramo, con un día o más y sin suficientes, y nada cuando Explorar no cuenta sus solicitudes aunque llegue un tramo.
+  - **.NET en total:** 4,646 pruebas en verde con SQL Server (Domain 1,373; Application 2,095; WebApi 487; Infrastructure 691), también el build en Release. **Cliente en total:** 196 archivos y 1,491 pruebas.
+  - **Primera visita:** 181,790 B (`master` en `cdf09e0`: 181,792 B, −2 B); el presupuesto sigue en 181,900 B.
+  - **Revisiones independientes** (servidor y cliente), sin bloqueos; se corrigió:
+    - las páginas esperaban en fila el rearmado de la foto, y tras un fallo cada una lo reintentaba: ahora la que la encuentra vieja la rearma, las demás salen sin el dato y nadie reintenta durante un minuto;
+    - en una mesa la tienda lo decía (se leía como el tiempo de la orden) y la API lo mandaba;
+    - ocultarse de Explorar o dejar de agendar seguía diciéndolo hasta 10 minutos; el dueño leía de la foto si agenda, y una foto que no leyó los tiempos le decía «todavía no contamos»;
+    - la nota sin tiempo prometía «cuando tengas 3 solicitudes»: cuentan desde la primera respuesta guardada;
+    - el reloj de la píldora se confundía con el del horario: ahora es un mensaje respondido, también en la tarjeta.
+  - **Escenas:** contra la línea base de `master` en `cdf09e0` (798 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - **796 iguales.**
+    - **2 cambian** por el ícono nuevo, y solo en él: «oficios que responden» en escritorio y teléfono (`oficios.spec.ts`).
+    - **4 nuevas:** la tienda del plomero que responde en menos de una hora (escritorio y teléfono), su solicitud de visita (teléfono) y «Cómo te ven» con su tiempo y la nota. Pasaron dos corridas seguidas contra el mismo build y la comparación completa.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
