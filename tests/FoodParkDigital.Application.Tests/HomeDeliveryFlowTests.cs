@@ -10,6 +10,7 @@ using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Orders.EventHandlers;
 using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
@@ -517,7 +518,7 @@ public class HomeDeliveryFlowTests
     }
 
     private static Task<PublicMenuDto?> MenuAsync(SalesTestFixture fixture)
-        => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off)
+        => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off, new PublicDirectoryCache(), NullLogger<GetPublicMenuQueryHandler>.Instance)
             .Handle(new GetPublicMenuQuery("demo"), CancellationToken.None);
 
     private static Task<PublicDeliveryQuoteDto?> QuoteAsync(SalesTestFixture fixture, string slug, string postalCode)

@@ -888,13 +888,19 @@ public sealed class PublicDirectoryCache
     private readonly SemaphoreSlim _rebuild = new(1, 1);
     private PublicDirectorySnapshot? _snapshot;
 
+    /// <param name="maxAge">
+    /// How old a snapshot this request takes, <see cref="Lifetime"/> unless it says otherwise: a page that only reads one
+    /// business of it (how soon it answers, Fase 29K) takes an older one, and rebuilds it only past that.
+    /// </param>
     public async Task<PublicDirectorySnapshot> GetAsync(
         DateTimeOffset utcNow,
         Func<DateTimeOffset, CancellationToken, Task<PublicDirectorySnapshot>> build,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? maxAge = null)
     {
+        var age = maxAge ?? Lifetime;
         var current = Volatile.Read(ref _snapshot);
-        if (IsFresh(current, utcNow))
+        if (IsFresh(current, utcNow, age))
             return current!;
 
         await _rebuild.WaitAsync(cancellationToken);
@@ -902,7 +908,7 @@ public sealed class PublicDirectoryCache
         {
             // Another request may have rebuilt it while this one waited.
             current = Volatile.Read(ref _snapshot);
-            if (IsFresh(current, utcNow))
+            if (IsFresh(current, utcNow, age))
                 return current!;
             // Its own time limit, not the request's: every request waiting shares it, and a customer who leaves (or
             // changes the search) does not throw away a rebuild half done.
@@ -921,9 +927,9 @@ public sealed class PublicDirectoryCache
     public void Invalidate() => Volatile.Write(ref _snapshot, null);
 
     /// <summary>
-    /// Built less than <see cref="Lifetime"/> before or after this instant: a request that read the clock an instant
+    /// Built less than <paramref name="maxAge"/> before or after this instant: a request that read the clock an instant
     /// before the one that rebuilt it uses it too, and a clock that goes back further rebuilds it.
     /// </summary>
-    private static bool IsFresh(PublicDirectorySnapshot? snapshot, DateTimeOffset utcNow)
-        => snapshot is not null && (utcNow - snapshot.BuiltAt).Duration() < Lifetime;
+    private static bool IsFresh(PublicDirectorySnapshot? snapshot, DateTimeOffset utcNow, TimeSpan maxAge)
+        => snapshot is not null && (utcNow - snapshot.BuiltAt).Duration() < maxAge;
 }

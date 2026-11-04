@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.OnlineBooking;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
@@ -24,6 +25,7 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
@@ -485,7 +487,7 @@ public class HomeVisitBookingFlowTests
     }
 
     private static Task<PublicHomeVisitDto?> PageAsync(SalesTestFixture fixture, string slug = Slug)
-        => new GetPublicHomeVisitQueryHandler(fixture.Context, fixture.TenantService)
+        => new GetPublicHomeVisitQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicHomeVisitQueryHandler>.Instance)
             .Handle(new GetPublicHomeVisitQuery(slug), CancellationToken.None);
 
     private static Task<PublicHomeVisitCoverageDto?> CoverageAsync(SalesTestFixture fixture, string postalCode)

@@ -206,7 +206,7 @@ public class ExploreNearbyTests
                 CancellationToken.None);
 
     private static Task<PublicMenuDto?> MenuAsync(SalesTestFixture fixture, string slug)
-        => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off)
+        => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off, new PublicDirectoryCache(), NullLogger<GetPublicMenuQueryHandler>.Instance)
             .Handle(new GetPublicMenuQuery(slug), CancellationToken.None);
 
     private static Task<StorePreviewDto?> PreviewAsync(SalesTestFixture fixture, string slug)

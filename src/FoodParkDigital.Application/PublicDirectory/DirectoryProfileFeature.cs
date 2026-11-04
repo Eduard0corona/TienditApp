@@ -5,12 +5,14 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.PublicDirectory;
 
@@ -47,6 +49,15 @@ public class DirectoryProfileDto
     /// says where to mark it «Solo a domicilio».
     /// </summary>
     public bool HomeVisitAddressNotice { get; set; }
+    /// <summary>
+    /// Explorar counts its requests online (Fase 29K, ADR 0065): it lists it, and it books online or receives visits.
+    /// </summary>
+    public bool CountsRequests { get; set; }
+    /// <summary>
+    /// How soon it answers them, for its owner (Fase 29K): the slower ones too, which its card does not say. Null while
+    /// Explorar does not count them, or fewer than 3 of the last 90 days count.
+    /// </summary>
+    public ResponseTime? ResponseTime { get; set; }
 }
 
 /// <summary>How the signed-in user's business shows in Explorar (owners and admins).</summary>
@@ -57,11 +68,22 @@ public class GetDirectoryProfileQueryHandler : IRequestHandler<GetDirectoryProfi
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly PublicDirectoryCache _directory;
+    private readonly ILogger<GetDirectoryProfileQueryHandler> _logger;
 
-    public GetDirectoryProfileQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetDirectoryProfileQueryHandler(
+        IApplicationDbContext context,
+        ICurrentTenantService tenantService,
+        IDateTimeProvider dateTimeProvider,
+        PublicDirectoryCache directory,
+        ILogger<GetDirectoryProfileQueryHandler> logger)
     {
         _context = context;
         _tenantService = tenantService;
+        _dateTimeProvider = dateTimeProvider;
+        _directory = directory;
+        _logger = logger;
     }
 
     public async Task<Result<DirectoryProfileDto>> Handle(GetDirectoryProfileQuery request, CancellationToken cancellationToken)
@@ -72,7 +94,9 @@ public class GetDirectoryProfileQueryHandler : IRequestHandler<GetDirectoryProfi
             .FirstOrDefaultAsync(t => t.Id == _tenantService.TenantId, cancellationToken);
         return tenant is null
             ? Result.Failure<DirectoryProfileDto>("Negocio no encontrado.")
-            : Result.Success(await DirectoryProfile.ReadAsync(_context, tenant, tenant.Settings, cancellationToken));
+            : Result.Success(await DirectoryProfile.ReadAsync(
+                _context, tenant, tenant.Settings, cancellationToken,
+                await PublicResponseTime.EntryAsync(_directory, _context, _dateTimeProvider.UtcNow, tenant.Id, _logger, cancellationToken)));
     }
 }
 
@@ -107,15 +131,24 @@ public class UpdateDirectoryProfileCommandHandler : IRequestHandler<UpdateDirect
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly PublicDirectoryCache _directory;
+    private readonly ILogger<UpdateDirectoryProfileCommandHandler> _logger;
 
     public UpdateDirectoryProfileCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IDateTimeProvider dateTimeProvider,
+        PublicDirectoryCache directory,
+        ILogger<UpdateDirectoryProfileCommandHandler> logger)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
+        _dateTimeProvider = dateTimeProvider;
+        _directory = directory;
+        _logger = logger;
     }
 
     public async Task<Result<DirectoryProfileDto>> Handle(UpdateDirectoryProfileCommand request, CancellationToken cancellationToken)
@@ -158,7 +191,9 @@ public class UpdateDirectoryProfileCommandHandler : IRequestHandler<UpdateDirect
             await _context.SaveChangesAsync(cancellationToken);
         }
 
-        return Result.Success(await DirectoryProfile.ReadAsync(_context, tenant, settings, cancellationToken));
+        return Result.Success(await DirectoryProfile.ReadAsync(
+            _context, tenant, settings, cancellationToken,
+            await PublicResponseTime.EntryAsync(_directory, _context, _dateTimeProvider.UtcNow, tenant.Id, _logger, cancellationToken)));
     }
 }
 
@@ -204,8 +239,15 @@ public class DismissHomeVisitAddressNoticeCommandHandler : IRequestHandler<Dismi
 internal static class DirectoryProfile
 {
     /// <summary>The profile and why Explorar lists the business or not, in the order its owner would fix it.</summary>
+    /// <param name="entry">
+    /// The business in the snapshot of Explorar (<see cref="PublicResponseTime.EntryAsync"/>): how soon it answers.
+    /// </param>
     public static async Task<DirectoryProfileDto> ReadAsync(
-        IApplicationDbContext context, Tenant tenant, TenantSettings? settings, CancellationToken cancellationToken)
+        IApplicationDbContext context,
+        Tenant tenant,
+        TenantSettings? settings,
+        CancellationToken cancellationToken,
+        PublicDirectorySnapshot.Entry? entry = null)
     {
         var listed = settings?.ListedInDirectory ?? true;
         var visibility = tenant.Status != TenantStatus.Active ? DirectoryVisibility.Inactive
@@ -213,7 +255,7 @@ internal static class DirectoryProfile
             : !listed ? DirectoryVisibility.HiddenByOwner
             : !await ShowsSomethingAsync(context, tenant, settings, cancellationToken) ? DirectoryVisibility.NoProducts
             : DirectoryVisibility.Shown;
-        return new DirectoryProfileDto
+        var profile = new DirectoryProfileDto
         {
             Category = tenant.DirectoryCategory,
             SuggestedCategory = BusinessCategoryDefaults.Suggest(tenant.Industry, tenant.BusinessType),
@@ -222,6 +264,13 @@ internal static class DirectoryProfile
             Visibility = visibility,
             HomeVisitAddressNotice = await HomeVisitAddressNotice.ShowsAsync(context, tenant, settings, cancellationToken)
         };
+        // As Explorar counts them: while it lists the business now, from its snapshot (PublicResponseTime.MaxAge).
+        if (visibility == DirectoryVisibility.Shown && entry is { Business: var card } && (card.BooksOnline || card.ReceivesVisits))
+        {
+            profile.CountsRequests = true;
+            profile.ResponseTime = entry.ResponseTime;
+        }
+        return profile;
     }
 
     /// <summary>

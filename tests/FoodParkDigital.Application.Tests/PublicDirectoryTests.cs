@@ -71,7 +71,7 @@ public class PublicDirectoryTests
         // The same answer as the menu of each one.
         foreach (var business in listed)
         {
-            var menu = await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off)
+            var menu = await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off, new PublicDirectoryCache(), NullLogger<GetPublicMenuQueryHandler>.Instance)
                 .Handle(new GetPublicMenuQuery(business.Slug), CancellationToken.None);
             Assert.True((menu!.AcceptsOrders, menu.OrdersPaused) == (business.AcceptsOrders, business.OrdersPaused), business.Slug);
         }
@@ -240,7 +240,7 @@ public class PublicDirectoryTests
         var tenant = await BusinessAsync(fixture, "abarrotes", OnlineMenuMode.MenuOnly, BusinessType.Retail);
         tenant.SetBusinessInfo(null, null, "Abarrotes", null, null);
         await fixture.Context.SaveChangesAsync();
-        var update = new UpdateDirectoryProfileCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser);
+        var update = new UpdateDirectoryProfileCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock, new PublicDirectoryCache(), NullLogger<UpdateDirectoryProfileCommandHandler>.Instance);
 
         var shown = await update.Handle(new UpdateDirectoryProfileCommand(BusinessCategory.Groceries, "  Abarrotes y tortillas ", true), CancellationToken.None);
         Assert.True(shown.IsSuccess, shown.Error);
@@ -260,7 +260,7 @@ public class PublicDirectoryTests
         settings.SetDirectoryListing(true);
         await fixture.Context.Products.ForEachAsync(p => p.SetAvailability(false));
         await fixture.Context.SaveChangesAsync();
-        var query = new GetDirectoryProfileQueryHandler(fixture.Context, fixture.TenantService);
+        var query = new GetDirectoryProfileQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetDirectoryProfileQueryHandler>.Instance);
         Assert.Equal(DirectoryVisibility.NoProducts, (await query.Handle(new GetDirectoryProfileQuery(), CancellationToken.None)).Value!.Visibility);
         settings.UpdateOnlineMenu(OnlineMenuMode.Off);
         await fixture.Context.SaveChangesAsync();

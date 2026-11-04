@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Attention;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.OnlineBooking;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
@@ -20,6 +21,7 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
@@ -48,7 +50,7 @@ public class OnlineBookingFlowTests
         await fixture.AddProductAsync(tenant, "Cera para cabello", 120m, unit: UnitType.Unit);
         await fixture.Context.SaveChangesAsync();
 
-        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService)
+        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicBookingQueryHandler>.Instance)
             .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None);
 
         Assert.NotNull(page);
@@ -76,7 +78,7 @@ public class OnlineBookingFlowTests
         }
         await ServiceAsync(fixture, tenant, "Corte de cabello", 45);
 
-        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService)
+        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicBookingQueryHandler>.Instance)
             .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None);
         var request = await RequestAsync(fixture, (await fixture.Context.Products.SingleAsync()).Id, Local(Monday, "10:00"));
 

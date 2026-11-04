@@ -28,7 +28,7 @@ namespace FoodParkDigital.Application.Tests;
 public class ExploreResponseTimeTests
 {
     // Well past Fase 29J and its first 90 days, so the window is the one that cuts.
-    private static readonly DateTimeOffset Now = new(2027, 3, 1, 17, 0, 0, TimeSpan.Zero);
+    internal static readonly DateTimeOffset Now = new(2027, 3, 1, 17, 0, 0, TimeSpan.Zero);
     private static readonly DayOfWeek[] EveryDay = Enum.GetValues<DayOfWeek>();
 
     [Fact]
@@ -300,7 +300,7 @@ public class ExploreResponseTimeTests
         Assert.Equal((Now, Now), (accepted.RespondedAt, declined.RespondedAt));
     }
 
-    private static SalesTestFixture Fixture(DateTimeOffset? now = null)
+    internal static SalesTestFixture Fixture(DateTimeOffset? now = null)
     {
         var fixture = SalesTestFixture.Create();
         fixture.Clock.UtcNow = now ?? Now;
@@ -308,7 +308,7 @@ public class ExploreResponseTimeTests
     }
 
     /// <summary>A salon that books online every day, its menu published; with a product, its menu shows something without it.</summary>
-    private static async Task<Tenant> SalonAsync(SalesTestFixture fixture, string slug, string name, bool bookingOn = true, bool product = false)
+    internal static async Task<Tenant> SalonAsync(SalesTestFixture fixture, string slug, string name, bool bookingOn = true, bool product = false)
     {
         var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, slug: slug);
         tenant.Update(name, $"{slug}@demo.com", null, null);
@@ -327,7 +327,7 @@ public class ExploreResponseTimeTests
     }
 
     /// <summary>A plumber that only receives visits, in a zone of the 72000, without booking online.</summary>
-    private static async Task<(Tenant Tenant, DeliveryZone Zone)> TradeAsync(SalesTestFixture fixture, string slug, string name)
+    internal static async Task<(Tenant Tenant, DeliveryZone Zone)> TradeAsync(SalesTestFixture fixture, string slug, string name)
     {
         var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments, slug: slug);
         tenant.Update(name, $"{slug}@demo.com", null, null);
@@ -343,7 +343,7 @@ public class ExploreResponseTimeTests
     }
 
     /// <summary>A request online that arrived <paramref name="arrivedAt"/>, for two days from now unless said, still waiting.</summary>
-    private static async Task<Appointment> RequestAsync(SalesTestFixture fixture, Tenant tenant, DateTimeOffset arrivedAt, DateTimeOffset? startAt = null)
+    internal static async Task<Appointment> RequestAsync(SalesTestFixture fixture, Tenant tenant, DateTimeOffset arrivedAt, DateTimeOffset? startAt = null)
     {
         var start = startAt ?? fixture.Clock.UtcNow.AddDays(2);
         var request = Appointment.RequestOnline(
@@ -359,7 +359,7 @@ public class ExploreResponseTimeTests
     /// A request the business accepted (or declined) after its customer waited <paramref name="waited"/>; for two days from
     /// now, or <paramref name="startsAfter"/> it arrived.
     /// </summary>
-    private static async Task AnsweredAsync(
+    internal static async Task AnsweredAsync(
         SalesTestFixture fixture, Tenant tenant, TimeSpan waited, int arrivedDaysAgo = 3, bool declined = false,
         TimeSpan? startsAfter = null, DateTimeOffset? clock = null)
     {
@@ -373,17 +373,17 @@ public class ExploreResponseTimeTests
     }
 
     /// <summary>A request whose time began without an answer.</summary>
-    private static Task LapsedAsync(SalesTestFixture fixture, Tenant tenant)
+    internal static Task LapsedAsync(SalesTestFixture fixture, Tenant tenant)
         => RequestAsync(fixture, tenant, Now.AddDays(-2), startAt: Now.AddHours(-1));
 
-    private static GetPublicDirectoryQueryHandler Handler(SalesTestFixture fixture)
+    internal static GetPublicDirectoryQueryHandler Handler(SalesTestFixture fixture)
         => new(fixture.Context, fixture.Clock, new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance);
 
     private static async Task<List<string>> CategoryAsync(SalesTestFixture fixture)
         => (await Handler(fixture).Handle(new GetPublicDirectoryQuery(BusinessCategory.Beauty), CancellationToken.None))
             .Businesses.Items.Select(b => b.Slug).ToList();
 
-    private static async Task<Dictionary<string, PublicDirectoryBusinessDto>> CardsAsync(SalesTestFixture fixture)
+    internal static async Task<Dictionary<string, PublicDirectoryBusinessDto>> CardsAsync(SalesTestFixture fixture)
         => (await Handler(fixture).Handle(new GetPublicDirectoryQuery(), CancellationToken.None))
             .Businesses.Items.ToDictionary(b => b.Slug);
 }

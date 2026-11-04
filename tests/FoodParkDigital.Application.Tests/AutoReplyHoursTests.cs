@@ -2,6 +2,7 @@ using System.Globalization;
 using FoodParkDigital.Application.AiAgents;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.AiAgents.Entities;
@@ -12,6 +13,7 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
@@ -615,7 +617,7 @@ public class AutoReplyHoursTests
         await using var fixture = SalesTestFixture.Create();
         var saturdayNight = OpeningHours.Create([Open(DayOfWeek.Saturday, "18:00", "01:30")]);
         var tenant = await BusinessAsync(fixture, saturdayNight, timeZone: "America/Tijuana");
-        var menu = new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off);
+        var menu = new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off, new PublicDirectoryCache(), NullLogger<GetPublicMenuQueryHandler>.Instance);
 
         fixture.Clock.UtcNow = new DateTimeOffset(2026, 11, 1, 8, 15, 0, TimeSpan.Zero);
         var firstMenu = (await menu.Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None))!.OpeningHours!;

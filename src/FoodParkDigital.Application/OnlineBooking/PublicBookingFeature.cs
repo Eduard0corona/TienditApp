@@ -10,6 +10,7 @@ using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
@@ -20,6 +21,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.OnlineBooking;
 
@@ -44,6 +46,11 @@ public class PublicBookingDto
     /// did not say who attends, and then customers do not choose.
     /// </summary>
     public List<PublicBookingStaffDto> Staff { get; set; } = [];
+    /// <summary>
+    /// How soon it answers its requests online (Fase 29K, ADR 0065), as its card in Explorar says it: Explorar lists it and
+    /// it answers within a day. Null otherwise.
+    /// </summary>
+    public ResponseTime? ResponseTime { get; set; }
 }
 
 /// <summary>A person customers book (Fase 24J): only the name the business gave them for customers.</summary>
@@ -132,11 +139,22 @@ public class GetPublicBookingQueryHandler : IRequestHandler<GetPublicBookingQuer
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly PublicDirectoryCache _directory;
+    private readonly ILogger<GetPublicBookingQueryHandler> _logger;
 
-    public GetPublicBookingQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetPublicBookingQueryHandler(
+        IApplicationDbContext context,
+        ICurrentTenantService tenantService,
+        IDateTimeProvider dateTimeProvider,
+        PublicDirectoryCache directory,
+        ILogger<GetPublicBookingQueryHandler> logger)
     {
         _context = context;
         _tenantService = tenantService;
+        _dateTimeProvider = dateTimeProvider;
+        _directory = directory;
+        _logger = logger;
     }
 
     public async Task<PublicBookingDto?> Handle(GetPublicBookingQuery request, CancellationToken cancellationToken)
@@ -181,7 +199,9 @@ public class GetPublicBookingQueryHandler : IRequestHandler<GetPublicBookingQuer
                 ImageUrl = ProductImageUrlsDto.FromBaseUrl(s.ImageUrl)?.Medium,
                 StaffIds = staff.Where(person => person.Offers(s.Id)).Select(person => person.Id).ToList()
             }).ToList(),
-            Staff = staff.Select(person => new PublicBookingStaffDto { Id = person.Id, Name = person.Name }).ToList()
+            Staff = staff.Select(person => new PublicBookingStaffDto { Id = person.Id, Name = person.Name }).ToList(),
+            ResponseTime = await PublicResponseTime.ShownAsync(
+                _directory, _context, _dateTimeProvider.UtcNow, tenant.Id, takesRequests: true, _logger, cancellationToken)
         };
     }
 }

@@ -479,11 +479,11 @@ public class HomeVisitRequestsFeatureTests
             .Handle(new GetPublicDirectoryQuery(PostalCode: postalCode, PageNumber: pageNumber, PageSize: pageSize), CancellationToken.None);
 
     private static async Task<PublicMenuDto> StoreAsync(SalesTestFixture fixture, string slug)
-        => (await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off)
+        => (await new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off, new PublicDirectoryCache(), NullLogger<GetPublicMenuQueryHandler>.Instance)
             .Handle(new GetPublicMenuQuery(slug), CancellationToken.None))!;
 
     private static async Task<DirectoryProfileDto> ProfileAsync(SalesTestFixture fixture)
-        => (await new GetDirectoryProfileQueryHandler(fixture.Context, fixture.TenantService)
+        => (await new GetDirectoryProfileQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetDirectoryProfileQueryHandler>.Instance)
             .Handle(new GetDirectoryProfileQuery(), CancellationToken.None)).Value;
 
     private static async Task<List<AttentionItemDto>> AttentionAsync(SalesTestFixture fixture, bool manager)

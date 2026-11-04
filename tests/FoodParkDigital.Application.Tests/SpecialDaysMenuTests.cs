@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
@@ -417,7 +418,7 @@ public class SpecialDaysMenuTests
     };
 
     private static GetPublicMenuQueryHandler MenuHandler(SalesTestFixture fixture)
-        => new(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off);
+        => new(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off, new PublicDirectoryCache(), NullLogger<GetPublicMenuQueryHandler>.Instance);
 
     private static PlacePublicOrderCommandHandler OrderHandler(SalesTestFixture fixture)
     {
