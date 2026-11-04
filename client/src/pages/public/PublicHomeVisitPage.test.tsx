@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
-import { HomeVisitChargePolicy } from '../../api/generated/enums';
+import { HomeVisitChargePolicy, ResponseTime } from '../../api/generated/enums';
 import { publicMenuApi, type PublicBookingSlots, type PublicHomeVisit } from '../../api/publicMenuApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import { resetLinkUploads } from '../../hooks/useProblemPhotoUploads';
@@ -129,6 +129,20 @@ describe('PublicHomeVisitPage', () => {
     api.getHomeVisitCoverage.mockImplementation(async (_slug, postalCode) =>
       (postalCode === '72000' ? { postalCode, covered: true, price: 400 } : { postalCode, covered: false, price: null }) as never);
     api.getHomeVisitSlots.mockResolvedValue(week() as never);
+  });
+
+  it('says how soon the business answers, as its card in Explorar does (Fase 29K)', async () => {
+    api.getHomeVisit.mockResolvedValue(visit({ responseTime: ResponseTime.WithinTwelveHours }) as never);
+    renderPage();
+
+    expect(await screen.findByText('Suele responder en menos de 12 horas')).toBeInTheDocument();
+  });
+
+  it('says nothing of how soon it answers without it', async () => {
+    renderPage();
+
+    expect(await screen.findByText('Visita y diagnóstico')).toBeInTheDocument();
+    expect(screen.queryByText(/Suele responder/)).not.toBeInTheDocument();
   });
 
   it('asks for a visit at a free time as a guest, where the business goes, and gives its link', async () => {

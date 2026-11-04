@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ResponseTime } from '../api/generated/enums';
-import { responseTimeLabel } from './responseTime';
+import { ownResponseTimeNote, responseTimeLabel } from './responseTime';
 
 describe('responseTimeLabel (Fase 29J)', () => {
   it('says within what the business answers, up to a day', () => {
@@ -19,5 +19,20 @@ describe('responseTimeLabel (Fase 29J)', () => {
   it('has a label for every time the server sends but the slowest', () => {
     const shown = Object.values(ResponseTime).filter((value) => value !== ResponseTime.Slower);
     expect(shown.map(responseTimeLabel).every((label) => label?.startsWith('Suele responder en menos de'))).toBe(true);
+  });
+});
+
+describe('ownResponseTimeNote (Fase 29K)', () => {
+  it('tells its owner where customers read it, or why nobody reads it yet', () => {
+    expect(ownResponseTimeNote(ResponseTime.WithinThreeHours)).toBe(
+      'Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas, por tus solicitudes en línea de los últimos 90 días.',
+    );
+    expect(ownResponseTimeNote(ResponseTime.Slower)).toBe(
+      'Sueles tardar un día o más en responder tus solicitudes en línea, así que tu tarjeta no lo dice.',
+    );
+    expect(ownResponseTimeNote(undefined)).toBe(
+      'Cuando tengas 3 solicitudes en línea de los últimos 90 días, tu tarjeta dirá en cuánto sueles responder.',
+    );
+    expect(ownResponseTimeNote(null)).toBe(ownResponseTimeNote(undefined));
   });
 });

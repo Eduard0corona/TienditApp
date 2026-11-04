@@ -23,6 +23,7 @@ import { visitPolicyNote, visitPriceText } from '../../utils/businessCategories'
 import { ADDRESS_LINE_MAX_LENGTH, REFERENCES_MAX_LENGTH, normalizePostalCode } from '../../utils/homeDelivery';
 import { describeDuration, shortDayLabel, upperFirst } from '../../utils/onlineBooking';
 import { readPostalCode } from '../../utils/postalCodePreference';
+import { responseTimeLabel } from '../../utils/responseTime';
 import { isPostalCode } from '../../utils/postalCodes';
 import { localPhone } from '../../utils/phones';
 import { previewBusinessTheme } from '../../utils/theme';
@@ -342,6 +343,8 @@ export default function PublicHomeVisitPage() {
     : notGoing ? `Por ahora no vamos al ${postalCode}.`
     : '';
 
+  const answers = responseTimeLabel(data.responseTime);
+
   return (
     <div className="pm-page">
       <header className="pm-bar">
@@ -353,6 +356,10 @@ export default function PublicHomeVisitPage() {
         <div className="min-w-0">
           <h1 className="pm-bar-name">{data.businessName}</h1>
           <div className="small text-muted">Solicita una visita a domicilio</div>
+          {/* How soon it answers, as its card in Explorar says it (Fase 29K). */}
+          {answers && (
+            <div className="small text-muted"><i className="ri-time-line me-1" aria-hidden="true"></i>{answers}</div>
+          )}
         </div>
       </header>
 

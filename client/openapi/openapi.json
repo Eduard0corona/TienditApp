@@ -25325,6 +25325,7 @@
       "DirectoryProfileDto": {
         "required": [
           "category",
+          "countsRequests",
           "homeVisitAddressNotice",
           "listed",
           "suggestedCategory",
@@ -25350,6 +25351,12 @@
           },
           "homeVisitAddressNotice": {
             "type": "boolean"
+          },
+          "countsRequests": {
+            "type": "boolean"
+          },
+          "responseTime": {
+            "$ref": "#/components/schemas/ResponseTime"
           }
         },
         "additionalProperties": false
@@ -34346,6 +34353,9 @@
             "items": {
               "$ref": "#/components/schemas/PublicBookingStaffDto"
             }
+          },
+          "responseTime": {
+            "$ref": "#/components/schemas/ResponseTime"
           }
         },
         "additionalProperties": false
@@ -35031,6 +35041,9 @@
             "items": {
               "$ref": "#/components/schemas/PublicBookingStaffDto"
             }
+          },
+          "responseTime": {
+            "$ref": "#/components/schemas/ResponseTime"
           }
         },
         "additionalProperties": false
@@ -35214,6 +35227,9 @@
           },
           "rating": {
             "$ref": "#/components/schemas/RatingSummaryDto"
+          },
+          "responseTime": {
+            "$ref": "#/components/schemas/ResponseTime"
           },
           "categories": {
             "type": "array",

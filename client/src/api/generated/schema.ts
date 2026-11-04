@@ -17576,6 +17576,8 @@ export interface components {
             listed: boolean;
             visibility: components["schemas"]["DirectoryVisibility"];
             homeVisitAddressNotice: boolean;
+            countsRequests: boolean;
+            responseTime?: components["schemas"]["ResponseTime"];
         };
         /**
          * Format: int32
@@ -20270,6 +20272,7 @@ export interface components {
             daysAhead: number;
             services: components["schemas"]["PublicBookingServiceDto"][];
             staff: components["schemas"]["PublicBookingStaffDto"][];
+            responseTime?: components["schemas"]["ResponseTime"];
         };
         PublicBookingServiceDto: {
             /** Format: uuid */
@@ -20461,6 +20464,7 @@ export interface components {
             chargePolicy: components["schemas"]["HomeVisitChargePolicy"];
             price: components["schemas"]["HomeVisitPriceDto"];
             staff: components["schemas"]["PublicBookingStaffDto"][];
+            responseTime?: components["schemas"]["ResponseTime"];
         };
         PublicHomeVisitServiceDto: {
             name: string;
@@ -20509,6 +20513,7 @@ export interface components {
             booksOnline: boolean;
             homeVisits?: components["schemas"]["PublicHomeVisitsDto"];
             rating?: components["schemas"]["RatingSummaryDto"];
+            responseTime?: components["schemas"]["ResponseTime"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
         PublicMenuProductDto: {

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
-import { HomeVisitChargePolicy } from '../../api/generated/enums';
+import { HomeVisitChargePolicy, ResponseTime } from '../../api/generated/enums';
 import { publicMenuApi, type PublicMenu } from '../../api/publicMenuApi';
 import { reviewsApi } from '../../api/reviewsApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
@@ -241,6 +241,23 @@ describe('PublicMenuPage', () => {
     expect(screen.queryByText(/Los Pinos/)).not.toBeInTheDocument();
     // The order is the same: the customer still orders online.
     expect(screen.getByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
+  });
+
+  it('says how soon it answers its requests, as its card in Explorar does (Fase 29K)', async () => {
+    api.getMenu.mockResolvedValue(menu({ booksOnline: true, responseTime: ResponseTime.WithinThreeHours }));
+
+    renderPage();
+
+    expect(await screen.findByText('Suele responder en menos de 3 horas')).toBeInTheDocument();
+  });
+
+  it('says nothing of how soon it answers without it, or past a day', async () => {
+    api.getMenu.mockResolvedValue(menu({ booksOnline: true, responseTime: ResponseTime.Slower }));
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'Café Luna' })).toBeInTheDocument();
+    expect(screen.queryByText(/Suele responder/)).not.toBeInTheDocument();
   });
 
   it('shows whether it is open now, its hours of the week and how to get there', async () => {

@@ -17,3 +17,15 @@ const LABELS: Record<ShownTime, string> = {
 export function responseTimeLabel(responseTime: ResponseTime | null | undefined): string | null {
   return responseTime == null || responseTime === ResponseTime.Slower ? null : LABELS[responseTime];
 }
+
+/**
+ * What its owner reads under the preview of its card while Explorar counts its requests online (Fase 29K, ADR 0065):
+ * where its customers read how soon it answers, or why nobody reads it yet.
+ */
+export function ownResponseTimeNote(responseTime: ResponseTime | null | undefined): string {
+  if (responseTime == null)
+    return 'Cuando tengas 3 solicitudes en línea de los últimos 90 días, tu tarjeta dirá en cuánto sueles responder.';
+  if (responseTime === ResponseTime.Slower)
+    return 'Sueles tardar un día o más en responder tus solicitudes en línea, así que tu tarjeta no lo dice.';
+  return 'Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas, por tus solicitudes en línea de los últimos 90 días.';
+}

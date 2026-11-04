@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicDirectoryApi, type DirectoryProfile } from '../../api/publicDirectoryApi';
-import { BusinessCategory, DirectoryVisibility } from '../../api/generated/enums';
+import { BusinessCategory, DirectoryVisibility, ResponseTime } from '../../api/generated/enums';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OnlineMenuMode, type TenantProfileDto } from '../../types';
@@ -27,6 +27,7 @@ function profile(overrides: Partial<DirectoryProfile> = {}): DirectoryProfile {
     listed: true,
     visibility: DirectoryVisibility.Shown,
     homeVisitAddressNotice: false,
+    countsRequests: false,
     ...overrides,
   };
 }
@@ -85,6 +86,33 @@ describe('DirectoryCard', () => {
     renderCard();
 
     expect(await screen.findByText(words)).toBeInTheDocument();
+  });
+
+  it('shows its owner how soon it answers on its card, and why it says nothing (Fase 29K)', async () => {
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true, responseTime: ResponseTime.WithinAnHour }));
+    const { unmount } = renderCard();
+
+    expect(await screen.findByText('Suele responder en menos de una hora')).toBeInTheDocument();
+    expect(screen.getByText(/Tus clientes lo leen en tu tarjeta, en tu tienda/)).toBeInTheDocument();
+    unmount();
+
+    // A day or more: its card says nothing, its owner reads why.
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true, responseTime: ResponseTime.Slower }));
+    const slow = renderCard();
+    expect(await screen.findByText(/Sueles tardar un día o más/)).toBeInTheDocument();
+    expect(screen.queryByText(/Suele responder/)).not.toBeInTheDocument();
+    slow.unmount();
+
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true }));
+    const newer = renderCard();
+    expect(await screen.findByText(/Cuando tengas 3 solicitudes en línea/)).toBeInTheDocument();
+    newer.unmount();
+
+    // Explorar does not count its requests: nothing of them.
+    api.getProfile.mockResolvedValue(profile());
+    renderCard();
+    expect(await screen.findByText(/Apareces en Explorar/)).toBeInTheDocument();
+    expect(screen.queryByText(/solicitudes en línea|Suele responder/)).not.toBeInTheDocument();
   });
 
   it('tells a business that goes to homes that its store shows its address, until its owner checks it (Fase 29A)', async () => {

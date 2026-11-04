@@ -18,6 +18,7 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { formatMoney } from '../../utils/money';
 import { describeDuration, shortDayLabel, upperFirst } from '../../utils/onlineBooking';
 import { localPhone } from '../../utils/phones';
+import { responseTimeLabel } from '../../utils/responseTime';
 import { previewBusinessTheme } from '../../utils/theme';
 import { newUuid } from '../../utils/uuid';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
@@ -257,6 +258,8 @@ export default function PublicBookingPage() {
     </div>
   );
 
+  const answers = responseTimeLabel(data.responseTime);
+
   return (
     <div className="pm-page">
       <header className="pm-bar">
@@ -268,6 +271,10 @@ export default function PublicBookingPage() {
         <div className="min-w-0">
           <h1 className="pm-bar-name">{data.businessName}</h1>
           <div className="small text-muted">Agenda tu cita</div>
+          {/* How soon it answers, as its card in Explorar says it (Fase 29K). */}
+          {answers && (
+            <div className="small text-muted"><i className="ri-time-line me-1" aria-hidden="true"></i>{answers}</div>
+          )}
         </div>
       </header>
 

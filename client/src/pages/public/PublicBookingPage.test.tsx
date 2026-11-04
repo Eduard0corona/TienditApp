@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ResponseTime } from '../../api/generated/enums';
 import { publicMenuApi, type PublicBooking, type PublicBookingSlots } from '../../api/publicMenuApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import PublicBookingPage from './PublicBookingPage';
@@ -120,6 +121,13 @@ describe('PublicBookingPage', () => {
     vi.resetAllMocks();
     api.getBooking.mockResolvedValue(booking() as never);
     api.getBookingSlots.mockResolvedValue(week() as never);
+  });
+
+  it('says how soon the business answers, as its card in Explorar does (Fase 29K)', async () => {
+    api.getBooking.mockResolvedValue(booking({ responseTime: ResponseTime.WithinAnHour }) as never);
+    renderPage();
+
+    expect(await screen.findByText('Suele responder en menos de una hora')).toBeInTheDocument();
   });
 
   it('books a service at a free time as a guest and gives the link of the appointment', async () => {
