@@ -257,7 +257,14 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     }
 
     /// <summary>A connection to a hub over WebSockets (the transport only the access sweep can close), not started.</summary>
-    public HubConnection Hub(string path, string accessToken) => new HubConnectionBuilder()
+    /// <param name="reconnect">It reconnects by itself, as the app's client does, when the server allows it.</param>
+    public HubConnection Hub(string path, string accessToken, bool reconnect = false)
+    {
+        var builder = HubBuilder(path, accessToken);
+        return (reconnect ? builder.WithAutomaticReconnect([TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero]) : builder).Build();
+    }
+
+    private IHubConnectionBuilder HubBuilder(string path, string accessToken) => new HubConnectionBuilder()
         .WithUrl(new Uri(_factory!.Server.BaseAddress, path), options =>
         {
             options.Transports = HttpTransportType.WebSockets;
@@ -269,8 +276,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
                 webSockets.ConfigureRequest = request => request.Headers.Authorization = $"Bearer {accessToken}";
                 return await webSockets.ConnectAsync(context.Uri, cancellationToken);
             };
-        })
-        .Build();
+        });
 
     public async Task<Guid> CreateOrderAsync(Business business) =>
         await IdAsync(business.Client, "/api/v1/orders", new

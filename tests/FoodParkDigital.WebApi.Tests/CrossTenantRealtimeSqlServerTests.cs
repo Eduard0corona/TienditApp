@@ -158,6 +158,29 @@ public sealed class CrossTenantRealtimeSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task ARefusedConnection_ShouldBeClosedForGood_NotReconnectedBySignalR()
+    {
+        // The server aborts it once connected (Context.Abort): its close forbids reconnecting, so a client that reconnects by
+        // itself, as the app's does, gets Closed and never Reconnecting. The app's client backs off its own retries from there.
+        var restaurant = await _api.SignUpAsync("avisos-sin-reconexion", TwoBusinessesApi.FoodBusiness);
+        await using var refused = _api.Hub("/hubs/appointments", restaurant.AccessToken, reconnect: true);
+        var reconnecting = 0;
+        refused.Reconnecting += _ =>
+        {
+            Interlocked.Increment(ref reconnecting);
+            return Task.CompletedTask;
+        };
+
+        var handshakePassed = await AssertRefusedAsync(refused);
+        await Task.Delay(TimeSpan.FromSeconds(1));
+
+        // The handshake passed before OnConnectedAsync refused it: the case where a reconnect would have looped.
+        Assert.True(handshakePassed);
+        Assert.Equal(0, reconnecting);
+        Assert.Equal(HubConnectionState.Disconnected, refused.State);
+    }
+
+    [SqlServerFact]
     public async Task AppointmentHub_ShouldRefuse_ABusinessWithoutAppointments()
     {
         var restaurant = await _api.SignUpAsync("avisos-comida", TwoBusinessesApi.FoodBusiness);
@@ -308,7 +331,8 @@ public sealed class CrossTenantRealtimeSqlServerTests
     /// A connection the server refuses: either the start fails, or the server closes it right after the handshake (it aborts
     /// it in OnConnectedAsync). Either way it ends disconnected and stays so.
     /// </summary>
-    private static async Task AssertRefusedAsync(HubConnection connection)
+    /// <returns>The handshake passed (the server closed it afterwards).</returns>
+    private static async Task<bool> AssertRefusedAsync(HubConnection connection)
     {
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         connection.Closed += _ =>
@@ -329,6 +353,7 @@ public sealed class CrossTenantRealtimeSqlServerTests
         if (started)
             await closed.Task.WaitAsync(Patience);
         Assert.Equal(HubConnectionState.Disconnected, connection.State);
+        return started;
     }
 
     /// <summary>A member of the owner's team with the permissions given, signed in with its own password: its client and token.</summary>
