@@ -183,6 +183,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("EndAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<bool>("FromTeam")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
@@ -272,6 +275,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasFilter("[Channel] = 1");
 
                     SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex(new[] { "CreatedAt" }, "IX_Appointments_OnlineRequests_CreatedAt"), new[] { "TenantId", "RespondedAt", "Status", "StartAt", "RequestedStartAt", "CancelledByCustomerAt" });
+
+                    b.HasIndex(new[] { "TenantId", "CustomerPhone", "CreatedAt" }, "IX_Appointments_OnlineRequests_Customer")
+                        .HasFilter("[Channel] = 1");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex(new[] { "TenantId", "CustomerPhone", "CreatedAt" }, "IX_Appointments_OnlineRequests_Customer"), new[] { "RespondedAt", "Status", "StartAt", "RequestedStartAt", "CancelledByCustomerAt", "FromTeam" });
 
                     b.ToTable("Appointments", null, t =>
                         {

@@ -100,5 +100,10 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
         builder.HasIndex(x => x.CreatedAt, "IX_Appointments_OnlineRequests_CreatedAt")
             .HasFilter("[Channel] = 1")
             .IncludeProperties(x => new { x.TenantId, x.RespondedAt, x.Status, x.StartAt, x.RequestedStartAt, x.CancelledByCustomerAt });
+        // Fase 29M (ADR 0067): Explorar counts one request per customer of each business, the last one decided, so it looks
+        // for a later one of the same phone; with what it needs to decide whether that one counts.
+        builder.HasIndex(x => new { x.TenantId, x.CustomerPhone, x.CreatedAt }, "IX_Appointments_OnlineRequests_Customer")
+            .HasFilter("[Channel] = 1")
+            .IncludeProperties(x => new { x.RespondedAt, x.Status, x.StartAt, x.RequestedStartAt, x.CancelledByCustomerAt, x.FromTeam });
     }
 }

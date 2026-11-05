@@ -22,6 +22,8 @@ internal static class BeforeAppointmentRespondedAt
     /// <summary>For the context of an earlier version, which does not know it either.</summary>
     public static void Ignore(ModelBuilder modelBuilder)
     {
+        // Nor what came after it (Fase 29M), whose index reads these columns too.
+        BeforeAppointmentFromTeam.Ignore(modelBuilder);
         var appointment = modelBuilder.Entity<Appointment>();
         var index = appointment.Metadata.GetIndexes().SingleOrDefault(i => i.GetDatabaseName() == IndexName);
         if (index is not null)
