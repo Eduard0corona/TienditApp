@@ -27,6 +27,7 @@ internal static class BeforeAppointmentFromTeam
             appointment.Metadata.RemoveIndex(index);
         appointment.Ignore(a => a.FromTeam);
         appointment.Ignore(a => a.RequestPhone);
+        BeforeTenantUserRequestEmails.Ignore(modelBuilder);
     }
 
     private sealed class Context(
