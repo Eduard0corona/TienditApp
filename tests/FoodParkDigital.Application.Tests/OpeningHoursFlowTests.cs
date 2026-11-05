@@ -2,6 +2,7 @@ using System.Text.Json;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tests.Support;
@@ -380,7 +381,7 @@ public class OpeningHoursFlowTests
         => new(fixture.Context, fixture.CurrentUser, fixture.TenantService);
 
     private static GetPublicMenuQueryHandler MenuHandler(SalesTestFixture fixture)
-        => new(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off);
+        => new(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off, new PublicDirectoryCache(), NullLogger<GetPublicMenuQueryHandler>.Instance);
 
     private static PlacePublicOrderCommandHandler OrderHandler(SalesTestFixture fixture)
     {

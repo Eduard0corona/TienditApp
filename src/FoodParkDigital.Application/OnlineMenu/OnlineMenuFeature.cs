@@ -19,6 +19,7 @@ using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Customers.Entities;
@@ -33,6 +34,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.OnlineMenu;
 
@@ -176,6 +178,11 @@ public class PublicMenuDto
     public PublicHomeVisitsDto? HomeVisits { get; set; }
     /// <summary>How its customers rate it (Fase 24H): its published reviews and their average; null without reviews.</summary>
     public RatingSummaryDto? Rating { get; set; }
+    /// <summary>
+    /// How soon it answers its requests online (Fase 29K, ADR 0065), as its card in Explorar says it: while it books online
+    /// or receives visits, Explorar lists it and it answers within a day. Null otherwise, and at a table.
+    /// </summary>
+    public ResponseTime? ResponseTime { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
 }
 
@@ -361,14 +368,23 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
     private readonly ICurrentTenantService _tenantService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IOnlinePaymentGateway _gateway;
+    private readonly PublicDirectoryCache _directory;
+    private readonly ILogger<GetPublicMenuQueryHandler> _logger;
 
     public GetPublicMenuQueryHandler(
-        IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider dateTimeProvider, IOnlinePaymentGateway gateway)
+        IApplicationDbContext context,
+        ICurrentTenantService tenantService,
+        IDateTimeProvider dateTimeProvider,
+        IOnlinePaymentGateway gateway,
+        PublicDirectoryCache directory,
+        ILogger<GetPublicMenuQueryHandler> logger)
     {
         _context = context;
         _tenantService = tenantService;
         _dateTimeProvider = dateTimeProvider;
         _gateway = gateway;
+        _directory = directory;
+        _logger = logger;
     }
 
     public async Task<PublicMenuDto?> Handle(GetPublicMenuQuery request, CancellationToken cancellationToken)
@@ -427,6 +443,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
                 settings.OpeningHours is not null)
             && await OnlineBookingCalendar.OfferedServices(_context).AnyAsync(cancellationToken);
 
+        var homeVisits = await PublicHomeVisits.ReadAsync(_context, tenant, settings, cancellationToken);
         var cover = LogoImageUrlsDto.FromBaseUrl(tenant.CoverImageUrl);
         return new PublicMenuDto
         {
@@ -452,8 +469,13 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             DeliveryAvailable = ordersOn && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken),
             OpeningHours = hours is null ? null : PublicOpeningHoursDto.From(hours, seatedOverride: acceptsOrders && closed),
             BooksOnline = booksOnline,
-            HomeVisits = await PublicHomeVisits.ReadAsync(_context, tenant, settings, cancellationToken),
+            HomeVisits = homeVisits,
             Rating = await ReviewRules.SummaryAsync(_context, cancellationToken),
+            // Not at a table, where only the order is requested.
+            ResponseTime = await PublicResponseTime.ShownAsync(
+                _directory, _context, utcNow, tenant.Id,
+                settings.ListedInDirectory && string.IsNullOrWhiteSpace(request.Table) && (booksOnline || homeVisits is not null),
+                _logger, cancellationToken),
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto

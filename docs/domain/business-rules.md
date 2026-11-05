@@ -231,6 +231,9 @@ Los clientes encuentran los negocios por categoría y compran en el menú de cad
   - **Las más lentas:** la que se respondió cuando esa hora ya había empezado, la que el negocio dejó pasar (aunque la mueva), la que lleva un día o más sin respuesta y la que el cliente canceló después de esperar un día sin respuesta (desde la Fase 29J). Una que espera desde hace menos de un día, o que el cliente canceló antes, todavía no cuenta.
   - **Qué dice la tarjeta:** desde 3 solicitudes, el tramo más corto que reúne al menos la mitad: «Suele responder en menos de una hora», «… de 3 horas», «… de 12 horas» o «… de un día». Con un día o más, con menos de 3 solicitudes o si ya no agenda en línea ni recibe visitas, no dice nada.
   - **Desde cuándo:** desde la primera respuesta que TienditApp guardó (el despliegue de la Fase 29J). Antes de ella las respuestas no guardan su hora, así que tampoco cuenta una solicitud que llegó a su límite entonces (la hora pedida o su día), aunque se responda después.
+  - **Fuera de Explorar** (Fase 29K, [ADR 0065](../adr/0065-response-time-outside-explore.md)): la tienda, la página de citas y la solicitud de visita dicen lo mismo que la tarjeta, de la misma foto, mientras el negocio aparece en Explorar y agenda en línea o recibe visitas; un cambio tarda hasta 10 minutos en verse en ellas.
+  - **Lo que lee el dueño:** en «Cómo te ven en TienditApp», su tarjeta como la ven sus clientes y una nota: dónde lo leen, que tarda un día o más (sus clientes no lo leen) o que todavía no se cuentan 3 de sus solicitudes.
+  - **En una mesa** (el QR con `?mesa=`) la tienda no lo dice: ahí solo se pide la orden.
 - **Quién entra por `/`:** los visitantes y los clientes llegan a Explorar. El equipo de un negocio entra a su trabajo, y desde Explorar regresa con «Mi negocio».
 
 ## Comprar con tu cuenta (Fase 24B)

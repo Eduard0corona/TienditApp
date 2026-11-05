@@ -19,6 +19,7 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
@@ -149,7 +150,7 @@ public class OnlineBookingStaffFlowTests
         var luis = await StaffAsync(fixture, tenant, "Luis", "Luis M.", services: [haircut.Id, beard.Id]);
         await StaffAsync(fixture, tenant, "Off", "Apagado", enabled: false);
 
-        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService)
+        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicBookingQueryHandler>.Instance)
             .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None);
 
         Assert.NotNull(page);
@@ -351,7 +352,7 @@ public class OnlineBookingStaffFlowTests
         fixture.Context.OnlineBookingStaff.AddRange(luis, marta);
         await fixture.Context.SaveChangesAsync();
 
-        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService)
+        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicBookingQueryHandler>.Instance)
             .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None);
 
         Assert.Equal([ana.Id], page!.Staff.Select(person => person.Id));
@@ -377,7 +378,7 @@ public class OnlineBookingStaffFlowTests
         await fixture.Context.SaveChangesAsync();
 
         // The haircut is still booked, but nobody who attends does it: the booking page would have no service.
-        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService)
+        var page = await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicBookingQueryHandler>.Instance)
             .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None);
         Assert.Empty(page!.Services);
         Assert.False((await MenuAsync(fixture))!.BooksOnline);
@@ -429,11 +430,11 @@ public class OnlineBookingStaffFlowTests
     }
 
     private static async Task<PublicBookingDto> BookingAsync(SalesTestFixture fixture)
-        => (await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService)
+        => (await new GetPublicBookingQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicBookingQueryHandler>.Instance)
             .Handle(new GetPublicBookingQuery(Slug), CancellationToken.None))!;
 
     private static Task<PublicMenuDto?> MenuAsync(SalesTestFixture fixture)
-        => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off)
+        => new GetPublicMenuQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, FakeOnlinePaymentGateway.Off, new PublicDirectoryCache(), NullLogger<GetPublicMenuQueryHandler>.Instance)
             .Handle(new GetPublicMenuQuery(Slug), CancellationToken.None);
 
     private static Task<PublicDirectorySnapshot> ExplorarAsync(SalesTestFixture fixture)

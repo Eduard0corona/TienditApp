@@ -7,6 +7,7 @@ using FoodParkDigital.Application.OnlinePayments;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -764,7 +765,7 @@ public partial class OnlinePaymentsFlowTests
         }
 
         public Task<PublicMenuDto> MenuAsync()
-            => new GetPublicMenuQueryHandler(Context, Fixture.TenantService, Clock, Gateway)
+            => new GetPublicMenuQueryHandler(Context, Fixture.TenantService, Clock, Gateway, new PublicDirectoryCache(), NullLogger<GetPublicMenuQueryHandler>.Instance)
                 .Handle(new GetPublicMenuQuery(Slug), CancellationToken.None)!;
 
         public Task<Common.Models.Result<OnlineCheckoutStartedDto>> CheckoutAsync(

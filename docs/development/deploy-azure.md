@@ -1006,6 +1006,15 @@ La Fase 29J trae una migración, [`database/production/20261103170924_AddAppoint
 - **Volver a la versión anterior:** funciona sin tocar la base. Explorar deja de decir cuánto tarda cada negocio y ordena cada grupo solo por nombre.
 - **Dejar también la base como estaba:** el `rollback.sql` quita el índice y las dos columnas; se pierden las horas guardadas, sin cambiar ninguna cita.
 
+## Cuánto tarda en responder, fuera de Explorar (Fase 29K)
+
+La Fase 29K no trae migración ni `apply.sql` ([ADR 0065](../adr/0065-response-time-outside-explore.md)).
+
+- **Lo que cambia:** la tienda, la página de citas, la solicitud de visita y el perfil del directorio leen la entrada de su negocio en la foto de Explorar, que ya existía. Las páginas de los clientes aceptan una foto de hasta 10 minutos (el perfil, de 30 segundos, como Explorar); la que la encuentra más vieja la rearma, y las demás no esperan en fila: salen sin el dato.
+- **Si la foto falla:** esas páginas salen igual, sin el dato, queda una advertencia en el log («Could not read how soon the business answers») y ninguna de ellas reintenta durante un minuto. Explorar sigue como siempre.
+- **Sin configuración nueva.**
+- **Volver a la versión anterior:** funciona sin tocar la base; esas páginas dejan de decirlo y Explorar sigue igual.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

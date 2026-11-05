@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
@@ -91,7 +92,7 @@ public class UpdateMyTenantCommandTests
         Assert.Equal(BusinessCategory.Groceries, (await fixture.Context.Tenants.SingleAsync()).DirectoryCategory);
 
         // The owner saves the card keeping the category the giro gave, with a description.
-        var saved = await new UpdateDirectoryProfileCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser)
+        var saved = await new UpdateDirectoryProfileCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, new FoodParkDigital.Application.Tests.Support.SalesClock(), new PublicDirectoryCache(), NullLogger<UpdateDirectoryProfileCommandHandler>.Instance)
             .Handle(new UpdateDirectoryProfileCommand(BusinessCategory.Groceries, "Abarrotes y cremería", true), CancellationToken.None);
         Assert.True(saved.IsSuccess, saved.Error);
 

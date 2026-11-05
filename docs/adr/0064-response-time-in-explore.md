@@ -44,8 +44,8 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
    - **Si esa consulta falla,** Explorar sigue sin el dato hasta la siguiente foto: nadie dice cuánto tarda y todos van en medio.
    - **La migración** `AddAppointmentRespondedAt` agrega las dos columnas (NULL en las citas que existen) y un índice de las solicitudes en línea por su llegada, con lo que lee la consulta. Su `apply.sql` va antes del merge. Una solicitud de antes, sin la hora pedida, se mide con su hora.
 6. **Fuera de esta fase:**
-   - **Decirlo en la tienda, en la página de citas o en la solicitud de visita.**
-   - **Mostrarle al negocio su propio tiempo** (la vista previa de su tarjeta en Configuración lo deja fuera).
+   - **Decirlo en la tienda, en la página de citas o en la solicitud de visita:** llegó en la Fase 29K ([ADR 0065](0065-response-time-outside-explore.md)).
+   - **Mostrarle al negocio su propio tiempo:** llegó en la Fase 29K, en «Cómo te ven en TienditApp».
    - **Contar las cotizaciones:** cuánto tarda en mandar la cotización después de la visita.
    - **Los pedidos en línea de los restaurantes.**
    - **Defenderse de solicitudes falsas** (ver «Lo que limita»).

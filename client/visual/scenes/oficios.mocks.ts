@@ -131,8 +131,11 @@ function plumberSettings(data: DemoData) {
 
 type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 
-/** The store of the plumber: its visits instead of a menu, its services as reference prices with IVA on top. */
-const plumberStore: ExtraRoutes = (_data, { ok }) => [
+/**
+ * The store of the plumber: its visits instead of a menu, its services as reference prices with IVA on top; with
+ * <paramref name="extra"/>, what else the server says (how soon it answers, Fase 29K).
+ */
+const plumberStoreWith = (extra: Record<string, unknown> = {}): ExtraRoutes => (_data, { ok }) => [
   ['GET', /^\/public\/menu\/plomeria-hernandez$/, () => ok({
     businessName: 'Plomería Hernández',
     slug: 'plomeria-hernandez',
@@ -157,8 +160,10 @@ const plumberStore: ExtraRoutes = (_data, { ok }) => [
       postalCodeCount: 20,
       services: PLUMBER_SERVICES.slice(1).map(({ name, price, durationMinutes }) => ({ name, price, durationMinutes })),
     },
+    ...extra,
   })],
 ];
+const plumberStore = plumberStoreWith();
 
 // The request page's week (Fase 29B), from the scenes' Sunday 4 October: free times with the trip of each visit already
 // left free, as the server gives them (PublicBookingSlotsDto). Mexico City is UTC-6 all year.
@@ -199,7 +204,7 @@ export const VISIT_LINK = 'Vq7Lm2Qv7RtW4yXk9PbN1sDf5GhJ3aEu6Ki0Oo-_PlM';
  * The request page of the plumber's visits (Fase 29B): «Visita y diagnóstico» of an hour, from $350 more IVA, taken off
  * the quote when the customer hires the work; whoever is free goes. It goes to Roma Norte (06700), not to 72000.
  */
-const plumberVisit: ExtraRoutes = (data, { ok }) => [
+const plumberVisitWith = (extra: Record<string, unknown> = {}): ExtraRoutes => (data, { ok }) => [
   ['GET', /^\/public\/menu\/plomeria-hernandez\/home-visit$/, () => ok({
     businessName: 'Plomería Hernández',
     slug: 'plomeria-hernandez',
@@ -213,6 +218,7 @@ const plumberVisit: ExtraRoutes = (data, { ok }) => [
     chargePolicy: CREDITED_IF_HIRED,
     price: { amount: 350, isStarting: true },
     staff: [],
+    ...extra,
   })],
   ['GET', /^\/public\/menu\/plomeria-hernandez\/home-visit\/coverage$/, (_match, query) => {
     const postalCode = query.get('postalCode') ?? '';
@@ -235,6 +241,7 @@ const plumberVisit: ExtraRoutes = (data, { ok }) => [
     trackingToken: VISIT_LINK,
   })],
 ];
+const plumberVisit = plumberVisitWith();
 
 /**
  * The visit as its link shows it (Fase 29H): «Por confirmar» at 06700, with the photos of what happens the customer sent
@@ -272,12 +279,24 @@ const visitPhotos = (sentBefore: number): ExtraRoutes => (data, helpers) => {
   ];
 };
 
+/**
+ * The plumber answers within an hour (Fase 29K, ADR 0065): its store and its request page say so, as its card does, and
+ * its owner reads it under the preview of its card.
+ */
+function plumberSettingsThatAnswers(data: DemoData) {
+  plumberSettings(data);
+  data.directoryProfile = { ...data.directoryProfile, homeVisitAddressNotice: false, countsRequests: true, responseTime: WITHIN_AN_HOUR };
+}
+
 export const OFICIOS_EN_EXPLORAR = asOption(tradesInExplore);
 export const OFICIOS_QUE_RESPONDEN = asOption(tradesThatAnswer);
 export const SERVICIOS_EN_EXPLORAR = asOption(servicesInExplore);
 export const PLOMERO_EN_CONFIGURACION = asOption(plumberSettings);
 export const TIENDA_DE_PLOMERIA = asOption(plumberStore);
 export const VISITA_DE_PLOMERIA = asOption(plumberVisit);
+export const TIENDA_DE_PLOMERIA_QUE_RESPONDE = asOption(plumberStoreWith({ responseTime: WITHIN_AN_HOUR }));
+export const VISITA_DE_PLOMERIA_QUE_RESPONDE = asOption(plumberVisitWith({ responseTime: WITHIN_AN_HOUR }));
+export const PLOMERO_QUE_RESPONDE_EN_CONFIGURACION = asOption(plumberSettingsThatAnswers);
 /** The request with photos of what happens, none sent yet (Fase 29H). */
 export const VISITA_CON_FOTOS = asOption(visitPhotos(0));
 /** The link of a visit that already has two photos and takes three more (Fase 29H). */

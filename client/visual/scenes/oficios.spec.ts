@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap, snapElement } from '../helpers';
 import {
-  ENLACE_CON_FOTOS, OFICIOS_EN_EXPLORAR, OFICIOS_QUE_RESPONDEN, PLOMERO_EN_CONFIGURACION, SERVICIOS_EN_EXPLORAR, TIENDA_DE_PLOMERIA, VISIT_LINK, VISITA_CON_FOTOS,
-  VISITA_DE_PLOMERIA,
+  ENLACE_CON_FOTOS, OFICIOS_EN_EXPLORAR, OFICIOS_QUE_RESPONDEN, PLOMERO_EN_CONFIGURACION, PLOMERO_QUE_RESPONDE_EN_CONFIGURACION, SERVICIOS_EN_EXPLORAR,
+  TIENDA_DE_PLOMERIA, TIENDA_DE_PLOMERIA_QUE_RESPONDE, VISIT_LINK, VISITA_CON_FOTOS, VISITA_DE_PLOMERIA, VISITA_DE_PLOMERIA_QUE_RESPONDE,
 } from './oficios.mocks';
 
 // Oficios a domicilio (Fase 29A, ADR 0053): the trades that go to their customers' homes to quote look like what they
@@ -62,6 +62,46 @@ test.describe('Oficios que responden pronto', () => {
       await snap(page, `oficios-explorar-respuesta-${look.suffix}`);
     });
   }
+});
+
+// Fase 29K (ADR 0065): the store and the request page say how soon the plumber answers, as its card does.
+test.describe('Tienda de un oficio que responde pronto', () => {
+  test.use({ signedIn: false, extraRoutes: TIENDA_DE_PLOMERIA_QUE_RESPONDE });
+
+  for (const look of LOOKS) {
+    test(`tienda de un oficio que responde ${look.suffix}`, async ({ page }) => {
+      await page.setViewportSize(look.viewport);
+      await open(page, '/m/plomeria-hernandez');
+      await expect(page.getByText('Suele responder en menos de una hora')).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Visitas a domicilio' }).getByRole('link', { name: 'Solicitar visita' })).toBeVisible();
+      await snap(page, `oficios-tienda-respuesta-${look.suffix}`);
+    });
+  }
+});
+
+test.describe('Solicitar una visita a un oficio que responde pronto', () => {
+  test.use({ signedIn: false, extraRoutes: VISITA_DE_PLOMERIA_QUE_RESPONDE });
+
+  test('solicitar visita que responde', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/m/plomeria-hernandez/visita');
+    await expect(page.getByText('Suele responder en menos de una hora')).toBeVisible();
+    await expect(page.getByText('Visita y diagnóstico')).toBeVisible();
+    await snap(page, 'oficios-solicitar-visita-respuesta-telefono');
+  });
+});
+
+test.describe('Cuánto tardas en Configuración', () => {
+  test.use({ prepareData: PLOMERO_QUE_RESPONDE_EN_CONFIGURACION });
+
+  test('cómo te ven con tu tiempo de respuesta', async ({ page }) => {
+    await open(page, '/settings/business');
+    const card = page.getByRole('region', { name: 'Cómo te ven en TienditApp' });
+    await expect(card.getByText('Suele responder en menos de una hora')).toBeVisible();
+    await expect(card.getByText(/Tus clientes lo leen en tu tarjeta, en tu tienda/)).toBeVisible();
+    await card.scrollIntoViewIfNeeded();
+    await snapElement(card, 'oficios-como-te-ven-respuesta');
+  });
 });
 
 // A search finds services (Fase 29I, ADR 0063): «corte» finds two services of a salon that books online, at their price and

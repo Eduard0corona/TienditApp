@@ -94,7 +94,7 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
             )}
             {answers && (
               <span className="dc-badge dc-badge-menu">
-                <i className="ri-time-line" aria-hidden="true"></i>{answers}
+                <i className="ri-chat-check-line" aria-hidden="true"></i>{answers}
               </span>
             )}
           </p>

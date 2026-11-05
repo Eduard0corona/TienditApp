@@ -484,10 +484,11 @@ public sealed class PublicDirectorySnapshot
 
     private static readonly StringComparer Names = StringComparer.Create(CultureInfo.GetCultureInfo("es-MX"), ignoreCase: true);
 
-    private PublicDirectorySnapshot(DateTimeOffset builtAt, IReadOnlyList<Entry> entries)
+    internal PublicDirectorySnapshot(DateTimeOffset builtAt, IReadOnlyList<Entry> entries, bool responseTimesRead = true)
     {
         BuiltAt = builtAt;
         Entries = entries;
+        ResponseTimesRead = responseTimesRead;
         Categories = Enum.GetValues<BusinessCategory>()
             .Select(category => new PublicDirectoryCategoryDto
             {
@@ -500,6 +501,12 @@ public sealed class PublicDirectorySnapshot
     public DateTimeOffset BuiltAt { get; }
 
     internal IReadOnlyList<Entry> Entries { get; }
+
+    /// <summary>
+    /// It read how soon its businesses answer (Fase 29J). When that read failed, none says it, and a page that reads one
+    /// of them (Fase 29K) says nothing either rather than «not enough requests».
+    /// </summary>
+    internal bool ResponseTimesRead { get; }
 
     internal IReadOnlyList<PublicDirectoryCategoryDto> Categories { get; }
 
@@ -628,6 +635,7 @@ public sealed class PublicDirectorySnapshot
 
         // How soon each one answers (Fase 29J) never takes Explorar with it: without it, every business is in the middle.
         Dictionary<Guid, ResponseTime?> responses;
+        var responsesRead = true;
         try
         {
             responses = await ResponseTimesAsync(context, listed, utcNow, cancellationToken);
@@ -636,6 +644,7 @@ public sealed class PublicDirectorySnapshot
         {
             logger?.LogWarning(ex, "Explorar could not read how soon its businesses answer: it says nothing of it until the next snapshot.");
             responses = [];
+            responsesRead = false;
         }
 
         var entries = rows
@@ -654,7 +663,7 @@ public sealed class PublicDirectorySnapshot
             entry.Business.Rating = ratings.GetValueOrDefault(entry.TenantId);
             entry.Business.ResponseTime = ResponseTimes.Shown(entry.ResponseTime);
         }
-        return new PublicDirectorySnapshot(utcNow, entries);
+        return new PublicDirectorySnapshot(utcNow, entries, responsesRead);
     }
 
     /// <summary>
@@ -885,8 +894,15 @@ public sealed class PublicDirectoryCache
     public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan RebuildTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// After a rebuild fails, how long a page that does not wait (<see cref="GetWithoutWaitingAsync"/>) leaves it alone:
+    /// one failure does not make every page that follows try again.
+    /// </summary>
+    public static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(1);
+
     private readonly SemaphoreSlim _rebuild = new(1, 1);
     private PublicDirectorySnapshot? _snapshot;
+    private long _failedAtTicks;
 
     public async Task<PublicDirectorySnapshot> GetAsync(
         DateTimeOffset utcNow,
@@ -894,7 +910,7 @@ public sealed class PublicDirectoryCache
         CancellationToken cancellationToken)
     {
         var current = Volatile.Read(ref _snapshot);
-        if (IsFresh(current, utcNow))
+        if (IsFresh(current, utcNow, Lifetime))
             return current!;
 
         await _rebuild.WaitAsync(cancellationToken);
@@ -902,14 +918,9 @@ public sealed class PublicDirectoryCache
         {
             // Another request may have rebuilt it while this one waited.
             current = Volatile.Read(ref _snapshot);
-            if (IsFresh(current, utcNow))
+            if (IsFresh(current, utcNow, Lifetime))
                 return current!;
-            // Its own time limit, not the request's: every request waiting shares it, and a customer who leaves (or
-            // changes the search) does not throw away a rebuild half done.
-            using var limit = new CancellationTokenSource(RebuildTimeout);
-            current = await build(utcNow, limit.Token);
-            Volatile.Write(ref _snapshot, current);
-            return current;
+            return await RebuildAsync(utcNow, build);
         }
         finally
         {
@@ -917,13 +928,69 @@ public sealed class PublicDirectoryCache
         }
     }
 
+    /// <summary>
+    /// For a page that reads one business of the snapshot (how soon it answers, Fase 29K): the snapshot while it is younger
+    /// than <paramref name="maxAge"/>. Otherwise this request rebuilds it, unless another one is rebuilding it or the last
+    /// rebuild failed less than <see cref="FailureBackoff"/> ago: then it gets null at once, and never waits in line.
+    /// </summary>
+    public async Task<PublicDirectorySnapshot?> GetWithoutWaitingAsync(
+        DateTimeOffset utcNow,
+        Func<DateTimeOffset, CancellationToken, Task<PublicDirectorySnapshot>> build,
+        TimeSpan maxAge,
+        CancellationToken cancellationToken)
+    {
+        var current = Volatile.Read(ref _snapshot);
+        if (IsFresh(current, utcNow, maxAge))
+            return current;
+        if (Interlocked.Read(ref _failedAtTicks) is var failed and not 0
+            && (utcNow - new DateTimeOffset(failed, TimeSpan.Zero)).Duration() < FailureBackoff)
+            return null;
+        if (!await _rebuild.WaitAsync(TimeSpan.Zero, cancellationToken))
+            return null;
+        try
+        {
+            current = Volatile.Read(ref _snapshot);
+            return IsFresh(current, utcNow, maxAge) ? current : await RebuildAsync(utcNow, build);
+        }
+        finally
+        {
+            _rebuild.Release();
+        }
+    }
+
+    /// <summary>Rebuilds the snapshot, holding the rebuild: a failure is remembered for <see cref="FailureBackoff"/>.</summary>
+    private async Task<PublicDirectorySnapshot> RebuildAsync(
+        DateTimeOffset utcNow, Func<DateTimeOffset, CancellationToken, Task<PublicDirectorySnapshot>> build)
+    {
+        // Its own time limit, not the request's: every request waiting shares it, and a customer who leaves (or changes the
+        // search) does not throw away a rebuild half done.
+        using var limit = new CancellationTokenSource(RebuildTimeout);
+        PublicDirectorySnapshot snapshot;
+        try
+        {
+            snapshot = await build(utcNow, limit.Token);
+        }
+        catch
+        {
+            Interlocked.Exchange(ref _failedAtTicks, utcNow.UtcTicks);
+            throw;
+        }
+        Volatile.Write(ref _snapshot, snapshot);
+        Interlocked.Exchange(ref _failedAtTicks, 0);
+        return snapshot;
+    }
+
     /// <summary>Forgets the snapshot: the next request reads every business again (a test that has just changed them).</summary>
-    public void Invalidate() => Volatile.Write(ref _snapshot, null);
+    public void Invalidate()
+    {
+        Volatile.Write(ref _snapshot, null);
+        Interlocked.Exchange(ref _failedAtTicks, 0);
+    }
 
     /// <summary>
-    /// Built less than <see cref="Lifetime"/> before or after this instant: a request that read the clock an instant
+    /// Built less than <paramref name="maxAge"/> before or after this instant: a request that read the clock an instant
     /// before the one that rebuilt it uses it too, and a clock that goes back further rebuilds it.
     /// </summary>
-    private static bool IsFresh(PublicDirectorySnapshot? snapshot, DateTimeOffset utcNow)
-        => snapshot is not null && (utcNow - snapshot.BuiltAt).Duration() < Lifetime;
+    private static bool IsFresh(PublicDirectorySnapshot? snapshot, DateTimeOffset utcNow, TimeSpan maxAge)
+        => snapshot is not null && (utcNow - snapshot.BuiltAt).Duration() < maxAge;
 }
