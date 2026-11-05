@@ -19,9 +19,10 @@ Tomé las decisiones de la Fase 29L con la autorización permanente del dueño d
 1. **El límite es uno solo:** `ResponseTimes.AnswerBy` da la hora que pidió el cliente (`RequestedStartAt`, o su hora si no la tiene) o un día después de llegar, lo que pase primero. Es el mismo límite de la consulta de Explorar, que lo escribe para SQL.
 2. **La Agenda lo dice:**
    - cada cita lo manda en `answerBy` mientras espera respuesta (`AppointmentDto`, nulo para las demás);
-   - cada solicitud por confirmar dice «Responde antes de las 3:30 p.m. para que cuente a tiempo» si vence hoy, o «Responde antes del martes 2 a las 10:00 a.m. para que cuente a tiempo» si vence otro día, en la zona del negocio;
-   - una que ya pasó su límite dice «Ya pasó su hora para responder a tiempo».
-3. **La campana cuenta como urgentes** las solicitudes que hay que responder hoy para que cuenten a tiempo, o que ya pasaron su hora y siguen pendientes. Su texto dice «(N por responder hoy)». Antes eran urgentes solo las de hoy.
+   - cada solicitud por confirmar dice «Responde antes de las 3:30 p.m. para que cuente a tiempo» si vence hoy, o «Responde mañana antes de las 10:00 a.m. para que cuente a tiempo» si vence mañana, en la zona del negocio («de la 1:30» en la hora de la una). Mientras no pasa, el límite cae en las próximas 24 horas; otro día («antes del jueves 4 a las 10:00 a.m.») solo sale si el reloj del dispositivo está mal;
+   - una que ya pasó su límite dice «Ya pasó el límite para responder a tiempo»;
+   - el texto vuelve a leer el reloj cada minuto, así que cambia con la Agenda abierta.
+3. **La campana**, que cuenta las solicitudes de ahora en adelante (Fase 24D), **marca como urgentes** las de hoy, como antes, y además las que hay que responder hoy para que cuenten a tiempo o que ya pasaron su límite y siguen pendientes. Una que el negocio movió a hoy es urgente aunque su límite sea mañana. Su texto dice «(N por responder hoy)».
 4. **Fuera de esta fase:**
    - avisar por WhatsApp, por correo o en tiempo real;
    - ordenar la Agenda por límite;
@@ -31,7 +32,9 @@ Tomé las decisiones de la Fase 29L con la autorización permanente del dueño d
 
 - **Lo que logra:** el negocio sabe qué solicitud responder primero para no volverse lento en Explorar, y la campana lo avisa el día que vence.
 - **Lo que limita:**
-  - el texto usa el reloj del dispositivo para decir si el límite ya pasó;
-  - una solicitud cuyo límite cayó antes de la primera respuesta guardada no cuenta en Explorar ([ADR 0064](0064-response-time-in-explore.md)), aunque la Agenda diga que ya pasó su hora.
-- **Decisión por omisión** (sin preferencia expresa del dueño): el texto de la Agenda y que la campana cuente como urgentes las que ya pasaron su hora.
+  - el texto usa el reloj del dispositivo para decir si el límite ya pasó y si cae hoy o mañana;
+  - la campana no cuenta una solicitud que ya empezó, como desde la Fase 24D, aunque todavía se pueda aceptar; la Agenda le dice que ya pasó el límite;
+  - una solicitud que el negocio movió antes de la hora que pidió el cliente conserva su límite, que puede caer después de la nueva hora: la Agenda dice ese límite, y la campana la marca por su nueva hora si es hoy;
+  - una solicitud cuyo límite cayó antes de la primera respuesta guardada no cuenta en Explorar ([ADR 0064](0064-response-time-in-explore.md)), aunque la Agenda diga que ya pasó el límite.
+- **Decisión por omisión** (sin preferencia expresa del dueño): el texto de la Agenda y que la campana cuente como urgentes las que ya pasaron su límite.
 - **Reversibilidad:** no hay migración. Volver a la versión anterior quita el texto de la Agenda, y la campana vuelve a marcar como urgentes solo las de hoy.
