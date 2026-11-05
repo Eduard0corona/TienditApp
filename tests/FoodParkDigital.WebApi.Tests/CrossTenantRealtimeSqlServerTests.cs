@@ -138,8 +138,8 @@ public sealed class CrossTenantRealtimeSqlServerTests
     {
         var owner = await _api.SignUpAsync("avisos-equipo");
         var (slug, service) = await CrossTenantOnlineBookingSqlServerTests.BookingAsync(owner.Client, "Corte del equipo");
-        var (cashier, cashierToken, cashierEmail) = await EmployeeAsync(owner, "ManageOrders");
-        var (stylist, stylistToken, stylistEmail) = await EmployeeAsync(owner, "ManageAppointments");
+        var (cashier, cashierToken, cashierEmail, _) = await EmployeeAsync(owner, "ManageOrders");
+        var (stylist, stylistToken, stylistEmail, stylistMember) = await EmployeeAsync(owner, "ManageAppointments");
 
         // Without the agenda: the hub refuses it and the choice is not theirs to make.
         await using var refused = _api.Hub("/hubs/appointments", cashierToken);
@@ -158,13 +158,29 @@ public sealed class CrossTenantRealtimeSqlServerTests
         Assert.True((await TwoBusinessesApi.ReadAsync(await owner.Client.GetAsync(RequestEmails))).GetProperty("enabled").GetBoolean());
 
         // A request online, with the access the API reads for each one: the stylist who chose them and the owner get its
-        // email; the cashier, who cannot answer it, does not.
+        // email; the cashier, who never chose them, does not.
         using var stranger = _api.AnonymousClient();
         await RequestAsync(stranger, slug, service, "5512340005");
         await _api.DispatchOutboxAsync();
         Assert.Single(_api.PlainEmailsTo(stylistEmail));
         Assert.Single(_api.PlainEmailsTo(owner.Email));
         Assert.Empty(_api.PlainEmailsTo(cashierEmail));
+
+        // The owner takes the agenda away from the stylist, who still chose them: the next request's email goes to the
+        // owner only, because the stylist can no longer answer it.
+        await TwoBusinessesApi.ReadAsync(await owner.Client.PutAsJsonAsync($"/api/v1/employees/{stylistMember}", new
+        {
+            tenantUserId = stylistMember,
+            firstName = "Empleado",
+            lastName = "De avisos",
+            appRole = 3,
+            tenantRole = 2,
+            permissions = new[] { "ManageOrders" }
+        }));
+        await RequestAsync(stranger, slug, service, "5512340006");
+        await _api.DispatchOutboxAsync();
+        Assert.Single(_api.PlainEmailsTo(stylistEmail));
+        Assert.Equal(2, _api.PlainEmailsTo(owner.Email).Count);
     }
 
     [SqlServerFact]
@@ -366,11 +382,14 @@ public sealed class CrossTenantRealtimeSqlServerTests
         return started;
     }
 
-    /// <summary>A member of the owner's team with the permissions given, signed in with its own password: its client, token and email.</summary>
-    private async Task<(HttpClient Client, string AccessToken, string Email)> EmployeeAsync(SignedUp owner, params string[] permissions)
+    /// <summary>
+    /// A member of the owner's team with the permissions given, signed in with its own password: its client, token, email
+    /// and membership.
+    /// </summary>
+    private async Task<(HttpClient Client, string AccessToken, string Email, Guid Member)> EmployeeAsync(SignedUp owner, params string[] permissions)
     {
         var email = $"avisos-{Guid.NewGuid():N}@demo.com";
-        await TwoBusinessesApi.ReadAsync(await owner.Client.PostAsJsonAsync("/api/v1/employees", new
+        var created = await TwoBusinessesApi.ReadAsync(await owner.Client.PostAsJsonAsync("/api/v1/employees", new
         {
             email,
             password = EmployeePassword,
@@ -384,7 +403,7 @@ public sealed class CrossTenantRealtimeSqlServerTests
         var signedIn = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = EmployeePassword }));
         var token = signedIn.GetProperty("accessToken").GetString()!;
         client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-        return (client, token, email);
+        return (client, token, email, created.GetProperty("tenantUserId").GetGuid());
     }
 
     private const string EmployeePassword = "Secreto1";
