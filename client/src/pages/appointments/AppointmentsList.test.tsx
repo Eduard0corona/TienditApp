@@ -120,6 +120,8 @@ describe('AppointmentsList', () => {
     act(() => {
       window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
     });
+    // The list stays while it reads again: no spinner in its place.
+    expect(screen.getByText('Ana Ruiz')).toBeInTheDocument();
 
     expect(await screen.findByText('Luz Mora')).toBeInTheDocument();
     expect(screen.getByText('Ana Ruiz')).toBeInTheDocument();

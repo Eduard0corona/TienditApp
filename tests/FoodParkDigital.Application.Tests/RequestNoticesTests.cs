@@ -62,6 +62,23 @@ public class RequestNoticesTests
     }
 
     [Fact]
+    public async Task NoEmail_ShouldGo_FromABusinessSuspended_OrWithoutTheModuleOfAppointments()
+    {
+        await using var fixture = Fixture();
+        var suspended = await SalonAsync(fixture, "suspendida", "Estética Suspendida");
+        await MemberAsync(fixture, suspended, "dueña", TenantUserRole.Owner);
+        var ofSuspended = await RequestAsync(fixture, suspended, Now.AddMinutes(-1));
+        suspended.SetStatus(TenantStatus.Suspended);
+        var shop = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, slug: "tienda");
+        await MemberAsync(fixture, shop, "dueño", TenantUserRole.Owner);
+        var ofShop = await RequestAsync(fixture, shop, Now.AddMinutes(-1));
+        await fixture.Context.SaveChangesAsync();
+
+        Assert.Empty(await QueueAsync(fixture, suspended, ofSuspended));
+        Assert.Empty(await QueueAsync(fixture, shop, ofShop));
+    }
+
+    [Fact]
     public async Task NoEmail_ShouldGo_ForARequestOfTheTeam_OneAnswered_OneOverADayOld_OrOneWhoseTimeCame()
     {
         await using var fixture = Fixture();
@@ -340,6 +357,7 @@ public class RequestNoticesTests
                 true,
                 capabilities,
                 TenantPermissionCatalog.ResolveEffectiveCodes(member.PermissionCodes, account.Role, member.Role),
+                TenantSuspended: tenant.Status is TenantStatus.Suspended or TenantStatus.Inactive,
                 IsManager: member.Role is TenantUserRole.Owner or TenantUserRole.Admin);
         }
 
