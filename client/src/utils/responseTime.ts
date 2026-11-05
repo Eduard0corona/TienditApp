@@ -1,4 +1,5 @@
 import { ResponseTime } from '../api/generated/enums';
+import { formatInBusinessZone, getBusinessToday, toBusinessDateTimeInput } from './dates';
 
 /** The times the card says: every one but the slowest, which it never says. */
 type ShownTime = Exclude<ResponseTime, typeof ResponseTime.Slower>;
@@ -28,4 +29,17 @@ export function ownResponseTimeNote(responseTime: ResponseTime | null | undefine
   if (responseTime === ResponseTime.Slower)
     return 'Sueles tardar un día o más en responder tus solicitudes en línea, así que tus clientes no lo leen.';
   return 'Lo calculamos con tus solicitudes en línea de los últimos 90 días. Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas.';
+}
+
+/**
+ * By when the business answers a request online still waiting to be in time (Fase 29L, ADR 0066), in its own time zone:
+ * the server works out the limit (`answerBy`: the time asked for, or a day after it arrived, whichever comes first).
+ */
+export function answerInTimeLabel(answerBy: string, now: Date = new Date()): string {
+  const limit = new Date(answerBy);
+  if (limit.getTime() <= now.getTime()) return 'Ya pasó su hora para responder a tiempo';
+  const time = formatInBusinessZone(limit, { hour: 'numeric', minute: '2-digit' });
+  const sameDay = toBusinessDateTimeInput(limit).slice(0, 10) === getBusinessToday(now);
+  const when = sameDay ? `de las ${time}` : `del ${formatInBusinessZone(limit, { weekday: 'long', day: 'numeric' })} a las ${time}`;
+  return `Responde antes ${when} para que cuente a tiempo`;
 }

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { ResponseTime } from '../api/generated/enums';
-import { ownResponseTimeNote, responseTimeLabel } from './responseTime';
+import { setBusinessTimeZone } from './dates';
+import { answerInTimeLabel, ownResponseTimeNote, responseTimeLabel } from './responseTime';
 
 describe('responseTimeLabel (Fase 29J)', () => {
   it('says within what the business answers, up to a day', () => {
@@ -34,5 +35,24 @@ describe('ownResponseTimeNote (Fase 29K)', () => {
       'Todavía no contamos 3 solicitudes en línea para saber en cuánto sueles responder: una cuenta cuando la respondes, o cuando llega su hora o pasa un día sin respuesta.',
     );
     expect(ownResponseTimeNote(null)).toBe(ownResponseTimeNote(undefined));
+  });
+});
+
+describe('answerInTimeLabel (Fase 29L)', () => {
+  // Monday 1 March 2027, 11:00 in Mexico City.
+  const now = new Date('2027-03-01T17:00:00Z');
+  afterEach(() => setBusinessTimeZone(null));
+
+  it('says by when the business answers to be in time, in its own time zone', () => {
+    setBusinessTimeZone('America/Mexico_City');
+
+    expect(answerInTimeLabel('2027-03-01T21:30:00Z', now)).toBe('Responde antes de las 3:30 p.m. para que cuente a tiempo');
+    expect(answerInTimeLabel('2027-03-02T16:00:00Z', now)).toBe('Responde antes del martes 2 a las 10:00 a.m. para que cuente a tiempo');
+  });
+
+  it('says when that time already passed', () => {
+    setBusinessTimeZone('America/Mexico_City');
+
+    expect(answerInTimeLabel('2027-03-01T17:00:00Z', now)).toBe('Ya pasó su hora para responder a tiempo');
   });
 });

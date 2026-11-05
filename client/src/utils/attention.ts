@@ -44,7 +44,7 @@ export function describeAttention(item: AttentionItem): AttentionNotice | null {
     case 'appointmentRequests':
       return {
         key,
-        text: `${plural(count, 'solicitud de cita', 'solicitudes de cita')} por confirmar${urgentCount > 0 ? ` (${urgentCount} de hoy)` : ''}`,
+        text: `${plural(count, 'solicitud de cita', 'solicitudes de cita')} por confirmar${urgentCount > 0 ? ` (${urgentCount} por responder hoy)` : ''}`,
         path: '/appointments?estado=por-confirmar',
         icon: 'ri-calendar-todo-line',
         tone: 'warning',

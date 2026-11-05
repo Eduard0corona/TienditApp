@@ -28,6 +28,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
 import { photoCount } from '../../utils/problemPhotos';
+import { answerInTimeLabel } from '../../utils/responseTime';
 import {
   businessDateTimeToIso,
   businessDayStart,
@@ -653,6 +654,10 @@ export default function AppointmentsList() {
                 <td className="text-center">
                   <span className={`badge ${statusBadge(item.status)}`}>{statusLabel(item.status)}</span>
                   {item.cancelledByCustomer && <div className="text-muted small">La canceló el cliente</div>}
+                  {/* By when it is answered in time, as Explorar counts it (Fase 29L). */}
+                  {item.status === AppointmentStatusConst.Requested && item.answerBy && (
+                    <div className="text-muted small">{answerInTimeLabel(item.answerBy)}</div>
+                  )}
                 </td>
                 <td className="text-center">
                   {item.status === AppointmentStatusConst.Requested ? (

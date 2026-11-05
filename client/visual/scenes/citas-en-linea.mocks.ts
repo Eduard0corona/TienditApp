@@ -230,6 +230,20 @@ function withRequests(data: DemoData) {
   data.appointments.sort((a: { startAt: string }, b: { startAt: string }) => b.startAt.localeCompare(a.startAt));
 }
 
+/**
+ * The requests with by when each is answered in time (Fase 29L, ADR 0066): María Fernanda's arrived this morning at 9:00
+ * for Tuesday, so within a day, Monday at 9:00; Jorge's arrived on Friday and its day already passed.
+ */
+function withRequestsInTime(data: DemoData) {
+  withRequests(data);
+  const answerBy: Record<string, string> = {
+    [uuid('appt:en-linea-mafer')]: utc('2026-10-05', 9 * 60),
+    [uuid('appt:en-linea-jorge')]: utc('2026-10-03', 11 * 60),
+  };
+  for (const appointment of data.appointments as { id: string; answerBy?: string }[])
+    if (appointment.id in answerBy) appointment.answerBy = answerBy[appointment.id];
+}
+
 /** Online booking is on and customers book: the owner's card links the booking page. */
 function bookingOn(data: DemoData) {
   data.onlineBooking = { enabled: true, capacity: 2, maxCapacity: 20, booksOnline: true, missing: [], slug: data.tenant.slug, staffCount: 0 };
@@ -265,6 +279,7 @@ export const CITAS_ROUTES = asOption(bookingRoutes);
 export const MENU_AGENDA = asOption(menuBooks);
 export const EXPLORAR_AGENDA = asOption(directoryBooks);
 export const AGENDA_SOLICITUDES = asOption(withRequests);
+export const AGENDA_SOLICITUDES_A_TIEMPO = asOption(withRequestsInTime);
 export const CITAS_PRENDIDAS = asOption(bookingOn);
 export const CITAS_CON_PERSONAS = asOption(withPeople);
 export const QUIEN_ATIENDE = asOption(staffSet);

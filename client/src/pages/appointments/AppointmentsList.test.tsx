@@ -288,6 +288,19 @@ describe('AppointmentsList', () => {
     expect(toast.success).toHaveBeenCalledWith('Solicitud rechazada: el cliente recibe el aviso.');
   });
 
+  it('says by when each request is answered in time, or that its time passed (Fase 29L)', async () => {
+    renderAgenda([
+      appointment({ id: 'r1', customerName: 'Valeria', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online, answerBy: '2099-03-02T16:00:00Z' }),
+      appointment({ id: 'r2', customerName: 'Rocío', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online, answerBy: '2000-03-02T16:00:00Z' }),
+      appointment({ id: 'a1', customerName: 'Mario', status: AppointmentStatus.Scheduled, channel: AppointmentChannel.Online }),
+    ]);
+
+    const waiting = (await screen.findByText('Valeria')).closest('tr')!;
+    expect(within(waiting).getByText(/^Responde antes del .+ para que cuente a tiempo$/)).toBeInTheDocument();
+    expect(within(screen.getByText('Rocío').closest('tr')!).getByText('Ya pasó su hora para responder a tiempo')).toBeInTheDocument();
+    expect(within(screen.getByText('Mario').closest('tr')!).queryByText(/a tiempo/)).not.toBeInTheDocument();
+  });
+
   it('says a visit to quote requested online is one, how it is charged and where its quote goes (Fase 29B)', async () => {
     renderAgenda([appointment({
       id: 'v1',

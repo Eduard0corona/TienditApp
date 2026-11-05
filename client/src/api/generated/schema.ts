@@ -15772,6 +15772,8 @@ export interface components {
             workOrderId?: string | null;
             workOrderNumber?: string | null;
             problemPhotos: string[];
+            /** Format: date-time */
+            answerBy?: string | null;
         };
         AppointmentDtoPaginatedList: {
             items: components["schemas"]["AppointmentDto"][];
