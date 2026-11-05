@@ -459,6 +459,10 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         if (startDate > lastDay.AddDays(1))
             return Result.Failure<PublicAppointmentReceiptDto>(TooFarMessage);
 
+        // Fase 29M (ADR 0067): one from the business's own team does not count in Explorar. Read before the lock below: it
+        // depends on nothing the lock guards.
+        var fromTeam = await TeamRequests.FromTeamAsync(_context, _phones, tenantId, phone, _currentUser.UserId, cancellationToken);
+
         // In line with the other bookings of the business: the one before this commits first, and its time is taken below.
         // The one before may have been this same request, sent twice: then it answers that one; or another of the same
         // phone, which counts.
@@ -503,8 +507,6 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
                 return Result.Failure<PublicAppointmentReceiptDto>(takenMessage);
         }
 
-        // Fase 29M (ADR 0067): one from the business's own team does not count in Explorar.
-        var fromTeam = await TeamRequests.FromTeamAsync(_context, _phones, tenantId, phone, _currentUser.UserId, cancellationToken);
         var appointment = Appointment.RequestOnline(
             tenantId,
             request.CustomerName.Trim(),

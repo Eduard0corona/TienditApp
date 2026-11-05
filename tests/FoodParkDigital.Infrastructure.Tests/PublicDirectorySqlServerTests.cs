@@ -144,6 +144,8 @@ public class PublicDirectorySqlServerTests
         await using var database = await SqlServerTestDatabase.CreateAsync();
         async Task<Guid> SalonAsync(string slug) => await SeedServicesAsync(database, slug, BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
         async Task SeedAsync(Guid tenantId, params (int ArrivedDaysAgo, TimeSpan? Wait, string? Phone, bool FromTeam)[] requests)
+            => await SeedKeyedAsync(tenantId, keyed: true, requests);
+        async Task SeedKeyedAsync(Guid tenantId, bool keyed, params (int ArrivedDaysAgo, TimeSpan? Wait, string? Phone, bool FromTeam)[] requests)
         {
             await using var seed = database.CreateContext(tenantId);
             foreach (var (arrivedDaysAgo, wait, phone, fromTeam) in requests)
@@ -152,6 +154,9 @@ public class PublicDirectorySqlServerTests
                 // Answered after its wait, or let pass: its time began a day after it arrived.
                 var request = Request(tenantId, arrivedAt.AddDays(wait is null ? 1 : 2), phone, fromTeam);
                 request.CreatedAt = arrivedAt;
+                // Saved by the version before Fase 29M while it was published: without the key of its phone.
+                if (!keyed)
+                    seed.Entry(request).Property(nameof(Appointment.RequestPhone)).CurrentValue = string.Empty;
                 if (wait is { } waited)
                     request.Accept(arrivedAt + waited);
                 seed.Appointments.Add(request);
@@ -169,6 +174,10 @@ public class PublicDirectorySqlServerTests
             (5, quick, "+525522220000", false), (4, null, "+525522220000", false), (3, quick, null, false), (3, TimeSpan.FromHours(13), null, false));
         // The regular's phone earlier in another business: there it is one of three customers.
         await SeedAsync(await SalonAsync("d-otra"), (6, quick, "+525511110000", false), (3, quick, null, false), (3, quick, null, false));
+        // Three answered at once, saved without the key of their phone (by the version before it, while this one was published):
+        // together, one customer.
+        await SeedKeyedAsync(await SalonAsync("e-sin-clave"), keyed: false,
+            (3, quick, null, false), (4, quick, null, false), (5, quick, null, false));
 
         await using var context = database.CreateContext();
         var handler = new GetPublicDirectoryQueryHandler(context, new FixedClock(Later), new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance);
@@ -177,7 +186,8 @@ public class PublicDirectorySqlServerTests
         Assert.Equal(
             new Dictionary<string, ResponseTime?>
             {
-                ["a-propia"] = null, ["b-repetida"] = null, ["c-habitual"] = ResponseTime.WithinADay, ["d-otra"] = ResponseTime.WithinAnHour
+                ["a-propia"] = null, ["b-repetida"] = null, ["c-habitual"] = ResponseTime.WithinADay, ["d-otra"] = ResponseTime.WithinAnHour,
+                ["e-sin-clave"] = null
             },
             category.Businesses.Items.ToDictionary(b => b.Slug, b => b.ResponseTime));
     }

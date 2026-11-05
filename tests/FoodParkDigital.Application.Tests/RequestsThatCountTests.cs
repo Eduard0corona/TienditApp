@@ -59,12 +59,40 @@ public class RequestsThatCountTests
         await RequestAsync(fixture, regular, Now.AddHours(-1), Now.AddDays(7), phone: phone);
         await AcceptedAsync(fixture, regular, TimeSpan.FromMinutes(5));
         await AcceptedAsync(fixture, regular, TimeSpan.FromHours(13));
+        // Later, one of its own team with the regular's phone, answered at once: it does not take the place of theirs.
+        await AcceptedAsync(fixture, regular, TimeSpan.FromMinutes(5), arrivedDaysAgo: 2, phone: phone, fromTeam: true);
 
         var cards = await CardsAsync(fixture);
 
         Assert.Null(cards["repetida"].ResponseTime);
         Assert.Equal(ResponseTime.WithinAnHour, cards["otra"].ResponseTime);
         Assert.Equal(ResponseTime.WithinADay, cards["habitual"].ResponseTime);
+    }
+
+    [Fact]
+    public async Task ACustomer_ShouldBeThePhoneTheRequestArrivedWith_ThoughTheBusinessChangesIt()
+    {
+        await using var fixture = Fixture();
+        // Two customers answered at once and one let pass, who arrived after them. The business then writes the first one's
+        // phone on the one it let pass: still three customers, two of three within an hour.
+        var edited = await SalonAsync(fixture, "editada", "Estética Editada");
+        var first = NewCustomerPhone();
+        await AcceptedAsync(fixture, edited, TimeSpan.FromMinutes(5), arrivedDaysAgo: 5, phone: first);
+        await AcceptedAsync(fixture, edited, TimeSpan.FromMinutes(5), arrivedDaysAgo: 5);
+        var lapsed = await RequestAsync(fixture, edited, Now.AddDays(-4), Now.AddDays(-2));
+        lapsed.Update("Valeria", first, "Corte", lapsed.StartAt, lapsed.EndAt, null, null);
+        // One phone written with and without the 1 of a Mexican mobile, and another customer: two customers, not enough.
+        var written = await SalonAsync(fixture, "escrita", "Estética Escrita");
+        var day = 3;
+        foreach (var phone in new[] { "+5215533334444", "+525533334444", "+5215533334444" })
+            await AcceptedAsync(fixture, written, TimeSpan.FromMinutes(5), arrivedDaysAgo: day++, phone: phone);
+        await AcceptedAsync(fixture, written, TimeSpan.FromMinutes(5));
+        await fixture.Context.SaveChangesAsync();
+
+        var cards = await CardsAsync(fixture);
+
+        Assert.Equal(ResponseTime.WithinAnHour, cards["editada"].ResponseTime);
+        Assert.Null(cards["escrita"].ResponseTime);
     }
 
     [Fact]

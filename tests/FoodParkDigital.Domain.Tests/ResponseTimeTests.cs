@@ -104,9 +104,25 @@ public class ResponseTimeTests
 
         Assert.True(fromTeam.FromTeam);
         Assert.True(visit.FromTeam);
+        Assert.Equal(("+525522107765", "+525522107765"), (fromTeam.RequestPhone, visit.RequestPhone));
         // A customer's request, and one the team booked, are not.
         Assert.False(Request().FromTeam);
         Assert.False(new Appointment(Business, "Valeria", "5522107765", "Corte", Start, Start.AddHours(1)).FromTeam);
+    }
+
+    [Fact]
+    public void ARequest_ShouldKeepThePhoneItArrivedWith_AsItsCustomer_ThoughTheBusinessChangesIt()
+    {
+        // Fase 29M (ADR 0067): a Mexican mobile written with the 1 of WhatsApp is the same customer.
+        var request = Appointment.RequestOnline(
+            Business, "Valeria", "+5215522107765", Guid.NewGuid(), "Corte de cabello", Start, Start.AddHours(1),
+            null, null, Guid.NewGuid(), Token);
+
+        request.Update("Valeria", "+525511112222", "Corte de cabello", Start, Start.AddHours(1), null, null);
+
+        Assert.Equal(("+525511112222", "+525522107765"), (request.CustomerPhone, request.RequestPhone));
+        // One the team booked has none.
+        Assert.Equal(string.Empty, new Appointment(Business, "Valeria", "5522107765", "Corte", Start, Start.AddHours(1)).RequestPhone);
     }
 
     [Fact]

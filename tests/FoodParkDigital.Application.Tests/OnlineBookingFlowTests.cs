@@ -182,6 +182,9 @@ public class OnlineBookingFlowTests
         fixture.Context.Branches.Add(new Branch(tenant.Id, "Norte", "NORTE", new BranchContact(ContactPhone: "55 4444 5555")));
         var member = await MemberAsync(fixture, tenant.Id, "55 1234 5678", TenantUserStatus.Active);
         await MemberAsync(fixture, tenant.Id, "+52 55 8765 4321", TenantUserStatus.Disabled);
+        await MemberAsync(fixture, tenant.Id, "55 7777 8888", TenantUserStatus.Invited);
+        // As a mobile is saved when its owner confirms it by WhatsApp: with the 1.
+        await MemberAsync(fixture, tenant.Id, "+5215566667777", TenantUserStatus.Active);
         var elsewhere = await MemberAsync(fixture, Guid.NewGuid(), null, TenantUserStatus.Active);
         await fixture.Context.SaveChangesAsync();
 
@@ -204,6 +207,9 @@ public class OnlineBookingFlowTests
         Assert.False(await FromTeamAsync("5511112222", tuesday, "09:00"));
         Assert.False(await FromTeamAsync("5587654321", tuesday, "10:00"));
         Assert.False(await FromTeamAsync("5533334444", tuesday, "11:00", elsewhere));
+        // Someone invited to the team, and a mobile saved with the 1, are of the team too.
+        Assert.True(await FromTeamAsync("5577778888", tuesday, "12:00"));
+        Assert.True(await FromTeamAsync("5566667777", tuesday, "13:00"));
     }
 
     [Fact]

@@ -30,6 +30,8 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
         builder.Property(x => x.CustomerPhone).HasMaxLength(50).IsRequired();
         // Fase 29M: 0 for the rows that exist and for those the version before it saves, unaware of the column.
         builder.Property(x => x.FromTeam).IsRequired().HasDefaultValue(false);
+        // Empty for those the version before it saves; the migration fills the requests that exist.
+        builder.Property(x => x.RequestPhone).HasMaxLength(50).IsRequired().HasDefaultValue(string.Empty);
         builder.Property(x => x.ServiceName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.StaffName).HasMaxLength(Appointment.MaxStaffNameLength);
         builder.Property(x => x.StartAt).IsRequired();
@@ -102,9 +104,9 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
         builder.HasIndex(x => x.CreatedAt, "IX_Appointments_OnlineRequests_CreatedAt")
             .HasFilter("[Channel] = 1")
             .IncludeProperties(x => new { x.TenantId, x.RespondedAt, x.Status, x.StartAt, x.RequestedStartAt, x.CancelledByCustomerAt });
-        // Fase 29M (ADR 0067): Explorar counts one request per customer of each business, the last one decided, so it looks
-        // for a later one of the same phone; with what it needs to decide whether that one counts.
-        builder.HasIndex(x => new { x.TenantId, x.CustomerPhone, x.CreatedAt }, "IX_Appointments_OnlineRequests_Customer")
+        // Fase 29M (ADR 0067): Explorar counts one request per customer of each business, the last one decided, so it seeks
+        // the last arrival of the same phone (as the request arrived with it); with what it needs to decide whether one counts.
+        builder.HasIndex(x => new { x.TenantId, x.RequestPhone, x.CreatedAt }, "IX_Appointments_OnlineRequests_Customer")
             .HasFilter("[Channel] = 1")
             .IncludeProperties(x => new { x.RespondedAt, x.Status, x.StartAt, x.RequestedStartAt, x.CancelledByCustomerAt, x.FromTeam });
     }

@@ -6,21 +6,24 @@
 --
 -- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory]. En una base que
 -- ya tiene 20261103170924_AddAppointmentRespondedAt (lo que exige master hoy; las Fases 29K y 29L no
--- trajeron migración) solo ejecuta 20261105081150_AddAppointmentFromTeam, las solicitudes en línea
--- que vienen del propio equipo del negocio (ADR 0067):
---   - [Appointments].[FromTeam]: columna nueva, bit NOT NULL con valor por omisión 0. Las citas que
---     ya existen quedan en 0: no se sabe cuáles de las de antes vinieron del equipo.
---   - [IX_Appointments_OnlineRequests_Customer]: índice nuevo de las solicitudes en línea
---     ([Channel] = 1) por negocio, teléfono del cliente y llegada, con lo que lee el resumen de
---     Explorar para contar una por cliente.
--- No cambia datos.
+-- trajeron migración) solo ejecuta 20261105081150_AddAppointmentFromTeam, las solicitudes que cuentan
+-- en Explorar (ADR 0067):
+--   - [Appointments].[FromTeam]: columna nueva, bit NOT NULL con 0 por omisión: si la solicitud en
+--     línea vino del propio equipo del negocio. Las citas que ya existen quedan en 0.
+--   - [Appointments].[RequestPhone]: columna nueva, nvarchar(50) NOT NULL con '' por omisión: el
+--     teléfono con que llegó la solicitud, como clave de su cliente (+52 y diez dígitos para un
+--     celular de México escrito +521). Cambia datos: llena la de cada solicitud en línea que existe
+--     ([Channel] = 1) con el teléfono que tiene hoy; las citas del equipo quedan en ''.
+--   - [IX_Appointments_OnlineRequests_Customer]: índice nuevo de las solicitudes en línea por
+--     negocio, esa clave y llegada, con lo que lee el resumen de Explorar para contar una por cliente.
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
 -- vacía): revisa antes el verify.sql de database/production/20261103170924_AddAppointmentRespondedAt.
 --
--- Compatible con la versión desplegada (master con la Fase 29L): no conoce la columna nueva, y el
--- valor por omisión la llena con 0 en las solicitudes que guarda. /health/schema sigue sano. Volver
--- a ella (redespliegue, o swap si el slot de staging está activo) funciona sin rollback.sql:
--- Explorar vuelve a contar todas las solicitudes, también las del equipo y varias del mismo cliente.
+-- Compatible con la versión desplegada (master con la Fase 29L): no conoce las columnas nuevas, y
+-- los valores por omisión las llenan con 0 y '' en las solicitudes que guarda; Explorar cuenta como
+-- un solo cliente de su negocio las que guarde así. /health/schema sigue sano. Volver a ella
+-- (redespliegue, o swap si el slot de staging está activo) funciona sin rollback.sql: Explorar
+-- vuelve a contar todas las solicitudes, también las del equipo y varias del mismo cliente.
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a
@@ -9900,7 +9903,30 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261105081150_AddAppointmentFromTeam'
 )
 BEGIN
-    EXEC(N'CREATE INDEX [IX_Appointments_OnlineRequests_Customer] ON [Appointments] ([TenantId], [CustomerPhone], [CreatedAt]) INCLUDE ([RespondedAt], [Status], [StartAt], [RequestedStartAt], [CancelledByCustomerAt], [FromTeam]) WHERE [Channel] = 1');
+    ALTER TABLE [Appointments] ADD [RequestPhone] nvarchar(50) NOT NULL DEFAULT N'';
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261105081150_AddAppointmentFromTeam'
+)
+BEGIN
+
+    EXEC(N'UPDATE [Appointments]
+    SET [RequestPhone] = CASE
+        WHEN LEN(LTRIM(RTRIM([CustomerPhone]))) = 14 AND LTRIM(RTRIM([CustomerPhone])) LIKE N''+521%''
+            THEN N''+52'' + SUBSTRING(LTRIM(RTRIM([CustomerPhone])), 5, 10)
+        ELSE LTRIM(RTRIM([CustomerPhone]))
+    END
+    WHERE [Channel] = 1');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261105081150_AddAppointmentFromTeam'
+)
+BEGIN
+    EXEC(N'CREATE INDEX [IX_Appointments_OnlineRequests_Customer] ON [Appointments] ([TenantId], [RequestPhone], [CreatedAt]) INCLUDE ([RespondedAt], [Status], [StartAt], [RequestedStartAt], [CancelledByCustomerAt], [FromTeam]) WHERE [Channel] = 1');
 END;
 
 IF NOT EXISTS (

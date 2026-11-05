@@ -14,9 +14,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// AddAppointmentFromTeam (Fase 29M, ADR 0067): whether a request online came from the business's own team. The appointments
-/// that exist are not, the version before it keeps taking requests (saved as not from the team), and rolling back drops only
-/// the column and its index, never an appointment.
+/// AddAppointmentFromTeam (Fase 29M, ADR 0067): whether a request online came from the business's own team, and the phone it
+/// arrived with as the key of its customer. The appointments that exist are not from the team and the requests among them get
+/// the key of the phone they have, the version before it keeps taking requests (saved as not from the team, without a key),
+/// and rolling back drops only the columns and their index, never an appointment.
 /// </summary>
 public class AppointmentFromTeamMigrationSqlServerTests
 {
@@ -37,7 +38,8 @@ public class AppointmentFromTeamMigrationSqlServerTests
         var (tenant, settings, zone) = Business();
         await using (var before = BeforeAppointmentFromTeam.CreateContext(database))
         {
-            var answered = Request(tenant.Id, zone);
+            // A mobile saved with the 1 of WhatsApp.
+            var answered = Request(tenant.Id, zone, phone: "+5215522107765");
             var ofTheTeam = new Appointment(tenant.Id, "Ana", "5522107765", "Revisión", Start, Start.AddHours(1));
             before.AddRange(tenant, settings, zone, answered, ofTheTeam);
             await before.SaveChangesAsync();
@@ -53,7 +55,14 @@ public class AppointmentFromTeamMigrationSqlServerTests
         Assert.Equal(2, appointments.Count);
         Assert.All(appointments, a => Assert.False(a.FromTeam));
         Assert.Contains(appointments, a => a is { Status: AppointmentStatus.Scheduled, RespondedAt: not null });
+        // The request gets the key of its phone, the one the team booked none.
+        Assert.Equal(
+            ["", "+525522107765"],
+            appointments.OrderBy(a => a.Channel).Select(a => a.RequestPhone));
         Assert.Equal("([Channel]=(1))", await IndexFilterAsync(context));
+        Assert.Equal(
+            "TenantId,RequestPhone,CreatedAt|CancelledByCustomerAt,FromTeam,RequestedStartAt,RespondedAt,StartAt,Status",
+            await IndexColumnsAsync(context));
 
         // A request from now on keeps whether it came from the team.
         var fromTeam = Request(tenantId, zone, fromTeam: true);
@@ -86,6 +95,8 @@ public class AppointmentFromTeamMigrationSqlServerTests
         await using var context = database.CreateContext(tenantId);
         var declined = await context.Appointments.AsNoTracking().SingleAsync(a => a.Id == appointmentId);
         Assert.Equal((AppointmentStatus.Cancelled, (DateTimeOffset?)Now, false), (declined.Status, declined.RespondedAt, declined.FromTeam));
+        // Without the key of its phone: Explorar counts it on its own.
+        Assert.Equal(string.Empty, declined.RequestPhone);
     }
 
     [SqlServerFact]
@@ -108,6 +119,7 @@ public class AppointmentFromTeamMigrationSqlServerTests
         {
             Assert.Equal(BeforeMigration, await LatestMigrationAsync(context));
             Assert.Null(await context.Database.SqlQuery<int?>($"SELECT COL_LENGTH(N'dbo.Appointments', N'FromTeam') AS [Value]").SingleAsync());
+            Assert.Null(await context.Database.SqlQuery<int?>($"SELECT COL_LENGTH(N'dbo.Appointments', N'RequestPhone') AS [Value]").SingleAsync());
             Assert.Null(await IndexFilterAsync(context));
             // The appointment stays as it was, its answer too.
             var accepted = await context.Appointments.AsNoTracking().SingleAsync(a => a.Id == request.Id);
@@ -137,9 +149,9 @@ public class AppointmentFromTeamMigrationSqlServerTests
         return (tenant, settings, zone);
     }
 
-    private static Appointment Request(Guid tenantId, DeliveryZone zone, bool fromTeam = false)
+    private static Appointment Request(Guid tenantId, DeliveryZone zone, bool fromTeam = false, string phone = "+525522107765")
         => Appointment.RequestHomeVisit(
-            tenantId, "Valeria", "+525522107765", null, HomeVisitRules.DefaultVisitName, Start, Start.AddHours(1),
+            tenantId, "Valeria", phone, null, HomeVisitRules.DefaultVisitName, Start, Start.AddHours(1),
             "Gotea el calentador", null, Address, zone, HomeVisitChargePolicy.Charged, null, Guid.NewGuid(),
             // Each request its own link, as the booking page makes them.
             (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43], fromTeam: fromTeam);
@@ -149,6 +161,22 @@ public class AppointmentFromTeamMigrationSqlServerTests
             SELECT [filter_definition] AS [Value] FROM sys.indexes
             WHERE [object_id] = OBJECT_ID(N'dbo.Appointments') AND [name] = {IndexName}
             """).SingleOrDefaultAsync();
+
+    /// <summary>The key columns of the index in order, then its included ones by name.</summary>
+    private static async Task<string> IndexColumnsAsync(ApplicationDbContext context)
+    {
+        var columns = await context.Database.SqlQuery<IndexColumn>($"""
+            SELECT c.[name] AS [Name], ic.[is_included_column] AS [Included], ic.[key_ordinal] AS [Ordinal]
+            FROM sys.indexes i
+            JOIN sys.index_columns ic ON ic.[object_id] = i.[object_id] AND ic.[index_id] = i.[index_id]
+            JOIN sys.columns c ON c.[object_id] = ic.[object_id] AND c.[column_id] = ic.[column_id]
+            WHERE i.[object_id] = OBJECT_ID(N'dbo.Appointments') AND i.[name] = {IndexName}
+            """).ToListAsync();
+        return string.Join(",", columns.Where(c => !c.Included).OrderBy(c => c.Ordinal).Select(c => c.Name))
+            + "|" + string.Join(",", columns.Where(c => c.Included).Select(c => c.Name).Order(StringComparer.Ordinal));
+    }
+
+    private sealed record IndexColumn(string Name, bool Included, byte Ordinal);
 
     private static async Task MigrateAsync(SqlServerTestDatabase database, string target)
     {

@@ -5,6 +5,7 @@ using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
 
@@ -119,6 +120,12 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// it arrives; false for one the team booked and for every request from before Fase 29M.
     /// </summary>
     public bool FromTeam { get; private set; }
+    /// <summary>
+    /// The phone a request online arrived with, as the key of its customer (<see cref="MessagingPhone.ToKey"/>: +52 and ten
+    /// digits for a Mexican mobile however it was written). Explorar counts one request per customer by it (Fase 29M, ADR
+    /// 0067), so changing the appointment's phone later does not merge or split customers. Empty for one the team booked.
+    /// </summary>
+    public string RequestPhone { get; private set; } = string.Empty;
 
     public bool IsHomeVisit => Visit is not null;
 
@@ -220,7 +227,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             ClientRequestId = clientRequestId,
             TrackingToken = trackingToken,
             RequestedStartAt = startAt,
-            FromTeam = fromTeam
+            FromTeam = fromTeam,
+            RequestPhone = MessagingPhone.ToKey(customerPhone)
         };
         return appointment;
     }
@@ -284,7 +292,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             TrackingToken = trackingToken,
             CustomerEmail = InvoiceEmailAddress.Normalize(customerEmail),
             RequestedStartAt = startAt,
-            FromTeam = fromTeam
+            FromTeam = fromTeam,
+            RequestPhone = MessagingPhone.ToKey(customerPhone)
         };
         appointment.Visit = new AppointmentVisit(tenantId, appointment.Id, address, zone.Name, zone.Fee, chargePolicy);
         return appointment;

@@ -703,7 +703,7 @@ public sealed class PublicDirectorySnapshot
             .Select(a => new
             {
                 a.TenantId,
-                a.CustomerPhone,
+                a.RequestPhone,
                 a.CreatedAt,
                 a.RespondedAt,
                 a.Status,
@@ -718,7 +718,7 @@ public sealed class PublicDirectorySnapshot
             .Select(a => new
             {
                 a.TenantId,
-                a.CustomerPhone,
+                a.RequestPhone,
                 a.CreatedAt,
                 a.RespondedAt,
                 a.Status,
@@ -734,12 +734,15 @@ public sealed class PublicDirectorySnapshot
                     && (a.RespondedAt >= a.Limit
                         || (a.RespondedAt == null && a.Status == AppointmentStatus.Requested)
                         || (a.RespondedAt == null && a.Kept && a.CancelledByCustomerAt >= a.Limit))));
-        // One per customer of each business (Fase 29M): of those of the same phone, the one that arrived last; a later one still
-        // undecided does not take its place.
+        // One per customer of each business (Fase 29M): of those of the same phone (the one each arrived with), the one that
+        // arrived last; a later one still undecided does not take its place. Written as its last arrival, which SQL Server
+        // seeks in IX_Appointments_OnlineRequests_Customer for each request; any other shape (a NOT EXISTS, an OR beside it)
+        // compares every pair of requests of a business. Those the version before it saved while this one was published have
+        // no phone of their own (empty): together, they are one customer of their business.
         var counted = await decided
-            .Where(a => !decided.Any(later => later.TenantId == a.TenantId
-                && later.CustomerPhone == a.CustomerPhone
-                && later.CreatedAt > a.CreatedAt))
+            .Where(a => a.CreatedAt == decided
+                .Where(same => same.TenantId == a.TenantId && same.RequestPhone == a.RequestPhone)
+                .Max(same => same.CreatedAt))
             .GroupBy(a => a.TenantId)
             .Select(g => new
             {
