@@ -19241,6 +19241,7 @@
           "customerName",
           "customerPhone",
           "endAt",
+          "fromTeam",
           "id",
           "problemPhotos",
           "saleCancelled",
@@ -19332,6 +19333,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "fromTeam": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

@@ -1188,9 +1188,11 @@ export interface AppointmentDto {
   problemPhotos?: string[];
   /**
    * By when a request online still waiting is answered in time (Fase 29L): the time its customer asked for, or a day after
-   * it arrived, whichever comes first. Null for every other appointment.
+   * it arrived, whichever comes first. Null for every other appointment, one from the business's own team too.
    */
   answerBy?: string | null;
+  /** A request online from the business's own team (Fase 29M): Explorar does not count how soon it is answered. */
+  fromTeam?: boolean;
 }
 
 /** One appointment that does (part of) the job of a service order that came from a quote (Fase 29F). */

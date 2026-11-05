@@ -28,7 +28,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { getAccess } from '../../utils/access';
 import { photoCount } from '../../utils/problemPhotos';
-import { answerInTimeLabel } from '../../utils/responseTime';
+import { answerInTimeLabel, FROM_TEAM_LABEL } from '../../utils/responseTime';
 import {
   businessDateTimeToIso,
   businessDayStart,
@@ -664,9 +664,12 @@ export default function AppointmentsList() {
                 <td className="text-center">
                   <span className={`badge ${statusBadge(item.status)}`}>{statusLabel(item.status)}</span>
                   {item.cancelledByCustomer && <div className="text-muted small">La canceló el cliente</div>}
-                  {/* By when it is answered in time, as Explorar counts it (Fase 29L). */}
+                  {/* By when it is answered in time, as Explorar counts it (Fase 29L); one of the team does not count (29M). */}
                   {item.status === AppointmentStatusConst.Requested && item.answerBy && (
                     <AnswerInTime answerBy={item.answerBy} />
+                  )}
+                  {item.status === AppointmentStatusConst.Requested && item.fromTeam && (
+                    <div className="text-muted small">{FROM_TEAM_LABEL}</div>
                   )}
                 </td>
                 <td className="text-center">

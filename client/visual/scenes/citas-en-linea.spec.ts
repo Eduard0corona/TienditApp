@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap, snapElement } from '../helpers';
 import {
-  AGENDA_SOLICITUDES, AGENDA_SOLICITUDES_A_TIEMPO, APPOINTMENT_LINK, CITAS_CON_PERSONAS, CITAS_PRENDIDAS, CITAS_ROUTES, EXPLORAR_AGENDA, MENU_AGENDA, QUIEN_ATIENDE,
+  AGENDA_SOLICITUD_DEL_EQUIPO, AGENDA_SOLICITUDES, AGENDA_SOLICITUDES_A_TIEMPO, APPOINTMENT_LINK, CITAS_CON_PERSONAS, CITAS_PRENDIDAS, CITAS_ROUTES, EXPLORAR_AGENDA, MENU_AGENDA, QUIEN_ATIENDE,
 } from './citas-en-linea.mocks';
 import { ACCOUNT_PROFILE } from './cuenta-cliente.mocks';
 
@@ -271,6 +271,20 @@ test.describe('Solicitudes por responder a tiempo', () => {
     await expect(page.getByText('Responde mañana antes de las 9:00 a.m. para que cuente a tiempo')).toBeVisible();
     await expect(page.getByText('Ya pasó el límite para responder a tiempo')).toBeVisible();
     await snap(page, 'agenda-solicitudes-a-tiempo-escritorio');
+  });
+});
+
+// Fase 29M (ADR 0067): a request from the business's own team does not count in Explorar.
+test.describe('Solicitud del equipo', () => {
+  test.use({ prepareData: AGENDA_SOLICITUD_DEL_EQUIPO });
+
+  test('agenda solicitud del equipo', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/appointments');
+    await page.getByRole('button', { name: 'Ver solicitudes' }).click();
+    await expect(page.getByText('Responde mañana antes de las 9:00 a.m. para que cuente a tiempo')).toBeVisible();
+    await expect(page.getByText('De tu equipo: no cuenta en Explorar')).toBeVisible();
+    await snap(page, 'agenda-solicitud-del-equipo-escritorio');
   });
 });
 

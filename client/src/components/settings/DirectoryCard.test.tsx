@@ -105,7 +105,7 @@ describe('DirectoryCard', () => {
 
     api.getProfile.mockResolvedValue(profile({ countsRequests: true }));
     const newer = renderCard();
-    expect(await screen.findByText(/Todavía no contamos 3 solicitudes en línea/)).toBeInTheDocument();
+    expect(await screen.findByText(/Todavía no contamos solicitudes en línea de 3 clientes/)).toBeInTheDocument();
     newer.unmount();
 
     // Explorar does not count its requests: nothing of them, whatever came with it.
