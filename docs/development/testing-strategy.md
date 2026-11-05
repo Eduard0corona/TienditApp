@@ -2051,6 +2051,33 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **802 iguales.**
     - **1 cambia**, solo en la nota del dueño: «cómo te ven con tu tiempo de respuesta» (`oficios.spec.ts`).
     - **1 nueva:** «agenda solicitud del equipo» (escritorio, `citas-en-linea.spec.ts`): María Fernanda con su límite y Jorge «De tu equipo: no cuenta en Explorar». Pasó dos corridas seguidas contra el mismo build y la comparación completa.
+- Fase 29N, avisarle al negocio de cada solicitud ([ADR 0068](../adr/0068-tell-the-business-of-each-request.md)):
+  - **Domain:** `RequestNoticesTests` (5, nuevo): una solicitud en línea o de visita avisa que llegó, con su tipo y si vino del equipo (una de la Agenda no, ni al responderla); sin elegir, solo a los dueños les llegan los correos, y lo que elige un miembro se queda aunque cambie su rol.
+  - **Application:** `RequestNoticesTests` (10, nuevo):
+    - el correo se reparte a cada miembro que lo eligió o, sin elegir, a los dueños, activo, con la cuenta activa y el correo confirmado y que puede atender la solicitud (no a quien solo cobra, al invitado, al dado de baja ni a otro negocio);
+    - nada de un negocio suspendido o sin citas, ni de una solicitud del equipo, ya respondida, de más de un día o ya empezada (en el límite exacto, sí);
+    - lo que dice: asunto y cuerpo en la zona del negocio, «a la» a la una, todo codificado, sin teléfono, notas ni dirección; la visita sin repetir su nombre y sin su límite si ya pasó; sin ligas si no hay `AppUrl`;
+    - no sale si se respondió o el miembro los apagó después de repartirlo; un fallo del proveedor se reintenta;
+    - las pantallas reciben qué y cuándo, nunca de otro negocio, y un fallo no tumba la solicitud;
+    - cada quien elige para sí en su negocio; quien no es del equipo no tiene qué elegir.
+  - **Infrastructure:**
+    - `RequestEmailsOutboxTests` (1, nuevo): con el despachador real, cada correo se reparte una vez con el registro del evento; otro handler del mismo evento que falla no los reparte otra vez, y el correo de un miembro que falla se reintenta solo, sin mandar otra vez el de los demás.
+    - `TenantUserRequestEmailsMigrationSqlServerTests` (3, nuevo): los miembros que existen quedan sin elegir (a los dueños les llegan), la versión anterior sigue agregando miembros sin elegir, y el rollback quita solo la columna.
+    - `OutboxTests`: los dos eventos nuevos pasan por el serializador.
+    - Los scripts de `database/production` se probaron en SQL Server: aplicar, `verify.sql`, aplicar otra vez, revertir dos veces y aplicar de nuevo; `apply.sql` y `rollback.sql` son los que genera CI.
+  - **WebApi:** `CrossTenantRealtimeSqlServerTests` (+3): una solicitud en línea llega solo al hub y a los correos de su negocio, y apagar los correos los apaga solo para esa persona; un empleado sin la Agenda no entra al hub ni elige (403) y uno con ella sí; un negocio sin citas no entra al hub.
+  - **Mutaciones:** 33 en el servidor, 31 muertas. Sobreviven dos guardas redundantes entre sí: el filtro de miembros activos en la consulta y el acceso activo del permiso (cada una sola no cambia el resultado). En el cliente, la barra sin la condición del negocio suspendido o de la Agenda, los reintentos sin esperar más, la Agenda sin la guarda de la lectura más reciente o con indicador, y el aviso de una del equipo: todas mueren.
+  - **Cliente:** `useAppointmentRequests.test.tsx` (6), `RequestEmailsCard.test.tsx` (3), `signalr.test.ts` (2) y `Topbar.test.tsx` (2), nuevos; `AppointmentsList.test.tsx` (+2): la Agenda recarga sin indicador, solo muestra la lectura más reciente y una silenciosa que falla no muestra error.
+  - **.NET en total:** 4,685 pruebas en verde con SQL Server (Domain 1,381; Application 2,114; WebApi 490; Infrastructure 700). **Cliente en total:** 199 archivos y 1,511 pruebas.
+  - **Primera visita:** 181,910 B (`master` en `c806be4`: 181,819 B, +91 B); el presupuesto sube de 181,900 a 182,000 B. Con SignalR en la barra superior sumaba unos 15 KB: ahora la barra carga aparte el componente que escucha, y este carga SignalR aparte.
+  - **Revisión independiente**, sin bloqueos, con un mayor y menores corregidos:
+    - una conexión que el servidor rechaza al conectar (negocio suspendido, permiso retirado) volvía cada segundo sin fin: los reintentos esperan cada vez más y la barra no escucha a un negocio suspendido;
+    - una recarga silenciosa de la Agenda podía pisar una más nueva o mostrar un error;
+    - faltaban pruebas del despachador real, del empleado sin permiso, del negocio suspendido o sin citas y de la barra; la ADR dice el modo enfocado.
+  - **Escenas:** contra la línea base de `master` en `c806be4` (805 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - **801 iguales.**
+    - **3 cambian**, solo por la tarjeta «Avisos de solicitudes» de Mi perfil (escritorio, teléfono y oscuro, `caja-config.spec.ts`).
+    - **1 nueva:** «perfil con los avisos apagados y el correo sin confirmar» (`avisos-solicitudes.spec.ts`). Pasó dos corridas seguidas contra el mismo build. Las escenas de perfil, citas, Agenda, oficios, Inicio y el marco se repitieron con el build final: 195 iguales y las mismas 4.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
