@@ -45,8 +45,8 @@ public static class AttentionKeys
     public const string LateServices = "lateServices";
     public const string AppointmentsToConfirm = "appointmentsToConfirm";
     /// <summary>
-    /// Appointments customers requested online that the business has not accepted nor declined (Fase 24D); urgent, those to
-    /// answer today to be in time, or already late (Fase 29L).
+    /// Appointments customers requested online, still ahead, that the business has not accepted nor declined (Fase 24D);
+    /// urgent, those for today and those to answer today to be in time, or already late (Fase 29L).
     /// </summary>
     public const string AppointmentRequests = "appointmentRequests";
     /// <summary>CFDI still «Timbrando» past the PAC's window, checked in the SAT's portal from Reportes › CFDI emitidos (Fase 28K).</summary>
@@ -172,13 +172,16 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
         {
             Add(AttentionKeys.AppointmentsToConfirm, await _context.Appointments.AsNoTracking()
                 .CountAsync(a => a.Status == AppointmentStatus.Scheduled && a.StartAt >= now && a.StartAt <= endOfToday, cancellationToken));
-            // Every request still ahead waits for an answer. Urgent are those to answer today to be in time (Fase 29L,
-            // ResponseTimes.AnswerBy: the time asked for or a day after arriving, whichever comes first), or already late.
+            // Every request still ahead waits for an answer. Urgent are those for today, as before, and those to answer
+            // today to be in time (Fase 29L, ResponseTimes.AnswerBy: the time asked for or a day after arriving, whichever
+            // comes first), or already late; a request the business moved to today is urgent though its limit is tomorrow.
             var requests = _context.Appointments.AsNoTracking()
                 .Where(a => a.Status == AppointmentStatus.Requested && a.StartAt > now);
             Add(AttentionKeys.AppointmentRequests, await requests.CountAsync(cancellationToken),
                 await requests.CountAsync(
-                    a => (a.RequestedStartAt ?? a.StartAt) <= endOfToday || a.CreatedAt.AddHours(AnswerByHours) <= endOfToday,
+                    a => a.StartAt <= endOfToday
+                        || (a.RequestedStartAt ?? a.StartAt) <= endOfToday
+                        || a.CreatedAt.AddHours(AnswerByHours) <= endOfToday,
                     cancellationToken));
         }
 

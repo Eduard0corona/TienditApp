@@ -109,8 +109,9 @@ public class ResponseTimeTests
         Assert.Equal(arrived.AddHours(6), ResponseTimes.AnswerBy(arrived, arrived.AddHours(6)));
         // Asked for next week: within a day of arriving.
         Assert.Equal(new DateTimeOffset(2027, 3, 2, 9, 0, 0, TimeSpan.FromHours(-6)), ResponseTimes.AnswerBy(arrived, arrived.AddDays(7)));
-        // Exactly a day later: the same instant.
-        Assert.Equal(arrived.AddDays(1), ResponseTimes.AnswerBy(arrived, arrived.AddDays(1)));
+        // A minute either side of a day later: whichever comes first.
+        Assert.Equal(arrived.AddDays(1).AddMinutes(-1), ResponseTimes.AnswerBy(arrived, arrived.AddDays(1).AddMinutes(-1)));
+        Assert.Equal(arrived.AddDays(1), ResponseTimes.AnswerBy(arrived, arrived.AddDays(1).AddMinutes(1)));
     }
 
     [Fact]
