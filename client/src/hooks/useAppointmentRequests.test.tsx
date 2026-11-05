@@ -1,4 +1,4 @@
-import { act, render, renderHook, screen } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -75,9 +75,13 @@ describe('the requests online, live (Fase 29N)', () => {
       </QueryClientProvider>,
     );
 
-  it('tells a request of a customer, and the bell and the agenda read it at once', () => {
+  /** SignalR loads apart: the connection exists once its module arrives. */
+  const connected = () => waitFor(() => expect(hub.handlers.has('AppointmentRequested')).toBe(true));
+
+  it('tells a request of a customer, and the bell and the agenda read it at once', async () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     renderLive();
+    await connected();
 
     act(() => hub.handlers.get('AppointmentRequested')?.(request()));
 
@@ -88,9 +92,10 @@ describe('the requests online, live (Fase 29N)', () => {
     expect(changes).toBe(1);
   });
 
-  it('refreshes without telling a request of the team, and reads again when the connection comes back', () => {
+  it('refreshes without telling a request of the team, and reads again when the connection comes back', async () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     renderLive();
+    await connected();
 
     act(() => hub.handlers.get('AppointmentRequested')?.(request({ fromTeam: true })));
     act(() => hub.onConnected?.());
@@ -100,14 +105,26 @@ describe('the requests online, live (Fase 29N)', () => {
     expect(changes).toBe(2);
   });
 
-  it('does not connect for whoever does not answer them, nor without a business, and stops when it goes', () => {
+  it('does not connect for whoever does not answer them, nor without a business, and stops when it goes', async () => {
     renderLive({ enabled: false });
     renderLive({ tenantId: '' });
-    expect(hub.urls).toEqual([]);
 
     const { unmount } = renderLive();
+    await connected();
     unmount();
+
+    expect(hub.urls).toEqual(['/hubs/appointments']);
     expect(hub.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('never connects when it goes before SignalR arrives', async () => {
+    const { unmount } = renderLive();
+    unmount();
+    await import('../api/signalr');
+    await Promise.resolve();
+
+    expect(hub.urls).toEqual([]);
+    expect(hub.stop).not.toHaveBeenCalled();
   });
 
   it('names a visit as such', () => {

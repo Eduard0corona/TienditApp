@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
 import { useAuth } from '../../hooks/useAuth';
@@ -11,11 +11,13 @@ import { getAccess } from '../../utils/access';
 import { getApiErrorMessage } from '../../api/errors';
 import BrandLogo from '../common/BrandLogo';
 import AttentionBell from './AttentionBell';
-import { useAppointmentRequestsLive } from '../../hooks/useAppointmentRequests';
 import BusinessSwitcher from './BusinessSwitcher';
 import CashStatusChip from './CashStatusChip';
 import CreateBusinessModal from '../business/CreateBusinessModal';
 import ThemeToggle from './ThemeToggle';
+
+// Fase 29N: loaded apart, after the first screen (it draws nothing).
+const AppointmentRequestsLive = lazy(() => import('./AppointmentRequestsLive'));
 
 const AUTO_SWITCH_MARKER_KEY = 'fpd_auto_tenant_switch';
 const AVATAR_PLACEHOLDER = '/images/placeholders/avatar.svg';
@@ -59,7 +61,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   const canOpenBusiness = !!user && !access.myOrders && !access.platform;
   const isBusinessMember = !!tenant && canOpenBusiness;
   // Fase 29N: whoever answers the requests online hears of each one as it arrives, wherever they are in the app.
-  useAppointmentRequestsLive(isBusinessMember && access.appointments, tenant?.id);
+  const hearsRequests = isBusinessMember && access.appointments && !!tenant?.id;
 
   const selectedTenantId = useMemo(
     () => tenant?.id ?? user?.tenantId ?? '',
@@ -219,6 +221,12 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
             <li className="d-none d-lg-inline-block">
               <CashStatusChip />
             </li>
+          )}
+
+          {hearsRequests && (
+            <Suspense fallback={null}>
+              <AppointmentRequestsLive tenantId={tenant.id} />
+            </Suspense>
           )}
 
           {/* What needs someone now: the API counts only what this person may handle. */}

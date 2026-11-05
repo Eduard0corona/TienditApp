@@ -31,7 +31,7 @@ describe('RequestEmailsCard (Fase 29N)', () => {
     vi.mocked(apiRequest).mockImplementation(async (method, _path, options) =>
       (method === 'get'
         ? { enabled: true, email: 'ana@demo.com', emailConfirmed: true }
-        : { enabled: (options as { body: { enabled: boolean } }).body.enabled, email: 'ana@demo.com', emailConfirmed: true }) as never);
+        : { enabled: (options as unknown as { body: { enabled: boolean } }).body.enabled, email: 'ana@demo.com', emailConfirmed: true }) as never);
     renderCard();
 
     const toggle = await screen.findByRole('switch', { name: 'Recibir un correo con cada solicitud de cita o de visita' });

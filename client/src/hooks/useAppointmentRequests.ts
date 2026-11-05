@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { createHubConnection, keepHubConnected } from '../api/signalr';
 import { queryKeys } from '../api/queries';
 import { formatInBusinessZone } from '../utils/dates';
 import { useToast } from './useToast';
@@ -51,21 +50,26 @@ export function useAppointmentRequestsLive(enabled: boolean, tenantId?: string) 
     // Switching business reloads the page; the business is a key all the same, so a connection never outlives its own.
     if (!enabled || !tenantId) return undefined;
     let isDisposed = false;
-    const connection = createHubConnection('/hubs/appointments');
+    let stop: (() => void) | undefined;
     const changed = () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
     };
-    connection.on('AppointmentRequested', (payload: AppointmentRequestedPayload) => {
-      changed();
-      if (payload.fromTeam) return;
-      const { title, message } = describeRequest(payload);
-      toastRef.current.info(message, { title, durationMs: 10_000 });
+    // The top bar is on every first screen: SignalR loads apart, once the person is known to answer the requests.
+    void import('../api/signalr').then(({ createHubConnection, keepHubConnected }) => {
+      if (isDisposed) return;
+      const connection = createHubConnection('/hubs/appointments');
+      connection.on('AppointmentRequested', (payload: AppointmentRequestedPayload) => {
+        changed();
+        if (payload.fromTeam) return;
+        const { title, message } = describeRequest(payload);
+        toastRef.current.info(message, { title, durationMs: 10_000 });
+      });
+      stop = keepHubConnected(connection, 'AppointmentHub', () => isDisposed, changed);
     });
-    const stop = keepHubConnected(connection, 'AppointmentHub', () => isDisposed, changed);
     return () => {
       isDisposed = true;
-      stop();
+      stop?.();
     };
   }, [enabled, tenantId, queryClient]);
 }
