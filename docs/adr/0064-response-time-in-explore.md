@@ -48,7 +48,7 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
    - **Mostrarle al negocio su propio tiempo:** llegó en la Fase 29K, en «Cómo te ven en TienditApp».
    - **Contar las cotizaciones:** cuánto tarda en mandar la cotización después de la visita.
    - **Los pedidos en línea de los restaurantes.**
-   - **Defenderse de solicitudes falsas** (ver «Lo que limita»).
+   - **Defenderse de solicitudes falsas** (ver «Lo que limita»). Desde la Fase 29M no cuentan las del propio equipo y cada cliente cuenta una vez ([ADR 0067](0067-requests-that-count.md)).
 
 ## Consecuencias
 

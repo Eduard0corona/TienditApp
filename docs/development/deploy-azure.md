@@ -1019,6 +1019,17 @@ La Fase 29K no trae migración ni `apply.sql` ([ADR 0065](../adr/0065-response-t
 
 La Fase 29L no trae migración ni `apply.sql` ([ADR 0066](../adr/0066-answer-requests-in-time.md)). La Agenda recibe `answerBy` en cada cita por confirmar y la campana cuenta las urgentes con el mismo límite; no hay configuración nueva. Volver a la versión anterior funciona sin tocar la base.
 
+## Las solicitudes que cuentan (Fase 29M)
+
+La Fase 29M trae una migración, [`database/production/20261105081150_AddAppointmentFromTeam`](../../database/production/20261105081150_AddAppointmentFromTeam). Su `apply.sql` va antes del merge ([ADR 0067](../adr/0067-requests-that-count.md)).
+
+- **La migración:** agrega a `Appointments` la columna `FromTeam` (`bit NOT NULL`, 0 por omisión: las citas que existen no vienen del equipo) y el índice `IX_Appointments_OnlineRequests_Customer`, filtrado a las solicitudes en línea (`[Channel] = 1`), por negocio, teléfono y llegada, con lo que la foto de Explorar necesita para contar una por cliente. No cambia datos.
+- **Mientras se publica:** la versión de `master` (la 29L) no conoce la columna; el valor por omisión la llena con 0 en lo que guarda, y sigue funcionando.
+- **Sin `apply.sql`:** la versión nueva lee `FromTeam` con cada cita, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva:** al pedir una cita o una visita se leen los teléfonos del equipo de ese negocio; la foto de Explorar sigue siendo una consulta agrupada por negocio, ahora con la búsqueda de la última solicitud de cada teléfono.
+- **Volver a la versión anterior:** funciona sin tocar la base. Explorar cuenta otra vez todas las solicitudes, también las del equipo y varias de un mismo cliente.
+- **Dejar también la base como estaba:** el `rollback.sql` quita el índice y la columna; se pierde qué solicitudes vinieron del equipo, sin cambiar ninguna cita.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
