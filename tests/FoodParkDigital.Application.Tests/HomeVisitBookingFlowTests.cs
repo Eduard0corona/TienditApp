@@ -232,6 +232,26 @@ public class HomeVisitBookingFlowTests
     }
 
     [Fact]
+    public async Task ARequestFromTheBusinessPhone_ShouldBeKeptAsFromTheTeam()
+    {
+        // Fase 29M (ADR 0067): a visit requested from the business's own phone does not count in Explorar.
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await TradeAsync(fixture);
+        var visit = await ServiceAsync(fixture, tenant, "Visita y diagnóstico", 300m, 45);
+        await SetVisitAsync(fixture, tenant, visit);
+        tenant.Update(tenant.Name, tenant.ContactEmail, "222 123 4567", null);
+        await fixture.Context.SaveChangesAsync();
+
+        var ours = await RequestAsync(fixture, Local(Monday, "10:00"), phone: "+52 222 123 4567", price: 350m);
+        var theirs = await RequestAsync(fixture, Local(Monday, "12:00"), phone: "5522107765", price: 350m);
+
+        Assert.True(ours.IsSuccess, ours.Error);
+        Assert.True(theirs.IsSuccess, theirs.Error);
+        var fromTeam = await fixture.Context.Appointments.AsNoTracking().ToDictionaryAsync(a => a.TrackingToken!, a => a.FromTeam);
+        Assert.Equal((true, false), (fromTeam[ours.Value!.TrackingToken], fromTeam[theirs.Value!.TrackingToken]));
+    }
+
+    [Fact]
     public async Task Request_ShouldRefuse_APostalCodeItDoesNotGoTo_OrATimeThatLeavesNoTrip()
     {
         await using var fixture = SalesTestFixture.Create();

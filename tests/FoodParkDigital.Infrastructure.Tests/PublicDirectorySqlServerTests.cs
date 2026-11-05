@@ -137,6 +137,51 @@ public class PublicDirectorySqlServerTests
             category.Businesses.Items.Select(b => (b.Slug, b.ResponseTime)));
     }
 
+    [SqlServerFact]
+    public async Task Category_ShouldNotCountTheTeam_AndCountACustomerOnce_ByTheirLastRequestDecided()
+    {
+        // Fase 29M (ADR 0067), as SQL Server reads it: the phone is compared in the database.
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        async Task<Guid> SalonAsync(string slug) => await SeedServicesAsync(database, slug, BranchServiceMode.Premises, [("Corte", 0, false)], booksOnline: true);
+        async Task SeedAsync(Guid tenantId, params (int ArrivedDaysAgo, TimeSpan? Wait, string? Phone, bool FromTeam)[] requests)
+        {
+            await using var seed = database.CreateContext(tenantId);
+            foreach (var (arrivedDaysAgo, wait, phone, fromTeam) in requests)
+            {
+                var arrivedAt = Later.AddDays(-arrivedDaysAgo);
+                // Answered after its wait, or let pass: its time began a day after it arrived.
+                var request = Request(tenantId, arrivedAt.AddDays(wait is null ? 1 : 2), phone, fromTeam);
+                request.CreatedAt = arrivedAt;
+                if (wait is { } waited)
+                    request.Accept(arrivedAt + waited);
+                seed.Appointments.Add(request);
+            }
+            await seed.SaveChangesAsync();
+        }
+        var quick = TimeSpan.FromMinutes(5);
+        // Three answered at once from its own team: nothing to say.
+        await SeedAsync(await SalonAsync("a-propia"), (3, quick, null, true), (3, quick, null, true), (3, quick, null, true));
+        // Three answered at once from one phone: one customer.
+        await SeedAsync(await SalonAsync("b-repetida"), (3, quick, "+525511110000", false), (4, quick, "+525511110000", false), (5, quick, "+525511110000", false));
+        // A regular answered at once, then let pass; and two more customers, one answered at once and one in 13 hours. The
+        // regular counts by the one let pass: one of three within an hour, two within a day.
+        await SeedAsync(await SalonAsync("c-habitual"),
+            (5, quick, "+525522220000", false), (4, null, "+525522220000", false), (3, quick, null, false), (3, TimeSpan.FromHours(13), null, false));
+        // The regular's phone earlier in another business: there it is one of three customers.
+        await SeedAsync(await SalonAsync("d-otra"), (6, quick, "+525511110000", false), (3, quick, null, false), (3, quick, null, false));
+
+        await using var context = database.CreateContext();
+        var handler = new GetPublicDirectoryQueryHandler(context, new FixedClock(Later), new PublicDirectoryCache(), new PublicProductIndexCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance);
+        var category = await handler.Handle(new GetPublicDirectoryQuery(BusinessCategory.Services), CancellationToken.None);
+
+        Assert.Equal(
+            new Dictionary<string, ResponseTime?>
+            {
+                ["a-propia"] = null, ["b-repetida"] = null, ["c-habitual"] = ResponseTime.WithinADay, ["d-otra"] = ResponseTime.WithinAnHour
+            },
+            category.Businesses.Items.ToDictionary(b => b.Slug, b => b.ResponseTime));
+    }
+
     private enum Drawer { None, MainBranch, OtherBranch, BeforeBranches }
 
     /// <summary>Requests online that arrived three days ago, each answered after its wait, or let pass when it has none.</summary>
@@ -189,10 +234,17 @@ public class PublicDirectorySqlServerTests
         await context.SaveChangesAsync();
     }
 
-    private static Appointment Request(Guid tenantId, DateTimeOffset start)
+    /// <summary>
+    /// A request online for <paramref name="start"/>, from a customer of its own unless <paramref name="phone"/> says whose
+    /// (Explorar counts one per customer, Fase 29M).
+    /// </summary>
+    private static Appointment Request(Guid tenantId, DateTimeOffset start, string? phone = null, bool fromTeam = false)
         => Appointment.RequestOnline(
-            tenantId, "Valeria", "+525522107765", Guid.NewGuid(), "Corte", start, start.AddHours(1), null, null, Guid.NewGuid(),
-            (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43]);
+            tenantId, "Valeria", phone ?? $"+5255{Interlocked.Increment(ref _customers):D8}", Guid.NewGuid(), "Corte", start,
+            start.AddHours(1), null, null, Guid.NewGuid(), (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43],
+            fromTeam: fromTeam);
+
+    private static int _customers;
 
     /// <summary>A business that books online or receives visits, with its weekly hours, its zone and its services.</summary>
     private static async Task<Guid> SeedServicesAsync(

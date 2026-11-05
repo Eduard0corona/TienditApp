@@ -46,9 +46,14 @@ public class AppointmentDto
     public List<string> ProblemPhotos { get; set; } = [];
     /// <summary>
     /// By when a request online still waiting is answered in time (Fase 29L, ADR 0066): the time its customer asked for, or a
-    /// day after it arrived, whichever comes first (<see cref="ResponseTimes.AnswerBy"/>). Null for every other appointment.
+    /// day after it arrived, whichever comes first (<see cref="ResponseTimes.AnswerBy"/>). Null for every other appointment,
+    /// one from the business's own team too: it does not count (Fase 29M).
     /// </summary>
     public DateTimeOffset? AnswerBy { get; set; }
+    /// <summary>
+    /// A request online from the business's own team (Fase 29M, ADR 0067): Explorar does not count how soon it is answered.
+    /// </summary>
+    public bool FromTeam { get; set; }
 
     public static AppointmentDto From(Appointment appointment) => new()
     {
@@ -77,9 +82,10 @@ public class AppointmentDto
         Channel = appointment.Channel,
         CancelledByCustomer = appointment.CancelledByCustomerAt != null,
         WorkOrderId = appointment.WorkOrderId,
-        AnswerBy = appointment.Status == AppointmentStatus.Requested
+        AnswerBy = appointment.Status == AppointmentStatus.Requested && !appointment.FromTeam
             ? ResponseTimes.AnswerBy(appointment.CreatedAt, appointment.RequestedStartAt ?? appointment.StartAt)
-            : null
+            : null,
+        FromTeam = appointment.FromTeam
     };
 
     /// <summary><see cref="From"/> written for SQL, for the lists.</summary>
@@ -111,11 +117,12 @@ public class AppointmentDto
         CancelledByCustomer = x.CancelledByCustomerAt != null,
         WorkOrderId = x.WorkOrderId,
         // ResponseTimes.AnswerBy, written for SQL.
-        AnswerBy = x.Status == AppointmentStatus.Requested
+        AnswerBy = x.Status == AppointmentStatus.Requested && !x.FromTeam
             ? ((x.RequestedStartAt ?? x.StartAt) < x.CreatedAt.AddHours(AnswerByHours)
                 ? x.RequestedStartAt ?? x.StartAt
                 : x.CreatedAt.AddHours(AnswerByHours))
-            : null
+            : null,
+        FromTeam = x.FromTeam
     };
 
     /// <summary>A day: the longest a request waits and is still answered in time (<see cref="ResponseTimes.AnswerBy"/>).</summary>

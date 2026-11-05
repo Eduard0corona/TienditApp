@@ -444,6 +444,8 @@ public class RequestPublicHomeVisitCommandHandler : IRequestHandler<RequestPubli
                 return Result.Failure<PublicAppointmentReceiptDto>(takenMessage);
         }
 
+        // Fase 29M (ADR 0067): one from the business's own team does not count in Explorar.
+        var fromTeam = await TeamRequests.FromTeamAsync(_context, _phones, tenant.Id, phone, _currentUser.UserId, cancellationToken);
         Appointment appointment;
         try
         {
@@ -464,7 +466,8 @@ public class RequestPublicHomeVisitCommandHandler : IRequestHandler<RequestPubli
                 request.IdempotencyKey,
                 OrderTracking.NewToken(),
                 goes?.UserId,
-                goes?.FullName);
+                goes?.FullName,
+                fromTeam);
         }
         catch (DomainException ex)
         {

@@ -342,18 +342,28 @@ public class ExploreResponseTimeTests
         return (tenant, zone);
     }
 
-    /// <summary>A request online that arrived <paramref name="arrivedAt"/>, for two days from now unless said, still waiting.</summary>
-    internal static async Task<Appointment> RequestAsync(SalesTestFixture fixture, Tenant tenant, DateTimeOffset arrivedAt, DateTimeOffset? startAt = null)
+    /// <summary>
+    /// A request online that arrived <paramref name="arrivedAt"/>, for two days from now unless said, still waiting; from a
+    /// customer of its own, unless <paramref name="phone"/> says whose (Explorar counts one per customer, Fase 29M).
+    /// </summary>
+    internal static async Task<Appointment> RequestAsync(
+        SalesTestFixture fixture, Tenant tenant, DateTimeOffset arrivedAt, DateTimeOffset? startAt = null, string? phone = null,
+        bool fromTeam = false)
     {
         var start = startAt ?? fixture.Clock.UtcNow.AddDays(2);
         var request = Appointment.RequestOnline(
-            tenant.Id, "Valeria", "+525522107765", Guid.NewGuid(), "Corte", start, start.AddHours(1), null, null, Guid.NewGuid(),
-            (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43]);
+            tenant.Id, "Valeria", phone ?? NewCustomerPhone(), Guid.NewGuid(), "Corte", start, start.AddHours(1), null, null, Guid.NewGuid(),
+            (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43], fromTeam: fromTeam);
         request.CreatedAt = arrivedAt;
         fixture.Context.Appointments.Add(request);
         await fixture.Context.SaveChangesAsync();
         return request;
     }
+
+    private static int _customers;
+
+    /// <summary>The phone of a customer no other request has, in E.164.</summary>
+    internal static string NewCustomerPhone() => $"+5255{Interlocked.Increment(ref _customers):D8}";
 
     /// <summary>
     /// A request the business accepted (or declined) after its customer waited <paramref name="waited"/>; for two days from

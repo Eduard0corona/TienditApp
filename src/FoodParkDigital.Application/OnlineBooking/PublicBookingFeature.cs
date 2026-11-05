@@ -503,6 +503,8 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
                 return Result.Failure<PublicAppointmentReceiptDto>(takenMessage);
         }
 
+        // Fase 29M (ADR 0067): one from the business's own team does not count in Explorar.
+        var fromTeam = await TeamRequests.FromTeamAsync(_context, _phones, tenantId, phone, _currentUser.UserId, cancellationToken);
         var appointment = Appointment.RequestOnline(
             tenantId,
             request.CustomerName.Trim(),
@@ -516,7 +518,8 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
             request.IdempotencyKey,
             OrderTracking.NewToken(),
             attends?.UserId,
-            attends?.FullName);
+            attends?.FullName,
+            fromTeam);
         _context.Appointments.Add(appointment);
         var noticeQueued = await _notices.QueueRequestedAsync(appointment, cancellationToken);
         try
