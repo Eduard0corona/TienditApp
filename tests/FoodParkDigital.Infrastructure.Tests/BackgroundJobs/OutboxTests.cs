@@ -355,7 +355,9 @@ public class OutboxTests
             new OnlinePaymentRefundRequestedEvent(Guid.NewGuid(), TenantA),
             new CfdiEmailRequestedEvent(Guid.NewGuid()),
             new CfdiMonthEmailRequestedEvent(Guid.NewGuid()),
-            new FoodParkDigital.Domain.Quotes.Events.QuoteEmailRequestedEvent(Guid.NewGuid())
+            new FoodParkDigital.Domain.Quotes.Events.QuoteEmailRequestedEvent(Guid.NewGuid()),
+            new FoodParkDigital.Domain.Appointments.Events.AppointmentRequestedEvent(Guid.NewGuid(), TenantA, HomeVisit: true, FromTeam: false),
+            new FoodParkDigital.Domain.Appointments.Events.AppointmentRequestEmailEvent(Guid.NewGuid(), Guid.NewGuid())
         };
 
         foreach (var domainEvent in events)
