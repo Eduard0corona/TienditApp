@@ -1,6 +1,9 @@
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
 
 namespace FoodParkDigital.Domain.Tests;
 
@@ -81,6 +84,29 @@ public class ResponseTimeTests
         Assert.Null(cancelled.RespondedAt);
         Assert.Null(waiting.RespondedAt);
         Assert.Null(ofTheTeam.RespondedAt);
+    }
+
+    [Fact]
+    public void ARequestFromTheTeam_ShouldBeKeptAsSuch_ThoughItIsMovedOrAnswered()
+    {
+        // Fase 29M (ADR 0067): decided when it arrives, online or as a visit.
+        var fromTeam = Appointment.RequestOnline(
+            Business, "Valeria", "+525522107765", Guid.NewGuid(), "Corte de cabello", Start, Start.AddHours(1),
+            null, null, Guid.NewGuid(), Token, fromTeam: true);
+        var visit = Appointment.RequestHomeVisit(
+            Business, "Valeria", "+525522107765", null, HomeVisitRules.DefaultVisitName, Start, Start.AddHours(1), "Gotea", null,
+            DeliveryAddress.ForVisit("72000", "Av. Juárez 123", null),
+            new DeliveryZone(Business, new DeliveryZoneFields("Centro", 0m, 0m, null, ["72000"], true)),
+            HomeVisitChargePolicy.Free, null, Guid.NewGuid(), Token, fromTeam: true);
+
+        fromTeam.Update("Valeria", "+525522107765", "Corte de cabello", Start.AddDays(1), Start.AddDays(1).AddHours(1), null, null);
+        fromTeam.Accept(Start.AddHours(-20));
+
+        Assert.True(fromTeam.FromTeam);
+        Assert.True(visit.FromTeam);
+        // A customer's request, and one the team booked, are not.
+        Assert.False(Request().FromTeam);
+        Assert.False(new Appointment(Business, "Valeria", "5522107765", "Corte", Start, Start.AddHours(1)).FromTeam);
     }
 
     [Fact]
