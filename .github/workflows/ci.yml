@@ -127,7 +127,8 @@ jobs:
   migrations:
     name: Migrations (SQL Server 2022, sqlcmd)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Around 20 minutes by November 2026, most of it the SQL Server tests; the limit leaves room for them to grow.
+    timeout-minutes: 30
     # An explicit bash adds pipefail: a failing `dotnet ef` inside a pipeline fails the step.
     defaults:
       run:
