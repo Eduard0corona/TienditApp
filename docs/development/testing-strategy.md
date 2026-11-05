@@ -2022,6 +2022,35 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas:** contra la línea base de `master` en `f0d935e` (802 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
     - **Las 802 salen iguales.** En la comparación completa, «auditoría escritorio-oscuro» salió distinta solo en el desplazamiento horizontal de su fila de pestañas, y pasó dos corridas seguidas después.
     - **1 nueva:** «agenda solicitudes a tiempo» (escritorio, `citas-en-linea.spec.ts`): María Fernanda «Responde mañana antes de las 9:00 a.m. para que cuente a tiempo» y Jorge «Ya pasó el límite para responder a tiempo». Pasó dos corridas seguidas contra el mismo build.
+- Fase 29M, las solicitudes que cuentan ([ADR 0067](../adr/0067-requests-that-count.md)):
+  - **Domain:** `ResponseTimeTests` (+2): una solicitud del equipo lo sigue siendo aunque se mueva o se responda (en línea y como visita), y una solicitud guarda como su cliente el teléfono con que llegó, con +521 como +52, aunque el negocio lo cambie.
+  - **Application:**
+    - `RequestsThatCountTests` (4, nuevo):
+      - Explorar no cuenta las del equipo;
+      - cuenta un cliente una vez por su última solicitud decidida: la más nueva sin decidir ni una del equipo con su teléfono toman su lugar, y el mismo teléfono cuenta aparte en otro negocio;
+      - el cliente es el teléfono con que llegó (editarlo no junta clientes; +521 y +52 son uno);
+      - la Agenda y la campana no le dan límite a una del equipo (la respuesta de un comando dice lo mismo que la lista).
+    - `OnlineBookingFlowTests` (+1): una solicitud es del equipo por el teléfono de un miembro activo o invitado (también guardado con +521), del negocio, de una sucursal o de su WhatsApp, o por la sesión de un miembro; no la de alguien dado de baja, un cliente o un miembro de otro negocio. `HomeVisitBookingFlowTests` (+1): lo mismo en una visita.
+    - Las solicitudes de prueba de Explorar tienen cada una su cliente (`NewCustomerPhone`).
+  - **Infrastructure:**
+    - `AppointmentFromTeamMigrationSqlServerTests` (3, nuevo): las citas que existen no son del equipo y las solicitudes reciben la clave de su teléfono (+521 como +52); el índice nuevo tiene sus columnas y su INCLUDE; la versión anterior sigue tomando solicitudes (sin clave); revertir quita solo las columnas y el índice, otra vez no hace nada, y hacia adelante se guarda otra vez. Las pruebas de la 29J leen su base con el modelo de su día (`BeforeAppointmentFromTeam`), y el modelo declara los valores por omisión, para las pruebas que crean la base con él y guardan con un modelo anterior.
+    - `PublicDirectorySqlServerTests` (+1): en SQL Server, el equipo no cuenta, un cliente que repite cuenta una vez por su última decidida, el mismo teléfono en otro negocio cuenta allá, y las que no tienen clave son un cliente. `AnswerInTimeSqlServerTests`: una del equipo vencida no lleva límite ni es urgente.
+    - Los scripts de `database/production` se probaron en SQL Server con datos: aplicar (llena la clave), `verify.sql`, aplicar otra vez, revertir dos veces (la segunda con la caché de planes vacía) y aplicar de nuevo.
+  - **Rendimiento de la consulta** (una sonda con 30 negocios en SQL Server, sin commit): con el `NOT EXISTS` de la primera versión, 201,265 lecturas lógicas con 30 mil citas y 1,358,570 con 90 mil (unos 40 s); con la última llegada de cada cliente, 23,833 y 78,685 (cerca de un segundo). Antes de la fase eran 460 y 1,256.
+  - **Mutaciones:** sin las del equipo en Explorar, sin una por cliente, con la primera en lugar de la última, con una sin decidir o del equipo en su lugar, entre negocios, sin la clave del teléfono, sin `ToKey` (al guardar o al comparar el equipo), solo miembros activos, sin la sesión de un miembro, sin sus teléfonos, sin el del negocio, sus sucursales o su WhatsApp, sin la marca al pedir (cita o visita), con límite para una del equipo en la lista o en la respuesta de un comando, o urgente por su límite en la campana, falla al menos una prueba.
+  - **Cliente:** `AppointmentsList.test.tsx` (+1): «De tu equipo: no cuenta en Explorar» y sin límite. `responseTime.test.ts` y `DirectoryCard.test.tsx`: las notas nuevas del dueño.
+  - **.NET en total:** 4,663 pruebas en verde con SQL Server (Domain 1,376; Application 2,104; WebApi 487; Infrastructure 696), también el build en Release. **Cliente en total:** 196 archivos y 1,498 pruebas.
+  - **Primera visita:** 181,819 B (`master` en `9804a9d`: 181,810 B, +9 B); el presupuesto sigue en 181,900 B.
+  - **Revisión independiente**, con un bloqueo y dos mayores, corregidos:
+    - la consulta de una por cliente comparaba cada pareja de solicitudes de un negocio (bloqueo): ahora busca la última llegada de cada cliente en el índice;
+    - cambiar el teléfono de una cita en la Agenda borraba las lentas: el cliente es ahora el teléfono con que llegó;
+    - un teléfono del equipo guardado con +521 no se reconocía;
+    - faltaban pruebas del invitado, de una del equipo posterior y de las columnas del índice; el equipo se decide antes del candado de la reserva; la ADR dice los teléfonos que declara el negocio y la solicitud con el teléfono de un cliente.
+    - CI encontró que las pruebas que crean la base con el modelo actual y guardan con uno anterior insertaban NULL en la columna nueva: el modelo declara su valor por omisión.
+  - **Escenas:** contra la línea base de `master` en `9804a9d` (803 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - **802 iguales.**
+    - **1 cambia**, solo en la nota del dueño: «cómo te ven con tu tiempo de respuesta» (`oficios.spec.ts`).
+    - **1 nueva:** «agenda solicitud del equipo» (escritorio, `citas-en-linea.spec.ts`): María Fernanda con su límite y Jorge «De tu equipo: no cuenta en Explorar». Pasó dos corridas seguidas contra el mismo build y la comparación completa.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
