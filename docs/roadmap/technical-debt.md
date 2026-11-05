@@ -138,7 +138,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
     - cuenta horas de reloj, no de su horario;
     - se puede inflar (el negocio se pide citas y las acepta) o hundir (solicitudes falsas sin atender): cualquiera manda solicitudes con cualquier teléfono;
     - solo ordena en las categorías. Desde la 29K ([ADR 0065](../adr/0065-response-time-outside-explore.md)) también lo dicen la tienda, la página de citas y la solicitud de visita, y el negocio ve el suyo, pero un negocio que no aparece en Explorar no lo dice en ninguna, y un cambio tarda hasta 10 minutos en verse en ellas;
-    - no cuenta cuánto tarda en mandar la cotización ni los pedidos en línea de los restaurantes, y no le avisa al negocio cuando su tiempo cambia.
+    - no cuenta cuánto tarda en mandar la cotización ni los pedidos en línea de los restaurantes, y no le avisa al negocio cuando su tiempo cambia. Desde la 29L ([ADR 0066](../adr/0066-answer-requests-in-time.md)) la Agenda dice para cuándo responder cada solicitud y la campana marca las que vencen hoy, sin avisos por WhatsApp, correo ni en tiempo real.
   - Siguen pendientes, por decisiones del dueño del producto, el anticipo al aceptar la cotización (cuánto y qué pasa con un pago tardío) y el PDF de la cotización: qué biblioteca y con qué licencia. PDFsharp, la que se consideró, declara `AGPL-3.0-only` en su paquete 6.5.0 de NuGet y pide una licencia al crear un documento (revisado el 2026-11-03).
   - La tarjeta de Configuración no calcula lo que costaría la visita con cambios sin guardar: dice lo de hoy y pide guardar.
   - La lista de servicios a elegir como visita trae los primeros 100 por nombre (el elegido siempre sale); la tienda, hasta 300 códigos postales y 50 servicios.
