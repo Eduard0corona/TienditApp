@@ -44,6 +44,19 @@ public static class ResponseTimes
     public static DateTimeOffset Since(DateTimeOffset now) => now.AddDays(-WindowDays);
 
     /// <summary>
+    /// By when a request is answered in time (Fase 29L, ADR 0066): before the time its customer asked for, and before it has
+    /// waited a day, whichever comes first. Answered later, or still waiting then, it counts among the slowest (ADR 0064).
+    /// The query of Explorar writes the same limit for SQL.
+    /// </summary>
+    /// <param name="arrivedAt">When the request arrived.</param>
+    /// <param name="askedFor">The time its customer asked for (<c>RequestedStartAt</c>, or its time when it has none).</param>
+    public static DateTimeOffset AnswerBy(DateTimeOffset arrivedAt, DateTimeOffset askedFor)
+    {
+        var aDayLater = arrivedAt.AddHours(LimitHours[^1]);
+        return askedFor < aDayLater ? askedFor : aDayLater;
+    }
+
+    /// <summary>
     /// Within what it answers: the soonest <see cref="ResponseTime"/> that holds at least half of its requests, the slowest
     /// counted last. Null with fewer than <see cref="MinRequests"/>.
     /// </summary>

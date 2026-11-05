@@ -19327,6 +19327,11 @@
             "items": {
               "type": "string"
             }
+          },
+          "answerBy": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false

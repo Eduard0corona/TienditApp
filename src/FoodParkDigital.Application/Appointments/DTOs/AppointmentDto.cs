@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 
 namespace FoodParkDigital.Application.Appointments.DTOs;
 
@@ -43,6 +44,11 @@ public class AppointmentDto
     /// them empty.
     /// </summary>
     public List<string> ProblemPhotos { get; set; } = [];
+    /// <summary>
+    /// By when a request online still waiting is answered in time (Fase 29L, ADR 0066): the time its customer asked for, or a
+    /// day after it arrived, whichever comes first (<see cref="ResponseTimes.AnswerBy"/>). Null for every other appointment.
+    /// </summary>
+    public DateTimeOffset? AnswerBy { get; set; }
 
     public static AppointmentDto From(Appointment appointment) => new()
     {
@@ -70,7 +76,10 @@ public class AppointmentDto
         SaleOrderId = appointment.SaleOrderId,
         Channel = appointment.Channel,
         CancelledByCustomer = appointment.CancelledByCustomerAt != null,
-        WorkOrderId = appointment.WorkOrderId
+        WorkOrderId = appointment.WorkOrderId,
+        AnswerBy = appointment.Status == AppointmentStatus.Requested
+            ? ResponseTimes.AnswerBy(appointment.CreatedAt, appointment.RequestedStartAt ?? appointment.StartAt)
+            : null
     };
 
     /// <summary><see cref="From"/> written for SQL, for the lists.</summary>
@@ -100,8 +109,17 @@ public class AppointmentDto
         SaleOrderId = x.SaleOrderId,
         Channel = x.Channel,
         CancelledByCustomer = x.CancelledByCustomerAt != null,
-        WorkOrderId = x.WorkOrderId
+        WorkOrderId = x.WorkOrderId,
+        // ResponseTimes.AnswerBy, written for SQL.
+        AnswerBy = x.Status == AppointmentStatus.Requested
+            ? ((x.RequestedStartAt ?? x.StartAt) < x.CreatedAt.AddHours(AnswerByHours)
+                ? x.RequestedStartAt ?? x.StartAt
+                : x.CreatedAt.AddHours(AnswerByHours))
+            : null
     };
+
+    /// <summary>A day: the longest a request waits and is still answered in time (<see cref="ResponseTimes.AnswerBy"/>).</summary>
+    private static readonly int AnswerByHours = ResponseTimes.LimitHours[^1];
 }
 
 /// <summary>

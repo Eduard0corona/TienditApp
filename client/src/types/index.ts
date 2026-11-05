@@ -1186,6 +1186,11 @@ export interface AppointmentDto {
    * sent; the agenda's lists carry them.
    */
   problemPhotos?: string[];
+  /**
+   * By when a request online still waiting is answered in time (Fase 29L): the time its customer asked for, or a day after
+   * it arrived, whichever comes first. Null for every other appointment.
+   */
+  answerBy?: string | null;
 }
 
 /** One appointment that does (part of) the job of a service order that came from a quote (Fase 29F). */

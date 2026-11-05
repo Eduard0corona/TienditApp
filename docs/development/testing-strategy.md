@@ -2001,6 +2001,27 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **796 iguales.**
     - **2 cambian** por el ícono nuevo, y solo en él: «oficios que responden» en escritorio y teléfono (`oficios.spec.ts`).
     - **4 nuevas:** la tienda del plomero que responde en menos de una hora (escritorio y teléfono), su solicitud de visita (teléfono) y «Cómo te ven» con su tiempo y la nota. Pasaron dos corridas seguidas contra el mismo build y la comparación completa.
+- Fase 29L, responder a tiempo ([ADR 0066](../adr/0066-answer-requests-in-time.md)):
+  - **Domain:** `ResponseTimeTests` (+1): el límite es la hora pedida o un día después de llegar, lo que pase primero, un minuto antes y después del día.
+  - **Application:** `AnswerInTimeTests` (3, nuevo):
+    - la Agenda dice el límite de cada solicitud que espera: para hoy, para la semana siguiente, movida (por la hora que pidió el cliente), anterior a la Fase 29J (sin hora pedida, por su hora) y nada para la aceptada; la respuesta de un comando dice lo mismo que la lista;
+    - la campana cuenta como urgentes las de hoy, las que vencen hoy (también la que vence en el último instante del día, no la de un minuto después), las ya vencidas y las movidas, a la semana siguiente (por la hora pedida) o a hoy (por su nueva hora);
+    - Explorar cuenta como las más lentas exactamente las que la Agenda dice que ya pasaron su límite, por la hora pedida y por el día: en el límite cuentan, un minuto antes no.
+    - `OnlineBookingFlowTests`: la prueba de la campana sella cuándo llegó la solicitud, como en producción.
+  - **Infrastructure:** `AnswerInTimeSqlServerTests` (1, nuevo): en SQL Server, la lista de la Agenda y la campana dicen el límite del dominio en cada caso, también el de un minuto antes del día y el de la solicitud sin hora pedida.
+  - **Mutaciones:** sin la hora pedida, sin el día o sin el estado (en la lista, en la respuesta de un comando o en la campana), con otro borde en la comparación de SQL, sin las de hoy en la campana, con «antes de» estricto al final del día, o con otro límite o un borde estricto en Explorar, falla al menos una prueba.
+  - **Cliente:** `responseTime.test.ts` (+4): hoy (también ya mañana en UTC), mañana, «la» en la hora de la una, el día con el reloj del dispositivo mal y el límite pasado. `attention.test.ts`: «(N por responder hoy)». `AppointmentsList.test.tsx` (+2): el texto en cada solicitud y nada en las demás, y que cambia con la Agenda abierta.
+  - **.NET en total:** 4,651 pruebas en verde con SQL Server (Domain 1,374; Application 2,098; WebApi 487; Infrastructure 692), también el build en Release. **Cliente en total:** 196 archivos y 1,497 pruebas.
+  - **Primera visita:** 181,810 B (`master` en `f0d935e`: 181,790 B, +20 B); el presupuesto sigue en 181,900 B.
+  - **Revisión independiente**, sin bloqueos; se corrigió:
+    - la campana dejó de marcar las de hoy que el negocio movió a hoy: ahora las de hoy siguen urgentes, como antes;
+    - «de las 1:30 p.m.»: ahora «de la 1:30»; el límite que no pasó cae hoy o mañana, así que dice «mañana antes de las …»; «Ya pasó su hora» se confundía con la hora de la cita: ahora «Ya pasó el límite»;
+    - el texto no cambiaba con la Agenda abierta: ahora vuelve a leer el reloj cada minuto;
+    - las pruebas no distinguían la hora pedida en la campana, la solicitud sin hora pedida, el borde del final del día ni el día del negocio frente al de UTC, y nada probaba la traducción a SQL Server ni que Explorar y la Agenda digan el mismo límite;
+    - la documentación decía que la campana marca solo las de hoy, o solo las que vencen hoy.
+  - **Escenas:** contra la línea base de `master` en `f0d935e` (802 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - **Las 802 salen iguales.** En la comparación completa, «auditoría escritorio-oscuro» salió distinta solo en el desplazamiento horizontal de su fila de pestañas, y pasó dos corridas seguidas después.
+    - **1 nueva:** «agenda solicitudes a tiempo» (escritorio, `citas-en-linea.spec.ts`): María Fernanda «Responde mañana antes de las 9:00 a.m. para que cuente a tiempo» y Jorge «Ya pasó el límite para responder a tiempo». Pasó dos corridas seguidas contra el mismo build.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

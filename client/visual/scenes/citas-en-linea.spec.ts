@@ -2,14 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap, snapElement } from '../helpers';
 import {
-  AGENDA_SOLICITUDES,
-  APPOINTMENT_LINK,
-  CITAS_CON_PERSONAS,
-  CITAS_PRENDIDAS,
-  CITAS_ROUTES,
-  EXPLORAR_AGENDA,
-  MENU_AGENDA,
-  QUIEN_ATIENDE,
+  AGENDA_SOLICITUDES, AGENDA_SOLICITUDES_A_TIEMPO, APPOINTMENT_LINK, CITAS_CON_PERSONAS, CITAS_PRENDIDAS, CITAS_ROUTES, EXPLORAR_AGENDA, MENU_AGENDA, QUIEN_ATIENDE,
 } from './citas-en-linea.mocks';
 import { ACCOUNT_PROFILE } from './cuenta-cliente.mocks';
 
@@ -264,6 +257,20 @@ test.describe('Solicitudes en la agenda', () => {
     await page.getByRole('button', { name: 'Rechazar la cita de Jorge Ibarra' }).click();
     await dialog(page, 'Rechazar la solicitud');
     await snap(page, 'agenda-rechazar-solicitud-escritorio', { fullPage: false });
+  });
+});
+
+// Fase 29L (ADR 0066): by when each request is answered in time, as Explorar counts it.
+test.describe('Solicitudes por responder a tiempo', () => {
+  test.use({ prepareData: AGENDA_SOLICITUDES_A_TIEMPO });
+
+  test('agenda solicitudes a tiempo', async ({ page }) => {
+    await page.setViewportSize(SIZES.desktop);
+    await open(page, '/appointments');
+    await page.getByRole('button', { name: 'Ver solicitudes' }).click();
+    await expect(page.getByText('Responde mañana antes de las 9:00 a.m. para que cuente a tiempo')).toBeVisible();
+    await expect(page.getByText('Ya pasó el límite para responder a tiempo')).toBeVisible();
+    await snap(page, 'agenda-solicitudes-a-tiempo-escritorio');
   });
 });
 

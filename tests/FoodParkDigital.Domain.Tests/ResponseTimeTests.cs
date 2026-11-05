@@ -101,6 +101,20 @@ public class ResponseTimeTests
     }
 
     [Fact]
+    public void AnswerBy_ShouldBeTheTimeAskedFor_OrADayAfterItArrived_WhicheverComesFirst()
+    {
+        var arrived = new DateTimeOffset(2027, 3, 1, 9, 0, 0, TimeSpan.FromHours(-6));
+
+        // Asked for this afternoon: before then.
+        Assert.Equal(arrived.AddHours(6), ResponseTimes.AnswerBy(arrived, arrived.AddHours(6)));
+        // Asked for next week: within a day of arriving.
+        Assert.Equal(new DateTimeOffset(2027, 3, 2, 9, 0, 0, TimeSpan.FromHours(-6)), ResponseTimes.AnswerBy(arrived, arrived.AddDays(7)));
+        // A minute either side of a day later: whichever comes first.
+        Assert.Equal(arrived.AddDays(1).AddMinutes(-1), ResponseTimes.AnswerBy(arrived, arrived.AddDays(1).AddMinutes(-1)));
+        Assert.Equal(arrived.AddDays(1), ResponseTimes.AnswerBy(arrived, arrived.AddDays(1).AddMinutes(1)));
+    }
+
+    [Fact]
     public void Typical_ShouldSayNothing_UnderThreeRequests()
     {
         Assert.Null(ResponseTimes.Typical([0, 0, 0, 0, 0]));

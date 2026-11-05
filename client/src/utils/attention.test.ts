@@ -14,7 +14,7 @@ describe('attention', () => {
 
   it('leads the requests booked online to the agenda, filtered on them', () => {
     expect(describeAttention({ key: 'appointmentRequests', count: 2, urgentCount: 1 })).toMatchObject({
-      text: '2 solicitudes de cita por confirmar (1 de hoy)',
+      text: '2 solicitudes de cita por confirmar (1 por responder hoy)',
       path: '/appointments?estado=por-confirmar',
       tone: 'warning',
     });

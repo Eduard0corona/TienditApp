@@ -481,6 +481,9 @@ public class OnlineBookingFlowTests
         var tenant = await BusinessAsync(fixture);
         var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
         await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
+        // It arrived now, as the API stamps it: to answer in time by Monday at 10:00, not today (Fase 29L).
+        (await fixture.Context.Appointments.SingleAsync()).CreatedAt = fixture.Clock.UtcNow;
+        await fixture.Context.SaveChangesAsync();
 
         var attention = await new GetAttentionQueryHandler(
                 fixture.Context, new Application.Common.Security.CurrentAccessContext(fixture.CurrentUser, fixture.TenantService, new OwnerAccess()),
