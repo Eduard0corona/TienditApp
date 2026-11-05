@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from
 import { Modal } from 'react-bootstrap';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { useOnAppointmentRequestsChanged } from '../../hooks/useAppointmentRequests';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import VisitProblem from '../../components/appointments/VisitProblem';
@@ -204,10 +205,10 @@ export default function AppointmentsList() {
   const [staff, setStaff] = useState<EmployeeDto[]>([]);
   const [quoteAnswer, setQuoteAnswer] = useState<QuoteAnswer | null>(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     // The route reads its own day.
     if (view === 'route') return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       // Upcoming opens with the business's today, the soonest first; history reads from the newest back.
       const params: {
@@ -253,6 +254,14 @@ export default function AppointmentsList() {
   useEffect(() => {
     void loadRequests();
   }, [loadRequests]);
+
+  // Fase 29N: a request online arrived (or the live connection came back): read the list and the requests again, quietly.
+  useOnAppointmentRequestsChanged(
+    useCallback(() => {
+      void loadData({ silent: true });
+      void loadRequests();
+    }, [loadData, loadRequests]),
+  );
 
   // The catalog's services and the active team, for the form and the route.
   useEffect(() => {

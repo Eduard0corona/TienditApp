@@ -17,6 +17,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { AppointmentChannel, AppointmentStatus, TenantCapability, type AppointmentDto } from '../../types';
 import { setBusinessTimeZone } from '../../utils/dates';
 import AppointmentsList from './AppointmentsList';
+import { APPOINTMENT_REQUESTS_CHANGED } from '../../hooks/useAppointmentRequests';
 
 vi.mock('../../api/appointmentsApi', () => ({
   appointmentsApi: {
@@ -104,6 +105,25 @@ describe('AppointmentsList', () => {
     } as unknown as ReturnType<typeof useTenant>);
     vi.mocked(productsApi.getAll).mockResolvedValue({ data: page([]) } as never);
     vi.mocked(employeesApi.getAll).mockResolvedValue({ data: page([]) } as never);
+  });
+
+  it('reads the list and the requests again, without a spinner, when a request arrives (Fase 29N)', async () => {
+    renderAgenda([appointment({ id: 'a1' })], { requests: 0 });
+    await screen.findByText('Ana Ruiz');
+    const before = vi.mocked(appointmentsApi.getAll).mock.calls.length;
+    vi.mocked(appointmentsApi.getAll).mockImplementation(async (params) => ({
+      data: countsRequests(params)
+        ? { ...page([]), totalCount: 1 }
+        : page([appointment({ id: 'a1' }), appointment({ id: 'a2', customerName: 'Luz Mora', status: AppointmentStatus.Requested })]),
+    }) as never);
+
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+
+    expect(await screen.findByText('Luz Mora')).toBeInTheDocument();
+    expect(screen.getByText('Ana Ruiz')).toBeInTheDocument();
+    expect(vi.mocked(appointmentsApi.getAll).mock.calls.slice(before).some(([params]) => countsRequests(params))).toBe(true);
   });
 
   it('says where each visit is, filters by where they happen and charges them in Vender', async () => {

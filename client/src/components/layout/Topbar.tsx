@@ -11,6 +11,7 @@ import { getAccess } from '../../utils/access';
 import { getApiErrorMessage } from '../../api/errors';
 import BrandLogo from '../common/BrandLogo';
 import AttentionBell from './AttentionBell';
+import { useAppointmentRequestsLive } from '../../hooks/useAppointmentRequests';
 import BusinessSwitcher from './BusinessSwitcher';
 import CashStatusChip from './CashStatusChip';
 import CreateBusinessModal from '../business/CreateBusinessModal';
@@ -57,6 +58,8 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   // Employees and owners may open a business of their own; a customer account is customer everywhere.
   const canOpenBusiness = !!user && !access.myOrders && !access.platform;
   const isBusinessMember = !!tenant && canOpenBusiness;
+  // Fase 29N: whoever answers the requests online hears of each one as it arrives, wherever they are in the app.
+  useAppointmentRequestsLive(isBusinessMember && access.appointments, tenant?.id);
 
   const selectedTenantId = useMemo(
     () => tenant?.id ?? user?.tenantId ?? '',
