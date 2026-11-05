@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Invoicing;
 using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Fiscal.Enums;
@@ -43,7 +44,10 @@ public static class AttentionKeys
     public const string UnreadChats = "unreadChats";
     public const string LateServices = "lateServices";
     public const string AppointmentsToConfirm = "appointmentsToConfirm";
-    /// <summary>Appointments customers requested online that the business has not accepted nor declined (Fase 24D).</summary>
+    /// <summary>
+    /// Appointments customers requested online that the business has not accepted nor declined (Fase 24D); urgent, those to
+    /// answer today to be in time, or already late (Fase 29L).
+    /// </summary>
     public const string AppointmentRequests = "appointmentRequests";
     /// <summary>CFDI still «Timbrando» past the PAC's window, checked in the SAT's portal from Reportes › CFDI emitidos (Fase 28K).</summary>
     public const string CfdisToReview = "cfdisToReview";
@@ -62,6 +66,7 @@ public static class AttentionKeys
 public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, AttentionDto>
 {
     private static readonly OrderStatus[] FinishedStatuses = [OrderStatus.Delivered, OrderStatus.Completed, OrderStatus.Cancelled];
+    private static readonly int AnswerByHours = ResponseTimes.LimitHours[^1];
 
     private readonly IApplicationDbContext _context;
     private readonly CurrentAccessContext _access;
@@ -167,11 +172,14 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
         {
             Add(AttentionKeys.AppointmentsToConfirm, await _context.Appointments.AsNoTracking()
                 .CountAsync(a => a.Status == AppointmentStatus.Scheduled && a.StartAt >= now && a.StartAt <= endOfToday, cancellationToken));
-            // Every request still ahead waits for an answer; those of today are urgent.
+            // Every request still ahead waits for an answer. Urgent are those to answer today to be in time (Fase 29L,
+            // ResponseTimes.AnswerBy: the time asked for or a day after arriving, whichever comes first), or already late.
             var requests = _context.Appointments.AsNoTracking()
                 .Where(a => a.Status == AppointmentStatus.Requested && a.StartAt > now);
             Add(AttentionKeys.AppointmentRequests, await requests.CountAsync(cancellationToken),
-                await requests.CountAsync(a => a.StartAt <= endOfToday, cancellationToken));
+                await requests.CountAsync(
+                    a => (a.RequestedStartAt ?? a.StartAt) <= endOfToday || a.CreatedAt.AddHours(AnswerByHours) <= endOfToday,
+                    cancellationToken));
         }
 
         if (Can(TenantPermission.ManageOrders) && Has(TenantCapability.Service))
