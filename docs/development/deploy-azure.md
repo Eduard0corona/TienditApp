@@ -1023,12 +1023,12 @@ La Fase 29L no trae migración ni `apply.sql` ([ADR 0066](../adr/0066-answer-req
 
 La Fase 29M trae una migración, [`database/production/20261105081150_AddAppointmentFromTeam`](../../database/production/20261105081150_AddAppointmentFromTeam). Su `apply.sql` va antes del merge ([ADR 0067](../adr/0067-requests-that-count.md)).
 
-- **La migración:** agrega a `Appointments` la columna `FromTeam` (`bit NOT NULL`, 0 por omisión: las citas que existen no vienen del equipo) y el índice `IX_Appointments_OnlineRequests_Customer`, filtrado a las solicitudes en línea (`[Channel] = 1`), por negocio, teléfono y llegada, con lo que la foto de Explorar necesita para contar una por cliente. No cambia datos.
-- **Mientras se publica:** la versión de `master` (la 29L) no conoce la columna; el valor por omisión la llena con 0 en lo que guarda, y sigue funcionando.
-- **Sin `apply.sql`:** la versión nueva lee `FromTeam` con cada cita, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
-- **Sin configuración nueva:** al pedir una cita o una visita se leen los teléfonos del equipo de ese negocio; la foto de Explorar sigue siendo una consulta agrupada por negocio, ahora con la búsqueda de la última solicitud de cada teléfono.
+- **La migración:** agrega a `Appointments` las columnas `FromTeam` (`bit NOT NULL`, 0 por omisión: las citas que existen no vienen del equipo) y `RequestPhone` (`nvarchar(50) NOT NULL`, `''` por omisión: el teléfono con que llegó cada solicitud, como clave de su cliente), y el índice `IX_Appointments_OnlineRequests_Customer`, filtrado a las solicitudes en línea (`[Channel] = 1`), por negocio, esa clave y llegada. Cambia datos: llena la clave de cada solicitud en línea que existe con el teléfono que tiene hoy (+52 y diez dígitos para un celular escrito +521).
+- **Mientras se publica:** la versión de `master` (la 29L) no conoce las columnas; los valores por omisión las llenan con 0 y `''` en lo que guarda, y sigue funcionando. Explorar cuenta como un solo cliente de su negocio las solicitudes que esa versión guarde mientras tanto.
+- **Sin `apply.sql`:** la versión nueva lee `FromTeam` y `RequestPhone` con cada cita, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva:** al pedir una cita o una visita se leen los teléfonos del equipo de ese negocio; la foto de Explorar sigue siendo una consulta agrupada por negocio, ahora con la búsqueda de la última solicitud de cada cliente en el índice nuevo (con 90 mil citas de prueba, unas 79 mil lecturas lógicas y alrededor de un segundo).
 - **Volver a la versión anterior:** funciona sin tocar la base. Explorar cuenta otra vez todas las solicitudes, también las del equipo y varias de un mismo cliente.
-- **Dejar también la base como estaba:** el `rollback.sql` quita el índice y la columna; se pierde qué solicitudes vinieron del equipo, sin cambiar ninguna cita.
+- **Dejar también la base como estaba:** el `rollback.sql` quita el índice y las dos columnas; se pierde qué solicitudes vinieron del equipo y con qué teléfono llegó cada una, sin cambiar ninguna cita.
 
 ## Slot de staging con swap y aprobación
 

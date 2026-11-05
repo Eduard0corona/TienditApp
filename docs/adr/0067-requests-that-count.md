@@ -25,14 +25,15 @@ Tomé las decisiones de la Fase 29M con la autorización permanente del dueño d
    - Una solicitud en línea o de visita viene del equipo si:
      - la manda alguien con sesión de un miembro del negocio (invitado o activo; no uno dado de baja);
      - o llega con el teléfono de la cuenta de uno de ellos, el del negocio, el de una de sus sucursales o el de su WhatsApp.
-   - Los teléfonos se comparan como número (E.164), como los haya escrito su dueño.
-   - Se decide una vez, al llegar, en el negocio que la página pública ya fijó. Se guarda en `Appointment.FromTeam` (migración `20261105081150_AddAppointmentFromTeam`). Las de antes de la fase quedan como de clientes.
+   - Los teléfonos se comparan como número (E.164), como los haya escrito su dueño. Un celular de México con el 1 que pone WhatsApp (`+52 1 …`) es el mismo (`MessagingPhone.ToKey`).
+   - Se decide una vez, al llegar, en el negocio que la página pública ya fijó y antes del candado de la reserva. Se guarda en `Appointment.FromTeam` (migración `20261105081150_AddAppointmentFromTeam`). Las de antes de la fase quedan como de clientes.
    - Explorar lee solo esa marca: no compara teléfonos entre negocios.
 2. **Cada cliente cuenta una vez.**
-   - De las solicitudes de un mismo teléfono a un negocio en los 90 días, Explorar cuenta solo la última que llegó entre las que ya se decidieron (respondida a tiempo, o llegada a su límite, [ADR 0064](0064-response-time-in-explore.md)).
-   - Una más nueva que todavía no se decide no toma su lugar.
-   - El mismo teléfono cuenta aparte en cada negocio.
-   - El teléfono solo se compara dentro de la base, en la consulta: no sale de ella. Un índice nuevo (`IX_Appointments_OnlineRequests_Customer`) busca las solicitudes de un negocio por teléfono y llegada.
+   - El cliente es el teléfono con que llegó la solicitud. Se guarda al llegar como clave en `Appointment.RequestPhone` (`MessagingPhone.ToKey`: un celular escrito `+521` y `+52` es el mismo), así que cambiar después el teléfono de la cita en la Agenda no junta ni separa clientes. La migración llena la clave de las solicitudes que ya existen con el teléfono que tienen hoy.
+   - De las solicitudes de un mismo cliente a un negocio en los 90 días, Explorar cuenta solo la última que llegó entre las que ya se decidieron (respondida a tiempo, o llegada a su límite, [ADR 0064](0064-response-time-in-explore.md)).
+   - Una más nueva que todavía no se decide no toma su lugar, ni una del equipo con el mismo teléfono.
+   - El mismo cliente cuenta aparte en cada negocio.
+   - La clave solo se compara dentro de la base, en la consulta: no sale de ella. La consulta busca la última llegada de cada clave en un índice nuevo (`IX_Appointments_OnlineRequests_Customer`, por negocio, clave y llegada); otra forma, como un `NOT EXISTS`, compara cada pareja de solicitudes de un negocio.
    - Desde 3 solicitudes ([ADR 0064](0064-response-time-in-explore.md)) quiere decir ahora desde 3 clientes.
 3. **La Agenda y la campana:**
    - una solicitud del equipo dice «De tu equipo: no cuenta en Explorar» y no lleva para cuándo responderla ([ADR 0066](0066-answer-requests-in-time.md)). La API manda `fromTeam` y `answerBy` nulo en `AppointmentDto`;
@@ -54,10 +55,13 @@ Tomé las decisiones de la Fase 29M con la autorización permanente del dueño d
   - Lo que cuenta es la última experiencia de cada cliente.
 - **Lo que limita:**
   - **Un teléfono que el negocio no registró** (el de un pariente, otro número suyo) cuenta como de un cliente. Uno solo pesa como un cliente.
+  - **Los teléfonos del equipo los declara el negocio**, sin confirmarlos: un negocio podría registrar como empleado el teléfono de un cliente para que sus solicitudes siguientes no cuenten.
+  - **Una solicitud con el teléfono de un cliente** que el negocio se mande y acepte rápido toma el lugar de la última de ese cliente. Ese cliente recibe por WhatsApp el aviso de la solicitud y de su respuesta.
   - **Un competidor con varios teléfonos** todavía puede mandar solicitudes que nadie atiende, una por teléfono, con el tope de la [ADR 0025](0025-online-booking.md).
   - **Un miembro que cambia su teléfono** después de pedir no cambia la marca de lo que ya pidió.
   - **Un cliente que repite** pesa como uno: si la última vez se le dejó pasar, eso cuenta aunque antes se le haya respondido rápido.
-  - **Dos solicitudes del mismo teléfono** guardadas en el mismo instante (al tick) cuentan las dos.
+  - **Dos solicitudes del mismo cliente** guardadas en el mismo instante (al tick) cuentan las dos.
+  - **Las que guarde la versión anterior** mientras se publica esta no tienen clave (`''`): Explorar las cuenta como un solo cliente de su negocio.
   - **La Agenda** sigue diciendo «para que cuente a tiempo» en una solicitud de un cliente que tiene otra más nueva por decidir. Solo cuenta la que se decida al último.
   - Lo demás es lo de las [ADR 0064](0064-response-time-in-explore.md) y [ADR 0065](0065-response-time-outside-explore.md): empieza vacío, horas de reloj y la foto de hasta 10 minutos fuera de Explorar.
 - **Decisión por omisión** (sin preferencia expresa del dueño):
@@ -65,6 +69,6 @@ Tomé las decisiones de la Fase 29M con la autorización permanente del dueño d
   - contar la última solicitud de cada cliente;
   - el texto de la Agenda y de la nota del dueño.
 - **Reversibilidad:**
-  - la migración solo agrega una columna (0 por omisión) y un índice, y la versión anterior funciona sin `rollback.sql`;
+  - la migración agrega dos columnas (0 y `''` por omisión), llena la clave de las solicitudes que existen y agrega un índice; la versión anterior funciona sin `rollback.sql`;
   - volver al código anterior hace que Explorar cuente otra vez todas las solicitudes;
-  - `rollback.sql` borra la columna y el índice, con lo que se pierde qué solicitudes vinieron del equipo.
+  - `rollback.sql` borra las columnas y el índice, con lo que se pierde qué solicitudes vinieron del equipo y con qué teléfono llegó cada una.
