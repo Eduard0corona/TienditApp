@@ -514,6 +514,9 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     /// <summary>The emails with the CFDI of an invoice (Fase 28E) that went to <paramref name="email"/>.</summary>
     public IReadOnlyList<DocumentEmail> DocumentsTo(string email) => _emails.DocumentsTo(email);
 
+    /// <summary>The plain emails (subject and body) that went to <paramref name="email"/>, such as the notice of a request (Fase 29N).</summary>
+    public IReadOnlyList<(string Subject, string Body)> PlainEmailsTo(string email) => _emails.PlainTo(email);
+
     /// <summary>The emails the API sends, kept to open their links as the person would.</summary>
     private sealed class RecordedEmails : IEmailService
     {
@@ -535,7 +538,17 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
 
         public Task SendPasswordResetEmailAsync(string email, string userId, string token) => Task.CompletedTask;
 
-        public Task SendEmailAsync(string to, string subject, string body) => Task.CompletedTask;
+        private readonly ConcurrentQueue<(string To, string Subject, string Body)> _plain = new();
+
+        /// <summary>The plain emails the server sent to <paramref name="email"/>, such as the notice of a request online (Fase 29N).</summary>
+        public IReadOnlyList<(string Subject, string Body)> PlainTo(string email)
+            => _plain.Where(sent => sent.To == email).Select(sent => (sent.Subject, sent.Body)).ToList();
+
+        public Task SendEmailAsync(string to, string subject, string body)
+        {
+            _plain.Enqueue((to, subject, body));
+            return Task.CompletedTask;
+        }
 
         public Task SendTeamInvitationAsync(string email, string businessName, string invitationPath) => Task.CompletedTask;
 

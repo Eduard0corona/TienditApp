@@ -413,6 +413,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appointments/request-emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RequestEmailsDto"];
+                        "application/json": components["schemas"]["RequestEmailsDto"];
+                        "text/json": components["schemas"]["RequestEmailsDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateRequestEmailsCommand"];
+                    "text/json": components["schemas"]["UpdateRequestEmailsCommand"];
+                    "application/*+json": components["schemas"]["UpdateRequestEmailsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RequestEmailsDto"];
+                        "application/json": components["schemas"]["RequestEmailsDto"];
+                        "text/json": components["schemas"]["RequestEmailsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/appointments/home-visit-requests": {
         parameters: {
             query?: never;
@@ -21139,6 +21203,11 @@ export interface components {
         RemovePlatformWithholdingCertificateRequest: {
             reason: string;
         };
+        RequestEmailsDto: {
+            enabled: boolean;
+            email?: string | null;
+            emailConfirmed: boolean;
+        };
         RequestPhoneChangeCommand: {
             phoneNumber: string;
             currentPassword: string;
@@ -22260,6 +22329,9 @@ export interface components {
             /** Format: int32 */
             validityDays: number;
             onlineReplies?: boolean | null;
+        };
+        UpdateRequestEmailsCommand: {
+            enabled: boolean;
         };
         UpdateSalesPolicyCommand: {
             pricesIncludeTax: boolean;

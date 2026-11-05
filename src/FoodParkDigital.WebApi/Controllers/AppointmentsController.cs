@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Appointments.Queries;
+using FoodParkDigital.Application.Appointments.RequestNotices;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Appointments.Enums;
 using MediatR;
@@ -82,6 +83,30 @@ public class AppointmentsController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Whether the person gets an email with each request online of this business, and where it arrives (Fase 29N). Only for
+    /// its team: the platform's admin acting in it gets 404.
+    /// </summary>
+    [HttpGet("request-emails")]
+    public async Task<ActionResult<RequestEmailsDto>> GetRequestEmails(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetRequestEmailsQuery(), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Turns those emails on or off for the person, in this business only (Fase 29N).</summary>
+    [HttpPut("request-emails")]
+    public async Task<ActionResult<RequestEmailsDto>> UpdateRequestEmails(
+        [FromBody] UpdateRequestEmailsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
         return Ok(result.Value);
     }
 

@@ -11,8 +11,9 @@ namespace FoodParkDigital.WebApi.Tests;
 
 /// <summary>
 /// The live channels of the two businesses on the real API (SQL Server): hub events reach only the business they
-/// belong to, a hub connection closes when its session ends, and each WhatsApp delivery reaches only the business that
-/// owns its number. Runs where TIENDITAPP_TEST_SQLSERVER names a server (the Migrations job of CI).
+/// belong to (and a request online, the emails of its own business only), a hub connection closes when its session ends,
+/// and each WhatsApp delivery reaches only the business that owns its number. Runs where TIENDITAPP_TEST_SQLSERVER names
+/// a server (the Migrations job of CI).
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class CrossTenantRealtimeSqlServerTests
@@ -82,6 +83,85 @@ public sealed class CrossTenantRealtimeSqlServerTests
         var order = await _api.CreateOrderAsync(A);
         await seenByA.WaitForAsync(order.ToString());
         Assert.Equal(HubConnectionState.Connected, hubA.State);
+    }
+
+    [SqlServerFact]
+    public async Task RequestsOnline_ShouldReachOnlyTheirBusiness_OnItsScreensAndByEmailToWhoGetsThem()
+    {
+        // Fase 29N (ADR 0068).
+        var mine = await _api.SignUpAsync("avisos-a");
+        var theirs = await _api.SignUpAsync("avisos-b");
+        var (mySlug, myService) = await CrossTenantOnlineBookingSqlServerTests.BookingAsync(mine.Client, "Corte de avisos");
+        var (theirSlug, theirService) = await CrossTenantOnlineBookingSqlServerTests.BookingAsync(theirs.Client, "Masaje de avisos");
+        var seenByMine = new Events();
+        var seenByTheirs = new Events();
+        await using var hubMine = await ConnectAsync("/hubs/appointments", mine.AccessToken, "AppointmentRequested", seenByMine, AppointmentIdOf);
+        await using var hubTheirs = await ConnectAsync("/hubs/appointments", theirs.AccessToken, "AppointmentRequested", seenByTheirs, AppointmentIdOf);
+        using var stranger = _api.AnonymousClient();
+
+        // Theirs is live (its own request reaches it) before mine gets one; then theirs gets another: had mine been sent
+        // to theirs, it would have arrived before that one.
+        var firstOfTheirs = await RequestAsync(stranger, theirSlug, theirService, "5512340001");
+        await seenByTheirs.WaitForAsync(firstOfTheirs.ToString());
+        var ofMine = await RequestAsync(stranger, mySlug, myService, "5512340002");
+        await seenByMine.WaitForAsync(ofMine.ToString());
+        var secondOfTheirs = await RequestAsync(stranger, theirSlug, theirService, "5512340003");
+        await seenByTheirs.WaitForAsync(secondOfTheirs.ToString());
+        Assert.False(seenByTheirs.Saw(ofMine.ToString()));
+        Assert.False(seenByMine.Saw(firstOfTheirs.ToString()));
+        Assert.False(seenByMine.Saw(secondOfTheirs.ToString()));
+
+        // Each owner gets the email of each request of their own business, and only those.
+        await _api.DispatchOutboxAsync();
+        var mineGot = _api.PlainEmailsTo(mine.Email);
+        var theirsGot = _api.PlainEmailsTo(theirs.Email);
+        Assert.Single(mineGot);
+        Assert.StartsWith("Nueva solicitud de cita en ", mineGot[0].Subject);
+        Assert.Contains("Corte de avisos", mineGot[0].Subject);
+        Assert.Equal(2, theirsGot.Count);
+        Assert.All(theirsGot, email => Assert.Contains("Masaje de avisos", email.Subject));
+        Assert.DoesNotContain(theirsGot.Concat(mineGot), email => email.Body.Contains("551234000"));
+
+        // The owner turns them off for themselves: the next request reaches the screens and no email goes out; the other
+        // business keeps its own choice.
+        var off = await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync(RequestEmails, new { enabled = false }));
+        Assert.Equal((false, mine.Email), (off.GetProperty("enabled").GetBoolean(), off.GetProperty("email").GetString()));
+        Assert.True((await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync(RequestEmails))).GetProperty("enabled").GetBoolean());
+        var unnoticed = await RequestAsync(stranger, mySlug, myService, "5512340004");
+        await seenByMine.WaitForAsync(unnoticed.ToString());
+        await _api.DispatchOutboxAsync();
+        Assert.Single(_api.PlainEmailsTo(mine.Email));
+    }
+
+    [SqlServerFact]
+    public async Task AppointmentHub_ShouldRefuse_ABusinessWithoutAppointments()
+    {
+        var restaurant = await _api.SignUpAsync("avisos-comida", TwoBusinessesApi.FoodBusiness);
+
+        await using var refused = _api.Hub("/hubs/appointments", restaurant.AccessToken);
+        await using var orders = _api.Hub("/hubs/orders", restaurant.AccessToken);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        refused.Closed += _ =>
+        {
+            closed.TrySetResult();
+            return Task.CompletedTask;
+        };
+
+        // The server aborts it as it connects: it never stays connected. Its orders hub is unaffected.
+        try
+        {
+            await refused.StartAsync();
+            await closed.Task.WaitAsync(Patience);
+        }
+        catch (Exception)
+        {
+            // Refused before the handshake ended.
+        }
+
+        Assert.Equal(HubConnectionState.Disconnected, refused.State);
+        await orders.StartAsync();
+        Assert.Equal(HubConnectionState.Connected, orders.State);
+        Assert.Equal(HttpStatusCode.Forbidden, (await restaurant.Client.GetAsync(RequestEmails)).StatusCode);
     }
 
     [SqlServerFact]
@@ -213,6 +293,21 @@ public sealed class CrossTenantRealtimeSqlServerTests
     }
 
     private static string OrderIdOf(JsonElement payload) => payload.GetProperty("orderId").GetString()!;
+
+    private static string AppointmentIdOf(JsonElement payload) => payload.GetProperty("appointmentId").GetString()!;
+
+    private const string RequestEmails = "/api/v1/appointments/request-emails";
+
+    /// <summary>A customer's request online at <paramref name="slug"/>, at its first free time; its id.</summary>
+    private static async Task<Guid> RequestAsync(HttpClient customer, string slug, Guid service, string phone)
+    {
+        var receipt = await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync(
+            $"/api/v1/public/menu/{slug}/appointments",
+            CrossTenantOnlineBookingSqlServerTests.Request(service, await CrossTenantOnlineBookingSqlServerTests.FirstFreeAsync(customer, slug, service), phone)));
+        var link = receipt.GetProperty("trackingToken").GetString()!;
+        return (await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync(CrossTenantOnlineBookingSqlServerTests.Tracking, new { token = link })))
+            .GetProperty("id").GetGuid();
+    }
 
     private static string MessageBodyOf(JsonElement payload) => payload.GetProperty("message").GetProperty("body").GetString()!;
 
