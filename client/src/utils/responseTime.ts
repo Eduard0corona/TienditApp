@@ -1,5 +1,5 @@
 import { ResponseTime } from '../api/generated/enums';
-import { formatInBusinessZone, getBusinessToday, toBusinessDateTimeInput } from './dates';
+import { addCalendarDays, formatInBusinessZone, getBusinessToday, toBusinessDateTimeInput } from './dates';
 
 /** The times the card says: every one but the slowest, which it never says. */
 type ShownTime = Exclude<ResponseTime, typeof ResponseTime.Slower>;
@@ -33,13 +33,21 @@ export function ownResponseTimeNote(responseTime: ResponseTime | null | undefine
 
 /**
  * By when the business answers a request online still waiting to be in time (Fase 29L, ADR 0066), in its own time zone:
- * the server works out the limit (`answerBy`: the time asked for, or a day after it arrived, whichever comes first).
+ * the server works out the limit (`answerBy`: the time asked for, or a day after it arrived, whichever comes first), so it
+ * falls today or tomorrow while it has not passed; another day is named only when the device clock is off.
  */
 export function answerInTimeLabel(answerBy: string, now: Date = new Date()): string {
   const limit = new Date(answerBy);
-  if (limit.getTime() <= now.getTime()) return 'Ya pasó su hora para responder a tiempo';
+  if (limit.getTime() <= now.getTime()) return 'Ya pasó el límite para responder a tiempo';
   const time = formatInBusinessZone(limit, { hour: 'numeric', minute: '2-digit' });
-  const sameDay = toBusinessDateTimeInput(limit).slice(0, 10) === getBusinessToday(now);
-  const when = sameDay ? `de las ${time}` : `del ${formatInBusinessZone(limit, { weekday: 'long', day: 'numeric' })} a las ${time}`;
-  return `Responde antes ${when} para que cuente a tiempo`;
+  // "de las 3:30", but "de la 1:30" in the one o'clock hour.
+  const at = `${time.startsWith('1:') ? 'la' : 'las'} ${time}`;
+  const day = toBusinessDateTimeInput(limit).slice(0, 10);
+  const today = getBusinessToday(now);
+  const when = day === today
+    ? `antes de ${at}`
+    : day === addCalendarDays(today, 1)
+      ? `mañana antes de ${at}`
+      : `antes del ${formatInBusinessZone(limit, { weekday: 'long', day: 'numeric' })} a ${at}`;
+  return `Responde ${when} para que cuente a tiempo`;
 }

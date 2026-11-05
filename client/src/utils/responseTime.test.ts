@@ -43,16 +43,32 @@ describe('answerInTimeLabel (Fase 29L)', () => {
   const now = new Date('2027-03-01T17:00:00Z');
   afterEach(() => setBusinessTimeZone(null));
 
-  it('says by when the business answers to be in time, in its own time zone', () => {
+  it('says by when the business answers to be in time, today or tomorrow in its own time zone', () => {
     setBusinessTimeZone('America/Mexico_City');
 
     expect(answerInTimeLabel('2027-03-01T21:30:00Z', now)).toBe('Responde antes de las 3:30 p.m. para que cuente a tiempo');
-    expect(answerInTimeLabel('2027-03-02T16:00:00Z', now)).toBe('Responde antes del martes 2 a las 10:00 a.m. para que cuente a tiempo');
+    // Already the 2nd in UTC, still the 1st in Mexico City.
+    expect(answerInTimeLabel('2027-03-02T03:00:00Z', now)).toBe('Responde antes de las 9:00 p.m. para que cuente a tiempo');
+    expect(answerInTimeLabel('2027-03-02T16:00:00Z', now)).toBe('Responde mañana antes de las 10:00 a.m. para que cuente a tiempo');
   });
 
-  it('says when that time already passed', () => {
+  it('says «la» in the one o\'clock hour', () => {
     setBusinessTimeZone('America/Mexico_City');
 
-    expect(answerInTimeLabel('2027-03-01T17:00:00Z', now)).toBe('Ya pasó su hora para responder a tiempo');
+    expect(answerInTimeLabel('2027-03-01T19:30:00Z', now)).toBe('Responde antes de la 1:30 p.m. para que cuente a tiempo');
+    expect(answerInTimeLabel('2027-03-02T07:00:00Z', now)).toBe('Responde mañana antes de la 1:00 a.m. para que cuente a tiempo');
+  });
+
+  it('names the day when the device clock is off by more than a day', () => {
+    setBusinessTimeZone('America/Mexico_City');
+
+    expect(answerInTimeLabel('2027-03-04T16:00:00Z', now)).toBe('Responde antes del jueves 4 a las 10:00 a.m. para que cuente a tiempo');
+    expect(answerInTimeLabel('2027-03-04T19:00:00Z', now)).toBe('Responde antes del jueves 4 a la 1:00 p.m. para que cuente a tiempo');
+  });
+
+  it('says when that limit already passed', () => {
+    setBusinessTimeZone('America/Mexico_City');
+
+    expect(answerInTimeLabel('2027-03-01T17:00:00Z', now)).toBe('Ya pasó el límite para responder a tiempo');
   });
 });

@@ -143,6 +143,16 @@ function formatSlot(item: AppointmentDto): string {
   return `${day} · ${from} a ${to}`;
 }
 
+/** By when a request is answered in time; it reads the clock every minute, so it says the limit passed with the agenda open. */
+function AnswerInTime({ answerBy }: { answerBy: string }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return <div className="text-muted small">{answerInTimeLabel(answerBy, now)}</div>;
+}
+
 export default function AppointmentsList() {
   const titleId = useId();
   const toast = useToast();
@@ -656,7 +666,7 @@ export default function AppointmentsList() {
                   {item.cancelledByCustomer && <div className="text-muted small">La canceló el cliente</div>}
                   {/* By when it is answered in time, as Explorar counts it (Fase 29L). */}
                   {item.status === AppointmentStatusConst.Requested && item.answerBy && (
-                    <div className="text-muted small">{answerInTimeLabel(item.answerBy)}</div>
+                    <AnswerInTime answerBy={item.answerBy} />
                   )}
                 </td>
                 <td className="text-center">

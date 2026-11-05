@@ -268,8 +268,8 @@ test.describe('Solicitudes por responder a tiempo', () => {
     await page.setViewportSize(SIZES.desktop);
     await open(page, '/appointments');
     await page.getByRole('button', { name: 'Ver solicitudes' }).click();
-    await expect(page.getByText('Responde antes del lunes 5 a las 9:00 a.m. para que cuente a tiempo')).toBeVisible();
-    await expect(page.getByText('Ya pasó su hora para responder a tiempo')).toBeVisible();
+    await expect(page.getByText('Responde mañana antes de las 9:00 a.m. para que cuente a tiempo')).toBeVisible();
+    await expect(page.getByText('Ya pasó el límite para responder a tiempo')).toBeVisible();
     await snap(page, 'agenda-solicitudes-a-tiempo-escritorio');
   });
 });

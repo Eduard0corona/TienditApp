@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -288,7 +288,7 @@ describe('AppointmentsList', () => {
     expect(toast.success).toHaveBeenCalledWith('Solicitud rechazada: el cliente recibe el aviso.');
   });
 
-  it('says by when each request is answered in time, or that its time passed (Fase 29L)', async () => {
+  it('says by when each request is answered in time, or that its limit passed (Fase 29L)', async () => {
     renderAgenda([
       appointment({ id: 'r1', customerName: 'Valeria', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online, answerBy: '2099-03-02T16:00:00Z' }),
       appointment({ id: 'r2', customerName: 'Rocío', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online, answerBy: '2000-03-02T16:00:00Z' }),
@@ -297,8 +297,25 @@ describe('AppointmentsList', () => {
 
     const waiting = (await screen.findByText('Valeria')).closest('tr')!;
     expect(within(waiting).getByText(/^Responde antes del .+ para que cuente a tiempo$/)).toBeInTheDocument();
-    expect(within(screen.getByText('Rocío').closest('tr')!).getByText('Ya pasó su hora para responder a tiempo')).toBeInTheDocument();
+    expect(within(screen.getByText('Rocío').closest('tr')!).getByText('Ya pasó el límite para responder a tiempo')).toBeInTheDocument();
     expect(within(screen.getByText('Mario').closest('tr')!).queryByText(/a tiempo/)).not.toBeInTheDocument();
+  });
+
+  it('says the limit passed while the agenda stays open (Fase 29L)', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2026-10-14T16:00:00Z'));
+    try {
+      renderAgenda([appointment({
+        id: 'r1', customerName: 'Valeria', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online, answerBy: '2026-10-14T16:00:30Z',
+      })]);
+
+      const row = (await screen.findByText('Valeria')).closest('tr')!;
+      expect(within(row).getByText(/^Responde antes de las .+ para que cuente a tiempo$/)).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(within(row).getByText('Ya pasó el límite para responder a tiempo')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('says a visit to quote requested online is one, how it is charged and where its quote goes (Fase 29B)', async () => {
