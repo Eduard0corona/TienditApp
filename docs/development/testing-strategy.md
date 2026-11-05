@@ -2065,15 +2065,16 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `TenantUserRequestEmailsMigrationSqlServerTests` (3, nuevo): los miembros que existen quedan sin elegir (a los dueños les llegan), la versión anterior sigue agregando miembros sin elegir, y el rollback quita solo la columna.
     - `OutboxTests`: los dos eventos nuevos pasan por el serializador.
     - Los scripts de `database/production` se probaron en SQL Server: aplicar, `verify.sql`, aplicar otra vez, revertir dos veces y aplicar de nuevo; `apply.sql` y `rollback.sql` son los que genera CI.
-  - **WebApi:** `CrossTenantRealtimeSqlServerTests` (+3): una solicitud en línea llega solo al hub y a los correos de su negocio, y apagar los correos los apaga solo para esa persona; un empleado sin la Agenda no entra al hub ni elige (403) y uno con ella sí; un negocio sin citas no entra al hub.
+  - **WebApi:** `CrossTenantRealtimeSqlServerTests` (+4): una solicitud en línea llega solo al hub y a los correos de su negocio, y apagar los correos los apaga solo para esa persona; un empleado sin la Agenda no entra al hub ni elige (403) y uno con ella sí; un negocio sin citas no entra al hub; y una conexión que el servidor rechaza después del handshake se cierra sin reconexión, aun con la reconexión automática del cliente (de ahí parte la espera creciente del cliente).
   - **Mutaciones:** 33 en el servidor, 31 muertas. Sobreviven dos guardas redundantes entre sí: el filtro de miembros activos en la consulta y el acceso activo del permiso (cada una sola no cambia el resultado). En el cliente, la barra sin la condición del negocio suspendido o de la Agenda, los reintentos sin esperar más, la Agenda sin la guarda de la lectura más reciente o con indicador, y el aviso de una del equipo: todas mueren.
   - **Cliente:** `useAppointmentRequests.test.tsx` (6), `RequestEmailsCard.test.tsx` (3), `signalr.test.ts` (2) y `Topbar.test.tsx` (2), nuevos; `AppointmentsList.test.tsx` (+2): la Agenda recarga sin indicador, solo muestra la lectura más reciente y una silenciosa que falla no muestra error.
-  - **.NET en total:** 4,685 pruebas en verde con SQL Server (Domain 1,381; Application 2,114; WebApi 490; Infrastructure 700). **Cliente en total:** 199 archivos y 1,511 pruebas.
+  - **.NET en total:** 4,686 pruebas en verde con SQL Server (Domain 1,381; Application 2,114; WebApi 491; Infrastructure 700). **Cliente en total:** 199 archivos y 1,511 pruebas.
   - **Primera visita:** 181,910 B (`master` en `c806be4`: 181,819 B, +91 B); el presupuesto sube de 181,900 a 182,000 B. Con SignalR en la barra superior sumaba unos 15 KB: ahora la barra carga aparte el componente que escucha, y este carga SignalR aparte.
   - **Revisión independiente**, sin bloqueos, con un mayor y menores corregidos:
     - una conexión que el servidor rechaza al conectar (negocio suspendido, permiso retirado) volvía cada segundo sin fin: los reintentos esperan cada vez más y la barra no escucha a un negocio suspendido;
     - una recarga silenciosa de la Agenda podía pisar una más nueva o mostrar un error;
     - faltaban pruebas del despachador real, del empleado sin permiso, del negocio suspendido o sin citas y de la barra; la ADR dice el modo enfocado.
+  - **Revisión automática:** sin bloqueos; un mayor que no se reproduce (que la reconexión automática de SignalR saltaría la espera creciente): el servidor cierra sin permitir reconectar, y lo prueba `CrossTenantRealtimeSqlServerTests`.
   - **Escenas:** contra la línea base de `master` en `c806be4` (805 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
     - **801 iguales.**
     - **3 cambian**, solo por la tarjeta «Avisos de solicitudes» de Mi perfil (escritorio, teléfono y oscuro, `caja-config.spec.ts`).
