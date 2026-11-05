@@ -171,6 +171,38 @@ describe('AppointmentsList', () => {
     expect(screen.queryByText('Sin conexión.')).not.toBeInTheDocument();
   });
 
+  it('says why the list did not change when a quiet read that took the place of a filtered one fails (Fase 29N)', async () => {
+    const user = userEvent.setup();
+    renderAgenda([appointment({ id: 'a1' })]);
+    await screen.findByText('Ana Ruiz');
+    let releaseFiltered = () => {};
+    const filtered = new Promise<void>((resolve) => {
+      releaseFiltered = resolve;
+    });
+    vi.mocked(appointmentsApi.getAll).mockImplementation(async (params) => {
+      if (countsRequests(params)) return { data: { ...page([]), totalCount: 0 } } as never;
+      if (params?.homeVisit === true && vi.mocked(appointmentsApi.getAll).mock.calls.filter(([p]) => p?.homeVisit === true).length === 1) {
+        await filtered;
+        return { data: page([appointment({ id: 'home', customerName: 'Visita Filtrada' })]) } as never;
+      }
+      throw apiError('Sin conexión.');
+    });
+
+    // The person filters (a read with the spinner), and a request arrives before it ends: its quiet read fails.
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Dónde' }), 'A domicilio');
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+
+    expect(await screen.findByText('Sin conexión.')).toBeInTheDocument();
+    await act(async () => {
+      releaseFiltered();
+      await filtered;
+    });
+    // The filtered read was replaced: what shows is the error, not a list of another filter without a word.
+    expect(screen.queryByText('Visita Filtrada')).not.toBeInTheDocument();
+  });
+
   it('says where each visit is, filters by where they happen and charges them in Vender', async () => {
     const user = userEvent.setup();
     renderAgenda([

@@ -207,11 +207,18 @@ export default function AppointmentsList() {
 
   // Each read of the list: only the latest one shows (a quiet one after a request may finish after a newer one).
   const listRead = useRef(0);
+  // A read the person is waiting for (with the spinner) has not finished yet.
+  const visibleReadPending = useRef(false);
   const loadData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     // The route reads its own day.
     if (view === 'route') return;
     const read = ++listRead.current;
-    if (!silent) setLoading(true);
+    // A quiet read that takes the place of one the person is waiting for answers as that one would, its error included.
+    const quiet = silent && !visibleReadPending.current;
+    if (!silent) {
+      visibleReadPending.current = true;
+      setLoading(true);
+    }
     try {
       // Upcoming opens with the business's today, the soonest first; history reads from the newest back.
       const params: {
@@ -232,9 +239,12 @@ export default function AppointmentsList() {
       if (read === listRead.current) setData(data);
     } catch (err: unknown) {
       // A quiet read that fails says nothing: the next request, the bell or the person reads it again.
-      if (read === listRead.current && !silent) setError(getApiErrorMessage(err, 'No se pudieron cargar las citas.'));
+      if (read === listRead.current && !quiet) setError(getApiErrorMessage(err, 'No se pudieron cargar las citas.'));
     } finally {
-      if (read === listRead.current) setLoading(false);
+      if (read === listRead.current) {
+        visibleReadPending.current = false;
+        setLoading(false);
+      }
     }
   }, [pageNumber, pageSize, placeFilter, search, statusFilter, view]);
 
