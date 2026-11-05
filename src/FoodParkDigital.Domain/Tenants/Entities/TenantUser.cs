@@ -28,6 +28,18 @@ public class TenantUser : AuditableEntity, ITenantScoped
     public TenantUserStatus Status { get; private set; }
     public string? PermissionCodes { get; private set; }
 
+    /// <summary>
+    /// Whether this member gets an email with each request online of the business (Fase 29N, ADR 0068), as they chose; null
+    /// until they choose, when only the owners get them (<see cref="GetsRequestEmails"/>). Their own to choose: nobody else
+    /// sets it for them.
+    /// </summary>
+    public bool? RequestEmails { get; private set; }
+
+    /// <summary>What they chose or, until they choose, whether they own the business.</summary>
+    public bool GetsRequestEmails => RequestEmails ?? Role == TenantUserRole.Owner;
+
+    public void ChooseRequestEmails(bool enabled) => RequestEmails = enabled;
+
     public void SetStatus(TenantUserStatus status) => Status = status;
 
     public void SetRole(TenantUserRole role) => Role = role;

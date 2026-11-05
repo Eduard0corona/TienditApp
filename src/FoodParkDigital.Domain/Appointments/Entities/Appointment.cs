@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Appointments.Events;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Common;
@@ -230,6 +231,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             FromTeam = fromTeam,
             RequestPhone = MessagingPhone.ToKey(customerPhone)
         };
+        appointment.AddDomainEvent(new AppointmentRequestedEvent(appointment.Id, tenantId, HomeVisit: false, fromTeam));
         return appointment;
     }
 
@@ -296,6 +298,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             RequestPhone = MessagingPhone.ToKey(customerPhone)
         };
         appointment.Visit = new AppointmentVisit(tenantId, appointment.Id, address, zone.Name, zone.Fee, chargePolicy);
+        appointment.AddDomainEvent(new AppointmentRequestedEvent(appointment.Id, tenantId, HomeVisit: true, fromTeam));
         return appointment;
     }
 

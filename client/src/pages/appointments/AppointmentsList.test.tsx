@@ -17,6 +17,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { AppointmentChannel, AppointmentStatus, TenantCapability, type AppointmentDto } from '../../types';
 import { setBusinessTimeZone } from '../../utils/dates';
 import AppointmentsList from './AppointmentsList';
+import { APPOINTMENT_REQUESTS_CHANGED } from '../../hooks/useAppointmentRequests';
 
 vi.mock('../../api/appointmentsApi', () => ({
   appointmentsApi: {
@@ -104,6 +105,102 @@ describe('AppointmentsList', () => {
     } as unknown as ReturnType<typeof useTenant>);
     vi.mocked(productsApi.getAll).mockResolvedValue({ data: page([]) } as never);
     vi.mocked(employeesApi.getAll).mockResolvedValue({ data: page([]) } as never);
+  });
+
+  it('reads the list and the requests again, without a spinner, when a request arrives (Fase 29N)', async () => {
+    renderAgenda([appointment({ id: 'a1' })], { requests: 0 });
+    await screen.findByText('Ana Ruiz');
+    const before = vi.mocked(appointmentsApi.getAll).mock.calls.length;
+    vi.mocked(appointmentsApi.getAll).mockImplementation(async (params) => ({
+      data: countsRequests(params)
+        ? { ...page([]), totalCount: 1 }
+        : page([appointment({ id: 'a1' }), appointment({ id: 'a2', customerName: 'Luz Mora', status: AppointmentStatus.Requested })]),
+    }) as never);
+
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+    // The list stays while it reads again: no spinner in its place.
+    expect(screen.getByText('Ana Ruiz')).toBeInTheDocument();
+
+    expect(await screen.findByText('Luz Mora')).toBeInTheDocument();
+    expect(screen.getByText('Ana Ruiz')).toBeInTheDocument();
+    expect(vi.mocked(appointmentsApi.getAll).mock.calls.slice(before).some(([params]) => countsRequests(params))).toBe(true);
+  });
+
+  it('shows only the latest of two quiet reads that cross, and says nothing when one fails (Fase 29N)', async () => {
+    renderAgenda([appointment({ id: 'a1' })]);
+    await screen.findByText('Ana Ruiz');
+    let releaseOld = () => {};
+    const old = new Promise<void>((resolve) => {
+      releaseOld = resolve;
+    });
+    let reads = 0;
+    vi.mocked(appointmentsApi.getAll).mockImplementation(async (params) => {
+      if (countsRequests(params)) return { data: { ...page([]), totalCount: 0 } } as never;
+      reads += 1;
+      if (reads === 1) {
+        await old;
+        return { data: page([appointment({ id: 'old', customerName: 'Lectura Vieja' })]) } as never;
+      }
+      if (reads === 2) return { data: page([appointment({ id: 'new', customerName: 'Lectura Nueva' })]) } as never;
+      throw apiError('Sin conexión.');
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+    expect(await screen.findByText('Lectura Nueva')).toBeInTheDocument();
+    await act(async () => {
+      releaseOld();
+      await old;
+    });
+
+    expect(screen.queryByText('Lectura Vieja')).not.toBeInTheDocument();
+    expect(screen.getByText('Lectura Nueva')).toBeInTheDocument();
+
+    // A third quiet read fails: the list stays, without an error.
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+    await waitFor(() => expect(reads).toBe(3));
+    expect(screen.getByText('Lectura Nueva')).toBeInTheDocument();
+    expect(screen.queryByText('Sin conexión.')).not.toBeInTheDocument();
+  });
+
+  it('says why the list did not change when a quiet read that took the place of a filtered one fails (Fase 29N)', async () => {
+    const user = userEvent.setup();
+    renderAgenda([appointment({ id: 'a1' })]);
+    await screen.findByText('Ana Ruiz');
+    let releaseFiltered = () => {};
+    const filtered = new Promise<void>((resolve) => {
+      releaseFiltered = resolve;
+    });
+    vi.mocked(appointmentsApi.getAll).mockImplementation(async (params) => {
+      if (countsRequests(params)) return { data: { ...page([]), totalCount: 0 } } as never;
+      if (params?.homeVisit === true && vi.mocked(appointmentsApi.getAll).mock.calls.filter(([p]) => p?.homeVisit === true).length === 1) {
+        await filtered;
+        return { data: page([appointment({ id: 'home', customerName: 'Visita Filtrada' })]) } as never;
+      }
+      throw apiError('Sin conexión.');
+    });
+
+    // The person filters (a read with the spinner), and a request arrives before it ends: its quiet read fails.
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Dónde' }), 'A domicilio');
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+
+    expect(await screen.findByText('Sin conexión.')).toBeInTheDocument();
+    await act(async () => {
+      releaseFiltered();
+      await filtered;
+    });
+    // The filtered read was replaced: what shows is the error, not a list of another filter without a word.
+    expect(screen.queryByText('Visita Filtrada')).not.toBeInTheDocument();
   });
 
   it('says where each visit is, filters by where they happen and charges them in Vender', async () => {

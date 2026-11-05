@@ -18,6 +18,10 @@ public class TenantUserConfiguration : IEntityTypeConfiguration<TenantUser>
         builder.Property(x => x.Role).HasConversion<int>().IsRequired();
         builder.Property(x => x.Status).HasConversion<int>().IsRequired();
         builder.Property(x => x.PermissionCodes).HasMaxLength(1000);
+        // Fase 29N (ADR 0068): whether the member gets an email with each request online, as they chose; null until they
+        // choose (the owners get them), which is also what the version before it saves.
+        builder.Property(x => x.RequestEmails);
+        builder.Ignore(x => x.GetsRequestEmails);
 
         builder.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
         builder.HasIndex(x => x.TenantId);

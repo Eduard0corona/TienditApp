@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { useOnAppointmentRequestsChanged } from '../../hooks/useAppointmentRequests';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import VisitProblem from '../../components/appointments/VisitProblem';
@@ -204,10 +205,20 @@ export default function AppointmentsList() {
   const [staff, setStaff] = useState<EmployeeDto[]>([]);
   const [quoteAnswer, setQuoteAnswer] = useState<QuoteAnswer | null>(null);
 
-  const loadData = useCallback(async () => {
+  // Each read of the list: only the latest one shows (a quiet one after a request may finish after a newer one).
+  const listRead = useRef(0);
+  // A read the person is waiting for (with the spinner) has not finished yet.
+  const visibleReadPending = useRef(false);
+  const loadData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     // The route reads its own day.
     if (view === 'route') return;
-    setLoading(true);
+    const read = ++listRead.current;
+    // A quiet read that takes the place of one the person is waiting for answers as that one would, its error included.
+    const quiet = silent && !visibleReadPending.current;
+    if (!silent) {
+      visibleReadPending.current = true;
+      setLoading(true);
+    }
     try {
       // Upcoming opens with the business's today, the soonest first; history reads from the newest back.
       const params: {
@@ -225,11 +236,15 @@ export default function AppointmentsList() {
       if (search) params.search = search;
       if (placeFilter !== '') params.homeVisit = placeFilter === 'home';
       const { data } = await appointmentsApi.getAll(params);
-      setData(data);
+      if (read === listRead.current) setData(data);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudieron cargar las citas.'));
+      // A quiet read that fails says nothing: the next request, the bell or the person reads it again.
+      if (read === listRead.current && !quiet) setError(getApiErrorMessage(err, 'No se pudieron cargar las citas.'));
     } finally {
-      setLoading(false);
+      if (read === listRead.current) {
+        visibleReadPending.current = false;
+        setLoading(false);
+      }
     }
   }, [pageNumber, pageSize, placeFilter, search, statusFilter, view]);
 
@@ -253,6 +268,14 @@ export default function AppointmentsList() {
   useEffect(() => {
     void loadRequests();
   }, [loadRequests]);
+
+  // Fase 29N: a request online arrived (or the live connection came back): read the list and the requests again, quietly.
+  useOnAppointmentRequestsChanged(
+    useCallback(() => {
+      void loadData({ silent: true });
+      void loadRequests();
+    }, [loadData, loadRequests]),
+  );
 
   // The catalog's services and the active team, for the form and the route.
   useEffect(() => {
