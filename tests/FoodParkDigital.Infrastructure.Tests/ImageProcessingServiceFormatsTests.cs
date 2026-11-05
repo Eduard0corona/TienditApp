@@ -6,10 +6,10 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// The service decodes only JPEG, PNG, WebP and GIF. ImageSharp 3.1.12 stays while its TIFF advisories cannot be reached
+/// The service decodes only JPEG, PNG, WebP and GIF. ImageSharp 3.2.0 fixes the TIFF advisories of 3.1.12
 /// (GHSA-wmxv-xphr-5c9g, GHSA-j3p4-wp97-rph4, GHSA-j9gm-c75j-xc9q, GHSA-jjfr-hcj7-qf5w, GHSA-v76p-62qx-wwq2; see
-/// docs/roadmap/technical-debt.md): product photos, covers, avatars and logos reach it without a check of their first
-/// bytes, so the formats it registers are what keeps a TIFF from being decoded.
+/// SECURITY.md), and the formats stay as they are: product photos, covers, avatars and logos reach it without a check of
+/// their first bytes, so the formats it registers are what keeps a TIFF, or a future TIFF advisory, from being decoded.
 /// </summary>
 public class ImageProcessingServiceFormatsTests
 {

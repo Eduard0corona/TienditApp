@@ -62,8 +62,11 @@ Una entrega firmada recibe 200 cuando se procesó, o cuando se descarta por JSON
 
 ```powershell
 $env:SEED_SUPERADMIN_PASSWORD = "<contraseña local>"
+$env:SIXLABORS_LICENSE_KEY = "<licencia completa de Six Labors>"
 docker compose up --build
 ```
+
+La imagen compila en Release, y `SixLabors.ImageSharp` 3.2.0 no lo permite sin una clave de Six Labors. `docker compose` la pasa al build como secreto de BuildKit desde `SIXLABORS_LICENSE_KEY`, y no queda en la imagen. Fuera de Docker, Debug solo avisa ([seguridad](../../SECURITY.md#dependencias)).
 
 La imagen compila también el SPA y corre con el usuario no root de la imagen de .NET. Publica API en 5000/5001 y SQL Server en 1433. Variables opcionales: `JWT_SECRET` (sin ella se usa una llave efímera de desarrollo), `SEED_SUPERADMIN_PASSWORD` y `MSSQL_SA_PASSWORD` (la contraseña por defecto del contenedor SQL solo sirve para un entorno local desechable). Detén el stack con `docker compose down`; no borres volúmenes salvo autorización explícita. Las imágenes de `docker-compose.yml` y del `Dockerfile` van fijadas por digest (Fase 13); cómo actualizarlas está en [despliegue](deploy-azure.md#columnas-borradas-imágenes-por-digest-y-cobertura-de-la-suite-fase-13).
 

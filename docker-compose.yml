@@ -6,6 +6,9 @@ services:
     build:
       context: .
       dockerfile: src/FoodParkDigital.WebApi/Dockerfile
+      # The image builds in Release, which SixLabors.ImageSharp 3.2.0 does not allow without a Six Labors licence key.
+      secrets:
+        - sixlabors_license_key
     ports:
       - "5000:8080"
       - "5001:8081"
@@ -41,3 +44,8 @@ services:
 
 volumes:
   sqlserver_data:
+
+# Only for the build: the whole licence issued by Six Labors, from the SIXLABORS_LICENSE_KEY variable of the shell.
+secrets:
+  sixlabors_license_key:
+    environment: SIXLABORS_LICENSE_KEY

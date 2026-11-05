@@ -37,7 +37,10 @@
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.25.1" />
     <PackageVersion Include="GoogleAuthenticator" Version="3.2.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
-    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <!-- 3.2.0 fixes GHSA-j3p4-wp97-rph4, GHSA-j9gm-c75j-xc9q, GHSA-jjfr-hcj7-qf5w, GHSA-v76p-62qx-wwq2, GHSA-gwg2-r3hj-4w44
+         and GHSA-wmxv-xphr-5c9g, which 3.1.12 has. From 3.2.0 a Release build of a project that references it directly
+         needs a Six Labors licence key: Infrastructure reads it from SIXLABORS_LICENSE_KEY (see SECURITY.md, Dependencias). -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.2.0" />
   </ItemGroup>
   <ItemGroup Label="Observability">
     <PackageVersion Include="Azure.Monitor.OpenTelemetry.AspNetCore" Version="1.6.0" />

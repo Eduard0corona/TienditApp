@@ -44,6 +44,7 @@ Tomé las decisiones de la Fase 29H con la autorización permanente del dueño d
    - **Un PNG o un WebP grande se decodifica completo** y luego se reduce: ImageSharp 3.1 no lo escala al leerlo. Lo acotan el tope de 50 megapíxeles y las dos fotos a la vez.
    - **Una foto más chica se guarda en su tamaño**, nunca ampliada.
    - **Lo demás que la cubre:** el tope de 50 megapíxeles, que se revisa antes de decodificar; el límite por IP; las 5 fotos por visita; y las dos fotos a la vez por instancia.
+   - **Actualización del 2026-11-05:** ImageSharp pasó a la 3.2.0, que corrige los seis avisos, con la clave de Six Labors como el secreto `SIXLABORS_LICENSE_KEY` del CI, el despliegue y el build de Docker ([seguridad](../../SECURITY.md#dependencias)). Lo demás de este punto no cambia: la 3.2.0 tampoco escala un PNG o un WebP al leerlo.
 8. **La migración** `20261102205836_AddAppointmentProblemPhotos`:
    - agrega la tabla `AppointmentProblemPhotos`: la cita (se borra con ella), el lugar de la foto de 0 a 4 (único por cita) y la llave de su archivo (única por negocio);
    - no cambia datos ni tablas que ya existen, y la versión anterior la tolera;

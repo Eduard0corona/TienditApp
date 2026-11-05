@@ -984,7 +984,7 @@ La Fase 29H trae una migración, [`database/production/20261102205836_AddAppoint
   - Las fotos van al almacenamiento privado que ya existe (`FileStorage`, el contenedor `private-files` en Azure o `App_Data/private-files` en local), bajo `orders/{tenantId}/visit-problem/`. No hay variables nuevas ni evento nuevo en el outbox.
   - La ruta anónima `POST /api/v1/public/appointments/tracking/photos` tiene su propio límite por IP (`public-upload`, 20 cada 10 minutos) y acepta un cuerpo de hasta 10 MB más el formulario. Un proxy delante de la app debe dejar pasar ese tamaño.
   - Cada instancia decodifica a lo más dos fotos a la vez. Al escalar a más instancias, crece lo que se procesa a la vez, no la memoria de cada una.
-- **ImageSharp:** sigue en la 3.1.12, por la decisión del 2026-11-03 de quedarse mientras ningún aviso sea alcanzable (deuda técnica). Una versión que los corrige pide una clave de Six Labors (`SixLaborsLicenseKey`) como secreto del CI, del despliegue y del build de Docker.
+- **ImageSharp:** sigue en la 3.1.12, por la decisión del 2026-11-03 de quedarse mientras ningún aviso sea alcanzable (deuda técnica). Una versión que los corrige pide una clave de Six Labors (`SixLaborsLicenseKey`) como secreto del CI, del despliegue y del build de Docker. Desde el 2026-11-05 es la 3.2.0 ([abajo](#imagesharp-320-y-la-clave-de-six-labors-2026-11-05)).
 - **Volver a la versión anterior:** funciona sin tocar la base. La solicitud y el enlace dejan de ofrecer las fotos, y las que ya se mandaron se quedan guardadas sin que el negocio las vea.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50056 en cuanto un cliente mandó una foto; si no, quita la tabla. Los archivos de las fotos no se borran.
 
@@ -1014,6 +1014,21 @@ La Fase 29K no trae migración ni `apply.sql` ([ADR 0065](../adr/0065-response-t
 - **Si la foto falla:** esas páginas salen igual, sin el dato, queda una advertencia en el log («Could not read how soon the business answers») y ninguna de ellas reintenta durante un minuto. Explorar sigue como siempre.
 - **Sin configuración nueva.**
 - **Volver a la versión anterior:** funciona sin tocar la base; esas páginas dejan de decirlo y Explorar sigue igual.
+
+## ImageSharp 3.2.0 y la clave de Six Labors (2026-11-05)
+
+`SixLabors.ImageSharp` pasa de la 3.1.12 a la 3.2.0, que corrige sus seis avisos de seguridad ([seguridad](../../SECURITY.md#dependencias)). No trae migración ni cambios de código, pero sí un secreto nuevo.
+
+- **Antes del merge:** en GitHub, *Settings* → *Secrets and variables* → *Actions* → *Secrets*, crea `SIXLABORS_LICENSE_KEY` con la licencia completa que emite Six Labors, tal cual, no solo su campo `Key`. Es un secreto: no va en el repositorio ni en un `sixlabors.lic` versionado.
+  - **La Community** es gratuita para un negocio con menos de 1 millón de dólares de ingresos brutos al año; si no, se necesita una comercial ([precios](https://sixlabors.com/pricing/)).
+  - **Al pedirla** en `licensing.sixlabors.com`, nombra el ensamblado `FoodParkDigital.Infrastructure`, el único que la referencia directamente.
+- **Sin la clave**, el build en Release de Infrastructure falla con «No Six Labors license found», y con él el CI (`backend` y `migrations`) y el despliegue: no se publica nada y producción se queda con la versión anterior.
+- **Dónde se usa:** solo en los pasos que compilan: el build y las pruebas de SQL Server del CI, y el build, las pruebas y el `dotnet publish` del despliegue.
+  - **El `Dockerfile`** la recibe como secreto de BuildKit, que no queda en ninguna capa: `docker build --secret id=sixlabors_license_key,env=SIXLABORS_LICENSE_KEY …`.
+  - **`docker compose`** la toma de la misma variable del shell.
+- **Las claves vencen:** renuévala antes de la fecha de la licencia o el CI y el despliegue dejan de compilar.
+- **En local** (Debug, `dotnet run`, `dotnet test`) solo avisa; un build en Release necesita la variable.
+- **Volver a la versión anterior:** funciona sin tocar la base ni la configuración del App Service; la 3.1.12 no pide la clave, pero vuelve a tener los seis avisos.
 
 ## Slot de staging con swap y aprobación
 

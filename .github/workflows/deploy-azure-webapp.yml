@@ -65,8 +65,11 @@ jobs:
       - name: Restore
         run: dotnet restore FoodParkDigital.sln
 
-      # Nothing is deployed unless the solution builds and every test passes.
+      # Nothing is deployed unless the solution builds and every test passes. This step and the publish compile, so
+      # they get the Six Labors licence key that SixLabors.ImageSharp 3.2.0 requires in Release (SECURITY.md).
       - name: Build and test
+        env:
+          SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         run: |
           dotnet build FoodParkDigital.sln --no-restore --configuration Release
           dotnet test FoodParkDigital.sln --no-build --configuration Release
@@ -74,6 +77,8 @@ jobs:
       # The commit goes into the informational version ("1.0.0+<sha>"): the health endpoints name it and the smoke tests
       # compare it, so an instance of the previous version does not pass when only the backend changed.
       - name: Publish backend
+        env:
+          SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         run: dotnet publish src/FoodParkDigital.WebApi/FoodParkDigital.WebApi.csproj -c Release -o ${{ github.workspace }}/publish -p:SourceRevisionId=${{ github.sha }}
 
       # The script that index.html loads carries the build's hash: the smoke tests look for it.

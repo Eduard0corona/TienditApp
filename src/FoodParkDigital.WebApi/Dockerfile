@@ -25,11 +25,19 @@ RUN dotnet restore "src/FoodParkDigital.WebApi/FoodParkDigital.WebApi.csproj"
 COPY . .
 COPY --from=client /client/dist ./client/dist
 WORKDIR "/src/src/FoodParkDigital.WebApi"
-RUN dotnet build -c $BUILD_CONFIGURATION -o /app/build
+# SixLabors.ImageSharp 3.2.0 fails a Release build of Infrastructure without a Six Labors licence key (SECURITY.md,
+# Dependencias). It comes as a BuildKit secret, mounted only while each command runs: it is never in a layer, the build
+# history or the final image. docker build --secret id=sixlabors_license_key,env=SIXLABORS_LICENSE_KEY; docker compose
+# passes it from the same variable.
+RUN --mount=type=secret,id=sixlabors_license_key \
+    SIXLABORS_LICENSE_KEY="$(cat /run/secrets/sixlabors_license_key 2>/dev/null)" \
+    dotnet build -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN --mount=type=secret,id=sixlabors_license_key \
+    SIXLABORS_LICENSE_KEY="$(cat /run/secrets/sixlabors_license_key 2>/dev/null)" \
+    dotnet publish -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
