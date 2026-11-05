@@ -128,6 +128,49 @@ describe('AppointmentsList', () => {
     expect(vi.mocked(appointmentsApi.getAll).mock.calls.slice(before).some(([params]) => countsRequests(params))).toBe(true);
   });
 
+  it('shows only the latest of two quiet reads that cross, and says nothing when one fails (Fase 29N)', async () => {
+    renderAgenda([appointment({ id: 'a1' })]);
+    await screen.findByText('Ana Ruiz');
+    let releaseOld = () => {};
+    const old = new Promise<void>((resolve) => {
+      releaseOld = resolve;
+    });
+    let reads = 0;
+    vi.mocked(appointmentsApi.getAll).mockImplementation(async (params) => {
+      if (countsRequests(params)) return { data: { ...page([]), totalCount: 0 } } as never;
+      reads += 1;
+      if (reads === 1) {
+        await old;
+        return { data: page([appointment({ id: 'old', customerName: 'Lectura Vieja' })]) } as never;
+      }
+      if (reads === 2) return { data: page([appointment({ id: 'new', customerName: 'Lectura Nueva' })]) } as never;
+      throw apiError('Sin conexión.');
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+    expect(await screen.findByText('Lectura Nueva')).toBeInTheDocument();
+    await act(async () => {
+      releaseOld();
+      await old;
+    });
+
+    expect(screen.queryByText('Lectura Vieja')).not.toBeInTheDocument();
+    expect(screen.getByText('Lectura Nueva')).toBeInTheDocument();
+
+    // A third quiet read fails: the list stays, without an error.
+    act(() => {
+      window.dispatchEvent(new Event(APPOINTMENT_REQUESTS_CHANGED));
+    });
+    await waitFor(() => expect(reads).toBe(3));
+    expect(screen.getByText('Lectura Nueva')).toBeInTheDocument();
+    expect(screen.queryByText('Sin conexión.')).not.toBeInTheDocument();
+  });
+
   it('says where each visit is, filters by where they happen and charges them in Vender', async () => {
     const user = userEvent.setup();
     renderAgenda([

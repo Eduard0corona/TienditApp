@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -205,9 +205,12 @@ export default function AppointmentsList() {
   const [staff, setStaff] = useState<EmployeeDto[]>([]);
   const [quoteAnswer, setQuoteAnswer] = useState<QuoteAnswer | null>(null);
 
+  // Each read of the list: only the latest one shows (a quiet one after a request may finish after a newer one).
+  const listRead = useRef(0);
   const loadData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     // The route reads its own day.
     if (view === 'route') return;
+    const read = ++listRead.current;
     if (!silent) setLoading(true);
     try {
       // Upcoming opens with the business's today, the soonest first; history reads from the newest back.
@@ -226,11 +229,12 @@ export default function AppointmentsList() {
       if (search) params.search = search;
       if (placeFilter !== '') params.homeVisit = placeFilter === 'home';
       const { data } = await appointmentsApi.getAll(params);
-      setData(data);
+      if (read === listRead.current) setData(data);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudieron cargar las citas.'));
+      // A quiet read that fails says nothing: the next request, the bell or the person reads it again.
+      if (read === listRead.current && !silent) setError(getApiErrorMessage(err, 'No se pudieron cargar las citas.'));
     } finally {
-      setLoading(false);
+      if (read === listRead.current) setLoading(false);
     }
   }, [pageNumber, pageSize, placeFilter, search, statusFilter, view]);
 

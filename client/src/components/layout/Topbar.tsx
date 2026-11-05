@@ -61,7 +61,8 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   const canOpenBusiness = !!user && !access.myOrders && !access.platform;
   const isBusinessMember = !!tenant && canOpenBusiness;
   // Fase 29N: whoever answers the requests online hears of each one as it arrives, wherever they are in the app.
-  const hearsRequests = isBusinessMember && access.appointments && !!tenant?.id;
+  // A suspended business gets no live updates: the server would refuse each connection.
+  const hearsRequests = isBusinessMember && access.appointments && !!tenant?.id && tenant.status === 0;
 
   const selectedTenantId = useMemo(
     () => tenant?.id ?? user?.tenantId ?? '',

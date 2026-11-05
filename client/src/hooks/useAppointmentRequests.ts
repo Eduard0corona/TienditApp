@@ -66,6 +66,8 @@ export function useAppointmentRequestsLive(enabled: boolean, tenantId?: string) 
         toastRef.current.info(message, { title, durationMs: 10_000 });
       });
       stop = keepHubConnected(connection, 'AppointmentHub', () => isDisposed, changed);
+    }).catch(() => {
+      // A new version replaced the chunk: the page reloads (vite:preloadError), and the bell still reads every minute.
     });
     return () => {
       isDisposed = true;

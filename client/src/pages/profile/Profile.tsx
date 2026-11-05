@@ -22,7 +22,9 @@ export default function Profile() {
   const { user, refreshProfile, logout } = useAuth();
   const { tenant, capabilities } = useTenant();
   // Fase 29N: whoever answers the requests online of the business chooses whether each one reaches them by email.
-  const answersRequests = !!tenant && getAccess(user, capabilities).appointments;
+  // The platform's admin acting in a business is not on its team: nothing to choose there.
+  const access = getAccess(user, capabilities);
+  const answersRequests = !!tenant && access.appointments && !access.platform;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const signOutTimeoutRef = useRef<number | undefined>(undefined);
 

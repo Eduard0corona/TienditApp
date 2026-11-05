@@ -8,6 +8,9 @@ const retryForever: IRetryPolicy = {
     Math.min(30_000, 1_000 * 2 ** Math.min(previousRetryCount, 5)),
 };
 
+/** How long a connection stays up before its closing starts the retries over from the shortest wait. */
+export const STABLE_CONNECTION_MS = 10_000;
+
 export function createHubConnection(url: string): HubConnection {
   return new HubConnectionBuilder()
     .withUrl(url, {
@@ -26,6 +29,10 @@ export function createHubConnection(url: string): HubConnection {
  *
  * <paramref name="onConnected"/> runs every time the connection is (re)established, including automatic
  * reconnects: events sent while it was down are lost, so screens use it to reload their data.
+ *
+ * A connection the server closes right after accepting it (it refused it once connected: a business suspended, a
+ * permission taken away) counts as a failed start, so the retries back off up to 30 seconds instead of coming back every
+ * second for as long as the page stays open. Only one that stayed up starts over from the shortest wait.
  */
 export function keepHubConnected(
   connection: HubConnection,
@@ -34,6 +41,7 @@ export function keepHubConnected(
   onConnected?: () => void,
 ) {
   let attempt = 0;
+  let connectedAt = 0;
   let retryTimeoutId: number | undefined;
 
   const notifyConnected = () => {
@@ -44,7 +52,7 @@ export function keepHubConnected(
     if (isDisposed() || connection.state !== HubConnectionState.Disconnected) return;
     try {
       await connection.start();
-      attempt = 0;
+      connectedAt = Date.now();
       notifyConnected();
     } catch (err) {
       if (isDisposed()) return;
@@ -67,9 +75,14 @@ export function keepHubConnected(
   };
 
   connection.onclose(() => {
-    if (!isDisposed()) scheduleStart();
+    if (isDisposed()) return;
+    if (Date.now() - connectedAt >= STABLE_CONNECTION_MS) attempt = 0;
+    scheduleStart();
   });
-  connection.onreconnected(notifyConnected);
+  connection.onreconnected(() => {
+    connectedAt = Date.now();
+    notifyConnected();
+  });
 
   // Delay start one tick to avoid StrictMode mount/unmount negotiation races in dev.
   retryTimeoutId = window.setTimeout(() => void start(), 0);

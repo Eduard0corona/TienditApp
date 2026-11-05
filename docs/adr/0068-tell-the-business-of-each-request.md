@@ -22,11 +22,12 @@ Tomé las decisiones de la Fase 29N con la autorización permanente del dueño d
 2. **En la app, al momento.**
    - Un hub nuevo, `/hubs/appointments`, para quien atiende la Agenda: el mismo permiso que pide `/api/v1/appointments` (`ManageAppointments`), en un negocio con el módulo de citas. Cada conexión entra solo al grupo de su negocio, y se cierra si pierde la sesión o el permiso.
    - Le llega `AppointmentRequested` con el servicio, la hora y si es visita o del equipo. No viaja el nombre, el teléfono ni las notas del cliente.
-   - La barra superior se conecta en cualquier pantalla. Con cada solicitud:
+   - La barra superior se conecta en cualquier pantalla que la tenga: no en el modo enfocado de Vender o Cocina, ni con el negocio suspendido (el servidor lo rechazaría). Con cada solicitud:
      - la campana la lee al momento;
      - la Agenda abierta recarga la lista sin indicador de carga;
      - sale un aviso: «Nueva solicitud de cita» (o «de visita»), con el servicio y la hora. Las del equipo no lo muestran.
    - Al reconectar, la campana y la Agenda leen otra vez: lo que llegó sin conexión no se repite. La campana se sigue leyendo cada minuto.
+   - Una conexión que el servidor cierra apenas la acepta (le quitaron el permiso, o el negocio se suspendió con la página abierta) cuenta como un intento fallido: los reintentos esperan cada vez más, hasta 30 segundos, en lugar de volver cada segundo. Vale para todos los hubs.
 3. **Por correo.**
    - **A quién:**
      - a los miembros activos del negocio que eligieron recibirlos o, mientras no elijan, a los dueños;
@@ -38,7 +39,7 @@ Tomé las decisiones de la Fase 29N con la autorización permanente del dueño d
      - cada miembro recibe el suyo como un mensaje aparte del outbox (`AppointmentRequestEmailEvent`). Se guardan con el registro de que se repartieron, así que cada correo sale y se reintenta solo: uno que falla no manda otra vez los de los demás;
      - antes de mandarlo se revisa otra vez que la solicitud siga por confirmar y que el miembro los siga recibiendo.
    - **Qué dice:**
-     - asunto: «Nueva solicitud de cita en {negocio}: {servicio}, {día} a las {hora}», o «de visita»;
+     - asunto: «Nueva solicitud de cita en {negocio}: {servicio}, {día} a las {hora}» («a la» a la una), o «de visita»;
      - quién la pidió y qué, para cuándo responderla para que cuente como respondida a tiempo ([ADR 0066](0066-answer-requests-in-time.md)), y la liga a la Agenda;
      - abajo: por qué le llega y que puede dejar de recibirlos en Mi perfil;
      - las horas en la zona del negocio. Los nombres escritos por el negocio y por el cliente van codificados;
@@ -68,7 +69,7 @@ Tomé las decisiones de la Fase 29N con la autorización permanente del dueño d
   - **Un negocio que apaga el módulo de citas** con la conexión abierta la conserva, pero sin módulo no le llegan solicitudes.
   - **Un correo que el proceso alcanzó a mandar** antes de detenerse sale otra vez al reintentar, como los demás del outbox.
   - **Mientras se publica:** el worker de la versión anterior no conoce los eventos nuevos y aparta los que tome (`Unknown event type`). Esos correos no salen; la campana y la Agenda sí los muestran.
-  - **El aviso en pantalla** depende de que la conexión esté arriba: sin ella, la campana lo dice en menos de un minuto.
+  - **El aviso en pantalla** depende de que la conexión esté arriba: sin ella, la campana lo dice en menos de un minuto. En el modo enfocado de Vender o Cocina no hay barra superior: ni aviso ni campana.
   - **A los dueños les llegan desde el primer día:** quien no los quiera los apaga en Mi perfil.
 - **Decisión por omisión** (sin preferencia expresa del dueño):
   - a quién le llegan sin elegir: a los dueños;

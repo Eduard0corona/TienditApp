@@ -134,31 +134,39 @@ public sealed class CrossTenantRealtimeSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task AppointmentHubAndItsEmails_ShouldBeForWhoeverAnswersTheRequests_NotTheRestOfTheTeam()
+    {
+        var owner = await _api.SignUpAsync("avisos-equipo");
+        var (cashier, cashierToken) = await EmployeeAsync(owner, "ManageOrders");
+        var (stylist, stylistToken) = await EmployeeAsync(owner, "ManageAppointments");
+
+        // Without the agenda: the hub refuses it and the choice is not theirs to make.
+        await using var refused = _api.Hub("/hubs/appointments", cashierToken);
+        await AssertRefusedAsync(refused);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync(RequestEmails)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PutAsJsonAsync(RequestEmails, new { enabled = true })).StatusCode);
+
+        // With it: connected, and their own choice, off until they make it (only the owners get them by default).
+        await using var accepted = _api.Hub("/hubs/appointments", stylistToken);
+        await accepted.StartAsync();
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Assert.Equal(HubConnectionState.Connected, accepted.State);
+        Assert.False((await TwoBusinessesApi.ReadAsync(await stylist.GetAsync(RequestEmails))).GetProperty("enabled").GetBoolean());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await stylist.PutAsJsonAsync(RequestEmails, new { enabled = true }))).GetProperty("enabled").GetBoolean());
+        // The owner's own stays as it was.
+        Assert.True((await TwoBusinessesApi.ReadAsync(await owner.Client.GetAsync(RequestEmails))).GetProperty("enabled").GetBoolean());
+    }
+
+    [SqlServerFact]
     public async Task AppointmentHub_ShouldRefuse_ABusinessWithoutAppointments()
     {
         var restaurant = await _api.SignUpAsync("avisos-comida", TwoBusinessesApi.FoodBusiness);
 
         await using var refused = _api.Hub("/hubs/appointments", restaurant.AccessToken);
         await using var orders = _api.Hub("/hubs/orders", restaurant.AccessToken);
-        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        refused.Closed += _ =>
-        {
-            closed.TrySetResult();
-            return Task.CompletedTask;
-        };
 
         // The server aborts it as it connects: it never stays connected. Its orders hub is unaffected.
-        try
-        {
-            await refused.StartAsync();
-            await closed.Task.WaitAsync(Patience);
-        }
-        catch (Exception)
-        {
-            // Refused before the handshake ended.
-        }
-
-        Assert.Equal(HubConnectionState.Disconnected, refused.State);
+        await AssertRefusedAsync(refused);
         await orders.StartAsync();
         Assert.Equal(HubConnectionState.Connected, orders.State);
         Assert.Equal(HttpStatusCode.Forbidden, (await restaurant.Client.GetAsync(RequestEmails)).StatusCode);
@@ -295,6 +303,56 @@ public sealed class CrossTenantRealtimeSqlServerTests
     private static string OrderIdOf(JsonElement payload) => payload.GetProperty("orderId").GetString()!;
 
     private static string AppointmentIdOf(JsonElement payload) => payload.GetProperty("appointmentId").GetString()!;
+
+    /// <summary>
+    /// A connection the server refuses: either the start fails, or the server closes it right after the handshake (it aborts
+    /// it in OnConnectedAsync). Either way it ends disconnected and stays so.
+    /// </summary>
+    private static async Task AssertRefusedAsync(HubConnection connection)
+    {
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Closed += _ =>
+        {
+            closed.TrySetResult();
+            return Task.CompletedTask;
+        };
+        var started = true;
+        try
+        {
+            await connection.StartAsync();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException or System.Net.WebSockets.WebSocketException)
+        {
+            started = false;
+        }
+
+        if (started)
+            await closed.Task.WaitAsync(Patience);
+        Assert.Equal(HubConnectionState.Disconnected, connection.State);
+    }
+
+    /// <summary>A member of the owner's team with the permissions given, signed in with its own password: its client and token.</summary>
+    private async Task<(HttpClient Client, string AccessToken)> EmployeeAsync(SignedUp owner, params string[] permissions)
+    {
+        var email = $"avisos-{Guid.NewGuid():N}@demo.com";
+        await TwoBusinessesApi.ReadAsync(await owner.Client.PostAsJsonAsync("/api/v1/employees", new
+        {
+            email,
+            password = EmployeePassword,
+            firstName = "Empleado",
+            lastName = "De avisos",
+            appRole = 3,
+            tenantRole = 2,
+            permissions
+        }));
+        var client = _api.AnonymousClient();
+        var signedIn = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = EmployeePassword }));
+        var token = signedIn.GetProperty("accessToken").GetString()!;
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return (client, token);
+    }
+
+    private const string EmployeePassword = "Secreto1";
 
     private const string RequestEmails = "/api/v1/appointments/request-emails";
 
