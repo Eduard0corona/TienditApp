@@ -166,8 +166,15 @@ public sealed class CrossTenantRealtimeSqlServerTests
         Assert.Single(_api.PlainEmailsTo(owner.Email));
         Assert.Empty(_api.PlainEmailsTo(cashierEmail));
 
-        // The owner takes the agenda away from the stylist, who still chose them: the next request's email goes to the
-        // owner only, because the stylist can no longer answer it.
+        // The owner takes the agenda away from the stylist, who still chose them: her live connection closes (the access
+        // sweep, every second here, checks the permission again), and the next request's email goes to the owner only,
+        // because the stylist can no longer answer it.
+        var stylistClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        accepted.Closed += _ =>
+        {
+            stylistClosed.TrySetResult();
+            return Task.CompletedTask;
+        };
         await TwoBusinessesApi.ReadAsync(await owner.Client.PutAsJsonAsync($"/api/v1/employees/{stylistMember}", new
         {
             tenantUserId = stylistMember,
@@ -177,6 +184,8 @@ public sealed class CrossTenantRealtimeSqlServerTests
             tenantRole = 2,
             permissions = new[] { "ManageOrders" }
         }));
+        await stylistClosed.Task.WaitAsync(Patience);
+        Assert.Equal(HubConnectionState.Disconnected, accepted.State);
         await RequestAsync(stranger, slug, service, "5512340006");
         await _api.DispatchOutboxAsync();
         Assert.Single(_api.PlainEmailsTo(stylistEmail));
