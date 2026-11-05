@@ -208,11 +208,12 @@ public class ExploreResponseTimeTests
     {
         await using var fixture = Fixture();
         var (plumber, zone) = await TradeAsync(fixture, "plomeria", "Plomería Hernández");
+        // Three customers (Explorar counts one per customer, Fase 29M), each arrived on its own day.
         for (var n = 0; n < 3; n++)
         {
-            var arrivedAt = Now.AddDays(-3);
+            var arrivedAt = Now.AddDays(-3 - n);
             var visit = Appointment.RequestHomeVisit(
-                plumber.Id, "Valeria", "+525522107765", null, HomeVisitRules.DefaultVisitName, Now.AddDays(2), Now.AddDays(2).AddHours(1),
+                plumber.Id, "Valeria", NewCustomerPhone(), null, HomeVisitRules.DefaultVisitName, Now.AddDays(2), Now.AddDays(2).AddHours(1),
                 "Gotea el calentador", null, DeliveryAddress.ForVisit("72000", "Av. Juárez 123", null), zone,
                 HomeVisitChargePolicy.Charged, null, Guid.NewGuid(), (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43]);
             visit.CreatedAt = arrivedAt;
