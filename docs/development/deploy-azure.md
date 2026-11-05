@@ -1030,6 +1030,26 @@ La Fase 29M trae una migración, [`database/production/20261105081150_AddAppoint
 - **Volver a la versión anterior:** funciona sin tocar la base. Explorar cuenta otra vez todas las solicitudes, también las del equipo y varias de un mismo cliente.
 - **Dejar también la base como estaba:** el `rollback.sql` quita el índice y las dos columnas; se pierde qué solicitudes vinieron del equipo y con qué teléfono llegó cada una, sin cambiar ninguna cita.
 
+## Avisarle al negocio de cada solicitud (Fase 29N)
+
+La Fase 29N trae una migración, [`database/production/20261105171726_AddTenantUserRequestEmails`](../../database/production/20261105171726_AddTenantUserRequestEmails). Su `apply.sql` va antes del merge ([ADR 0068](../adr/0068-tell-the-business-of-each-request.md)).
+
+- **La migración:** agrega a `TenantUsers` la columna `RequestEmails` (`bit NULL`, sin valor por omisión): si el miembro recibe un correo con cada solicitud en línea. No cambia datos: todos quedan sin elegir (`NULL`), y así les llegan a los dueños desde que se publique la 29N.
+- **Mientras se publica:** la versión de `master` (la 29M) no conoce la columna y sigue funcionando; los miembros que agrega quedan sin elegir, como los demás.
+- **Los avisos de la versión nueva** (`AppointmentRequestedEvent` y `AppointmentRequestEmailEvent`) van por el outbox. Si en los segundos en que corren las dos versiones, o después de volver a la anterior, el worker de la 29M toma uno, no conoce el evento y lo aparta (`Unknown event type` en el log, y `background-queues` Degraded un día): ese correo no sale, aunque la campana y la Agenda sí muestran la solicitud. Para mandarlos, ya con esta versión publicada y el mismo día, regresa a pendientes los mensajes apartados de esos tipos (el de una solicitud de más de un día ya no sale):
+
+  ```sql
+  UPDATE OutboxMessages SET DeadLetteredAt = NULL, Attempts = 0, LastError = NULL, NextAttemptAt = SYSDATETIMEOFFSET()
+  WHERE Type IN ('FoodParkDigital.Domain.Appointments.Events.AppointmentRequestedEvent',
+                 'FoodParkDigital.Domain.Appointments.Events.AppointmentRequestEmailEvent')
+    AND DeadLetteredAt IS NOT NULL AND LastError LIKE 'Unknown event type%';
+  ```
+
+- **Sin `apply.sql`:** la versión nueva lee `RequestEmails` con cada miembro, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva:** el correo usa el proveedor de correo de la plataforma, como la factura (Fase 28E), y `AppUrl` para las ligas a la Agenda y a Mi perfil (sin `AppUrl`, el correo sale sin ligas). El hub `/hubs/appointments` usa la misma configuración de SignalR que los demás, también Azure SignalR si está activo (Fase 5E).
+- **Volver a la versión anterior:** funciona sin tocar la base; deja de avisar, y lo que cada quien eligió se queda guardado.
+- **Dejar también la base como estaba:** el `rollback.sql` quita la columna; se pierde quién prendió o apagó los avisos, sin cambiar ningún miembro.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

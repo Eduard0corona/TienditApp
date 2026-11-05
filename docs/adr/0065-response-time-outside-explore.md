@@ -39,7 +39,7 @@ Tomé las decisiones de la Fase 29K con la autorización permanente del dueño d
    - **Los pedidos en línea de los restaurantes.**
    - **Defenderse de solicitudes falsas** ([ADR 0064](0064-response-time-in-explore.md), «Lo que limita»). Desde la Fase 29M no cuentan las del propio equipo y cada cliente cuenta una vez ([ADR 0067](0067-requests-that-count.md)).
    - **Ordenar por tiempo de respuesta en otro lugar** que la página de una categoría.
-   - **Avisarle al negocio** cuando su tiempo cambia o cuando tiene solicitudes sin responder. Desde la Fase 29L la Agenda dice para cuándo responder cada una y la campana marca las que vencen hoy o ya vencieron ([ADR 0066](0066-answer-requests-in-time.md)).
+   - **Avisarle al negocio** cuando su tiempo cambia o cuando tiene solicitudes sin responder. Desde la Fase 29L la Agenda dice para cuándo responder cada una y la campana marca las que vencen hoy o ya vencieron ([ADR 0066](0066-answer-requests-in-time.md)); desde la 29N cada solicitud se avisa en la app al momento y por correo ([ADR 0068](0068-tell-the-business-of-each-request.md)).
 
 ## Consecuencias
 

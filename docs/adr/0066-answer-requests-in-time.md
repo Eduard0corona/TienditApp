@@ -24,7 +24,7 @@ Tomé las decisiones de la Fase 29L con la autorización permanente del dueño d
    - el texto vuelve a leer el reloj cada minuto, así que cambia con la Agenda abierta.
 3. **La campana**, que cuenta las solicitudes de ahora en adelante (Fase 24D), **marca como urgentes** las de hoy, como antes, y además las que hay que responder hoy para que cuenten a tiempo o que ya pasaron su límite y siguen pendientes. Una que el negocio movió a hoy es urgente aunque su límite sea mañana. Su texto dice «(N por responder hoy)».
 4. **Fuera de esta fase:**
-   - avisar por WhatsApp, por correo o en tiempo real;
+   - avisar por WhatsApp, por correo o en tiempo real. Desde la Fase 29N se avisa en la app al momento y por correo a quien lo elige o, sin elegir, a los dueños; WhatsApp sigue fuera ([ADR 0068](0068-tell-the-business-of-each-request.md));
    - ordenar la Agenda por límite;
    - lo demás de la [ADR 0065](0065-response-time-outside-explore.md), «Fuera de esta fase».
 
