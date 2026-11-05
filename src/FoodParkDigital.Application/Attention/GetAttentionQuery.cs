@@ -174,14 +174,16 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
                 .CountAsync(a => a.Status == AppointmentStatus.Scheduled && a.StartAt >= now && a.StartAt <= endOfToday, cancellationToken));
             // Every request still ahead waits for an answer. Urgent are those for today, as before, and those to answer
             // today to be in time (Fase 29L, ResponseTimes.AnswerBy: the time asked for or a day after arriving, whichever
-            // comes first), or already late; a request the business moved to today is urgent though its limit is tomorrow.
+            // comes first), or already late; a request the business moved to today is urgent though its limit is tomorrow. One
+            // from the business's own team counts in no time to answer (Fase 29M): urgent only for today.
             var requests = _context.Appointments.AsNoTracking()
                 .Where(a => a.Status == AppointmentStatus.Requested && a.StartAt > now);
             Add(AttentionKeys.AppointmentRequests, await requests.CountAsync(cancellationToken),
                 await requests.CountAsync(
                     a => a.StartAt <= endOfToday
-                        || (a.RequestedStartAt ?? a.StartAt) <= endOfToday
-                        || a.CreatedAt.AddHours(AnswerByHours) <= endOfToday,
+                        || (!a.FromTeam
+                            && ((a.RequestedStartAt ?? a.StartAt) <= endOfToday
+                                || a.CreatedAt.AddHours(AnswerByHours) <= endOfToday)),
                     cancellationToken));
         }
 

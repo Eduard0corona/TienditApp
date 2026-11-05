@@ -15774,6 +15774,7 @@ export interface components {
             problemPhotos: string[];
             /** Format: date-time */
             answerBy?: string | null;
+            fromTeam: boolean;
         };
         AppointmentDtoPaginatedList: {
             items: components["schemas"]["AppointmentDto"][];

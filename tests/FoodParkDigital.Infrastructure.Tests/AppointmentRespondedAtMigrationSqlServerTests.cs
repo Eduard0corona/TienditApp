@@ -16,7 +16,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// <summary>
 /// AddAppointmentRespondedAt (Fase 29J, ADR 0064): when the business answered a request online, and the time its customer asked
 /// for. The appointments that exist keep neither, the version before it keeps taking and answering requests (without keeping
-/// them), and rolling back drops only the columns and their index, never an appointment.
+/// them), and rolling back drops only the columns and their index, never an appointment. A database at this migration is
+/// read with the model of its day (<see cref="BeforeAppointmentFromTeam"/>).
 /// </summary>
 public class AppointmentRespondedAtMigrationSqlServerTests
 {
@@ -50,7 +51,7 @@ public class AppointmentRespondedAtMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeAppointmentFromTeam.CreateContext(database, tenantId);
         var appointments = await context.Appointments.AsNoTracking().OrderBy(a => a.Channel).ToListAsync();
         Assert.Equal([(ofTheTeamId, (DateTimeOffset?)null), (answeredId, null)], appointments.Select(a => (a.Id, a.RespondedAt)));
         Assert.All(appointments, a => Assert.Null(a.RequestedStartAt));
@@ -64,7 +65,7 @@ public class AppointmentRespondedAtMigrationSqlServerTests
         var answeredAt = Now.AddMinutes(37).AddTicks(1234567);
         request.Decline(answeredAt);
         await context.SaveChangesAsync();
-        await using var check = database.CreateContext(tenantId);
+        await using var check = BeforeAppointmentFromTeam.CreateContext(database, tenantId);
         var kept = await check.Appointments.AsNoTracking().SingleAsync(a => a.Id == request.Id);
         Assert.Equal((answeredAt, (DateTimeOffset?)Start), (kept.RespondedAt, kept.RequestedStartAt));
     }
@@ -89,7 +90,7 @@ public class AppointmentRespondedAtMigrationSqlServerTests
             (tenantId, appointmentId) = (tenant.Id, request.Id);
         }
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeAppointmentFromTeam.CreateContext(database, tenantId);
         var declined = await context.Appointments.AsNoTracking().SingleAsync(a => a.Id == appointmentId);
         Assert.Equal((AppointmentStatus.Cancelled, (DateTimeOffset?)null), (declined.Status, declined.RespondedAt));
     }
@@ -101,7 +102,7 @@ public class AppointmentRespondedAtMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var (tenant, settings, zone) = Business();
         var request = Request(tenant.Id, zone);
-        await using (var seed = database.CreateContext(tenant.Id))
+        await using (var seed = BeforeAppointmentFromTeam.CreateContext(database, tenant.Id))
         {
             seed.AddRange(tenant, settings, zone, request);
             await seed.SaveChangesAsync();
@@ -124,7 +125,7 @@ public class AppointmentRespondedAtMigrationSqlServerTests
         // Rolling back again does nothing, and forward again a request keeps when it was answered.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeAppointmentFromTeam.CreateContext(database, tenant.Id);
         var another = Request(tenant.Id, zone);
         forward.Appointments.Add(another);
         await forward.SaveChangesAsync();

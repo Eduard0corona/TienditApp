@@ -671,7 +671,9 @@ public sealed class PublicDirectorySnapshot
     /// since <see cref="ResponseTimes.Since"/> counted by how long their customers waited for an answer before their time
     /// began. The slowest are those answered once their time began or let pass, and those that waited a day without an answer
     /// (still waiting, or cancelled by their customer); one that has waited less, or that its customer cancelled sooner, does
-    /// not count yet. Only the businesses with any are in it, and nothing of who made them is read.
+    /// not count yet. Only the businesses with any are in it. Since Fase 29M (ADR 0067) those from the business's own team do
+    /// not count, and a customer counts once: of the requests of one phone, the last one decided. The phone is only compared in
+    /// the database, never read.
     /// </summary>
     /// <remarks>
     /// Each request counts by the moment it was decided: a quick answer when it was answered, a slow one when it reached its
@@ -695,12 +697,13 @@ public sealed class PublicDirectorySnapshot
         int anHour = ResponseTimes.LimitHours[0], threeHours = ResponseTimes.LimitHours[1];
         int twelveHours = ResponseTimes.LimitHours[2], aDay = ResponseTimes.LimitHours[3];
         // Its time is the one its customer asked for: moving the appointment after letting it pass does not undo it. One from
-        // before Fase 29J has only its own.
-        var counted = await requests
-            .Where(a => a.CreatedAt >= since)
+        // before Fase 29J has only its own. One from the business's own team does not count (Fase 29M).
+        var decided = requests
+            .Where(a => a.CreatedAt >= since && !a.FromTeam)
             .Select(a => new
             {
                 a.TenantId,
+                a.RequestPhone,
                 a.CreatedAt,
                 a.RespondedAt,
                 a.Status,
@@ -715,6 +718,7 @@ public sealed class PublicDirectorySnapshot
             .Select(a => new
             {
                 a.TenantId,
+                a.RequestPhone,
                 a.CreatedAt,
                 a.RespondedAt,
                 a.Status,
@@ -729,7 +733,16 @@ public sealed class PublicDirectorySnapshot
                 || (a.Limit <= utcNow && a.Limit >= keptSince
                     && (a.RespondedAt >= a.Limit
                         || (a.RespondedAt == null && a.Status == AppointmentStatus.Requested)
-                        || (a.RespondedAt == null && a.Kept && a.CancelledByCustomerAt >= a.Limit))))
+                        || (a.RespondedAt == null && a.Kept && a.CancelledByCustomerAt >= a.Limit))));
+        // One per customer of each business (Fase 29M): of those of the same phone (the one each arrived with), the one that
+        // arrived last; a later one still undecided does not take its place. Written as its last arrival, which SQL Server
+        // seeks in IX_Appointments_OnlineRequests_Customer for each request; any other shape (a NOT EXISTS, an OR beside it)
+        // compares every pair of requests of a business. Those the version before it saved while this one was published have
+        // no phone of their own (empty): together, they are one customer of their business.
+        var counted = await decided
+            .Where(a => a.CreatedAt == decided
+                .Where(same => same.TenantId == a.TenantId && same.RequestPhone == a.RequestPhone)
+                .Max(same => same.CreatedAt))
             .GroupBy(a => a.TenantId)
             .Select(g => new
             {

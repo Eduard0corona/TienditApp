@@ -10,6 +10,7 @@ using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
@@ -167,6 +168,48 @@ public class OnlineBookingFlowTests
             (stored.Status, stored.Channel, stored.CustomerPhone, stored.EndAt));
         var notice = await fixture.Context.OutgoingMessages.SingleAsync(m => m.Purpose == MessagePurpose.AppointmentNotice);
         Assert.Contains("recibimos tu solicitud de cita de Corte de cabello el lunes 5 de octubre a las 10:00 a. m.", notice.Body);
+    }
+
+    [Fact]
+    public async Task ARequestFromTheTeam_ShouldBeKeptAsSuch_ByItsPhone_OrWhoIsSignedIn()
+    {
+        // Fase 29M (ADR 0067): decided when it arrives, whatever way each phone was written.
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 45);
+        await ConnectWhatsAppAsync(fixture, tenant.Id);
+        tenant.Update(tenant.Name, tenant.ContactEmail, "(55) 2222-3333", null);
+        fixture.Context.Branches.Add(new Branch(tenant.Id, "Norte", "NORTE", new BranchContact(ContactPhone: "55 4444 5555")));
+        var member = await MemberAsync(fixture, tenant.Id, "55 1234 5678", TenantUserStatus.Active);
+        await MemberAsync(fixture, tenant.Id, "+52 55 8765 4321", TenantUserStatus.Disabled);
+        await MemberAsync(fixture, tenant.Id, "55 7777 8888", TenantUserStatus.Invited);
+        // As a mobile is saved when its owner confirms it by WhatsApp: with the 1.
+        await MemberAsync(fixture, tenant.Id, "+5215566667777", TenantUserStatus.Active);
+        var elsewhere = await MemberAsync(fixture, Guid.NewGuid(), null, TenantUserStatus.Active);
+        await fixture.Context.SaveChangesAsync();
+
+        async Task<bool> FromTeamAsync(string phone, DateOnly day, string at, Guid? signedIn = null)
+        {
+            fixture.CurrentUser.UserId = (signedIn ?? Guid.NewGuid()).ToString();
+            var result = await RequestAsync(fixture, haircut.Id, Local(day, at), phone);
+            Assert.True(result.IsSuccess, result.Error);
+            return (await fixture.Context.Appointments.AsNoTracking().SingleAsync(a => a.TrackingToken == result.Value!.TrackingToken)).FromTeam;
+        }
+
+        // A member, the business, a branch and its WhatsApp; and a member signed in with any phone.
+        Assert.True(await FromTeamAsync("5512345678", Monday, "09:00"));
+        Assert.True(await FromTeamAsync("55 2222 3333", Monday, "10:00"));
+        Assert.True(await FromTeamAsync("+52 55 4444 5555", Monday, "11:00"));
+        Assert.True(await FromTeamAsync("5500000000", Monday, "12:00"));
+        Assert.True(await FromTeamAsync("5599990000", Monday, "13:00", member));
+        // A customer, someone who left the team, and a member of another business.
+        var tuesday = Monday.AddDays(1);
+        Assert.False(await FromTeamAsync("5511112222", tuesday, "09:00"));
+        Assert.False(await FromTeamAsync("5587654321", tuesday, "10:00"));
+        Assert.False(await FromTeamAsync("5533334444", tuesday, "11:00", elsewhere));
+        // Someone invited to the team, and a mobile saved with the 1, are of the team too.
+        Assert.True(await FromTeamAsync("5577778888", tuesday, "12:00"));
+        Assert.True(await FromTeamAsync("5566667777", tuesday, "13:00"));
     }
 
     [Fact]
@@ -573,6 +616,26 @@ public class OnlineBookingFlowTests
             IsActive = true
         };
         fixture.Context.Users.Add(user);
+        await fixture.Context.SaveChangesAsync();
+        return user.Id;
+    }
+
+    /// <summary>Someone of the team of a business, with the phone of their account as they wrote it.</summary>
+    private static async Task<Guid> MemberAsync(SalesTestFixture fixture, Guid tenantId, string? phone, TenantUserStatus status)
+    {
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            Email = $"{Guid.NewGuid():N}@equipo.test",
+            UserName = $"{Guid.NewGuid():N}@equipo.test",
+            FirstName = "Ana",
+            LastName = "Ruiz",
+            Role = UserRole.Staff,
+            IsActive = true,
+            PhoneNumber = phone
+        };
+        fixture.Context.Users.Add(user);
+        fixture.Context.TenantUsers.Add(new TenantUser(tenantId, user.Id, TenantUserRole.Staff, status));
         await fixture.Context.SaveChangesAsync();
         return user.Id;
     }

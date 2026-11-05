@@ -27,7 +27,7 @@ public class AnswerInTimeSqlServerTests
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
         var tenantId = await SeedTenantAsync(database);
-        Guid today, nextWeek, almostADay, movedLater, movedToday, late, older, endsToday, endsTomorrow, accepted;
+        Guid today, nextWeek, almostADay, movedLater, movedToday, late, lateOfTheTeam, older, endsToday, endsTomorrow, accepted;
         await using (var context = database.CreateContext(tenantId))
         {
             // For this afternoon: before then.
@@ -46,6 +46,8 @@ public class AnswerInTimeSqlServerTests
             movedToday = sooner.Id;
             // Arrived two days ago for next week: already late.
             late = Request(context, tenantId, Now.AddDays(-2), Now.AddDays(5)).Id;
+            // The same, from the business's own team (Fase 29M): no time to answer it in.
+            lateOfTheTeam = Request(context, tenantId, Now.AddDays(-2), Now.AddDays(5), fromTeam: true).Id;
             // Arrived before Fase 29J kept the time asked for: by its own time, this evening.
             var before = Request(context, tenantId, Now.AddHours(-2), Now.AddHours(6));
             context.Entry(before).Property(nameof(Appointment.RequestedStartAt)).CurrentValue = null;
@@ -72,6 +74,7 @@ public class AnswerInTimeSqlServerTests
             Assert.Equal(Now.AddHours(3), agenda[movedLater]);
             Assert.Equal(Now.AddHours(23), agenda[movedToday]);
             Assert.Equal(Now.AddDays(-1), agenda[late]);
+            Assert.Null(agenda[lateOfTheTeam]);
             Assert.Equal(Now.AddHours(6), agenda[older]);
             Assert.Equal(EndOfToday, agenda[endsToday]);
             Assert.Equal(EndOfToday.AddMinutes(1), agenda[endsTomorrow]);
@@ -86,18 +89,19 @@ public class AnswerInTimeSqlServerTests
             var attention = await new GetAttentionQueryHandler(context, new CurrentAccessContext(owner, tenant, new Managers()), owner, new Clock())
                 .Handle(new GetAttentionQuery(), CancellationToken.None);
 
-            // All but the accepted one wait; urgent, all but the three in time until tomorrow.
+            // All but the accepted one wait; urgent, all but the three in time until tomorrow and the one of the team.
             var requests = Assert.Single(attention.Items, item => item.Key == AttentionKeys.AppointmentRequests);
-            Assert.Equal((9, 6), (requests.Count, requests.UrgentCount));
+            Assert.Equal((10, 6), (requests.Count, requests.UrgentCount));
         }
     }
 
     /// <summary>A request online that arrived <paramref name="arrivedAt"/> for <paramref name="startAt"/>, still waiting.</summary>
-    private static Appointment Request(DbContext context, Guid tenantId, DateTimeOffset arrivedAt, DateTimeOffset startAt)
+    private static Appointment Request(
+        DbContext context, Guid tenantId, DateTimeOffset arrivedAt, DateTimeOffset startAt, bool fromTeam = false)
     {
         var request = Appointment.RequestOnline(
             tenantId, "Valeria", "+525522107765", Guid.NewGuid(), "Corte", startAt, startAt.AddHours(1), null, null, Guid.NewGuid(),
-            (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43]);
+            (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43], fromTeam: fromTeam);
         // This context has no audit interceptor: stamp when it arrived, as production does.
         request.CreatedAt = arrivedAt;
         context.Add(request);

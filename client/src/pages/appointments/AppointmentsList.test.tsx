@@ -301,6 +301,21 @@ describe('AppointmentsList', () => {
     expect(within(screen.getByText('Mario').closest('tr')!).queryByText(/a tiempo/)).not.toBeInTheDocument();
   });
 
+  it('says a request of the team does not count in Explorar, and gives it no limit (Fase 29M)', async () => {
+    renderAgenda([
+      appointment({ id: 'r1', customerName: 'Valeria', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online, fromTeam: true, answerBy: null }),
+      appointment({ id: 'r2', customerName: 'Rocío', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online, answerBy: '2099-03-02T16:00:00Z' }),
+      appointment({ id: 'a1', customerName: 'Mario', status: AppointmentStatus.Scheduled, channel: AppointmentChannel.Online, fromTeam: true }),
+    ]);
+
+    const ours = (await screen.findByText('Valeria')).closest('tr')!;
+    expect(within(ours).getByText('De tu equipo: no cuenta en Explorar')).toBeInTheDocument();
+    expect(within(ours).queryByText(/a tiempo/)).not.toBeInTheDocument();
+    expect(within(screen.getByText('Rocío').closest('tr')!).queryByText(/De tu equipo/)).not.toBeInTheDocument();
+    // Once accepted there is nothing left to answer.
+    expect(within(screen.getByText('Mario').closest('tr')!).queryByText(/De tu equipo/)).not.toBeInTheDocument();
+  });
+
   it('says the limit passed while the agenda stays open (Fase 29L)', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(new Date('2026-10-14T16:00:00Z'));

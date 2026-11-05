@@ -244,6 +244,15 @@ function withRequestsInTime(data: DemoData) {
     if (appointment.id in answerBy) appointment.answerBy = answerBy[appointment.id];
 }
 
+/** Fase 29M (ADR 0067): Jorge's request came from the café's own team, so it has no limit to answer it in. */
+function withRequestFromTeam(data: DemoData) {
+  withRequestsInTime(data);
+  const jorge = (data.appointments as { id: string; answerBy?: string | null; fromTeam?: boolean }[])
+    .find((appointment) => appointment.id === uuid('appt:en-linea-jorge'))!;
+  jorge.answerBy = null;
+  jorge.fromTeam = true;
+}
+
 /** Online booking is on and customers book: the owner's card links the booking page. */
 function bookingOn(data: DemoData) {
   data.onlineBooking = { enabled: true, capacity: 2, maxCapacity: 20, booksOnline: true, missing: [], slug: data.tenant.slug, staffCount: 0 };
@@ -280,6 +289,7 @@ export const MENU_AGENDA = asOption(menuBooks);
 export const EXPLORAR_AGENDA = asOption(directoryBooks);
 export const AGENDA_SOLICITUDES = asOption(withRequests);
 export const AGENDA_SOLICITUDES_A_TIEMPO = asOption(withRequestsInTime);
+export const AGENDA_SOLICITUD_DEL_EQUIPO = asOption(withRequestFromTeam);
 export const CITAS_PRENDIDAS = asOption(bookingOn);
 export const CITAS_CON_PERSONAS = asOption(withPeople);
 export const QUIEN_ATIENDE = asOption(staffSet);

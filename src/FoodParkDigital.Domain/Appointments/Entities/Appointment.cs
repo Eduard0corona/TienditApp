@@ -5,6 +5,7 @@ using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
 
@@ -113,6 +114,18 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// so the appointment never gets a sale of its own. Null for every other appointment.
     /// </summary>
     public Guid? WorkOrderId { get; private set; }
+    /// <summary>
+    /// A request online that came from the business's own team (Fase 29M, ADR 0067): the phone of one of its members or of
+    /// the business, or someone signed in as a member. Explorar does not count how soon it was answered. Decided once, when
+    /// it arrives; false for one the team booked and for every request from before Fase 29M.
+    /// </summary>
+    public bool FromTeam { get; private set; }
+    /// <summary>
+    /// The phone a request online arrived with, as the key of its customer (<see cref="MessagingPhone.ToKey"/>: +52 and ten
+    /// digits for a Mexican mobile however it was written). Explorar counts one request per customer by it (Fase 29M, ADR
+    /// 0067), so changing the appointment's phone later does not merge or split customers. Empty for one the team booked.
+    /// </summary>
+    public string RequestPhone { get; private set; } = string.Empty;
 
     public bool IsHomeVisit => Visit is not null;
 
@@ -182,6 +195,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// Who attends it, when the business says who attends online (Fase 24J): the person the customer chose, or the one the
     /// business's rule picked among the free ones; with <paramref name="staffName"/>, their name in the agenda.
     /// </param>
+    /// <param name="fromTeam">It came from the business's own team (<see cref="FromTeam"/>).</param>
     public static Appointment RequestOnline(
         Guid tenantId,
         string customerName,
@@ -195,7 +209,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         Guid? clientRequestId,
         string trackingToken,
         Guid? staffUserId = null,
-        string? staffName = null)
+        string? staffName = null,
+        bool fromTeam = false)
     {
         if (serviceProductId == Guid.Empty)
             throw new ArgumentException("The service is required.", nameof(serviceProductId));
@@ -211,7 +226,9 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             CustomerUserId = customerUserId,
             ClientRequestId = clientRequestId,
             TrackingToken = trackingToken,
-            RequestedStartAt = startAt
+            RequestedStartAt = startAt,
+            FromTeam = fromTeam,
+            RequestPhone = MessagingPhone.ToKey(customerPhone)
         };
         return appointment;
     }
@@ -229,6 +246,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <param name="clientRequestId">The request page's key for this request.</param>
     /// <param name="trackingToken">The link to follow it without an account.</param>
     /// <param name="staffUserId">Who goes, when the business says who attends online; with <paramref name="staffName"/>.</param>
+    /// <param name="fromTeam">It came from the business's own team (<see cref="FromTeam"/>).</param>
     public static Appointment RequestHomeVisit(
         Guid tenantId,
         string customerName,
@@ -246,7 +264,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         Guid? clientRequestId,
         string trackingToken,
         Guid? staffUserId = null,
-        string? staffName = null)
+        string? staffName = null,
+        bool fromTeam = false)
     {
         ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(zone);
@@ -272,7 +291,9 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             ClientRequestId = clientRequestId,
             TrackingToken = trackingToken,
             CustomerEmail = InvoiceEmailAddress.Normalize(customerEmail),
-            RequestedStartAt = startAt
+            RequestedStartAt = startAt,
+            FromTeam = fromTeam,
+            RequestPhone = MessagingPhone.ToKey(customerPhone)
         };
         appointment.Visit = new AppointmentVisit(tenantId, appointment.Id, address, zone.Name, zone.Fee, chargePolicy);
         return appointment;
