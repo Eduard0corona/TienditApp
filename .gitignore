@@ -39,6 +39,8 @@ docker-compose.override.yml
 appsettings.*.local.json
 *.pfx
 *.key
+# Six Labors licence for SixLabors.ImageSharp (SECURITY.md, Dependencias): it goes in SIXLABORS_LICENSE_KEY, never here.
+sixlabors.lic
 src/FoodParkDigital.WebApi/Properties/PublishProfiles/
 src/FoodParkDigital.WebApi/Properties/ServiceDependencies/
 

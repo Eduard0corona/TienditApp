@@ -4,6 +4,14 @@
     <RootNamespace>FoodParkDigital.Infrastructure</RootNamespace>
   </PropertyGroup>
 
+  <!-- SixLabors.ImageSharp 3.2.0 checks a Six Labors licence key before compiling this project, the only one that
+       references it directly: a Release build fails without it, a Debug build only warns. The key is the whole licence
+       issued by Six Labors, in the SIXLABORS_LICENSE_KEY environment variable (a secret in CI, the deployment and the
+       Docker build; never in the repository). A SixLaborsLicenseKey or SixLaborsLicenseFile given to the build wins. -->
+  <PropertyGroup Condition="'$(SixLaborsLicenseKey)' == '' and '$(SixLaborsLicenseFile)' == '' and '$(SIXLABORS_LICENSE_KEY)' != ''">
+    <SixLaborsLicenseKey>$(SIXLABORS_LICENSE_KEY)</SixLaborsLicenseKey>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="GoogleAuthenticator" />

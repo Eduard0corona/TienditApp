@@ -36,7 +36,11 @@ jobs:
       - name: Restore
         run: dotnet restore FoodParkDigital.sln
 
+      # SixLabors.ImageSharp 3.2.0 fails a Release build of Infrastructure without a Six Labors licence key (see
+      # SECURITY.md, Dependencias). Only the steps that compile get it; GitHub masks it in the logs.
       - name: Build
+        env:
+          SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         run: dotnet build FoodParkDigital.sln --no-restore --configuration Release
 
       # Private files depend on the access level of their Blob container: test classes named *AzuriteTests run against
@@ -160,7 +164,10 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # The Six Labors licence key, as in the backend job: this step and the SQL Server tests compile.
       - name: Build
+        env:
+          SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         run: dotnet build src/FoodParkDigital.WebApi --configuration Release
 
       - name: Install dotnet-ef
@@ -344,6 +351,7 @@ jobs:
       - name: SQL Server tests
         env:
           TIENDITAPP_TEST_SQLSERVER: ${{ env.MSSQL_CONNECTION }}
+          SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         run: |
           dotnet test tests/FoodParkDigital.Infrastructure.Tests --configuration Release --filter "FullyQualifiedName~SqlServerTests"
           dotnet test tests/FoodParkDigital.WebApi.Tests --configuration Release --filter "FullyQualifiedName~SqlServerTests"
