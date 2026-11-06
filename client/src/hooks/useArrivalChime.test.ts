@@ -97,6 +97,22 @@ describe('useArrivalChime', () => {
     expect(result.current.enabled).toBe(false);
   });
 
+  it('plays without another touch once the page had one, as when the agenda opens again (Fase 29P)', async () => {
+    window.localStorage.setItem('tienditapp:test-sound', 'on');
+    vi.stubGlobal('navigator', { ...navigator, userActivation: { hasBeenActive: false } });
+    const beforeAnyTouch = renderHook(() => useArrivalChime('tienditapp:test-sound'));
+    await act(async () => undefined);
+    expect(beforeAnyTouch.result.current.needsTouch).toBe(true);
+
+    vi.stubGlobal('navigator', { ...navigator, userActivation: { hasBeenActive: true } });
+    const reopened = renderHook(() => useArrivalChime('tienditapp:test-sound'));
+    await act(async () => undefined);
+
+    expect(reopened.result.current.needsTouch).toBe(false);
+    act(() => reopened.result.current.play());
+    expect(played).toEqual([880, 1175]);
+  });
+
   it('turns on and off with it every chime of the page with its key, and no other (Fase 29P)', async () => {
     const agenda = renderHook(() => useArrivalChime('tienditapp:appointments-sound'));
     const topBar = renderHook(() => useArrivalChime('tienditapp:appointments-sound'));

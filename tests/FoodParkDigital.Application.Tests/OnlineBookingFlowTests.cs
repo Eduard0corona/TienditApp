@@ -311,10 +311,10 @@ public class OnlineBookingFlowTests
         Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage, withTheOne.Error);
 
         // A day after they were cancelled they no longer count: with the one still waiting, one more fits.
-        fixture.Clock.UtcNow = SalesTestFixture.Now + OnlineBookingRules.CancelledCountFor - TimeSpan.FromHours(2);
+        fixture.Clock.UtcNow = SalesTestFixture.Now + TimeSpan.FromHours(22);
         Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage,
             (await RequestAsync(fixture, haircut.Id, Local(Monday, "13:00"))).Error);
-        fixture.Clock.UtcNow = SalesTestFixture.Now + OnlineBookingRules.CancelledCountFor + TimeSpan.FromMinutes(1);
+        fixture.Clock.UtcNow = SalesTestFixture.Now + TimeSpan.FromHours(24) + TimeSpan.FromMinutes(1);
         var later = await RequestAsync(fixture, haircut.Id, Local(Monday, "13:00"));
         Assert.True(later.IsSuccess, later.Error);
     }

@@ -26,6 +26,14 @@ interface ChimeChange {
   enabled: boolean;
 }
 
+/**
+ * Whether the page already had a touch or a key since it opened: the browser then lets a new sound play without waiting for
+ * another, as when the agenda opens again after the top bar unlocked its own. Browsers that do not say it wait for the next one.
+ */
+function pageWasTouched(): boolean {
+  return (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive === true;
+}
+
 /** A sound that something arrived (two notes up) or left (two notes down: a cancellation, Fase 29P). */
 export type ChimeKind = 'arrival' | 'leaving';
 
@@ -69,6 +77,7 @@ export function useArrivalChime(storageKey: string) {
 
   useEffect(() => {
     if (!enabled || unlocked) return undefined;
+    if (pageWasTouched()) unlock();
     // A touch, a click or a key: whoever works with the keyboard also unlocks it.
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
