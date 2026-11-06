@@ -193,6 +193,113 @@ public sealed class CrossTenantRealtimeSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task CancellationsByTheCustomer_ShouldReachOnlyTheirBusiness_OnItsScreensAndByEmailToWhoGetsThem()
+    {
+        // Fase 29O (ADR 0069).
+        var mine = await _api.SignUpAsync("cancela-a");
+        var theirs = await _api.SignUpAsync("cancela-b");
+        var (mySlug, myService) = await CrossTenantOnlineBookingSqlServerTests.BookingAsync(mine.Client, "Corte que se cancela");
+        var (theirSlug, theirService) = await CrossTenantOnlineBookingSqlServerTests.BookingAsync(theirs.Client, "Masaje que se cancela");
+        using var stranger = _api.AnonymousClient();
+        var ofMine = await RequestWithLinkAsync(stranger, mySlug, myService, "5512340011");
+        var firstOfTheirs = await RequestWithLinkAsync(stranger, theirSlug, theirService, "5512340012");
+        var secondOfTheirs = await RequestWithLinkAsync(stranger, theirSlug, theirService, "5512340013");
+        var seenByMine = new Events();
+        var seenByTheirs = new Events();
+        var payloadsOfMine = new ConcurrentQueue<JsonElement>();
+        await using var hubMine = await ConnectAsync("/hubs/appointments", mine.AccessToken, "AppointmentCancelled", seenByMine, payload =>
+        {
+            payloadsOfMine.Enqueue(payload.Clone());
+            return AppointmentIdOf(payload);
+        });
+        await using var hubTheirs = await ConnectAsync("/hubs/appointments", theirs.AccessToken, "AppointmentCancelled", seenByTheirs, AppointmentIdOf);
+
+        // Theirs is live before mine is cancelled; then theirs gets another: had mine been sent to theirs, it would have
+        // arrived before that one.
+        await CancelFromLinkAsync(stranger, firstOfTheirs.Token);
+        await seenByTheirs.WaitForAsync(firstOfTheirs.Id.ToString());
+        await CancelFromLinkAsync(stranger, ofMine.Token);
+        await seenByMine.WaitForAsync(ofMine.Id.ToString());
+        await CancelFromLinkAsync(stranger, secondOfTheirs.Token);
+        await seenByTheirs.WaitForAsync(secondOfTheirs.Id.ToString());
+        Assert.False(seenByTheirs.Saw(ofMine.Id.ToString()));
+        Assert.False(seenByMine.Saw(firstOfTheirs.Id.ToString()));
+        Assert.False(seenByMine.Saw(secondOfTheirs.Id.ToString()));
+        // What it was for and when; never who cancelled it.
+        var payload = Assert.Single(payloadsOfMine);
+        Assert.Equal(
+            ["appointmentId", "fromTeam", "homeVisit", "serviceName", "startAt", "wasRequest"],
+            payload.EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal(("Corte que se cancela", true, false), (payload.GetProperty("serviceName").GetString(),
+            payload.GetProperty("wasRequest").GetBoolean(), payload.GetProperty("fromTeam").GetBoolean()));
+
+        // Each owner gets the email of each cancellation of their own business, and only those.
+        await _api.DispatchOutboxAsync();
+        var mineGot = _api.PlainEmailsTo(mine.Email).Where(e => e.Subject.Contains("cancelada")).ToList();
+        var theirsGot = _api.PlainEmailsTo(theirs.Email).Where(e => e.Subject.Contains("cancelada")).ToList();
+        Assert.Single(mineGot);
+        Assert.StartsWith("Solicitud de cita cancelada en ", mineGot[0].Subject);
+        Assert.Contains("Corte que se cancela", mineGot[0].Subject);
+        Assert.Equal(2, theirsGot.Count);
+        Assert.All(theirsGot, email => Assert.Contains("Masaje que se cancela", email.Subject));
+        Assert.DoesNotContain(theirsGot.Concat(mineGot), email => email.Body.Contains("551234001"));
+
+        // The owner turns the agenda's notices off for themselves: the next cancellation reaches the screens and no email
+        // goes out.
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync(RequestEmails, new { enabled = false }));
+        var unnoticed = await RequestWithLinkAsync(stranger, mySlug, myService, "5512340014");
+        await CancelFromLinkAsync(stranger, unnoticed.Token);
+        await seenByMine.WaitForAsync(unnoticed.Id.ToString());
+        await _api.DispatchOutboxAsync();
+        Assert.Single(_api.PlainEmailsTo(mine.Email), e => e.Subject.Contains("cancelada"));
+    }
+
+    [SqlServerFact]
+    public async Task AnswersToQuotes_ShouldReachByEmailOnlyTheirBusiness_ForWhoeverWorksTheQuotesAndChoseThem()
+    {
+        // Fase 29O (ADR 0069).
+        var mine = await _api.SignUpAsync("responde-aviso-a");
+        var theirs = await _api.SignUpAsync("responde-aviso-b");
+        var (cashier, _, cashierEmail, _) = await EmployeeAsync(mine, "ManageOrders");
+        var (stylist, _, stylistEmail, _) = await EmployeeAsync(mine, "ManageAppointments");
+
+        // The choice is for whoever works the quotes: off for a member of the team until they choose, on for the owner.
+        Assert.Equal(HttpStatusCode.Forbidden, (await stylist.GetAsync(QuoteReplyEmails)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await stylist.PutAsJsonAsync(QuoteReplyEmails, new { enabled = true })).StatusCode);
+        Assert.False((await TwoBusinessesApi.ReadAsync(await cashier.GetAsync(QuoteReplyEmails))).GetProperty("enabled").GetBoolean());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await cashier.PutAsJsonAsync(QuoteReplyEmails, new { enabled = true }))).GetProperty("enabled").GetBoolean());
+        var owners = await TwoBusinessesApi.ReadAsync(await mine.Client.GetAsync(QuoteReplyEmails));
+        Assert.Equal((true, mine.Email), (owners.GetProperty("enabled").GetBoolean(), owners.GetProperty("email").GetString()));
+
+        // A customer of each answers from the link: each business hears only of its own.
+        var (_, myToken) = await CrossTenantQuoteSqlServerTests.SentQuoteAsync(mine.Client);
+        var (_, theirToken) = await CrossTenantQuoteSqlServerTests.SentQuoteAsync(theirs.Client);
+        using var stranger = _api.AnonymousClient();
+        await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply",
+            new { token = myToken, accepted = true, response = "Los espero el jueves, mi número es 5522107765" }));
+        await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = theirToken, accepted = false }));
+        await _api.DispatchOutboxAsync();
+
+        var ownerGot = Assert.Single(_api.PlainEmailsTo(mine.Email), e => e.Subject.StartsWith("Cotización"));
+        Assert.StartsWith("Cotización aceptada en ", ownerGot.Subject);
+        Assert.Contains("aceptó desde su enlace la cotización <strong>COT-", ownerGot.Body);
+        Assert.DoesNotContain("jueves", ownerGot.Body);
+        Assert.DoesNotContain("5522107765", ownerGot.Body);
+        Assert.Single(_api.PlainEmailsTo(cashierEmail), e => e.Subject.StartsWith("Cotización aceptada en "));
+        Assert.Empty(_api.PlainEmailsTo(stylistEmail));
+        Assert.StartsWith("Cotización rechazada en ", Assert.Single(_api.PlainEmailsTo(theirs.Email), e => e.Subject.StartsWith("Cotización")).Subject);
+
+        // The owner turns them off for themselves; the cashier keeps theirs, and the other business its own.
+        Assert.False((await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync(QuoteReplyEmails, new { enabled = false }))).GetProperty("enabled").GetBoolean());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await theirs.Client.GetAsync(QuoteReplyEmails))).GetProperty("enabled").GetBoolean());
+        var (_, nextToken) = await CrossTenantQuoteSqlServerTests.SentQuoteAsync(mine.Client);
+        await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = nextToken, accepted = false }));
+        await _api.DispatchOutboxAsync();
+        Assert.Single(_api.PlainEmailsTo(mine.Email), e => e.Subject.StartsWith("Cotización"));
+        Assert.Equal(2, _api.PlainEmailsTo(cashierEmail).Count(e => e.Subject.StartsWith("Cotización")));
+    }
+
+    [SqlServerFact]
     public async Task ARefusedConnection_ShouldBeClosedForGood_NotReconnectedBySignalR()
     {
         // The server aborts it once connected (Context.Abort): its close forbids reconnecting, so a client that reconnects by
@@ -419,16 +526,27 @@ public sealed class CrossTenantRealtimeSqlServerTests
 
     private const string RequestEmails = "/api/v1/appointments/request-emails";
 
+    private const string QuoteReplyEmails = "/api/v1/quotes/reply-emails";
+
     /// <summary>A customer's request online at <paramref name="slug"/>, at its first free time; its id.</summary>
     private static async Task<Guid> RequestAsync(HttpClient customer, string slug, Guid service, string phone)
+        => (await RequestWithLinkAsync(customer, slug, service, phone)).Id;
+
+    /// <summary>A customer's request online at <paramref name="slug"/>, at its first free time; its id and its link.</summary>
+    private static async Task<(Guid Id, string Token)> RequestWithLinkAsync(HttpClient customer, string slug, Guid service, string phone)
     {
         var receipt = await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync(
             $"/api/v1/public/menu/{slug}/appointments",
             CrossTenantOnlineBookingSqlServerTests.Request(service, await CrossTenantOnlineBookingSqlServerTests.FirstFreeAsync(customer, slug, service), phone)));
         var link = receipt.GetProperty("trackingToken").GetString()!;
-        return (await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync(CrossTenantOnlineBookingSqlServerTests.Tracking, new { token = link })))
+        var id = (await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync(CrossTenantOnlineBookingSqlServerTests.Tracking, new { token = link })))
             .GetProperty("id").GetGuid();
+        return (id, link);
     }
+
+    /// <summary>Its customer cancels the appointment from its link, without an account.</summary>
+    private static async Task CancelFromLinkAsync(HttpClient customer, string token)
+        => await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync($"{CrossTenantOnlineBookingSqlServerTests.Tracking}/cancel", new { token }));
 
     private static string MessageBodyOf(JsonElement payload) => payload.GetProperty("message").GetProperty("body").GetString()!;
 

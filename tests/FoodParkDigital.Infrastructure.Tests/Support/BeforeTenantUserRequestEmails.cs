@@ -16,7 +16,11 @@ internal static class BeforeTenantUserRequestEmails
         => database.CreateContext(tenantId, (options, tenant, mediator) => new Context(options, tenant, mediator));
 
     /// <summary>For the context of an earlier version, which does not know it either.</summary>
-    public static void Ignore(ModelBuilder modelBuilder) => modelBuilder.Entity<TenantUser>().Ignore(m => m.RequestEmails);
+    public static void Ignore(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<TenantUser>().Ignore(m => m.RequestEmails);
+        BeforeTenantUserQuoteReplyEmails.Ignore(modelBuilder);
+    }
 
     private sealed class Context(
         DbContextOptions<ApplicationDbContext> options,

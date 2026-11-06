@@ -13536,6 +13536,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/quotes/reply-emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteReplyEmailsDto"];
+                        "application/json": components["schemas"]["QuoteReplyEmailsDto"];
+                        "text/json": components["schemas"]["QuoteReplyEmailsDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateQuoteReplyEmailsCommand"];
+                    "text/json": components["schemas"]["UpdateQuoteReplyEmailsCommand"];
+                    "application/*+json": components["schemas"]["UpdateQuoteReplyEmailsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["QuoteReplyEmailsDto"];
+                        "application/json": components["schemas"]["QuoteReplyEmailsDto"];
+                        "text/json": components["schemas"]["QuoteReplyEmailsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/quotes/{id}/send": {
         parameters: {
             query?: never;
@@ -20951,6 +21015,11 @@ export interface components {
          * @enum {integer}
          */
         QuoteReplyChannel: 0 | 1 | 2 | 3 | 4;
+        QuoteReplyEmailsDto: {
+            enabled: boolean;
+            email?: string | null;
+            emailConfirmed: boolean;
+        };
         QuoteSettingsDto: {
             /** Format: int32 */
             validityDays: number;
@@ -22324,6 +22393,9 @@ export interface components {
             validityDays: number;
             note?: string | null;
             lines: components["schemas"]["QuoteLineRequest"][];
+        };
+        UpdateQuoteReplyEmailsCommand: {
+            enabled: boolean;
         };
         UpdateQuoteSettingsCommand: {
             /** Format: int32 */

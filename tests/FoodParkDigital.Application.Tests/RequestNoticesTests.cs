@@ -17,6 +17,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using static FoodParkDigital.Application.Tests.ExploreResponseTimeTests;
+using static FoodParkDigital.Application.Tests.Support.NoticeEmailsSupport;
 
 namespace FoodParkDigital.Application.Tests;
 
@@ -27,8 +28,7 @@ namespace FoodParkDigital.Application.Tests;
 /// </summary>
 public class RequestNoticesTests
 {
-    // 2027-03-01 at 11:00 in Mexico City.
-    private const string AppUrl = "https://app.tienditapp.test";
+    // Now: 2027-03-01 at 11:00 in Mexico City.
 
     [Fact]
     public async Task TheEmails_ShouldGoToEachMemberWhoGetsThem_AndMayAnswerTheRequests()
@@ -126,7 +126,10 @@ public class RequestNoticesTests
             sent.Body);
         Assert.Contains("<p>Respóndela antes del martes 2 de marzo a las 10:00 a. m. para que cuente como respondida a tiempo.</p>", sent.Body);
         Assert.Contains($"<a href='{AppUrl}/appointments'>Abrir la Agenda</a>", sent.Body);
-        Assert.Contains($"de Est&#233;tica &lt;Luna&gt; &amp; Sol. Puedes dejar de recibirlos en <a href='{AppUrl}/profile'>Mi perfil</a>.", sent.Body);
+        // Since the Fase 29O the same choice also brings the appointments its customers cancel.
+        Assert.Contains(
+            $"Te llega porque recibes un correo con cada solicitud en línea de Est&#233;tica &lt;Luna&gt; &amp; Sol y con cada cita que sus clientes cancelan. Puedes dejar de recibirlos en <a href='{AppUrl}/profile'>Mi perfil</a>.",
+            sent.Body);
         Assert.DoesNotContain("5522107765", sent.Body + sent.Subject);
         Assert.DoesNotContain("largo", sent.Body);
     }
@@ -283,7 +286,7 @@ public class RequestNoticesTests
         SalesTestFixture fixture, Tenant tenant, Appointment request)
     {
         fixture.TenantService.SetTenant(tenant.Id);
-        var outbox = new Outbox();
+        var outbox = new Outbox<AppointmentRequestEmailEvent>();
         await new AppointmentRequestedEmailsHandler(fixture.Context, new MembersAccess(fixture.Context), outbox, fixture.Clock)
             .HandleAsync(new AppointmentRequestedEvent(request.Id, tenant.Id, request.Visit is not null, request.FromTeam), Context(tenant), CancellationToken.None);
         return outbox.Added;
@@ -298,127 +301,5 @@ public class RequestNoticesTests
         await new AppointmentRequestEmailHandler(fixture.Context, new MembersAccess(fixture.Context), emails, new Links(appUrl), fixture.Clock)
             .HandleAsync(new AppointmentRequestEmailEvent(request.Id, userId), Context(tenant), CancellationToken.None);
         return emails.Sent;
-    }
-
-    private static OutboxEventContext Context(Tenant tenant) => new(Guid.NewGuid(), tenant.Id, null, null, Now, 1);
-
-    /// <summary>A member of <paramref name="tenant"/> with an account of their own, and its id.</summary>
-    private static async Task<Guid> MemberAsync(
-        SalesTestFixture fixture,
-        Tenant tenant,
-        string name,
-        TenantUserRole role,
-        bool? choose = null,
-        TenantPermission[]? permissions = null,
-        TenantUserStatus status = TenantUserStatus.Active,
-        bool emailConfirmed = true,
-        bool accountActive = true)
-    {
-        var email = $"{name}.{tenant.Slug}@demo.com";
-        var account = new ApplicationUser
-        {
-            Id = Guid.NewGuid(),
-            UserName = email,
-            Email = email,
-            EmailConfirmed = emailConfirmed,
-            FirstName = name,
-            LastName = "Equipo",
-            Role = role == TenantUserRole.Staff ? UserRole.Staff : UserRole.TenantAdmin,
-            IsActive = accountActive
-        };
-        var member = Membership(tenant, account.Id, role, status);
-        if (permissions is not null)
-            member.SetExplicitPermissions(permissions.Select(p => p.ToString()));
-        if (choose is { } chosen)
-            member.ChooseRequestEmails(chosen);
-        fixture.Context.Users.Add(account);
-        fixture.Context.TenantUsers.Add(member);
-        await fixture.Context.SaveChangesAsync();
-        return account.Id;
-    }
-
-    private static TenantUser Membership(Tenant tenant, Guid userId, TenantUserRole role, TenantUserStatus status = TenantUserStatus.Active)
-        => new(tenant.Id, userId, role, status);
-
-    /// <summary>The access of each member as the API reads it (TenantAccessService), from what the fixture saved.</summary>
-    private sealed class MembersAccess(SalesDbContext context) : ITenantAccessService
-    {
-        public async Task<TenantAccessSnapshot> GetAccessSnapshotAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
-        {
-            var member = await context.TenantUsers.IgnoreQueryFilters().AsNoTracking()
-                .SingleOrDefaultAsync(m => m.UserId == userId && m.TenantId == tenantId, cancellationToken);
-            var tenant = await context.Tenants.IgnoreQueryFilters().AsNoTracking().SingleAsync(t => t.Id == tenantId, cancellationToken);
-            var settings = await context.TenantSettings.IgnoreQueryFilters().AsNoTracking().SingleAsync(s => s.TenantId == tenantId, cancellationToken);
-            var capabilities = TenantCapabilityRules.NormalizeCapabilities(settings.Capabilities, tenant.BusinessType);
-            if (member is not { Status: TenantUserStatus.Active })
-                return new TenantAccessSnapshot(false, capabilities, []);
-            var account = await context.Users.AsNoTracking().SingleAsync(u => u.Id == userId, cancellationToken);
-            return new TenantAccessSnapshot(
-                true,
-                capabilities,
-                TenantPermissionCatalog.ResolveEffectiveCodes(member.PermissionCodes, account.Role, member.Role),
-                TenantSuspended: tenant.Status is TenantStatus.Suspended or TenantStatus.Inactive,
-                IsManager: member.Role is TenantUserRole.Owner or TenantUserRole.Admin);
-        }
-
-        public Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<bool> HasCapabilityAsync(Guid tenantId, TenantCapability capability, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<bool> HasAnyCapabilityAsync(Guid tenantId, TenantCapability capabilities, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<IReadOnlyCollection<string>> GetPermissionsAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<bool> HasPermissionAsync(Guid userId, Guid tenantId, TenantPermission permission, CancellationToken cancellationToken) => throw new NotSupportedException();
-    }
-
-    private sealed class Outbox : IOutbox
-    {
-        public List<(AppointmentRequestEmailEvent Event, Guid? TenantId)> Added { get; } = [];
-
-        public void Add(DomainEvent domainEvent, Guid? tenantId) => Added.Add(((AppointmentRequestEmailEvent)domainEvent, tenantId));
-    }
-
-    private sealed class Emails(bool fail = false) : IEmailService
-    {
-        public List<(string To, string Subject, string Body)> Sent { get; } = [];
-
-        public Task SendEmailAsync(string to, string subject, string body)
-        {
-            if (fail)
-                throw new InvalidOperationException("SMTP 421");
-            Sent.Add((to, subject, body));
-            return Task.CompletedTask;
-        }
-
-        public Task SendEmailConfirmationAsync(string email, string userId, string token) => throw new NotSupportedException();
-
-        public Task SendPasswordResetEmailAsync(string email, string userId, string token) => throw new NotSupportedException();
-
-        public Task SendTeamInvitationAsync(string email, string businessName, string invitationPath) => throw new NotSupportedException();
-
-        public Task SendAccountAlreadyExistsAsync(string email, bool customerAccount) => throw new NotSupportedException();
-
-        public Task SendUnfinishedAccountAsync(string email, string userId, string token) => throw new NotSupportedException();
-
-        public Task<EmailSendOutcome> SendDocumentsAsync(DocumentEmail email, CancellationToken cancellationToken) => throw new NotSupportedException();
-    }
-
-    private sealed class Links(string? baseUrl) : IAppLinks
-    {
-        public string? BaseUrl => baseUrl;
-    }
-
-    private sealed class Screens(bool fail = false) : IAppointmentNotificationService
-    {
-        public List<(Guid TenantId, AppointmentRequestedNotice Notice)> Heard { get; } = [];
-
-        public Task NotifyAppointmentRequested(Guid tenantId, AppointmentRequestedNotice notice)
-        {
-            if (fail)
-                throw new InvalidOperationException("SignalR");
-            Heard.Add((tenantId, notice));
-            return Task.CompletedTask;
-        }
     }
 }

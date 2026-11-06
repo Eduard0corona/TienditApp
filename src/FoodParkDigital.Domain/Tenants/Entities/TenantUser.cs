@@ -29,9 +29,9 @@ public class TenantUser : AuditableEntity, ITenantScoped
     public string? PermissionCodes { get; private set; }
 
     /// <summary>
-    /// Whether this member gets an email with each request online of the business (Fase 29N, ADR 0068), as they chose; null
-    /// until they choose, when only the owners get them (<see cref="GetsRequestEmails"/>). Their own to choose: nobody else
-    /// sets it for them.
+    /// Whether this member gets an email with each request online of the business (Fase 29N, ADR 0068) and, since the Fase
+    /// 29O (ADR 0069), with each appointment its customer cancels, as they chose; null until they choose, when only the owners
+    /// get them (<see cref="GetsRequestEmails"/>). Their own to choose: nobody else sets it for them.
     /// </summary>
     public bool? RequestEmails { get; private set; }
 
@@ -39,6 +39,18 @@ public class TenantUser : AuditableEntity, ITenantScoped
     public bool GetsRequestEmails => RequestEmails ?? Role == TenantUserRole.Owner;
 
     public void ChooseRequestEmails(bool enabled) => RequestEmails = enabled;
+
+    /// <summary>
+    /// Whether this member gets an email each time a customer accepts or rejects a quote of the business from its link (Fase
+    /// 29O, ADR 0069), as they chose; null until they choose, when only the owners get them (<see cref="GetsQuoteReplyEmails"/>).
+    /// Their own to choose: nobody else sets it for them.
+    /// </summary>
+    public bool? QuoteReplyEmails { get; private set; }
+
+    /// <summary>What they chose or, until they choose, whether they own the business.</summary>
+    public bool GetsQuoteReplyEmails => QuoteReplyEmails ?? Role == TenantUserRole.Owner;
+
+    public void ChooseQuoteReplyEmails(bool enabled) => QuoteReplyEmails = enabled;
 
     public void SetStatus(TenantUserStatus status) => Status = status;
 

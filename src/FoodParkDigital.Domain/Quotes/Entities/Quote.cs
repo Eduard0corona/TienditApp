@@ -3,6 +3,7 @@ using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Taxes;
+using FoodParkDigital.Domain.Quotes.Events;
 
 namespace FoodParkDigital.Domain.Quotes.Entities;
 
@@ -254,6 +255,7 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
     /// changes nothing (false), another one is refused, and so is a version the business replaced or one that expired.
     /// </summary>
     /// <returns>Whether the quote changed: false when it already had this answer.</returns>
+    /// <remarks>An answer that changes it tells the business (Fase 29O, ADR 0069): <see cref="QuoteAnsweredFromLinkEvent"/>.</remarks>
     public bool ReplyFromLink(bool accepted, DateOnly today, string? response, DateTimeOffset now)
     {
         var answer = accepted ? QuoteStatus.Accepted : QuoteStatus.Rejected;
@@ -278,6 +280,7 @@ public class Quote : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(QuoteRules.CustomerResponseTooLongMessage);
 
         Close(answer, today, QuoteReplyChannel.Link, trimmed, now);
+        AddDomainEvent(new QuoteAnsweredFromLinkEvent(Id, TenantId, accepted));
         return true;
     }
 

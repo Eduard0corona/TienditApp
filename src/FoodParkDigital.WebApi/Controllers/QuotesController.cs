@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Quotes;
+using FoodParkDigital.Application.Quotes.ReplyNotices;
 using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.WebApi.Errors;
 using MediatR;
@@ -54,6 +55,30 @@ public class QuotesController : ControllerBase
     public async Task<ActionResult<QuoteSettingsDto>> SetWhatsAppTemplate(
         [FromBody] SetQuoteWhatsAppTemplateCommand command, CancellationToken cancellationToken)
         => Answer(await _mediator.Send(command, cancellationToken));
+
+    /// <summary>
+    /// Whether the person gets an email each time a customer answers a quote of this business from its link, and where it
+    /// arrives (Fase 29O). Only for its team: the platform's admin acting in it gets 404.
+    /// </summary>
+    [HttpGet("reply-emails")]
+    public async Task<ActionResult<QuoteReplyEmailsDto>> GetReplyEmails(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetQuoteReplyEmailsQuery(), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Turns those emails on or off for the person, in this business only (Fase 29O).</summary>
+    [HttpPut("reply-emails")]
+    public async Task<ActionResult<QuoteReplyEmailsDto>> UpdateReplyEmails(
+        [FromBody] UpdateQuoteReplyEmailsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return Ok(result.Value);
+    }
 
     /// <summary>A new draft for a customer, or for the visit of an appointment (which opens its quote when it has one).</summary>
     [HttpPost]

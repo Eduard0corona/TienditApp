@@ -87,8 +87,8 @@ public class AppointmentsController : ControllerBase
     }
 
     /// <summary>
-    /// Whether the person gets an email with each request online of this business, and where it arrives (Fase 29N). Only for
-    /// its team: the platform's admin acting in it gets 404.
+    /// Whether the person gets an email with each request online of this business (Fase 29N) and with each appointment its
+    /// customer cancels (Fase 29O), and where they arrive. Only for its team: the platform's admin acting in it gets 404.
     /// </summary>
     [HttpGet("request-emails")]
     public async Task<ActionResult<RequestEmailsDto>> GetRequestEmails(CancellationToken cancellationToken)

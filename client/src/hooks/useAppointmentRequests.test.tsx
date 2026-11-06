@@ -7,9 +7,11 @@ import { queryKeys } from '../api/queries';
 import { setBusinessTimeZone } from '../utils/dates';
 import {
   APPOINTMENT_REQUESTS_CHANGED,
+  describeCancellation,
   describeRequest,
   useAppointmentRequestsLive,
   useOnAppointmentRequestsChanged,
+  type AppointmentCancelledPayload,
   type AppointmentRequestedPayload,
 } from './useAppointmentRequests';
 
@@ -38,6 +40,12 @@ const request = (overrides: Partial<AppointmentRequestedPayload> = {}): Appointm
   startAt: '2026-11-06T16:00:00Z',
   homeVisit: false,
   fromTeam: false,
+  ...overrides,
+});
+
+const cancellation = (overrides: Partial<AppointmentCancelledPayload> = {}): AppointmentCancelledPayload => ({
+  ...request(),
+  wasRequest: false,
   ...overrides,
 });
 
@@ -125,6 +133,37 @@ describe('the requests online, live (Fase 29N)', () => {
 
     expect(hub.urls).toEqual([]);
     expect(hub.stop).not.toHaveBeenCalled();
+  });
+
+  it('tells an appointment its customer cancelled, and the bell and the agenda read it again (Fase 29O)', async () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    renderLive();
+    await connected();
+
+    act(() => hub.handlers.get('AppointmentCancelled')?.(cancellation()));
+
+    expect(screen.getByText('Cita cancelada')).toBeInTheDocument();
+    expect(
+      screen.getByText(/^El cliente canceló Corte de cabello, viernes, 6 de noviembre, 10:00.*Ese horario quedó libre\.$/),
+    ).toBeInTheDocument();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.attention });
+    expect(changes).toBe(1);
+  });
+
+  it('refreshes without telling a cancellation of the team (Fase 29O)', async () => {
+    renderLive();
+    await connected();
+
+    act(() => hub.handlers.get('AppointmentCancelled')?.(cancellation({ fromTeam: true })));
+
+    expect(screen.queryByText(/cancelada/)).not.toBeInTheDocument();
+    expect(changes).toBe(1);
+  });
+
+  it('names a cancelled request and a cancelled visit as such (Fase 29O)', () => {
+    expect(describeCancellation(cancellation({ wasRequest: true })).title).toBe('Solicitud de cita cancelada');
+    expect(describeCancellation(cancellation({ wasRequest: true, homeVisit: true })).title).toBe('Solicitud de visita cancelada');
+    expect(describeCancellation(cancellation({ homeVisit: true, serviceName: 'Visita a domicilio' })).title).toBe('Visita cancelada');
   });
 
   it('names a visit as such', () => {

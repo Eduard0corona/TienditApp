@@ -1050,6 +1050,28 @@ La Fase 29N trae una migración, [`database/production/20261105171726_AddTenantU
 - **Volver a la versión anterior:** funciona sin tocar la base; deja de avisar, y lo que cada quien eligió se queda guardado.
 - **Dejar también la base como estaba:** el `rollback.sql` quita la columna; se pierde quién prendió o apagó los avisos, sin cambiar ningún miembro.
 
+## Avisarle lo que responden sus clientes (Fase 29O)
+
+La Fase 29O trae una migración, [`database/production/20261106060148_AddTenantUserQuoteReplyEmails`](../../database/production/20261106060148_AddTenantUserQuoteReplyEmails). Su `apply.sql` va antes del merge ([ADR 0069](../adr/0069-tell-the-business-what-customers-answer.md)).
+
+- **La migración:** agrega a `TenantUsers` la columna `QuoteReplyEmails` (`bit NULL`, sin valor por omisión): si el miembro recibe un correo cada vez que un cliente responde una cotización desde su enlace. No cambia datos: todos quedan sin elegir (`NULL`), y así les llegan a los dueños desde que se publique la 29O. Las cancelaciones usan la columna de la 29N, `RequestEmails`.
+- **Mientras se publica:** la versión de `master` (la 29N) no conoce la columna y sigue funcionando; los miembros que agrega quedan sin elegir, como los demás.
+- **Los avisos de la versión nueva** (`AppointmentCancelledByCustomerEvent`, `AppointmentCancellationEmailEvent`, `QuoteAnsweredFromLinkEvent` y `QuoteReplyEmailEvent`) van por el outbox. Si el worker de la 29N toma uno, no conoce el evento y lo aparta (`Unknown event type` en el log, y `background-queues` Degraded un día): ese correo no sale, aunque la Agenda y la cotización sí muestran lo que pasó. Para mandarlos, ya con esta versión publicada y el mismo día, regresa a pendientes los mensajes apartados de esos tipos (los de hace más de un día ya no salen):
+
+  ```sql
+  UPDATE OutboxMessages SET DeadLetteredAt = NULL, Attempts = 0, LastError = NULL, NextAttemptAt = SYSDATETIMEOFFSET()
+  WHERE Type IN ('FoodParkDigital.Domain.Appointments.Events.AppointmentCancelledByCustomerEvent',
+                 'FoodParkDigital.Domain.Appointments.Events.AppointmentCancellationEmailEvent',
+                 'FoodParkDigital.Domain.Quotes.Events.QuoteAnsweredFromLinkEvent',
+                 'FoodParkDigital.Domain.Quotes.Events.QuoteReplyEmailEvent')
+    AND DeadLetteredAt IS NOT NULL AND LastError LIKE 'Unknown event type%';
+  ```
+
+- **Sin `apply.sql`:** la versión nueva lee `QuoteReplyEmails` con cada miembro, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva:** los correos usan el proveedor de correo de la plataforma y `AppUrl` para las ligas a la Agenda, a la cotización y a Mi perfil (sin `AppUrl`, salen sin ligas). El aviso en pantalla usa el hub `/hubs/appointments` de la 29N.
+- **Volver a la versión anterior:** funciona sin tocar la base; deja de mandar estos avisos, y lo que cada quien eligió se queda guardado.
+- **Dejar también la base como estaba:** el `rollback.sql` quita la columna; se pierde quién prendió o apagó los avisos de las cotizaciones, sin cambiar ningún miembro ni su elección de la Agenda.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
