@@ -2079,6 +2079,41 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **801 iguales.**
     - **3 cambian**, solo por la tarjeta «Avisos de solicitudes» de Mi perfil (escritorio, teléfono y oscuro, `caja-config.spec.ts`).
     - **1 nueva:** «perfil con los avisos apagados y el correo sin confirmar» (`avisos-solicitudes.spec.ts`). Pasó dos corridas seguidas contra el mismo build. Las escenas de perfil, citas, Agenda, oficios, Inicio y el marco se repitieron con el build final: 195 iguales y las mismas 4.
+- Fase 29O, avisarle al negocio lo que responden sus clientes ([ADR 0069](../adr/0069-tell-the-business-what-customers-answer.md)):
+  - **Domain:** `CustomerAnswerNoticesTests` (9, nuevo):
+    - la cita que su cliente cancela lo dice, con si es visita, si vino del equipo y si esperaba respuesta;
+    - la que rechaza el negocio, la que no puede cancelar y la de la Agenda no dicen nada;
+    - la cotización respondida desde su enlace lo dice una vez, la misma respuesta otra vez no, y tampoco la que registra el negocio o la que se rechaza;
+    - sin elegir, solo a los dueños les llegan los correos de las cotizaciones, y esa elección no toca la de la Agenda.
+  - **Application:** `CustomerAnswerNoticesTests` (16, nuevo), con los ayudantes compartidos de `Support/NoticeEmailsSupport` (los usa también `RequestNoticesTests`):
+    - el correo de una cancelación va a quien recibe los avisos de la Agenda y puede responder solicitudes; elegir las cotizaciones no lo trae;
+    - nada de una del equipo, de una cancelada hace más de un día, de una cuya hora llegó, de una que rechazó el negocio ni de un negocio suspendido (en el límite exacto, sí);
+    - lo que dice una solicitud, una cita y una visita cancelada: en la zona del negocio, «a la» a la una, todo codificado, sin teléfono, notas ni dirección, y sin ligas si no hay `AppUrl`;
+    - el correo de una respuesta va a quien la eligió (o, sin elegir, a los dueños) y tiene `ManageOrders`; no a quien solo tiene la Agenda, ni de una que registró el negocio, de hace más de un día, ya convertida en orden o reemplazada, ni de un negocio suspendido o sin servicios ni citas;
+    - lo que dice una aceptada y una rechazada: quién, qué folio y por cuánto, que dejó un mensaje sin el mensaje, y convertirla en orden solo donde hay servicios (también con el handler real, en un negocio con citas y sin servicios);
+    - ninguno sale si el miembro los apagó, si la hora llegó o la cotización se convirtió después de repartirlo, ni a otro negocio; un fallo del proveedor se reintenta;
+    - las pantallas reciben qué y cuándo de una cancelación, nunca de otro negocio, y un fallo no tumba la cancelación;
+    - cada quien elige las cotizaciones para sí, aparte de la Agenda; quien no es del equipo no tiene qué elegir.
+  - **Infrastructure:**
+    - `CustomerAnswerEmailsOutboxTests` (2, nuevo): con el despachador real, cancelar una cita y responder una cotización guardan su evento con el cambio, y cada dueño recibe su correo una vez aunque el despachador corra otra vez o el cliente toque dos veces.
+    - `TenantUserQuoteReplyEmailsMigrationSqlServerTests` (3, nuevo): los miembros que existen quedan sin elegir (a los dueños les llegan), la versión anterior sigue agregando miembros sin elegir, y el rollback quita solo la columna, con la elección de la Agenda intacta. `TenantUserRequestEmailsMigrationSqlServerTests` lee con el modelo de su migración (`BeforeTenantUserQuoteReplyEmails`).
+    - `OutboxTests`: los cuatro eventos nuevos pasan por el serializador.
+    - Los scripts de `database/production` se probaron en SQL Server sobre una base en la migración de la 29N: `verify.sql`, aplicar, aplicar otra vez sin cambios, revertir dos veces (queda la columna de la 29N) y aplicar de nuevo; `apply.sql` y `rollback.sql` son los que genera CI.
+  - **WebApi:** `CrossTenantRealtimeSqlServerTests` (+2):
+    - una cita cancelada desde su liga llega solo al hub y a los correos de su negocio; el aviso trae exactamente qué y cuándo, sin datos del cliente, y apagar los avisos de la Agenda apaga también estos correos;
+    - una cotización respondida desde su liga llega por correo solo al dueño y al cajero que lo eligió en su negocio, nunca lo que escribió el cliente; quien solo tiene la Agenda no elige (403) ni la recibe; apagarlos lo apaga solo para esa persona.
+  - **Mutaciones:** 36 en el servidor, 32 muertas. Dos sobrevivían y ahora mueren: convertir en orden aunque no haya servicios (prueba con el handler real) y el aviso en pantalla que siempre dice solicitud. Sobreviven cuatro guardas redundantes: el estado `Cancelled` junto a la marca de cancelada por el cliente (una cita cancelada no vuelve a otro estado), los dos filtros explícitos por negocio que repiten el filtro global, y el miembro activo junto al acceso activo.
+  - **Cliente:** `NoticeEmailsCard.test.tsx` (6, nuevo, reemplaza a `RequestEmailsCard.test.tsx`): cada aviso se prende y apaga por su lado, se muestran solo los que la persona puede elegir, el correo sin confirmar, el error al guardar, el que el servidor rechaza no se muestra, el que falla por otra cosa ofrece reintentar, y el que carga se marca ocupado. `useAppointmentRequests.test.tsx` (+3): la cancelación se avisa y recarga la campana y la Agenda, la del equipo no se avisa, y el título de una solicitud o una visita cancelada.
+  - **.NET en total:** 4,718 pruebas en verde con SQL Server (Domain 1,390; Application 2,130; WebApi 493; Infrastructure 705). **Cliente en total:** 200 archivos y 1,520 pruebas.
+  - **Primera visita:** 181,904 B (`master` en `4e4926b`: 181,910 B, −6 B); el presupuesto se queda en 182,000 B.
+  - **Revisión independiente**, sin bloqueos ni mayores, con menores corregidos:
+    - la ADR y SECURITY decían que el tope por teléfono acota a quien pide y cancela una y otra vez, pero no cuenta las canceladas: ahora dicen que lo acota solo el límite por IP;
+    - faltaba probar con el handler real que un negocio sin servicios no ofrece convertir la cotización, y la forma exacta del aviso en el hub;
+    - en Mi perfil un aviso desaparecía con cualquier error: ahora solo si el servidor lo rechaza (403 o 404), otro error ofrece reintentar, y el que carga se marca ocupado;
+    - los módulos de las cotizaciones quedaron en una sola constante.
+  - **Escenas:** contra la línea base de `master` en `4e4926b` (805 escenas, con el Chromium del contenedor en `VISUAL_CHROMIUM`):
+    - **801 iguales.**
+    - **4 cambian**, solo por la tarjeta «Avisos por correo» de Mi perfil: perfil en escritorio, teléfono y oscuro (`caja-config.spec.ts`), y «perfil con los avisos de la Agenda apagados y el correo sin confirmar» (`avisos-solicitudes.spec.ts`, que en `master` no corre porque ahí no existe la tarjeta). Las cuatro dieron la misma imagen en dos corridas seguidas contra el mismo build.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
