@@ -18,9 +18,21 @@ function writeFlag(key: string, enabled: boolean) {
   }
 }
 
+/** The window event that tells every chime of the page that one with its key was turned on or off. */
+const CHIME_CHANGED = 'tienditapp:chime-changed';
+
+interface ChimeChange {
+  key: string;
+  enabled: boolean;
+}
+
+/** A sound that something arrived (two notes up) or left (two notes down: a cancellation, Fase 29P). */
+export type ChimeKind = 'arrival' | 'leaving';
+
 /**
  * A short two-note chime for new orders, per device (a kitchen screen wants it, the owner's phone may not).
- * Browsers only play sound after someone touches the page, so the audio unlocks on the first touch.
+ * Browsers only play sound after someone touches the page, so the audio unlocks on the first touch. Every chime of the page
+ * with the same key follows the one that was turned on or off (the agenda turns on the one of the top bar, Fase 29P).
  */
 export function useArrivalChime(storageKey: string) {
   const [enabled, setEnabled] = useState(() => readFlag(storageKey));
@@ -35,6 +47,18 @@ export function useArrivalChime(storageKey: string) {
   }, []);
 
   useEffect(() => {
+    const listener = (event: Event) => {
+      const change = (event as CustomEvent<ChimeChange>).detail;
+      if (change?.key !== storageKey) return;
+      setEnabled(change.enabled);
+      // Still inside the touch that turned it on: the browser lets this one play too.
+      if (change.enabled) unlock();
+    };
+    window.addEventListener(CHIME_CHANGED, listener);
+    return () => window.removeEventListener(CHIME_CHANGED, listener);
+  }, [storageKey, unlock]);
+
+  useEffect(() => {
     if (!enabled || unlocked) return undefined;
     window.addEventListener('pointerdown', unlock, { once: true });
     return () => window.removeEventListener('pointerdown', unlock);
@@ -43,20 +67,19 @@ export function useArrivalChime(storageKey: string) {
   useEffect(() => () => void contextRef.current?.close().catch(() => undefined), []);
 
   const toggle = useCallback(() => {
-    setEnabled((current) => {
-      const next = !current;
-      writeFlag(storageKey, next);
-      return next;
-    });
+    const next = !enabled;
+    setEnabled(next);
+    writeFlag(storageKey, next);
+    window.dispatchEvent(new CustomEvent<ChimeChange>(CHIME_CHANGED, { detail: { key: storageKey, enabled: next } }));
     // The click on the toggle is the touch the browser asks for.
     unlock();
-  }, [storageKey, unlock]);
+  }, [enabled, storageKey, unlock]);
 
-  const play = useCallback(() => {
+  const play = useCallback((kind: ChimeKind = 'arrival') => {
     const context = contextRef.current;
     if (!enabled || !context || context.state !== 'running') return;
     const start = context.currentTime;
-    [880, 1175].forEach((frequency, index) => {
+    (kind === 'arrival' ? [880, 1175] : [1175, 880]).forEach((frequency, index) => {
       const at = start + index * 0.18;
       const oscillator = context.createOscillator();
       const gain = context.createGain();

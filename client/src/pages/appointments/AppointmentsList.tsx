@@ -2,7 +2,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Modal } from 'react-bootstrap';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useOnAppointmentRequestsChanged } from '../../hooks/useAppointmentRequests';
+import { APPOINTMENTS_SOUND_KEY, useOnAppointmentRequestsChanged } from '../../hooks/useAppointmentRequests';
+import { useArrivalChime } from '../../hooks/useArrivalChime';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import VisitProblem from '../../components/appointments/VisitProblem';
@@ -177,6 +178,8 @@ export default function AppointmentsList() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('upcoming');
   const [statusFilter, setStatusFilter] = useState(linkedState === REQUESTS_LINK ? REQUESTED_FILTER : '');
+  // Fase 29P: the sound of each request or cancellation of a customer, on this device; the top bar plays it.
+  const chime = useArrivalChime(APPOINTMENTS_SOUND_KEY);
   const [placeFilter, setPlaceFilter] = useState<PlaceFilter>('');
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -565,6 +568,10 @@ export default function AppointmentsList() {
 
       <div className="card">
         <div className="card-body">
+          {view === 'upcoming' && statusFilter === REQUESTED_FILTER && (
+            // Fase 29P: the server reads them by when each is answered in time.
+            <p className="text-muted small mb-2">Primero las que hay que responder antes; al final, las de tu equipo.</p>
+          )}
           {view === 'route' ? (
             <>
               <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
@@ -624,9 +631,21 @@ export default function AppointmentsList() {
               </>
             )}
             toolbarEnd={(
-              <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
-                <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cita
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-light btn-sm"
+                  onClick={chime.toggle}
+                  aria-pressed={chime.enabled}
+                  title="Suena en este dispositivo cuando un cliente pide o cancela una cita en línea"
+                >
+                  <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
+                  {chime.enabled ? 'Sonido activado' : 'Sonido para solicitudes en línea'}
+                </button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
+                  <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cita
+                </button>
+              </>
             )}
             serverSide={{
               totalCount: data.totalCount,

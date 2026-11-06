@@ -279,6 +279,36 @@ public class OnlineBookingFlowTests
     }
 
     [Fact]
+    public async Task Phone_ShouldNotAskAndCancelOverAndOver_ForTheCancellationsOfTheLastDayCountToo()
+    {
+        // Fase 29P (ADR 0070): each request and each cancellation tells the business.
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture, capacity: 5);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        foreach (var time in new[] { "09:00", "10:00" })
+        {
+            Assert.True((await RequestAsync(fixture, haircut.Id, Local(Monday, time))).IsSuccess);
+            await CancelLastAsync(fixture);
+        }
+        // Two cancelled and one waiting: a fourth is refused, and says why.
+        Assert.True((await RequestAsync(fixture, haircut.Id, Local(Monday, "11:00"))).IsSuccess);
+        var fourth = await RequestAsync(fixture, haircut.Id, Local(Monday, "12:00"));
+        // Another phone is not held back by them.
+        var otherPhone = await RequestAsync(fixture, haircut.Id, Local(Monday, "12:00"), phone: "5511112222");
+
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyCancelledMessage, fourth.Error);
+        Assert.True(otherPhone.IsSuccess, otherPhone.Error);
+
+        // A day after they were cancelled they no longer count: with the one still waiting, one more fits.
+        fixture.Clock.UtcNow = SalesTestFixture.Now + OnlineBookingRules.CancelledCountFor - TimeSpan.FromHours(2);
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyCancelledMessage,
+            (await RequestAsync(fixture, haircut.Id, Local(Monday, "13:00"))).Error);
+        fixture.Clock.UtcNow = SalesTestFixture.Now + OnlineBookingRules.CancelledCountFor + TimeSpan.FromMinutes(1);
+        var later = await RequestAsync(fixture, haircut.Id, Local(Monday, "13:00"));
+        Assert.True(later.IsSuccess, later.Error);
+    }
+
+    [Fact]
     public async Task Accept_ShouldScheduleTheRequest_AndDecline_ShouldFreeItsTime_EachTellingTheCustomer()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -592,6 +622,14 @@ public class OnlineBookingFlowTests
                 Notes = notes,
                 IdempotencyKey = key
             }, CancellationToken.None);
+
+    /// <summary>Its customer cancels the request made last, now (as from its link).</summary>
+    private static async Task CancelLastAsync(SalesTestFixture fixture)
+    {
+        var last = await fixture.Context.Appointments.OrderByDescending(a => a.StartAt).FirstAsync();
+        last.CancelByCustomer(fixture.Clock.UtcNow);
+        await fixture.Context.SaveChangesAsync();
+    }
 
     private static Task<Result<CustomerAppointmentDto>> CancelMineAsync(SalesTestFixture fixture, Guid appointmentId)
         => new CancelMyAppointmentCommandHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService, fixture.Clock)

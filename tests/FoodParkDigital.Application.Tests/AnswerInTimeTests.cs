@@ -52,6 +52,31 @@ public class AnswerInTimeTests
     }
 
     [Fact]
+    public async Task TheRequestsToConfirm_ShouldReadByWhenEachRunsOut_AndThoseOfTheTeamLastByTheirTime()
+    {
+        // Fase 29P (ADR 0070): «Por confirmar» in the agenda opens with the one to answer first.
+        await using var fixture = Fixture();
+        var salon = await SalonAsync(fixture, "orden", "Estética Orden");
+        var nextWeek = await RequestAsync(fixture, salon, Now.AddHours(-1), Now.AddDays(5));
+        var thisAfternoon = await RequestAsync(fixture, salon, Now.AddHours(-2), Now.AddHours(5));
+        var late = await RequestAsync(fixture, salon, Now.AddDays(-2), Now.AddDays(6));
+        var teamTomorrow = await RequestAsync(fixture, salon, Now.AddDays(-3), Now.AddHours(20), fromTeam: true);
+        var teamThisAfternoon = await RequestAsync(fixture, salon, Now.AddHours(-1), Now.AddHours(2), fromTeam: true);
+        var accepted = await RequestAsync(fixture, salon, Now.AddHours(-2), Now.AddHours(1));
+        accepted.Accept(Now.AddHours(-1));
+        await fixture.Context.SaveChangesAsync();
+        var handler = new GetAppointmentsQueryHandler(fixture.Context);
+
+        var requests = await handler.Handle(
+            new GetAppointmentsQuery { Status = Domain.Appointments.Enums.AppointmentStatus.Requested, PageSize = 50 }, CancellationToken.None);
+        var all = await handler.Handle(new GetAppointmentsQuery { PageSize = 50 }, CancellationToken.None);
+
+        Assert.Equal([late.Id, thisAfternoon.Id, nextWeek.Id, teamThisAfternoon.Id, teamTomorrow.Id], requests.Items.Select(a => a.Id));
+        // The rest of the agenda still reads by time.
+        Assert.Equal([accepted.Id, teamThisAfternoon.Id, thisAfternoon.Id, teamTomorrow.Id, nextWeek.Id, late.Id], all.Items.Select(a => a.Id));
+    }
+
+    [Fact]
     public async Task TheBell_ShouldCountAsUrgent_TheRequestsForToday_ToAnswerTodayToBeInTime_OrAlreadyLate()
     {
         // 11:00 in Mexico City: its day ends a tick before 06:00 UTC tomorrow.

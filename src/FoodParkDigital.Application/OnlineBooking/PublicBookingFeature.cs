@@ -390,6 +390,7 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
     public const string TimeTakenMessage = "Esa hora ya no está libre. Elige otra.";
     public const string TooFarMessage = "Esa fecha todavía no se puede agendar.";
     public const string TooManyPendingMessage = "Ya tienes citas esperando confirmación. Espera a que el negocio las confirme.";
+    public const string TooManyCancelledMessage = "Cancelaste varias citas en las últimas 24 horas desde este teléfono. Espera un poco para pedir otra.";
     public const string AlreadySentMessage = "Esa solicitud ya se envió.";
     public const string AlreadyCancelledMessage = "Esa solicitud ya se envió y la cita se canceló.";
     public const string StaffGoneMessage = "Esa persona ya no agenda ese servicio en línea. Elige otra.";
@@ -446,8 +447,8 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         var tenantId = business.Tenant.Id;
         var now = _clock.UtcNow;
         // Until the business decides them, a phone cannot keep piling up requests.
-        if (await PublicAppointmentReceipts.PendingForPhoneAsync(_context, phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
-            return Result.Failure<PublicAppointmentReceiptDto>(TooManyPendingMessage);
+        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, now, cancellationToken) is { } refused)
+            return Result.Failure<PublicAppointmentReceiptDto>(refused);
 
         var settings = business.Settings;
         var zone = TenantDateTimeResolver.Resolve(settings.TimeZone);
@@ -469,8 +470,8 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
         await _bookingLock.AcquireAsync(tenantId, cancellationToken);
         if (request.IdempotencyKey is { } lockedKey && await RequestedAsync(lockedKey, phone, business, account, cancellationToken) is { } answered)
             return answered;
-        if (await PublicAppointmentReceipts.PendingForPhoneAsync(_context, phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
-            return Result.Failure<PublicAppointmentReceiptDto>(TooManyPendingMessage);
+        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, now, cancellationToken) is { } refusedNow)
+            return Result.Failure<PublicAppointmentReceiptDto>(refusedNow);
         var hours = await BusinessHours.ReadAsync(_context, tenantId, settings.OpeningHours, settings.TimeZone, now, cancellationToken);
         var endAt = startAt + service.Duration;
         var earliest = now.AddMinutes(OnlineBookingRules.MinNoticeMinutes);
@@ -564,6 +565,28 @@ internal static class PublicAppointmentReceipts
             && a.CustomerPhone == phone
             && a.Status == AppointmentStatus.Requested
             && a.StartAt > now, cancellationToken);
+
+    /// <summary>
+    /// Why a phone may not make one more request in the business, or null when it may: it already has
+    /// <see cref="OnlineBookingRules.MaxPendingPerPhone"/> waiting for an answer or, since the Fase 29P (ADR 0070), that many
+    /// counting those its customer cancelled in the last <see cref="OnlineBookingRules.CancelledCountFor"/>. Each request and
+    /// each cancellation tells the business by email: asking and cancelling over and over is capped like asking.
+    /// </summary>
+    public static async Task<string?> RefusalForPhoneAsync(
+        IApplicationDbContext context, string phone, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var waiting = await PendingForPhoneAsync(context, phone, now, cancellationToken);
+        if (waiting >= OnlineBookingRules.MaxPendingPerPhone)
+            return RequestPublicAppointmentCommandHandler.TooManyPendingMessage;
+
+        var since = now - OnlineBookingRules.CancelledCountFor;
+        var cancelled = await context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online
+            && a.CustomerPhone == phone
+            && a.CancelledByCustomerAt >= since, cancellationToken);
+        return waiting + cancelled >= OnlineBookingRules.MaxPendingPerPhone
+            ? RequestPublicAppointmentCommandHandler.TooManyCancelledMessage
+            : null;
+    }
 
     /// <summary>
     /// What the customer reads once the request is stored: at the business, its main branch; at the customer's address

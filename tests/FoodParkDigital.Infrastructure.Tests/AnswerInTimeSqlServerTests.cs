@@ -95,6 +95,41 @@ public class AnswerInTimeSqlServerTests
         }
     }
 
+    [SqlServerFact]
+    public async Task TheRequestsToConfirm_ShouldReadByWhenEachRunsOut_AndThoseOfTheTeamLastByTheirTime()
+    {
+        // Fase 29P (ADR 0070).
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var tenantId = await SeedTenantAsync(database);
+        Guid nextWeek, thisAfternoon, late, teamTomorrow, teamThisAfternoon, accepted;
+        await using (var context = database.CreateContext(tenantId))
+        {
+            // By tomorrow at 10:00; by this afternoon; already late.
+            nextWeek = Request(context, tenantId, Now.AddHours(-1), Now.AddDays(5)).Id;
+            thisAfternoon = Request(context, tenantId, Now.AddHours(-2), Now.AddHours(5)).Id;
+            late = Request(context, tenantId, Now.AddDays(-2), Now.AddDays(6)).Id;
+            // Of the team, with no limit: by their time, after the rest.
+            teamTomorrow = Request(context, tenantId, Now.AddDays(-3), Now.AddHours(20), fromTeam: true).Id;
+            teamThisAfternoon = Request(context, tenantId, Now.AddHours(-1), Now.AddHours(2), fromTeam: true).Id;
+            var answered = Request(context, tenantId, Now.AddHours(-2), Now.AddHours(1));
+            answered.Accept(Now.AddHours(-1));
+            accepted = answered.Id;
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = database.CreateContext(tenantId))
+        {
+            var handler = new GetAppointmentsQueryHandler(context);
+            var requests = await handler.Handle(
+                new GetAppointmentsQuery { Status = Domain.Appointments.Enums.AppointmentStatus.Requested, PageSize = 50 }, CancellationToken.None);
+            var all = await handler.Handle(new GetAppointmentsQuery { PageSize = 50 }, CancellationToken.None);
+
+            Assert.Equal([late, thisAfternoon, nextWeek, teamThisAfternoon, teamTomorrow], requests.Items.Select(a => a.Id));
+            // The rest of the agenda still reads by time.
+            Assert.Equal([accepted, teamThisAfternoon, thisAfternoon, teamTomorrow, nextWeek, late], all.Items.Select(a => a.Id));
+        }
+    }
+
     /// <summary>A request online that arrived <paramref name="arrivedAt"/> for <paramref name="startAt"/>, still waiting.</summary>
     private static Appointment Request(
         DbContext context, Guid tenantId, DateTimeOffset arrivedAt, DateTimeOffset startAt, bool fromTeam = false)

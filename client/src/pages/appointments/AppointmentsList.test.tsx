@@ -508,6 +508,35 @@ describe('AppointmentsList', () => {
     expect(screen.getByRole('combobox', { name: 'Estado' })).toHaveValue(String(AppointmentStatus.Requested));
   });
 
+  it('says the requests read by when each is answered, only on them (Fase 29P)', async () => {
+    const user = userEvent.setup();
+    renderAgenda([AT_HOME], { requests: 1 });
+    const note = 'Primero las que hay que responder antes; al final, las de tu equipo.';
+
+    await screen.findByText(/Tienes 1 solicitud de cita por confirmar/);
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ver solicitudes' }));
+
+    expect(await screen.findByText(note)).toBeInTheDocument();
+  });
+
+  it('turns the sound of the requests on and off on this device (Fase 29P)', async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem('tienditapp:appointments-sound');
+    renderAgenda([AT_HOME]);
+
+    const sound = await screen.findByRole('button', { name: 'Sonido para solicitudes en línea' });
+    expect(sound).toHaveAttribute('aria-pressed', 'false');
+    await user.click(sound);
+
+    expect(screen.getByRole('button', { name: 'Sonido activado' })).toHaveAttribute('aria-pressed', 'true');
+    expect(window.localStorage.getItem('tienditapp:appointments-sound')).toBe('on');
+    // The one action of the screen is still «Nueva cita».
+    expect(screen.getByRole('button', { name: 'Nueva cita' })).toHaveClass('btn-primary');
+    expect(screen.getByRole('button', { name: 'Sonido activado' })).not.toHaveClass('btn-primary');
+    window.localStorage.removeItem('tienditapp:appointments-sound');
+  });
+
   it('says when the customer cancelled the appointment', async () => {
     renderAgenda([appointment({ status: AppointmentStatus.Cancelled, channel: AppointmentChannel.Online, cancelledByCustomer: true })]);
 
