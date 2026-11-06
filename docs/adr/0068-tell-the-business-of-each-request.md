@@ -51,7 +51,7 @@ Tomé las decisiones de la Fase 29N con la autorización permanente del dueño d
 5. **Fuera de esta fase:**
    - **Avisar al dueño por WhatsApp:** necesita una plantilla aprobada por Meta y cuesta cada conversación. Lo decide el dueño del producto.
    - **Las notificaciones del navegador o del teléfono** (Web Push): necesitan llaves de la plataforma y que cada persona dé permiso.
-   - **Un sonido con cada solicitud**, como el de los pedidos por confirmar.
+   - **Un sonido con cada solicitud**, como el de los pedidos por confirmar. Llegó en la Fase 29P ([ADR 0070](0070-cancellations-cap-agenda-order-and-sound.md)), también con cada cancelación.
    - **Recordar una solicitud antes de su límite.**
    - **Avisar otras cosas por correo:** que el cliente canceló, o la respuesta a una cotización. Llegó en la Fase 29O ([ADR 0069](0069-tell-the-business-what-customers-answer.md)): la cita cancelada también avisa en la app.
    - **Que el dueño elija por su equipo.**

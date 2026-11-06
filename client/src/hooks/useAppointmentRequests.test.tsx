@@ -22,6 +22,14 @@ const hub = vi.hoisted(() => ({
   urls: [] as string[],
 }));
 
+const chime = vi.hoisted(() => ({ play: vi.fn(), key: '' }));
+vi.mock('./useArrivalChime', () => ({
+  useArrivalChime: (key: string) => {
+    chime.key = key;
+    return { enabled: true, toggle: vi.fn(), play: chime.play, needsTouch: false };
+  },
+}));
+
 vi.mock('../api/signalr', () => ({
   createHubConnection: (url: string) => {
     hub.urls.push(url);
@@ -67,6 +75,7 @@ describe('the requests online, live (Fase 29N)', () => {
     hub.onConnected = undefined;
     hub.urls = [];
     hub.stop.mockReset();
+    chime.play.mockReset();
     queryClient = new QueryClient();
     changes = 0;
     window.addEventListener(APPOINTMENT_REQUESTS_CHANGED, countChange);
@@ -158,6 +167,19 @@ describe('the requests online, live (Fase 29N)', () => {
 
     expect(screen.queryByText(/cancelada/)).not.toBeInTheDocument();
     expect(changes).toBe(1);
+  });
+
+  it('rings with each request or cancellation of a customer, never with those of the team (Fase 29P)', async () => {
+    renderLive();
+    await connected();
+
+    act(() => hub.handlers.get('AppointmentRequested')?.(request()));
+    act(() => hub.handlers.get('AppointmentCancelled')?.(cancellation()));
+    act(() => hub.handlers.get('AppointmentRequested')?.(request({ fromTeam: true })));
+    act(() => hub.handlers.get('AppointmentCancelled')?.(cancellation({ fromTeam: true })));
+
+    expect(chime.key).toBe('tienditapp:appointments-sound');
+    expect(chime.play.mock.calls).toEqual([['arrival'], ['leaving']]);
   });
 
   it('names a cancelled request and a cancelled visit as such (Fase 29O)', () => {

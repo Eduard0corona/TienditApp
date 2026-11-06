@@ -95,15 +95,119 @@ public class AnswerInTimeSqlServerTests
         }
     }
 
+    [SqlServerFact]
+    public async Task TheRequestsToConfirm_ShouldReadByWhenEachRunsOut_AndThoseOfTheTeamLastByTheirTime()
+    {
+        // Fase 29P (ADR 0070).
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var tenantId = await SeedTenantAsync(database);
+        Guid nextWeek, thisAfternoon, late, yesterday, inThreeHours, teamTomorrow, teamThisAfternoon, accepted;
+        await using (var context = database.CreateContext(tenantId))
+        {
+            // By tomorrow at 10:00; by this afternoon; already late.
+            nextWeek = Request(context, tenantId, Now.AddHours(-1), Now.AddDays(5)).Id;
+            thisAfternoon = Request(context, tenantId, Now.AddHours(-2), Now.AddHours(5)).Id;
+            late = Request(context, tenantId, Now.AddDays(-2), Now.AddDays(6)).Id;
+            // Arrived after the one of yesterday, but runs out before it: in three hours, against a day after it arrived, in four.
+            yesterday = Request(context, tenantId, Now.AddHours(-20), Now.AddDays(4)).Id;
+            inThreeHours = Request(context, tenantId, Now.AddMinutes(-30), Now.AddHours(3)).Id;
+            // Of the team, with no limit: by their time, after the rest.
+            teamTomorrow = Request(context, tenantId, Now.AddDays(-3), Now.AddHours(20), fromTeam: true).Id;
+            teamThisAfternoon = Request(context, tenantId, Now.AddHours(-1), Now.AddHours(2), fromTeam: true).Id;
+            var answered = Request(context, tenantId, Now.AddHours(-2), Now.AddHours(1));
+            answered.Accept(Now.AddHours(-1));
+            accepted = answered.Id;
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = database.CreateContext(tenantId))
+        {
+            var handler = new GetAppointmentsQueryHandler(context);
+            var requests = await handler.Handle(
+                new GetAppointmentsQuery { Status = Domain.Appointments.Enums.AppointmentStatus.Requested, PageSize = 50 }, CancellationToken.None);
+            var all = await handler.Handle(new GetAppointmentsQuery { PageSize = 50 }, CancellationToken.None);
+
+            // Not by when each arrived (late, yesterday, thisAfternoon, nextWeek, inThreeHours), nor by its time.
+            Assert.Equal(
+                [late, inThreeHours, yesterday, thisAfternoon, nextWeek, teamThisAfternoon, teamTomorrow],
+                requests.Items.Select(a => a.Id));
+            // The rest of the agenda still reads by time.
+            Assert.Equal(
+                [accepted, teamThisAfternoon, inThreeHours, thisAfternoon, teamTomorrow, yesterday, nextWeek, late],
+                all.Items.Select(a => a.Id));
+        }
+    }
+
+    [SqlServerFact]
+    public async Task TheAgenda_ShouldBreakTiesByTimeAndThenById_SoThatAPageNeverRepeatsOrSkipsOne()
+    {
+        // Fase 29P (ADR 0070). Each list is added in the reverse of the order it should read in.
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var tenantId = await SeedTenantAsync(database);
+        await using (var context = database.CreateContext(tenantId))
+        {
+            // Arrived together for after tomorrow, with the same limit (a day after arriving): by their time, not their id.
+            Request(context, tenantId, Now.AddHours(-1), Now.AddDays(3).AddHours(2), id: TiedId(1));
+            Request(context, tenantId, Now.AddHours(-1), Now.AddDays(3), id: TiedId(2));
+            // Three at the same time tomorrow and three at the same time yesterday: by their id.
+            foreach (var n in new[] { 6, 5, 4 })
+                context.Add(WithId(new Appointment(tenantId, "Valeria", "5522107765", "Corte", Now.AddDays(1), Now.AddDays(1).AddHours(1)), TiedId(n)));
+            foreach (var n in new[] { 9, 8, 7 })
+                context.Add(WithId(new Appointment(tenantId, "Valeria", "5522107765", "Corte", Now.AddDays(-1), Now.AddDays(-1).AddHours(1)), TiedId(n)));
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = database.CreateContext(tenantId))
+        {
+            var handler = new GetAppointmentsQueryHandler(context);
+            var requests = await handler.Handle(
+                new GetAppointmentsQuery { Status = Domain.Appointments.Enums.AppointmentStatus.Requested, FromDate = Now, PageSize = 50 },
+                CancellationToken.None);
+
+            Assert.Equal([TiedId(2), TiedId(1)], requests.Items.Select(a => a.Id));
+            // One per page: each once, by id, in the agenda and in the past.
+            Assert.Equal([TiedId(4), TiedId(5), TiedId(6)],
+                await OnePerPageAsync(handler, new GetAppointmentsQuery { FromDate = Now.AddHours(12), ToDate = Now.AddDays(2) }));
+            Assert.Equal([TiedId(7), TiedId(8), TiedId(9)], await OnePerPageAsync(handler, new GetAppointmentsQuery { ToDate = Now }));
+        }
+    }
+
+    /// <summary>
+    /// An id that reads in the same place by <paramref name="n"/> in .NET and in SQL Server: they differ only in their last bytes,
+    /// the ones SQL Server compares first.
+    /// </summary>
+    private static Guid TiedId(int n) => new($"00000000-0000-0000-0000-{n:D12}");
+
+    private static Appointment WithId(Appointment appointment, Guid id)
+    {
+        typeof(Domain.Common.BaseEntity).GetProperty(nameof(Domain.Common.BaseEntity.Id))!.SetValue(appointment, id);
+        return appointment;
+    }
+
+    /// <summary>Reads <paramref name="query"/> one appointment per page, to its end.</summary>
+    private static async Task<List<Guid>> OnePerPageAsync(GetAppointmentsQueryHandler handler, GetAppointmentsQuery query)
+    {
+        var ids = new List<Guid>();
+        for (var page = 1; ; page++)
+        {
+            var read = await handler.Handle(query with { PageNumber = page, PageSize = 1 }, CancellationToken.None);
+            if (read.Items.Count == 0)
+                return ids;
+            ids.AddRange(read.Items.Select(a => a.Id));
+        }
+    }
+
     /// <summary>A request online that arrived <paramref name="arrivedAt"/> for <paramref name="startAt"/>, still waiting.</summary>
     private static Appointment Request(
-        DbContext context, Guid tenantId, DateTimeOffset arrivedAt, DateTimeOffset startAt, bool fromTeam = false)
+        DbContext context, Guid tenantId, DateTimeOffset arrivedAt, DateTimeOffset startAt, bool fromTeam = false, Guid? id = null)
     {
         var request = Appointment.RequestOnline(
             tenantId, "Valeria", "+525522107765", Guid.NewGuid(), "Corte", startAt, startAt.AddHours(1), null, null, Guid.NewGuid(),
             (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43], fromTeam: fromTeam);
         // This context has no audit interceptor: stamp when it arrived, as production does.
         request.CreatedAt = arrivedAt;
+        if (id is { } chosen)
+            WithId(request, chosen);
         context.Add(request);
         return request;
     }

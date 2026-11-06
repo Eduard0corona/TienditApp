@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../api/queries';
 import { formatInBusinessZone } from '../utils/dates';
+import { useArrivalChime } from './useArrivalChime';
 import { useToast } from './useToast';
 
 /** A request online that arrived (Fase 29N): what was asked for and when, never who asked. */
@@ -27,6 +28,12 @@ export interface AppointmentCancelledPayload {
   /** It still waited for the business's answer. */
   wasRequest: boolean;
 }
+
+/**
+ * Fase 29P: the device's choice of a sound with each request or cancellation of a customer. The agenda turns it on or off;
+ * the top bar plays it on any screen.
+ */
+export const APPOINTMENTS_SOUND_KEY = 'tienditapp:appointments-sound';
 
 /** The window event the agenda listens to: a request arrived, or the live connection came back and may have missed one. */
 export const APPOINTMENT_REQUESTS_CHANGED = 'tienditapp:appointment-requests-changed';
@@ -62,8 +69,8 @@ export function describeCancellation(payload: AppointmentCancelledPayload): { ti
 /**
  * The live requests online of the business, for whoever answers them (the top bar mounts it): the bell reads them at once,
  * the agenda reloads, and a notice tells each one that came from a customer. Since the Fase 29O, so do the appointments its
- * customers cancel. Events sent while the connection was down are lost: every (re)connection reads again, and the bell
- * still reads every minute.
+ * customers cancel, and since the Fase 29P each one rings when the device has the sound on. Events sent while the
+ * connection was down are lost: every (re)connection reads again, and the bell still reads every minute.
  */
 export function useAppointmentRequestsLive(enabled: boolean, tenantId?: string) {
   const queryClient = useQueryClient();
@@ -72,6 +79,12 @@ export function useAppointmentRequestsLive(enabled: boolean, tenantId?: string) 
   useEffect(() => {
     toastRef.current = toast;
   }, [toast]);
+  // Fase 29P: rings on this device when the agenda turned the sound on (never for the team's own).
+  const chime = useArrivalChime(APPOINTMENTS_SOUND_KEY);
+  const playRef = useRef(chime.play);
+  useEffect(() => {
+    playRef.current = chime.play;
+  }, [chime.play]);
 
   useEffect(() => {
     // Switching business reloads the page; the business is a key all the same, so a connection never outlives its own.
@@ -91,12 +104,14 @@ export function useAppointmentRequestsLive(enabled: boolean, tenantId?: string) 
         if (payload.fromTeam) return;
         const { title, message } = describeRequest(payload);
         toastRef.current.info(message, { title, durationMs: 10_000 });
+        playRef.current('arrival');
       });
       connection.on('AppointmentCancelled', (payload: AppointmentCancelledPayload) => {
         changed();
         if (payload.fromTeam) return;
         const { title, message } = describeCancellation(payload);
         toastRef.current.warning(message, { title, durationMs: 10_000 });
+        playRef.current('leaving');
       });
       stop = keepHubConnected(connection, 'AppointmentHub', () => isDisposed, changed);
     }).catch(() => {

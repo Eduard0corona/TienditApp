@@ -18,8 +18,17 @@ public static class OnlineBookingRules
     /// <summary>Days of times one request reads: a week.</summary>
     public const int DaysPerRequest = 7;
 
-    /// <summary>Requests a phone may leave waiting for the business to accept them (spam guard), like online orders.</summary>
+    /// <summary>
+    /// Requests a phone may leave waiting for the business to accept them (spam guard), like online orders. Since the Fase
+    /// 29P (ADR 0070), the appointments its customer cancelled in the last <see cref="CancelledCountFor"/> count too.
+    /// </summary>
     public const int MaxPendingPerPhone = 3;
+
+    /// <summary>
+    /// How long an appointment its customer cancelled still counts toward <see cref="MaxPendingPerPhone"/> (Fase 29P, ADR
+    /// 0070): each request and each cancellation tells the business, so asking and cancelling over and over is capped too.
+    /// </summary>
+    public static readonly TimeSpan CancelledCountFor = TimeSpan.FromDays(1);
 
     /// <summary>A service without its duration takes an hour, as in the agenda.</summary>
     public const int DefaultServiceMinutes = 60;

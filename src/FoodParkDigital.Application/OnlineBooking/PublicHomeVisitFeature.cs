@@ -384,8 +384,8 @@ public class RequestPublicHomeVisitCommandHandler : IRequestHandler<RequestPubli
 
         var now = _clock.UtcNow;
         // Until the business decides them, a phone cannot keep piling up requests: visits and appointments count alike.
-        if (await PublicAppointmentReceipts.PendingForPhoneAsync(_context, phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
-            return Result.Failure<PublicAppointmentReceiptDto>(RequestPublicAppointmentCommandHandler.TooManyPendingMessage);
+        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, now, cancellationToken) is { } refused)
+            return Result.Failure<PublicAppointmentReceiptDto>(refused);
 
         var visit = await business.VisitAsync(_context, cancellationToken);
         // The customer agreed to what the page said: a visit charged otherwise since is asked again, never stored.
@@ -410,8 +410,8 @@ public class RequestPublicHomeVisitCommandHandler : IRequestHandler<RequestPubli
         await _bookingLock.AcquireAsync(tenant.Id, cancellationToken);
         if (request.IdempotencyKey is { } lockedKey && await RequestedAsync(lockedKey, phone, business, account, cancellationToken) is { } answered)
             return answered;
-        if (await PublicAppointmentReceipts.PendingForPhoneAsync(_context, phone, now, cancellationToken) >= OnlineBookingRules.MaxPendingPerPhone)
-            return Result.Failure<PublicAppointmentReceiptDto>(RequestPublicAppointmentCommandHandler.TooManyPendingMessage);
+        if (await PublicAppointmentReceipts.RefusalForPhoneAsync(_context, phone, now, cancellationToken) is { } refusedNow)
+            return Result.Failure<PublicAppointmentReceiptDto>(refusedNow);
         var hours = await BusinessHours.ReadAsync(_context, tenant.Id, settings.OpeningHours, settings.TimeZone, now, cancellationToken);
         var endAt = startAt + visit.Duration;
         var earliest = now.AddMinutes(OnlineBookingRules.MinNoticeMinutes);

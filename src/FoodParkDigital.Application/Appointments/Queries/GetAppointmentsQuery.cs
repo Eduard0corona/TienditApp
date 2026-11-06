@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,9 @@ public record GetAppointmentsQuery : IRequest<PaginatedList<AppointmentDto>>
 
 public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery, PaginatedList<AppointmentDto>>
 {
+    /// <summary>A day: the longest a request waits and is still answered in time (<see cref="ResponseTimes.AnswerBy"/>).</summary>
+    private static readonly int AnswerByHours = ResponseTimes.LimitHours[^1];
+
     private readonly IApplicationDbContext _context;
 
     public GetAppointmentsQueryHandler(IApplicationDbContext context)
@@ -58,9 +62,25 @@ public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery,
         }
 
         // The past (only an end date) reads from the newest back; anything else from the soonest on, so the
-        // agenda of the day opens with today.
+        // agenda of the day opens with today. The requests to confirm read by when each is answered in time (Fase 29P,
+        // ADR 0070): the one that runs out first goes first, and those of the team, which have no limit, go after by their
+        // time.
         var history = !request.FromDate.HasValue && request.ToDate.HasValue;
-        var ordered = history ? query.OrderByDescending(x => x.StartAt) : query.OrderBy(x => x.StartAt);
+        // Ties (two appointments at the same time) break by id, so a page never repeats or skips one.
+        var ordered = history
+            ? query.OrderByDescending(x => x.StartAt).ThenBy(x => x.Id)
+            : request.Status == AppointmentStatus.Requested
+                ? query
+                    .OrderBy(x => x.FromTeam)
+                    .ThenBy(x => x.FromTeam
+                        ? x.StartAt
+                        // ResponseTimes.AnswerBy, written for SQL, like the projection.
+                        : (x.RequestedStartAt ?? x.StartAt) < x.CreatedAt.AddHours(AnswerByHours)
+                            ? x.RequestedStartAt ?? x.StartAt
+                            : x.CreatedAt.AddHours(AnswerByHours))
+                    .ThenBy(x => x.StartAt)
+                    .ThenBy(x => x.Id)
+                : query.OrderBy(x => x.StartAt).ThenBy(x => x.Id);
         var projected = ordered
             .Select(AppointmentDto.Projection);
 
