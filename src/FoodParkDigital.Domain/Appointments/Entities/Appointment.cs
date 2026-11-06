@@ -379,7 +379,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
 
     /// <summary>
     /// Its customer cancels an appointment booked online, from the account or the link, before it starts: requested,
-    /// agendada or confirmed. Once in service, or closed, only the business changes it.
+    /// agendada or confirmed. Once in service, or closed, only the business changes it. The business hears of it (Fase 29O,
+    /// ADR 0069): <see cref="AppointmentCancelledByCustomerEvent"/>.
     /// </summary>
     public void CancelByCustomer(DateTimeOffset now)
     {
@@ -391,8 +392,10 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             || StartAt <= now)
             throw new DomainException(OnlineBookingRules.CustomerCancelStartedMessage);
 
+        var wasRequest = Status == AppointmentStatus.Requested;
         Status = AppointmentStatus.Cancelled;
         CancelledByCustomerAt = now;
+        AddDomainEvent(new AppointmentCancelledByCustomerEvent(Id, TenantId, IsHomeVisit, FromTeam, wasRequest));
     }
 
     /// <summary>
