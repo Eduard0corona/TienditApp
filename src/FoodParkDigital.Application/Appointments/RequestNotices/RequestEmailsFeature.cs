@@ -1,14 +1,17 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Notices;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Appointments.RequestNotices;
 
-/// <summary>Whether the person gets an email with each request online of the business they are in (Fase 29N, ADR 0068).</summary>
+/// <summary>
+/// Whether the person gets the agenda's emails of the business they are in: one with each request online (Fase 29N, ADR 0068)
+/// and, since the Fase 29O (ADR 0069), one with each appointment its customer cancels.
+/// </summary>
 public class RequestEmailsDto
 {
     /// <summary>They get them: as they chose or, until they choose, because they own the business.</summary>
@@ -35,7 +38,7 @@ public class RequestEmailsHandler :
     IRequestHandler<GetRequestEmailsQuery, Result<RequestEmailsDto>>,
     IRequestHandler<UpdateRequestEmailsCommand, Result<RequestEmailsDto>>
 {
-    public const string NotAMemberMessage = "Estos avisos son para el equipo del negocio.";
+    public const string NotAMemberMessage = NoticeEmailPreferences.NotAMemberMessage;
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -50,7 +53,7 @@ public class RequestEmailsHandler :
 
     public async Task<Result<RequestEmailsDto>> Handle(GetRequestEmailsQuery request, CancellationToken cancellationToken)
     {
-        var member = await MemberAsync(tracked: false, cancellationToken);
+        var member = await NoticeEmailPreferences.MemberAsync(_context, _tenantService, _currentUser, tracked: false, cancellationToken);
         return member is null
             ? Result.Failure<RequestEmailsDto>(NotAMemberMessage)
             : Result.Success(await DescribeAsync(member, cancellationToken));
@@ -58,7 +61,7 @@ public class RequestEmailsHandler :
 
     public async Task<Result<RequestEmailsDto>> Handle(UpdateRequestEmailsCommand request, CancellationToken cancellationToken)
     {
-        var member = await MemberAsync(tracked: true, cancellationToken);
+        var member = await NoticeEmailPreferences.MemberAsync(_context, _tenantService, _currentUser, tracked: true, cancellationToken);
         if (member is null)
             return Result.Failure<RequestEmailsDto>(NotAMemberMessage);
 
@@ -67,28 +70,9 @@ public class RequestEmailsHandler :
         return Result.Success(await DescribeAsync(member, cancellationToken));
     }
 
-    /// <summary>The person's membership in the current business; none for whoever is not on its team (the platform's admin).</summary>
-    private Task<TenantUser?> MemberAsync(bool tracked, CancellationToken cancellationToken)
-    {
-        if (!Guid.TryParse(_currentUser.UserId, out var userId))
-            return Task.FromResult<TenantUser?>(null);
-
-        var members = tracked ? _context.TenantUsers : _context.TenantUsers.AsNoTracking();
-        return members.FirstOrDefaultAsync(m => m.TenantId == _tenantService.TenantId && m.UserId == userId, cancellationToken);
-    }
-
     private async Task<RequestEmailsDto> DescribeAsync(TenantUser member, CancellationToken cancellationToken)
     {
-        var account = await _context.Users
-            .AsNoTracking()
-            .Where(u => u.Id == member.UserId)
-            .Select(u => new { u.Email, u.EmailConfirmed })
-            .FirstAsync(cancellationToken);
-        return new RequestEmailsDto
-        {
-            Enabled = member.GetsRequestEmails,
-            Email = account.Email,
-            EmailConfirmed = account.EmailConfirmed
-        };
+        var (email, confirmed) = await NoticeEmailPreferences.AccountAsync(_context, member, cancellationToken);
+        return new RequestEmailsDto { Enabled = member.GetsRequestEmails, Email = email, EmailConfirmed = confirmed };
     }
 }

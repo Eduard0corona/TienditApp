@@ -8,6 +8,12 @@ public interface IAppointmentNotificationService
 {
     /// <summary>A request online or of a visit arrived: the bell and the agenda read it, and the screen tells it unless it came from the team.</summary>
     Task NotifyAppointmentRequested(Guid tenantId, AppointmentRequestedNotice notice);
+
+    /// <summary>
+    /// Its customer cancelled an appointment booked online (Fase 29O, ADR 0069): the bell and the agenda read it again, and the
+    /// screen tells it unless it came from the team.
+    /// </summary>
+    Task NotifyAppointmentCancelled(Guid tenantId, AppointmentCancelledNotice notice);
 }
 
 /// <summary>
@@ -22,3 +28,17 @@ public sealed record AppointmentRequestedNotice(
     DateTimeOffset StartAt,
     bool HomeVisit,
     bool FromTeam);
+
+/// <summary>
+/// What the screens get of an appointment its customer cancelled (Fase 29O): what it was for and when, never who cancelled it.
+/// </summary>
+/// <param name="HomeVisit">A visit at the customer's address, not an appointment at the business.</param>
+/// <param name="FromTeam">It came from the business's own team (Fase 29M): the screens refresh without telling it.</param>
+/// <param name="WasRequest">It still waited for the business's answer.</param>
+public sealed record AppointmentCancelledNotice(
+    Guid AppointmentId,
+    string ServiceName,
+    DateTimeOffset StartAt,
+    bool HomeVisit,
+    bool FromTeam,
+    bool WasRequest);

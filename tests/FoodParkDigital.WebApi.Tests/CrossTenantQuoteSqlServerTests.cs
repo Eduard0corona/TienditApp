@@ -251,7 +251,7 @@ public sealed class CrossTenantQuoteSqlServerTests
     }
 
     /// <summary>A quote of the business for «Cambio de calentador», sent: its id and its link.</summary>
-    private static async Task<(Guid Id, string Token)> SentQuoteAsync(HttpClient client)
+    internal static async Task<(Guid Id, string Token)> SentQuoteAsync(HttpClient client)
     {
         var draft = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/quotes",
             new { customerName = "Valeria Ruiz", customerPhone = "5522107765" }));
