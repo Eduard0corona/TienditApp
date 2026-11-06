@@ -572,6 +572,12 @@ export default function AppointmentsList() {
             // Fase 29P: the server reads them by when each is answered in time.
             <p className="text-muted small mb-2">Primero las que hay que responder antes; al final, las de tu equipo.</p>
           )}
+          {chime.needsTouch && (
+            // The browser plays nothing until it is touched after it opens.
+            <p className="text-muted small mb-2" role="status">
+              Toca la pantalla o presiona una tecla para que suenen las solicitudes.
+            </p>
+          )}
           {view === 'route' ? (
             <>
               <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
@@ -637,10 +643,10 @@ export default function AppointmentsList() {
                   className="btn btn-light btn-sm"
                   onClick={chime.toggle}
                   aria-pressed={chime.enabled}
-                  title="Suena en este dispositivo cuando un cliente pide o cancela una cita en línea"
+                  title="Suena en este navegador cuando un cliente pide o cancela una cita en línea"
                 >
                   <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
-                  {chime.enabled ? 'Sonido activado' : 'Sonido para solicitudes en línea'}
+                  Sonido para solicitudes en línea
                 </button>
                 <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
                   <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cita

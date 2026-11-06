@@ -529,11 +529,23 @@ describe('AppointmentsList', () => {
     expect(sound).toHaveAttribute('aria-pressed', 'false');
     await user.click(sound);
 
-    expect(screen.getByRole('button', { name: 'Sonido activado' })).toHaveAttribute('aria-pressed', 'true');
+    // Its name stays; whether it is on says aria-pressed.
+    expect(sound).toHaveAttribute('aria-pressed', 'true');
     expect(window.localStorage.getItem('tienditapp:appointments-sound')).toBe('on');
     // The one action of the screen is still «Nueva cita».
     expect(screen.getByRole('button', { name: 'Nueva cita' })).toHaveClass('btn-primary');
-    expect(screen.getByRole('button', { name: 'Sonido activado' })).not.toHaveClass('btn-primary');
+    expect(sound).not.toHaveClass('btn-primary');
+    await user.click(sound);
+    expect(sound).toHaveAttribute('aria-pressed', 'false');
+    expect(window.localStorage.getItem('tienditapp:appointments-sound')).toBe('off');
+    window.localStorage.removeItem('tienditapp:appointments-sound');
+  });
+
+  it('asks for a touch when the sound is on but the browser has not been touched yet (Fase 29P)', async () => {
+    window.localStorage.setItem('tienditapp:appointments-sound', 'on');
+    renderAgenda([AT_HOME]);
+
+    expect(await screen.findByText('Toca la pantalla o presiona una tecla para que suenen las solicitudes.')).toBeInTheDocument();
     window.localStorage.removeItem('tienditapp:appointments-sound');
   });
 

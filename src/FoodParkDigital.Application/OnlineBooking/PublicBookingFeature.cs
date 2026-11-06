@@ -16,6 +16,7 @@ using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -389,8 +390,7 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
     public const string ServiceNotBookedMessage = "Ese servicio no se agenda en línea.";
     public const string TimeTakenMessage = "Esa hora ya no está libre. Elige otra.";
     public const string TooFarMessage = "Esa fecha todavía no se puede agendar.";
-    public const string TooManyPendingMessage = "Ya tienes citas esperando confirmación. Espera a que el negocio las confirme.";
-    public const string TooManyCancelledMessage = "Cancelaste varias citas en las últimas 24 horas desde este teléfono. Espera un poco para pedir otra.";
+    public const string TooManyPendingMessage = "Ya pediste varias citas desde este teléfono. Espera a que el negocio confirme las que tienes, o vuelve a intentarlo más tarde.";
     public const string AlreadySentMessage = "Esa solicitud ya se envió.";
     public const string AlreadyCancelledMessage = "Esa solicitud ya se envió y la cita se canceló.";
     public const string StaffGoneMessage = "Esa persona ya no agenda ese servicio en línea. Elige otra.";
@@ -559,32 +559,25 @@ public class RequestPublicAppointmentCommandHandler : IRequestHandler<RequestPub
 /// </summary>
 internal static class PublicAppointmentReceipts
 {
-    /// <summary>The requests of a phone in the business still waiting for an answer.</summary>
-    public static Task<int> PendingForPhoneAsync(IApplicationDbContext context, string phone, DateTimeOffset now, CancellationToken cancellationToken)
-        => context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online
-            && a.CustomerPhone == phone
-            && a.Status == AppointmentStatus.Requested
-            && a.StartAt > now, cancellationToken);
-
     /// <summary>
     /// Why a phone may not make one more request in the business, or null when it may: it already has
     /// <see cref="OnlineBookingRules.MaxPendingPerPhone"/> waiting for an answer or, since the Fase 29P (ADR 0070), that many
-    /// counting those its customer cancelled in the last <see cref="OnlineBookingRules.CancelledCountFor"/>. Each request and
-    /// each cancellation tells the business by email: asking and cancelling over and over is capped like asking.
+    /// counting the appointments its customer cancelled in the last <see cref="OnlineBookingRules.CancelledCountFor"/>. Each
+    /// request and each cancellation tells the business by email: asking and cancelling over and over is capped like asking.
+    /// The phone is compared as a number (<see cref="MessagingPhone.ToKey"/>), as the requests keep it when they arrive, and
+    /// one message says it for both, so a stranger who types a phone does not learn whether its customer cancelled.
     /// </summary>
     public static async Task<string?> RefusalForPhoneAsync(
         IApplicationDbContext context, string phone, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var waiting = await PendingForPhoneAsync(context, phone, now, cancellationToken);
-        if (waiting >= OnlineBookingRules.MaxPendingPerPhone)
-            return RequestPublicAppointmentCommandHandler.TooManyPendingMessage;
-
+        var key = MessagingPhone.ToKey(phone);
         var since = now - OnlineBookingRules.CancelledCountFor;
-        var cancelled = await context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online
-            && a.CustomerPhone == phone
-            && a.CancelledByCustomerAt >= since, cancellationToken);
-        return waiting + cancelled >= OnlineBookingRules.MaxPendingPerPhone
-            ? RequestPublicAppointmentCommandHandler.TooManyCancelledMessage
+        // A request its customer cancelled is no longer waiting: it counts once.
+        var counted = await context.Appointments.CountAsync(a => a.Channel == AppointmentChannel.Online
+            && a.RequestPhone == key
+            && ((a.Status == AppointmentStatus.Requested && a.StartAt > now) || a.CancelledByCustomerAt >= since), cancellationToken);
+        return counted >= OnlineBookingRules.MaxPendingPerPhone
+            ? RequestPublicAppointmentCommandHandler.TooManyPendingMessage
             : null;
     }
 

@@ -30,9 +30,10 @@ interface ChimeChange {
 export type ChimeKind = 'arrival' | 'leaving';
 
 /**
- * A short two-note chime for new orders, per device (a kitchen screen wants it, the owner's phone may not).
- * Browsers only play sound after someone touches the page, so the audio unlocks on the first touch. Every chime of the page
- * with the same key follows the one that was turned on or off (the agenda turns on the one of the top bar, Fase 29P).
+ * A short two-note chime for new orders, per browser (a kitchen screen wants it, the owner's phone may not).
+ * Browsers only play sound after someone touches the page or presses a key, so the audio unlocks then. Every chime of the
+ * page with the same key follows the one that was turned on or off (the agenda turns on the one of the top bar, Fase 29P),
+ * and so do the other tabs of the browser.
  */
 export function useArrivalChime(storageKey: string) {
   const [enabled, setEnabled] = useState(() => readFlag(storageKey));
@@ -54,14 +55,27 @@ export function useArrivalChime(storageKey: string) {
       // Still inside the touch that turned it on: the browser lets this one play too.
       if (change.enabled) unlock();
     };
+    // Another tab of the same browser turned it on or off: this one follows (it unlocks with its own next touch).
+    const otherTab = (event: StorageEvent) => {
+      if (event.key === storageKey) setEnabled(event.newValue === 'on');
+    };
     window.addEventListener(CHIME_CHANGED, listener);
-    return () => window.removeEventListener(CHIME_CHANGED, listener);
+    window.addEventListener('storage', otherTab);
+    return () => {
+      window.removeEventListener(CHIME_CHANGED, listener);
+      window.removeEventListener('storage', otherTab);
+    };
   }, [storageKey, unlock]);
 
   useEffect(() => {
     if (!enabled || unlocked) return undefined;
+    // A touch, a click or a key: whoever works with the keyboard also unlocks it.
     window.addEventListener('pointerdown', unlock, { once: true });
-    return () => window.removeEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
   }, [enabled, unlocked, unlock]);
 
   useEffect(() => () => void contextRef.current?.close().catch(() => undefined), []);
@@ -71,8 +85,8 @@ export function useArrivalChime(storageKey: string) {
     setEnabled(next);
     writeFlag(storageKey, next);
     window.dispatchEvent(new CustomEvent<ChimeChange>(CHIME_CHANGED, { detail: { key: storageKey, enabled: next } }));
-    // The click on the toggle is the touch the browser asks for.
-    unlock();
+    // The click on the toggle is the touch the browser asks for; turning it off needs no sound.
+    if (next) unlock();
   }, [enabled, storageKey, unlock]);
 
   const play = useCallback((kind: ChimeKind = 'arrival') => {

@@ -66,8 +66,9 @@ public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery,
         // ADR 0070): the one that runs out first goes first, and those of the team, which have no limit, go after by their
         // time.
         var history = !request.FromDate.HasValue && request.ToDate.HasValue;
+        // Ties (two appointments at the same time) break by id, so a page never repeats or skips one.
         var ordered = history
-            ? query.OrderByDescending(x => x.StartAt)
+            ? query.OrderByDescending(x => x.StartAt).ThenBy(x => x.Id)
             : request.Status == AppointmentStatus.Requested
                 ? query
                     .OrderBy(x => x.FromTeam)
@@ -78,7 +79,8 @@ public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery,
                             ? x.RequestedStartAt ?? x.StartAt
                             : x.CreatedAt.AddHours(AnswerByHours))
                     .ThenBy(x => x.StartAt)
-                : query.OrderBy(x => x.StartAt);
+                    .ThenBy(x => x.Id)
+                : query.OrderBy(x => x.StartAt).ThenBy(x => x.Id);
         var projected = ordered
             .Select(AppointmentDto.Projection);
 

@@ -290,18 +290,29 @@ public class OnlineBookingFlowTests
             Assert.True((await RequestAsync(fixture, haircut.Id, Local(Monday, time))).IsSuccess);
             await CancelLastAsync(fixture);
         }
-        // Two cancelled and one waiting: a fourth is refused, and says why.
+        // One the business declined does not count: it was not its customer who cancelled it.
         Assert.True((await RequestAsync(fixture, haircut.Id, Local(Monday, "11:00"))).IsSuccess);
-        var fourth = await RequestAsync(fixture, haircut.Id, Local(Monday, "12:00"));
-        // Another phone is not held back by them.
-        var otherPhone = await RequestAsync(fixture, haircut.Id, Local(Monday, "12:00"), phone: "5511112222");
+        var declined = await fixture.Context.Appointments.OrderByDescending(a => a.StartAt).FirstAsync();
+        declined.Decline(fixture.Clock.UtcNow);
+        await fixture.Context.SaveChangesAsync();
+        // Two cancelled and one waiting: a fourth is refused, with the same words as three waiting.
+        Assert.True((await RequestAsync(fixture, haircut.Id, Local(Monday, "12:00"))).IsSuccess);
+        var fourth = await RequestAsync(fixture, haircut.Id, Local(Monday, "13:00"));
+        // The same mobile written with the 1 WhatsApp adds is the same phone.
+        var withTheOne = await RequestAsync(fixture, haircut.Id, Local(Monday, "13:00"), phone: "+5215522107765");
+        // Another phone is not held back by them: two of its own waiting, and one more fits.
+        foreach (var time in new[] { "09:00", "10:00", "11:00" })
+        {
+            var ofAnother = await RequestAsync(fixture, haircut.Id, Local(Monday, time), phone: "5511112222");
+            Assert.True(ofAnother.IsSuccess, $"{time}: {ofAnother.Error}");
+        }
 
-        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyCancelledMessage, fourth.Error);
-        Assert.True(otherPhone.IsSuccess, otherPhone.Error);
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage, fourth.Error);
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage, withTheOne.Error);
 
         // A day after they were cancelled they no longer count: with the one still waiting, one more fits.
         fixture.Clock.UtcNow = SalesTestFixture.Now + OnlineBookingRules.CancelledCountFor - TimeSpan.FromHours(2);
-        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyCancelledMessage,
+        Assert.Equal(RequestPublicAppointmentCommandHandler.TooManyPendingMessage,
             (await RequestAsync(fixture, haircut.Id, Local(Monday, "13:00"))).Error);
         fixture.Clock.UtcNow = SalesTestFixture.Now + OnlineBookingRules.CancelledCountFor + TimeSpan.FromMinutes(1);
         var later = await RequestAsync(fixture, haircut.Id, Local(Monday, "13:00"));
