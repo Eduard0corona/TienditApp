@@ -66,3 +66,11 @@ export function whatsAppInvitationLink(link: string, businessName: string, first
   const to = digits.length === 10 ? `52${digits}` : digits;
   return `https://wa.me/${to}?text=${encodeURIComponent(text)}`;
 }
+
+/**
+ * Whether a membership role is the owner's, however it comes: the session sends it in capitals (OWNER), the team's list
+ * as the enum (Owner) (Fase 29Q).
+ */
+export function isOwnerRole(role: string | null | undefined): boolean {
+  return (role ?? '').replace(/[\s_-]/g, '').toUpperCase() === 'OWNER';
+}

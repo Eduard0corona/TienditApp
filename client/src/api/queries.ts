@@ -18,7 +18,6 @@ export const queryKeys = {
   deliveryPlatforms: ['delivery-platforms'] as const,
   deliveryPlatformChannels: ['delivery-platforms', 'channels'] as const,
   platformPrices: (channel: OrderChannel) => ['delivery-platforms', channel, 'prices'] as const,
-  orderChannels: ['orders', 'channels'] as const,
 };
 
 // The bell and the drawer chip stay current without a live connection of their own.
@@ -66,21 +65,6 @@ export function useDeliveryPlatformChannels(enabled = true) {
 }
 
 /**
- * Where the business receives orders (Fase 29Q), for the Channel filter of Pedidos: the counter, WhatsApp while it has a
- * number, the online menu while it takes orders, and the platforms it set up. The API says it: the client does not know
- * whether the business has a WhatsApp number. Read again each time Pedidos opens (it is cheap), so a number or a menu set up
- * a moment ago shows at once.
- */
-export function useOrderChannels(enabled = true) {
-  return useQuery({
-    queryKey: queryKeys.orderChannels,
-    queryFn: ({ signal }) => apiRequest('get', '/api/v1/orders/channels', { signal }),
-    enabled,
-    staleTime: 0,
-  });
-}
-
-/**
  * The three delivery platforms with the terms of their contracts and an example worked out by the server (owners and
  * admins): the ones never saved come without a commission.
  */
@@ -104,7 +88,6 @@ export function useSaveDeliveryPlatform() {
     onSuccess: (platforms) => {
       client.setQueryData(queryKeys.deliveryPlatforms, platforms);
       void client.invalidateQueries({ queryKey: queryKeys.deliveryPlatformChannels });
-      void client.invalidateQueries({ queryKey: queryKeys.orderChannels });
     },
   });
 }
