@@ -88,7 +88,7 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
         if (user is null || user.Role == UserRole.Customer)
             return Result.Failure<EmployeeDto>("Empleado no encontrado.");
 
-        // Before anything changes: the roles of the account are saved as soon as they change.
+        // Before anything changes: a refused change of the owner's notices leaves their name and permissions as they were.
         if (EmployeeNoticeEmails.RefusalFor(tenantUser, request.RequestEmails, request.QuoteReplyEmails) is { } noticesRefused)
             return Result.Failure<EmployeeDto>(noticesRefused);
 

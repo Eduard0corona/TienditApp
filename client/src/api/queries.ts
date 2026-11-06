@@ -68,13 +68,15 @@ export function useDeliveryPlatformChannels(enabled = true) {
 /**
  * Where the business receives orders (Fase 29Q), for the Channel filter of Pedidos: the counter, WhatsApp while it has a
  * number, the online menu while it takes orders, and the platforms it set up. The API says it: the client does not know
- * whether the business has a WhatsApp number.
+ * whether the business has a WhatsApp number. Read again each time Pedidos opens (it is cheap), so a number or a menu set up
+ * a moment ago shows at once.
  */
 export function useOrderChannels(enabled = true) {
   return useQuery({
     queryKey: queryKeys.orderChannels,
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/orders/channels', { signal }),
     enabled,
+    staleTime: 0,
   });
 }
 

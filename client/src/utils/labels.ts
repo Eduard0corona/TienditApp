@@ -150,6 +150,14 @@ export function getRoleLabel(role: string | null | undefined): string {
 }
 
 /**
+ * Whether a membership role is the owner's, however it comes: the session sends it in capitals (OWNER), the team's list
+ * as the enum (Owner).
+ */
+export function isOwnerRole(role: string | null | undefined): boolean {
+  return (role ?? '').replace(/[\s_-]/g, '').toUpperCase() === 'OWNER';
+}
+
+/**
  * Role shown for the signed-in user: the membership role (Dueño, Administrador, Empleado) except for
  * kitchen and platform accounts, whose platform role says more.
  */

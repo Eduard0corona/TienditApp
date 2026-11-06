@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Employees;
 using FoodParkDigital.Application.Employees.Commands;
 using FoodParkDigital.Application.Employees.DTOs;
+using FoodParkDigital.Application.Employees.Queries;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -207,6 +208,28 @@ public class EmployeeAccessRulesTests
         Assert.Equal(("Persona", UserRole.TenantAdmin), (account.FirstName, account.Role));
     }
 
+    [Fact]
+    public async Task TheTeam_ShouldSayWhatEachPersonGets_InItsListAndInTheirDetail()
+    {
+        // The owner without a choice gets both; a receptionist who chose the agenda's, with her email confirmed, gets those.
+        await using var fixture = await Fixture.CreateAsync();
+        var owner = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Owner);
+        var receptionist = await fixture.AddMemberAsync(TenantA, UserRole.Staff, TenantUserRole.Staff);
+        await fixture.ChooseAsync(receptionist, requestEmails: true);
+        await fixture.ConfirmEmailAsync(receptionist);
+
+        var list = await fixture.ListAsync(TenantA);
+        var detail = await fixture.DetailAsync(receptionist);
+        var ownersDetail = await fixture.DetailAsync(owner);
+
+        static (bool, bool, bool) Notices(EmployeeDto dto) =>
+            (dto.NoticeEmails.Requests, dto.NoticeEmails.QuoteReplies, dto.NoticeEmails.EmailConfirmed);
+        Assert.Equal((true, false, true), Notices(list.Single(e => e.TenantUserId == receptionist.TenantUserId)));
+        Assert.Equal((true, true, false), Notices(list.Single(e => e.TenantUserId == owner.TenantUserId)));
+        Assert.Equal((true, false, true), Notices(detail));
+        Assert.Equal((true, true, false), Notices(ownersDetail));
+    }
+
     private sealed record Member(Guid TenantUserId, Guid UserId, Guid TenantId, string Role);
 
     private sealed class Fixture : IAsyncDisposable
@@ -293,6 +316,39 @@ public class EmployeeAccessRulesTests
 
         public Task<TenantUser> MembershipAsync(Member member) =>
             _context.TenantUsers.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == member.TenantUserId);
+
+        public async Task ChooseAsync(Member member, bool? requestEmails = null, bool? quoteReplyEmails = null)
+        {
+            var membership = await _context.TenantUsers.IgnoreQueryFilters().SingleAsync(x => x.Id == member.TenantUserId);
+            if (requestEmails is { } requests)
+                membership.ChooseRequestEmails(requests);
+            if (quoteReplyEmails is { } quoteReplies)
+                membership.ChooseQuoteReplyEmails(quoteReplies);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task ConfirmEmailAsync(Member member)
+        {
+            var user = await _context.Users.IgnoreQueryFilters().SingleAsync(x => x.Id == member.UserId);
+            user.EmailConfirmed = true;
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<IReadOnlyList<EmployeeDto>> ListAsync(Guid tenantId)
+        {
+            _tenantService.SetTenant(tenantId);
+            return (await new GetEmployeesQueryHandler(_context, _tenantService)
+                .Handle(new GetEmployeesQuery { PageSize = 50 }, CancellationToken.None)).Items;
+        }
+
+        public async Task<EmployeeDto> DetailAsync(Member member)
+        {
+            _tenantService.SetTenant(member.TenantId);
+            var result = await new GetEmployeeByIdQueryHandler(_context, _tenantService)
+                .Handle(new GetEmployeeByIdQuery(member.TenantUserId), CancellationToken.None);
+            Assert.True(result.IsSuccess, result.Error);
+            return result.Value!;
+        }
 
         public async Task<(bool? Requests, bool? QuoteReplies)> ChoicesAsync(Member member)
         {

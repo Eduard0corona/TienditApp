@@ -334,7 +334,7 @@ function buildRoutes(data, token) {
       return ok(paginate([...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), q, 10));
     }],
     // Where the demo business receives orders (Fase 29Q): its WhatsApp number and its menu that takes orders, so Pedidos
-    // offers the Channel filter (a scene file sets `data.orderChannels` for a business at the counter only).
+    // offers the Channel filter (`COUNTER_ONLY_DATA` sets `data.orderChannels` for a business at the counter only).
     ['GET', /^\/orders\/channels$/, () => ok({ channels: data.orderChannels ?? [0, 1, 2] })],
     ['GET', /^\/orders\/([^/]+)$/, (m) => {
       const o = data.orders.find((x) => x.id === m[1]);

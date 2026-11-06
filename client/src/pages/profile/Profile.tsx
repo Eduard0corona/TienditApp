@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { useAuth } from '../../hooks/useAuth';
-import { getUserRoleLabel } from '../../utils/labels';
+import { getUserRoleLabel, isOwnerRole } from '../../utils/labels';
 import { profileApi } from '../../api/profileApi';
 import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
@@ -331,7 +331,7 @@ export default function Profile() {
               businessName={tenant?.name}
               agenda={answersRequests}
               quotes={worksQuotes}
-              ownsBusiness={user?.tenantRole === 'Owner'}
+              ownsBusiness={isOwnerRole(user?.tenantRole)}
             />
           )}
 

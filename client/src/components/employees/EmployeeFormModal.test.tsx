@@ -43,9 +43,9 @@ function inBusiness(capabilities: number) {
   vi.mocked(useTenant).mockReturnValue({ tenant: null, capabilities, isLoading: false, refreshTenant: vi.fn() } as never);
 }
 
-const renderForm = (employee: EmployeeRecord | null) =>
+const renderForm = (employee: EmployeeRecord | null, permissionOptions = OPTIONS) =>
   render(
-    <EmployeeFormModal employee={employee} presets={PRESETS} permissionOptions={OPTIONS} onClose={vi.fn()} onSaved={vi.fn()} />,
+    <EmployeeFormModal employee={employee} presets={PRESETS} permissionOptions={permissionOptions} onClose={vi.fn()} onSaved={vi.fn()} />,
   );
 
 /** The body of the save the form sent. */
@@ -82,18 +82,36 @@ describe('EmployeeFormModal: the notices by email of each person (Fase 29Q)', ()
     expect(sentBody()).toMatchObject({ tenantUserId: 'm-1', requestEmails: true, quoteReplyEmails: true });
   });
 
-  it('shows only the notices the business has, and leaves the rest as they are', async () => {
-    const user = userEvent.setup();
+  it('shows only the notices the business has', async () => {
     inBusiness(TenantCapability.Service);
     renderForm(member({ noticeEmails: { requests: false, quoteReplies: true, emailConfirmed: false } }));
 
     expect(screen.queryByRole('switch', { name: 'Citas en línea' })).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Cotizaciones' })).toBeChecked();
     expect(screen.getByText(/cuando confirme su correo/)).toBeInTheDocument();
+  });
+
+  it('sends only the notices changed here, never undoing what the person chose after the list was read', async () => {
+    const user = userEvent.setup();
+    renderForm(member({ noticeEmails: { requests: true, quoteReplies: false, emailConfirmed: true } }));
+
+    // Another permission, and a notice turned off and on again: neither notice changed.
+    await user.click(screen.getByRole('radio', { name: /Cajero/ }));
+    await user.click(screen.getByRole('switch', { name: 'Cotizaciones' }));
+    await user.click(screen.getByRole('switch', { name: 'Cotizaciones' }));
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
     await waitFor(() => expect(apiRequest).toHaveBeenCalled());
-    expect(sentBody()).toMatchObject({ requestEmails: null, quoteReplyEmails: true });
+    expect(sentBody()).toMatchObject({ permissions: ['ManageOrders'], requestEmails: null, quoteReplyEmails: null });
+  });
+
+  it('names the permission a notice needs only once the names have loaded', async () => {
+    const user = userEvent.setup();
+    renderForm(member({ permissions: [] }), []);
+
+    await user.click(screen.getByRole('switch', { name: 'Citas en línea' }));
+
+    expect(screen.queryByText(/Sin el permiso/)).not.toBeInTheDocument();
   });
 
   it('never chooses the owner\'s: they choose them in Mi perfil', async () => {
@@ -116,12 +134,13 @@ describe('EmployeeFormModal: the notices by email of each person (Fase 29Q)', ()
     await user.type(screen.getByLabelText('Nombre'), 'Lupita');
     await user.type(screen.getByLabelText('Apellido'), 'Ruiz');
     await user.type(screen.getByLabelText('Correo'), 'recepcion@demo.com');
+    expect(screen.getByText(/Le llegan a recepcion@demo\.com en cuanto su correo esté confirmado\./)).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Citas en línea' })).not.toBeChecked();
     await user.click(screen.getByRole('switch', { name: 'Citas en línea' }));
     await user.click(screen.getByRole('button', { name: 'Invitar' }));
 
     await waitFor(() => expect(apiRequest).toHaveBeenCalled());
     expect(vi.mocked(apiRequest).mock.calls.at(-1)![0]).toBe('post');
-    expect(sentBody()).toMatchObject({ email: 'recepcion@demo.com', requestEmails: true, quoteReplyEmails: false });
+    expect(sentBody()).toMatchObject({ email: 'recepcion@demo.com', requestEmails: true, quoteReplyEmails: null });
   });
 });

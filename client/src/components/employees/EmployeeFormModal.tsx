@@ -51,8 +51,10 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
   const [presetKey, setPresetKey] = useState(initialPreset);
   const [appRole, setAppRole] = useState<number>(initialAppRole);
   const [permissions, setPermissions] = useState<string[]>(initialPermissions);
-  const [requestEmails, setRequestEmails] = useState(employee?.noticeEmails?.requests ?? false);
-  const [quoteReplyEmails, setQuoteReplyEmails] = useState(employee?.noticeEmails?.quoteReplies ?? false);
+  const initialRequestEmails = employee?.noticeEmails?.requests ?? false;
+  const initialQuoteReplyEmails = employee?.noticeEmails?.quoteReplies ?? false;
+  const [requestEmails, setRequestEmails] = useState(initialRequestEmails);
+  const [quoteReplyEmails, setQuoteReplyEmails] = useState(initialQuoteReplyEmails);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const { capabilities } = useTenant();
@@ -79,12 +81,15 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
     setAppRole(matched === CUSTOM_ROLE_KEY ? AppRole.Staff : nextAppRole);
   };
 
-  // What a notice the business does not have would say is left as it is.
+  // Only what someone changed here is sent: a notice left as it was (or one the business does not have) stays as it is,
+  // so the form never undoes what the person chose in Mi perfil after the list was read.
   const noticeFields = () => ({
-    requestEmails: offersRequests ? requestEmails : null,
-    quoteReplyEmails: offersQuoteReplies ? quoteReplyEmails : null,
+    requestEmails: offersRequests && requestEmails !== initialRequestEmails ? requestEmails : null,
+    quoteReplyEmails: offersQuoteReplies && quoteReplyEmails !== initialQuoteReplyEmails ? quoteReplyEmails : null,
   });
-  const permissionName = (code: string) => permissionOptions.find((option) => option.code === code)?.name ?? code;
+  // The permission a notice still needs, by its name; nothing while the names have not loaded.
+  const missingPermission = (code: string) =>
+    !isManager && !permissions.includes(code) ? permissionOptions.find((option) => option.code === code)?.name ?? null : null;
 
   const roleFields = () => isManager
     ? { appRole: AppRole.TenantAdmin as Schemas['UserRole'], tenantRole: BusinessRole.Admin as Schemas['TenantUserRole'], permissions: null }
@@ -248,8 +253,10 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
                 <legend className="form-label fs-6 fw-semibold">Avisos por correo</legend>
                 <p className="small text-muted mb-2">
                   Le llegan a {employee?.email || email.trim() || 'su correo'}
-                  {employee && !employee.noticeEmails?.emailConfirmed ? ' cuando confirme su correo' : ''}. También los
-                  puede cambiar en Mi perfil.
+                  {!employee
+                    ? ' en cuanto su correo esté confirmado'
+                    : !employee.noticeEmails?.emailConfirmed ? ' cuando confirme su correo' : ''}. También los puede cambiar en
+                  Mi perfil.
                 </p>
                 {offersRequests && (
                   <NoticeSwitch
@@ -257,7 +264,7 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
                     description="Cada solicitud de cita o de visita y cada cita que un cliente cancela."
                     checked={requestEmails}
                     onChange={setRequestEmails}
-                    missing={!isManager && !permissions.includes('ManageAppointments') ? permissionName('ManageAppointments') : null}
+                    missing={missingPermission('ManageAppointments')}
                   />
                 )}
                 {offersQuoteReplies && (
@@ -266,7 +273,7 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
                     description="Cada vez que un cliente acepta o rechaza una cotización desde su enlace."
                     checked={quoteReplyEmails}
                     onChange={setQuoteReplyEmails}
-                    missing={!isManager && !permissions.includes('ManageOrders') ? permissionName('ManageOrders') : null}
+                    missing={missingPermission('ManageOrders')}
                   />
                 )}
               </fieldset>
@@ -315,7 +322,10 @@ function NoticeSwitch({
       <label className="form-check-label fw-semibold" htmlFor={switchId}>{label}</label>
       <div className="form-text mt-0" id={descriptionId}>
         {description}
-        {checked && missing && <span className="d-block text-warning-emphasis">Sin el permiso «{missing}» no le llegan.</span>}
+        {/* Always there, so a screen reader hears the warning when the switch turns on. */}
+        <span className="d-block text-warning-emphasis" aria-live="polite">
+          {checked && missing ? `Sin el permiso «${missing}» no le llegan.` : ''}
+        </span>
       </div>
     </div>
   );

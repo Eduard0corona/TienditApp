@@ -80,7 +80,8 @@ export function buildData() {
     phoneNumberConfirmed: true,
     emailConfirmed: true,
     role: 'TenantAdmin',
-    tenantRole: 'Owner',
+    // The session sends the role of the membership in capitals, as the claim carries it.
+    tenantRole: 'OWNER',
     permissions: ALL_PERMISSIONS,
     tenantId: TENANT_ID,
     isActive: true,

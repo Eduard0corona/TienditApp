@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
 import {
+  COUNTER_ONLY_DATA,
   COURIER_ORDERS_DATA,
   CUSTOMER_PROFILE,
   DELIVERY_ORDERS_DATA,
@@ -552,6 +553,17 @@ test.describe('Pedidos', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/orders');
     await snapPage(page, 'pedidos-telefono');
+  });
+
+  test.describe('solo en mostrador', () => {
+    test.use({ prepareData: COUNTER_ONLY_DATA });
+
+    test('Pedidos de un negocio solo de mostrador, sin filtro Canal', async ({ page }) => {
+      await open(page, '/orders');
+      await expect(page.getByRole('combobox', { name: 'Estado' })).toBeVisible();
+      await expect(page.getByRole('combobox', { name: 'Canal' })).toHaveCount(0);
+      await snapPage(page, 'pedidos-solo-mostrador-escritorio');
+    });
   });
 
   test('Detalle de una venta', async ({ page }) => {

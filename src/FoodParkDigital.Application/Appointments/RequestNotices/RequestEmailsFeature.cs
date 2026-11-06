@@ -29,7 +29,10 @@ public class RequestEmailsDto
 [RequiresCapability(TenantCapability.Appointments)]
 public record GetRequestEmailsQuery : IRequest<Result<RequestEmailsDto>>;
 
-/// <summary>Turns them on or off for the person, in this business only. Nobody chooses for someone else.</summary>
+/// <summary>
+/// Turns them on or off for the person who calls, in this business only. Someone else's are chosen from the team, by whoever
+/// runs it (Fase 29Q, ADR 0071).
+/// </summary>
 [RequiresPermission(TenantPermission.ManageAppointments)]
 [RequiresCapability(TenantCapability.Appointments)]
 public record UpdateRequestEmailsCommand(bool Enabled) : IRequest<Result<RequestEmailsDto>>;

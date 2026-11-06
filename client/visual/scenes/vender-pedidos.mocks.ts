@@ -389,3 +389,10 @@ function withSelfInvoicing(data: DemoData) {
 }
 
 export const SELF_INVOICING_DATA = asOption(withSelfInvoicing);
+
+/** The business sells at the counter only (Fase 29Q): no WhatsApp number, no menu that takes orders, no platform. */
+function atTheCounterOnly(data: DemoData) {
+  data.orderChannels = [0];
+}
+
+export const COUNTER_ONLY_DATA = asOption(atTheCounterOnly);
