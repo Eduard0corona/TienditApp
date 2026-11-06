@@ -40,7 +40,7 @@ public class TenantUserRequestEmailsMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = AtThisMigration(database, tenant.Id);
         var members = await context.TenantUsers.AsNoTracking().OrderBy(m => m.Role).ToListAsync();
         Assert.Equal(
             [(TenantUserRole.Owner, (bool?)null, true), (TenantUserRole.Admin, null, false)],
@@ -52,7 +52,7 @@ public class TenantUserRequestEmailsMigrationSqlServerTests
         tracked[0].ChooseRequestEmails(false);
         tracked[1].ChooseRequestEmails(true);
         await context.SaveChangesAsync();
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = AtThisMigration(database, tenant.Id);
         Assert.Equal(
             [(bool?)false, true],
             await check.TenantUsers.AsNoTracking().OrderBy(m => m.Role).Select(m => m.RequestEmails).ToListAsync());
@@ -73,7 +73,7 @@ public class TenantUserRequestEmailsMigrationSqlServerTests
             await before.SaveChangesAsync();
         }
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = AtThisMigration(database, tenant.Id);
         var member = await context.TenantUsers.AsNoTracking().SingleAsync();
         Assert.Equal(((bool?)null, true), (member.RequestEmails, member.GetsRequestEmails));
     }
@@ -85,7 +85,7 @@ public class TenantUserRequestEmailsMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var tenant = Business();
         var owner = Account("dueña");
-        await using (var seed = database.CreateContext(tenant.Id))
+        await using (var seed = AtThisMigration(database, tenant.Id))
         {
             var member = new TenantUser(tenant.Id, owner.Id, TenantUserRole.Owner);
             member.ChooseRequestEmails(false);
@@ -106,7 +106,7 @@ public class TenantUserRequestEmailsMigrationSqlServerTests
         // Rolling back again does nothing; forward again, what was chosen is gone and the owner gets them again.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = AtThisMigration(database, tenant.Id);
         var again = await forward.TenantUsers.AsNoTracking().SingleAsync();
         Assert.Equal(((bool?)null, true), (again.RequestEmails, again.GetsRequestEmails));
     }
@@ -142,6 +142,10 @@ public class TenantUserRequestEmailsMigrationSqlServerTests
             FROM sys.columns c
             WHERE c.[object_id] = OBJECT_ID(N'dbo.TenantUsers') AND c.[name] = N'RequestEmails'
             """).SingleAsync();
+
+    /// <summary>The model at this migration: it knows the column, not the ones that came after it (Fase 29O).</summary>
+    private static ApplicationDbContext AtThisMigration(SqlServerTestDatabase database, Guid tenantId)
+        => BeforeTenantUserQuoteReplyEmails.CreateContext(database, tenantId);
 
     private static async Task MigrateAsync(SqlServerTestDatabase database, string target)
     {

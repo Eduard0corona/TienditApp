@@ -22,6 +22,10 @@ public class TenantUserConfiguration : IEntityTypeConfiguration<TenantUser>
         // choose (the owners get them), which is also what the version before it saves.
         builder.Property(x => x.RequestEmails);
         builder.Ignore(x => x.GetsRequestEmails);
+        // Fase 29O (ADR 0069): whether the member gets an email with each answer to a quote from its link, as they chose; null
+        // until they choose (the owners get them), which is also what the version before it saves.
+        builder.Property(x => x.QuoteReplyEmails);
+        builder.Ignore(x => x.GetsQuoteReplyEmails);
 
         builder.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
         builder.HasIndex(x => x.TenantId);
