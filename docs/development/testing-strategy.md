@@ -2119,15 +2119,19 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `OnlineBookingFlowTests` (+1): dos citas pedidas y canceladas, una que el negocio rechaza (no cuenta) y una en espera llegan al tope; la cuarta se rechaza con el mismo mensaje que tres en espera, también con el mismo celular escrito con el 1; otro teléfono con dos en espera pide una más; 24 horas después de las cancelaciones ya no cuentan.
     - `AnswerInTimeTests` (+1): «Por confirmar» pone primero la vencida, luego por límite, y las del equipo al final por su hora; el resto de la Agenda sigue por hora.
   - **Infrastructure:** `AnswerInTimeSqlServerTests` (+1): el mismo orden contra SQL Server, con el límite escrito para SQL.
-  - **Cliente:** `useArrivalChime.test.ts` (3, nuevo): dos notas hacia arriba o hacia abajo y nada apagado; otro sonido con la misma clave lo sigue y suena con el mismo toque, uno con otra clave no; se desbloquea con una tecla y sigue a otra pestaña. `useAppointmentRequests.test.tsx` (+1): suena con cada solicitud y cancelación de un cliente, nunca con las del equipo. `AppointmentsList.test.tsx` (+3): la nota solo en «Por confirmar», el interruptor con su nombre fijo y `aria-pressed` sin quitarle la acción principal a «Nueva cita», y el aviso del toque que falta.
-  - **.NET en total:** 4,721 pruebas en verde con SQL Server (Domain 1,390; Application 2,132; WebApi 493; Infrastructure 706). **Cliente en total:** 201 archivos y 1,527 pruebas.
-  - **Primera visita:** 181,941 B (`master` en `d3fc1a4`: 181,904 B, +37 B); el presupuesto se queda en 182,000 B.
+  - **Cliente:** `useArrivalChime.test.ts` (5, nuevo): dos notas hacia arriba o hacia abajo y nada apagado; otro sonido con la misma clave lo sigue y suena con el mismo toque, uno con otra clave no; se desbloquea con una tecla y sigue a otra pestaña; un toque desbloquea todos los sonidos de la página, aunque la barra superior se monte después o la Agenda se abra otra vez, y uno que se va no le quita su escucha a los demás. `useAppointmentRequests.test.tsx` (+1): suena con cada solicitud y cancelación de un cliente, nunca con las del equipo. `AppointmentsList.test.tsx` (+3): la nota solo en «Por confirmar», el interruptor con su nombre fijo y `aria-pressed` sin quitarle la acción principal a «Nueva cita», y el aviso del toque que falta.
+  - **.NET en total:** 4,721 pruebas en verde con SQL Server (Domain 1,390; Application 2,132; WebApi 493; Infrastructure 706). **Cliente en total:** 201 archivos y 1,529 pruebas.
+  - **Primera visita:** 181,947 B (`master` en `d3fc1a4`: 181,904 B, +43 B); el presupuesto se queda en 182,000 B.
   - **Revisión independiente**, sin bloqueos ni mayores, con menores corregidos:
     - el mensaje propio de las canceladas revelaba si un teléfono canceló en ese negocio: ahora es uno solo;
     - el tope comparaba el teléfono como se escribió: ahora con la clave de la solicitud (`RequestPhone`), en una sola consulta;
     - la Agenda no tenía desempate al paginar: ahora por id;
     - el sonido no seguía a las otras pestañas ni se desbloqueaba con el teclado, la Agenda no pedía el toque que falta y el botón cambiaba de nombre;
     - pruebas que pasaban aunque el tope ignorara el teléfono, y docs que decían que pedir y cancelar para en la tercera vuelta.
+  - **Revisión automática del PR**, tres menores corregidos:
+    - las pruebas de «Por confirmar» pasaban también ordenando por llegada: ahora una solicitud llega después que otra y vence antes;
+    - la prueba del tope calculaba sus relojes con la constante, sin fijar las 24 horas: ahora las escribe;
+    - el aviso del toque salía del sonido propio de la Agenda, no del de la barra superior, que es el que suena: ahora todos los sonidos de la página comparten uno.
   - **Escenas:** contra la línea base de `master` en `d3fc1a4` (805 escenas):
     - **784 iguales.**
     - **21 cambian**, todas de la Agenda, por el botón «Sonido para solicitudes en línea» junto a «Nueva cita» y, en las de «Por confirmar», la nota del orden: la Agenda a domicilio y sus diálogos (`agenda-domicilio.spec.ts`), las solicitudes en línea (`citas-en-linea.spec.ts`) y la Agenda y la cita nueva (`clientes-mensajes.spec.ts`).

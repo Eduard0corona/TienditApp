@@ -1,6 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useArrivalChime } from './useArrivalChime';
+
+// The page's sound lives as long as the module: each test loads it again, as a page that just opened.
+let useArrivalChime: typeof import('./useArrivalChime').useArrivalChime;
 
 /** The notes each fake audio context played, in order. */
 const played: number[] = [];
@@ -40,10 +42,12 @@ class FakeAudioContext {
 }
 
 describe('useArrivalChime', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     played.length = 0;
     window.localStorage.clear();
     vi.stubGlobal('AudioContext', FakeAudioContext);
+    vi.resetModules();
+    ({ useArrivalChime } = await import('./useArrivalChime'));
   });
 
   afterEach(() => {
@@ -97,20 +101,38 @@ describe('useArrivalChime', () => {
     expect(result.current.enabled).toBe(false);
   });
 
-  it('plays without another touch once the page had one, as when the agenda opens again (Fase 29P)', async () => {
-    window.localStorage.setItem('tienditapp:test-sound', 'on');
-    vi.stubGlobal('navigator', { ...navigator, userActivation: { hasBeenActive: false } });
-    const beforeAnyTouch = renderHook(() => useArrivalChime('tienditapp:test-sound'));
-    await act(async () => undefined);
-    expect(beforeAnyTouch.result.current.needsTouch).toBe(true);
+  it('plays every chime with the one touch, and says so in each, as the agenda that opens again (Fase 29P)', async () => {
+    window.localStorage.setItem('tienditapp:appointments-sound', 'on');
+    const agenda = renderHook(() => useArrivalChime('tienditapp:appointments-sound'));
+    expect(agenda.result.current.needsTouch).toBe(true);
 
-    vi.stubGlobal('navigator', { ...navigator, userActivation: { hasBeenActive: true } });
-    const reopened = renderHook(() => useArrivalChime('tienditapp:test-sound'));
-    await act(async () => undefined);
-
-    expect(reopened.result.current.needsTouch).toBe(false);
-    act(() => reopened.result.current.play());
+    // The touch reaches the agenda before the top bar mounts.
+    await act(async () => {
+      window.dispatchEvent(new Event('pointerdown'));
+    });
+    const topBar = renderHook(() => useArrivalChime('tienditapp:appointments-sound'));
+    expect(agenda.result.current.needsTouch).toBe(false);
+    expect(topBar.result.current.needsTouch).toBe(false);
+    act(() => topBar.result.current.play());
     expect(played).toEqual([880, 1175]);
+
+    // The agenda opens again: it does not ask for the touch the page already had.
+    agenda.unmount();
+    const reopened = renderHook(() => useArrivalChime('tienditapp:appointments-sound'));
+    expect(reopened.result.current.needsTouch).toBe(false);
+  });
+
+  it('still unlocks with a touch after another chime of the page goes away (Fase 29P)', async () => {
+    window.localStorage.setItem('tienditapp:appointments-sound', 'on');
+    const agenda = renderHook(() => useArrivalChime('tienditapp:appointments-sound'));
+    const topBar = renderHook(() => useArrivalChime('tienditapp:appointments-sound'));
+
+    agenda.unmount();
+    await act(async () => {
+      window.dispatchEvent(new Event('pointerdown'));
+    });
+
+    expect(topBar.result.current.needsTouch).toBe(false);
   });
 
   it('turns on and off with it every chime of the page with its key, and no other (Fase 29P)', async () => {
@@ -124,7 +146,7 @@ describe('useArrivalChime', () => {
 
     expect(topBar.result.current.enabled).toBe(true);
     expect(orders.result.current.enabled).toBe(false);
-    // The top bar unlocked its own sound with the same touch: it plays.
+    // The same touch started the page's sound: the top bar plays it.
     act(() => topBar.result.current.play('leaving'));
     expect(played).toEqual([1175, 880]);
 
