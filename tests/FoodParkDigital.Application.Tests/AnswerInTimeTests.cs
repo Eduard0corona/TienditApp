@@ -60,6 +60,9 @@ public class AnswerInTimeTests
         var nextWeek = await RequestAsync(fixture, salon, Now.AddHours(-1), Now.AddDays(5));
         var thisAfternoon = await RequestAsync(fixture, salon, Now.AddHours(-2), Now.AddHours(5));
         var late = await RequestAsync(fixture, salon, Now.AddDays(-2), Now.AddDays(6));
+        // Arrived after the one of yesterday, but runs out before it: in three hours, against a day after it arrived, in four.
+        var yesterday = await RequestAsync(fixture, salon, Now.AddHours(-20), Now.AddDays(4));
+        var inThreeHours = await RequestAsync(fixture, salon, Now.AddMinutes(-30), Now.AddHours(3));
         var teamTomorrow = await RequestAsync(fixture, salon, Now.AddDays(-3), Now.AddHours(20), fromTeam: true);
         var teamThisAfternoon = await RequestAsync(fixture, salon, Now.AddHours(-1), Now.AddHours(2), fromTeam: true);
         var accepted = await RequestAsync(fixture, salon, Now.AddHours(-2), Now.AddHours(1));
@@ -71,9 +74,14 @@ public class AnswerInTimeTests
             new GetAppointmentsQuery { Status = Domain.Appointments.Enums.AppointmentStatus.Requested, PageSize = 50 }, CancellationToken.None);
         var all = await handler.Handle(new GetAppointmentsQuery { PageSize = 50 }, CancellationToken.None);
 
-        Assert.Equal([late.Id, thisAfternoon.Id, nextWeek.Id, teamThisAfternoon.Id, teamTomorrow.Id], requests.Items.Select(a => a.Id));
+        // Not by when each arrived (late, yesterday, thisAfternoon, nextWeek, inThreeHours), nor by its time.
+        Assert.Equal(
+            [late.Id, inThreeHours.Id, yesterday.Id, thisAfternoon.Id, nextWeek.Id, teamThisAfternoon.Id, teamTomorrow.Id],
+            requests.Items.Select(a => a.Id));
         // The rest of the agenda still reads by time.
-        Assert.Equal([accepted.Id, teamThisAfternoon.Id, thisAfternoon.Id, teamTomorrow.Id, nextWeek.Id, late.Id], all.Items.Select(a => a.Id));
+        Assert.Equal(
+            [accepted.Id, teamThisAfternoon.Id, inThreeHours.Id, thisAfternoon.Id, teamTomorrow.Id, yesterday.Id, nextWeek.Id, late.Id],
+            all.Items.Select(a => a.Id));
     }
 
     [Fact]
