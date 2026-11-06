@@ -31,7 +31,8 @@ public class TenantUser : AuditableEntity, ITenantScoped
     /// <summary>
     /// Whether this member gets an email with each request online of the business (Fase 29N, ADR 0068) and, since the Fase
     /// 29O (ADR 0069), with each appointment its customer cancels, as they chose; null until they choose, when only the owners
-    /// get them (<see cref="GetsRequestEmails"/>). Their own to choose: nobody else sets it for them.
+    /// get them (<see cref="GetsRequestEmails"/>). Theirs to choose and, since the Fase 29Q (ADR 0071), whoever runs the team's,
+    /// except the owner's.
     /// </summary>
     public bool? RequestEmails { get; private set; }
 
@@ -43,7 +44,7 @@ public class TenantUser : AuditableEntity, ITenantScoped
     /// <summary>
     /// Whether this member gets an email each time a customer accepts or rejects a quote of the business from its link (Fase
     /// 29O, ADR 0069), as they chose; null until they choose, when only the owners get them (<see cref="GetsQuoteReplyEmails"/>).
-    /// Their own to choose: nobody else sets it for them.
+    /// Theirs to choose and, since the Fase 29Q (ADR 0071), whoever runs the team's, except the owner's.
     /// </summary>
     public bool? QuoteReplyEmails { get; private set; }
 

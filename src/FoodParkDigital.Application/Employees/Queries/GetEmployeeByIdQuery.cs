@@ -43,7 +43,8 @@ public class GetEmployeeByIdQueryHandler : IRequestHandler<GetEmployeeByIdQuery,
                         u.LastName,
                         u.PhoneNumber,
                         u.Role,
-                        u.IsActive
+                        u.IsActive,
+                        u.EmailConfirmed
                     })
                     .FirstOrDefault()
             })
@@ -68,7 +69,8 @@ public class GetEmployeeByIdQueryHandler : IRequestHandler<GetEmployeeByIdQuery,
             Permissions = TenantPermissionCatalog.ResolveEffectiveCodes(
                 row.TenantUser.PermissionCodes,
                 row.User.Role,
-                row.TenantUser.Role).ToList()
+                row.TenantUser.Role).ToList(),
+            NoticeEmails = EmployeeNoticeEmailsDto.From(row.TenantUser, row.User.EmailConfirmed)
         };
 
         return Result.Success(dto);

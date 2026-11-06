@@ -17,7 +17,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
-/// <summary>The owner keeps the business, and someone always administers it, whatever the team edits.</summary>
+/// <summary>
+/// The owner keeps the business, and someone always administers it, whatever the team edits. Since the Fase 29Q (ADR 0071),
+/// whoever runs the team also chooses the notices by email of each person, but never the owner's.
+/// </summary>
 public class EmployeeAccessRulesTests
 {
     private static readonly Guid TenantA = Guid.NewGuid();
@@ -139,6 +142,71 @@ public class EmployeeAccessRulesTests
         Assert.Equal("Persona", (await fixture.UserAsync(helper)).FirstName);
     }
 
+    [Fact]
+    public async Task WhoeverRunsTheTeam_ShouldChooseTheNoticesOfEachPerson_SavingOnlyWhatChanges()
+    {
+        // Fase 29Q (ADR 0071).
+        await using var fixture = await Fixture.CreateAsync();
+        var owner = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Owner);
+        var admin = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Admin);
+        var receptionist = await fixture.AddMemberAsync(TenantA, UserRole.Staff, TenantUserRole.Staff);
+        var cashier = await fixture.AddMemberAsync(TenantA, UserRole.Staff, TenantUserRole.Staff);
+
+        var byTheOwner = await fixture.UpdateAsync(owner, receptionist, UserRole.Staff, TenantUserRole.Staff, requestEmails: true);
+        var byAnAdmin = await fixture.UpdateAsync(admin, admin, UserRole.TenantAdmin, TenantUserRole.Admin, quoteReplyEmails: true);
+        // What they already get changes nothing: until someone chooses, a cashier gets none.
+        var asTheyAre = await fixture.UpdateAsync(admin, cashier, UserRole.Staff, TenantUserRole.Staff, "Persona", false, false);
+
+        Assert.All([byTheOwner, byAnAdmin, asTheyAre], result => Assert.True(result.IsSuccess, result.Error));
+        Assert.Equal((true, false, false), (byTheOwner.Value!.NoticeEmails.Requests, byTheOwner.Value.NoticeEmails.QuoteReplies,
+            byTheOwner.Value.NoticeEmails.EmailConfirmed));
+        Assert.Equal((false, true), (byAnAdmin.Value!.NoticeEmails.Requests, byAnAdmin.Value.NoticeEmails.QuoteReplies));
+        Assert.Equal(((bool?)true, (bool?)null), await fixture.ChoicesAsync(receptionist));
+        Assert.Equal(((bool?)null, (bool?)true), await fixture.ChoicesAsync(admin));
+        Assert.Equal(((bool?)null, (bool?)null), await fixture.ChoicesAsync(cashier));
+
+        // Null leaves each as it is; turned off, it stays off.
+        var kept = await fixture.UpdateAsync(owner, receptionist, UserRole.Staff, TenantUserRole.Staff);
+        var turnedOff = await fixture.UpdateAsync(admin, receptionist, UserRole.Staff, TenantUserRole.Staff, "Persona", false);
+        Assert.True(kept.Value!.NoticeEmails.Requests);
+        Assert.False(turnedOff.Value!.NoticeEmails.Requests);
+        Assert.Equal(((bool?)false, (bool?)null), await fixture.ChoicesAsync(receptionist));
+    }
+
+    [Fact]
+    public async Task TheOwnersNotices_ShouldOnlyChangeFromTheirProfile_NeverFromTheTeam()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var owner = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Owner);
+        var admin = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Admin);
+
+        var byAnAdmin = await fixture.UpdateAsync(admin, owner, UserRole.TenantAdmin, TenantUserRole.Owner, "Rosa", requestEmails: false);
+        var byThemselves = await fixture.UpdateAsync(owner, owner, UserRole.TenantAdmin, TenantUserRole.Owner, "Rosa", quoteReplyEmails: false);
+        // What they already get is no change: the rest of the form saves.
+        var asTheyAre = await fixture.UpdateAsync(admin, owner, UserRole.TenantAdmin, TenantUserRole.Owner, "Rosa", true, true);
+
+        Assert.Equal(EmployeeNoticeEmails.OwnerChoosesMessage, byAnAdmin.Error);
+        Assert.Equal(EmployeeNoticeEmails.OwnerChoosesMessage, byThemselves.Error);
+        Assert.True(asTheyAre.IsSuccess, asTheyAre.Error);
+        Assert.Equal(((bool?)null, (bool?)null), await fixture.ChoicesAsync(owner));
+        Assert.Equal("Rosa", (await fixture.UserAsync(owner)).FirstName);
+    }
+
+    [Fact]
+    public async Task ARefusedChangeOfTheOwnersNotices_ShouldChangeNothingElse()
+    {
+        // The account's roles save as soon as they change: the refusal comes first.
+        await using var fixture = await Fixture.CreateAsync();
+        var owner = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Owner);
+        var admin = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Admin);
+
+        var refused = await fixture.UpdateAsync(admin, owner, UserRole.Staff, TenantUserRole.Staff, "Otra", requestEmails: false);
+
+        Assert.Equal(EmployeeNoticeEmails.OwnerChoosesMessage, refused.Error);
+        var account = await fixture.UserAsync(owner);
+        Assert.Equal(("Persona", UserRole.TenantAdmin), (account.FirstName, account.Role));
+    }
+
     private sealed record Member(Guid TenantUserId, Guid UserId, Guid TenantId, string Role);
 
     private sealed class Fixture : IAsyncDisposable
@@ -196,7 +264,8 @@ public class EmployeeAccessRulesTests
         }
 
         public Task<Result<EmployeeDto>> UpdateAsync(
-            Member actor, Member employee, UserRole appRole, TenantUserRole tenantRole, string firstName = "Persona")
+            Member actor, Member employee, UserRole appRole, TenantUserRole tenantRole, string firstName = "Persona",
+            bool? requestEmails = null, bool? quoteReplyEmails = null)
         {
             _tenantService.SetTenant(employee.TenantId);
             var handler = new UpdateEmployeeCommandHandler(
@@ -207,7 +276,9 @@ public class EmployeeAccessRulesTests
                 FirstName = firstName,
                 LastName = "Demo",
                 AppRole = appRole,
-                TenantRole = tenantRole
+                TenantRole = tenantRole,
+                RequestEmails = requestEmails,
+                QuoteReplyEmails = quoteReplyEmails
             }, CancellationToken.None);
         }
 
@@ -222,6 +293,12 @@ public class EmployeeAccessRulesTests
 
         public Task<TenantUser> MembershipAsync(Member member) =>
             _context.TenantUsers.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == member.TenantUserId);
+
+        public async Task<(bool? Requests, bool? QuoteReplies)> ChoicesAsync(Member member)
+        {
+            var membership = await MembershipAsync(member);
+            return (membership.RequestEmails, membership.QuoteReplyEmails);
+        }
 
         public Task<ApplicationUser> UserAsync(Member member) =>
             _context.Users.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == member.UserId);

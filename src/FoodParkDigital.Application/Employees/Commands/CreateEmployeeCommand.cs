@@ -34,6 +34,10 @@ public record CreateEmployeeCommand : IRequest<Result<EmployeeDto>>
     public TenantUserRole TenantRole { get; init; } = TenantUserRole.Staff;
     /// <summary>Null takes the defaults of the role; an empty list is "sin acceso".</summary>
     public List<string>? Permissions { get; init; }
+    /// <summary>Whether they get the agenda's emails (Fase 29Q, ADR 0071); null leaves what they have.</summary>
+    public bool? RequestEmails { get; init; }
+    /// <summary>Whether they get an email with each answer to a quote from its link; null leaves what they have.</summary>
+    public bool? QuoteReplyEmails { get; init; }
 }
 
 public class CreateEmployeeCommandValidator : AbstractValidator<CreateEmployeeCommand>
@@ -147,6 +151,7 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
             tenantUser.SetPermissionCodes(TenantPermissionCatalog.GetDefaultCodes(request.AppRole, tenantRole));
         else
             tenantUser.SetExplicitPermissions(request.Permissions);
+        EmployeeNoticeEmails.Apply(tenantUser, request.RequestEmails, request.QuoteReplyEmails);
         _context.TenantUsers.Add(tenantUser);
         // The invitation email is saved with the membership and goes out from the outbox.
         var invitationPath = invite
@@ -168,7 +173,8 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
             IsActive = tenantUser.Status == TenantUserStatus.Active,
             CreatedAt = tenantUser.CreatedAt,
             Permissions = TenantPermissionCatalog.ResolveEffectiveCodes(tenantUser.PermissionCodes, user.Role, tenantRole).ToList(),
-            InvitationUrl = invitationPath
+            InvitationUrl = invitationPath,
+            NoticeEmails = EmployeeNoticeEmailsDto.From(tenantUser, user.EmailConfirmed)
         });
     }
 }

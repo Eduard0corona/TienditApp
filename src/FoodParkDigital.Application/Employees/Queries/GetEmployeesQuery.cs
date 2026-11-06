@@ -51,7 +51,8 @@ public class GetEmployeesQueryHandler : IRequestHandler<GetEmployeesQuery, Pagin
                         u.LastName,
                         u.PhoneNumber,
                         u.Role,
-                        u.IsActive
+                        u.IsActive,
+                        u.EmailConfirmed
                     })
                     .FirstOrDefault()
             })
@@ -112,7 +113,8 @@ public class GetEmployeesQueryHandler : IRequestHandler<GetEmployeesQuery, Pagin
             Permissions = TenantPermissionCatalog.ResolveEffectiveCodes(
                 x.TenantUser.PermissionCodes,
                 x.User.Role,
-                x.TenantUser.Role).ToList()
+                x.TenantUser.Role).ToList(),
+            NoticeEmails = EmployeeNoticeEmailsDto.From(x.TenantUser, x.User.EmailConfirmed)
         }).ToList();
 
         return new PaginatedList<EmployeeDto>(items, totalCount, pageNumber, pageSize);

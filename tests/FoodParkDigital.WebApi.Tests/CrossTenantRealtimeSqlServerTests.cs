@@ -193,6 +193,53 @@ public sealed class CrossTenantRealtimeSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task TheNoticesOfTheTeam_ShouldBeChosenByWhoeverRunsIt_InItsOwnBusinessOnly_ButNeverTheOwners()
+    {
+        // Fase 29Q (ADR 0071).
+        var owner = await _api.SignUpAsync("avisos-por-equipo");
+        var (slug, service) = await CrossTenantOnlineBookingSqlServerTests.BookingAsync(owner.Client, "Corte por equipo");
+        var (receptionist, _, receptionistEmail, receptionistMember) = await EmployeeAsync(owner, "ManageAppointments");
+        var team = await TwoBusinessesApi.ReadAsync(await owner.Client.GetAsync("/api/v1/employees?pageSize=50"));
+        var ownerMember = team.GetProperty("items").EnumerateArray()
+            .Single(member => member.GetProperty("tenantRole").GetString() == "Owner")
+            .GetProperty("tenantUserId").GetGuid();
+
+        // Someone of the team, or another business, does not choose them.
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await receptionist.PutAsJsonAsync($"/api/v1/employees/{receptionistMember}", Edit(receptionistMember, requestEmails: true))).StatusCode);
+        AssertRefused(await A.Client.PutAsJsonAsync($"/api/v1/employees/{receptionistMember}", Edit(receptionistMember, requestEmails: true)));
+        Assert.False((await TwoBusinessesApi.ReadAsync(await receptionist.GetAsync(RequestEmails))).GetProperty("enabled").GetBoolean());
+
+        // The owner turns them on for the receptionist: she sees it in her profile, and the next request reaches her.
+        var chosen = await TwoBusinessesApi.ReadAsync(
+            await owner.Client.PutAsJsonAsync($"/api/v1/employees/{receptionistMember}", Edit(receptionistMember, requestEmails: true)));
+        Assert.True(chosen.GetProperty("noticeEmails").GetProperty("requests").GetBoolean());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await receptionist.GetAsync(RequestEmails))).GetProperty("enabled").GetBoolean());
+        using var stranger = _api.AnonymousClient();
+        await RequestAsync(stranger, slug, service, "5512340031");
+        await _api.DispatchOutboxAsync();
+        Assert.Single(_api.PlainEmailsTo(receptionistEmail));
+
+        // The owner's own are chosen in their profile, not from the team.
+        var ownersOwn = await owner.Client.PutAsJsonAsync($"/api/v1/employees/{ownerMember}", Edit(ownerMember, requestEmails: false));
+        Assert.Equal(HttpStatusCode.BadRequest, ownersOwn.StatusCode);
+        Assert.Contains("Mi perfil", await ownersOwn.Content.ReadAsStringAsync());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await owner.Client.GetAsync(RequestEmails))).GetProperty("enabled").GetBoolean());
+    }
+
+    /// <summary>The edit of a member of the team, with the agenda, and the notices to choose.</summary>
+    private static object Edit(Guid member, bool? requestEmails) => new
+    {
+        tenantUserId = member,
+        firstName = "Empleado",
+        lastName = "De avisos",
+        appRole = 3,
+        tenantRole = 2,
+        permissions = new[] { "ManageAppointments" },
+        requestEmails
+    };
+
+    [SqlServerFact]
     public async Task CancellationsByTheCustomer_ShouldReachOnlyTheirBusiness_OnItsScreensAndByEmailToWhoGetsThem()
     {
         // Fase 29O (ADR 0069).
