@@ -85,6 +85,35 @@ public class AnswerInTimeTests
     }
 
     [Fact]
+    public async Task TheAgenda_ShouldBreakTiesByTimeAndThenById_SoThatAPageNeverRepeatsOrSkipsOne()
+    {
+        // Fase 29P (ADR 0070). Each list is added in the reverse of the order it should read in.
+        await using var fixture = Fixture();
+        var salon = await SalonAsync(fixture, "empates", "Estética Empates");
+        // Arrived together for after tomorrow, with the same limit (a day after arriving): by their time, not their id.
+        var later = Waiting(salon.Id, Now.AddDays(3).AddHours(2), TiedId(1));
+        var sooner = Waiting(salon.Id, Now.AddDays(3), TiedId(2));
+        fixture.Context.Appointments.AddRange(later, sooner);
+        // Three at the same time tomorrow and three at the same time yesterday: by their id.
+        foreach (var n in new[] { 6, 5, 4 })
+            fixture.Context.Appointments.Add(Booked(salon.Id, Now.AddDays(1), TiedId(n)));
+        foreach (var n in new[] { 9, 8, 7 })
+            fixture.Context.Appointments.Add(Booked(salon.Id, Now.AddDays(-1), TiedId(n)));
+        await fixture.Context.SaveChangesAsync();
+        var handler = new GetAppointmentsQueryHandler(fixture.Context);
+
+        var requests = await handler.Handle(
+            new GetAppointmentsQuery { Status = Domain.Appointments.Enums.AppointmentStatus.Requested, FromDate = Now, PageSize = 50 },
+            CancellationToken.None);
+
+        Assert.Equal([sooner.Id, later.Id], requests.Items.Select(a => a.Id));
+        // One per page: each once, by id, in the agenda and in the past.
+        Assert.Equal([TiedId(4), TiedId(5), TiedId(6)],
+            await OnePerPageAsync(handler, new GetAppointmentsQuery { FromDate = Now.AddHours(12), ToDate = Now.AddDays(2) }));
+        Assert.Equal([TiedId(7), TiedId(8), TiedId(9)], await OnePerPageAsync(handler, new GetAppointmentsQuery { ToDate = Now }));
+    }
+
+    [Fact]
     public async Task TheBell_ShouldCountAsUrgent_TheRequestsForToday_ToAnswerTodayToBeInTime_OrAlreadyLate()
     {
         // 11:00 in Mexico City: its day ends a tick before 06:00 UTC tomorrow.
@@ -150,5 +179,44 @@ public class AnswerInTimeTests
         Assert.Equal(ResponseTime.WithinADay, cards["atrasada"].ResponseTime);
         // Neither one in time counts yet: two answers say nothing. Either one counted, two of three would be within an hour.
         Assert.Null(cards["a-tiempo"].ResponseTime);
+    }
+
+    /// <summary>
+    /// An id that reads in the same place by <paramref name="n"/> in .NET and in SQL Server: they differ only in their last bytes,
+    /// the ones SQL Server compares first.
+    /// </summary>
+    internal static Guid TiedId(int n) => new($"00000000-0000-0000-0000-{n:D12}");
+
+    /// <summary>A request online still waiting, that arrived an hour ago, with its id.</summary>
+    private static Appointment Waiting(Guid tenantId, DateTimeOffset startAt, Guid id)
+    {
+        var request = Appointment.RequestOnline(
+            tenantId, "Valeria", NewCustomerPhone(), Guid.NewGuid(), "Corte", startAt, startAt.AddHours(1), null, null, Guid.NewGuid(),
+            (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43]);
+        request.CreatedAt = Now.AddHours(-1);
+        return WithId(request, id);
+    }
+
+    /// <summary>An appointment the business booked, with its id.</summary>
+    private static Appointment Booked(Guid tenantId, DateTimeOffset startAt, Guid id)
+        => WithId(new Appointment(tenantId, "Valeria", "5522107765", "Corte", startAt, startAt.AddHours(1)), id);
+
+    private static Appointment WithId(Appointment appointment, Guid id)
+    {
+        typeof(Domain.Common.BaseEntity).GetProperty(nameof(Domain.Common.BaseEntity.Id))!.SetValue(appointment, id);
+        return appointment;
+    }
+
+    /// <summary>Reads <paramref name="query"/> one appointment per page, to its end.</summary>
+    private static async Task<List<Guid>> OnePerPageAsync(GetAppointmentsQueryHandler handler, GetAppointmentsQuery query)
+    {
+        var ids = new List<Guid>();
+        for (var page = 1; ; page++)
+        {
+            var read = await handler.Handle(query with { PageNumber = page, PageSize = 1 }, CancellationToken.None);
+            if (read.Items.Count == 0)
+                return ids;
+            ids.AddRange(read.Items.Select(a => a.Id));
+        }
     }
 }
