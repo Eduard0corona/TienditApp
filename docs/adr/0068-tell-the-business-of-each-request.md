@@ -47,14 +47,14 @@ Tomé las decisiones de la Fase 29N con la autorización permanente del dueño d
 4. **Cada quien elige.**
    - `TenantUser.RequestEmails` (migración `20261105171726_AddTenantUserRequestEmails`): sí, no o sin elegir (`NULL`). Mientras no elija, solo a los dueños les llegan.
    - Se elige en **Mi perfil › Avisos de solicitudes**, por negocio y solo para uno mismo (`GET` y `PUT /api/v1/appointments/request-emails`, con el permiso de la Agenda). Dice a qué correo llegan y si falta confirmarlo.
-   - Nadie elige por otro. Quien no es del equipo (el administrador de la plataforma) no tiene qué elegir.
+   - Nadie elige por otro. Quien no es del equipo (el administrador de la plataforma) no tiene qué elegir. Desde la Fase 29Q, quien administra el equipo también los elige, menos los del dueño ([ADR 0071](0071-team-notices-and-orders-cleanup.md)).
 5. **Fuera de esta fase:**
    - **Avisar al dueño por WhatsApp:** necesita una plantilla aprobada por Meta y cuesta cada conversación. Lo decide el dueño del producto.
    - **Las notificaciones del navegador o del teléfono** (Web Push): necesitan llaves de la plataforma y que cada persona dé permiso.
    - **Un sonido con cada solicitud**, como el de los pedidos por confirmar. Llegó en la Fase 29P ([ADR 0070](0070-cancellations-cap-agenda-order-and-sound.md)), también con cada cancelación.
    - **Recordar una solicitud antes de su límite.**
    - **Avisar otras cosas por correo:** que el cliente canceló, o la respuesta a una cotización. Llegó en la Fase 29O ([ADR 0069](0069-tell-the-business-what-customers-answer.md)): la cita cancelada también avisa en la app.
-   - **Que el dueño elija por su equipo.**
+   - **Que el dueño elija por su equipo.** Desde la Fase 29Q, el dueño y los administradores eligen los de cada persona, menos los del dueño ([ADR 0071](0071-team-notices-and-orders-cleanup.md)).
    - Lo demás de la [ADR 0066](0066-answer-requests-in-time.md), «Fuera de esta fase».
 
 ## Consecuencias

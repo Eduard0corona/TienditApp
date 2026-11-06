@@ -50,14 +50,14 @@ Tomé las decisiones de la Fase 29O con la autorización permanente del dueño d
    - **Las cotizaciones:** `TenantUser.QuoteReplyEmails` (migración `20261106060148_AddTenantUserQuoteReplyEmails`): sí, no o sin elegir (`NULL`). Mientras no elija, solo a los dueños les llegan.
      - Se elige con `GET` y `PUT /api/v1/quotes/reply-emails`, con lo que pide la API de cotizaciones (`ManageOrders` y servicios o citas).
    - **Mi perfil › Avisos por correo** reemplaza a «Avisos de solicitudes». Tiene un interruptor por aviso, «Citas en línea» y «Cotizaciones», y cada persona ve solo los que puede elegir. Dice a qué correo llegan y si falta confirmarlo.
-   - Nadie elige por otro. Quien no es del equipo (el administrador de la plataforma) no tiene qué elegir.
+   - Nadie elige por otro. Quien no es del equipo (el administrador de la plataforma) no tiene qué elegir. Desde la Fase 29Q, quien administra el equipo también los elige, menos los del dueño ([ADR 0071](0071-team-notices-and-orders-cleanup.md)).
 5. **Lo compartido.**
    - Quién recibe un aviso y cómo se escribe el correo viven en `Application/Common/Notices`. Cada aviso dice qué eligieron sus miembros y quién puede atenderlo. La 29N usa lo mismo.
 6. **Fuera de esta fase:**
    - **Un aviso en pantalla de las respuestas a cotizaciones:** necesita un hub para quien trabaja las cotizaciones.
    - **Avisar cuando el cliente cancela un pedido en línea**, o paga un anticipo.
    - **Avisar por WhatsApp, con notificaciones del navegador o con un sonido:** siguen como en la [ADR 0068](0068-tell-the-business-of-each-request.md).
-   - **Que el dueño elija por su equipo.**
+   - **Que el dueño elija por su equipo.** Desde la Fase 29Q, el dueño y los administradores eligen los de cada persona, menos los del dueño ([ADR 0071](0071-team-notices-and-orders-cleanup.md)).
    - Lo demás de la [ADR 0068](0068-tell-the-business-of-each-request.md), «Fuera de esta fase».
 
 ## Consecuencias
