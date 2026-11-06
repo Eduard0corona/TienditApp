@@ -50,6 +50,14 @@ public class OrdersController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Where the business receives orders, for the Channel filter (Fase 29Q): the counter, WhatsApp while it has a number, the
+    /// online menu while it takes orders, and the delivery platforms it set up.
+    /// </summary>
+    [HttpGet("channels")]
+    public async Task<ActionResult<OrderChannelsDto>> GetChannels(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetOrderChannelsQuery(), cancellationToken));
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<OrderDto>> GetById(Guid id, CancellationToken cancellationToken)
     {

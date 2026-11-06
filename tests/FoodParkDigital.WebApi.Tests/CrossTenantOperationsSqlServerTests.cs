@@ -61,11 +61,13 @@ public sealed class CrossTenantOperationsSqlServerTests
         {
             "totalOrders", "inProgressOrders", "pendingOrders", "completedOrders", "cancelledOrders", "uniqueCustomers",
             "activeProducts", "activeServices", "totalRevenue", "paidOrders", "averageOrderValue", "outstandingBalance",
-            "unpaidOrders", "ordersByStatus", "topSellingItems"
+            "unpaidOrders", "topSellingItems"
         })
         {
             Assert.Equal(metricsBefore.GetProperty(figure).GetRawText(), metricsAfter.GetProperty(figure).GetRawText());
         }
+        // Inicio stopped showing the orders by status (Fase 17): since the Fase 29Q the API no longer sends them.
+        Assert.False(metricsAfter.TryGetProperty("ordersByStatus", out _));
 
         var attentionAfter = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/dashboard/attention");
         Assert.Equal(attentionBefore.GetRawText(), attentionAfter.GetRawText());

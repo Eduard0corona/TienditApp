@@ -405,7 +405,6 @@ public class DashboardMetricsDto
     /// <summary>Balance still owed by the orders of the range that are not cancelled.</summary>
     public decimal OutstandingBalance { get; set; }
     public int UnpaidOrders { get; set; }
-    public Dictionary<string, int> OrdersByStatus { get; set; } = new();
     public List<TopSellingItemDto> TopSellingItems { get; set; } = new();
 }
 
