@@ -9,6 +9,7 @@ import {
   MENU_CIERRE_ESPECIAL,
   MENU_HORARIO_ESPECIAL,
   NEGOCIO_SUSPENDIDO,
+  NOMBRE_LARGO,
   PRINCIPAL_SOLO_A_DOMICILIO,
   PUBLICO_ROUTES,
 } from './publico-cuenta-marco.mocks';
@@ -552,6 +553,17 @@ test.describe('Marco sin conexión', () => {
       await snap(page, `marco-sin-conexion-${size}`);
     });
   }
+});
+
+test.describe('Marco con un nombre largo de negocio', () => {
+  test.use({ prepareData: NOMBRE_LARGO });
+
+  test('marco nombre largo teléfono chico', async ({ page }) => {
+    await page.setViewportSize(SIZES.smallPhone);
+    await open(page, '/dashboard');
+    await expect(page.getByRole('button', { name: /^Negocio actual: Taquería y Antojitos Los Compadres/ })).toBeVisible();
+    await snapScreen(page, 'marco-nombre-largo-telefono-chico');
+  });
 });
 
 test.describe('Marco con el negocio suspendido', () => {

@@ -2095,7 +2095,6 @@ export interface DashboardMetricsDto {
   /** Balance still owed by the orders of the range that are not cancelled. */
   outstandingBalance: number;
   unpaidOrders: number;
-  ordersByStatus: Record<string, number>;
   topSellingItems: TopSellingItemDto[];
 }
 

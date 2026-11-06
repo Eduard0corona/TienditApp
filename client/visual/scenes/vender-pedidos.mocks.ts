@@ -217,6 +217,7 @@ export const SELL_ROUTES = asOption(sellRoutes);
 /** The business takes Rappi orders: Vender offers it as an origin and Pedidos filters by it. */
 const rappiRoutes: ExtraRoutes = (data, helpers) => [
   ['GET', /^\/delivery-platforms\/channels$/, () => helpers.ok([{ channel: RAPPI, isActive: true }])],
+  ['GET', /^\/orders\/channels$/, () => helpers.ok({ channels: [0, 1, 2, RAPPI] })],
   ...sellRoutes(data, helpers),
 ];
 

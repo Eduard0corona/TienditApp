@@ -11551,6 +11551,35 @@
         }
       }
     },
+    "/api/v1/orders/channels": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderChannelsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderChannelsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderChannelsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/orders/{id}": {
       "get": {
         "tags": [
@@ -22636,6 +22665,14 @@
               "type": "string"
             },
             "nullable": true
+          },
+          "requestEmails": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "quoteReplyEmails": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -25045,7 +25082,6 @@
           "completedOrders",
           "inProgressOrders",
           "onlineCollected",
-          "ordersByStatus",
           "outstandingBalance",
           "paidOrders",
           "pendingOrders",
@@ -25127,13 +25163,6 @@
           "unpaidOrders": {
             "type": "integer",
             "format": "int32"
-          },
-          "ordersByStatus": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "integer",
-              "format": "int32"
-            }
           },
           "topSellingItems": {
             "type": "array",
@@ -25591,6 +25620,7 @@
           "firstName",
           "isActive",
           "lastName",
+          "noticeEmails",
           "permissions",
           "status",
           "tenantRole",
@@ -25645,6 +25675,9 @@
           "invitationUrl": {
             "type": "string",
             "nullable": true
+          },
+          "noticeEmails": {
+            "$ref": "#/components/schemas/EmployeeNoticeEmailsDto"
           }
         },
         "additionalProperties": false
@@ -25703,6 +25736,26 @@
           },
           "email": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmployeeNoticeEmailsDto": {
+        "required": [
+          "emailConfirmed",
+          "quoteReplies",
+          "requests"
+        ],
+        "type": "object",
+        "properties": {
+          "requests": {
+            "type": "boolean"
+          },
+          "quoteReplies": {
+            "type": "boolean"
+          },
+          "emailConfirmed": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -30504,6 +30557,21 @@
           "UberEats",
           "DidiFood"
         ]
+      },
+      "OrderChannelsDto": {
+        "required": [
+          "channels"
+        ],
+        "type": "object",
+        "properties": {
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "OrderDeliveryDto": {
         "required": [
@@ -40807,6 +40875,14 @@
             "items": {
               "type": "string"
             },
+            "nullable": true
+          },
+          "requestEmails": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "quoteReplyEmails": {
+            "type": "boolean",
             "nullable": true
           }
         },

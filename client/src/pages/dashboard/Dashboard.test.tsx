@@ -30,7 +30,6 @@ function metrics(overrides: Partial<DashboardMetricsDto> = {}): DashboardMetrics
     totalOrders: 8, inProgressOrders: 6, pendingOrders: 1, completedOrders: 0, cancelledOrders: 1,
     uniqueCustomers: 5, activeProducts: 24, activeServices: 0,
     totalRevenue: 1250, averageOrderValue: 156.25, paidOrders: 8, outstandingBalance: 0, unpaidOrders: 0,
-    ordersByStatus: { Delivered: 4, InPreparation: 2, Pending: 1, Cancelled: 1 },
     topSellingItems: [item('Café americano', 'Product'), item('Concha de vainilla', 'Product')],
     ...overrides,
   };

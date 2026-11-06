@@ -327,7 +327,12 @@ export default function Profile() {
           <PhoneChangeCard />
 
           {(answersRequests || worksQuotes) && (
-            <NoticeEmailsCard businessName={tenant?.name} agenda={answersRequests} quotes={worksQuotes} />
+            <NoticeEmailsCard
+              businessName={tenant?.name}
+              agenda={answersRequests}
+              quotes={worksQuotes}
+              ownsBusiness={user?.tenantRole === 'Owner'}
+            />
           )}
 
           {/* Avatar Section */}

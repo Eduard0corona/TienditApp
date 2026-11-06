@@ -19,14 +19,17 @@ interface NoticeEmailsCardProps {
   agenda: boolean;
   /** Whoever works the quotes: each answer a customer gives from a quote's link (Fase 29O). */
   quotes: boolean;
+  /** The owner's are theirs alone; anyone else's, whoever runs the team may also choose (Fase 29Q). */
+  ownsBusiness?: boolean;
 }
 
 /**
  * Fases 29N and 29O: whether this person gets an email with what the customers of the business they are in do online. Each
- * notice is their own choice, in that business only; until they make it, the owners get them. Whoever is not on its team
- * (the platform's admin) sees nothing.
+ * notice is their choice, in that business only; until someone makes it, the owners get them. Since the Fase 29Q whoever
+ * runs the team may also choose them for anyone but the owner, and the last choice holds. Whoever is not on its team (the
+ * platform's admin) sees nothing.
  */
-export default function NoticeEmailsCard({ businessName, agenda, quotes }: NoticeEmailsCardProps) {
+export default function NoticeEmailsCard({ businessName, agenda, quotes, ownsBusiness = false }: NoticeEmailsCardProps) {
   const inBusiness = businessName ? ` de ${businessName}` : '';
   const requests = useNoticeEmails(REQUEST_EMAILS, agenda);
   const replies = useNoticeEmails(QUOTE_REPLY_EMAILS, quotes);
@@ -50,7 +53,8 @@ export default function NoticeEmailsCard({ businessName, agenda, quotes }: Notic
         ) : (
           <>
             <p className="text-muted small mb-2">
-              Te llegan a <strong>{email || 'tu correo'}</strong>. Solo cambian para ti.
+              Te llegan a <strong>{email || 'tu correo'}</strong>. Solo cambian para ti
+              {ownsBusiness ? '.' : '; quien administra el equipo también los puede elegir por ti.'}
             </p>
             {rows[0] && (
               <NoticeEmailSwitch

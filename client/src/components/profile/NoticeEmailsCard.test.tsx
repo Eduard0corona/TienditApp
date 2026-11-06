@@ -17,10 +17,15 @@ function apiError(status: number, detail: string): AxiosError {
   return new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, response);
 }
 
-const renderCard = (props: { agenda?: boolean; quotes?: boolean } = {}) =>
+const renderCard = (props: { agenda?: boolean; quotes?: boolean; ownsBusiness?: boolean } = {}) =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <NoticeEmailsCard businessName="Estética Luna" agenda={props.agenda ?? true} quotes={props.quotes ?? true} />
+      <NoticeEmailsCard
+        businessName="Estética Luna"
+        agenda={props.agenda ?? true}
+        quotes={props.quotes ?? true}
+        ownsBusiness={props.ownsBusiness}
+      />
     </QueryClientProvider>,
   );
 
@@ -135,5 +140,18 @@ describe('NoticeEmailsCard (Fases 29N and 29O)', () => {
     await waitFor(() => expect(agenda).toBeChecked());
     expect(screen.getByRole('switch', { name: 'Cotizaciones' })).toHaveAttribute('aria-busy', 'true');
     expect(agenda).toHaveAttribute('aria-busy', 'false');
+  });
+
+  it('tells the team that whoever runs it may also choose them, but not the owner (Fase 29Q)', async () => {
+    serve({ [REQUESTS]: { enabled: true } });
+    const { unmount } = renderCard({ quotes: false });
+
+    expect(await screen.findByText(/quien administra el equipo también los puede elegir por ti/)).toBeInTheDocument();
+    unmount();
+
+    renderCard({ quotes: false, ownsBusiness: true });
+    await screen.findByRole('switch', { name: 'Citas en línea' });
+    expect(screen.queryByText(/quien administra el equipo/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Solo cambian para ti\./)).toBeInTheDocument();
   });
 });

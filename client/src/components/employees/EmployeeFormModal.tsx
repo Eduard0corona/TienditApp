@@ -2,6 +2,9 @@ import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { apiRequest, type Schemas } from '../../api/typedClient';
 import { getApiErrorMessage } from '../../api/errors';
+import { useTenant } from '../../hooks/useTenant';
+import { TenantCapability } from '../../types';
+import { hasAnyCapability, hasCapability } from '../../utils/tenantCapabilities';
 import {
   AppRole,
   BusinessRole,
@@ -27,7 +30,8 @@ const DEFAULT_PRESET = 'cashier';
 /**
  * Invite a person or change what they can do. A named role (Gerente, Cajero, Mesero, Cocina, Técnico) fills the
  * permissions; changing any of them makes it a custom role. Nobody invents a password: the person chooses it from
- * the invitation link.
+ * the invitation link. Whoever runs the team also chooses the notices by email the person gets (Fase 29Q), except the
+ * owner's, who chooses them in Mi perfil.
  */
 export default function EmployeeFormModal({ employee, presets, permissionOptions, onClose, onSaved }: EmployeeFormModalProps) {
   const titleId = useId();
@@ -47,8 +51,14 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
   const [presetKey, setPresetKey] = useState(initialPreset);
   const [appRole, setAppRole] = useState<number>(initialAppRole);
   const [permissions, setPermissions] = useState<string[]>(initialPermissions);
+  const [requestEmails, setRequestEmails] = useState(employee?.noticeEmails?.requests ?? false);
+  const [quoteReplyEmails, setQuoteReplyEmails] = useState(employee?.noticeEmails?.quoteReplies ?? false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const { capabilities } = useTenant();
+  // The notices the business has: the agenda's with appointments, the answers to quotes with services or appointments.
+  const offersRequests = hasCapability(capabilities, TenantCapability.Appointments);
+  const offersQuoteReplies = hasAnyCapability(capabilities, TenantCapability.Service | TenantCapability.Appointments);
 
   const isManager = isManagerPreset(presets.find((preset) => preset.key === presetKey));
   const noAccess = !isManager && !editingOwner && permissions.length === 0;
@@ -68,6 +78,13 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
     setPresetKey(matched);
     setAppRole(matched === CUSTOM_ROLE_KEY ? AppRole.Staff : nextAppRole);
   };
+
+  // What a notice the business does not have would say is left as it is.
+  const noticeFields = () => ({
+    requestEmails: offersRequests ? requestEmails : null,
+    quoteReplyEmails: offersQuoteReplies ? quoteReplyEmails : null,
+  });
+  const permissionName = (code: string) => permissionOptions.find((option) => option.code === code)?.name ?? code;
 
   const roleFields = () => isManager
     ? { appRole: AppRole.TenantAdmin as Schemas['UserRole'], tenantRole: BusinessRole.Admin as Schemas['TenantUserRole'], permissions: null }
@@ -89,10 +106,10 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
             tenantUserId: employee.tenantUserId,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
-            // The owner keeps their role whatever is sent.
+            // The owner keeps their role whatever is sent, and chooses their notices in Mi perfil.
             ...(editingOwner
               ? { appRole: AppRole.TenantAdmin as Schemas['UserRole'], tenantRole: BusinessRole.Owner as Schemas['TenantUserRole'], permissions: null }
-              : roleFields()),
+              : { ...roleFields(), ...noticeFields() }),
           },
         })
         : await apiRequest('post', '/api/v1/employees', {
@@ -102,6 +119,7 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
             lastName: lastName.trim(),
             phoneNumber: phone.trim() || null,
             ...roleFields(),
+            ...noticeFields(),
           },
         });
       onSaved(saved);
@@ -160,7 +178,8 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
 
         {editingOwner ? (
           <div className="alert alert-info small mb-0" role="status">
-            Es el dueño del negocio: puede hacer todo y su rol no se puede cambiar ni desactivar.
+            Es el dueño del negocio: puede hacer todo y su rol no se puede cambiar ni desactivar. Sus avisos por correo los
+            elige en Mi perfil.
           </div>
         ) : (
           <>
@@ -223,6 +242,35 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
                 </div>
               )}
             </fieldset>
+
+            {(offersRequests || offersQuoteReplies) && (
+              <fieldset className="mt-3">
+                <legend className="form-label fs-6 fw-semibold">Avisos por correo</legend>
+                <p className="small text-muted mb-2">
+                  Le llegan a {employee?.email || email.trim() || 'su correo'}
+                  {employee && !employee.noticeEmails?.emailConfirmed ? ' cuando confirme su correo' : ''}. También los
+                  puede cambiar en Mi perfil.
+                </p>
+                {offersRequests && (
+                  <NoticeSwitch
+                    label="Citas en línea"
+                    description="Cada solicitud de cita o de visita y cada cita que un cliente cancela."
+                    checked={requestEmails}
+                    onChange={setRequestEmails}
+                    missing={!isManager && !permissions.includes('ManageAppointments') ? permissionName('ManageAppointments') : null}
+                  />
+                )}
+                {offersQuoteReplies && (
+                  <NoticeSwitch
+                    label="Cotizaciones"
+                    description="Cada vez que un cliente acepta o rechaza una cotización desde su enlace."
+                    checked={quoteReplyEmails}
+                    onChange={setQuoteReplyEmails}
+                    missing={!isManager && !permissions.includes('ManageOrders') ? permissionName('ManageOrders') : null}
+                  />
+                )}
+              </fieldset>
+            )}
           </>
         )}
       </Modal.Body>
@@ -233,5 +281,42 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
         </button>
       </Modal.Footer>
     </Modal>
+  );
+}
+
+/** One notice by email, and the permission it still needs to reach the person, if any. */
+function NoticeSwitch({
+  label,
+  description,
+  checked,
+  onChange,
+  missing,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  /** The name of the permission without which this notice does not reach them. */
+  missing: string | null;
+}) {
+  const switchId = useId();
+  const descriptionId = useId();
+  return (
+    <div className="form-check form-switch mb-2">
+      <input
+        className="form-check-input"
+        type="checkbox"
+        role="switch"
+        id={switchId}
+        aria-describedby={descriptionId}
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <label className="form-check-label fw-semibold" htmlFor={switchId}>{label}</label>
+      <div className="form-text mt-0" id={descriptionId}>
+        {description}
+        {checked && missing && <span className="d-block text-warning-emphasis">Sin el permiso «{missing}» no le llegan.</span>}
+      </div>
+    </div>
   );
 }
