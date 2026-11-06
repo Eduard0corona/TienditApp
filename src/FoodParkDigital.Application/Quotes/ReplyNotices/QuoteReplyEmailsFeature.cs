@@ -26,12 +26,12 @@ public class QuoteReplyEmailsDto
 
 /// <summary>The person's own choice, for whoever works the quotes (what the quotes' API asks).</summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-[RequiresCapability(TenantCapability.Service | TenantCapability.Appointments)]
+[RequiresCapability(QuoteReplyEmail.Modules)]
 public record GetQuoteReplyEmailsQuery : IRequest<Result<QuoteReplyEmailsDto>>;
 
 /// <summary>Turns them on or off for the person, in this business only. Nobody chooses for someone else.</summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-[RequiresCapability(TenantCapability.Service | TenantCapability.Appointments)]
+[RequiresCapability(QuoteReplyEmail.Modules)]
 public record UpdateQuoteReplyEmailsCommand(bool Enabled) : IRequest<Result<QuoteReplyEmailsDto>>;
 
 public class QuoteReplyEmailsHandler :

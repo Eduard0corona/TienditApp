@@ -228,8 +228,9 @@ public class CustomerAnswerNoticesTests
         fixture.TenantService.SetTenant(salon.Id);
         var screens = new Screens();
 
+        // What the event says of it (here, that it was already agendada) is what the screens hear.
         await Notifications(fixture, screens)
-            .Handle(new AppointmentCancelledByCustomerEvent(cancelled.Id, salon.Id, HomeVisit: false, FromTeam: false, WasRequest: true), CancellationToken.None);
+            .Handle(new AppointmentCancelledByCustomerEvent(cancelled.Id, salon.Id, HomeVisit: false, FromTeam: false, WasRequest: false), CancellationToken.None);
         // One of another business is never told to this one.
         await Notifications(fixture, screens)
             .Handle(new AppointmentCancelledByCustomerEvent(cancelled.Id, Guid.NewGuid(), HomeVisit: false, FromTeam: false, WasRequest: true), CancellationToken.None);
@@ -239,7 +240,7 @@ public class CustomerAnswerNoticesTests
 
         var (tenantId, notice) = Assert.Single(screens.Cancelled);
         Assert.Equal(salon.Id, tenantId);
-        Assert.Equal(new AppointmentCancelledNotice(cancelled.Id, "Corte", cancelled.StartAt, false, false, true), notice);
+        Assert.Equal(new AppointmentCancelledNotice(cancelled.Id, "Corte", cancelled.StartAt, false, false, false), notice);
         Assert.Empty(screens.Heard);
     }
 
@@ -348,6 +349,23 @@ public class CustomerAnswerNoticesTests
         Assert.DoesNotContain("mensaje", sent.Body);
         Assert.DoesNotContain("Conviértela", sent.Body);
         Assert.DoesNotContain("href", sent.Body);
+    }
+
+    [Fact]
+    public async Task TheEmailOfAnAcceptedQuote_ShouldNotOfferTheOrder_WhenItsBusinessHasAppointmentsButNoServices()
+    {
+        await using var fixture = Fixture();
+        // A shop with the agenda: it quotes its visits, but an accepted quote does not become a service order there.
+        var shop = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail | TenantCapability.Appointments, slug: "tienda-agenda");
+        var owner = await MemberAsync(fixture, shop, "dueño", TenantUserRole.Owner);
+        var quote = await SentQuoteAsync(fixture, shop, 1);
+        quote.ReplyFromLink(true, Today, null, Now.AddMinutes(-1));
+        await fixture.Context.SaveChangesAsync();
+
+        var sent = Assert.Single(await SendReplyAsync(fixture, shop, quote, owner));
+
+        Assert.StartsWith("Cotización aceptada en ", sent.Subject);
+        Assert.DoesNotContain("Conviértela", sent.Body);
     }
 
     [Fact]

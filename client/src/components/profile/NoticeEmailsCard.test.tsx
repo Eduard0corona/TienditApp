@@ -92,7 +92,7 @@ describe('NoticeEmailsCard (Fases 29N and 29O)', () => {
 
   it('hides a notice the server refuses, and shows nothing to whoever is not on the team', async () => {
     serve({ [REQUESTS]: { enabled: true } });
-    const { container, unmount } = renderCard();
+    const { unmount } = renderCard();
 
     const card = await screen.findByRole('heading', { name: 'Avisos por correo' });
     await waitFor(() => expect(within(card.parentElement!).queryByRole('switch', { name: 'Cotizaciones' })).not.toBeInTheDocument());
@@ -102,6 +102,38 @@ describe('NoticeEmailsCard (Fases 29N and 29O)', () => {
     vi.mocked(apiRequest).mockRejectedValue(apiError(404, 'Estos avisos son para el equipo del negocio.'));
     const second = renderCard();
     await waitFor(() => expect(second.container).toBeEmptyDOMElement());
-    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('keeps a notice that failed to load for another reason, and lets the person try again', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    vi.mocked(apiRequest).mockImplementation(async (_method, path) => {
+      if (path === QUOTES && fail) throw apiError(500, 'Falló.');
+      return { enabled: true, email: 'ana@demo.com', emailConfirmed: true } as never;
+    });
+    renderCard();
+
+    const quotes = await screen.findByRole('switch', { name: 'Cotizaciones' });
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('No se pudo leer esta elección.');
+    expect(quotes).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Citas en línea' })).toBeChecked();
+
+    fail = false;
+    await user.click(within(alert).getByRole('button', { name: 'Reintentar' }));
+
+    await waitFor(() => expect(quotes).toBeChecked());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('marks a notice still loading as busy', async () => {
+    vi.mocked(apiRequest).mockImplementation(async (_method, path) =>
+      path === QUOTES ? new Promise<never>(() => {}) : ({ enabled: true, email: 'ana@demo.com', emailConfirmed: true } as never));
+    renderCard();
+
+    const agenda = await screen.findByRole('switch', { name: 'Citas en línea' });
+    await waitFor(() => expect(agenda).toBeChecked());
+    expect(screen.getByRole('switch', { name: 'Cotizaciones' })).toHaveAttribute('aria-busy', 'true');
+    expect(agenda).toHaveAttribute('aria-busy', 'false');
   });
 });

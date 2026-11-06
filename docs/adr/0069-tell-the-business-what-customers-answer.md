@@ -67,7 +67,7 @@ Tomé las decisiones de la Fase 29O con la autorización permanente del dueño d
   - Cada quien decide qué avisos le llegan, por separado y sin que nadie más lo decida.
   - Los correos no reparten los datos del cliente ni lo que escribió: quien atiende los ve en la Agenda o en la cotización.
 - **Lo que limita:**
-  - **Un cliente que pide y cancela muchas veces** manda también muchos correos. Lo acotan el tope de solicitudes por teléfono ([ADR 0025](0025-online-booking.md)) y el límite de peticiones.
+  - **Un cliente que pide y cancela muchas veces** manda dos correos con cada vuelta: el de la solicitud y el de la cancelación. El tope de solicitudes por teléfono ([ADR 0025](0025-online-booking.md)) no lo acota, porque solo cuenta las que esperan respuesta y una cancelada ya no espera. Lo acota el límite de peticiones de las páginas públicas, por dirección IP (6 cada 10 minutos para pedir y para cancelar), que quien cambia de dirección rodea.
   - **Quien recibe los avisos de la Agenda recibe ahora también las cancelaciones**, sin elegirlo aparte. El pie del correo lo dice, y se apagan juntos en Mi perfil.
   - **Las respuestas a cotizaciones no avisan en pantalla:** la campana las muestra en menos de un minuto.
   - **Un correo que el proceso alcanzó a mandar** antes de detenerse sale otra vez al reintentar, como los demás del outbox.

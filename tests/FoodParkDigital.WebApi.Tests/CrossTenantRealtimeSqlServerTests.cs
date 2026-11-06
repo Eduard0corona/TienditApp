@@ -206,7 +206,12 @@ public sealed class CrossTenantRealtimeSqlServerTests
         var secondOfTheirs = await RequestWithLinkAsync(stranger, theirSlug, theirService, "5512340013");
         var seenByMine = new Events();
         var seenByTheirs = new Events();
-        await using var hubMine = await ConnectAsync("/hubs/appointments", mine.AccessToken, "AppointmentCancelled", seenByMine, AppointmentIdOf);
+        var payloadsOfMine = new ConcurrentQueue<JsonElement>();
+        await using var hubMine = await ConnectAsync("/hubs/appointments", mine.AccessToken, "AppointmentCancelled", seenByMine, payload =>
+        {
+            payloadsOfMine.Enqueue(payload.Clone());
+            return AppointmentIdOf(payload);
+        });
         await using var hubTheirs = await ConnectAsync("/hubs/appointments", theirs.AccessToken, "AppointmentCancelled", seenByTheirs, AppointmentIdOf);
 
         // Theirs is live before mine is cancelled; then theirs gets another: had mine been sent to theirs, it would have
@@ -220,6 +225,13 @@ public sealed class CrossTenantRealtimeSqlServerTests
         Assert.False(seenByTheirs.Saw(ofMine.Id.ToString()));
         Assert.False(seenByMine.Saw(firstOfTheirs.Id.ToString()));
         Assert.False(seenByMine.Saw(secondOfTheirs.Id.ToString()));
+        // What it was for and when; never who cancelled it.
+        var payload = Assert.Single(payloadsOfMine);
+        Assert.Equal(
+            ["appointmentId", "fromTeam", "homeVisit", "serviceName", "startAt", "wasRequest"],
+            payload.EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal(("Corte que se cancela", true, false), (payload.GetProperty("serviceName").GetString(),
+            payload.GetProperty("wasRequest").GetBoolean(), payload.GetProperty("fromTeam").GetBoolean()));
 
         // Each owner gets the email of each cancellation of their own business, and only those.
         await _api.DispatchOutboxAsync();
