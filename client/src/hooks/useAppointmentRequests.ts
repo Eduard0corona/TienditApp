@@ -15,28 +15,55 @@ export interface AppointmentRequestedPayload {
   fromTeam: boolean;
 }
 
+/** An appointment booked online that its customer cancelled (Fase 29O): what it was for and when, never who cancelled it. */
+export interface AppointmentCancelledPayload {
+  appointmentId: string;
+  serviceName: string;
+  startAt: string;
+  /** A visit at the customer's address, not an appointment at the business. */
+  homeVisit: boolean;
+  /** It came from the business's own team: the screens refresh without telling it. */
+  fromTeam: boolean;
+  /** It still waited for the business's answer. */
+  wasRequest: boolean;
+}
+
 /** The window event the agenda listens to: a request arrived, or the live connection came back and may have missed one. */
 export const APPOINTMENT_REQUESTS_CHANGED = 'tienditapp:appointment-requests-changed';
 
-/** "Corte de cabello, viernes, 6 de noviembre, 10:00 a.m.". */
-export function describeRequest(payload: AppointmentRequestedPayload): { title: string; message: string } {
-  const when = formatInBusinessZone(payload.startAt, {
+/** "viernes, 6 de noviembre, 10:00 a.m.", in the business's zone. */
+function when(startAt: string): string {
+  return formatInBusinessZone(startAt, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+/** "Corte de cabello, viernes, 6 de noviembre, 10:00 a.m.". */
+export function describeRequest(payload: AppointmentRequestedPayload): { title: string; message: string } {
   return {
     title: payload.homeVisit ? 'Nueva solicitud de visita' : 'Nueva solicitud de cita',
-    message: `${payload.serviceName}, ${when}. Respóndela desde la Agenda.`,
+    message: `${payload.serviceName}, ${when(payload.startAt)}. Respóndela desde la Agenda.`,
+  };
+}
+
+/** Fase 29O: "Cita cancelada: Corte de cabello, viernes, 6 de noviembre, 10:00 a.m. Ese horario quedó libre.". */
+export function describeCancellation(payload: AppointmentCancelledPayload): { title: string; message: string } {
+  const kind = payload.homeVisit ? 'visita' : 'cita';
+  return {
+    title: payload.wasRequest ? `Solicitud de ${kind} cancelada` : `${payload.homeVisit ? 'Visita' : 'Cita'} cancelada`,
+    message: `El cliente canceló ${payload.serviceName}, ${when(payload.startAt)}. Ese horario quedó libre.`,
   };
 }
 
 /**
  * The live requests online of the business, for whoever answers them (the top bar mounts it): the bell reads them at once,
- * the agenda reloads, and a notice tells each one that came from a customer. Events sent while the connection was down are
- * lost: every (re)connection reads again, and the bell still reads every minute.
+ * the agenda reloads, and a notice tells each one that came from a customer. Since the Fase 29O, so do the appointments its
+ * customers cancel. Events sent while the connection was down are lost: every (re)connection reads again, and the bell
+ * still reads every minute.
  */
 export function useAppointmentRequestsLive(enabled: boolean, tenantId?: string) {
   const queryClient = useQueryClient();
@@ -65,6 +92,12 @@ export function useAppointmentRequestsLive(enabled: boolean, tenantId?: string) 
         const { title, message } = describeRequest(payload);
         toastRef.current.info(message, { title, durationMs: 10_000 });
       });
+      connection.on('AppointmentCancelled', (payload: AppointmentCancelledPayload) => {
+        changed();
+        if (payload.fromTeam) return;
+        const { title, message } = describeCancellation(payload);
+        toastRef.current.warning(message, { title, durationMs: 10_000 });
+      });
       stop = keepHubConnected(connection, 'AppointmentHub', () => isDisposed, changed);
     }).catch(() => {
       // A new version replaced the chunk: the page reloads (vite:preloadError), and the bell still reads every minute.
@@ -76,7 +109,7 @@ export function useAppointmentRequestsLive(enabled: boolean, tenantId?: string) 
   }, [enabled, tenantId, queryClient]);
 }
 
-/** Runs <paramref name="callback"/> when a request online arrives, or the live connection comes back. */
+/** Runs <paramref name="callback"/> when a request online arrives or is cancelled, or the live connection comes back. */
 export function useOnAppointmentRequestsChanged(callback: () => void) {
   const callbackRef = useRef(callback);
   useEffect(() => {

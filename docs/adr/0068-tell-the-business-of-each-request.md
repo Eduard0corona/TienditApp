@@ -53,7 +53,7 @@ Tomé las decisiones de la Fase 29N con la autorización permanente del dueño d
    - **Las notificaciones del navegador o del teléfono** (Web Push): necesitan llaves de la plataforma y que cada persona dé permiso.
    - **Un sonido con cada solicitud**, como el de los pedidos por confirmar.
    - **Recordar una solicitud antes de su límite.**
-   - **Avisar otras cosas por correo:** que el cliente canceló, o la respuesta a una cotización.
+   - **Avisar otras cosas por correo:** que el cliente canceló, o la respuesta a una cotización. Llegó en la Fase 29O ([ADR 0069](0069-tell-the-business-what-customers-answer.md)): la cita cancelada también avisa en la app.
    - **Que el dueño elija por su equipo.**
    - Lo demás de la [ADR 0066](0066-answer-requests-in-time.md), «Fuera de esta fase».
 

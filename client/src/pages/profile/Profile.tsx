@@ -8,7 +8,7 @@ import { profileApi } from '../../api/profileApi';
 import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import PhoneChangeCard from '../../components/profile/PhoneChangeCard';
-import RequestEmailsCard from '../../components/profile/RequestEmailsCard';
+import NoticeEmailsCard from '../../components/profile/NoticeEmailsCard';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
 import { formatInBusinessZone } from '../../utils/dates';
@@ -21,10 +21,12 @@ interface DisableTwoFactorForm {
 export default function Profile() {
   const { user, refreshProfile, logout } = useAuth();
   const { tenant, capabilities } = useTenant();
-  // Fase 29N: whoever answers the requests online of the business chooses whether each one reaches them by email.
+  // Fases 29N and 29O: whoever answers the requests online, or works the quotes, chooses which notices reach them by email.
   // The platform's admin acting in a business is not on its team: nothing to choose there.
   const access = getAccess(user, capabilities);
-  const answersRequests = !!tenant && access.appointments && !access.platform;
+  const onTheTeam = !!tenant && !access.platform;
+  const answersRequests = onTheTeam && access.appointments;
+  const worksQuotes = onTheTeam && access.quotes;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const signOutTimeoutRef = useRef<number | undefined>(undefined);
 
@@ -324,7 +326,9 @@ export default function Profile() {
 
           <PhoneChangeCard />
 
-          {answersRequests && <RequestEmailsCard businessName={tenant?.name} />}
+          {(answersRequests || worksQuotes) && (
+            <NoticeEmailsCard businessName={tenant?.name} agenda={answersRequests} quotes={worksQuotes} />
+          )}
 
           {/* Avatar Section */}
           <div className="card">
