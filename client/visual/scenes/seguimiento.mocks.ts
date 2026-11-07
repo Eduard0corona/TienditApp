@@ -98,10 +98,6 @@ function myOrder(data: DemoData, id: string) {
   return null;
 }
 
-/**
- * The guest's order followed with the link of its receipt (PublicOrderTrackingDto): the two conchas and the americano of
- * Café La Esquina, accepted and in preparation, to an address it does not show. Any other link is not found.
- */
 /** The link of a guest's order the business has not accepted yet (Fase 29R): the guest may cancel it. */
 export const WAITING_TRACKING_LINK = 'PorConfirmarPorConfirmarPorConfirmar-_01234';
 
@@ -132,6 +128,10 @@ function waitingGuestOrder(data: DemoData, cancelled: boolean) {
   };
 }
 
+/**
+ * The guest's order followed with the link of its receipt (PublicOrderTrackingDto): the two conchas and the americano of
+ * Café La Esquina, accepted and in preparation, to an address it does not show. Any other link is not found.
+ */
 function guestOrder(data: DemoData) {
   return {
     orderNumber: 'ORD-000360', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', businessContactPhone: '5512345678',

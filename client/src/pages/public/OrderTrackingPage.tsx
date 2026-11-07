@@ -75,7 +75,10 @@ export default function OrderTrackingPage() {
                   <CancelOrderButton
                     orderNumber={order.orderNumber}
                     cancel={async () => {
-                      queryClient.setQueryData(queryKey, await publicMenuApi.cancelOrderByLink(token));
+                      const cancelled = await publicMenuApi.cancelOrderByLink(token);
+                      // A reading of every 20 seconds that left before the answer must not bring it back as it was.
+                      await queryClient.cancelQueries({ queryKey });
+                      queryClient.setQueryData(queryKey, cancelled);
                     }}
                     onRefused={() => void trackingQuery.refetch()}
                   />

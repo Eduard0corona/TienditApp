@@ -69,7 +69,10 @@ export default function MyOrderPage() {
                   <CancelOrderButton
                     orderNumber={order.orderNumber}
                     cancel={async () => {
-                      queryClient.setQueryData(queryKey, await accountApi.cancelOrder(id));
+                      const cancelled = await accountApi.cancelOrder(id);
+                      // A reading of every 20 seconds that left before the answer must not bring it back as it was.
+                      await queryClient.cancelQueries({ queryKey });
+                      queryClient.setQueryData(queryKey, cancelled);
                       // The list of the account says where each order is: it reads again when opened.
                       void queryClient.invalidateQueries({ queryKey: ['me', 'orders'], refetchType: 'none' });
                     }}

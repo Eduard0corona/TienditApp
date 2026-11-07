@@ -40,8 +40,11 @@ export function useQuoteRepliesLive(enabled: boolean, tenantId?: string) {
     let stop: (() => void) | undefined;
     const changed = () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
-      // The list and the detail; their settings do not change with an answer.
-      void queryClient.invalidateQueries({ queryKey: ['quotes'], predicate: (query) => query.queryKey[1] !== 'settings' });
+      // The list and the detail; their settings and the catalog of a draft do not change with an answer.
+      void queryClient.invalidateQueries({
+        queryKey: ['quotes'],
+        predicate: (query) => query.queryKey[1] !== 'settings' && query.queryKey[1] !== 'catalog',
+      });
     };
     // The top bar is on every first screen: SignalR loads apart, once the person is known to work the quotes.
     void import('../api/signalr').then(({ createHubConnection, keepHubConnected }) => {

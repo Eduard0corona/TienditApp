@@ -69,8 +69,11 @@ public sealed class OrderAuditHandlers :
         => AddAsync(domainEvent.TenantId, nameof(Order), domainEvent.OrderId, "OrderCancelled", context, new
         {
             domainEvent.PreviousStatus,
-            domainEvent.Reason
-        });
+            domainEvent.Reason,
+            domainEvent.ByCustomer
+        },
+        // Its customer cancelled it (Fase 29R): the business reads «Cliente», as its history says, never the account's email.
+        performedBy: domainEvent.ByCustomer ? Order.CustomerPerformedBy : null);
 
     public Task HandleAsync(ServiceOrderPieceStatusChangedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
         => AddAsync(domainEvent.TenantId, "ServiceOrderPiece", domainEvent.PieceId, "ServiceOrderPieceStatusChanged", context, new
@@ -123,14 +126,15 @@ public sealed class OrderAuditHandlers :
             domainEvent.ReturnedToStock
         });
 
-    private Task AddAsync(Guid tenantId, string entityName, Guid entityId, string action, OutboxEventContext context, object metadata)
+    private Task AddAsync(
+        Guid tenantId, string entityName, Guid entityId, string action, OutboxEventContext context, object metadata, string? performedBy = null)
     {
         _context.AuditLogs.Add(new AuditLog(
             tenantId: tenantId,
             entityName: entityName,
             entityId: entityId.ToString(),
             action: action,
-            performedBy: context.ActorName ?? "system",
+            performedBy: performedBy ?? context.ActorName ?? "system",
             metadata: JsonSerializer.Serialize(metadata),
             timestamp: context.OccurredAt));
         return Task.CompletedTask;

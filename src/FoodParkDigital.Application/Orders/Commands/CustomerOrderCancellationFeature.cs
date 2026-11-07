@@ -3,7 +3,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Domain.Exceptions;
-using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FluentValidation;
 using MediatR;
@@ -48,7 +48,7 @@ public class CancelPublicOrderCommandHandler : IRequestHandler<CancelPublicOrder
         var now = _clock.UtcNow;
         var found = await PublicOrderLink.FindAsync(_context, request.Token, now, cancellationToken);
         if (found is null)
-            return Result.Failure<PublicOrderTrackingDto>(CustomerOrderCancellation.NotFoundMessage);
+            return Result.Failure<PublicOrderTrackingDto>(OrderTracking.NotFoundMessage);
 
         _tenantService.SetTenant(found.Value.TenantId);
         await CustomerOrderCancellation.CancelAsync(_context, _inventory, found.Value.Id, cancellationToken);
@@ -90,8 +90,12 @@ public class CancelMyOrderCommandHandler : IRequestHandler<CancelMyOrderCommand,
         if (!Guid.TryParse(_currentUser.UserId, out var userId))
             return Result.Failure<MyOrderDetailDto>(CustomerOrderCancellation.NotFoundMessage);
 
-        var found = await MyOrder.Of(_context, userId, request.Id)
-            .Select(o => new { o.Id, o.TenantId })
+        // Like the link, only an order of a business that is active: one suspended takes no changes.
+        var found = await (
+                from order in MyOrder.Of(_context, userId, request.Id)
+                join tenant in _context.Tenants.AsNoTracking() on order.TenantId equals tenant.Id
+                where tenant.Status == TenantStatus.Active
+                select new { order.Id, order.TenantId })
             .FirstOrDefaultAsync(cancellationToken);
         if (found is null)
             return Result.Failure<MyOrderDetailDto>(CustomerOrderCancellation.NotFoundMessage);
@@ -108,22 +112,37 @@ public class CancelMyOrderCommandHandler : IRequestHandler<CancelMyOrderCommand,
 /// </summary>
 internal static class CustomerOrderCancellation
 {
-    public const string NotFoundMessage = "No encontramos ese pedido.";
+    /// <summary>The account's detail says the same of an order that is not its own.</summary>
+    public const string NotFoundMessage = "No encontramos ese pedido en tu cuenta.";
+
+    private const int MaxAttempts = 3;
 
     public static async Task CancelAsync(
         IApplicationDbContext context, IOrderInventoryService inventory, Guid orderId, CancellationToken cancellationToken)
     {
-        var order = await context.Orders
-            .Include(o => o.StatusHistory)
-            .Include(o => o.ServicePieces)
-            .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
-            ?? throw new EntityNotFoundException("Order", orderId);
-        // Tapped twice, or sent again after its answer was lost: it is already cancelled, and the answer shows it as it is.
-        if (order.Status == OrderStatus.Cancelled)
-            return;
+        for (var attempt = 1; ; attempt++)
+        {
+            var order = await context.Orders
+                .Include(o => o.StatusHistory)
+                .Include(o => o.ServicePieces)
+                .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
+                ?? throw new EntityNotFoundException("Order", orderId);
+            // Already cancelled by its customer (tapped twice, or sent again after its answer was lost): nothing changes.
+            if (!order.CancelByCustomer(OrderStateMachineFactory.Create(order.BusinessType, order.OrderType)))
+                return;
 
-        order.CancelByCustomer(OrderStateMachineFactory.Create(order.BusinessType, order.OrderType));
-        await inventory.ReverseConsumptionForOrderAsync(order, order.CancellationReason, cancellationToken);
-        await context.SaveChangesAsync(cancellationToken);
+            await inventory.ReverseConsumptionForOrderAsync(order, order.CancellationReason, cancellationToken);
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxAttempts)
+            {
+                // The business accepted (or changed) it at the same time: read it again, and the domain says what it is now.
+                if (context is DbContext dbContext)
+                    dbContext.ChangeTracker.Clear();
+            }
+        }
     }
 }

@@ -674,24 +674,37 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public const string CustomerCancelAcceptedMessage = "El negocio ya aceptó tu pedido: para cancelarlo, llámale.";
     public const string CustomerCancelPaidMessage = "Tu pedido ya tiene un pago: para cancelarlo, llámale al negocio.";
     public const string CustomerCancelTableMessage = "Un pedido de una mesa se cancela con quien te atiende.";
+    public const string CustomerCancelByBusinessMessage = "El negocio ya canceló tu pedido.";
 
     /// <summary>
     /// Whether its customer may still cancel it (Fase 29R, ADR 0072): an order of the online menu the business has not
-    /// accepted yet, with nothing paid or forgiven, and not of a table.
+    /// accepted yet, with nothing paid or forgiven, and not of a table (one ordered with the QR of a table is handled by
+    /// whoever serves it).
     /// </summary>
     public bool CustomerMayCancel =>
         Channel == OrderChannel.Online && Status == OrderStatus.Pending && PaidAmount == 0 && WrittenOffAmount == 0
-        && OpenTableId is null;
+        && TableNumber is null && OpenTableId is null;
 
     /// <summary>
     /// Its customer cancels it from their link or their account, while <see cref="CustomerMayCancel"/>: once the business
     /// accepted it, or something was paid, only the business cancels it. The history says the customer did it.
     /// </summary>
-    public void CancelByCustomer(IOrderStateMachine stateMachine)
+    /// <returns>
+    /// False when its customer had already cancelled it (tapped twice, or sent again after the answer was lost): nothing
+    /// changes. One the business cancelled says so.
+    /// </returns>
+    public bool CancelByCustomer(IOrderStateMachine stateMachine)
     {
+        if (Status == OrderStatus.Cancelled)
+        {
+            // A cancelled order stays so: its one cancellation in the history says who did it.
+            if (StatusHistory.Any(h => h.NewStatus == OrderStatus.Cancelled && h.ChangedBy == CustomerPerformedBy))
+                return false;
+            throw new DomainException(CustomerCancelByBusinessMessage);
+        }
         if (Channel != OrderChannel.Online)
             throw new DomainException(CustomerCancelNotOnlineMessage);
-        if (OpenTableId is not null)
+        if (TableNumber is not null || OpenTableId is not null)
             throw new DomainException(CustomerCancelTableMessage);
         if (Status != OrderStatus.Pending)
             throw new DomainException(CustomerCancelAcceptedMessage);
@@ -699,6 +712,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(CustomerCancelPaidMessage);
 
         CancelAs(stateMachine, CustomerPerformedBy, CustomerCancellationReason, byCustomer: true);
+        return true;
     }
 
     private void CancelAs(IOrderStateMachine stateMachine, string? performedBy, string? reason, bool byCustomer)

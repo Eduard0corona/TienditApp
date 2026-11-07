@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Customers.Services;
@@ -18,9 +19,12 @@ using FoodParkDigital.Domain.Orders.Events;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
@@ -71,16 +75,45 @@ public class CustomerOrderCancellationTests
         var token = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
         await ChangeAsync(fixture, token, order => order.TransitionTo(
             OrderStatus.Confirmed, OrderStateMachineFactory.Create(order.BusinessType, order.OrderType), "cajero"));
+        var cancelledByIt = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
+        await ChangeAsync(fixture, cancelledByIt, order => order.Cancel(
+            OrderStateMachineFactory.Create(order.BusinessType, order.OrderType), "cajero", "Sin existencias"));
+        var expired = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
+        await ChangeAsync(fixture, expired, order => order.CreatedAt = fixture.Clock.UtcNow.AddDays(-OrderTracking.Days).AddMinutes(-1));
         var inventory = new RecordingInventory();
 
         Assert.False((await TrackAsync(fixture, token))!.CanCancel);
         var accepted = await Assert.ThrowsAsync<DomainException>(() => CancelByLinkAsync(fixture, token, inventory));
+        // The business cancelled it first: the customer is not told they did.
+        var byTheBusiness = await Assert.ThrowsAsync<DomainException>(() => CancelByLinkAsync(fixture, cancelledByIt, inventory));
         var unknown = await CancelByLinkAsync(fixture, new string('x', Order.TrackingTokenLength), inventory);
+        var tooOld = await CancelByLinkAsync(fixture, expired, inventory);
 
         Assert.Equal(Order.CustomerCancelAcceptedMessage, accepted.Message);
-        Assert.Equal(CustomerOrderCancellation.NotFoundMessage, unknown.Error);
+        Assert.Equal(Order.CustomerCancelByBusinessMessage, byTheBusiness.Message);
+        Assert.Equal((OrderTracking.NotFoundMessage, OrderTracking.NotFoundMessage), (unknown.Error, tooOld.Error));
         Assert.Empty(inventory.Reversed);
         Assert.Equal(OrderStatus.Confirmed, (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.TrackingToken == token)).Status);
+        Assert.Equal(OrderStatus.Pending, (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.TrackingToken == expired)).Status);
+    }
+
+    [Fact]
+    public async Task TheBusinessAcceptingItAtTheSameTime_ShouldWin_AndTheLinkShouldSaySo()
+    {
+        var race = new AcceptedMeanwhile();
+        await using var fixture = SalesTestFixture.Create(null, race);
+        var (_, tacos) = await StoreAsync(fixture);
+        var token = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
+        race.Arm(fixture);
+
+        // The customer's save meets the row the business changed: it reads the order again, and the domain says why not.
+        var refused = await Assert.ThrowsAsync<DomainException>(() => CancelByLinkAsync(fixture, token, new RecordingInventory()));
+
+        Assert.Equal(Order.CustomerCancelAcceptedMessage, refused.Message);
+        Assert.True(race.Raced);
+        var stored = await fixture.Context.Orders.IgnoreQueryFilters().Include(o => o.StatusHistory).SingleAsync(o => o.TrackingToken == token);
+        Assert.Equal(OrderStatus.Confirmed, stored.Status);
+        Assert.DoesNotContain(stored.StatusHistory, history => history.NewStatus == OrderStatus.Cancelled);
     }
 
     [Fact]
@@ -99,12 +132,37 @@ public class CustomerOrderCancellationTests
         SignIn(fixture, other);
         var notTheirs = await CancelMineAsync(fixture, id, inventory);
         SignIn(fixture, mariana);
+        // The account's request comes with no business, or another one in context: the order names its own.
+        fixture.TenantService.SetTenant(Guid.NewGuid());
         var hers = await CancelMineAsync(fixture, id, inventory);
 
         Assert.Equal(CustomerOrderCancellation.NotFoundMessage, notTheirs.Error);
         Assert.True(hers.IsSuccess, hers.Error);
         Assert.Equal((OrderStatus.Cancelled, false), (hers.Value!.Status, hers.Value.CanCancel));
         Assert.Equal([id], inventory.Reversed);
+    }
+
+    [Fact]
+    public async Task TheAccount_ShouldNotCancelAnOrderOfABusinessThatIsNotActive_NorOneOfATable()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, tacos) = await StoreAsync(fixture);
+        var mariana = await AccountAsync(fixture, "mariana@demo.com");
+        SignIn(fixture, mariana);
+        var suspendedToken = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
+        var suspended = (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.TrackingToken == suspendedToken)).Id;
+        var inventory = new RecordingInventory();
+
+        // A business suspended takes no changes: the account does not offer it, and cancelling it is not found, as by its link.
+        var business = await fixture.Context.Tenants.SingleAsync(t => t.Id == tenant.Id);
+        business.SetStatus(TenantStatus.Suspended);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        Assert.False((await MyOrderAsync(fixture, suspended))!.CanCancel);
+        Assert.Equal(CustomerOrderCancellation.NotFoundMessage, (await CancelMineAsync(fixture, suspended, inventory)).Error);
+        Assert.Empty(inventory.Reversed);
+        Assert.Equal(OrderStatus.Pending, (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.Id == suspended)).Status);
     }
 
     [Fact]
@@ -126,6 +184,39 @@ public class CustomerOrderCancellationTests
         Assert.Equal(
             (tenant.Id, cancelled.OrderId, OrderStatus.Pending, Order.CustomerCancellationReason, receipt.OrderNumber, true),
             Assert.Single(screens.Cancelled));
+    }
+
+    [Fact]
+    public async Task TheAuditLog_ShouldSayTheCustomerCancelledIt_NeverTheirEmail()
+    {
+        var mediator = new RecordingMediator();
+        await using var fixture = SalesTestFixture.Create(mediator);
+        var (tenant, tacos) = await StoreAsync(fixture);
+        var mariana = await AccountAsync(fixture, "mariana@demo.com");
+        SignIn(fixture, mariana);
+        var mineToken = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
+        var mine = (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.TrackingToken == mineToken)).Id;
+        var theirs = (await PlaceAsync(fixture, Pickup(tacos))).Value.TrackingToken!;
+        await ChangeAsync(fixture, theirs, order => order.Cancel(
+            OrderStateMachineFactory.Create(order.BusinessType, order.OrderType), "cajero@demo.com", "Sin existencias"));
+        Assert.True((await CancelMineAsync(fixture, mine, new RecordingInventory())).IsSuccess);
+        var events = mediator.Published.OfType<OrderCancelledEvent>().ToList();
+
+        // The outbox runs each one as whoever caused it: the account's email for hers, the cashier for theirs.
+        var audit = new OrderAuditHandlers(fixture.Context);
+        foreach (var cancelled in events)
+            await audit.HandleAsync(cancelled, new OutboxEventContext(
+                Guid.NewGuid(), tenant.Id, Guid.NewGuid().ToString(), cancelled.ByCustomer ? "mariana@demo.com" : "cajero@demo.com",
+                fixture.Clock.UtcNow, 1), CancellationToken.None);
+        await fixture.Context.SaveChangesAsync();
+
+        var entries = await fixture.Context.AuditLogs.IgnoreQueryFilters().Where(a => a.Action == "OrderCancelled").ToListAsync();
+        var hers = Assert.Single(entries, entry => entry.EntityId == mine.ToString());
+        var cashiers = Assert.Single(entries, entry => entry.EntityId != mine.ToString());
+        Assert.Equal((Order.CustomerPerformedBy, "cajero@demo.com"), (hers.PerformedBy, cashiers.PerformedBy));
+        Assert.Contains("\"ByCustomer\":true", hers.Metadata!);
+        Assert.Contains("\"ByCustomer\":false", cashiers.Metadata!);
+        Assert.DoesNotContain(entries, entry => entry.PerformedBy.Contains("mariana"));
     }
 
     /// <summary>A kitchen that takes online orders and accepts each one itself: they arrive waiting.</summary>
@@ -232,6 +323,33 @@ public class CustomerOrderCancellationTests
         finally
         {
             fixture.Context.ChangeTracker.Clear();
+        }
+    }
+
+    /// <summary>The business accepts the order between the customer's read and their save, once.</summary>
+    private sealed class AcceptedMeanwhile : SaveChangesInterceptor
+    {
+        private SalesTestFixture? _fixture;
+
+        public bool Raced { get; private set; }
+
+        public void Arm(SalesTestFixture fixture) => _fixture = fixture;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var cancelling = eventData.Context?.ChangeTracker.Entries<Order>().FirstOrDefault(e => e.Entity.Status == OrderStatus.Cancelled);
+            if (_fixture is not { } fixture || cancelling is null)
+                return result;
+            _fixture = null;
+
+            var options = (DbContextOptions<ApplicationDbContext>)eventData.Context!.GetService<IDbContextOptions>();
+            await using var business = new SalesDbContext(options, fixture.TenantService);
+            var order = await business.Orders.Include(o => o.StatusHistory).SingleAsync(o => o.Id == cancelling.Entity.Id, cancellationToken);
+            order.TransitionTo(OrderStatus.Confirmed, OrderStateMachineFactory.Create(order.BusinessType, order.OrderType), "cajero");
+            await business.SaveChangesAsync(cancellationToken);
+            Raced = true;
+            throw new DbUpdateConcurrencyException("The business accepted it first.");
         }
     }
 

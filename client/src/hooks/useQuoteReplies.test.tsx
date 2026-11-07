@@ -59,15 +59,17 @@ describe('the answers to quotes, live (Fase 29R)', () => {
   /** SignalR loads apart: the connection exists once its module arrives. */
   const connected = () => waitFor(() => expect(hub.handlers.has('QuoteAnswered')).toBe(true));
 
-  it('tells an accepted quote, and the bell, the list and the quote on screen read it at once, not its settings', async () => {
+  it('tells an accepted quote, and the bell, the list and the quote on screen read it at once, not its settings nor catalog', async () => {
     const list = vi.fn(async () => 'lista');
     const detail = vi.fn(async () => 'detalle');
     const settings = vi.fn(async () => 'ajustes');
-    // Three screens that read the quotes, each observed as a mounted page would.
+    const catalog = vi.fn(async () => 'catálogo');
+    // The screens that read the quotes, each read as a mounted page would.
     const observers = [
       queryClient.getQueryCache().build(queryClient, { queryKey: ['quotes', 'all', '', 1], queryFn: list }),
       queryClient.getQueryCache().build(queryClient, { queryKey: ['quotes', 'detail', 'q1'], queryFn: detail }),
       queryClient.getQueryCache().build(queryClient, { queryKey: ['quotes', 'settings'], queryFn: settings }),
+      queryClient.getQueryCache().build(queryClient, { queryKey: ['quotes', 'catalog', ''], queryFn: catalog }),
     ];
     await Promise.all(observers.map((query) => query.fetch()));
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
@@ -83,6 +85,7 @@ describe('the answers to quotes, live (Fase 29R)', () => {
     expect(queryClient.getQueryState(['quotes', 'all', '', 1])?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(['quotes', 'detail', 'q1'])?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(['quotes', 'settings'])?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(['quotes', 'catalog', ''])?.isInvalidated).toBe(false);
   });
 
   it('tells a rejected quote with its version, and reads again when the connection comes back', async () => {

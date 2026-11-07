@@ -21,9 +21,10 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
    - La barra superior se conecta, aparte de la primera pantalla, para quien trabaja las cotizaciones en un negocio activo. Con cada respuesta, la campana, la lista y la cotización abierta se leen otra vez, y un aviso dice «Te aceptaron la cotización COT-000007» o «Te rechazaron…», con la versión si es una corrección. Sin sonido: una respuesta no urge como un pedido.
 2. **El cliente cancela su pedido en línea mientras el negocio no lo acepta.**
    - Desde el enlace de seguimiento (`POST /api/v1/public/orders/tracking/cancel`, sin sesión, con el enlace en el cuerpo) o desde Mis pedidos (`POST /api/v1/me/orders/{id}/cancel`, solo los de su cuenta).
-   - Solo un pedido del menú en línea (`Online`) que sigue «Por confirmar» (`Pending`), sin pagos, sin condonaciones y que no es de una mesa abierta. Lo decide el agregado (`Order.CancelByCustomer`), con un mensaje para cada caso: «El negocio ya aceptó tu pedido: para cancelarlo, llámale.», «Tu pedido ya tiene un pago…», «Un pedido de una mesa se cancela con quien te atiende.».
-   - Queda en el historial como lo hizo «Cliente», con el motivo «Lo canceló el cliente.». Lo que tomó del inventario regresa, como en cualquier cancelación.
+   - Solo un pedido del menú en línea (`Online`) que sigue «Por confirmar» (`Pending`), sin pagos, sin condonaciones, que no se pidió con el QR de una mesa y de un negocio activo. Lo decide el agregado (`Order.CancelByCustomer`), con un mensaje para cada caso: «El negocio ya aceptó tu pedido: para cancelarlo, llámale.», «Tu pedido ya tiene un pago…», «Un pedido de una mesa se cancela con quien te atiende.», «El negocio ya canceló tu pedido.».
+   - Queda en el historial y en la bitácora del negocio como lo hizo «Cliente» (nunca el correo de la cuenta), con el motivo «Lo canceló el cliente.». Lo que tomó del inventario regresa, como en cualquier cancelación.
    - Cancelar otra vez (dos toques, o un reintento que perdió la respuesta) contesta el pedido como quedó, sin cancelarlo de nuevo.
+   - Si el negocio lo acepta al mismo tiempo, gana el negocio: la cancelación lee el pedido otra vez y dice que ya lo aceptó.
    - El enlace y Mis pedidos dicen si se puede cancelar (`canCancel`) y muestran «Cancelar pedido», con confirmación, solo mientras se puede.
 3. **El negocio se entera al momento.**
    - El evento de la cancelación dice si fue el cliente (`OrderCancelledEvent.ByCustomer`), y el hub de pedidos lo manda con el folio (`byCustomer`, `orderNumber`).

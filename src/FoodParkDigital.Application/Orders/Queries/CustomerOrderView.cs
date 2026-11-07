@@ -95,8 +95,10 @@ internal sealed class CustomerOrderView
                 PaidAmount = order.PaidAmount,
                 WrittenOffAmount = order.WrittenOffAmount,
                 CancellationReason = order.CancellationReason,
+                // Order.CustomerMayCancel, in SQL; a business that is not active takes no cancellation either.
                 CustomerMayCancel = order.Channel == OrderChannel.Online && order.Status == OrderStatus.Pending
-                    && order.PaidAmount == 0 && order.WrittenOffAmount == 0 && order.OpenTableId == null,
+                    && order.PaidAmount == 0 && order.WrittenOffAmount == 0 && order.TableNumber == null && order.OpenTableId == null
+                    && tenant.Status == TenantStatus.Active,
                 TableNumber = order.TableNumber,
                 HasDelivery = order.Delivery != null,
                 DeliveryFee = order.Delivery != null ? order.Delivery.Fee : (decimal?)null,

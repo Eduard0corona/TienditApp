@@ -132,6 +132,7 @@ public sealed class CrossTenantOrderTrackingSqlServerTests
         var swapped = await stranger.PostAsJsonAsync(Cancel, new { token = SwapCase(guestsLink) });
         var unknown = await stranger.PostAsJsonAsync(Cancel, new { token = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE" });
         Assert.Equal((HttpStatusCode.NotFound, HttpStatusCode.NotFound), (swapped.StatusCode, unknown.StatusCode));
+        Assert.Equal((OrderTracking.NotFoundMessage, OrderTracking.NotFoundMessage), (await DetailAsync(swapped), await DetailAsync(unknown)));
 
         // The guest cancels theirs with its link, without a session: its business hears it was the customer, the other one nothing.
         var cancelled = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync(Cancel, new { token = guestsLink }));
@@ -140,7 +141,9 @@ public sealed class CrossTenantOrderTrackingSqlServerTests
         Assert.Equal(HttpStatusCode.OK, (await stranger.PostAsJsonAsync(Cancel, new { token = guestsLink })).StatusCode);
 
         // The detail of Ana's order is cancelled only by Ana: not another account, the team of a business, or no session.
-        Assert.Equal(HttpStatusCode.NotFound, (await beto.Client.PostAsync($"/api/v1/me/orders/{anasId}/cancel", null)).StatusCode);
+        var betos = await beto.Client.PostAsync($"/api/v1/me/orders/{anasId}/cancel", null);
+        Assert.Equal(HttpStatusCode.NotFound, betos.StatusCode);
+        Assert.Equal("No encontramos ese pedido en tu cuenta.", await DetailAsync(betos));
         Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"/api/v1/me/orders/{anasId}/cancel", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await ana.Client.PostAsync($"/api/v1/me/orders/{guestsId}/cancel", null)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await stranger.PostAsync($"/api/v1/me/orders/{anasId}/cancel", null)).StatusCode);

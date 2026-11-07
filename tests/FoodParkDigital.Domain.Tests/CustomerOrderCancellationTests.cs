@@ -51,8 +51,8 @@ public class CustomerOrderCancellationTests
         accepted.TransitionTo(OrderStatus.Confirmed, Food, "cajero");
         var paid = OnlineOrder();
         paid.RegisterOnlinePayment("mp-123", Now, null);
-        var atATable = OnlineOrder();
-        atATable.OpenAsTab(Guid.NewGuid(), "Mesa 4", Now, "mesero");
+        // Ordered with the QR of a table: whoever serves it handles it.
+        var atATable = OnlineOrder(tableNumber: "Mesa 4");
         var byWhatsApp = OnlineOrder(OrderChannel.WhatsApp);
 
         Assert.Equal(Order.CustomerCancelAcceptedMessage, Refusal(accepted));
@@ -68,18 +68,24 @@ public class CustomerOrderCancellationTests
     }
 
     [Fact]
-    public void ACancelledOrder_ShouldNotBeCancelledAgain()
+    public void AnOrderItsCustomerCancelled_ShouldNotBeCancelledAgain_AndOneTheBusinessCancelledShouldSaySo()
     {
-        var order = OnlineOrder();
-        order.CancelByCustomer(Food);
+        var mine = OnlineOrder();
+        Assert.True(mine.CancelByCustomer(Food));
+        var theirs = OnlineOrder();
+        theirs.Cancel(Food, "cajero", "Sin existencias");
 
-        Assert.Equal(Order.CustomerCancelAcceptedMessage, Refusal(order));
-        Assert.Single(order.DomainEvents, e => e is OrderCancelledEvent);
+        // Tapped twice: nothing changes.
+        Assert.False(mine.CancelByCustomer(Food));
+        Assert.Single(mine.DomainEvents, e => e is OrderCancelledEvent);
+        Assert.Single(mine.StatusHistory, h => h.NewStatus == OrderStatus.Cancelled);
+        Assert.Equal(Order.CustomerCancelByBusinessMessage, Refusal(theirs));
+        Assert.Equal("Sin existencias", theirs.CancellationReason);
     }
 
     private static string Refusal(Order order) => Assert.Throws<DomainException>(() => order.CancelByCustomer(Food)).Message;
 
-    private static Order OnlineOrder(OrderChannel channel = OrderChannel.Online)
+    private static Order OnlineOrder(OrderChannel channel = OrderChannel.Online, string? tableNumber = null)
     {
         var order = new Order(
             tenantId: TenantId,
@@ -92,7 +98,7 @@ public class CustomerOrderCancellationTests
             customerName: "Valeria Morales",
             customerPhone: "+525522107765",
             customerNotes: null,
-            tableNumber: null,
+            tableNumber: tableNumber,
             pricesIncludeTax: true,
             channel: channel);
         order.AddItem(Guid.NewGuid(), "Torta de jamón", 2, 117.75m);
