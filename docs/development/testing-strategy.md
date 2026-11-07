@@ -2193,6 +2193,29 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas:** contra la línea base de `master` en `b665e90` (807 escenas):
     - **807 iguales.**
     - **3 nuevas** (`seguimiento.spec.ts`): el detalle de un pedido por confirmar con «Cancelar pedido», la confirmación desde el enlace y el pedido que el cliente canceló, con su motivo y su aviso. Las tres dieron la misma imagen en dos corridas seguidas.
+- Fase 29S, cuánto tarda en mandar la cotización y el orden de Explorar en todas sus listas ([ADR 0073](../adr/0073-quote-time-and-explore-order.md)):
+  - **Domain:** `QuoteTimeTests` (9, nuevo): el tramo más corto que reúne al menos la mitad de las visitas, con la más lenta al final; con menos de 3 no dice nada; Explorar lo dice dentro de una semana; los límites (24, 72 y 168 horas) y la ventana de 90 días; cuentas que no cuadran se rechazan.
+  - **Application:**
+    - `QuoteTimeInExploreTests` (7, nuevo): la tarjeta de un oficio dice en cuánto mandó la mitad de sus cotizaciones desde 3 visitas; solo cuentan las visitas pedidas en línea por sus clientes, no las del equipo, una por cliente y en los últimos 90 días; solo las que ya pasaron (ni canceladas, ni no asistidas, ni por venir), cada negocio con sus clientes y sus cotizaciones aunque el mismo teléfono pida a otro oficio o la cotización sea de otro negocio; una espera de exactamente un día no es «menos de un día»; si la foto no puede leer las cotizaciones, nadie lo dice y al dueño no se le dice que todavía no se cuenta; el dueño lee el tramo, también el lento, y la solicitud de visita dice lo que su tarjeta; la lista completa y los servicios de una búsqueda ponen primero al que responde antes dentro de cada grupo.
+    - `ExploreResponseTimeTests`: la lista completa sigue el mismo orden que una categoría.
+  - **WebApi:**
+    - `TenantFilterBypassAllowlistTests`: `PublicDirectoryFeature.cs` pasa de 5 a 7 lecturas entre negocios (las visitas y sus cotizaciones, unidas dentro del mismo negocio).
+    - `CrossTenantDirectoryQuoteTimeSqlServerTests` (2, nuevo, SQL Server): los mismos tres clientes piden visita a dos oficios; uno cotiza las tres y su tarjeta y su página de visita dicen «menos de un día», el otro cotiza una y no dice nada; las esperas de 23 horas, un día exacto, 3 días exactos y más de una semana dan «menos de 3 días».
+  - **Cliente:**
+    - `responseTime.test.ts` (+2): el texto de cada tramo de cotizar hasta una semana, y las notas del dueño (dónde lo leen sus clientes, que una semana o más no se dice, o que todavía no se cuenta).
+    - `DirectoryBusinessCard.test.tsx` (+1) y `PublicHomeVisitPage.test.tsx` (+1): el tiempo de cotizar en la tarjeta de un oficio y en su página de visita, nunca en un negocio sin visitas.
+    - `DirectoryCard.test.tsx` (+1): «Cómo te ven» dice el tramo, que tarda una semana o más, o que todavía no se cuenta, y nada de cotizar si Explorar no cuenta sus cotizaciones.
+  - **Cliente en total:** 204 archivos y 1,555 pruebas.
+  - **Primera visita:** 182,011 B (`master` en `07c926b`: 181,988 B, +23 B): el enum `QuoteTime` va en la entrada con los demás enums generados; la etiqueta se carga con Explorar y las notas del dueño con Configuración. La entrada lleva los nombres con hash de los chunks que carga aparte, y su gzip cambia unos 20 B entre builds con el mismo código en la primera visita (`585c4ed`: 181,989 B; `bc84467`: 182,011 B). El presupuesto sube de 182,000 a 182,100 B. El CSS global, 63,077 B de 63,200 B.
+  - **Revisión independiente**, sin bloqueantes, con estos arreglos:
+    - contaba visitas que no pasaron (canceladas, no asistidas o por venir) con una cotización mandada: ahora solo las que ya terminaron;
+    - si la foto no podía leer las cotizaciones, el dueño leía «todavía no contamos»: ahora no lee nada de cotizar (`countsQuotes`);
+    - la comparación del envío por cliente usa un solo subquery dentro del mismo negocio, sin compensar nulos, y deja usar el índice de la primera versión;
+    - y pruebas para el mismo cliente en dos oficios, una cotización de otro negocio, los límites exactos (en memoria y en SQL Server) y la lectura que falla. Quitar el negocio del subquery por cliente hace fallar la prueba de SQL Server.
+  - **CI:** la primera visita pasó el presupuesto por 23 B con las notas del dueño en el módulo de Explorar (182,023 B): se cargan aparte, con Configuración. Después, por 11 B sin cambiar el código de la entrada: el presupuesto sube como arriba.
+  - **Escenas:** contra la línea base de `master` en `07c926b` (810 escenas):
+    - **806 iguales.**
+    - **4 cambian** (`oficios.spec.ts`), como se esperaba: Explorar en escritorio y en teléfono (el plomero «menos de un día» y el carpintero «menos de una semana»), la solicitud de visita y «Cómo te ven» con el tiempo de cotizar. Las cuatro dieron la misma imagen en dos corridas seguidas.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
