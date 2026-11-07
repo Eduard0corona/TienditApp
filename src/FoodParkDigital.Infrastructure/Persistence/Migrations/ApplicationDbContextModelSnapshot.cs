@@ -191,6 +191,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<DateTimeOffset?>("MarkedFakeAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");

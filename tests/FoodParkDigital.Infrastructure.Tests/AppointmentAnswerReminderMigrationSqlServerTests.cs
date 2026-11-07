@@ -37,7 +37,7 @@ public class AppointmentAnswerReminderMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = BeforeAppointmentMarkedFake.CreateContext(database, tenant.Id);
         Assert.Null((await context.Appointments.AsNoTracking().SingleAsync()).AnswerReminderSentAt);
         Assert.Equal("datetimeoffset|1|", await ColumnAsync(context));
 
@@ -45,7 +45,7 @@ public class AppointmentAnswerReminderMigrationSqlServerTests
         var tracked = await context.Appointments.SingleAsync();
         Assert.True(tracked.RemindToAnswer(Arrived.AddHours(23)));
         await context.SaveChangesAsync();
-        await using var check = database.CreateContext(tenant.Id);
+        await using var check = BeforeAppointmentMarkedFake.CreateContext(database, tenant.Id);
         Assert.Equal(Arrived.AddHours(23), (await check.Appointments.AsNoTracking().SingleAsync()).AnswerReminderSentAt);
     }
 
@@ -63,7 +63,7 @@ public class AppointmentAnswerReminderMigrationSqlServerTests
             await before.SaveChangesAsync();
         }
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = BeforeAppointmentMarkedFake.CreateContext(database, tenant.Id);
         Assert.Null((await context.Appointments.AsNoTracking().SingleAsync()).AnswerReminderSentAt);
     }
 
@@ -73,7 +73,7 @@ public class AppointmentAnswerReminderMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
-        await using (var seed = database.CreateContext(tenant.Id))
+        await using (var seed = BeforeAppointmentMarkedFake.CreateContext(database, tenant.Id))
         {
             var request = Request(tenant.Id);
             Assert.True(request.RemindToAnswer(Arrived.AddHours(23)));
@@ -95,7 +95,7 @@ public class AppointmentAnswerReminderMigrationSqlServerTests
         // Rolling back again does nothing; forward again, no request has been reminded.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeAppointmentMarkedFake.CreateContext(database, tenant.Id);
         Assert.Null((await forward.Appointments.AsNoTracking().SingleAsync()).AnswerReminderSentAt);
     }
 
