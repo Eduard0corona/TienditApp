@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Appointments.Entities;
@@ -156,6 +157,9 @@ public class QuoteTimeInExploreTests
         var cards = await CardsAsync(fixture);
         Assert.Null(cards["plomeria"].QuoteTime);
         Assert.Equal(QuoteTime.WithinThreeDays, cards["electricista"].QuoteTime);
+        // Its visit page says what its card says: nothing of a week or more.
+        Assert.Null((await VisitAsync(fixture, "plomeria"))!.QuoteTime);
+        Assert.Equal(QuoteTime.WithinThreeDays, (await VisitAsync(fixture, "electricista"))!.QuoteTime);
     }
 
     [Fact]
@@ -223,6 +227,12 @@ public class QuoteTimeInExploreTests
         fixture.Context.Quotes.Add(quote);
         await fixture.Context.SaveChangesAsync();
     }
+
+    private static Task<PublicHomeVisitDto?> VisitAsync(SalesTestFixture fixture, string slug)
+        => new GetPublicHomeVisitQueryHandler(
+                fixture.Context, fixture.TenantService, fixture.Clock, new PublicDirectoryCache(),
+                NullLogger<GetPublicHomeVisitQueryHandler>.Instance)
+            .Handle(new GetPublicHomeVisitQuery(slug), CancellationToken.None);
 
     private static async Task<DirectoryProfileDto> ProfileAsync(SalesTestFixture fixture, Tenant tenant)
     {

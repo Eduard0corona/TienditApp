@@ -2213,6 +2213,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - si la foto no podía leer las cotizaciones, el dueño leía «todavía no contamos»: ahora no lee nada de cotizar (`countsQuotes`);
     - la comparación del envío por cliente usa un solo subquery dentro del mismo negocio, sin compensar nulos, y deja usar el índice de la primera versión;
     - y pruebas para el mismo cliente en dos oficios, una cotización de otro negocio, los límites exactos (en memoria y en SQL Server) y la lectura que falla. Quitar el negocio del subquery por cliente hace fallar la prueba de SQL Server.
+  - **`claude-review`:** un menor, corregido: la prueba del dueño decía que la solicitud de visita dice lo que su tarjeta, pero no la pedía. Ahora la pide para el oficio lento (nada) y el de 3 días; si la página leyera el tramo sin `QuoteTimes.Shown`, la prueba falla.
   - **CI:** la primera visita pasó el presupuesto por 23 B con las notas del dueño en el módulo de Explorar (182,023 B): se cargan aparte, con Configuración. Después, por 11 B sin cambiar el código de la entrada: el presupuesto sube como arriba.
   - **Escenas:** contra la línea base de `master` en `07c926b` (810 escenas):
     - **806 iguales.**
