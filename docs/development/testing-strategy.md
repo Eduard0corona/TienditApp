@@ -2218,6 +2218,40 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas:** contra la línea base de `master` en `07c926b` (810 escenas):
     - **806 iguales.**
     - **4 cambian** (`oficios.spec.ts`), como se esperaba: Explorar en escritorio y en teléfono (el plomero «menos de un día» y el carpintero «menos de una semana»), la solicitud de visita y «Cómo te ven» con el tiempo de cotizar. Las cuatro dieron la misma imagen en dos corridas seguidas.
+- Fase 29T, cuánto tarda en confirmar los pedidos en línea ([ADR 0074](../adr/0074-order-confirm-time.md)):
+  - **Domain:** `OrderConfirmTimeTests` (9, nuevo): el tramo más corto que reúne al menos la mitad de los pedidos, con el más lento al final; con menos de 3 no dice nada; Explorar lo dice dentro de media hora; los límites (5, 15 y 30 minutos) y la ventana de 90 días; cuentas que no cuadran se rechazan. El tiempo de responder y el de cotizar usan la misma regla (`TypicalWait`) y sus pruebas siguen igual.
+  - **Application:**
+    - `OrderConfirmTimeInExploreTests` (9, nuevo):
+      - la tarjeta dice en cuánto confirmó la mitad de sus pedidos desde 3, también los rechazados;
+      - solo cuentan los del menú en línea: ni los de una mesa, ni los que tomó el equipo (en mostrador, de WhatsApp o registrados como en línea), ni los de hace más de 90 días; uno por cliente, el último, y un pedido posterior todavía sin decidir (esperando o cancelado antes de media hora) no toma su lugar;
+      - cada negocio cuenta a sus clientes, aunque pidan después en otro;
+      - un pedido sin respuesta cuenta como de los más lentos cuando lleva media hora, también si su cliente lo canceló después, y aceptarlo solo cuenta como inmediato;
+      - cinco minutos exactos ya no son «menos de 5 minutos», y media hora exacta, respondido o esperando, es de los más lentos;
+      - si la foto no puede leer los pedidos, nadie lo dice y al dueño no se le dice que todavía no se cuenta; si no puede leer las solicitudes, un negocio que agenda y toma pedidos sigue diciendo el de los pedidos en su menú y a su dueño;
+      - el dueño lee el tramo, también el lento, o que todavía no se cuenta; un menú que no toma pedidos no lo dice ni en su tarjeta; el menú dice lo que su tarjeta, salvo en una mesa.
+    - `ResponseTimeOutsideExploreTests`: una foto que no pudo leer las solicitudes lo dice en cada entrada (`ResponseTimeRead`).
+  - **WebApi:**
+    - `TenantFilterBypassAllowlistTests`: `PublicDirectoryFeature.cs` pasa de 7 a 9 lecturas entre negocios (los pedidos y su historial, unidos dentro del mismo negocio).
+    - `ClientEnumContractTests` (+1): la copia del cliente de `OrderConfirmTime` es igual al enum del dominio.
+    - `CrossTenantDirectoryOrderConfirmTimeSqlServerTests` (3, nuevo, SQL Server): los mismos tres clientes piden en dos cocinas y cada una cuenta los suyos (la tarjeta y el menú de la rápida dicen «menos de 5 minutos», la lenta nada); las esperas de 4, 5 y 15 minutos, con una cancelación del cliente a los 2 que no cuenta, dan «menos de 15 minutos»; un pedido sin respuesta de 40 minutos y una cancelación del cliente a los 35 son de los más lentos (y su dueño lo lee), y una cocina que acepta sola dice «menos de 5 minutos».
+  - **Cliente:**
+    - `responseTime.test.ts` (+2): el texto de cada tramo de confirmar hasta media hora, y la nota del dueño (dónde lo leen sus clientes, que media hora o más no se dice, o que todavía no se cuenta).
+    - `DirectoryBusinessCard.test.tsx` (+1): el tiempo de confirmar en un negocio que toma pedidos, también en pausa; nunca en uno que solo muestra su menú ni en un oficio con sus pedidos en pausa.
+    - `PublicMenuPage.test.tsx` (+1): el menú lo dice como su tarjeta, pero no en una mesa.
+    - `DirectoryCard.test.tsx` (+1): «Cómo te ven» dice el tramo, que tarda media hora o más, o que todavía no se cuenta, y nada de confirmar si Explorar no cuenta sus pedidos.
+  - **.NET en total:** 4,789 pruebas en verde con SQL Server (Domain 1,412; Application 2,166; WebApi 503; Infrastructure 708). **Cliente en total:** 204 archivos y 1,560 pruebas.
+  - **Primera visita:** 182,055 B (`master` en `c88ba07`: 182,011 B, +44 B): el enum `OrderConfirmTime` va en la entrada con los demás enums generados; la etiqueta se carga con Explorar y el menú, y la nota del dueño con Configuración. El presupuesto (182,100 B) no cambia. El CSS global, 63,077 B de 63,200 B.
+  - **Costo de la foto,** medido en SQL Server con una sola cocina: unos 20 ms sin pedidos, unos 250 ms con 25,000 pedidos en 90 días (2,500 en línea) y unos 600 ms con 100,000 (10,000 en línea). Queda en el ADR y en la deuda técnica: un índice filtrado de los pedidos en línea pide migración.
+  - **Revisión independiente**, sin bloqueantes, con estos arreglos:
+    - la consulta tomaba como respuesta la primera fila del historial (la del pedido recién creado, de «Por confirmar» a «Por confirmar»): se corrigió antes de la primera prueba;
+    - el último pedido de cada cliente se buscaba otra vez por cada pedido, con un `IS NULL` al lado de la comparación del teléfono: ahora se busca una sola vez, agrupado, entre los pedidos con teléfono;
+    - una lectura fallida de las solicitudes callaba también el tiempo de confirmar en el menú y para el dueño: cada tiempo depende de su propia lectura;
+    - la tarjeta de un oficio con sus pedidos en pausa hablaba de pedidos: ya no;
+    - y pruebas para media hora exacta, el pedido posterior sin decidir, el filtro del servidor, un negocio con solicitudes y pedidos, y en SQL Server los pedidos sin respuesta, la cancelación tardía y la aceptación automática. Cada una falla si se rompe lo que prueba: quitar el negocio de la comparación por cliente, contar la primera fila del historial, usar `<=` en un límite, contar la cancelación del cliente como respuesta o quitar el filtro del servidor.
+  - **Escenas:** contra la línea base de `master` en `c88ba07` (810 escenas):
+    - **779 iguales.**
+    - **31 cambian**, como se esperaba: Café La Esquina confirma sus pedidos en menos de 5 minutos. Son las escenas de Explorar con su tarjeta (la lista, una categoría, los productos, «Cerca de mí», los favoritos, como cliente, con código postal, con calificación y con agenda en línea), las de su tienda (escritorio, teléfono, buscar, pestañas, producto, pedido, botón del pedido y favorita) y «Cómo te ven». Las 31 dieron la misma imagen en dos corridas seguidas.
+    - Las comprobaciones nuevas de las escenas buscan el texto que `master` no tiene: se quitaron solo para tomar su línea base.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
