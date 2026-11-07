@@ -2298,6 +2298,50 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **806 iguales.**
     - **4 cambian**, como se esperaba: Mi perfil en escritorio, teléfono y oscuro, y la tarjeta de avisos con la Agenda apagada. El texto de «Citas en línea» nombra el recordatorio y la tarjeta crece una línea. Las cuatro dieron la misma imagen en dos corridas seguidas.
     - Las del equipo no cambian: en sus diálogos no se ofrecen los avisos de la Agenda.
+- Fase 29V, marcar una solicitud como falsa ([ADR 0076](../adr/0076-mark-a-request-as-fake.md)):
+  - **Domain:** `FakeRequestTests` (3, nuevo):
+    - se marca una solicitud en línea de un cliente que sigue por confirmar, también pasada su hora y su límite: queda cancelada, guarda cuándo y no guarda respuesta;
+    - no se marca una del equipo, una agendada por el negocio ni una aceptada, rechazada o cancelada;
+    - la marca se quita una vez: queda rechazada desde ese momento, conserva cuándo se marcó y ya no se marca otra vez.
+  - **Application:**
+    - `OnlineBookingFlowTests` (+2):
+      - marcarla libera su horario sin avisarle a nadie;
+      - la misma solicitud con su llave responde que ya se canceló;
+      - su teléfono, también con el 1 de WhatsApp, ya no pide en ese negocio, y otro teléfono sí;
+      - al quitar la marca el cliente recibe el aviso de rechazo y su teléfono vuelve a pedir;
+      - 90 días después de la marca, el teléfono vuelve a pedir (un minuto antes, no).
+    - `HomeVisitBookingFlowTests` (+1): un teléfono marcado en un oficio tampoco pide una visita ahí.
+    - `ExploreResponseTimeTests` (+1): la marcada no cuenta ni toma el lugar de la última de su cliente, y vuelve a contar la anterior de ese teléfono. Al quitar la marca cuenta como respondida en ese momento: entre las más lentas pasado su límite, nunca como una respuesta rápida.
+  - **Infrastructure:**
+    - `AppointmentMarkedFakeMigrationSqlServerTests` (3, nuevo, SQL Server):
+      - las solicitudes que existen quedan sin marcar, y las dos columnas son `datetimeoffset NULL` sin valor por omisión;
+      - marcar y quitar la marca se guardan;
+      - la versión anterior sigue guardando solicitudes;
+      - volver atrás quita solo las columnas (la marcada sigue cancelada y sin respuesta), y al migrar otra vez ninguna está marcada.
+    - `BeforeAppointmentMarkedFake` entra en la cadena de `Before*`, y las pruebas de la migración de la 29U lo usan.
+  - **WebApi:**
+    - `CrossTenantFakeRequestsSqlServerTests` (1, nuevo, SQL Server): otro negocio no la marca ni le quita la marca (404); su teléfono ya no pide en ese negocio («Este negocio no está recibiendo solicitudes de este teléfono…»), pero sí en otro; al quitarle la marca, vuelve a pedir.
+    - `TwoBusinessesApi`: cada cliente llega con su propia dirección (ver **CI**).
+  - **Cliente:** `AppointmentsList.test.tsx` (+2):
+    - «Es falsa» solo en las solicitudes de clientes; dice qué pasa antes de marcarla y no llama a rechazar;
+    - la marcada lo dice y «No era falsa» pide confirmarlo (el aviso al cliente, que no se podrá marcar otra vez) antes de quitar la marca.
+    - `responseTime.test.ts`: la nota del dueño dice que no cuentan las que marcó como falsas.
+  - **.NET en total:** 4,815 pruebas en verde con SQL Server (Domain 1,421; Application 2,174; WebApi 506; Infrastructure 714). **Cliente en total:** 204 archivos y 1,562 pruebas.
+  - **Primera visita:** 182,055 B (la 29U medía 182,057 B): la Agenda y Configuración se cargan aparte, y los 2 B son del gzip con otros nombres de chunks. El presupuesto (182,100 B) no cambia. El CSS global, 63,077 B de 63,200 B.
+  - **Migración:**
+    - el script que genera `dotnet ef` es igual al `apply.sql` y al `rollback.sql`;
+    - `has-pending-model-changes` no encuentra cambios;
+    - en una base local llevada a la 29U con `dotnet ef database update`: `verify.sql`, `apply.sql` dos veces, `verify.sql`, `rollback.sql` dos veces, `verify.sql` y `apply.sql` otra vez, sin errores.
+  - **Revisión independiente**, sin bloqueantes, con estos arreglos:
+    - «No era falsa» salía con un clic y no se podía deshacer: ahora pide confirmarlo y dice qué pasa;
+    - al quitar la marca contaba como rechazada cuando se marcó, una respuesta rápida que el cliente nunca recibió, y marcar y desmarcar mejoraba el tiempo. Ahora cuenta desde que se quita, y el cliente recibe el aviso de rechazo;
+    - quitar la marca borraba cuándo se marcó: ahora se conserva y la migración agrega `UnmarkedFakeAt`;
+    - y pruebas para el reintento con la misma llave, el aviso al quitar la marca y el tiempo desde que se quita.
+    - Mutaciones que hacen fallar una prueba: guardar respuesta al marcar, quitar el bloqueo del teléfono, avisar al marcar, olvidar los 90 días y contar desde que se marcó al quitar la marca.
+  - **CI:** el job de migraciones, que corre las pruebas de WebApi sobre la base migrada, dio 429 en las del recordatorio de la 29U. Los clientes de `TwoBusinessesApi` compartían una sola dirección, y las solicitudes de citas, visitas y pedidos de toda la colección gastaban un mismo límite por IP (`public-order`, 100 cada 10 minutos en Development): las de esta fase lo pasaron. Ahora cada cliente llega con su propia dirección, con un encabezado que solo lee el host de las pruebas.
+  - **Escenas:** contra la línea base de `master` en `1a530f0` (810 escenas):
+    - **802 iguales.**
+    - **8 cambian**, como se esperaba: las siete de la Agenda con solicitudes (escritorio, teléfono, oscuro, el aviso, rechazar, a tiempo y la del equipo), con «Es falsa» en las de clientes y no en la del equipo, y «Cómo te ven» con la nota del dueño. Las ocho dieron la misma imagen en dos corridas seguidas.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
