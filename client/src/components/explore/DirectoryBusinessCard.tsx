@@ -42,8 +42,10 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
   const answers = responseTimeLabel(business.responseTime);
   // Fase 29S: a trade also says how soon it sends the quote after the visit.
   const quotes = business.receivesVisits ? quoteTimeLabel(business.quoteTime) : null;
-  // Fase 29T: one that takes online orders, now or paused, says how soon it confirms them.
-  const confirms = business.acceptsOrders || business.ordersPaused ? orderConfirmTimeLabel(business.orderConfirmTime) : null;
+  // Fase 29T: one that takes online orders, now or paused, says how soon it confirms them; a trade whose orders are paused
+  // never speaks of them (its card speaks of visits, as orderStatus does).
+  const takesOrders = business.acceptsOrders || (business.ordersPaused && !business.receivesVisits);
+  const confirms = takesOrders ? orderConfirmTimeLabel(business.orderConfirmTime) : null;
   const place = [
     categoryInfo(business.category)?.label,
     business.deliveryOnly ? 'Solo a domicilio' : business.city,

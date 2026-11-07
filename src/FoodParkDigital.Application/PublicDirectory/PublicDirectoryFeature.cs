@@ -499,11 +499,10 @@ public sealed class PublicDirectorySnapshot
 
     private static readonly StringComparer Names = StringComparer.Create(CultureInfo.GetCultureInfo("es-MX"), ignoreCase: true);
 
-    internal PublicDirectorySnapshot(DateTimeOffset builtAt, IReadOnlyList<Entry> entries, bool responseTimesRead = true)
+    internal PublicDirectorySnapshot(DateTimeOffset builtAt, IReadOnlyList<Entry> entries)
     {
         BuiltAt = builtAt;
         Entries = entries;
-        ResponseTimesRead = responseTimesRead;
         Categories = Enum.GetValues<BusinessCategory>()
             .Select(category => new PublicDirectoryCategoryDto
             {
@@ -516,12 +515,6 @@ public sealed class PublicDirectorySnapshot
     public DateTimeOffset BuiltAt { get; }
 
     internal IReadOnlyList<Entry> Entries { get; }
-
-    /// <summary>
-    /// It read how soon its businesses answer (Fase 29J). When that read failed, none says it, and a page that reads one
-    /// of them (Fase 29K) says nothing either rather than «not enough requests».
-    /// </summary>
-    internal bool ResponseTimesRead { get; }
 
     internal IReadOnlyList<PublicDirectoryCategoryDto> Categories { get; }
 
@@ -544,6 +537,11 @@ public sealed class PublicDirectorySnapshot
     /// <param name="ResponseTime">
     /// How soon it answers its requests online (Fase 29J), slower ones included, while it books online or receives visits:
     /// its place in Explorar within its group (Fase 29S). The card says it only within a day.
+    /// </param>
+    /// <param name="ResponseTimeRead">
+    /// The snapshot could read how soon its businesses answer: when it could not, none says it, and its owner is not told
+    /// that its requests are not counted yet (Fase 29K). Each time is told by its own read (Fase 29T): one that fails never
+    /// hides another.
     /// </param>
     /// <param name="QuoteTime">
     /// How soon it sends the quote after a visit (Fase 29S), slower ones included, while it receives visits. The card says it
@@ -569,6 +567,7 @@ public sealed class PublicDirectorySnapshot
         GeoPoint? Location = null,
         decimal? VisitServicePrice = null,
         ResponseTime? ResponseTime = null,
+        bool ResponseTimeRead = true,
         QuoteTime? QuoteTime = null,
         bool QuoteTimeRead = true,
         OrderConfirmTime? OrderConfirmTime = null,
@@ -716,9 +715,11 @@ public sealed class PublicDirectorySnapshot
             .Select(entry => entry!)
             // Only one that takes requests now: one that stopped booking online says nothing of them, and one that stopped
             // receiving visits says nothing of its quotes.
-            .Select(entry => entry.Business.BooksOnline || entry.Business.ReceivesVisits
-                ? entry with { ResponseTime = responses.GetValueOrDefault(entry.TenantId) }
-                : entry)
+            .Select(entry => entry with
+            {
+                ResponseTime = entry.Business.BooksOnline || entry.Business.ReceivesVisits ? responses.GetValueOrDefault(entry.TenantId) : null,
+                ResponseTimeRead = responsesRead
+            })
             .Select(entry => entry.Business.ReceivesVisits
                 ? entry with { QuoteTime = quotes.GetValueOrDefault(entry.TenantId), QuoteTimeRead = quotesRead }
                 : entry)
@@ -740,7 +741,7 @@ public sealed class PublicDirectorySnapshot
             entry.Business.QuoteTime = QuoteTimes.Shown(entry.QuoteTime);
             entry.Business.OrderConfirmTime = OrderConfirmTimes.Shown(entry.OrderConfirmTime);
         }
-        return new PublicDirectorySnapshot(utcNow, entries, responsesRead);
+        return new PublicDirectorySnapshot(utcNow, entries);
     }
 
     /// <summary>
@@ -914,11 +915,12 @@ public sealed class PublicDirectorySnapshot
         int halfAnHour = OrderConfirmTimes.LimitMinutes[2];
         var history = context.OrderStatusHistories.IgnoreQueryFilters().AsNoTracking();
         // An order its customer placed on the online menu, not with the QR of a table: whoever serves the table handles it.
+        // Every one has its customer's phone; saying so keeps the comparison of phones below one equality.
         var placed = context.Orders
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(o => o.Channel == OrderChannel.Online && !o.CreatedByBusiness && o.TableNumber == null && o.OpenTableId == null
-                && o.CreatedAt >= since && listed.Any(t => t.Id == o.TenantId))
+                && o.CustomerPhone != null && o.CreatedAt >= since && listed.Any(t => t.Id == o.TenantId))
             .Select(o => new
             {
                 o.TenantId,
@@ -945,11 +947,16 @@ public sealed class PublicDirectorySnapshot
                     && (o.AnsweredAt >= o.Limit
                         || (o.AnsweredAt == null && o.Status == OrderStatus.Pending)
                         || (o.AnsweredAt == null && o.CancelledByCustomerAt >= o.Limit))));
-        var counted = await placed
-            // One per customer of each business: of those of the same phone, the one that arrived last.
-            .Where(o => o.CreatedAt == placed
-                .Where(same => same.TenantId == o.TenantId && same.CustomerPhone == o.CustomerPhone)
-                .Max(same => same.CreatedAt))
+        // One per customer of each business: of those of the same phone, the one that arrived last (a later one still
+        // undecided does not take its place). The last of each customer is found once, grouped, not once for each order.
+        var lastOfEachCustomer = placed
+            .GroupBy(o => new { o.TenantId, o.CustomerPhone })
+            .Select(g => new { g.Key.TenantId, g.Key.CustomerPhone, CreatedAt = g.Max(o => o.CreatedAt) });
+        var counted = await (
+                from o in placed
+                join last in lastOfEachCustomer
+                    on new { o.TenantId, o.CustomerPhone, o.CreatedAt } equals new { last.TenantId, last.CustomerPhone, last.CreatedAt }
+                select o)
             .GroupBy(o => o.TenantId)
             .Select(g => new
             {

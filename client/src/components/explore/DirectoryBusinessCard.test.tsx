@@ -61,11 +61,17 @@ describe('DirectoryBusinessCard', () => {
     renderCard(business({ name: 'Tacos El Güero', acceptsOrders: true, orderConfirmTime: OrderConfirmTime.WithinFiveMinutes }));
     renderCard(business({ name: 'Pizzería Napoli', acceptsOrders: false, ordersPaused: true, orderConfirmTime: OrderConfirmTime.WithinHalfAnHour }));
     renderCard(business({ name: 'Café Luna', acceptsOrders: false, ordersPaused: false, orderConfirmTime: OrderConfirmTime.WithinFiveMinutes }));
+    // A trade whose orders are paused speaks of its visits only.
+    renderCard(business({
+      name: 'Plomería Hernández', receivesVisits: true, acceptsOrders: false, ordersPaused: true,
+      orderConfirmTime: OrderConfirmTime.WithinFiveMinutes,
+    }));
 
-    const [taking, paused, menuOnly] = screen.getAllByRole('link');
+    const [taking, paused, menuOnly, trade] = screen.getAllByRole('link');
     expect(taking).toHaveTextContent('Suele confirmar los pedidos en menos de 5 minutos');
     expect(paused).toHaveTextContent('Suele confirmar los pedidos en menos de media hora');
     expect(menuOnly).not.toHaveTextContent('Suele confirmar');
+    expect(trade).not.toHaveTextContent('Suele confirmar');
   });
 
   it('says nothing of how soon it answers when the server sends none (Fase 29J)', () => {

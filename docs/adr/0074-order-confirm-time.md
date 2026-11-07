@@ -26,12 +26,13 @@ El dueño del producto pidió avanzar este punto (el 8), entre otros, sin espera
    - «… de media hora».
    - Con media hora o más, o con menos de 3 pedidos, no dice nada.
 3. **Dónde:**
-   - En la tarjeta de Explorar de un negocio que toma pedidos en línea, aunque estén en pausa (cerrado o sin caja abierta).
+   - En la tarjeta de Explorar de un negocio que toma pedidos en línea, aunque estén en pausa (cerrado o sin caja abierta). La tarjeta de un oficio con sus pedidos en pausa habla de sus visitas, no de pedidos, como ya lo hacía ([ADR 0053](0053-home-visit-quotes.md)).
    - En su menú, salvo en una mesa.
    - Para su dueño, en «Cómo te ven en TienditApp». Ahí también lee si tarda media hora o más, o que todavía no se cuenta.
 4. **De dónde:** de la foto de Explorar, como el tiempo de respuesta.
    - Una sola lectura entre negocios, filtrada por los negocios listados, une cada pedido con su historial dentro del mismo negocio.
    - Si no se puede leer, nadie lo dice hasta la siguiente foto, y al dueño no se le dice que todavía no se cuenta.
+   - Cada tiempo depende de su propia lectura. Si la foto no puede leer las solicitudes, el menú y el dueño siguen diciendo el de los pedidos, y al revés. Antes, una lectura fallida de las solicitudes callaba todo lo que la foto dice fuera de Explorar.
    - La regla de la mitad es la misma para responder, cotizar y confirmar (`TypicalWait`).
 5. **Fuera de esta fase:**
    - Ordenar Explorar por el tiempo de confirmar. Un restaurante sigue en medio de su grupo, como antes ([ADR 0073](0073-quote-time-and-explore-order.md)).

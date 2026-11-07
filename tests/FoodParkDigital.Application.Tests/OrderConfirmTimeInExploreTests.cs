@@ -2,6 +2,8 @@ using System.Linq.Expressions;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -79,6 +81,11 @@ public class OrderConfirmTimeInExploreTests
         // A fourth customer confirmed at once: two of four within five minutes is half.
         await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(1));
         Assert.Equal(OrderConfirmTime.WithinFiveMinutes, Entry(await SnapshotAsync(fixture), tacos).OrderConfirmTime);
+        // The first customer orders once more, still waiting for 10 minutes, and once more they cancel after 2: neither is
+        // decided, so their quick order still counts.
+        await OrderAsync(fixture, tacos, arrivedAt: Now.AddMinutes(-10), phone: phone);
+        await OrderAsync(fixture, tacos, cancelledByCustomerAfter: TimeSpan.FromMinutes(2), arrivedAt: Now.AddMinutes(-5), phone: phone);
+        Assert.Equal(OrderConfirmTime.WithinFiveMinutes, Entry(await SnapshotAsync(fixture), tacos).OrderConfirmTime);
     }
 
     [Fact]
@@ -137,6 +144,19 @@ public class OrderConfirmTimeInExploreTests
     }
 
     [Fact]
+    public async Task HalfAnHourExactly_ShouldBeAmongTheSlowest_AnsweredOrStillWaiting()
+    {
+        await using var fixture = Fixture();
+        var tacos = await KitchenAsync(fixture, "tacos", "Tacos El Güero");
+        // Answered after 20 minutes and after exactly 30, and one waiting for exactly 30 minutes now: two of three slower.
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(20));
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(30));
+        await OrderAsync(fixture, tacos, arrivedAt: Now.AddMinutes(-30));
+
+        Assert.Equal(OrderConfirmTime.Slower, Entry(await SnapshotAsync(fixture), tacos).OrderConfirmTime);
+    }
+
+    [Fact]
     public async Task ASnapshotThatCouldNotReadTheOrders_ShouldNotTellTheOwnerTheyAreNotCountedYet()
     {
         await using var fixture = SalesTestFixture.Create(null, new FailingOrderHistory());
@@ -153,6 +173,31 @@ public class OrderConfirmTimeInExploreTests
     }
 
     [Fact]
+    public async Task ASnapshotThatCouldNotReadTheRequests_ShouldStillSayHowSoonItConfirms_EachFromItsOwnRead()
+    {
+        await using var fixture = SalesTestFixture.Create(null, new FailingAppointments());
+        fixture.Clock.UtcNow = Now;
+        // A salon that books online and also takes online orders.
+        var salon = await SalonAsync(fixture, "luna", "Estética Luna", product: true);
+        var settings = await fixture.Context.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == salon.Id);
+        settings.UpdateOnlineMenu(OnlineMenuMode.Orders);
+        settings.Update(settings.Currency, settings.TimeZone, autoAcceptOrders: false, settings.MaxConcurrentOrders);
+        var branch = await fixture.Context.Branches.IgnoreQueryFilters().SingleAsync(b => b.TenantId == salon.Id && b.IsDefault);
+        await fixture.OpenCashSessionAsync(salon, branch.Id);
+        for (var n = 0; n < 3; n++)
+            await OrderAsync(fixture, salon, answeredAfter: TimeSpan.FromMinutes(2));
+
+        var profile = await ProfileAsync(fixture, salon);
+        var menu = await MenuAsync(fixture, "luna");
+
+        // Its requests could not be read: nothing of them, not even «not yet»; its orders could, and say how soon.
+        Assert.Equal((false, (ResponseTime?)null), (profile.CountsRequests, profile.ResponseTime));
+        Assert.Equal((true, (OrderConfirmTime?)OrderConfirmTime.WithinFiveMinutes), (profile.CountsOrders, profile.OrderConfirmTime));
+        Assert.Equal(OrderConfirmTime.WithinFiveMinutes, menu!.OrderConfirmTime);
+        Assert.Null(menu.ResponseTime);
+    }
+
+    [Fact]
     public async Task TheOwner_ShouldReadHowSoonItConfirms_TheSlowerToo_AndItsMenuWhatItsCardSays()
     {
         await using var fixture = Fixture();
@@ -163,8 +208,11 @@ public class OrderConfirmTimeInExploreTests
         for (var n = 0; n < 3; n++)
             await OrderAsync(fixture, quick, answeredAfter: TimeSpan.FromMinutes(2));
         var newer = await KitchenAsync(fixture, "sushi", "Sushi Koi");
-        // A menu that takes no orders: its owner reads nothing of them.
+        // A menu that takes no orders (any more): neither its card nor its owner says anything of them.
         var menuOnly = await KitchenAsync(fixture, "cafe", "Café Luna", ordersOn: false);
+        for (var n = 0; n < 3; n++)
+            await OrderAsync(fixture, menuOnly, answeredAfter: TimeSpan.FromMinutes(2));
+        Assert.Null(Entry(await SnapshotAsync(fixture), menuOnly).OrderConfirmTime);
 
         var slowProfile = await ProfileAsync(fixture, slow);
         Assert.Equal((true, OrderConfirmTime.Slower), (slowProfile.CountsOrders, slowProfile.OrderConfirmTime));
@@ -268,31 +316,41 @@ public class OrderConfirmTimeInExploreTests
         return profile.Value!;
     }
 
+    /// <summary>The read of the appointments fails, as a database that does not answer would; every other read works.</summary>
+    private sealed class FailingAppointments : IQueryExpressionInterceptor
+    {
+        public Expression QueryCompilationStarting(Expression queryExpression, QueryExpressionEventData eventData)
+            => new Reads(typeof(Appointment)).Finds(queryExpression)
+                ? throw new InvalidOperationException("La base no responde.")
+                : queryExpression;
+    }
+
+    /// <summary>Whether a query reads the entity of <paramref name="type"/>.</summary>
+    private sealed class Reads(Type type) : ExpressionVisitor
+    {
+        private bool _found;
+
+        public bool Finds(Expression expression)
+        {
+            Visit(expression);
+            return _found;
+        }
+
+        public override Expression? Visit(Expression? node)
+        {
+            if (node is QueryRootExpression root && root.ElementType == type)
+                _found = true;
+            return base.Visit(node);
+        }
+    }
+
     /// <summary>The read of the orders' history fails, as a database that does not answer would; every other read works.</summary>
     private sealed class FailingOrderHistory : IQueryExpressionInterceptor
     {
         public Expression QueryCompilationStarting(Expression queryExpression, QueryExpressionEventData eventData)
-            => new ReadsHistory().Finds(queryExpression)
+            => new Reads(typeof(OrderStatusHistory)).Finds(queryExpression)
                 ? throw new InvalidOperationException("La base no responde.")
                 : queryExpression;
-
-        private sealed class ReadsHistory : ExpressionVisitor
-        {
-            private bool _found;
-
-            public bool Finds(Expression expression)
-            {
-                Visit(expression);
-                return _found;
-            }
-
-            public override Expression? Visit(Expression? node)
-            {
-                if (node is QueryRootExpression root && root.ElementType == typeof(OrderStatusHistory))
-                    _found = true;
-                return base.Visit(node);
-            }
-        }
     }
 
     private static Task<PublicDirectorySnapshot> SnapshotAsync(SalesTestFixture fixture)

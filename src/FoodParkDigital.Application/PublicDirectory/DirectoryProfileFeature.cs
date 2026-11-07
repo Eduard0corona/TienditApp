@@ -52,7 +52,8 @@ public class DirectoryProfileDto
     /// </summary>
     public bool HomeVisitAddressNotice { get; set; }
     /// <summary>
-    /// Explorar counts its requests online (Fase 29K, ADR 0065): it lists it, and it books online or receives visits.
+    /// Explorar counts its requests online (Fase 29K, ADR 0065): it lists it, it books online or receives visits, and the
+    /// snapshot could read them.
     /// </summary>
     public bool CountsRequests { get; set; }
     /// <summary>
@@ -298,10 +299,11 @@ internal static class DirectoryProfile
         var takesOrders = settings!.OnlineMenuMode == OnlineMenuMode.Orders;
         if ((takesRequests || takesOrders) && await readEntry(cancellationToken) is { } entry)
         {
+            // Each from its own read (Fase 29T): one the snapshot could not read says nothing, not even «not yet».
             if (takesRequests)
             {
-                profile.CountsRequests = true;
-                profile.ResponseTime = entry.ResponseTime;
+                profile.CountsRequests = entry.ResponseTimeRead;
+                profile.ResponseTime = profile.CountsRequests ? entry.ResponseTime : null;
                 profile.CountsQuotes = entry.Business.ReceivesVisits && entry.QuoteTimeRead;
                 profile.QuoteTime = profile.CountsQuotes ? entry.QuoteTime : null;
             }

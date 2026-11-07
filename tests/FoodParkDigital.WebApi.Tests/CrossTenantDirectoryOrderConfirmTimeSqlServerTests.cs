@@ -80,6 +80,40 @@ public sealed class CrossTenantDirectoryOrderConfirmTimeSqlServerTests
         Assert.Equal(1, (await CardsAsync(stranger))[kitchen.Slug].GetInt32());
     }
 
+    [SqlServerFact]
+    public async Task OrdersWithoutAnAnswer_ShouldBeAmongTheSlowest_AndAcceptingThemAutomatically_AmongTheQuickest()
+    {
+        var waiting = await KitchenAsync("confirma-d");
+        var automatic = await KitchenAsync("confirma-e");
+        await _api.QueryAsync(automatic.Business.TenantId, db => db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE TenantSettings SET AutoAcceptOrders = 1 WHERE TenantId = {automatic.Business.TenantId}"));
+        using var stranger = _api.AnonymousClient();
+
+        // Accepted after 2 minutes; still waiting after 40; cancelled by its customer after waiting 35: two of three slower.
+        var accepted = await OrderAsync(waiting, stranger, "5560000001");
+        await AcceptAsync(waiting, accepted);
+        await AnsweredAsync(waiting, accepted, arrivedHoursAgo: 5, waitedMinutes: 2);
+        var unanswered = await OrderAsync(waiting, stranger, "5560000002");
+        await _api.QueryAsync(waiting.Business.TenantId, db => db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE Orders SET CreatedAt = DATEADD(minute, -40, SYSDATETIMEOFFSET()) WHERE Id = {unanswered.Id}"));
+        var cancelled = await OrderAsync(waiting, stranger, "5560000003");
+        Assert.Equal(HttpStatusCode.OK, (await stranger.PostAsJsonAsync(Cancel, new { token = cancelled.Token })).StatusCode);
+        await AnsweredAsync(waiting, cancelled, arrivedHoursAgo: 5, waitedMinutes: 35);
+        // The other kitchen accepts its orders automatically: each one was answered as it arrived.
+        for (var n = 0; n < 3; n++)
+            await OrderAsync(automatic, stranger, $"55600000{n + 4:00}");
+        _api.ForgetDirectorySnapshot();
+
+        var listed = await CardsAsync(stranger);
+        var profile = await TwoBusinessesApi.ReadAsync(await waiting.Client.GetAsync("/api/v1/auth/my-tenant/directory"));
+
+        Assert.Equal(JsonValueKind.Null, listed[waiting.Slug].ValueKind);
+        Assert.Equal(0, listed[automatic.Slug].GetInt32());
+        // Its owner reads it: half an hour or more.
+        Assert.True(profile.GetProperty("countsOrders").GetBoolean());
+        Assert.Equal(3, profile.GetProperty("orderConfirmTime").GetInt32());
+    }
+
     private sealed record Kitchen(SignedUp Business, string Slug, Guid Product)
     {
         public HttpClient Client => Business.Client;
