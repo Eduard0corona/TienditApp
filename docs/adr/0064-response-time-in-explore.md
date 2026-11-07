@@ -46,7 +46,7 @@ Tomé las decisiones de la Fase 29J con la autorización permanente del dueño d
 6. **Fuera de esta fase:**
    - **Decirlo en la tienda, en la página de citas o en la solicitud de visita:** llegó en la Fase 29K ([ADR 0065](0065-response-time-outside-explore.md)).
    - **Mostrarle al negocio su propio tiempo:** llegó en la Fase 29K, en «Cómo te ven en TienditApp».
-   - **Contar las cotizaciones:** cuánto tarda en mandar la cotización después de la visita.
+   - **Contar las cotizaciones:** cuánto tarda en mandar la cotización después de la visita. Llegó en la Fase 29S ([ADR 0073](0073-quote-time-and-explore-order.md)).
    - **Los pedidos en línea de los restaurantes.**
    - **Defenderse de solicitudes falsas** (ver «Lo que limita»). Desde la Fase 29M no cuentan las del propio equipo y cada cliente cuenta una vez ([ADR 0067](0067-requests-that-count.md)).
 

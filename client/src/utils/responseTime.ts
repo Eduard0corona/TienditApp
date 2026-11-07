@@ -1,4 +1,4 @@
-import { ResponseTime } from '../api/generated/enums';
+import { QuoteTime, ResponseTime } from '../api/generated/enums';
 import { addCalendarDays, formatInBusinessZone, getBusinessToday, toBusinessDateTimeInput } from './dates';
 
 /** The times the card says: every one but the slowest, which it never says. */
@@ -19,17 +19,21 @@ export function responseTimeLabel(responseTime: ResponseTime | null | undefined)
   return responseTime == null || responseTime === ResponseTime.Slower ? null : LABELS[responseTime];
 }
 
+/** The quote times the card says: every one but the slowest, which it never says. */
+type ShownQuoteTime = Exclude<QuoteTime, typeof QuoteTime.Slower>;
+
+const QUOTE_LABELS: Record<ShownQuoteTime, string> = {
+  [QuoteTime.WithinADay]: 'Suele mandar la cotización en menos de un día',
+  [QuoteTime.WithinThreeDays]: 'Suele mandar la cotización en menos de 3 días',
+  [QuoteTime.WithinAWeek]: 'Suele mandar la cotización en menos de una semana',
+};
+
 /**
- * What its owner reads under the preview of its card while Explorar counts its requests online (Fase 29K, ADR 0065):
- * where its customers read how soon it answers, or why nobody reads it yet. Since Fase 29M (ADR 0067) a customer counts once,
- * by their last request, and those of its own team do not count.
+ * What the card of a trade says of how soon it sends the quote after the visit (Fase 29S, ADR 0073): within what it sent at
+ * least half of them, as the server sums it up. Nothing without enough visits quoted or past a week.
  */
-export function ownResponseTimeNote(responseTime: ResponseTime | null | undefined): string {
-  if (responseTime == null)
-    return 'Todavía no contamos solicitudes en línea de 3 clientes para saber en cuánto sueles responder: una cuenta cuando la respondes, o cuando llega su hora o pasa un día sin respuesta.';
-  if (responseTime === ResponseTime.Slower)
-    return 'Sueles tardar un día o más en responder tus solicitudes en línea, así que tus clientes no lo leen.';
-  return 'Lo calculamos con tus solicitudes en línea de los últimos 90 días, la última de cada cliente y sin las de tu equipo. Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas.';
+export function quoteTimeLabel(quoteTime: QuoteTime | null | undefined): string | null {
+  return quoteTime == null || quoteTime === QuoteTime.Slower ? null : QUOTE_LABELS[quoteTime];
 }
 
 /**

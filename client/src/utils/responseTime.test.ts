@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { ResponseTime } from '../api/generated/enums';
+import { QuoteTime, ResponseTime } from '../api/generated/enums';
 import { setBusinessTimeZone } from './dates';
-import { answerInTimeLabel, ownResponseTimeNote, responseTimeLabel } from './responseTime';
+import { ownQuoteTimeNote, ownResponseTimeNote } from './ownResponseTime';
+import { answerInTimeLabel, quoteTimeLabel, responseTimeLabel } from './responseTime';
 
 describe('responseTimeLabel (Fase 29J)', () => {
   it('says within what the business answers, up to a day', () => {
@@ -70,5 +71,22 @@ describe('answerInTimeLabel (Fase 29L)', () => {
     setBusinessTimeZone('America/Mexico_City');
 
     expect(answerInTimeLabel('2027-03-01T17:00:00Z', now)).toBe('Ya pasó el límite para responder a tiempo');
+  });
+});
+
+describe('quoteTimeLabel and ownQuoteTimeNote (Fase 29S)', () => {
+  it('says within what the trade sends the quote after the visit, up to a week', () => {
+    expect(quoteTimeLabel(QuoteTime.WithinADay)).toBe('Suele mandar la cotización en menos de un día');
+    expect(quoteTimeLabel(QuoteTime.WithinThreeDays)).toBe('Suele mandar la cotización en menos de 3 días');
+    expect(quoteTimeLabel(QuoteTime.WithinAWeek)).toBe('Suele mandar la cotización en menos de una semana');
+    expect(quoteTimeLabel(QuoteTime.Slower)).toBeNull();
+    expect(quoteTimeLabel(null)).toBeNull();
+    expect(quoteTimeLabel(undefined)).toBeNull();
+  });
+
+  it('tells its owner where customers read it, that a week or more is not said, or that it is not counted yet', () => {
+    expect(ownQuoteTimeNote(QuoteTime.WithinADay)).toMatch(/Tus clientes lo leen en tu tarjeta y donde te piden la visita\.$/);
+    expect(ownQuoteTimeNote(QuoteTime.Slower)).toMatch(/^Sueles tardar una semana o más/);
+    expect(ownQuoteTimeNote(null)).toMatch(/^Todavía no contamos visitas en línea de 3 clientes/);
   });
 });

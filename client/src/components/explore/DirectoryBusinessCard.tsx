@@ -4,7 +4,7 @@ import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
 import { categoryInfo, deliveryToPostalCode, orderStatus, visitToPostalCode } from '../../utils/businessCategories';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import { formatDistance } from '../../utils/geo';
-import { responseTimeLabel } from '../../utils/responseTime';
+import { quoteTimeLabel, responseTimeLabel } from '../../utils/responseTime';
 import { formatAverage, ratingDescription } from '../../utils/reviews';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 import './DirectoryBusinessCard.css';
@@ -39,6 +39,8 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
   const delivery = deliveryToPostalCode(business);
   const visit = visitToPostalCode(business);
   const answers = responseTimeLabel(business.responseTime);
+  // Fase 29S: a trade also says how soon it sends the quote after the visit.
+  const quotes = business.receivesVisits ? quoteTimeLabel(business.quoteTime) : null;
   const place = [
     categoryInfo(business.category)?.label,
     business.deliveryOnly ? 'Solo a domicilio' : business.city,
@@ -95,6 +97,11 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
             {answers && (
               <span className="dc-badge dc-badge-menu">
                 <i className="ri-chat-check-line" aria-hidden="true"></i>{answers}
+              </span>
+            )}
+            {quotes && (
+              <span className="dc-badge dc-badge-menu">
+                <i className="ri-file-list-3-line" aria-hidden="true"></i>{quotes}
               </span>
             )}
           </p>

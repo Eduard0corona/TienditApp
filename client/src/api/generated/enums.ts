@@ -561,6 +561,14 @@ export const QuoteStatus = {
 } as const;
 export type QuoteStatus = (typeof QuoteStatus)[keyof typeof QuoteStatus];
 
+export const QuoteTime = {
+  WithinADay: 0,
+  WithinThreeDays: 1,
+  WithinAWeek: 2,
+  Slower: 3,
+} as const;
+export type QuoteTime = (typeof QuoteTime)[keyof typeof QuoteTime];
+
 export const ReceivablesSort = {
   Owed: 0,
   Oldest: 1,

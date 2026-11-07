@@ -50,19 +50,24 @@ function tradesInExplore(data: DemoData) {
 // ResponseTime as the contract numbers it.
 const WITHIN_AN_HOUR = 0;
 const WITHIN_TWELVE_HOURS = 2;
+// QuoteTime as the contract numbers it (Fase 29S).
+const QUOTES_WITHIN_A_DAY = 0;
+const QUOTES_WITHIN_THREE_DAYS = 1;
+const QUOTES_WITHIN_A_WEEK = 2;
 
 /**
  * How soon each trade answers (Fase 29J): the plumber answered most requests within an hour and the carpenter within 12
- * hours; the locksmith has too few requests, and its card says nothing. The server puts the quicker ones first.
+ * hours; the locksmith has too few requests, and its card says nothing. The server puts the quicker ones first. Since Fase
+ * 29S each also says how soon it sends the quote after the visit: the plumber within a day, the carpenter within a week.
  */
 function tradesThatAnswer(data: DemoData) {
   tradesInExplore(data);
-  const answers: Record<string, number> = {
-    'plomeria-hernandez': WITHIN_AN_HOUR,
-    'carpinteria-don-jose': WITHIN_TWELVE_HOURS,
+  const answers: Record<string, { responseTime: number; quoteTime: number }> = {
+    'plomeria-hernandez': { responseTime: WITHIN_AN_HOUR, quoteTime: QUOTES_WITHIN_A_DAY },
+    'carpinteria-don-jose': { responseTime: WITHIN_TWELVE_HOURS, quoteTime: QUOTES_WITHIN_A_WEEK },
   };
   data.directory = (data.directory as DemoData[]).map((business) =>
-    business.slug in answers ? { ...business, responseTime: answers[business.slug as string] } : business);
+    business.slug in answers ? { ...business, ...answers[business.slug as string] } : business);
 }
 
 // BusinessCategory and PublicDirectoryServiceKind as the contract numbers them.
@@ -285,7 +290,11 @@ const visitPhotos = (sentBefore: number): ExtraRoutes => (data, helpers) => {
  */
 function plumberSettingsThatAnswers(data: DemoData) {
   plumberSettings(data);
-  data.directoryProfile = { ...data.directoryProfile, homeVisitAddressNotice: false, countsRequests: true, responseTime: WITHIN_AN_HOUR };
+  data.directoryProfile = {
+    ...data.directoryProfile, homeVisitAddressNotice: false, countsRequests: true, responseTime: WITHIN_AN_HOUR,
+    // And it sends its quotes within 3 days of the visit (Fase 29S).
+    countsQuotes: true, quoteTime: QUOTES_WITHIN_THREE_DAYS,
+  };
 }
 
 export const OFICIOS_EN_EXPLORAR = asOption(tradesInExplore);
@@ -295,7 +304,7 @@ export const PLOMERO_EN_CONFIGURACION = asOption(plumberSettings);
 export const TIENDA_DE_PLOMERIA = asOption(plumberStore);
 export const VISITA_DE_PLOMERIA = asOption(plumberVisit);
 export const TIENDA_DE_PLOMERIA_QUE_RESPONDE = asOption(plumberStoreWith({ responseTime: WITHIN_AN_HOUR }));
-export const VISITA_DE_PLOMERIA_QUE_RESPONDE = asOption(plumberVisitWith({ responseTime: WITHIN_AN_HOUR }));
+export const VISITA_DE_PLOMERIA_QUE_RESPONDE = asOption(plumberVisitWith({ responseTime: WITHIN_AN_HOUR, quoteTime: QUOTES_WITHIN_A_DAY }));
 export const PLOMERO_QUE_RESPONDE_EN_CONFIGURACION = asOption(plumberSettingsThatAnswers);
 /** The request with photos of what happens, none sent yet (Fase 29H). */
 export const VISITA_CON_FOTOS = asOption(visitPhotos(0));

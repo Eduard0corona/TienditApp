@@ -20,6 +20,7 @@ using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Reviews.Enums;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -129,6 +130,13 @@ public class PublicDirectoryBusinessDto
     /// nor receives visits: the card says nothing.
     /// </summary>
     public ResponseTime? ResponseTime { get; set; }
+
+    /// <summary>
+    /// How soon it sends the quote after the visits its customers requested online (Fase 29S, ADR 0073): within what it sent
+    /// at least half of those of the last 90 days. Null with fewer than three, when it takes a week or more, or when it no
+    /// longer receives visits: the card says nothing.
+    /// </summary>
+    public QuoteTime? QuoteTime { get; set; }
 
     /// <summary>
     /// It receives visits to quote now (Fase 29A, ADR 0053): its card speaks of visits, never of orders or the drawer,
@@ -253,11 +261,8 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
         var inCategory = snapshot.Entries
             .Where(entry => request.Category is null || entry.Business.Category == request.Category)
             .ToList();
-        // In a category, the businesses of each group that answer their requests sooner first, and one without enough in the
-        // middle (Fase 29J), by name otherwise (a stable order). Everything else keeps the order of Explorar: the whole list mixes
-        // businesses that take no requests, and the products and services of a search follow it.
-        if (request.Category is not null)
-            inCategory = inCategory.OrderBy(entry => entry.Rank).ThenBy(entry => ResponseTimes.Order(entry.ResponseTime)).ToList();
+        // The snapshot is already in the order of Explorar: within each group, those that answer their requests sooner first
+        // (Fase 29J in a category, Fase 29S everywhere), so a category, the whole list and a search keep it.
         // «Cerca de mí» orders every business of the category, so the products of a search follow the same order.
         var near = request.Near() is { } position ? PublicDirectoryNearby.Order(inCategory, position) : null;
         var found = (near?.Entries ?? inCategory)
@@ -528,7 +533,15 @@ public sealed class PublicDirectorySnapshot
     /// </param>
     /// <param name="ResponseTime">
     /// How soon it answers its requests online (Fase 29J), slower ones included, while it books online or receives visits:
-    /// its place in a category. The card says it only within a day.
+    /// its place in Explorar within its group (Fase 29S). The card says it only within a day.
+    /// </param>
+    /// <param name="QuoteTime">
+    /// How soon it sends the quote after a visit (Fase 29S), slower ones included, while it receives visits. The card says it
+    /// only within a week; its owner reads it whole.
+    /// </param>
+    /// <param name="QuoteTimeRead">
+    /// The snapshot could read how soon its trades quote: when it could not, its owner is not told that its visits are not
+    /// counted yet.
     /// </param>
     internal sealed record Entry(
         Guid TenantId,
@@ -537,7 +550,9 @@ public sealed class PublicDirectorySnapshot
         int Rank,
         GeoPoint? Location = null,
         decimal? VisitServicePrice = null,
-        ResponseTime? ResponseTime = null);
+        ResponseTime? ResponseTime = null,
+        QuoteTime? QuoteTime = null,
+        bool QuoteTimeRead = true);
 
     /// <summary>
     /// Reads every business Explorar lists: a public request has no business, so these reads span all of them, each
@@ -647,21 +662,44 @@ public sealed class PublicDirectorySnapshot
             responsesRead = false;
         }
 
+        // How soon each trade sends the quote after a visit (Fase 29S) never takes Explorar with it either.
+        Dictionary<Guid, QuoteTime?> quotes;
+        var quotesRead = true;
+        try
+        {
+            quotes = await QuoteTimesAsync(context, listed, utcNow, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Explorar could not read how soon its trades send their quotes: it says nothing of it until the next snapshot.");
+            quotes = [];
+            quotesRead = false;
+        }
+
         var entries = rows
             .Select(row => ToEntry(row, specialDays[row.Id], utcNow))
             .Where(entry => entry is not null)
             .Select(entry => entry!)
-            .OrderBy(entry => entry.Rank)
-            .ThenBy(entry => entry.Business.Name, Names)
-            // Only one that takes requests now: one that stopped booking online says nothing of them.
+            // Only one that takes requests now: one that stopped booking online says nothing of them, and one that stopped
+            // receiving visits says nothing of its quotes.
             .Select(entry => entry.Business.BooksOnline || entry.Business.ReceivesVisits
                 ? entry with { ResponseTime = responses.GetValueOrDefault(entry.TenantId) }
                 : entry)
+            .Select(entry => entry.Business.ReceivesVisits
+                ? entry with { QuoteTime = quotes.GetValueOrDefault(entry.TenantId), QuoteTimeRead = quotesRead }
+                : entry)
+            // The order of Explorar (Fase 29S, ADR 0073): by group, those that answer their requests sooner first within it
+            // (one without enough in the middle, as one that takes none), then by name. Every list of Explorar keeps it: the
+            // whole list, each category, and the products and services of a search; «Cerca de mí» orders by distance.
+            .OrderBy(entry => entry.Rank)
+            .ThenBy(entry => ResponseTimes.Order(entry.ResponseTime))
+            .ThenBy(entry => entry.Business.Name, Names)
             .ToList();
         foreach (var entry in entries)
         {
             entry.Business.Rating = ratings.GetValueOrDefault(entry.TenantId);
             entry.Business.ResponseTime = ResponseTimes.Shown(entry.ResponseTime);
+            entry.Business.QuoteTime = QuoteTimes.Shown(entry.QuoteTime);
         }
         return new PublicDirectorySnapshot(utcNow, entries, responsesRead);
     }
@@ -764,6 +802,58 @@ public sealed class PublicDirectorySnapshot
                 row.WithinTwelveHours - row.WithinThreeHours,
                 row.WithinADay - row.WithinTwelveHours,
                 row.Requests - row.WithinADay
+            ]));
+    }
+
+    /// <summary>
+    /// How soon each trade listed sends the quote after the visits its customers requested online (Fase 29S, ADR 0073): one
+    /// row per business, the first version of each visit's quote sent since <see cref="QuoteTimes.Since"/>, counted by how long
+    /// after the end of its visit it was sent (before the end, nothing), once the visit ended and unless it was cancelled or
+    /// missed. As for the requests (Fase 29M, ADR 0067), visits from
+    /// the business's own team do not count, and a customer counts once: of the visits of one phone, the one quoted last. The
+    /// phone is only compared in the database, never read.
+    /// </summary>
+    internal static async Task<Dictionary<Guid, QuoteTime?>> QuoteTimesAsync(
+        IApplicationDbContext context, IQueryable<Tenant> listed, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        var since = QuoteTimes.Since(utcNow);
+        int aDay = QuoteTimes.LimitHours[0], threeDays = QuoteTimes.LimitHours[1], aWeek = QuoteTimes.LimitHours[2];
+        // A visit requested online, by a customer, that took place (it ended, and was neither cancelled nor missed), whose first
+        // version of its quote was sent: the one of its business only. A sent quote is never discarded; saying so lets SQL
+        // Server use the index of the first version of each visit's quote.
+        var quoted =
+            from visit in context.Appointments.IgnoreQueryFilters().AsNoTracking()
+            join quote in context.Quotes.IgnoreQueryFilters().AsNoTracking()
+                on new { visit.TenantId, AppointmentId = (Guid?)visit.Id } equals new { quote.TenantId, quote.AppointmentId }
+            where visit.Channel == AppointmentChannel.Online && visit.Visit != null && !visit.FromTeam
+                && visit.EndAt <= utcNow && visit.Status != AppointmentStatus.Cancelled && visit.Status != AppointmentStatus.NoShow
+                && quote.Revision == 1 && quote.Status != QuoteStatus.Discarded && quote.SentAt >= since
+                && listed.Any(t => t.Id == visit.TenantId)
+            // Never null past the filter: written so, the comparison below is one subquery, not two.
+            select new { visit.TenantId, visit.RequestPhone, visit.EndAt, SentAt = quote.SentAt ?? since };
+        var counted = await quoted
+            // One per customer of each business: of those of the same phone, the one quoted last.
+            .Where(v => v.SentAt == quoted
+                .Where(same => same.TenantId == v.TenantId && same.RequestPhone == v.RequestPhone)
+                .Max(same => same.SentAt))
+            .GroupBy(v => v.TenantId)
+            .Select(g => new
+            {
+                TenantId = g.Key,
+                Visits = g.Count(),
+                WithinADay = g.Count(v => v.SentAt < v.EndAt.AddHours(aDay)),
+                WithinThreeDays = g.Count(v => v.SentAt < v.EndAt.AddHours(threeDays)),
+                WithinAWeek = g.Count(v => v.SentAt < v.EndAt.AddHours(aWeek))
+            })
+            .ToListAsync(cancellationToken);
+        return counted.ToDictionary(
+            row => row.TenantId,
+            row => QuoteTimes.Typical(
+            [
+                row.WithinADay,
+                row.WithinThreeDays - row.WithinADay,
+                row.WithinAWeek - row.WithinThreeDays,
+                row.Visits - row.WithinAWeek
             ]));
     }
 
