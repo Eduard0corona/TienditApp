@@ -48,7 +48,12 @@ El dueño del producto pidió avanzar este punto (el 8), entre otros, sin espera
 - **Lo que limita:**
   - **Aceptar solo cuenta como inmediato:** un negocio que acepta los pedidos solo dice «menos de 5 minutos». Es lo que vive su cliente: el pedido entra a preparación al llegar.
   - **Se puede inflar** con pedidos falsos desde varios teléfonos, como el tiempo de respuesta ([ADR 0064](0064-response-time-in-explore.md)). Es una señal para el cliente, no una garantía.
-  - **Costo de la foto:** cada foto (cada 30 segundos) lee los pedidos en línea de 90 días de los negocios listados y busca en el historial el primer cambio de cada uno. Usa los índices que ya existen (`Orders` por negocio y fecha y por teléfono, `OrderStatusHistory` por pedido y hora). Con muchos pedidos convendría guardar en el pedido cuándo se confirmó, lo que pide migración.
+  - **Costo de la foto:** cada foto (cada 30 segundos, si alguien la pide) lee los pedidos de 90 días de los negocios listados.
+    - Los busca por negocio y fecha (`IX_Orders_TenantId_CreatedAt`) y revisa en cada uno el canal y la mesa, que no están en ese índice: también recorre las ventas de mostrador.
+    - Busca el primer cambio de cada pedido en el historial, por pedido y hora, y el último pedido de cada cliente una sola vez, agrupado.
+    - Medido en SQL Server, con una sola cocina: unos 20 ms sin pedidos, unos 250 ms con 25,000 pedidos (2,500 en línea) y unos 600 ms con 100,000 (10,000 en línea). Crece con los pedidos de todos los negocios listados.
+    - Con varios negocios de ese tamaño conviene un índice filtrado de los pedidos en línea (por negocio, teléfono y fecha) o guardar en el pedido cuándo se confirmó. Los dos piden migración.
+  - **El menú puede armar la foto:** el menú de un negocio que toma pedidos lee ahora la foto de Explorar, como las páginas de citas y de visitas (Fase 29K, [ADR 0065](0065-response-time-outside-explore.md)). Si la foto tiene más de 10 minutos, la petición que la encuentra la arma de nuevo; las demás no esperan.
   - **Contrato:** la tarjeta de Explorar, el menú y «Cómo te ven» suman `orderConfirmTime`, y «Cómo te ven», `countsOrders`. Los clientes anteriores los ignoran.
 - **Decisión por omisión** (sin preferencia expresa del dueño):
   - qué cuenta (sin las mesas y con la aceptación automática);
