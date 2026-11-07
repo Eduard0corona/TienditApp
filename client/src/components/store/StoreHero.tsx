@@ -4,7 +4,7 @@ import { BusinessCategory } from '../../api/generated/enums';
 import type { PublicMenu } from '../../api/publicMenuApi';
 import type { RatingSummary } from '../../api/reviewsApi';
 import { categoryInfo } from '../../utils/businessCategories';
-import { responseTimeLabel } from '../../utils/responseTime';
+import { orderConfirmTimeLabel, responseTimeLabel } from '../../utils/responseTime';
 import { formatAverage, reviewCountLabel, storeRatingName } from '../../utils/reviews';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 
@@ -42,7 +42,8 @@ interface StoreHeroProps {
 /**
  * The top of the online menu as the delivery apps open a store (Fase 24E): the business's cover across the page (its
  * colors without one), its logo over it, its name, what it is and its line, whether it is open, a button for its hours
- * and address, its rating (Fase 24H), how soon it answers its requests (Fase 29K), and how the customer wants the order. The arrow goes back only to where the customer came from in the
+ * and address, its rating (Fase 24H), how soon it answers its requests (Fase 29K) and confirms its orders (Fase 29T), and how
+ * the customer wants the order. The arrow goes back only to where the customer came from in the
  * app: a menu opened from a QR or a link never leads to other businesses.
  */
 export default function StoreHero({
@@ -59,6 +60,8 @@ export default function StoreHero({
   // How soon it answers its requests online, as its card in Explorar says it (Fase 29K); not at a table, where nothing
   // is requested but the order.
   const answers = tableLabel ? null : responseTimeLabel(menu.responseTime);
+  // And how soon it confirms its online orders (Fase 29T), likewise not at a table, where whoever serves it is there.
+  const confirms = tableLabel ? null : orderConfirmTimeLabel(menu.orderConfirmTime);
   const shared = shareNotice === 'Enlace copiado';
 
   useEffect(() => {
@@ -137,7 +140,7 @@ export default function StoreHero({
           </p>
         )}
 
-        {(onOpenInfo || menu.deliveryOnly || rating || answers) && (
+        {(onOpenInfo || menu.deliveryOnly || rating || answers || confirms) && (
           <div className="pm-pills">
             {rating && (
               <button
@@ -164,6 +167,9 @@ export default function StoreHero({
             )}
             {menu.deliveryOnly && (
               <span className="pm-pill static"><i className="ri-e-bike-2-line" aria-hidden="true"></i>Solo a domicilio</span>
+            )}
+            {confirms && (
+              <span className="pm-pill static"><i className="ri-check-double-line" aria-hidden="true"></i>{confirms}</span>
             )}
             {answers && (
               <span className="pm-pill static"><i className="ri-chat-check-line" aria-hidden="true"></i>{answers}</span>

@@ -1,4 +1,4 @@
-import { QuoteTime, ResponseTime } from '../api/generated/enums';
+import { OrderConfirmTime, QuoteTime, ResponseTime } from '../api/generated/enums';
 import { addCalendarDays, formatInBusinessZone, getBusinessToday, toBusinessDateTimeInput } from './dates';
 
 /** The times the card says: every one but the slowest, which it never says. */
@@ -34,6 +34,24 @@ const QUOTE_LABELS: Record<ShownQuoteTime, string> = {
  */
 export function quoteTimeLabel(quoteTime: QuoteTime | null | undefined): string | null {
   return quoteTime == null || quoteTime === QuoteTime.Slower ? null : QUOTE_LABELS[quoteTime];
+}
+
+/** The confirm times the card says: every one but the slowest, which it never says. */
+type ShownConfirmTime = Exclude<OrderConfirmTime, typeof OrderConfirmTime.Slower>;
+
+const CONFIRM_LABELS: Record<ShownConfirmTime, string> = {
+  [OrderConfirmTime.WithinFiveMinutes]: 'Suele confirmar los pedidos en menos de 5 minutos',
+  [OrderConfirmTime.WithinFifteenMinutes]: 'Suele confirmar los pedidos en menos de 15 minutos',
+  [OrderConfirmTime.WithinHalfAnHour]: 'Suele confirmar los pedidos en menos de media hora',
+};
+
+/**
+ * What the card and the menu of a business say of how soon it confirms the orders placed on its online menu (Fase 29T, ADR
+ * 0074): within what it accepted or declined at least half of them, as the server sums it up. Nothing without enough orders
+ * or past half an hour.
+ */
+export function orderConfirmTimeLabel(confirmTime: OrderConfirmTime | null | undefined): string | null {
+  return confirmTime == null || confirmTime === OrderConfirmTime.Slower ? null : CONFIRM_LABELS[confirmTime];
 }
 
 /**

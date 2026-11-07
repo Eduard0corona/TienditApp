@@ -365,6 +365,14 @@ export const OrderChannel = {
 } as const;
 export type OrderChannel = (typeof OrderChannel)[keyof typeof OrderChannel];
 
+export const OrderConfirmTime = {
+  WithinFiveMinutes: 0,
+  WithinFifteenMinutes: 1,
+  WithinHalfAnHour: 2,
+  Slower: 3,
+} as const;
+export type OrderConfirmTime = (typeof OrderConfirmTime)[keyof typeof OrderConfirmTime];
+
 export const OrderInvoiceFileKind = {
   Xml: 0,
   Pdf: 1,

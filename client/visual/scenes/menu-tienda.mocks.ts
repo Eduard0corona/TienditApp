@@ -6,10 +6,14 @@ import { withProductPhotos } from './catalogo-inventario.mocks';
 
 const COVER = '/visual-img/portada.svg';
 
-/** The store dressed: the menu answers with its cover and logo (publico-cuenta-marco.mocks.ts) and the photos. */
+/**
+ * The store dressed: the menu answers with its cover and logo (publico-cuenta-marco.mocks.ts) and the photos, and says it
+ * confirms its orders within five minutes (Fase 29T, OrderConfirmTime.WithinFiveMinutes), as its card in Explorar does.
+ */
 function dressedStore(data: DemoData) {
   withProductPhotos(data);
   data.menuStore = true;
+  data.menuOrderConfirmTime = 0;
 }
 
 /** The owner uploaded a cover: the profile has its variants, all the same demo picture. */

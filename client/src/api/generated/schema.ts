@@ -17829,6 +17829,8 @@ export interface components {
             responseTime?: components["schemas"]["ResponseTime"];
             countsQuotes: boolean;
             quoteTime?: components["schemas"]["QuoteTime"];
+            countsOrders: boolean;
+            orderConfirmTime?: components["schemas"]["OrderConfirmTime"];
         };
         /**
          * Format: int32
@@ -19323,6 +19325,11 @@ export interface components {
         OrderChannelsDto: {
             channels: components["schemas"]["OrderChannel"][];
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OrderConfirmTime: 0 | 1 | 2 | 3;
         OrderDeliveryDto: {
             postalCode: string;
             addressLine: string;
@@ -20637,6 +20644,7 @@ export interface components {
             rating?: components["schemas"]["RatingSummaryDto"];
             responseTime?: components["schemas"]["ResponseTime"];
             quoteTime?: components["schemas"]["QuoteTime"];
+            orderConfirmTime?: components["schemas"]["OrderConfirmTime"];
             receivesVisits: boolean;
             visitChargePolicy?: components["schemas"]["HomeVisitChargePolicy"];
             visitPrice?: components["schemas"]["HomeVisitPriceDto"];
@@ -20777,6 +20785,7 @@ export interface components {
             homeVisits?: components["schemas"]["PublicHomeVisitsDto"];
             rating?: components["schemas"]["RatingSummaryDto"];
             responseTime?: components["schemas"]["ResponseTime"];
+            orderConfirmTime?: components["schemas"]["OrderConfirmTime"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
         PublicMenuProductDto: {

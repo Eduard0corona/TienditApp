@@ -25601,6 +25601,7 @@
       "DirectoryProfileDto": {
         "required": [
           "category",
+          "countsOrders",
           "countsQuotes",
           "countsRequests",
           "homeVisitAddressNotice",
@@ -25640,6 +25641,12 @@
           },
           "quoteTime": {
             "$ref": "#/components/schemas/QuoteTime"
+          },
+          "countsOrders": {
+            "type": "boolean"
+          },
+          "orderConfirmTime": {
+            "$ref": "#/components/schemas/OrderConfirmTime"
           }
         },
         "additionalProperties": false
@@ -30672,6 +30679,22 @@
         },
         "additionalProperties": false
       },
+      "OrderConfirmTime": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "WithinFiveMinutes",
+          "WithinFifteenMinutes",
+          "WithinHalfAnHour",
+          "Slower"
+        ]
+      },
       "OrderDeliveryDto": {
         "required": [
           "addressLine",
@@ -35052,6 +35075,9 @@
           "quoteTime": {
             "$ref": "#/components/schemas/QuoteTime"
           },
+          "orderConfirmTime": {
+            "$ref": "#/components/schemas/OrderConfirmTime"
+          },
           "receivesVisits": {
             "type": "boolean"
           },
@@ -35562,6 +35588,9 @@
           },
           "responseTime": {
             "$ref": "#/components/schemas/ResponseTime"
+          },
+          "orderConfirmTime": {
+            "$ref": "#/components/schemas/OrderConfirmTime"
           },
           "categories": {
             "type": "array",

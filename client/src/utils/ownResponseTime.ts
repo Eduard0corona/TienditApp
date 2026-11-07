@@ -1,4 +1,4 @@
-import { QuoteTime, ResponseTime } from '../api/generated/enums';
+import { OrderConfirmTime, QuoteTime, ResponseTime } from '../api/generated/enums';
 
 // What an owner reads of their own times in «Cómo te ven en TienditApp». Apart from utils/responseTime, which the cards of
 // Explorar (the first visit) load: these notes come with Configuración only.
@@ -23,4 +23,13 @@ export function ownQuoteTimeNote(quoteTime: QuoteTime | null | undefined): strin
   if (quoteTime === QuoteTime.Slower)
     return 'Sueles tardar una semana o más en mandar la cotización después de la visita, así que tus clientes no lo leen.';
   return 'Lo contamos desde que termina cada visita en línea hasta que mandas su cotización, en los últimos 90 días, la última de cada cliente. Tus clientes lo leen en tu tarjeta y donde te piden la visita.';
+}
+
+/** What its owner reads of how soon it confirms its online orders, while Explorar counts them (Fase 29T, ADR 0074). */
+export function ownOrderConfirmTimeNote(confirmTime: OrderConfirmTime | null | undefined): string {
+  if (confirmTime == null)
+    return 'Todavía no contamos pedidos en línea de 3 clientes para saber en cuánto sueles confirmarlos: uno cuenta cuando lo aceptas o lo rechazas, o cuando pasa media hora sin respuesta.';
+  if (confirmTime === OrderConfirmTime.Slower)
+    return 'Sueles tardar media hora o más en confirmar tus pedidos en línea, así que tus clientes no lo leen.';
+  return 'Lo contamos desde que llega cada pedido de tu menú en línea hasta que lo aceptas o lo rechazas, en los últimos 90 días, el último de cada cliente y sin los de tus mesas. Tus clientes lo leen en tu tarjeta y en tu menú.';
 }
