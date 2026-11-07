@@ -153,6 +153,14 @@ public class CustomerOrderCancellationTests
         var suspended = (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.TrackingToken == suspendedToken)).Id;
         var inventory = new RecordingInventory();
 
+        // Ordered with the QR of a table: whoever serves it handles it; the account does not offer it, and refuses it.
+        var tableToken = (await PlaceAsync(fixture, Pickup(tacos) with { TableLabel = "Mesa 4" })).Value.TrackingToken!;
+        var atATable = (await fixture.Context.Orders.IgnoreQueryFilters().SingleAsync(o => o.TrackingToken == tableToken)).Id;
+        Assert.False((await MyOrderAsync(fixture, atATable))!.CanCancel);
+        var refused = await Assert.ThrowsAsync<DomainException>(() => CancelMineAsync(fixture, atATable, inventory));
+        Assert.Equal(Order.CustomerCancelTableMessage, refused.Message);
+        Assert.True((await MyOrderAsync(fixture, suspended))!.CanCancel);
+
         // A business suspended takes no changes: the account does not offer it, and cancelling it is not found, as by its link.
         var business = await fixture.Context.Tenants.SingleAsync(t => t.Id == tenant.Id);
         business.SetStatus(TenantStatus.Suspended);
