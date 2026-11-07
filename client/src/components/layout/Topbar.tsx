@@ -17,8 +17,7 @@ import CreateBusinessModal from '../business/CreateBusinessModal';
 import ThemeToggle from './ThemeToggle';
 
 // Fase 29N: loaded apart, after the first screen (it draws nothing).
-const AppointmentRequestsLive = lazy(() => import('./AppointmentRequestsLive'));
-const QuoteRepliesLive = lazy(() => import('./QuoteRepliesLive'));
+const LiveNotices = lazy(() => import('./LiveNotices'));
 
 const AUTO_SWITCH_MARKER_KEY = 'fpd_auto_tenant_switch';
 const AVATAR_PLACEHOLDER = '/images/placeholders/avatar.svg';
@@ -63,9 +62,10 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   const isBusinessMember = !!tenant && canOpenBusiness;
   // Fase 29N: whoever answers the requests online hears of each one as it arrives, wherever they are in the app.
   // A suspended business gets no live updates: the server would refuse each connection.
-  const hearsRequests = isBusinessMember && access.appointments && !!tenant?.id && tenant.status === 0;
-  // Fase 29R: whoever works the quotes hears the answers of their customers on any screen.
-  const hearsQuoteReplies = isBusinessMember && access.quotes && !!tenant?.id && tenant.status === 0;
+  // Fase 29R: whoever works the quotes hears the answers of their customers, the same way.
+  const live = isBusinessMember && !!tenant?.id && tenant.status === 0;
+  const hearsRequests = live && access.appointments;
+  const hearsQuoteReplies = live && access.quotes;
 
   const selectedTenantId = useMemo(
     () => tenant?.id ?? user?.tenantId ?? '',
@@ -227,15 +227,9 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
             </li>
           )}
 
-          {hearsRequests && (
+          {(hearsRequests || hearsQuoteReplies) && (
             <Suspense fallback={null}>
-              <AppointmentRequestsLive tenantId={tenant.id} />
-            </Suspense>
-          )}
-
-          {hearsQuoteReplies && (
-            <Suspense fallback={null}>
-              <QuoteRepliesLive tenantId={tenant.id} />
+              <LiveNotices tenantId={tenant.id} requests={hearsRequests} quotes={hearsQuoteReplies} />
             </Suspense>
           )}
 

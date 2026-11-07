@@ -16,11 +16,13 @@ vi.mock('./BusinessSwitcher', () => ({ default: () => null }));
 vi.mock('./CashStatusChip', () => ({ default: () => null }));
 vi.mock('./ThemeToggle', () => ({ default: () => null }));
 vi.mock('../business/CreateBusinessModal', () => ({ default: () => null }));
-vi.mock('./AppointmentRequestsLive', () => ({
-  default: ({ tenantId }: { tenantId: string }) => <span>Escucha las solicitudes de {tenantId}</span>,
-}));
-vi.mock('./QuoteRepliesLive', () => ({
-  default: ({ tenantId }: { tenantId: string }) => <span>Escucha las cotizaciones de {tenantId}</span>,
+vi.mock('./LiveNotices', () => ({
+  default: ({ tenantId, requests, quotes }: { tenantId: string; requests: boolean; quotes: boolean }) => (
+    <>
+      {requests && <span>Escucha las solicitudes de {tenantId}</span>}
+      {quotes && <span>Escucha las cotizaciones de {tenantId}</span>}
+    </>
+  ),
 }));
 
 const APPOINTMENTS = TenantCapability.Service | TenantCapability.Appointments;
