@@ -436,8 +436,47 @@ public class CustomerAnswerNoticesTests
         Assert.Equal(RequestEmailsHandler.NotAMemberMessage, (await stranger.Handle(new UpdateQuoteReplyEmailsCommand(true), CancellationToken.None)).Error);
     }
 
+    [Fact]
+    public async Task TheScreensOfTheQuotes_ShouldHearWhichQuoteWasAnsweredAndHow_AndNotWhatTheCustomerWrote()
+    {
+        await using var fixture = Fixture();
+        var (quote, trade, _) = await AnsweredQuoteAsync(fixture, accepted: true, response: "Puedo el sábado");
+        fixture.TenantService.SetTenant(trade.Id);
+        var screens = new QuoteScreens();
+
+        await QuoteNotifications(fixture, screens)
+            .Handle(new QuoteAnsweredFromLinkEvent(quote.Id, trade.Id, Accepted: true), CancellationToken.None);
+        // One of another business is never told to this one.
+        await QuoteNotifications(fixture, screens)
+            .Handle(new QuoteAnsweredFromLinkEvent(quote.Id, Guid.NewGuid(), Accepted: false), CancellationToken.None);
+        // A screen that fails does not fail the answer: the email is the notice that stays.
+        await QuoteNotifications(fixture, new QuoteScreens(fail: true))
+            .Handle(new QuoteAnsweredFromLinkEvent(quote.Id, trade.Id, Accepted: true), CancellationToken.None);
+
+        var (tenantId, notice) = Assert.Single(screens.Answered);
+        Assert.Equal(trade.Id, tenantId);
+        Assert.Equal(new QuoteAnsweredNotice(quote.Id, quote.Number, quote.Revision, true), notice);
+    }
+
     private static QuoteReplyEmailsHandler QuoteHandler(SalesTestFixture fixture, Guid userId)
         => new(fixture.Context, fixture.TenantService, new SalesCurrentUser { UserId = userId.ToString() });
+
+    private static QuoteAnswerRealtimeNotifications QuoteNotifications(SalesTestFixture fixture, IQuoteNotificationService screens)
+        => new(fixture.Context, screens, NullLogger<QuoteAnswerRealtimeNotifications>.Instance);
+
+    /// <summary>What the live screens of the quotes heard (Fase 29R).</summary>
+    private sealed class QuoteScreens(bool fail = false) : IQuoteNotificationService
+    {
+        public List<(Guid TenantId, QuoteAnsweredNotice Notice)> Answered { get; } = [];
+
+        public Task NotifyQuoteAnswered(Guid tenantId, QuoteAnsweredNotice notice)
+        {
+            if (fail)
+                throw new InvalidOperationException("SignalR");
+            Answered.Add((tenantId, notice));
+            return Task.CompletedTask;
+        }
+    }
 
     private static AppointmentCancellationRealtimeNotifications Notifications(SalesTestFixture fixture, IAppointmentNotificationService screens)
         => new(fixture.Context, screens, NullLogger<AppointmentCancellationRealtimeNotifications>.Instance);

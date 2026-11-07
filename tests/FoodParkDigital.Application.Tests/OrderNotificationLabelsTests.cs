@@ -241,6 +241,27 @@ public class OrderNotificationLabelsTests
     }
 
     [Fact]
+    public async Task OrderTheCustomerCancelled_ShouldNotMessageThem_ButOneTheBusinessCancelledShould()
+    {
+        var tenantService = new FixedTenantService();
+        await using var context = NewContext(tenantService);
+        var order = CustomerOrder(tenantService.TenantId, "ORD-000014");
+        context.Orders.Add(order);
+        await context.SaveChangesAsync();
+        var whatsApp = new RecordingWhatsAppService();
+
+        // Fase 29R: whoever just cancelled it from their link or account is not told what they did.
+        await DispatchAsync(context, whatsApp, tenantService.TenantId,
+            [new OrderCancelledEvent(order.Id, tenantService.TenantId, OrderStatus.Pending, Order.CustomerCancellationReason, ByCustomer: true)]);
+        Assert.Empty(whatsApp.Templates);
+
+        await DispatchAsync(context, whatsApp, tenantService.TenantId,
+            [new OrderCancelledEvent(order.Id, tenantService.TenantId, OrderStatus.Pending, "Sin existencias")]);
+        Assert.Equal(["order_cancelled"], whatsApp.TemplateNames);
+        Assert.Equal(["ORD-000014", "Sin existencias"], Assert.Single(whatsApp.Templates));
+    }
+
+    [Fact]
     public async Task PolicyOfAnotherBusiness_ShouldNotApply()
     {
         var tenantService = new FixedTenantService();
