@@ -147,6 +147,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("AnswerReminderSentAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset?>("CancelledByCustomerAt")
                         .HasColumnType("datetimeoffset");
 

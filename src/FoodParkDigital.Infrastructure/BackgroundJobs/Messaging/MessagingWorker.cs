@@ -1,5 +1,8 @@
+using FoodParkDigital.Application.Appointments.RequestNotices;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Messaging;
+using FoodParkDigital.Domain.Appointments.Enums;
+using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -187,6 +190,68 @@ public sealed class MessagingWorker
         }
 
         return queued;
+    }
+
+    /// <summary>
+    /// Reminds each business of its requests online still waiting an hour before their limit to be answered in time (Fase 29U,
+    /// ADR 0075). Which businesses have any is read across all of them (only the business of each request); each is then
+    /// reminded in its own scope, where its requests decide whether they are due, and saved on its own: the outbox sends the
+    /// emails. Another instance that reminded the same request first wins (its version), and this pass skips that business.
+    /// </summary>
+    /// <returns>Requests reminded.</returns>
+    public async Task<int> QueueAnswerRemindersAsync(CancellationToken cancellationToken)
+    {
+        List<Guid> tenants;
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var since = _clock.UtcNow.AddHours(-ResponseTimes.LimitHours[^1]);
+            tenants = await context.Appointments
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(a => a.Channel == AppointmentChannel.Online
+                    && a.Status == AppointmentStatus.Requested
+                    && !a.FromTeam
+                    && a.AnswerReminderSentAt == null
+                    && a.CreatedAt >= since
+                    && context.Tenants.Any(t => t.Id == a.TenantId && t.Status == TenantStatus.Active))
+                .Select(a => a.TenantId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+        }
+
+        var reminded = 0;
+        foreach (var tenantId in tenants)
+        {
+            try
+            {
+                await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
+                var services = scope.ServiceProvider;
+                var count = await services.GetRequiredService<AnswerReminderPlanner>().RemindDueAsync(cancellationToken);
+                if (count == 0)
+                    continue;
+
+                await services.GetRequiredService<ApplicationDbContext>().SaveChangesAsync(cancellationToken);
+                reminded += count;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                // Another instance reminded one of them, or the business answered it, at the same time: the next pass sees it.
+                _logger.LogInformation(
+                    LogRedaction.RedactDatabaseMessages(ex),
+                    "Answer reminders of tenant {TenantId} were not saved in this pass",
+                    tenantId);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(
+                    LogRedaction.RedactDatabaseMessages(ex),
+                    "Answer reminders of tenant {TenantId} could not be queued",
+                    tenantId);
+            }
+        }
+
+        return reminded;
     }
 
     /// <summary>

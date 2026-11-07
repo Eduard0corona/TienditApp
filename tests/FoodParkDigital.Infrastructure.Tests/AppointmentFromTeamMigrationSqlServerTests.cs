@@ -50,7 +50,7 @@ public class AppointmentFromTeamMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeTenantUserRequestEmails.CreateContext(database, tenantId);
         var appointments = await context.Appointments.AsNoTracking().ToListAsync();
         Assert.Equal(2, appointments.Count);
         Assert.All(appointments, a => Assert.False(a.FromTeam));
@@ -68,7 +68,7 @@ public class AppointmentFromTeamMigrationSqlServerTests
         var fromTeam = Request(tenantId, zone, fromTeam: true);
         context.Appointments.Add(fromTeam);
         await context.SaveChangesAsync();
-        await using var check = database.CreateContext(tenantId);
+        await using var check = BeforeTenantUserRequestEmails.CreateContext(database, tenantId);
         Assert.True((await check.Appointments.AsNoTracking().SingleAsync(a => a.Id == fromTeam.Id)).FromTeam);
     }
 
@@ -92,7 +92,7 @@ public class AppointmentFromTeamMigrationSqlServerTests
             (tenantId, appointmentId) = (tenant.Id, request.Id);
         }
 
-        await using var context = database.CreateContext(tenantId);
+        await using var context = BeforeTenantUserRequestEmails.CreateContext(database, tenantId);
         var declined = await context.Appointments.AsNoTracking().SingleAsync(a => a.Id == appointmentId);
         Assert.Equal((AppointmentStatus.Cancelled, (DateTimeOffset?)Now, false), (declined.Status, declined.RespondedAt, declined.FromTeam));
         // Without the key of its phone: Explorar counts it on its own.
@@ -106,7 +106,7 @@ public class AppointmentFromTeamMigrationSqlServerTests
         await MigrateAsync(database, Migration);
         var (tenant, settings, zone) = Business();
         var request = Request(tenant.Id, zone, fromTeam: true);
-        await using (var seed = database.CreateContext(tenant.Id))
+        await using (var seed = BeforeTenantUserRequestEmails.CreateContext(database, tenant.Id))
         {
             seed.AddRange(tenant, settings, zone, request);
             await seed.SaveChangesAsync();
@@ -129,7 +129,7 @@ public class AppointmentFromTeamMigrationSqlServerTests
         // Rolling back again does nothing, and forward again a request keeps whether it came from the team.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeTenantUserRequestEmails.CreateContext(database, tenant.Id);
         var another = Request(tenant.Id, zone, fromTeam: true);
         forward.Appointments.Add(another);
         await forward.SaveChangesAsync();
