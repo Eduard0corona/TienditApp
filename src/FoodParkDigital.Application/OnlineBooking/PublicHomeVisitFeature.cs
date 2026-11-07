@@ -21,6 +21,7 @@ using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
+using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -64,6 +65,11 @@ public class PublicHomeVisitDto
     /// it answers within a day. Null otherwise.
     /// </summary>
     public ResponseTime? ResponseTime { get; set; }
+    /// <summary>
+    /// How soon it sends the quote after the visit (Fase 29S, ADR 0073), as its card in Explorar says it: Explorar lists it
+    /// and it sends half of them within a week. Null otherwise.
+    /// </summary>
+    public QuoteTime? QuoteTime { get; set; }
 }
 
 /// <summary>Whether the business goes to a postal code and what the visit costs there; never the zone's name.</summary>
@@ -116,6 +122,10 @@ public class GetPublicHomeVisitQueryHandler : IRequestHandler<GetPublicHomeVisit
             .Select(zone => zone.Fee)
             .ToListAsync(cancellationToken);
         var staff = await visit.GoingAsync(_context, tenant.Id, cancellationToken);
+        // Its entry in Explorar, read once: how soon it answers and how soon it quotes, as its card says them.
+        var entry = settings.ListedInDirectory
+            ? await PublicResponseTime.EntryAsync(_directory, _context, _dateTimeProvider.UtcNow, tenant.Id, _logger, cancellationToken)
+            : null;
         return new PublicHomeVisitDto
         {
             BusinessName = tenant.Name,
@@ -131,9 +141,8 @@ public class GetPublicHomeVisitQueryHandler : IRequestHandler<GetPublicHomeVisit
             // It receives visits: it has an active zone, so there is a price.
             Price = HomeVisitPriceDto.From(HomeVisitCharge.Starting(settings.HomeVisitChargePolicy, visit.Price, zoneFees))!,
             Staff = staff.Select(person => new PublicBookingStaffDto { Id = person.Id, Name = person.Name }).ToList(),
-            ResponseTime = await PublicResponseTime.ShownAsync(
-                _directory, _context, _dateTimeProvider.UtcNow, tenant.Id, takesRequests: settings.ListedInDirectory, _logger,
-                cancellationToken)
+            ResponseTime = entry?.Business.ResponseTime,
+            QuoteTime = entry?.Business.QuoteTime
         };
     }
 }

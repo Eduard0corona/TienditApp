@@ -278,9 +278,9 @@ public class ExploreResponseTimeTests
         Assert.Equal(
             [ResponseTime.WithinAnHour, null, ResponseTime.WithinTwelveHours, ResponseTime.WithinADay, null, null],
             category.Businesses.Items.Select(b => b.ResponseTime));
-        // The whole list mixes businesses that take no requests: each group keeps its order by name.
+        // Since Fase 29S (ADR 0073) the whole list keeps the same order: a business that takes no requests goes with the unknown.
         Assert.Equal(
-            ["a-lenta", "b-nueva", "c-rapida", "d-un-dia", "e-doce", "f-sin-agenda"],
+            ["c-rapida", "b-nueva", "e-doce", "d-un-dia", "a-lenta", "f-sin-agenda"],
             everyone.Businesses.Items.Select(b => b.Slug));
     }
 

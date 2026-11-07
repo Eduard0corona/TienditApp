@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -58,6 +59,11 @@ public class DirectoryProfileDto
     /// Explorar does not count them, or fewer than 3 of the last 90 days count.
     /// </summary>
     public ResponseTime? ResponseTime { get; set; }
+    /// <summary>
+    /// How soon it sends the quote after a visit, for its owner (Fase 29S, ADR 0073): the slower ones too, which its card does
+    /// not say. Null while Explorar does not count its requests, it does not receive visits, or fewer than 3 visits count.
+    /// </summary>
+    public QuoteTime? QuoteTime { get; set; }
 }
 
 /// <summary>How the signed-in user's business shows in Explorar (owners and admins).</summary>
@@ -276,6 +282,7 @@ internal static class DirectoryProfile
         {
             profile.CountsRequests = true;
             profile.ResponseTime = entry.ResponseTime;
+            profile.QuoteTime = entry.QuoteTime;
         }
         return profile;
     }
