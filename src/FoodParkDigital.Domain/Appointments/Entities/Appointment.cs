@@ -106,6 +106,11 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public DateTimeOffset? RequestedStartAt { get; private set; }
     /// <summary>
+    /// When its business was reminded to answer it in time (Fase 29U, ADR 0075): once, an hour before its limit, while it
+    /// still waited. Null for every other appointment, and for requests from before Fase 29U.
+    /// </summary>
+    public DateTimeOffset? AnswerReminderSentAt { get; private set; }
+    /// <summary>
     /// Where the customer gets the quote of a visit they requested online (Fase 29B, ADR 0053 point 11), when they gave it:
     /// one plain address (<see cref="InvoiceEmailAddress"/>). Null otherwise. Theirs: it never goes in the activity or a log.
     /// </summary>
@@ -366,6 +371,28 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(OnlineBookingRules.RequestTimePassedMessage);
         Status = AppointmentStatus.Scheduled;
         RespondedAt = now;
+    }
+
+    /// <summary>
+    /// Reminds its business to answer a request online still waiting (Fase 29U, ADR 0075): once, from
+    /// <see cref="ResponseTimes.RemindAt"/> until its limit (<see cref="ResponseTimes.AnswerBy"/>). Never one of its own team,
+    /// one whose limit came less than two hours after it arrived, or one already answered, cancelled or reminded:
+    /// <see cref="AppointmentAnswerDueSoonEvent"/> then is not raised.
+    /// </summary>
+    /// <returns>Whether it is reminded now.</returns>
+    public bool RemindToAnswer(DateTimeOffset now)
+    {
+        if (Channel != AppointmentChannel.Online || FromTeam || Status != AppointmentStatus.Requested || AnswerReminderSentAt is not null)
+            return false;
+        var askedFor = RequestedStartAt ?? StartAt;
+        if (ResponseTimes.RemindAt(CreatedAt, askedFor) is not { } remindAt
+            || now < remindAt
+            || now >= ResponseTimes.AnswerBy(CreatedAt, askedFor))
+            return false;
+
+        AnswerReminderSentAt = now;
+        AddDomainEvent(new AppointmentAnswerDueSoonEvent(Id, TenantId));
+        return true;
     }
 
     /// <summary>The business declines a request: it is cancelled and its time is free again.</summary>

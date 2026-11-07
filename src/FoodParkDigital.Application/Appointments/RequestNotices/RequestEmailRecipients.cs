@@ -5,8 +5,9 @@ using FoodParkDigital.Domain.Tenants.Enums;
 namespace FoodParkDigital.Application.Appointments.RequestNotices;
 
 /// <summary>
-/// Who gets the agenda's emails of a business: one with each request online (Fase 29N, ADR 0068) and, since the Fase 29O
-/// (ADR 0069), one with each appointment its customer cancels. Its active members who chose to get them (or own it and have
+/// Who gets the agenda's emails of a business: one with each request online (Fase 29N, ADR 0068), since the Fase 29O (ADR
+/// 0069) one with each appointment its customer cancels and, since the Fase 29U (ADR 0075), a reminder of each request still
+/// waiting an hour before its limit. Its active members who chose to get them (or own it and have
 /// not chosen), whose account is active with its email confirmed, and who may answer the requests now (the agenda's
 /// permission, in a business with appointments that is not suspended), as the API would let them.
 /// </summary>

@@ -1072,6 +1072,26 @@ La Fase 29O trae una migración, [`database/production/20261106060148_AddTenantU
 - **Volver a la versión anterior:** funciona sin tocar la base; deja de mandar estos avisos, y lo que cada quien eligió se queda guardado.
 - **Dejar también la base como estaba:** el `rollback.sql` quita la columna; se pierde quién prendió o apagó los avisos de las cotizaciones, sin cambiar ningún miembro ni su elección de la Agenda.
 
+## Recordar una solicitud antes de su límite (Fase 29U)
+
+La Fase 29U trae una migración, [`database/production/20261107061906_AddAppointmentAnswerReminderSentAt`](../../database/production/20261107061906_AddAppointmentAnswerReminderSentAt). Su `apply.sql` va antes del merge ([ADR 0075](../adr/0075-answer-reminder.md)).
+
+- **La migración:** agrega a `Appointments` la columna `AnswerReminderSentAt` (`datetimeoffset NULL`, sin valor por omisión): cuándo se le recordó al negocio responder la solicitud. No cambia datos: ninguna solicitud que existe se ha recordado, y las que sigan por confirmar se recuerdan mientras no llegue su límite: las que ya estén en su última hora lo reciben en la primera pasada.
+- **Mientras se publica:** la versión de `master` (la 29T) no conoce la columna y sigue funcionando; las solicitudes que guarda quedan sin recordar, como las demás. Su worker no busca solicitudes por recordar.
+- **Los avisos de la versión nueva** (`AppointmentAnswerDueSoonEvent` y `AppointmentAnswerReminderEmailEvent`) van por el outbox. Si en los segundos en que corren las dos versiones, o después de volver a la anterior, el worker de la 29T toma uno, no conoce el evento y lo aparta (`Unknown event type` en el log, y `background-queues` Degraded un día): ese recordatorio no sale y la solicitud queda marcada como recordada. Para mandarlos, ya con esta versión publicada, regresa a pendientes los mensajes apartados de esos tipos; cada correo vuelve a revisar que la solicitud siga por confirmar antes de su límite, así que uno que ya llegó a su límite no sale:
+
+  ```sql
+  UPDATE OutboxMessages SET DeadLetteredAt = NULL, Attempts = 0, LastError = NULL, NextAttemptAt = SYSDATETIMEOFFSET()
+  WHERE Type IN ('FoodParkDigital.Domain.Appointments.Events.AppointmentAnswerDueSoonEvent',
+                 'FoodParkDigital.Domain.Appointments.Events.AppointmentAnswerReminderEmailEvent')
+    AND DeadLetteredAt IS NOT NULL AND LastError LIKE 'Unknown event type%';
+  ```
+
+- **Sin `apply.sql`:** la versión nueva lee `AnswerReminderSentAt` con cada cita, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **Sin configuración nueva:** el barrido corre en el worker de mensajes, cada 5 minutos, junto a los recordatorios de las citas (con `BackgroundJobs__Enabled` = `false` no corre). Los correos usan el proveedor de correo de la plataforma y `AppUrl` para la liga a la Agenda (sin `AppUrl`, salen sin liga), y les llegan a los mismos que reciben los correos de las solicitudes (`RequestEmails`, Fase 29N).
+- **Volver a la versión anterior:** funciona sin tocar la base; deja de mandar los recordatorios, y a qué solicitudes ya se les mandó se queda guardado.
+- **Dejar también la base como estaba:** el `rollback.sql` quita la columna; se pierde a qué solicitudes ya se les mandó el recordatorio, sin cambiar ninguna cita, su estado ni su respuesta.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

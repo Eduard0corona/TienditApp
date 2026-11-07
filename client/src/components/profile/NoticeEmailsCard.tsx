@@ -61,7 +61,7 @@ export default function NoticeEmailsCard({ businessName, agenda, quotes, ownsBus
                 path={REQUEST_EMAILS}
                 query={requests}
                 label="Citas en línea"
-                description={`Cada solicitud de cita o de visita${inBusiness} y cada cita que un cliente cancela.`}
+                description={`Cada solicitud de cita o de visita${inBusiness}, su recordatorio si sigue sin respuesta y cada cita que un cliente cancela.`}
               />
             )}
             {rows[1] && (

@@ -423,6 +423,8 @@ describe('AppointmentsList', () => {
 
       const row = (await screen.findByText('Valeria')).closest('tr')!;
       expect(within(row).getByText(/^Responde antes de las .+ para que cuente a tiempo$/)).toBeInTheDocument();
+      // The row can show before its effect starts the clock: until it does, the minute below would pass unseen.
+      await vi.waitUntil(() => vi.getTimerCount() > 0);
       act(() => vi.advanceTimersByTime(60_000));
       expect(within(row).getByText('Ya pasó el límite para responder a tiempo')).toBeInTheDocument();
     } finally {

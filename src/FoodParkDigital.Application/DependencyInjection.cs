@@ -59,6 +59,8 @@ public static class DependencyInjection
         services.AddScoped<CampaignAudienceResolver>();
         services.AddScoped<CampaignLauncher>();
         services.AddScoped<AppointmentReminderPlanner>();
+        // Fase 29U: the reminder to answer a request online in time, from the same worker, in the business's scope.
+        services.AddScoped<Appointments.RequestNotices.AnswerReminderPlanner>();
         services.AddScoped<CreditReminderPlanner>();
         services.AddScoped<CreditDueSoonPlanner>();
         services.AddScoped<OutgoingMessageSender>();

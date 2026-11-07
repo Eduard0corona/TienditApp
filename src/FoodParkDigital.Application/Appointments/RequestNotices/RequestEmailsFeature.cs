@@ -9,8 +9,9 @@ using MediatR;
 namespace FoodParkDigital.Application.Appointments.RequestNotices;
 
 /// <summary>
-/// Whether the person gets the agenda's emails of the business they are in: one with each request online (Fase 29N, ADR 0068)
-/// and, since the Fase 29O (ADR 0069), one with each appointment its customer cancels.
+/// Whether the person gets the agenda's emails of the business they are in: one with each request online (Fase 29N, ADR 0068),
+/// since the Fase 29O (ADR 0069) one with each appointment its customer cancels and, since the Fase 29U (ADR 0075), a reminder
+/// of each request still waiting an hour before its limit to be answered in time.
 /// </summary>
 public class RequestEmailsDto
 {

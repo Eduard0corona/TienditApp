@@ -511,6 +511,14 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// One pass of the reminders to answer the requests online in time (Fase 29U), as the messaging worker runs it (the workers
+    /// are off here); the outbox sends their emails afterwards (<see cref="DispatchOutboxAsync"/>).
+    /// </summary>
+    public Task<int> RemindAnswersAsync()
+        => _factory!.Services.GetRequiredService<FoodParkDigital.Infrastructure.BackgroundJobs.Messaging.MessagingWorker>()
+            .QueueAnswerRemindersAsync(CancellationToken.None);
+
     /// <summary>How many confirmation emails went to <paramref name="email"/>.</summary>
     public int ConfirmationsTo(string email) => _emails.ConfirmationsTo(email);
 
