@@ -68,6 +68,24 @@ public class TeamInvitationTests
     }
 
     [Fact]
+    public async Task Invitation_ShouldCarryTheNoticesWhoeverRunsTheTeamChose()
+    {
+        // Fase 29Q (ADR 0071): the receptionist gets the agenda's emails from the start, once she confirms her email.
+        await using var host = await CreateHostAsync();
+        var tenant = await SeedTenantAsync(host, "Estética Lupita");
+
+        var receptionist = (await InviteAsync(host, tenant, "recepcion@demo.com", permissions: null, requestEmails: true, quoteReplyEmails: false)).Value!;
+        var cashier = (await InviteAsync(host, tenant, "caja@demo.com", permissions: null)).Value!;
+
+        Assert.Equal((true, false, false), (receptionist.NoticeEmails.Requests, receptionist.NoticeEmails.QuoteReplies,
+            receptionist.NoticeEmails.EmailConfirmed));
+        var chosen = await MembershipAsync(host, receptionist.TenantUserId);
+        // Off was already what she got: nothing is saved for it.
+        Assert.Equal(((bool?)true, (bool?)null), (chosen.RequestEmails, chosen.QuoteReplyEmails));
+        Assert.Equal((false, false), (cashier.NoticeEmails.Requests, cashier.NoticeEmails.QuoteReplies));
+    }
+
+    [Fact]
     public async Task InvitationLink_ShouldNotResetAPassword()
     {
         await using var host = await CreateHostAsync();
@@ -249,7 +267,8 @@ public class TeamInvitationTests
         });
 
     private static Task<Result<EmployeeDto>> InviteAsync(
-        SqliteTestHost host, Tenant tenant, string email, List<string>? permissions, string firstName = "Maria")
+        SqliteTestHost host, Tenant tenant, string email, List<string>? permissions, string firstName = "Maria",
+        bool? requestEmails = null, bool? quoteReplyEmails = null)
     {
         host.SetTenant(tenant.Id);
         return host.InScopeAsync(services => ActivatorUtilities
@@ -262,7 +281,9 @@ public class TeamInvitationTests
                 PhoneNumber = "5512345678",
                 AppRole = UserRole.Staff,
                 TenantRole = TenantUserRole.Staff,
-                Permissions = permissions
+                Permissions = permissions,
+                RequestEmails = requestEmails,
+                QuoteReplyEmails = quoteReplyEmails
             }, CancellationToken.None));
     }
 

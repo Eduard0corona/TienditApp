@@ -9654,6 +9654,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderChannelsDto"];
+                        "application/json": components["schemas"]["OrderChannelsDto"];
+                        "text/json": components["schemas"]["OrderChannelsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}": {
         parameters: {
             query?: never;
@@ -16832,6 +16869,8 @@ export interface components {
             appRole: components["schemas"]["UserRole"];
             tenantRole: components["schemas"]["TenantUserRole"];
             permissions?: string[] | null;
+            requestEmails?: boolean | null;
+            quoteReplyEmails?: boolean | null;
         };
         CreateInventoryLocationCommand: {
             name: string;
@@ -17595,9 +17634,6 @@ export interface components {
             outstandingBalance: number;
             /** Format: int32 */
             unpaidOrders: number;
-            ordersByStatus: {
-                [key: string]: number;
-            };
             topSellingItems: components["schemas"]["TopSellingItemDto"][];
         };
         /**
@@ -17744,6 +17780,7 @@ export interface components {
             createdAt: string;
             permissions: string[];
             invitationUrl?: string | null;
+            noticeEmails: components["schemas"]["EmployeeNoticeEmailsDto"];
         };
         EmployeeDtoPaginatedList: {
             items: components["schemas"]["EmployeeDto"][];
@@ -17759,6 +17796,11 @@ export interface components {
         EmployeeInvitationDto: {
             invitationUrl: string;
             email: string;
+        };
+        EmployeeNoticeEmailsDto: {
+            requests: boolean;
+            quoteReplies: boolean;
+            emailConfirmed: boolean;
         };
         EmployeePermissionOptionDto: {
             code: string;
@@ -19193,6 +19235,9 @@ export interface components {
          * @enum {integer}
          */
         OrderChannel: 0 | 1 | 2 | 3 | 4 | 5;
+        OrderChannelsDto: {
+            channels: components["schemas"]["OrderChannel"][];
+        };
         OrderDeliveryDto: {
             postalCode: string;
             addressLine: string;
@@ -22220,6 +22265,8 @@ export interface components {
             appRole: components["schemas"]["UserRole"];
             tenantRole: components["schemas"]["TenantUserRole"];
             permissions?: string[] | null;
+            requestEmails?: boolean | null;
+            quoteReplyEmails?: boolean | null;
         };
         UpdateHomeVisitRequestsSettingsCommand: {
             enabled: boolean;

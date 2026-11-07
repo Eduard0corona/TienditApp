@@ -27,6 +27,10 @@ public record UpdateEmployeeCommand : IRequest<Result<EmployeeDto>>
     public TenantUserRole TenantRole { get; init; } = TenantUserRole.Staff;
     /// <summary>Null takes the defaults of the role; an empty list is "sin acceso".</summary>
     public List<string>? Permissions { get; init; }
+    /// <summary>Whether they get the agenda's emails (Fase 29Q, ADR 0071); null leaves what they have.</summary>
+    public bool? RequestEmails { get; init; }
+    /// <summary>Whether they get an email with each answer to a quote from its link; null leaves what they have.</summary>
+    public bool? QuoteReplyEmails { get; init; }
 }
 
 public class UpdateEmployeeCommandValidator : AbstractValidator<UpdateEmployeeCommand>
@@ -83,6 +87,10 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
 
         if (user is null || user.Role == UserRole.Customer)
             return Result.Failure<EmployeeDto>("Empleado no encontrado.");
+
+        // Before anything changes: a refused change of the owner's notices leaves their name and permissions as they were.
+        if (EmployeeNoticeEmails.RefusalFor(tenantUser, request.RequestEmails, request.QuoteReplyEmails) is { } noticesRefused)
+            return Result.Failure<EmployeeDto>(noticesRefused);
 
         // The owner keeps the business: their role never changes from here.
         var isOwner = tenantUser.Role == TenantUserRole.Owner;
@@ -143,6 +151,7 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
             tenantUser.SetPermissionCodes(TenantPermissionCatalog.GetDefaultCodes(appRole, tenantRole));
         else
             tenantUser.SetExplicitPermissions(request.Permissions);
+        EmployeeNoticeEmails.Apply(tenantUser, request.RequestEmails, request.QuoteReplyEmails);
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -159,7 +168,8 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
             Status = tenantUser.Status.ToString(),
             IsActive = tenantUser.Status == TenantUserStatus.Active && user.IsActive,
             CreatedAt = tenantUser.CreatedAt,
-            Permissions = TenantPermissionCatalog.ResolveEffectiveCodes(tenantUser.PermissionCodes, user.Role, tenantUser.Role).ToList()
+            Permissions = TenantPermissionCatalog.ResolveEffectiveCodes(tenantUser.PermissionCodes, user.Role, tenantUser.Role).ToList(),
+            NoticeEmails = EmployeeNoticeEmailsDto.From(tenantUser, user.EmailConfirmed)
         });
     }
 }

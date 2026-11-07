@@ -80,7 +80,8 @@ export function buildData() {
     phoneNumberConfirmed: true,
     emailConfirmed: true,
     role: 'TenantAdmin',
-    tenantRole: 'Owner',
+    // The session sends the role of the membership in capitals, as the claim carries it.
+    tenantRole: 'OWNER',
     permissions: ALL_PERMISSIONS,
     tenantId: TENANT_ID,
     isActive: true,
@@ -415,9 +416,6 @@ export function buildData() {
   const todayStart = at(0, 0);
   const todays = orders.filter((o) => o.createdAt >= todayStart);
   const completedStatuses = [6, 7];
-  const statusName = { 0: 'Pending', 1: 'Confirmed', 2: 'InPreparation', 3: 'Ready', 4: 'Accepted', 5: 'InProgress', 6: 'Delivered', 7: 'Completed', 99: 'Cancelled' };
-  const ordersByStatus = {};
-  todays.forEach((o) => { ordersByStatus[statusName[o.status]] = (ordersByStatus[statusName[o.status]] ?? 0) + 1; });
   const top = new Map();
   todays.filter((o) => completedStatuses.includes(o.status)).forEach((o) => o.items.forEach((it) => {
     const cur = top.get(it.productId) ?? { productId: it.productId, productName: it.productName, itemType: products.find((p) => p.id === it.productId)._itemType, quantitySold: 0, totalAmount: 0 };
@@ -441,7 +439,6 @@ export function buildData() {
       / Math.max(1, orders.filter((o) => o.payments.some((p) => p.paidAt >= todayStart)).length)),
     outstandingBalance: r2(todays.filter((o) => o.status !== 99 && o.balance > 0).reduce((s, o) => s + o.balance, 0)),
     unpaidOrders: todays.filter((o) => o.status !== 99 && o.balance > 0).length,
-    ordersByStatus,
     topSellingItems: [...top.values()].sort((a, b) => b.quantitySold - a.quantitySold).slice(0, 10),
   };
 

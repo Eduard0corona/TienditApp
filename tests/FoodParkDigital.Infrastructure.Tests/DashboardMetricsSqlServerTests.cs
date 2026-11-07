@@ -273,8 +273,7 @@ public class DashboardMetricsSqlServerTests
             PaidOrders = paidOrders,
             AverageOrderValue = paidOrders > 0 ? Math.Round(revenue / paidOrders, 2) : 0,
             OutstandingBalance = openOrders.Sum(o => o.Total - o.PaidAmount),
-            UnpaidOrders = openOrders.Count,
-            OrdersByStatus = orders.GroupBy(o => o.Status.ToString()).ToDictionary(g => g.Key, g => g.Count())
+            UnpaidOrders = openOrders.Count
         };
     }
 
@@ -291,7 +290,6 @@ public class DashboardMetricsSqlServerTests
         Assert.True(expected.AverageOrderValue == actual.AverageOrderValue, $"AverageOrderValue {because}");
         Assert.True(expected.OutstandingBalance == actual.OutstandingBalance, $"OutstandingBalance {because}");
         Assert.True(expected.UnpaidOrders == actual.UnpaidOrders, $"UnpaidOrders {because}");
-        Assert.Equal(expected.OrdersByStatus.OrderBy(x => x.Key), actual.OrdersByStatus.OrderBy(x => x.Key));
     }
 
     /// <summary>

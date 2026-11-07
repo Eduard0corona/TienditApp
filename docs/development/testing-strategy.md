@@ -2137,6 +2137,32 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas:** contra la línea base de `master` en `d3fc1a4` (805 escenas):
     - **784 iguales.**
     - **21 cambian**, todas de la Agenda, por el botón «Sonido para solicitudes en línea» junto a «Nueva cita» y, en las de «Por confirmar», la nota del orden: la Agenda a domicilio y sus diálogos (`agenda-domicilio.spec.ts`), las solicitudes en línea (`citas-en-linea.spec.ts`) y la Agenda y la cita nueva (`clientes-mensajes.spec.ts`).
+- Fase 29Q, los avisos del equipo y la limpieza de Pedidos e Inicio ([ADR 0071](../adr/0071-team-notices-and-orders-cleanup.md)):
+  - **Application:**
+    - `EmployeeAccessRulesTests` (+4): quien administra el equipo elige los avisos de cada persona y solo se guarda lo que cambia lo que recibe (pedir lo que ya recibe no guarda nada, `null` deja cada aviso); nadie cambia desde Equipo los del dueño, ni él mismo; el rechazo llega antes de tocar su nombre; la lista y el detalle de Equipo dicen lo que le llega a cada persona y si su correo está confirmado (el dueño sin elegir recibe los dos).
+    - `TeamInvitationTests` (+1): la invitación lleva los avisos elegidos.
+    - `OrderChannelsTests` (3, nuevo): el mostrador siempre; WhatsApp con número (prendido o pausado), el menú que toma pedidos y las plataformas configuradas (activas o no), en el orden del filtro; nada de otro negocio; un menú sin pedidos o un WhatsApp sin número no cuentan.
+  - **Infrastructure:** `DashboardMetricsSqlServerTests` deja de comparar `OrdersByStatus`.
+  - **WebApi (SQL Server):**
+    - `CrossTenantRealtimeSqlServerTests` (+1): alguien del equipo (403) u otro negocio no eligen los avisos de una persona; el dueño los prende y le llega la siguiente solicitud; los del dueño no se cambian desde Equipo.
+    - `CrossTenantDeliveryPlatformsSqlServerTests`: los canales de cada negocio, y que son para quien trabaja los pedidos (Reportes, 403).
+    - `CrossTenantOperationsSqlServerTests`: Inicio ya no recibe `ordersByStatus`.
+  - **Cliente:**
+    - `EmployeeFormModal.test.tsx` (6, nuevo): los interruptores y el permiso que falta; solo los avisos que el negocio tiene; solo manda el aviso que se cambió (prenderlo y apagarlo no cuenta); al dueño no le ofrece elegir; el permiso sin nombre no se muestra mientras cargan; invitar con avisos.
+    - `NoticeEmailsCard.test.tsx` (+1): al equipo le dice que quien lo administra también los elige, al dueño no.
+    - `OrdersList.test.tsx`: el filtro Canal solo con más de un canal, con los que dice la API.
+    - `teamRoles.test.ts` (1, nuevo): reconoce al dueño con el rol en mayúsculas (sesión) o como enum (Equipo).
+  - **.NET en total:** 4,732 pruebas en verde con SQL Server (Domain 1,390; Application 2,141; WebApi 494; Infrastructure 707). **Cliente en total:** 203 archivos y 1,537 pruebas.
+  - **Primera visita:** 181,979 B (`master` en `e7d1895`: 181,947 B, +32 B); el presupuesto se queda en 182,000 B. El CSS global, 63,077 B de 63,200 B.
+  - **Revisión independiente**, con dos mayores y cinco menores corregidos:
+    - Mi perfil comparaba el rol de la sesión con «Owner», pero llega en mayúsculas: al dueño le decía que otros podían elegir sus avisos;
+    - el formulario de Equipo mandaba siempre los dos avisos y podía deshacer lo que la persona eligió después de leer la lista: ahora solo manda el que se cambió;
+    - pruebas de la lista y el detalle de Equipo, el texto al invitar, el aviso del permiso anunciado y sin código crudo, los canales leídos cada vez que se abre Pedidos, comentarios desactualizados y una escena de Pedidos solo de mostrador.
+  - **CI:** la primera visita subió a 182,025 B por la consulta de canales y el rol del dueño en módulos de la primera visita; pasaron a los de Pedidos y del equipo.
+  - **Escenas:** contra la línea base de `36f8ff0` (807 escenas):
+    - **796 iguales.**
+    - **9 cambian**, solo por el nombre del negocio en dos líneas en el selector de un teléfono: Inicio y el menú de la cuenta en 360 px (`shell.spec.ts`), Productos en 360 px (`catalogo-inventario.spec.ts`), cinco de Cotizaciones en el teléfono (`cotizaciones.spec.ts`) y Visitas a domicilio en Configuración (`oficios.spec.ts`), con «Café La Esquina» o «Plomería Hernández» completos. En las nueve la diferencia queda dentro del selector.
+    - **2 nuevas:** el nombre largo en 360 px (`publico-cuenta-marco.spec.ts`, «Taquería Los Compadres» completo) y Pedidos de un negocio solo de mostrador, sin filtro Canal (`vender-pedidos.spec.ts`). Las dos dieron la misma imagen en dos corridas seguidas.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

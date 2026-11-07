@@ -230,7 +230,6 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
             AverageOrderValue = paidOrders > 0 ? Math.Round(revenue / paidOrders, 2) : 0,
             OutstandingBalance = notCancelled.Sum(x => x.Owed),
             UnpaidOrders = notCancelled.Sum(x => x.Unpaid),
-            OrdersByStatus = byStatus.ToDictionary(x => x.Status.ToString(), x => x.Count),
             TopSellingItems = topSellingItems
         };
     }

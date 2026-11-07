@@ -17,7 +17,8 @@ import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
 import { useRefreshCustomerCredit } from '../../api/customerCredit';
 import { useOrderSelfInvoice } from '../../api/invoicing';
-import { queryKeys, useDeliveryPlatformChannels } from '../../api/queries';
+import { queryKeys } from '../../api/queries';
+import { useOrderChannels } from './useOrderChannels';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { getServicePriorityLabel, parseChecklist } from '../../utils/serviceDetail';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
@@ -44,7 +45,6 @@ import { getVatLabel } from '../../utils/orderTotals';
 import { buildTicketText, buildWhatsAppTicketUrl, formatCancelled, printTicket } from '../../utils/ticket';
 import { isDeliveryPlatform } from '../../utils/deliveryPlatforms';
 import {
-  DELIVERY_PLATFORM_CHANNELS,
   ORDER_CHANNEL_LABELS,
   ORDER_TYPE_LABELS,
   SERVICE_PIECE_STATUS_LABELS,
@@ -72,15 +72,10 @@ const ORDER_TYPE_STATUS_OPTIONS: Record<OrderType, Array<{ value: OrderStatus; l
   [OrderTypeConst.Service]: toStatusOptions([0, 4, 5, 7, 99]),
 };
 
-// Where the order came from; the counter is the usual one and carries no badge in the list. The delivery platforms are
-// offered once the business set one up (active or not: its orders stay to be found).
-const OWN_CHANNELS: OrderChannel[] = [OrderChannel.Counter, OrderChannel.WhatsApp, OrderChannel.Online];
-
-function getChannelOptions(withPlatforms: boolean) {
-  return [...OWN_CHANNELS, ...(withPlatforms ? DELIVERY_PLATFORM_CHANNELS : [])].map((value) => ({
-    value,
-    label: ORDER_CHANNEL_LABELS[value],
-  }));
+// Where the order came from; the counter is the usual one and carries no badge in the list. The API says where the
+// business receives orders (Fase 29Q): a paused channel stays, so its orders are still found.
+function getChannelOptions(channels: OrderChannel[]) {
+  return channels.map((value) => ({ value, label: ORDER_CHANNEL_LABELS[value] }));
 }
 
 /** The platform charged the order in its app: nothing is left to collect from the courier. */
@@ -219,8 +214,10 @@ export default function OrdersList() {
   const canSell = access.sell;
   const canCharge = access.charge;
   const canRefund = access.refunds;
-  const platformChannels = useDeliveryPlatformChannels(access.orders);
-  const channelOptions = useMemo(() => getChannelOptions((platformChannels.data?.length ?? 0) > 0), [platformChannels.data]);
+  const orderChannels = useOrderChannels(access.orders);
+  const channelOptions = useMemo(() => getChannelOptions(orderChannels.data?.channels ?? []), [orderChannels.data]);
+  // Filtering by channel only says something when the business receives orders by more than one.
+  const showChannelFilter = channelOptions.length > 1;
   // The kind of each order says something only while the list mixes sales and services.
   const orderTypes = getOrderTypes(capabilities);
   const mixesOrderTypes = orderTypes.length > 1;
@@ -578,23 +575,25 @@ export default function OrdersList() {
                         ))}
                       </select>
                     </DataTableFilter>
-                    <DataTableFilter label="Canal" htmlFor="orderslist-canal">
-                      <select id="orderslist-canal"
-                        className="form-select form-select-sm"
-                        value={selectedChannel}
-                        onChange={(e) => {
-                          setSelectedChannel(e.target.value);
-                          setPageNumber(1);
-                        }}
-                      >
-                        <option value="">Todos</option>
-                        {channelOptions.map((channel) => (
-                          <option key={channel.value} value={channel.value}>
-                            {channel.label}
-                          </option>
-                        ))}
-                      </select>
-                    </DataTableFilter>
+                    {showChannelFilter && (
+                      <DataTableFilter label="Canal" htmlFor="orderslist-canal">
+                        <select id="orderslist-canal"
+                          className="form-select form-select-sm"
+                          value={selectedChannel}
+                          onChange={(e) => {
+                            setSelectedChannel(e.target.value);
+                            setPageNumber(1);
+                          }}
+                        >
+                          <option value="">Todos</option>
+                          {channelOptions.map((channel) => (
+                            <option key={channel.value} value={channel.value}>
+                              {channel.label}
+                            </option>
+                          ))}
+                        </select>
+                      </DataTableFilter>
+                    )}
                     <DataTableFilter label="Desde" htmlFor="orderslist-desde">
                       <input id="orderslist-desde"
                         type="date"

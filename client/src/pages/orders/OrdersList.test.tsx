@@ -49,12 +49,12 @@ vi.mock('../../components/orders/RefundOrderModal', () => ({
     <button type="button" onClick={() => onSubmit({ amount: 100, method: 0, reason: 'No se hizo una parte', items: [] })}>Registrar el reembolso</button>
   ),
 }));
-// The delivery platforms of the business (GET /delivery-platforms/channels) come through the typed client.
+// Where the business receives orders (GET /orders/channels, Fase 29Q) comes through the typed client.
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 
-function givePlatforms(rows: Array<{ channel: OrderChannel; isActive: boolean }>) {
+function giveChannels(channels: OrderChannel[]) {
   vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) =>
-    Promise.resolve(path === '/api/v1/delivery-platforms/channels' ? rows : undefined)) as unknown as typeof apiRequest);
+    Promise.resolve(path === '/api/v1/orders/channels' ? { channels } : undefined)) as unknown as typeof apiRequest);
 }
 
 /** An order Rappi charged in its app, as the API lists it: the folio and who charged, never the commission. */
@@ -97,15 +97,16 @@ describe('OrdersList', () => {
     vi.mocked(useAuth).mockReturnValue({
       user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ViewOrders', 'CreateSales', 'ManageOrders'] },
     } as unknown as ReturnType<typeof useAuth>);
-    givePlatforms([]);
+    giveChannels([OrderChannel.Counter]);
   });
 
   it('filters by where the order came from and clears it with the other filters', async () => {
     const user = userEvent.setup();
+    giveChannels([OrderChannel.Counter, OrderChannel.WhatsApp]);
     renderOrders(TenantCapability.Food);
     await screen.findByText('ORD-000001');
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Canal' }), 'WhatsApp');
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Canal' }), 'WhatsApp');
     await waitFor(() => expect(lastParams()).toMatchObject({ channel: OrderChannel.WhatsApp, pageNumber: 1 }));
 
     await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
@@ -147,21 +148,23 @@ describe('OrdersList', () => {
     expect(states).not.toContain('Entregada');
   });
 
-  it('offers the delivery platforms in the channel filter once the business set one up, active or not', async () => {
+  it('offers the channel filter only with more than one channel, with those the API says (Fase 29Q)', async () => {
     const user = userEvent.setup();
+    // At the counter only: nothing to filter.
     const page = renderOrders(TenantCapability.Food);
     await screen.findByText('ORD-000001');
-    const channels = () => within(screen.getByRole('combobox', { name: 'Canal' })).getAllByRole('option').map((option) => option.textContent);
-    await waitFor(() => expect(apiRequest).toHaveBeenCalled());
-    expect(channels()).toEqual(['Todos', 'Mostrador', 'WhatsApp', 'En línea']);
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith('get', '/api/v1/orders/channels', expect.anything()));
+    expect(screen.queryByRole('combobox', { name: 'Canal' })).not.toBeInTheDocument();
     page.unmount();
 
-    givePlatforms([{ channel: OrderChannel.UberEats, isActive: false }]);
+    // WhatsApp and a platform, with no online menu: those, in the order the API gives.
+    giveChannels([OrderChannel.Counter, OrderChannel.WhatsApp, OrderChannel.UberEats]);
     renderOrders(TenantCapability.Food);
-    await waitFor(() => expect(channels()).toEqual(['Todos', 'Mostrador', 'WhatsApp', 'En línea', 'Rappi', 'Uber Eats', 'DiDi Food']));
+    const filter = await screen.findByRole('combobox', { name: 'Canal' });
+    expect(within(filter).getAllByRole('option').map((option) => option.textContent)).toEqual(['Todos', 'Mostrador', 'WhatsApp', 'Uber Eats']);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Canal' }), 'Rappi');
-    await waitFor(() => expect(lastParams()).toMatchObject({ channel: OrderChannel.Rappi, pageNumber: 1 }));
+    await user.selectOptions(filter, 'Uber Eats');
+    await waitFor(() => expect(lastParams()).toMatchObject({ channel: OrderChannel.UberEats, pageNumber: 1 }));
   });
 
   it('marks an order of a platform with its badge, the folio of its app and who charged it', async () => {

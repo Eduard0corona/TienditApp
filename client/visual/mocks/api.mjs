@@ -333,6 +333,9 @@ function buildRoutes(data, token) {
       if (orderSearch) rows = rows.filter((o) => includesCI(o.orderNumber, orderSearch) || includesCI(o.customerName, orderSearch) || includesCI(o.customerPhone, orderSearch));
       return ok(paginate([...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), q, 10));
     }],
+    // Where the demo business receives orders (Fase 29Q): its WhatsApp number and its menu that takes orders, so Pedidos
+    // offers the Channel filter (`COUNTER_ONLY_DATA` sets `data.orderChannels` for a business at the counter only).
+    ['GET', /^\/orders\/channels$/, () => ok({ channels: data.orderChannels ?? [0, 1, 2] })],
     ['GET', /^\/orders\/([^/]+)$/, (m) => {
       const o = data.orders.find((x) => x.id === m[1]);
       return o ? ok(o) : notFound('Orden');

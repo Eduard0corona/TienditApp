@@ -217,6 +217,7 @@ export const SELL_ROUTES = asOption(sellRoutes);
 /** The business takes Rappi orders: Vender offers it as an origin and Pedidos filters by it. */
 const rappiRoutes: ExtraRoutes = (data, helpers) => [
   ['GET', /^\/delivery-platforms\/channels$/, () => helpers.ok([{ channel: RAPPI, isActive: true }])],
+  ['GET', /^\/orders\/channels$/, () => helpers.ok({ channels: [0, 1, 2, RAPPI] })],
   ...sellRoutes(data, helpers),
 ];
 
@@ -388,3 +389,10 @@ function withSelfInvoicing(data: DemoData) {
 }
 
 export const SELF_INVOICING_DATA = asOption(withSelfInvoicing);
+
+/** The business sells at the counter only (Fase 29Q): no WhatsApp number, no menu that takes orders, no platform. */
+function atTheCounterOnly(data: DemoData) {
+  data.orderChannels = [0];
+}
+
+export const COUNTER_ONLY_DATA = asOption(atTheCounterOnly);

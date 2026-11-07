@@ -29,7 +29,10 @@ public class QuoteReplyEmailsDto
 [RequiresCapability(QuoteReplyEmail.Modules)]
 public record GetQuoteReplyEmailsQuery : IRequest<Result<QuoteReplyEmailsDto>>;
 
-/// <summary>Turns them on or off for the person, in this business only. Nobody chooses for someone else.</summary>
+/// <summary>
+/// Turns them on or off for the person who calls, in this business only. Someone else's are chosen from the team, by whoever
+/// runs it (Fase 29Q, ADR 0071).
+/// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 [RequiresCapability(QuoteReplyEmail.Modules)]
 public record UpdateQuoteReplyEmailsCommand(bool Enabled) : IRequest<Result<QuoteReplyEmailsDto>>;

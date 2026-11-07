@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Application.Employees.DTOs;
@@ -19,6 +20,29 @@ public class EmployeeDto
     public List<string> Permissions { get; set; } = [];
     /// <summary>Only right after inviting someone new: the link to set their password, to share it by WhatsApp.</summary>
     public string? InvitationUrl { get; set; }
+    /// <summary>The notices by email this person gets in the business (Fase 29Q, ADR 0071).</summary>
+    public EmployeeNoticeEmailsDto NoticeEmails { get; set; } = new();
+}
+
+/// <summary>
+/// What a person gets by email from the business: what they or whoever runs the team chose or, until someone chooses, whether
+/// they own it. Each arrives only while they may act on it and their email is confirmed.
+/// </summary>
+public class EmployeeNoticeEmailsDto
+{
+    /// <summary>One with each request online and with each appointment its customer cancels.</summary>
+    public bool Requests { get; set; }
+    /// <summary>One each time a customer accepts or rejects a quote from its link.</summary>
+    public bool QuoteReplies { get; set; }
+    /// <summary>Whether the email of their account is confirmed: until it is, none reaches them.</summary>
+    public bool EmailConfirmed { get; set; }
+
+    public static EmployeeNoticeEmailsDto From(TenantUser member, bool emailConfirmed) => new()
+    {
+        Requests = member.GetsRequestEmails,
+        QuoteReplies = member.GetsQuoteReplyEmails,
+        EmailConfirmed = emailConfirmed
+    };
 }
 
 /// <summary>The link where an invited person chooses their password, relative to the app.</summary>

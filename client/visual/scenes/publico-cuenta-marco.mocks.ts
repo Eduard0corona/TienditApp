@@ -223,6 +223,12 @@ const suspendedBusiness: PrepareData = (data) => {
   data.suspended = true;
 };
 
+/** A business with a long name (Fase 29Q): on a small phone the switcher reads it whole, in two lines. */
+const longBusinessName: PrepareData = (data) => {
+  data.tenant.name = 'Taquería Los Compadres';
+  data.myTenants[0].name = 'Taquería Los Compadres';
+};
+
 /** Inicio cannot load its figures: the API fails with a 500. */
 const failingMetrics: PrepareData = (data) => {
   data.metricsFail = true;
@@ -278,5 +284,6 @@ export const MENU_A_DOMICILIO = asOption(menuDelivers);
 export const MENU_CIERRE_ESPECIAL = asOption(menuSpecialClosing);
 export const MENU_HORARIO_ESPECIAL = asOption(menuSpecialHours);
 export const NEGOCIO_SUSPENDIDO = asOption(suspendedBusiness);
+export const NOMBRE_LARGO = asOption(longBusinessName);
 export const INICIO_CON_ERROR = asOption(failingMetrics);
 export const CON_DOS_PASOS = asOption(twoFactorAccount);

@@ -683,6 +683,25 @@ html[data-ta-sidenav='full'].ta-sidebar-open .ta-sidebar {
     position: initial;
   }
 
+  /*
+   * A long business name takes two lines instead of being cut (Fase 29Q): on a 360 px phone "Taquería Los Compadres" reads
+   * whole. One that does not fit in two lines ends with an ellipsis and reads whole in the list. A short one stays on one
+   * line, as before (a 1rem radius rounds one line as fully as 999px).
+   */
+  .topbar-business-button {
+    border-radius: 1rem;
+    text-align: start;
+  }
+
+  .topbar-business-button .text-truncate {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .ta-topbar .dropdown {
     position: static;
   }

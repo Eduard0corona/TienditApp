@@ -50,6 +50,9 @@ public sealed class CrossTenantDeliveryPlatformsSqlServerTests
         Assert.Equal(JsonValueKind.Null, Rappi(theirView).GetProperty("commissionPercent").ValueKind);
         Assert.Equal(0, Rappi(theirView).GetProperty("revision").GetInt32());
         Assert.Equal(0, (await theirs.Client.GetFromJsonAsync<JsonElement>("/api/v1/delivery-platforms/channels")).GetArrayLength());
+        // The Channel filter of Pedidos (Fase 29Q): mine offers Rappi; theirs, at the counter only, offers nothing to filter.
+        Assert.Equal(new[] { (int)OrderChannel.Counter, (int)OrderChannel.Rappi }, await OrderChannelsAsync(mine.Client));
+        Assert.Equal(new[] { (int)OrderChannel.Counter }, await OrderChannelsAsync(theirs.Client));
 
         // Their saves, with the header too, make and change their own Rappi.
         using var save = new HttpRequestMessage(HttpMethod.Put, "/api/v1/delivery-platforms/3")
@@ -161,7 +164,15 @@ public sealed class CrossTenantDeliveryPlatformsSqlServerTests
 
         var rappi = Rappi(await owner.Client.GetFromJsonAsync<JsonElement>("/api/v1/delivery-platforms"));
         Assert.Equal((30m, 1), (rappi.GetProperty("commissionPercent").GetDecimal(), rappi.GetProperty("revision").GetInt32()));
+        // Where the business receives orders is for whoever works them (Fase 29Q).
+        Assert.Equal(new[] { (int)OrderChannel.Counter, (int)OrderChannel.Rappi }, await OrderChannelsAsync(kitchen));
+        Assert.Equal(HttpStatusCode.Forbidden, (await reports.GetAsync("/api/v1/orders/channels")).StatusCode);
     }
+
+    /// <summary>The channels the Channel filter of Pedidos offers (Fase 29Q), by number.</summary>
+    private static async Task<int[]> OrderChannelsAsync(HttpClient client)
+        => (await client.GetFromJsonAsync<JsonElement>("/api/v1/orders/channels")).GetProperty("channels").EnumerateArray()
+            .Select(channel => channel.GetInt32()).ToArray();
 
     [SqlServerFact]
     public async Task OrderOfAPlatform_OnlyAnotherBusinessTurnedOn_ShouldBeRefused()
