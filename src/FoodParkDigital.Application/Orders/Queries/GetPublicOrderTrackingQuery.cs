@@ -61,6 +61,11 @@ public class PublicOrderTrackingDto
     public decimal WrittenOffAmount { get; set; }
     /// <summary>What the business said when it cancelled it, as the customer heard it by WhatsApp.</summary>
     public string? CancellationReason { get; set; }
+    /// <summary>
+    /// Whether the customer may still cancel it from the link (Fase 29R, ADR 0072): an order of the online menu the business
+    /// has not accepted, with nothing paid.
+    /// </summary>
+    public bool CanCancel { get; set; }
 }
 
 public class GetPublicOrderTrackingQueryHandler : IRequestHandler<GetPublicOrderTrackingQuery, PublicOrderTrackingDto?>
@@ -78,25 +83,45 @@ public class GetPublicOrderTrackingQueryHandler : IRequestHandler<GetPublicOrder
 
     public async Task<PublicOrderTrackingDto?> Handle(GetPublicOrderTrackingQuery request, CancellationToken cancellationToken)
     {
-        if (!Order.IsTrackingToken(request.Token))
+        var now = _clock.UtcNow;
+        var found = await PublicOrderLink.FindAsync(_context, request.Token, now, cancellationToken);
+        if (found is null)
+            return null;
+
+        _tenantService.SetTenant(found.Value.TenantId);
+        return await PublicOrderLink.ReadAsync(_context, found.Value.Id, now, cancellationToken);
+    }
+}
+
+/// <summary>The order a tracking link names, of an active business, while it is followed; and how the link shows it.</summary>
+internal static class PublicOrderLink
+{
+    public static async Task<(Guid Id, Guid TenantId)?> FindAsync(
+        IApplicationDbContext context, string token, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (!Order.IsTrackingToken(token))
             return null;
 
         // The link names one order of the whole platform before any business is in context: only its business and when
         // it was placed are read here; the order itself is read inside that business.
-        var now = _clock.UtcNow;
         var found = await (
-                from order in _context.Orders.IgnoreQueryFilters().AsNoTracking()
-                join tenant in _context.Tenants.AsNoTracking() on order.TenantId equals tenant.Id
-                where order.TrackingToken == request.Token && tenant.Status == TenantStatus.Active
+                from order in context.Orders.IgnoreQueryFilters().AsNoTracking()
+                join tenant in context.Tenants.AsNoTracking() on order.TenantId equals tenant.Id
+                where order.TrackingToken == token && tenant.Status == TenantStatus.Active
                 select new { order.Id, order.TenantId, order.TrackingToken, order.CreatedAt })
             .FirstOrDefaultAsync(cancellationToken);
         // The column compares without case, as the database does; the link is the exact one. Followed only for its days.
-        if (found is null || !string.Equals(found.TrackingToken, request.Token, StringComparison.Ordinal)
+        if (found is null || !string.Equals(found.TrackingToken, token, StringComparison.Ordinal)
             || found.CreatedAt < now.AddDays(-OrderTracking.Days))
             return null;
+        return (found.Id, found.TenantId);
+    }
 
-        _tenantService.SetTenant(found.TenantId);
-        var view = await CustomerOrderView.FirstAsync(_context, _context.Orders.Where(o => o.Id == found.Id), cancellationToken);
+    /// <summary>The order of the business in context as its link shows it: nothing of the customer.</summary>
+    public static async Task<PublicOrderTrackingDto?> ReadAsync(
+        IApplicationDbContext context, Guid orderId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var view = await CustomerOrderView.FirstAsync(context, context.Orders.Where(o => o.Id == orderId), cancellationToken);
         if (view is null)
             return null;
 
@@ -127,7 +152,8 @@ public class GetPublicOrderTrackingQueryHandler : IRequestHandler<GetPublicOrder
             Total = view.Total,
             PaidAmount = view.PaidAmount,
             WrittenOffAmount = view.WrittenOffAmount,
-            CancellationReason = view.CancellationReason
+            CancellationReason = view.CancellationReason,
+            CanCancel = view.CustomerMayCancel
         };
     }
 }

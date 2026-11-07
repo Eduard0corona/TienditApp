@@ -54,11 +54,21 @@ public sealed class OrderRealtimeNotifications :
             notification.NewStatus));
 
     public Task Handle(OrderCancelledEvent notification, CancellationToken cancellationToken)
-        => NotifyAsync(notification, () => _notificationService.NotifyOrderCancelled(
-            notification.TenantId,
-            notification.OrderId,
-            notification.PreviousStatus,
-            notification.Reason));
+        => NotifyAsync(notification, async () =>
+        {
+            var orderNumber = await _context.Orders
+                .AsNoTracking()
+                .Where(o => o.Id == notification.OrderId && o.TenantId == notification.TenantId)
+                .Select(o => o.OrderNumber)
+                .FirstOrDefaultAsync(cancellationToken);
+            await _notificationService.NotifyOrderCancelled(
+                notification.TenantId,
+                notification.OrderId,
+                notification.PreviousStatus,
+                notification.Reason,
+                orderNumber ?? string.Empty,
+                notification.ByCustomer);
+        });
 
     public Task Handle(TabRoundSentEvent notification, CancellationToken cancellationToken)
         => NotifyAsync(notification, () => _notificationService.NotifyKitchenTicketsChanged(

@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Orders;
+using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -31,6 +32,20 @@ public class PublicOrderTrackingController : ControllerBase
     {
         var order = await _mediator.Send(new GetPublicOrderTrackingQuery(request.Token), cancellationToken);
         return order is null ? this.ApiError(StatusCodes.Status404NotFound, OrderTracking.NotFoundMessage) : Ok(order);
+    }
+
+    /// <summary>
+    /// Cancels the order of the link while the business has not accepted it and nothing was paid (Fase 29R); answers the order
+    /// as the link shows it. Rate limited per IP like placing an order.
+    /// </summary>
+    [HttpPost("cancel")]
+    [EnableRateLimiting("public-order")]
+    public async Task<ActionResult<PublicOrderTrackingDto>> Cancel([FromBody] PublicOrderTrackingRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CancelPublicOrderCommand(request.Token), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return Ok(result.Value);
     }
 }
 

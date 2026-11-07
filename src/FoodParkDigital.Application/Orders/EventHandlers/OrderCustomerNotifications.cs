@@ -84,6 +84,10 @@ public sealed class OrderCustomerNotifications :
 
     public async Task HandleAsync(OrderCancelledEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
     {
+        // The customer cancelled it themselves (Fase 29R): nobody tells them what they just did.
+        if (domainEvent.ByCustomer)
+            return;
+
         var order = await FindOrderAsync(domainEvent.OrderId, includePieces: false, cancellationToken);
         if (order?.CustomerPhone is null || !await ShouldNotifyAsync(order, cancellationToken))
             return;

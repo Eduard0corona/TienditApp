@@ -63,6 +63,7 @@ builder.AddObservability();
 // SignalR notification services
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
 builder.Services.AddScoped<IAppointmentNotificationService, AppointmentNotificationService>();
+builder.Services.AddScoped<IQuoteNotificationService, QuoteNotificationService>();
 builder.Services.AddScoped<IWhatsAppNotificationService, WhatsAppNotificationService>();
 
 // Webhook signature verification (fails closed without WhatsApp:AppSecret or MercadoPago:WebhookSecret)
@@ -312,6 +313,7 @@ app.MapControllers();
 app.MapHub<OrderHub>("/hubs/orders", options => options.CloseOnAuthenticationExpiration = true);
 app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true);
 app.MapHub<AppointmentHub>("/hubs/appointments", options => options.CloseOnAuthenticationExpiration = true);
+app.MapHub<QuoteHub>("/hubs/quotes", options => options.CloseOnAuthenticationExpiration = true);
 // The store pages, robots.txt and sitemap.xml for search engines and link previews (Fase 24D-2, ADR 0027).
 app.MapPublicPages();
 app.MapClientFallback();
