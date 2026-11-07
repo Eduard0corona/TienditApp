@@ -56,6 +56,10 @@ export const publicMenuApi = {
   trackOrder: (token: string, signal?: AbortSignal) =>
     apiRequest('post', '/api/v1/public/orders/tracking', { body: { token }, signal }),
 
+  /** The customer cancels it from its link while the business has not accepted it (Fase 29R): the order as it stays. */
+  cancelOrderByLink: (token: string) =>
+    apiRequest('post', '/api/v1/public/orders/tracking/cancel', { body: { token } }),
+
   /** The services a business books online (Fase 24D): not found (404) while its owner has online booking off. */
   getBooking: (slug: string, signal?: AbortSignal) =>
     apiRequest('get', '/api/v1/public/menu/{slug}/booking', { path: { slug }, signal }),

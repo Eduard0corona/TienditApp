@@ -23,8 +23,11 @@ export interface OrderStatusChangedPayload {
 
 export interface OrderCancelledPayload {
   orderId: string;
+  orderNumber: string;
   previousStatus: string;
   reason?: string;
+  /** The customer cancelled it from their link or account before the business accepted it (Fase 29R). */
+  byCustomer: boolean;
 }
 
 export interface KitchenTicketsChangedPayload {

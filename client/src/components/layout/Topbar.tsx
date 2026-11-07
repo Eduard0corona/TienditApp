@@ -18,6 +18,7 @@ import ThemeToggle from './ThemeToggle';
 
 // Fase 29N: loaded apart, after the first screen (it draws nothing).
 const AppointmentRequestsLive = lazy(() => import('./AppointmentRequestsLive'));
+const QuoteRepliesLive = lazy(() => import('./QuoteRepliesLive'));
 
 const AUTO_SWITCH_MARKER_KEY = 'fpd_auto_tenant_switch';
 const AVATAR_PLACEHOLDER = '/images/placeholders/avatar.svg';
@@ -63,6 +64,8 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   // Fase 29N: whoever answers the requests online hears of each one as it arrives, wherever they are in the app.
   // A suspended business gets no live updates: the server would refuse each connection.
   const hearsRequests = isBusinessMember && access.appointments && !!tenant?.id && tenant.status === 0;
+  // Fase 29R: whoever works the quotes hears the answers of their customers on any screen.
+  const hearsQuoteReplies = isBusinessMember && access.quotes && !!tenant?.id && tenant.status === 0;
 
   const selectedTenantId = useMemo(
     () => tenant?.id ?? user?.tenantId ?? '',
@@ -227,6 +230,12 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
           {hearsRequests && (
             <Suspense fallback={null}>
               <AppointmentRequestsLive tenantId={tenant.id} />
+            </Suspense>
+          )}
+
+          {hearsQuoteReplies && (
+            <Suspense fallback={null}>
+              <QuoteRepliesLive tenantId={tenant.id} />
             </Suspense>
           )}
 

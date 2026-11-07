@@ -329,7 +329,13 @@ export default function OrdersList() {
       scheduleReload(payload.orderId);
     });
     const cancelledOff = onOrderCancelled((payload) => {
-      setRealtimeMessage(`Pedido cancelado${payload.reason ? `: ${payload.reason}` : ''}`);
+      if (payload.byCustomer) {
+        // Fase 29R: the customer cancelled it before it was accepted; it rings down, as it rang when it arrived.
+        setRealtimeMessage(`El cliente canceló el pedido ${payload.orderNumber} antes de que lo aceptaran.`);
+        playChimeRef.current('leaving');
+      } else {
+        setRealtimeMessage(`Pedido cancelado${payload.reason ? `: ${payload.reason}` : ''}`);
+      }
       scheduleReload(payload.orderId);
     });
     // The trip written down or the order sent out with the courier (Fase 22D): read again, without a message.
