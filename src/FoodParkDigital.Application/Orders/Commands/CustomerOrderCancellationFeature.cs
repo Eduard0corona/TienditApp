@@ -1,8 +1,9 @@
-using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FluentValidation;
 using MediatR;
@@ -117,6 +118,9 @@ internal static class CustomerOrderCancellation
             .Include(o => o.ServicePieces)
             .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", orderId);
+        // Tapped twice, or sent again after its answer was lost: it is already cancelled, and the answer shows it as it is.
+        if (order.Status == OrderStatus.Cancelled)
+            return;
 
         order.CancelByCustomer(OrderStateMachineFactory.Create(order.BusinessType, order.OrderType));
         await inventory.ReverseConsumptionForOrderAsync(order, order.CancellationReason, cancellationToken);

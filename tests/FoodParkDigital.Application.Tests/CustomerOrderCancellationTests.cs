@@ -52,6 +52,15 @@ public class CustomerOrderCancellationTests
         Assert.Equal((OrderStatus.Cancelled, Order.CustomerPerformedBy), (stored.Status, stored.StatusHistory.Last().ChangedBy));
         Assert.Equal([stored.Id], inventory.Reversed);
         Assert.Equal(tenant.Id, fixture.TenantService.TenantId);
+
+        // Tapped twice, or sent again after its answer was lost: the same answer, without a second cancellation.
+        var again = await CancelByLinkAsync(fixture, token, inventory);
+        Assert.True(again.IsSuccess, again.Error);
+        Assert.Equal(OrderTrackingStep.Cancelled, again.Value!.Step);
+        Assert.Equal([stored.Id], inventory.Reversed);
+        Assert.Single(
+            (await fixture.Context.Orders.IgnoreQueryFilters().Include(o => o.StatusHistory).SingleAsync(o => o.TrackingToken == token)).StatusHistory,
+            history => history.NewStatus == OrderStatus.Cancelled);
     }
 
     [Fact]

@@ -347,6 +347,50 @@ public sealed class CrossTenantRealtimeSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task AnswersToQuotes_ShouldReachTheScreensOfOnlyTheirBusiness_ForWhoeverWorksTheQuotes()
+    {
+        // Fase 29R (ADR 0072).
+        var mine = await _api.SignUpAsync("responde-vivo-a");
+        var theirs = await _api.SignUpAsync("responde-vivo-b");
+        var restaurant = await _api.SignUpAsync("responde-vivo-comida", TwoBusinessesApi.FoodBusiness);
+        var (_, cashierToken, _, _) = await EmployeeAsync(mine, "ManageOrders");
+        var (_, stylistToken, _, _) = await EmployeeAsync(mine, "ManageAppointments");
+
+        // Whoever does not work the quotes, or a business without them, never stays connected.
+        await using (var stylists = _api.Hub("/hubs/quotes", stylistToken))
+            await AssertRefusedAsync(stylists);
+        await using (var restaurants = _api.Hub("/hubs/quotes", restaurant.AccessToken))
+            await AssertRefusedAsync(restaurants);
+
+        var seenByMine = new Events();
+        var seenByCashier = new Events();
+        var seenByTheirs = new Events();
+        await using var hubMine = await ConnectAsync("/hubs/quotes", mine.AccessToken, "QuoteAnswered", seenByMine, QuoteAnswerOf);
+        await using var hubCashier = await ConnectAsync("/hubs/quotes", cashierToken, "QuoteAnswered", seenByCashier, QuoteAnswerOf);
+        await using var hubTheirs = await ConnectAsync("/hubs/quotes", theirs.AccessToken, "QuoteAnswered", seenByTheirs, QuoteAnswerOf);
+        var (myQuote, myToken) = await CrossTenantQuoteSqlServerTests.SentQuoteAsync(mine.Client);
+        var (theirQuote, theirToken) = await CrossTenantQuoteSqlServerTests.SentQuoteAsync(theirs.Client);
+        var (secondOfTheirs, secondToken) = await CrossTenantQuoteSqlServerTests.SentQuoteAsync(theirs.Client);
+        using var stranger = _api.AnonymousClient();
+
+        // Theirs is live (its own answer reaches it) before mine gets one; then theirs gets another: had mine been sent
+        // to theirs, it would have arrived before that one.
+        await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = theirToken, accepted = false }));
+        await seenByTheirs.WaitForAsync($"{theirQuote}:False");
+        await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply",
+            new { token = myToken, accepted = true, response = "Los espero el jueves" }));
+        await seenByMine.WaitForAsync($"{myQuote}:True");
+        await seenByCashier.WaitForAsync($"{myQuote}:True");
+        await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync("/api/v1/public/quotes/reply", new { token = secondToken, accepted = true }));
+        await seenByTheirs.WaitForAsync($"{secondOfTheirs}:True");
+
+        Assert.False(seenByTheirs.Saw($"{myQuote}:True"));
+        Assert.False(seenByMine.Saw($"{theirQuote}:False"));
+        Assert.False(seenByMine.Saw($"{secondOfTheirs}:True"));
+        Assert.False(seenByCashier.Saw($"{secondOfTheirs}:True"));
+    }
+
+    [SqlServerFact]
     public async Task ARefusedConnection_ShouldBeClosedForGood_NotReconnectedBySignalR()
     {
         // The server aborts it once connected (Context.Abort): its close forbids reconnecting, so a client that reconnects by
@@ -515,6 +559,15 @@ public sealed class CrossTenantRealtimeSqlServerTests
     private static string OrderIdOf(JsonElement payload) => payload.GetProperty("orderId").GetString()!;
 
     private static string AppointmentIdOf(JsonElement payload) => payload.GetProperty("appointmentId").GetString()!;
+
+    /// <summary>Which quote was answered and how, and that the notice says its folio and version (never what the customer wrote).</summary>
+    private static string QuoteAnswerOf(JsonElement payload)
+    {
+        Assert.StartsWith("COT-", payload.GetProperty("number").GetString());
+        Assert.Equal(1, payload.GetProperty("revision").GetInt32());
+        Assert.False(payload.TryGetProperty("response", out _));
+        return $"{payload.GetProperty("quoteId").GetString()}:{payload.GetProperty("accepted").GetBoolean()}";
+    }
 
     /// <summary>
     /// A connection the server refuses: either the start fails, or the server closes it right after the handshake (it aborts
