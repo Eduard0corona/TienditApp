@@ -86,8 +86,10 @@ public class TenantFilterBypassAllowlistTests
         // rate each one listed, from its published reviews only (Fase 24H); how soon each one answers, counted from its
         // requests online by how long they waited, never who made them (Fase 29J); and how soon each trade sends the quote
         // after a visit requested online, from when the visit ended and its quote was sent, joined within its own business,
-        // never what it says or who asked (Fase 29S).
-        ["src/FoodParkDigital.Application/PublicDirectory/PublicDirectoryFeature.cs"] = 7,
+        // never what it says or who asked (Fase 29S); and how soon each one confirms its online orders, from when each arrived
+        // and when its history says it first left «Por confirmar», within its own business, never who ordered or answered
+        // (Fase 29T).
+        ["src/FoodParkDigital.Application/PublicDirectory/PublicDirectoryFeature.cs"] = 9,
         // The reviews a customer account wrote, in every business, by its own user id (Fase 24H).
         ["src/FoodParkDigital.Application/Reviews/CustomerReviewsFeature.cs"] = 1,
         // The platform's moderation of reviews (a platform admin only): the reported or hidden ones of every business, and

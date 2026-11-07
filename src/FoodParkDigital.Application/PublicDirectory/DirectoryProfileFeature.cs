@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Appointments.OnlineBooking;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -69,6 +70,16 @@ public class DirectoryProfileDto
     /// Null while Explorar does not count it (<see cref="CountsQuotes"/>), or fewer than 3 visits count.
     /// </summary>
     public QuoteTime? QuoteTime { get; set; }
+    /// <summary>
+    /// Explorar counts how soon it confirms its online orders (Fase 29T, ADR 0074): it lists the business, it takes online
+    /// orders, and the snapshot could read its orders. Otherwise its owner reads nothing of it, not even «not counted yet».
+    /// </summary>
+    public bool CountsOrders { get; set; }
+    /// <summary>
+    /// How soon it confirms its online orders, for its owner (Fase 29T): the slower ones too, which its card does not say.
+    /// Null while Explorar does not count them (<see cref="CountsOrders"/>), or fewer than 3 orders count.
+    /// </summary>
+    public OrderConfirmTime? OrderConfirmTime { get; set; }
 }
 
 /// <summary>How the signed-in user's business shows in Explorar (owners and admins).</summary>
@@ -253,8 +264,8 @@ internal static class DirectoryProfile
 {
     /// <summary>The profile and why Explorar lists the business or not, in the order its owner would fix it.</summary>
     /// <param name="readEntry">
-    /// Reads the business in the snapshot of Explorar (PublicResponseTime.EntryAsync): how soon it answers. Read only while
-    /// Explorar counts its requests.
+    /// Reads the business in the snapshot of Explorar (PublicResponseTime.EntryAsync): how soon it answers, and confirms its
+    /// orders. Read only while Explorar counts its requests or its orders.
     /// </param>
     public static async Task<DirectoryProfileDto> ReadAsync(
         IApplicationDbContext context,
@@ -278,17 +289,24 @@ internal static class DirectoryProfile
             Visibility = visibility,
             HomeVisitAddressNotice = await HomeVisitAddressNotice.ShowsAsync(context, tenant, settings, cancellationToken)
         };
-        // Explorar counts its requests while it lists the business and it books online or receives visits, both as they are
-        // now; how soon it answers comes from the snapshot, as fresh as Explorar's. One that cannot be read says nothing.
-        if (readEntry is not null
-            && visibility == DirectoryVisibility.Shown
-            && await TakesRequestsAsync(context, tenant, settings!, cancellationToken)
-            && await readEntry(cancellationToken) is { } entry)
+        // Explorar counts its requests while it lists the business and it books online or receives visits, and its orders
+        // while it takes online orders (Fase 29T), as they are now; how soon comes from the snapshot, as fresh as Explorar's.
+        // One that cannot be read says nothing.
+        if (readEntry is null || visibility != DirectoryVisibility.Shown)
+            return profile;
+        var takesRequests = await TakesRequestsAsync(context, tenant, settings!, cancellationToken);
+        var takesOrders = settings!.OnlineMenuMode == OnlineMenuMode.Orders;
+        if ((takesRequests || takesOrders) && await readEntry(cancellationToken) is { } entry)
         {
-            profile.CountsRequests = true;
-            profile.ResponseTime = entry.ResponseTime;
-            profile.CountsQuotes = entry.Business.ReceivesVisits && entry.QuoteTimeRead;
-            profile.QuoteTime = profile.CountsQuotes ? entry.QuoteTime : null;
+            if (takesRequests)
+            {
+                profile.CountsRequests = true;
+                profile.ResponseTime = entry.ResponseTime;
+                profile.CountsQuotes = entry.Business.ReceivesVisits && entry.QuoteTimeRead;
+                profile.QuoteTime = profile.CountsQuotes ? entry.QuoteTime : null;
+            }
+            profile.CountsOrders = takesOrders && (entry.Business.AcceptsOrders || entry.Business.OrdersPaused) && entry.OrderConfirmTimeRead;
+            profile.OrderConfirmTime = profile.CountsOrders ? entry.OrderConfirmTime : null;
         }
         return profile;
     }

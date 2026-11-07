@@ -1,3 +1,5 @@
+using FoodParkDigital.Domain.Common;
+
 namespace FoodParkDigital.Domain.Quotes;
 
 /// <summary>
@@ -40,28 +42,7 @@ public static class QuoteTimes
     /// </summary>
     /// <param name="counts">How many visits within each <see cref="QuoteTime"/>, in its order; the last one counts the slowest.</param>
     public static QuoteTime? Typical(IReadOnlyList<int> counts)
-    {
-        if (counts.Count != LimitHours.Count + 1)
-            throw new ArgumentException("One count for each quote time.", nameof(counts));
-        if (counts.Any(count => count < 0))
-            throw new ArgumentOutOfRangeException(nameof(counts), "A count is never negative.");
-
-        var total = counts.Sum();
-        if (total < MinVisits)
-            return null;
-
-        // At least half: the visit in the middle, the faster one of the two in the middle when they are even.
-        var half = (total + 1) / 2;
-        var sofar = 0;
-        for (var i = 0; i < LimitHours.Count; i++)
-        {
-            sofar += counts[i];
-            if (sofar >= half)
-                return (QuoteTime)i;
-        }
-
-        return QuoteTime.Slower;
-    }
+        => TypicalWait.Bucket(counts, LimitHours.Count, MinVisits) is { } bucket ? (QuoteTime)bucket : null;
 
     /// <summary>What Explorar says of it: its <see cref="Typical"/> within a week, never <see cref="QuoteTime.Slower"/>.</summary>
     public static QuoteTime? Shown(QuoteTime? typical)
