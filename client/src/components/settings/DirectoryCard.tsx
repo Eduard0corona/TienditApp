@@ -11,7 +11,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OnlineMenuMode } from '../../types';
 import { BUSINESS_CATEGORIES, categoryInfo } from '../../utils/businessCategories';
-import { ownQuoteTimeNote, ownResponseTimeNote } from '../../utils/responseTime';
+import { ownQuoteTimeNote, ownResponseTimeNote } from '../../utils/ownResponseTime';
 
 // The same limit as the API (Tenant.MaxPublicDescriptionLength).
 const MAX_DESCRIPTION = 160;

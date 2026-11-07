@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { QuoteTime, ResponseTime } from '../api/generated/enums';
 import { setBusinessTimeZone } from './dates';
-import { answerInTimeLabel, ownQuoteTimeNote, ownResponseTimeNote, quoteTimeLabel, responseTimeLabel } from './responseTime';
+import { ownQuoteTimeNote, ownResponseTimeNote } from './ownResponseTime';
+import { answerInTimeLabel, quoteTimeLabel, responseTimeLabel } from './responseTime';
 
 describe('responseTimeLabel (Fase 29J)', () => {
   it('says within what the business answers, up to a day', () => {
