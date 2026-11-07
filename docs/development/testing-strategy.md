@@ -2252,6 +2252,52 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **779 iguales.**
     - **31 cambian**, como se esperaba: Café La Esquina confirma sus pedidos en menos de 5 minutos. Son las escenas de Explorar con su tarjeta (la lista, una categoría, los productos, «Cerca de mí», los favoritos, como cliente, con código postal, con calificación y con agenda en línea), las de su tienda (escritorio, teléfono, buscar, pestañas, producto, pedido, botón del pedido y favorita) y «Cómo te ven». Las 31 dieron la misma imagen en dos corridas seguidas.
     - Las comprobaciones nuevas de las escenas buscan el texto que `master` no tiene: se quitaron solo para tomar su línea base.
+- Fase 29U, recordar una solicitud antes de su límite ([ADR 0075](../adr/0075-answer-reminder.md)):
+  - **Domain:** `AnswerReminderTests` (6, nuevo):
+    - la hora del recordatorio es una hora antes del límite, y no hay recordatorio si el límite llega antes de dos horas de que llegó (dos horas exactas sí);
+    - se recuerda una sola vez, desde una hora antes hasta el límite, también tarde si el worker estuvo detenido;
+    - no se recuerda pasado el límite, y el límite es la hora que pidió el cliente aunque el negocio la mueva;
+    - solo una solicitud en línea de un cliente que sigue por confirmar: ni aceptada, ni cancelada, ni del equipo, ni agendada por el negocio.
+  - **Application:**
+    - `AnswerReminderNoticesTests` (4, nuevo):
+      - el barrido de un negocio recuerda solo las que tocan, una vez y en su propio negocio;
+      - el correo va a cada miembro que recibe los de las solicitudes y puede responderlas, y no sale si mientras tanto se respondió o pasó el límite;
+      - dice qué se pidió y para cuándo responderla en la zona del negocio, con lo escrito codificado, nunca el teléfono ni las notas;
+      - el de una visita dice que es visita, sin su dirección, y su límite es la hora que pidió el cliente aunque el negocio la haya movido.
+    - `RequestNoticesTests` y `CustomerAnswerNoticesTests`: el pie de los correos de la Agenda dice que también llega el recordatorio.
+  - **Infrastructure:**
+    - `AppointmentAnswerReminderMigrationSqlServerTests` (3, nuevo, SQL Server):
+      - las solicitudes que existen quedan sin recordar, y la columna es `datetimeoffset NULL` sin valor por omisión;
+      - la versión anterior sigue guardando solicitudes;
+      - volver atrás quita solo la columna (la solicitud sigue aceptada, con su respuesta), y al migrar otra vez ninguna está recordada.
+    - Las pruebas de las migraciones anteriores usan el modelo de su momento: `BeforeAppointmentAnswerReminder` entra en la cadena de `Before*`, y la de `AddAppointmentFromTeam` usa `BeforeTenantUserRequestEmails`.
+    - `OutboxTests`: los dos eventos nuevos se leen igual desde el outbox.
+  - **WebApi:**
+    - `TenantFilterBypassAllowlistTests`: `MessagingWorker.cs` pasa de 6 a 7 lecturas entre negocios.
+    - `CrossTenantAnswerReminderSqlServerTests` (2, nuevo, SQL Server):
+      - con el barrido del worker y el outbox, cada dueño recibe una vez el recordatorio de la solicitud de su negocio que toca, nunca el de otro negocio, ni de una que todavía no toca o ya se respondió, y sin el teléfono;
+      - un negocio con la Agenda apagada o suspendido no se recuerda, y al prender la Agenda antes del límite, sí.
+  - **Cliente:**
+    - `NoticeEmailsCard.test.tsx` y `EmployeeFormModal.test.tsx`: Mi perfil y el equipo dicen que también llega el recordatorio.
+    - `AppointmentsList.test.tsx`: la prueba de la 29L que dice que pasó el límite con la Agenda abierta espera a que arranque el reloj (ver **CI**).
+  - **.NET en total:** 4,804 pruebas en verde con SQL Server (Domain 1,418; Application 2,170; WebApi 505; Infrastructure 711). **Cliente en total:** 204 archivos y 1,560 pruebas.
+  - **Primera visita:** 182,057 B (`master` en `10e8608`: 182,055 B, +2 B): solo cambia el texto de los avisos. El presupuesto (182,100 B) no cambia. El CSS global, 63,077 B de 63,200 B.
+  - **Migración:**
+    - el script que genera `dotnet ef` para la migración es igual a su bloque del `apply.sql`;
+    - `dotnet ef migrations has-pending-model-changes` no encuentra cambios.
+  - **Revisión independiente**, sin bloqueantes, con estos arreglos:
+    - el barrido marcaba las solicitudes de un negocio con la Agenda apagada sin nadie a quien mandarles el correo: ahora lo salta, y las recuerda si la prende antes del límite;
+    - el ADR y el `apply.sql` decían que un recordatorio que no salió a su hora ya no sale, pero el código lo manda mientras no llegue el límite: ahora lo dicen así y una prueba lo fija;
+    - el ADR dice que quien responde en los mismos milisegundos en que el barrido marca la solicitud puede ver «Alguien más modificó este registro»;
+    - los comentarios de `RequestEmailRecipients` y `RequestEmailsDto` nombran el recordatorio;
+    - y pruebas para la visita movida, el recordatorio tardío y la Agenda apagada o suspendida. Quitar la condición de la Agenda del barrido, o calcular el límite del correo con la hora movida, hace fallar su prueba.
+  - **CI:**
+    - la prueba del outbox no conocía los dos eventos nuevos;
+    - en el cliente falló una prueba de la 29L sin cambios en su código. La fila aparece antes de que React corra el efecto que arranca el intervalo de cada minuto, y el minuto que avanzaba la prueba pasaba sin verse. Ahora espera a que el intervalo exista (`vi.waitUntil`). Con el intervalo registrado 30 ms tarde a propósito, la versión anterior falla y esta pasa.
+  - **Escenas:** contra la línea base de `master` en `10e8608` (810 escenas):
+    - **806 iguales.**
+    - **4 cambian**, como se esperaba: Mi perfil en escritorio, teléfono y oscuro, y la tarjeta de avisos con la Agenda apagada. El texto de «Citas en línea» nombra el recordatorio y la tarjeta crece una línea. Las cuatro dieron la misma imagen en dos corridas seguidas.
+    - Las del equipo no cambian: en sus diálogos no se ofrecen los avisos de la Agenda.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.
