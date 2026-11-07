@@ -60,8 +60,13 @@ public class DirectoryProfileDto
     /// </summary>
     public ResponseTime? ResponseTime { get; set; }
     /// <summary>
-    /// How soon it sends the quote after a visit, for its owner (Fase 29S, ADR 0073): the slower ones too, which its card does
-    /// not say. Null while Explorar does not count its requests, it does not receive visits, or fewer than 3 visits count.
+    /// Explorar counts how soon it quotes after a visit (Fase 29S, ADR 0073): it counts its requests, it receives visits, and
+    /// the snapshot could read its quotes. Otherwise its owner reads nothing of it, not even «not counted yet».
+    /// </summary>
+    public bool CountsQuotes { get; set; }
+    /// <summary>
+    /// How soon it sends the quote after a visit, for its owner (Fase 29S): the slower ones too, which its card does not say.
+    /// Null while Explorar does not count it (<see cref="CountsQuotes"/>), or fewer than 3 visits count.
     /// </summary>
     public QuoteTime? QuoteTime { get; set; }
 }
@@ -282,7 +287,8 @@ internal static class DirectoryProfile
         {
             profile.CountsRequests = true;
             profile.ResponseTime = entry.ResponseTime;
-            profile.QuoteTime = entry.QuoteTime;
+            profile.CountsQuotes = entry.Business.ReceivesVisits && entry.QuoteTimeRead;
+            profile.QuoteTime = profile.CountsQuotes ? entry.QuoteTime : null;
         }
         return profile;
     }

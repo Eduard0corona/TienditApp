@@ -539,6 +539,10 @@ public sealed class PublicDirectorySnapshot
     /// How soon it sends the quote after a visit (Fase 29S), slower ones included, while it receives visits. The card says it
     /// only within a week; its owner reads it whole.
     /// </param>
+    /// <param name="QuoteTimeRead">
+    /// The snapshot could read how soon its trades quote: when it could not, its owner is not told that its visits are not
+    /// counted yet.
+    /// </param>
     internal sealed record Entry(
         Guid TenantId,
         PublicDirectoryBusinessDto Business,
@@ -547,7 +551,8 @@ public sealed class PublicDirectorySnapshot
         GeoPoint? Location = null,
         decimal? VisitServicePrice = null,
         ResponseTime? ResponseTime = null,
-        QuoteTime? QuoteTime = null);
+        QuoteTime? QuoteTime = null,
+        bool QuoteTimeRead = true);
 
     /// <summary>
     /// Reads every business Explorar lists: a public request has no business, so these reads span all of them, each
@@ -659,6 +664,7 @@ public sealed class PublicDirectorySnapshot
 
         // How soon each trade sends the quote after a visit (Fase 29S) never takes Explorar with it either.
         Dictionary<Guid, QuoteTime?> quotes;
+        var quotesRead = true;
         try
         {
             quotes = await QuoteTimesAsync(context, listed, utcNow, cancellationToken);
@@ -667,6 +673,7 @@ public sealed class PublicDirectorySnapshot
         {
             logger?.LogWarning(ex, "Explorar could not read how soon its trades send their quotes: it says nothing of it until the next snapshot.");
             quotes = [];
+            quotesRead = false;
         }
 
         var entries = rows
@@ -679,7 +686,7 @@ public sealed class PublicDirectorySnapshot
                 ? entry with { ResponseTime = responses.GetValueOrDefault(entry.TenantId) }
                 : entry)
             .Select(entry => entry.Business.ReceivesVisits
-                ? entry with { QuoteTime = quotes.GetValueOrDefault(entry.TenantId) }
+                ? entry with { QuoteTime = quotes.GetValueOrDefault(entry.TenantId), QuoteTimeRead = quotesRead }
                 : entry)
             // The order of Explorar (Fase 29S, ADR 0073): by group, those that answer their requests sooner first within it
             // (one without enough in the middle, as one that takes none), then by name. Every list of Explorar keeps it: the
@@ -801,7 +808,8 @@ public sealed class PublicDirectorySnapshot
     /// <summary>
     /// How soon each trade listed sends the quote after the visits its customers requested online (Fase 29S, ADR 0073): one
     /// row per business, the first version of each visit's quote sent since <see cref="QuoteTimes.Since"/>, counted by how long
-    /// after the end of its visit it was sent (before the end, nothing). As for the requests (Fase 29M, ADR 0067), visits from
+    /// after the end of its visit it was sent (before the end, nothing), once the visit ended and unless it was cancelled or
+    /// missed. As for the requests (Fase 29M, ADR 0067), visits from
     /// the business's own team do not count, and a customer counts once: of the visits of one phone, the one quoted last. The
     /// phone is only compared in the database, never read.
     /// </summary>
@@ -810,15 +818,19 @@ public sealed class PublicDirectorySnapshot
     {
         var since = QuoteTimes.Since(utcNow);
         int aDay = QuoteTimes.LimitHours[0], threeDays = QuoteTimes.LimitHours[1], aWeek = QuoteTimes.LimitHours[2];
-        // A visit requested online, by a customer, whose first version of its quote was sent: the one of its business only.
+        // A visit requested online, by a customer, that took place (it ended, and was neither cancelled nor missed), whose first
+        // version of its quote was sent: the one of its business only. A sent quote is never discarded; saying so lets SQL
+        // Server use the index of the first version of each visit's quote.
         var quoted =
             from visit in context.Appointments.IgnoreQueryFilters().AsNoTracking()
             join quote in context.Quotes.IgnoreQueryFilters().AsNoTracking()
                 on new { visit.TenantId, AppointmentId = (Guid?)visit.Id } equals new { quote.TenantId, quote.AppointmentId }
             where visit.Channel == AppointmentChannel.Online && visit.Visit != null && !visit.FromTeam
-                && quote.Revision == 1 && quote.SentAt >= since
+                && visit.EndAt <= utcNow && visit.Status != AppointmentStatus.Cancelled && visit.Status != AppointmentStatus.NoShow
+                && quote.Revision == 1 && quote.Status != QuoteStatus.Discarded && quote.SentAt >= since
                 && listed.Any(t => t.Id == visit.TenantId)
-            select new { visit.TenantId, visit.RequestPhone, visit.EndAt, SentAt = quote.SentAt!.Value };
+            // Never null past the filter: written so, the comparison below is one subquery, not two.
+            select new { visit.TenantId, visit.RequestPhone, visit.EndAt, SentAt = quote.SentAt ?? since };
         var counted = await quoted
             // One per customer of each business: of those of the same phone, the one quoted last.
             .Where(v => v.SentAt == quoted

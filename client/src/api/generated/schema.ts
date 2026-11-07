@@ -17827,6 +17827,7 @@ export interface components {
             homeVisitAddressNotice: boolean;
             countsRequests: boolean;
             responseTime?: components["schemas"]["ResponseTime"];
+            countsQuotes: boolean;
             quoteTime?: components["schemas"]["QuoteTime"];
         };
         /**

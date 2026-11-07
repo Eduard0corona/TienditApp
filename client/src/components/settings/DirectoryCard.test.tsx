@@ -31,6 +31,7 @@ function profile(overrides: Partial<DirectoryProfile> = {}): DirectoryProfile {
     visibility: DirectoryVisibility.Shown,
     homeVisitAddressNotice: false,
     countsRequests: false,
+    countsQuotes: false,
     ...overrides,
   };
 }
@@ -49,6 +50,7 @@ function renderCard() {
 describe('DirectoryCard', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    visits.data = undefined;
     vi.mocked(useToast).mockReturnValue(toast as unknown as ReturnType<typeof useToast>);
     vi.mocked(useTenant).mockReturnValue({
       tenant: { id: 't1', name: 'Abarrotes Doña Mary', slug: 'dona-mary', theme: 0, onlineMenuMode: OnlineMenuMode.Orders } as TenantProfileDto,
@@ -120,22 +122,26 @@ describe('DirectoryCard', () => {
 
   it('shows a trade how soon it quotes after the visit, and why it says nothing (Fase 29S)', async () => {
     visits.data = { receivesVisits: true };
-    api.getProfile.mockResolvedValue(profile({ countsRequests: true, quoteTime: QuoteTime.WithinThreeDays }));
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true, countsQuotes: true, quoteTime: QuoteTime.WithinThreeDays }));
     const { unmount } = renderCard();
 
     expect(await screen.findByText('Suele mandar la cotización en menos de 3 días')).toBeInTheDocument();
     expect(screen.getByText(/hasta que mandas su cotización/)).toBeInTheDocument();
     unmount();
 
-    api.getProfile.mockResolvedValue(profile({ countsRequests: true, quoteTime: QuoteTime.Slower }));
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true, countsQuotes: true, quoteTime: QuoteTime.Slower }));
     const slow = renderCard();
     expect(await screen.findByText(/Sueles tardar una semana o más/)).toBeInTheDocument();
     expect(screen.queryByText(/Suele mandar la cotización/)).not.toBeInTheDocument();
     slow.unmount();
 
-    // A business without visits says nothing of quotes.
-    visits.data = undefined;
-    api.getProfile.mockResolvedValue(profile({ countsRequests: true, quoteTime: QuoteTime.WithinADay }));
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true, countsQuotes: true }));
+    const newer = renderCard();
+    expect(await screen.findByText(/Todavía no contamos visitas en línea de 3 clientes/)).toBeInTheDocument();
+    newer.unmount();
+
+    // Explorar does not count its quotes (no visits, or its quotes could not be read): nothing of them, not even «not yet».
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true, countsQuotes: false, quoteTime: QuoteTime.WithinADay }));
     renderCard();
     expect(await screen.findByText(/Todavía no contamos solicitudes en línea/)).toBeInTheDocument();
     expect(screen.queryByText(/cotización|cotizar/)).not.toBeInTheDocument();

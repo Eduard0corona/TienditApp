@@ -7,7 +7,8 @@ namespace FoodParkDigital.Application.PublicDirectory;
 /// <summary>
 /// How soon a business answers its requests online, outside Explorar (Fase 29K, ADR 0065): its store, its booking page
 /// and its visit request say what its card in Explorar says, and its owner reads it in «Cómo te ven en TienditApp». It is
-/// the entry of the business in the snapshot of Explorar (ADR 0064): the same rules, and no other read.
+/// the entry of the business in the snapshot of Explorar (ADR 0064): the same rules, and no other read. Since Fase 29S
+/// (ADR 0073) the entry also says how soon a trade quotes after a visit, for its visit request and its owner.
 /// </summary>
 internal static class PublicResponseTime
 {

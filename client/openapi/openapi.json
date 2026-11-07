@@ -25601,6 +25601,7 @@
       "DirectoryProfileDto": {
         "required": [
           "category",
+          "countsQuotes",
           "countsRequests",
           "homeVisitAddressNotice",
           "listed",
@@ -25633,6 +25634,9 @@
           },
           "responseTime": {
             "$ref": "#/components/schemas/ResponseTime"
+          },
+          "countsQuotes": {
+            "type": "boolean"
           },
           "quoteTime": {
             "$ref": "#/components/schemas/QuoteTime"

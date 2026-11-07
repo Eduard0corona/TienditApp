@@ -293,7 +293,7 @@ function plumberSettingsThatAnswers(data: DemoData) {
   data.directoryProfile = {
     ...data.directoryProfile, homeVisitAddressNotice: false, countsRequests: true, responseTime: WITHIN_AN_HOUR,
     // And it sends its quotes within 3 days of the visit (Fase 29S).
-    quoteTime: QUOTES_WITHIN_THREE_DAYS,
+    countsQuotes: true, quoteTime: QUOTES_WITHIN_THREE_DAYS,
   };
 }
 

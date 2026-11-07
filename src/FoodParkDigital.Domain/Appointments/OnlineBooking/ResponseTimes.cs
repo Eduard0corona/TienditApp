@@ -90,6 +90,9 @@ public static class ResponseTimes
     public static ResponseTime? Shown(ResponseTime? typical)
         => typical is ResponseTime.Slower ? null : typical;
 
-    /// <summary>Its place in the order of a category of Explorar within its group: the quickest first, one without enough requests in the middle.</summary>
+    /// <summary>
+    /// Its place in the order of Explorar within its group (a category since Fase 29J, every list since Fase 29S): the quickest
+    /// first, one without enough requests (or that takes none) in the middle.
+    /// </summary>
     public static int Order(ResponseTime? typical) => (int)(typical ?? UnknownOrder);
 }

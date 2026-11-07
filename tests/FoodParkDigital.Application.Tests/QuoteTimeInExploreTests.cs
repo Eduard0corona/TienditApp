@@ -1,6 +1,8 @@
+using System.Linq.Expressions;
 using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
@@ -10,6 +12,8 @@ using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Quotes.Entities;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Logging.Abstractions;
 using static FoodParkDigital.Application.Tests.ExploreResponseTimeTests;
 
@@ -75,6 +79,68 @@ public class QuoteTimeInExploreTests
     }
 
     [Fact]
+    public async Task OnlyVisitsThatTookPlace_ShouldCount_EachBusinessItsOwnCustomersAndQuotes()
+    {
+        await using var fixture = Fixture();
+        var (plumber, zone) = await TradeAsync(fixture, "plomeria", "Plomería Hernández");
+        var (electrician, otherZone) = await TradeAsync(fixture, "electricista", "Electricista Ruiz");
+        var first = NewCustomerPhone();
+        var second = NewCustomerPhone();
+        await QuotedVisitAsync(fixture, plumber, zone, TimeSpan.FromHours(1), phone: first);
+        await QuotedVisitAsync(fixture, plumber, zone, TimeSpan.FromHours(1), phone: second);
+        // None of these counts: one its customer cancelled and one missed, though their quotes went out before; and one of
+        // the plumber whose quote row belongs to another business.
+        await QuotedVisitAsync(fixture, plumber, zone, TimeSpan.FromHours(-3), then: visit => visit.CancelByCustomer(Now.AddDays(-11)));
+        await QuotedVisitAsync(fixture, plumber, zone, TimeSpan.FromHours(-3), then: visit =>
+        {
+            visit.Accept(Now.AddDays(-12));
+            visit.ChangeStatus(AppointmentStatus.NoShow);
+        });
+        await QuotedVisitAsync(fixture, plumber, zone, TimeSpan.FromHours(1), quotedBy: electrician);
+        // One quoted already whose visit is in two days: it counts once it took place.
+        await QuotedVisitAsync(fixture, plumber, zone, TimeSpan.FromHours(-30), endedDaysAgo: -2);
+        // The same two customers asked the electrician too, and were quoted later: each business counts its own.
+        await QuotedVisitAsync(fixture, electrician, otherZone, TimeSpan.FromHours(1), phone: first, endedDaysAgo: 5);
+        await QuotedVisitAsync(fixture, electrician, otherZone, TimeSpan.FromHours(1), phone: second, endedDaysAgo: 5);
+        await QuotedVisitAsync(fixture, electrician, otherZone, TimeSpan.FromHours(1), endedDaysAgo: 5);
+
+        var today = await SnapshotAsync(fixture);
+        fixture.Clock.UtcNow = Now.AddDays(3);
+        var inThreeDays = await SnapshotAsync(fixture);
+
+        Assert.Null(Entry(today, plumber).QuoteTime);
+        Assert.Equal(QuoteTime.WithinADay, Entry(today, electrician).QuoteTime);
+        Assert.Equal(QuoteTime.WithinADay, Entry(inThreeDays, plumber).QuoteTime);
+    }
+
+    [Fact]
+    public async Task TheLimits_ShouldLeaveOut_AWaitOfExactlyADay()
+    {
+        await using var fixture = Fixture();
+        var (carpenter, zone) = await TradeAsync(fixture, "carpinteria", "Carpintería Don José");
+        // Within a day, exactly a day, exactly three days, and more than a week: half is within three days, not one.
+        foreach (var hours in new[] { 23, 24, 72, 200 })
+            await QuotedVisitAsync(fixture, carpenter, zone, TimeSpan.FromHours(hours));
+
+        Assert.Equal(QuoteTime.WithinThreeDays, Entry(await SnapshotAsync(fixture), carpenter).QuoteTime);
+    }
+
+    [Fact]
+    public async Task ASnapshotThatCouldNotReadTheQuotes_ShouldNotTellTheOwnerTheyAreNotCountedYet()
+    {
+        await using var fixture = SalesTestFixture.Create(null, new FailingQuoteTimes());
+        fixture.Clock.UtcNow = Now;
+        var (plumber, zone) = await TradeAsync(fixture, "plomeria", "Plomería Hernández");
+        for (var n = 0; n < 3; n++)
+            await QuotedVisitAsync(fixture, plumber, zone, TimeSpan.FromHours(1));
+
+        var profile = await ProfileAsync(fixture, plumber);
+
+        Assert.Equal((true, false, (QuoteTime?)null), (profile.CountsRequests, profile.CountsQuotes, profile.QuoteTime));
+        Assert.Null((await CardsAsync(fixture))["plomeria"].QuoteTime);
+    }
+
+    [Fact]
     public async Task TheOwner_ShouldReadHowSoonItQuotes_TheSlowerToo_AndTheVisitPageWhatItsCardSays()
     {
         await using var fixture = Fixture();
@@ -85,7 +151,7 @@ public class QuoteTimeInExploreTests
         for (var n = 0; n < 3; n++)
             await QuotedVisitAsync(fixture, quick, otherZone, TimeSpan.FromHours(50));
 
-        Assert.Equal(QuoteTime.Slower, (await ProfileAsync(fixture, slow)).QuoteTime);
+        Assert.Equal((true, QuoteTime.Slower), ((await ProfileAsync(fixture, slow)).CountsQuotes, (await ProfileAsync(fixture, slow)).QuoteTime));
         Assert.Equal(QuoteTime.WithinThreeDays, (await ProfileAsync(fixture, quick)).QuoteTime);
         var cards = await CardsAsync(fixture);
         Assert.Null(cards["plomeria"].QuoteTime);
@@ -120,9 +186,11 @@ public class QuoteTimeInExploreTests
     /// A visit a customer requested online that ended <paramref name="endedDaysAgo"/>, and its quote sent
     /// <paramref name="sentAfterTheEnd"/> after it ended.
     /// </summary>
+    /// <param name="then">What became of the visit after its quote went out.</param>
+    /// <param name="quotedBy">The business of the quote row, the trade's own unless said.</param>
     private static async Task QuotedVisitAsync(
         SalesTestFixture fixture, Tenant trade, DeliveryZone zone, TimeSpan sentAfterTheEnd, int endedDaysAgo = 10,
-        string? phone = null, bool fromTeam = false)
+        string? phone = null, bool fromTeam = false, Action<Appointment>? then = null, Tenant? quotedBy = null)
     {
         var end = Now.AddDays(-endedDaysAgo);
         var visit = Appointment.RequestHomeVisit(
@@ -130,8 +198,9 @@ public class QuoteTimeInExploreTests
             "Gotea el calentador", null, DeliveryAddress.ForVisit("72000", "Av. Juárez 123", null), zone,
             HomeVisitChargePolicy.Charged, null, Guid.NewGuid(), Token(), fromTeam: fromTeam);
         visit.CreatedAt = end.AddDays(-2);
+        then?.Invoke(visit);
         fixture.Context.Appointments.Add(visit);
-        await SendQuoteAsync(fixture, trade, visit, end + sentAfterTheEnd);
+        await SendQuoteAsync(fixture, quotedBy ?? trade, visit, end + sentAfterTheEnd);
     }
 
     /// <summary>An appointment booked online, not a visit, quoted <paramref name="sentAfterTheEnd"/> after it ended.</summary>
@@ -164,6 +233,33 @@ public class QuoteTimeInExploreTests
             .Handle(new GetDirectoryProfileQuery(), CancellationToken.None);
         Assert.True(profile.IsSuccess, profile.Error);
         return profile.Value!;
+    }
+
+    /// <summary>The read of the quotes fails, as a database that does not answer would; every other read works.</summary>
+    private sealed class FailingQuoteTimes : IQueryExpressionInterceptor
+    {
+        public Expression QueryCompilationStarting(Expression queryExpression, QueryExpressionEventData eventData)
+            => new ReadsQuotes().Finds(queryExpression)
+                ? throw new InvalidOperationException("La base no responde.")
+                : queryExpression;
+
+        private sealed class ReadsQuotes : ExpressionVisitor
+        {
+            private bool _found;
+
+            public bool Finds(Expression expression)
+            {
+                Visit(expression);
+                return _found;
+            }
+
+            public override Expression? Visit(Expression? node)
+            {
+                if (node is QueryRootExpression root && root.ElementType == typeof(Quote))
+                    _found = true;
+                return base.Visit(node);
+            }
+        }
     }
 
     private static Task<PublicDirectorySnapshot> SnapshotAsync(SalesTestFixture fixture)
