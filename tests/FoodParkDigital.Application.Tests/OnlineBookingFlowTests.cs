@@ -343,6 +343,61 @@ public class OnlineBookingFlowTests
     }
 
     [Fact]
+    public async Task MarkingARequestFake_ShouldFreeItsTime_TellNobody_AndKeepItsPhoneFromAsking_UntilTheMarkIsTakenBack()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        await ConnectWhatsAppAsync(fixture, tenant.Id);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
+        var request = await fixture.Context.Appointments.SingleAsync();
+        var messages = await fixture.Context.OutgoingMessages.CountAsync();
+
+        var marked = await RequestHandler(fixture).Handle(new MarkAppointmentRequestFakeCommand(request.Id), CancellationToken.None);
+
+        Assert.Equal((AppointmentStatus.Cancelled, true), (marked.Value!.Status, marked.Value.MarkedFake));
+        // Nobody is told: its phone may not be of whoever sent it.
+        Assert.Equal(messages, await fixture.Context.OutgoingMessages.CountAsync());
+        // Its time is offered again, but its phone may not ask, also written with the 1 WhatsApp adds; another phone may.
+        Assert.Contains(Local(Monday, "10:00"), (await SlotsAsync(fixture, haircut.Id))!.Days[1].Slots.Select(s => s.StartAt));
+        Assert.Equal(
+            RequestPublicAppointmentCommandHandler.MarkedFakeMessage, (await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"))).Error);
+        Assert.Equal(
+            RequestPublicAppointmentCommandHandler.MarkedFakeMessage,
+            (await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), phone: "+5215522107765")).Error);
+        var another = await RequestAsync(fixture, haircut.Id, Local(Monday, "11:00"), phone: "5511112222");
+        Assert.True(another.IsSuccess, another.Error);
+
+        // Taken back, its phone may ask again; still nobody was told it was declined.
+        var unmarked = await RequestHandler(fixture).Handle(new UnmarkAppointmentRequestFakeCommand(request.Id), CancellationToken.None);
+        Assert.Equal((AppointmentStatus.Cancelled, false), (unmarked.Value!.Status, unmarked.Value.MarkedFake));
+        var again = await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
+        Assert.True(again.IsSuccess, again.Error);
+        Assert.DoesNotContain(
+            await fixture.Context.OutgoingMessages.Select(m => m.Body).ToListAsync(), body => body.Contains("no pudimos confirmar"));
+    }
+
+    [Fact]
+    public async Task APhoneMarkedFake_ShouldAskAgain_NinetyDaysAfterTheMark()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture);
+        var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
+        await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
+        var request = await fixture.Context.Appointments.SingleAsync();
+        await RequestHandler(fixture).Handle(new MarkAppointmentRequestFakeCommand(request.Id), CancellationToken.None);
+        var marked = request.MarkedFakeAt!.Value;
+        fixture.TenantService.SetTenant(tenant.Id);
+
+        Assert.Equal(
+            RequestPublicAppointmentCommandHandler.MarkedFakeMessage,
+            await PublicAppointmentReceipts.RefusalForPhoneAsync(
+                fixture.Context, "+525522107765", marked.AddDays(90).AddMinutes(-1), CancellationToken.None));
+        Assert.Null(await PublicAppointmentReceipts.RefusalForPhoneAsync(
+            fixture.Context, "+525522107765", marked.AddDays(90).AddMinutes(1), CancellationToken.None));
+    }
+
+    [Fact]
     public async Task MovingARequest_ShouldKeepItWaiting_AndTellTheCustomerItIsStillARequest()
     {
         await using var fixture = SalesTestFixture.Create();

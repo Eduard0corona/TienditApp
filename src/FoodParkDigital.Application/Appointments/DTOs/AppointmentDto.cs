@@ -54,6 +54,11 @@ public class AppointmentDto
     /// A request online from the business's own team (Fase 29M, ADR 0067): Explorar does not count how soon it is answered.
     /// </summary>
     public bool FromTeam { get; set; }
+    /// <summary>
+    /// A request online its business declined as fake (Fase 29V, ADR 0076): it does not count in Explorar, and its phone may
+    /// not request again in the business for 90 days, until the mark is taken back.
+    /// </summary>
+    public bool MarkedFake { get; set; }
 
     public static AppointmentDto From(Appointment appointment) => new()
     {
@@ -85,7 +90,8 @@ public class AppointmentDto
         AnswerBy = appointment.Status == AppointmentStatus.Requested && !appointment.FromTeam
             ? ResponseTimes.AnswerBy(appointment.CreatedAt, appointment.RequestedStartAt ?? appointment.StartAt)
             : null,
-        FromTeam = appointment.FromTeam
+        FromTeam = appointment.FromTeam,
+        MarkedFake = appointment.MarkedFakeAt != null
     };
 
     /// <summary><see cref="From"/> written for SQL, for the lists.</summary>
@@ -122,7 +128,8 @@ public class AppointmentDto
                 ? x.RequestedStartAt ?? x.StartAt
                 : x.CreatedAt.AddHours(AnswerByHours))
             : null,
-        FromTeam = x.FromTeam
+        FromTeam = x.FromTeam,
+        MarkedFake = x.MarkedFakeAt != null
     };
 
     /// <summary>A day: the longest a request waits and is still answered in time (<see cref="ResponseTimes.AnswerBy"/>).</summary>

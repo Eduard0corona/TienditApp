@@ -285,6 +285,38 @@ public class ExploreResponseTimeTests
     }
 
     [Fact]
+    public async Task ARequestDeclinedAsFake_ShouldNotCount_NorTakeThePlaceOfItsCustomersLast_UntilTheMarkIsTakenBack()
+    {
+        await using var fixture = Fixture();
+        var salon = await SalonAsync(fixture, "falsas", "Estética Falsas");
+        // One quick answer and two let pass, of three customers.
+        await AnsweredAsync(fixture, salon, TimeSpan.FromMinutes(30));
+        await LapsedAsync(fixture, salon);
+        await LapsedAsync(fixture, salon);
+        // A customer answered quickly before, whose last request was let pass; and another one let pass.
+        var known = NewCustomerPhone();
+        var before = await RequestAsync(fixture, salon, Now.AddDays(-5), phone: known);
+        before.Accept(Now.AddDays(-5).AddMinutes(20));
+        var later = await RequestAsync(fixture, salon, Now.AddDays(-2), startAt: Now.AddHours(-1), phone: known);
+        var stranger = await RequestAsync(fixture, salon, Now.AddDays(-2), startAt: Now.AddHours(-1));
+        await fixture.Context.SaveChangesAsync();
+        // One of five within an hour: nothing to say.
+        Assert.Null((await CardsAsync(fixture))["falsas"].ResponseTime);
+
+        // Declined as fake, they do not count, and the customer's quick answer before counts again: two of four.
+        later.MarkFake(Now);
+        stranger.MarkFake(Now);
+        await fixture.Context.SaveChangesAsync();
+        Assert.Equal(ResponseTime.WithinAnHour, (await CardsAsync(fixture))["falsas"].ResponseTime);
+
+        // Taken back, they count again, declined now: past their limit, among the slowest.
+        later.UnmarkFake();
+        stranger.UnmarkFake();
+        await fixture.Context.SaveChangesAsync();
+        Assert.Null((await CardsAsync(fixture))["falsas"].ResponseTime);
+    }
+
+    [Fact]
     public async Task TheAgenda_ShouldKeepWhenItsTeamAnswered_ByTheStatusToo()
     {
         await using var fixture = Fixture();
