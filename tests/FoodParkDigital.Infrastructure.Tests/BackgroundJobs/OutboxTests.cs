@@ -430,6 +430,21 @@ public class OutboxTests
         Assert.Equal(current.OrderId, restored.OrderId);
     }
 
+    [Fact]
+    public void OrderCancelledEventStoredBeforeItSaidWho_ShouldReadAsCancelledByTheBusiness()
+    {
+        // Messages waiting in the outbox during the deploy of Fase 29R: only the business cancelled orders then.
+        var current = new OrderCancelledEvent(Guid.NewGuid(), TenantA, OrderStatus.Pending, "Lo canceló el cliente.", ByCustomer: true);
+        var payload = JsonNode.Parse(OutboxEventSerializer.Serialize(current))!.AsObject();
+        Assert.True(payload.Remove("byCustomer"));
+
+        var restored = Assert.IsType<OrderCancelledEvent>(
+            OutboxEventSerializer.Deserialize(OutboxEventSerializer.TypeNameOf(current), payload.ToJsonString()));
+
+        Assert.False(restored.ByCustomer);
+        Assert.Equal((current.OrderId, current.Reason), (restored.OrderId, restored.Reason));
+    }
+
     private sealed class ReceivedCodeRequests
     {
         public List<VerificationCodeRequestedEvent> Events { get; } = [];

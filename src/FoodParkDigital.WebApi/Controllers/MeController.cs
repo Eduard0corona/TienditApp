@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Customers;
 using FoodParkDigital.Application.Identity.Queries;
+using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.Reviews;
 using FoodParkDigital.Application.Tenants.Commands;
@@ -52,6 +53,19 @@ public class MeController : ControllerBase
     {
         var order = await _mediator.Send(new GetMyOrderQuery(id), cancellationToken);
         return order is null ? this.ApiError(StatusCodes.Status404NotFound, "No encontramos ese pedido en tu cuenta.") : Ok(order);
+    }
+
+    /// <summary>
+    /// Cancels one of the account's orders of the online menu while the business has not accepted it and nothing was paid
+    /// (Fase 29R); any other is not found.
+    /// </summary>
+    [HttpPost("orders/{id:guid}/cancel")]
+    public async Task<ActionResult<MyOrderDetailDto>> CancelMyOrder(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CancelMyOrderCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return Ok(result.Value);
     }
 
     /// <summary>The customer account's appointments booked online, in every business (Fase 24D): coming or before.</summary>

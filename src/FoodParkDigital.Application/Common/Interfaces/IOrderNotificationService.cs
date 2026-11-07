@@ -18,7 +18,9 @@ public interface IOrderNotificationService
         OrderChannel channel,
         string? externalOrderNumber);
     Task NotifyOrderStatusChanged(Guid tenantId, Guid orderId, OrderStatus previousStatus, OrderStatus newStatus);
-    Task NotifyOrderCancelled(Guid tenantId, Guid orderId, OrderStatus previousStatus, string? reason);
+    /// <param name="orderNumber">Its folio, for the notice of a cancellation by its customer.</param>
+    /// <param name="byCustomer">Its customer cancelled it from their link or their account (Fase 29R, ADR 0072).</param>
+    Task NotifyOrderCancelled(Guid tenantId, Guid orderId, OrderStatus previousStatus, string? reason, string orderNumber, bool byCustomer);
     /// <summary>A round of an open tab was sent or moved in the kitchen (kitchen board and dining room refresh).</summary>
     Task NotifyKitchenTicketsChanged(Guid tenantId, Guid orderId, int round);
     /// <summary>Something else of the order changed, such as its delivery (Fase 22D): the screens that show it read it again.</summary>

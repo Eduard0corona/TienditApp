@@ -1,0 +1,148 @@
+using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.Orders.StateMachines;
+using FluentValidation;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace FoodParkDigital.Application.Orders.Commands;
+
+/// <summary>
+/// The customer cancels their order of the online menu with the link of its receipt (Fase 29R, ADR 0072), while the business
+/// has not accepted it and nothing was paid. A link unknown, changed, expired or of a business that is not active answers
+/// as not found.
+/// </summary>
+[AllowAnonymousRequest("Cancelar con el enlace imposible de adivinar de su recibo un pedido en línea que el negocio no ha aceptado.")]
+public record CancelPublicOrderCommand(string Token) : IRequest<Result<PublicOrderTrackingDto>>;
+
+public class CancelPublicOrderCommandValidator : AbstractValidator<CancelPublicOrderCommand>
+{
+    public CancelPublicOrderCommandValidator()
+    {
+        RuleFor(x => x.Token).NotEmpty().MaximumLength(100);
+    }
+}
+
+public class CancelPublicOrderCommandHandler : IRequestHandler<CancelPublicOrderCommand, Result<PublicOrderTrackingDto>>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenantService;
+    private readonly IOrderInventoryService _inventory;
+    private readonly IDateTimeProvider _clock;
+
+    public CancelPublicOrderCommandHandler(
+        IApplicationDbContext context, ICurrentTenantService tenantService, IOrderInventoryService inventory, IDateTimeProvider clock)
+    {
+        _context = context;
+        _tenantService = tenantService;
+        _inventory = inventory;
+        _clock = clock;
+    }
+
+    public async Task<Result<PublicOrderTrackingDto>> Handle(CancelPublicOrderCommand request, CancellationToken cancellationToken)
+    {
+        var now = _clock.UtcNow;
+        var found = await PublicOrderLink.FindAsync(_context, request.Token, now, cancellationToken);
+        if (found is null)
+            return Result.Failure<PublicOrderTrackingDto>(OrderTracking.NotFoundMessage);
+
+        _tenantService.SetTenant(found.Value.TenantId);
+        await CustomerOrderCancellation.CancelAsync(_context, _inventory, found.Value.Id, cancellationToken);
+        return Result.Success((await PublicOrderLink.ReadAsync(_context, found.Value.Id, now, cancellationToken))!);
+    }
+}
+
+/// <summary>
+/// The customer cancels from their account one of its orders of the online menu (Fase 29R, ADR 0072), with the same rule as
+/// the link. Only an order of the account itself; any other is not found, whatever business it is in.
+/// </summary>
+[RequiresAuthentication]
+public record CancelMyOrderCommand(Guid Id) : IRequest<Result<MyOrderDetailDto>>;
+
+public class CancelMyOrderCommandHandler : IRequestHandler<CancelMyOrderCommand, Result<MyOrderDetailDto>>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenantService;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IOrderInventoryService _inventory;
+    private readonly IDateTimeProvider _clock;
+
+    public CancelMyOrderCommandHandler(
+        IApplicationDbContext context,
+        ICurrentTenantService tenantService,
+        ICurrentUserService currentUser,
+        IOrderInventoryService inventory,
+        IDateTimeProvider clock)
+    {
+        _context = context;
+        _tenantService = tenantService;
+        _currentUser = currentUser;
+        _inventory = inventory;
+        _clock = clock;
+    }
+
+    public async Task<Result<MyOrderDetailDto>> Handle(CancelMyOrderCommand request, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(_currentUser.UserId, out var userId))
+            return Result.Failure<MyOrderDetailDto>(CustomerOrderCancellation.NotFoundMessage);
+
+        // Like the link, only an order of a business that is active: one suspended takes no changes.
+        var found = await (
+                from order in MyOrder.Of(_context, userId, request.Id)
+                join tenant in _context.Tenants.AsNoTracking() on order.TenantId equals tenant.Id
+                where tenant.Status == TenantStatus.Active
+                select new { order.Id, order.TenantId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (found is null)
+            return Result.Failure<MyOrderDetailDto>(CustomerOrderCancellation.NotFoundMessage);
+
+        _tenantService.SetTenant(found.TenantId);
+        await CustomerOrderCancellation.CancelAsync(_context, _inventory, found.Id, cancellationToken);
+        return Result.Success((await MyOrder.ReadAsync(_context, userId, found.Id, _clock.UtcNow, cancellationToken))!);
+    }
+}
+
+/// <summary>
+/// Its customer cancels an order of the business in context (Fase 29R): the domain decides whether they may, and what the
+/// order took from the inventory goes back, as when the business cancels it (nothing was prepared before it was accepted).
+/// </summary>
+internal static class CustomerOrderCancellation
+{
+    /// <summary>The account's detail says the same of an order that is not its own.</summary>
+    public const string NotFoundMessage = "No encontramos ese pedido en tu cuenta.";
+
+    private const int MaxAttempts = 3;
+
+    public static async Task CancelAsync(
+        IApplicationDbContext context, IOrderInventoryService inventory, Guid orderId, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var order = await context.Orders
+                .Include(o => o.StatusHistory)
+                .Include(o => o.ServicePieces)
+                .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
+                ?? throw new EntityNotFoundException("Order", orderId);
+            // Already cancelled by its customer (tapped twice, or sent again after its answer was lost): nothing changes.
+            if (!order.CancelByCustomer(OrderStateMachineFactory.Create(order.BusinessType, order.OrderType)))
+                return;
+
+            await inventory.ReverseConsumptionForOrderAsync(order, order.CancellationReason, cancellationToken);
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxAttempts)
+            {
+                // The business accepted (or changed) it at the same time: read it again, and the domain says what it is now.
+                if (context is DbContext dbContext)
+                    dbContext.ChangeTracker.Clear();
+            }
+        }
+    }
+}

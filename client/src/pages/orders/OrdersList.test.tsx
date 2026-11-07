@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ordersApi } from '../../api/ordersApi';
 import { apiRequest } from '../../api/typedClient';
 import { useAuth } from '../../hooks/useAuth';
-import type { OrderCreatedPayload, OrderUpdatedPayload } from '../../hooks/useOrderSignalR';
+import type { OrderCancelledPayload, OrderCreatedPayload, OrderUpdatedPayload } from '../../hooks/useOrderSignalR';
 import { OnlinePaymentDispute, OnlinePaymentRefundReason, OnlinePaymentRefundStatus } from '../../api/generated/enums';
 import { useTenant } from '../../hooks/useTenant';
 import { DeliveryCourier, OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, TenantCapability, type OrderDto } from '../../types';
@@ -17,6 +17,8 @@ import OrdersList from './OrdersList';
 const realtime = vi.hoisted(() => ({
   created: undefined as ((payload: OrderCreatedPayload) => void) | undefined,
   updated: undefined as ((payload: OrderUpdatedPayload) => void) | undefined,
+  cancelled: undefined as ((payload: OrderCancelledPayload) => void) | undefined,
+  play: vi.fn(),
 }));
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
@@ -25,7 +27,7 @@ vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 const dialogs = vi.hoisted(() => ({ prompt: vi.fn(), confirm: vi.fn() }));
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => dialogs }));
 vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
-vi.mock('../../hooks/useArrivalChime', () => ({ useArrivalChime: () => ({ enabled: false, toggle: vi.fn(), play: vi.fn() }) }));
+vi.mock('../../hooks/useArrivalChime', () => ({ useArrivalChime: () => ({ enabled: false, toggle: vi.fn(), play: realtime.play }) }));
 vi.mock('../../hooks/useOrderSignalR', () => {
   const subscribe = () => () => undefined;
   const onOrderCreated = (callback: (payload: OrderCreatedPayload) => void) => {
@@ -36,9 +38,13 @@ vi.mock('../../hooks/useOrderSignalR', () => {
     realtime.updated = callback;
     return () => undefined;
   };
+  const onOrderCancelled = (callback: (payload: OrderCancelledPayload) => void) => {
+    realtime.cancelled = callback;
+    return () => undefined;
+  };
   return {
     useOrderSignalR: () => ({
-      onOrderCreated, onOrderStatusChanged: subscribe, onOrderCancelled: subscribe, onOrderUpdated, onConnected: subscribe,
+      onOrderCreated, onOrderStatusChanged: subscribe, onOrderCancelled, onOrderUpdated, onConnected: subscribe,
     }),
   };
 });
@@ -599,6 +605,28 @@ describe('OrdersList', () => {
     expect(within(onTheWay).getByText(/Por cobrar/)).toHaveTextContent('$275.00');
     expect(within(delivered).queryByText('En camino')).not.toBeInTheDocument();
     expect(within(delivered).getByText(/Lo debe Paquetenvia/)).toHaveTextContent('$275.00');
+  });
+
+  it('says the customer cancelled an order before it was accepted, ringing down, and reads the orders again (Fase 29R)', async () => {
+    renderOrders(TenantCapability.Food);
+    await screen.findByText('ORD-000001');
+    const reads = vi.mocked(ordersApi.getAll).mock.calls.length;
+    realtime.play.mockClear();
+
+    act(() => realtime.cancelled?.({
+      orderId: 'o1', orderNumber: 'ORD-000127', previousStatus: 'Pending', reason: 'Lo canceló el cliente.', byCustomer: true,
+    }));
+
+    expect(screen.getByRole('status')).toHaveTextContent('El cliente canceló el pedido ORD-000127 antes de que lo aceptaran.');
+    expect(realtime.play.mock.calls).toEqual([['leaving']]);
+    await waitFor(() => expect(vi.mocked(ordersApi.getAll).mock.calls.length).toBeGreaterThan(reads), { timeout: 3000 });
+
+    // One the business cancelled says its reason, without a sound.
+    act(() => realtime.cancelled?.({
+      orderId: 'o1', orderNumber: 'ORD-000127', previousStatus: 'Confirmed', reason: 'Sin existencias', byCustomer: false,
+    }));
+    expect(screen.getByRole('status')).toHaveTextContent('Pedido cancelado: Sin existencias');
+    expect(realtime.play).toHaveBeenCalledTimes(1);
   });
 
   it('reads the orders again when one goes out with the courier', async () => {

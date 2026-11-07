@@ -51,9 +51,18 @@ public class OrderNotificationService : IOrderNotificationService
             .SendAsync("OrderStatusChanged", payload);
     }
 
-    public async Task NotifyOrderCancelled(Guid tenantId, Guid orderId, OrderStatus previousStatus, string? reason)
+    public async Task NotifyOrderCancelled(
+        Guid tenantId, Guid orderId, OrderStatus previousStatus, string? reason, string orderNumber, bool byCustomer)
     {
-        var payload = new { OrderId = orderId, PreviousStatus = previousStatus.ToString(), Reason = reason };
+        // Its folio and who cancelled it, so the notice says «El cliente canceló el pedido ORD-000123» (Fase 29R).
+        var payload = new
+        {
+            OrderId = orderId,
+            OrderNumber = orderNumber,
+            PreviousStatus = previousStatus.ToString(),
+            Reason = reason,
+            ByCustomer = byCustomer
+        };
 
         await _hubContext.Clients
             .Group($"tenant_{tenantId}")

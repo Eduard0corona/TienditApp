@@ -2163,6 +2163,36 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **796 iguales.**
     - **9 cambian**, solo por el nombre del negocio en dos líneas en el selector de un teléfono: Inicio y el menú de la cuenta en 360 px (`shell.spec.ts`), Productos en 360 px (`catalogo-inventario.spec.ts`), cinco de Cotizaciones en el teléfono (`cotizaciones.spec.ts`) y Visitas a domicilio en Configuración (`oficios.spec.ts`), con «Café La Esquina» o «Plomería Hernández» completos. En las nueve la diferencia queda dentro del selector.
     - **2 nuevas:** el nombre largo en 360 px (`publico-cuenta-marco.spec.ts`, «Taquería Los Compadres» completo) y Pedidos de un negocio solo de mostrador, sin filtro Canal (`vender-pedidos.spec.ts`). Las dos dieron la misma imagen en dos corridas seguidas.
+- Fase 29R, el aviso en pantalla de las cotizaciones y el cliente cancela su pedido en línea ([ADR 0072](../adr/0072-quote-answers-live-and-customer-order-cancellation.md)):
+  - **Domain:** `CustomerOrderCancellationTests` (4, nuevo): el cliente cancela un pedido en línea por confirmar, con su historial («Cliente», de Por confirmar a Cancelado) y el evento que dice que fue él; la cancelación del negocio no lo dice; no cancela uno aceptado, pagado, pedido con el QR de una mesa o de otro canal, cada uno con su mensaje; cancelar otra vez el suyo no cambia nada, y uno que canceló el negocio lo dice.
+  - **Application:**
+    - `CustomerOrderCancellationTests` (7, nuevo): el enlace cancela el pedido sin aceptar desde cualquier negocio en contexto, regresa su inventario y dice que ya no se puede cancelar; cancelar otra vez contesta lo mismo sin otra cancelación; no cancela uno aceptado, uno que canceló el negocio, ni con un enlace desconocido o vencido; si el negocio lo acepta en el mismo instante, gana el negocio y el enlace lo dice; la cuenta cancela solo el suyo, con otro negocio en contexto, y no uno de un negocio suspendido; Pedidos oye que fue el cliente, con su folio; la bitácora dice «Cliente», nunca el correo de la cuenta.
+    - `CustomerAnswerNoticesTests` (+1): las pantallas de cotizaciones oyen qué cotización se respondió y cómo, solo en su negocio, y una pantalla que falla no falla la respuesta.
+    - `OrderNotificationLabelsTests` (+1): al cliente que canceló no le llega el WhatsApp; al que le canceló el negocio, sí.
+    - `AuthorizationBehaviorTests`: `CancelPublicOrderCommand` entra a la lista de comandos anónimos.
+  - **Infrastructure:** `OutboxTests` (+1): un `OrderCancelledEvent` guardado antes de la 29R, sin `byCustomer`, se lee como del negocio.
+  - **WebApi (SQL Server):**
+    - `CrossTenantRealtimeSqlServerTests` (+1): el hub de cotizaciones rechaza a quien no trabaja los pedidos y a un negocio sin servicios ni citas; cada negocio oye solo las respuestas de sus cotizaciones, con el folio y la versión y sin lo que escribió el cliente.
+    - `CrossTenantOrderTrackingSqlServerTests` (+1): un enlace desconocido o con otras mayúsculas no cancela (404, con el mismo mensaje del seguimiento); el enlace cancela su pedido sin sesión, y otra vez contesta lo mismo; el pedido de Ana solo lo cancela Ana (otra cuenta, el equipo del negocio o sin sesión: 404 o 401); uno aceptado responde 422 con su mensaje; cada negocio oye solo sus cancelaciones, como del cliente.
+  - **Cliente:**
+    - `useQuoteReplies.test.tsx` (5, nuevo): avisa la cotización aceptada o rechazada (con la versión), lee otra vez la campana, la lista y la cotización abierta pero no sus ajustes, lee otra vez al reconectar, no se conecta sin el permiso o sin negocio y no se queda conectado al desmontarse.
+    - `Topbar.test.tsx` (+2): escucha las respuestas quien trabaja las cotizaciones de un negocio activo, y no en uno suspendido, sin Pedidos, sin cotizaciones ni para la plataforma.
+    - `OrderTrackingPage.test.tsx` (+3) y `MyOrderPage.test.tsx` (+2): «Cancelar pedido» solo mientras el servidor lo deja, con confirmación (volver no cancela), la llamada con el enlace en el cuerpo o con el id, el pedido como queda y, si el negocio lo aceptó mientras tanto, el porqué y la lectura otra vez.
+    - `OrdersList.test.tsx` (+1): «El cliente canceló el pedido … antes de que lo aceptaran.» con el sonido hacia abajo; la cancelación del negocio dice su motivo, sin sonido.
+  - **.NET en total:** 4,748 pruebas en verde con SQL Server (Domain 1,394; Application 2,150; WebApi 496; Infrastructure 708). **Cliente en total:** 204 archivos y 1,550 pruebas.
+  - **Primera visita:** 181,988 B (`master` en `b665e90`: 181,979 B, +9 B); el presupuesto se queda en 182,000 B. Con dos componentes aparte en la barra superior subía a 182,040 B: las solicitudes y las cotizaciones se cargan juntas en `LiveNotices`. El CSS global, 63,077 B de 63,200 B.
+  - **Revisión independiente**, sin bloqueantes ni mayores, con seis menores corregidos:
+    - la bitácora del negocio decía «system» (enlace) o el correo de la cuenta en una cancelación del cliente: ahora «Cliente», con `ByCustomer`;
+    - si el negocio aceptaba el pedido en el mismo instante, el cliente recibía un 409 genérico: ahora se lee otra vez y dice que ya lo aceptó;
+    - la regla de mesa miraba la cuenta abierta, que un pedido en línea nunca tiene: ahora mira el QR de una mesa (`TableNumber`), y su prueba deja de usar un estado imposible;
+    - la cuenta cancelaba el pedido de un negocio suspendido: ahora no, como el enlace;
+    - una lectura de cada 20 segundos en curso podía devolver el pedido a «Por confirmar»: se cancela antes de guardar la respuesta;
+    - un pedido que canceló el negocio respondía «Cancelaste tu pedido»: ahora dice «El negocio ya canceló tu pedido.»;
+    - y los detalles: la campana en Pedidos, el catálogo de cotizaciones que no se relee, los mensajes de no encontrado, la prueba del outbox de antes de la 29R y un comentario fuera de lugar en las escenas.
+  - **CI:** la primera visita pasó el presupuesto por 40 B (182,040 B), corregido como arriba.
+  - **Escenas:** contra la línea base de `master` en `b665e90` (807 escenas):
+    - **807 iguales.**
+    - **3 nuevas** (`seguimiento.spec.ts`): el detalle de un pedido por confirmar con «Cancelar pedido», la confirmación desde el enlace y el pedido que el cliente canceló, con su motivo y su aviso. Las tres dieron la misma imagen en dos corridas seguidas.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

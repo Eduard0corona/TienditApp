@@ -46,6 +46,8 @@ internal sealed class CustomerOrderView
     /// <summary>What the business forgave (Fase 26B): not to pay anymore.</summary>
     public decimal WrittenOffAmount { get; init; }
     public string? CancellationReason { get; init; }
+    /// <summary>Whether its customer may still cancel it: <see cref="Order.CustomerMayCancel"/>, written for SQL (Fase 29R).</summary>
+    public bool CustomerMayCancel { get; init; }
     public string? TableNumber { get; init; }
     public bool HasDelivery { get; init; }
     public decimal? DeliveryFee { get; init; }
@@ -93,6 +95,10 @@ internal sealed class CustomerOrderView
                 PaidAmount = order.PaidAmount,
                 WrittenOffAmount = order.WrittenOffAmount,
                 CancellationReason = order.CancellationReason,
+                // Order.CustomerMayCancel, in SQL; a business that is not active takes no cancellation either.
+                CustomerMayCancel = order.Channel == OrderChannel.Online && order.Status == OrderStatus.Pending
+                    && order.PaidAmount == 0 && order.WrittenOffAmount == 0 && order.TableNumber == null && order.OpenTableId == null
+                    && tenant.Status == TenantStatus.Active,
                 TableNumber = order.TableNumber,
                 HasDelivery = order.Delivery != null,
                 DeliveryFee = order.Delivery != null ? order.Delivery.Fee : (decimal?)null,

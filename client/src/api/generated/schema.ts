@@ -8436,6 +8436,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/orders/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyOrderDetailDto"];
+                        "application/json": components["schemas"]["MyOrderDetailDto"];
+                        "text/json": components["schemas"]["MyOrderDetailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/appointments": {
         parameters: {
             query?: never;
@@ -12748,6 +12787,49 @@ export interface paths {
         trace?: never;
     };
     "/api/v1/public/orders/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PublicOrderTrackingRequest"];
+                    "text/json": components["schemas"]["PublicOrderTrackingRequest"];
+                    "application/*+json": components["schemas"]["PublicOrderTrackingRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicOrderTrackingDto"];
+                        "application/json": components["schemas"]["PublicOrderTrackingDto"];
+                        "text/json": components["schemas"]["PublicOrderTrackingDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/orders/tracking/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -18943,6 +19025,7 @@ export interface components {
             /** Format: double */
             writtenOffAmount: number;
             cancellationReason?: string | null;
+            canCancel: boolean;
             tableNumber?: string | null;
             delivery?: components["schemas"]["MyOrderDeliveryDto"];
         };
@@ -20778,6 +20861,7 @@ export interface components {
             /** Format: double */
             writtenOffAmount: number;
             cancellationReason?: string | null;
+            canCancel: boolean;
         };
         PublicOrderTrackingRequest: {
             token: string;

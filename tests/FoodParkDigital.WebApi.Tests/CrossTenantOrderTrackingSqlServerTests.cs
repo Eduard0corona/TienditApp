@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Infrastructure.Tests.Support;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using static FoodParkDigital.WebApi.Tests.CrossTenantManagementSqlServerTests;
 
@@ -18,6 +20,7 @@ public sealed class CrossTenantOrderTrackingSqlServerTests
 {
     private const string Tracking = "/api/v1/public/orders/tracking";
     private const string OnlineMenu = "/api/v1/auth/my-tenant/online-menu";
+    private const string Cancel = "/api/v1/public/orders/tracking/cancel";
 
     private readonly TwoBusinessesApi _api;
 
@@ -93,6 +96,98 @@ public sealed class CrossTenantOrderTrackingSqlServerTests
         var past = await TwoBusinessesApi.ReadAsync(await ana.Client.GetAsync("/api/v1/me/orders?scope=2&pageSize=50"));
         Assert.Equal(id, Assert.Single(inProgress.GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
         Assert.Equal(0, past.GetProperty("items").GetArrayLength());
+    }
+
+    [SqlServerFact]
+    public async Task Link_ShouldCancelOnlyItsOrder_TheAccountOnlyItsOwn_AndOnlyTheirBusinessShouldHearIt()
+    {
+        // Fase 29R (ADR 0072).
+        var mine = await _api.SignUpAsync("cancela-a", TwoBusinessesApi.FoodBusiness);
+        var theirs = await _api.SignUpAsync("cancela-b", TwoBusinessesApi.FoodBusiness);
+        var myTacos = await ProductAsync(mine.Client, "Tacos de canasta");
+        var theirTacos = await ProductAsync(theirs.Client, "Tacos de cabeza");
+        await TwoBusinessesApi.IdAsync(mine.Client, "/api/v1/cash/open", new { openingAmount = 100m });
+        await TwoBusinessesApi.IdAsync(theirs.Client, "/api/v1/cash/open", new { openingAmount = 100m });
+        var mySlug = await MenuWithOrdersAsync(mine.Client);
+        var theirSlug = await MenuWithOrdersAsync(theirs.Client);
+        var ana = await _api.SignUpCustomerAsync("cancela-ana");
+        var beto = await _api.SignUpCustomerAsync("cancela-beto");
+        using var stranger = _api.AnonymousClient();
+        var heardByMine = new ConcurrentQueue<(Guid OrderId, bool ByCustomer)>();
+        var heardByTheirs = new ConcurrentQueue<(Guid OrderId, bool ByCustomer)>();
+        await using var myScreen = await CancellationsAsync(mine.AccessToken, heardByMine);
+        await using var theirScreen = await CancellationsAsync(theirs.AccessToken, heardByTheirs);
+
+        // A guest orders twice in one business; Ana orders with her session in the other. None accepted yet.
+        var guestsLink = await OrderAsync(stranger, mySlug, myTacos);
+        var acceptedLink = await OrderAsync(stranger, mySlug, myTacos);
+        var anasLink = await OrderAsync(ana.Client, theirSlug, theirTacos);
+        var guestsId = await _api.QueryAsync(mine.TenantId, db => db.Orders.Where(o => o.TrackingToken == guestsLink).Select(o => o.Id).SingleAsync());
+        var acceptedId = await _api.QueryAsync(mine.TenantId, db => db.Orders.Where(o => o.TrackingToken == acceptedLink).Select(o => o.Id).SingleAsync());
+        var anasId = await _api.QueryAsync(theirs.TenantId, db => db.Orders.Where(o => o.TrackingToken == anasLink).Select(o => o.Id).SingleAsync());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync(Tracking, new { token = guestsLink }))).GetProperty("canCancel").GetBoolean());
+        Assert.True((await TwoBusinessesApi.ReadAsync(await ana.Client.GetAsync($"/api/v1/me/orders/{anasId}"))).GetProperty("canCancel").GetBoolean());
+
+        // A link unknown or written with other case cancels nothing, and says the same as following it.
+        var swapped = await stranger.PostAsJsonAsync(Cancel, new { token = SwapCase(guestsLink) });
+        var unknown = await stranger.PostAsJsonAsync(Cancel, new { token = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE" });
+        Assert.Equal((HttpStatusCode.NotFound, HttpStatusCode.NotFound), (swapped.StatusCode, unknown.StatusCode));
+        Assert.Equal((OrderTracking.NotFoundMessage, OrderTracking.NotFoundMessage), (await DetailAsync(swapped), await DetailAsync(unknown)));
+
+        // The guest cancels theirs with its link, without a session: its business hears it was the customer, the other one nothing.
+        var cancelled = await TwoBusinessesApi.ReadAsync(await stranger.PostAsJsonAsync(Cancel, new { token = guestsLink }));
+        Assert.Equal((false, false), (cancelled.GetProperty("canCancel").GetBoolean(), cancelled.GetProperty("inProgress").GetBoolean()));
+        // Tapped twice: the same answer.
+        Assert.Equal(HttpStatusCode.OK, (await stranger.PostAsJsonAsync(Cancel, new { token = guestsLink })).StatusCode);
+
+        // The detail of Ana's order is cancelled only by Ana: not another account, the team of a business, or no session.
+        var betos = await beto.Client.PostAsync($"/api/v1/me/orders/{anasId}/cancel", null);
+        Assert.Equal(HttpStatusCode.NotFound, betos.StatusCode);
+        Assert.Equal("No encontramos ese pedido en tu cuenta.", await DetailAsync(betos));
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.PostAsync($"/api/v1/me/orders/{anasId}/cancel", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await ana.Client.PostAsync($"/api/v1/me/orders/{guestsId}/cancel", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await stranger.PostAsync($"/api/v1/me/orders/{anasId}/cancel", null)).StatusCode);
+        var anas = await TwoBusinessesApi.ReadAsync(await ana.Client.PostAsync($"/api/v1/me/orders/{anasId}/cancel", null));
+        Assert.Equal((99, false), (anas.GetProperty("status").GetInt32(), anas.GetProperty("canCancel").GetBoolean()));
+
+        // Once the business accepted it, the customer calls: the link says so and cancels nothing.
+        Assert.Equal(HttpStatusCode.NoContent, (await mine.Client.PutAsJsonAsync($"/api/v1/orders/{acceptedId}/status", new { newStatus = 1 })).StatusCode);
+        var accepted = await stranger.PostAsJsonAsync(Cancel, new { token = acceptedLink });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, accepted.StatusCode);
+        Assert.Equal(FoodParkDigital.Domain.Orders.Entities.Order.CustomerCancelAcceptedMessage, await DetailAsync(accepted));
+
+        await WaitUntilAsync(() => heardByMine.Count >= 1 && heardByTheirs.Count >= 1);
+        Assert.Equal([(guestsId, true)], heardByMine.ToArray());
+        Assert.Equal([(anasId, true)], heardByTheirs.ToArray());
+        Assert.Equal(1, await _api.QueryAsync(mine.TenantId, db => db.Orders.Where(o => o.Id == guestsId).SelectMany(o => o.StatusHistory)
+            .CountAsync(h => h.NewStatus == FoodParkDigital.Domain.Orders.Enums.OrderStatus.Cancelled)));
+    }
+
+    private async Task<HubConnection> CancellationsAsync(string accessToken, ConcurrentQueue<(Guid OrderId, bool ByCustomer)> heard)
+    {
+        var connection = _api.Hub("/hubs/orders", accessToken);
+        connection.On<JsonElement>("OrderCancelled", payload =>
+            heard.Enqueue((payload.GetProperty("orderId").GetGuid(), payload.GetProperty("byCustomer").GetBoolean())));
+        await connection.StartAsync();
+        return connection;
+    }
+
+    /// <returns>The link of the order placed in the menu of <paramref name="slug"/>.</returns>
+    private static async Task<string> OrderAsync(HttpClient customer, string slug, Guid product)
+        => (await TwoBusinessesApi.ReadAsync(await customer.PostAsJsonAsync($"/api/v1/public/menu/{slug}/orders", new
+        {
+            customerName = "Cliente Cancela",
+            customerPhone = "5512345678",
+            items = new[] { new { productId = product, quantity = 1 } }
+        }))).GetProperty("trackingToken").GetString()!;
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (!condition() && DateTime.UtcNow < deadline)
+            await Task.Delay(50);
+        // What else arrives with them would come right behind: a moment more before saying nothing else came.
+        await Task.Delay(300);
     }
 
     /// <returns>The slug of the menu, now taking orders.</returns>

@@ -54,8 +54,8 @@ Tomé las decisiones de la Fase 29O con la autorización permanente del dueño d
 5. **Lo compartido.**
    - Quién recibe un aviso y cómo se escribe el correo viven en `Application/Common/Notices`. Cada aviso dice qué eligieron sus miembros y quién puede atenderlo. La 29N usa lo mismo.
 6. **Fuera de esta fase:**
-   - **Un aviso en pantalla de las respuestas a cotizaciones:** necesita un hub para quien trabaja las cotizaciones.
-   - **Avisar cuando el cliente cancela un pedido en línea**, o paga un anticipo.
+   - **Un aviso en pantalla de las respuestas a cotizaciones:** necesita un hub para quien trabaja las cotizaciones. Desde la Fase 29R lo tiene ([ADR 0072](0072-quote-answers-live-and-customer-order-cancellation.md)).
+   - **Avisar cuando el cliente cancela un pedido en línea**, o paga un anticipo. Desde la Fase 29R el cliente cancela el pedido que el negocio no ha aceptado y Pedidos lo avisa al momento ([ADR 0072](0072-quote-answers-live-and-customer-order-cancellation.md)); el anticipo sigue fuera.
    - **Avisar por WhatsApp, con notificaciones del navegador o con un sonido:** siguen como en la [ADR 0068](0068-tell-the-business-of-each-request.md).
    - **Que el dueño elija por su equipo.** Desde la Fase 29Q, el dueño y los administradores eligen los de cada persona, menos los del dueño ([ADR 0071](0071-team-notices-and-orders-cleanup.md)).
    - Lo demás de la [ADR 0068](0068-tell-the-business-of-each-request.md), «Fuera de esta fase».

@@ -664,6 +664,58 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     }
 
     public void Cancel(IOrderStateMachine stateMachine, string? performedBy, string? reason = null)
+        => CancelAs(stateMachine, performedBy, reason, byCustomer: false);
+
+    /// <summary>Who the history says cancelled an order its customer cancelled (Fase 29R).</summary>
+    public const string CustomerPerformedBy = "Cliente";
+    /// <summary>The reason an order its customer cancelled keeps, which its link and the business read.</summary>
+    public const string CustomerCancellationReason = "Lo canceló el cliente.";
+    public const string CustomerCancelNotOnlineMessage = "Este pedido lo tomó el negocio: para cancelarlo, llámale.";
+    public const string CustomerCancelAcceptedMessage = "El negocio ya aceptó tu pedido: para cancelarlo, llámale.";
+    public const string CustomerCancelPaidMessage = "Tu pedido ya tiene un pago: para cancelarlo, llámale al negocio.";
+    public const string CustomerCancelTableMessage = "Un pedido de una mesa se cancela con quien te atiende.";
+    public const string CustomerCancelByBusinessMessage = "El negocio ya canceló tu pedido.";
+
+    /// <summary>
+    /// Whether its customer may still cancel it (Fase 29R, ADR 0072): an order of the online menu the business has not
+    /// accepted yet, with nothing paid or forgiven, and not of a table (one ordered with the QR of a table is handled by
+    /// whoever serves it).
+    /// </summary>
+    public bool CustomerMayCancel =>
+        Channel == OrderChannel.Online && Status == OrderStatus.Pending && PaidAmount == 0 && WrittenOffAmount == 0
+        && TableNumber is null && OpenTableId is null;
+
+    /// <summary>
+    /// Its customer cancels it from their link or their account, while <see cref="CustomerMayCancel"/>: once the business
+    /// accepted it, or something was paid, only the business cancels it. The history says the customer did it.
+    /// </summary>
+    /// <returns>
+    /// False when its customer had already cancelled it (tapped twice, or sent again after the answer was lost): nothing
+    /// changes. One the business cancelled says so.
+    /// </returns>
+    public bool CancelByCustomer(IOrderStateMachine stateMachine)
+    {
+        if (Status == OrderStatus.Cancelled)
+        {
+            // A cancelled order stays so: its one cancellation in the history says who did it.
+            if (StatusHistory.Any(h => h.NewStatus == OrderStatus.Cancelled && h.ChangedBy == CustomerPerformedBy))
+                return false;
+            throw new DomainException(CustomerCancelByBusinessMessage);
+        }
+        if (Channel != OrderChannel.Online)
+            throw new DomainException(CustomerCancelNotOnlineMessage);
+        if (TableNumber is not null || OpenTableId is not null)
+            throw new DomainException(CustomerCancelTableMessage);
+        if (Status != OrderStatus.Pending)
+            throw new DomainException(CustomerCancelAcceptedMessage);
+        if (PaidAmount > 0 || WrittenOffAmount > 0)
+            throw new DomainException(CustomerCancelPaidMessage);
+
+        CancelAs(stateMachine, CustomerPerformedBy, CustomerCancellationReason, byCustomer: true);
+        return true;
+    }
+
+    private void CancelAs(IOrderStateMachine stateMachine, string? performedBy, string? reason, bool byCustomer)
     {
         if (!stateMachine.CanCancel(Status))
             throw new InvalidOrderStateTransitionException(Status, OrderStatus.Cancelled, BusinessType);
@@ -688,7 +740,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         foreach (var piece in _servicePieces.Where(p => p.Status is ServiceOrderPieceStatus.Accepted or ServiceOrderPieceStatus.InProgress))
             piece.UpdateStatus(ServiceOrderPieceStatus.Cancelled);
 
-        AddDomainEvent(new OrderCancelledEvent(Id, TenantId, previousStatus, reason));
+        AddDomainEvent(new OrderCancelledEvent(Id, TenantId, previousStatus, reason, byCustomer));
     }
 
     /// <summary>A new order is built before its folio is taken (<see cref="AssignNumber"/>).</summary>

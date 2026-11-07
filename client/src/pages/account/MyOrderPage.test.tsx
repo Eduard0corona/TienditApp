@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -12,6 +12,10 @@ vi.mock('../../components/common/PageTitle', () => ({
   default: ({ title, parent }: { title: string; parent?: { label: string } }) => <h1>{parent?.label} › {title}</h1>,
 }));
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
+const dialogs = vi.hoisted(() => ({ confirm: vi.fn() }));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => dialogs }));
+vi.mock('../../hooks/useToast', () => ({ useToast: () => toast }));
 
 const request = vi.mocked(apiRequest);
 
@@ -50,6 +54,7 @@ function detail(overrides: Record<string, unknown> = {}) {
     cancellationReason: null,
     tableNumber: null,
     delivery: { postalCode: '72000', addressLine: 'Av. Juárez 120', references: 'Portón verde' },
+    canCancel: false,
     ...overrides,
   };
 }
@@ -163,6 +168,33 @@ describe('MyOrderPage', () => {
     expect(await screen.findByText('Total')).toBeInTheDocument();
     expect(screen.queryByText('Por pagar')).not.toBeInTheDocument();
     expect(screen.getByText('Nada por pagar')).toBeInTheDocument();
+  });
+
+  it('cancels its order while the business has not accepted it, once the customer confirms (Fase 29R)', async () => {
+    const user = userEvent.setup();
+    const waiting = detail({ status: OrderStatus.Pending, step: OrderTrackingStep.Received, stepLabel: 'Recibido', canCancel: true });
+    const cancelled = detail({
+      status: OrderStatus.Cancelled, step: OrderTrackingStep.Cancelled, stepLabel: 'Cancelado', inProgress: false,
+      canCancel: false, cancellationReason: 'Lo canceló el cliente.',
+    });
+    request.mockImplementation(async (_method: string, path: string) => (path.endsWith('/cancel') ? cancelled : waiting) as never);
+    dialogs.confirm.mockResolvedValue(true);
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar pedido' }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Cancelaste tu pedido T-1042.'));
+    expect(request).toHaveBeenCalledWith('post', '/api/v1/me/orders/{id}/cancel', { path: { id: 'o1' } });
+    expect(screen.getByText('Lo canceló el cliente.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancelar pedido' })).not.toBeInTheDocument();
+  });
+
+  it('offers no cancelling once the business accepted it (Fase 29R)', async () => {
+    request.mockResolvedValue(detail() as never);
+    renderPage();
+
+    await screen.findByRole('heading', { name: 'Café Luna' });
+    expect(screen.queryByRole('button', { name: 'Cancelar pedido' })).not.toBeInTheDocument();
   });
 
   it('says so when the order is not the account\'s', async () => {

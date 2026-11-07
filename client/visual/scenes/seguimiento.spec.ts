@@ -2,7 +2,7 @@ import { expect, test } from '../fixtures';
 import { SIZES, open, snap } from '../helpers';
 import { ACCOUNT_PROFILE } from './cuenta-cliente.mocks';
 import { TRACKING_LINK } from './publico-cuenta-marco.mocks';
-import { SEGUIMIENTO_ROUTES } from './seguimiento.mocks';
+import { SEGUIMIENTO_ROUTES, WAITING_TRACKING_LINK } from './seguimiento.mocks';
 
 // Seguimiento (Fase 24C): the detail of an order of María Fernanda's account (the tortas on their way to her home, and a
 // latte the business cancelled), and the order of a guest followed with the link of its receipt.
@@ -46,6 +46,15 @@ test.describe('Detalle del pedido', () => {
     await snap(page, 'detalle-pedido-no-encontrado-telefono');
   });
 
+  test('detalle de un pedido por confirmar', async ({ page }) => {
+    // Fase 29R: while the business has not accepted it, she may cancel it.
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/mis-pedidos/my-5');
+    await expect(page.getByRole('button', { name: 'Cancelar pedido' })).toBeVisible();
+    await expect(page.getByText('Puedes cancelarlo mientras el negocio no lo acepte.')).toBeVisible();
+    await snap(page, 'detalle-pedido-por-confirmar-telefono');
+  });
+
   test('mis pedidos ver pedido', async ({ page }) => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/mis-pedidos');
@@ -72,6 +81,26 @@ test.describe('Seguimiento con enlace', () => {
       });
     });
   }
+
+  test('seguimiento de un pedido por confirmar', async ({ page }) => {
+    // Fase 29R: the guest cancels it from the link while the business has not accepted it.
+    await open(page, `/seguimiento#${WAITING_TRACKING_LINK}`);
+    await page.getByRole('button', { name: 'Cancelar pedido' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Cancelar pedido' });
+    await expect(dialog).toContainText('El negocio todavía no acepta tu pedido ORD-000361.');
+    await snap(page, 'seguimiento-cancelar-pedido-escritorio');
+  });
+
+  test('seguimiento de un pedido que el cliente canceló', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, `/seguimiento#${WAITING_TRACKING_LINK}`);
+    await page.getByRole('button', { name: 'Cancelar pedido' }).click();
+    await page.getByRole('dialog', { name: 'Cancelar pedido' }).getByRole('button', { name: 'Cancelar pedido' }).click();
+    await expect(page.getByText('Lo canceló el cliente.')).toBeVisible();
+    await expect(page.getByText('Cancelaste tu pedido ORD-000361.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Cancelar pedido' })).toHaveCount(0);
+    await snap(page, 'seguimiento-cancelado-por-el-cliente-telefono');
+  });
 
   test('seguimiento sin enlace', async ({ page }) => {
     await page.setViewportSize(SIZES.phone);

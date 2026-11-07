@@ -329,7 +329,15 @@ export default function OrdersList() {
       scheduleReload(payload.orderId);
     });
     const cancelledOff = onOrderCancelled((payload) => {
-      setRealtimeMessage(`Pedido cancelado${payload.reason ? `: ${payload.reason}` : ''}`);
+      if (payload.byCustomer) {
+        // Fase 29R: the customer cancelled it before it was accepted; it rings down, as it rang when it arrived, and the
+        // bell stops counting it.
+        setRealtimeMessage(`El cliente canceló ${payload.orderNumber ? `el pedido ${payload.orderNumber}` : 'un pedido'} antes de que lo aceptaran.`);
+        playChimeRef.current('leaving');
+        void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
+      } else {
+        setRealtimeMessage(`Pedido cancelado${payload.reason ? `: ${payload.reason}` : ''}`);
+      }
       scheduleReload(payload.orderId);
     });
     // The trip written down or the order sent out with the courier (Fase 22D): read again, without a message.
@@ -345,7 +353,7 @@ export default function OrdersList() {
       updatedOff();
       connectedOff();
     };
-  }, [loadOrders, onConnected, onOrderCancelled, onOrderCreated, onOrderStatusChanged, onOrderUpdated, refreshSelectedOrder]);
+  }, [loadOrders, onConnected, onOrderCancelled, onOrderCreated, onOrderStatusChanged, onOrderUpdated, queryClient, refreshSelectedOrder]);
 
   const openPaymentModal = (order: OrderDto) => {
     setPaymentOrder(order);

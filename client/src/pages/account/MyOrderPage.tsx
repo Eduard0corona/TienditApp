@@ -1,8 +1,9 @@
 import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountApi } from '../../api/accountApi';
 import { getApiErrorMessage } from '../../api/errors';
 import PageTitle from '../../components/common/PageTitle';
+import CancelOrderButton from '../../components/tracking/CancelOrderButton';
 import OrderItemsSummary from '../../components/tracking/OrderItemsSummary';
 import OrderTimeline, { OrderStepChip } from '../../components/tracking/OrderTimeline';
 import { useOrderAgain } from '../../hooks/useOrderAgain';
@@ -13,13 +14,16 @@ import { businessWhatsAppUrl } from '../../utils/whatsApp';
 
 /**
  * One order of the customer account (Fase 24C): where it is, step by step with the time of each one, what it carries,
- * where it goes and «Pedir otra vez». It asks again every 20 seconds while the order is in progress.
+ * where it goes and «Pedir otra vez». It asks again every 20 seconds while the order is in progress. While the business has
+ * not accepted it, the customer cancels it from here (Fase 29R).
  */
 export default function MyOrderPage() {
   const { id = '' } = useParams();
   const orderAgain = useOrderAgain();
+  const queryClient = useQueryClient();
+  const queryKey = ['me', 'orders', 'detail', id];
   const orderQuery = useQuery({
-    queryKey: ['me', 'orders', 'detail', id],
+    queryKey,
     queryFn: ({ signal }) => accountApi.getOrder(id, signal),
     refetchInterval: (query) => trackingRefresh(!!query.state.data?.inProgress, query.state.error),
   });
@@ -60,6 +64,20 @@ export default function MyOrderPage() {
                 <OrderTimeline steps={order.steps} />
                 {order.step === OrderTrackingStep.Cancelled && order.cancellationReason && (
                   <p className="small mt-3 mb-0"><span className="text-muted">Motivo:</span> {order.cancellationReason}</p>
+                )}
+                {order.canCancel && (
+                  <CancelOrderButton
+                    orderNumber={order.orderNumber}
+                    cancel={async () => {
+                      const cancelled = await accountApi.cancelOrder(id);
+                      // A reading of every 20 seconds that left before the answer must not bring it back as it was.
+                      await queryClient.cancelQueries({ queryKey });
+                      queryClient.setQueryData(queryKey, cancelled);
+                      // The list of the account says where each order is: it reads again when opened.
+                      void queryClient.invalidateQueries({ queryKey: ['me', 'orders'], refetchType: 'none' });
+                    }}
+                    onRefused={() => void orderQuery.refetch()}
+                  />
                 )}
                 {order.courierTrackingUrl && (
                   <a className="btn btn-light btn-sm mt-3" href={order.courierTrackingUrl} target="_blank" rel="noopener noreferrer">

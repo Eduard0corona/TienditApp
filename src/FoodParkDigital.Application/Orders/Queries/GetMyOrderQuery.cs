@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +52,11 @@ public class MyOrderDetailDto
     public decimal WrittenOffAmount { get; set; }
     /// <summary>What the business said when it cancelled it, as the customer heard it by WhatsApp.</summary>
     public string? CancellationReason { get; set; }
+    /// <summary>
+    /// Whether the customer may still cancel it from their account (Fase 29R, ADR 0072): an order of the online menu the
+    /// business has not accepted, with nothing paid.
+    /// </summary>
+    public bool CanCancel { get; set; }
     /// <summary>The table it was ordered from («Mesa 4»).</summary>
     public string? TableNumber { get; set; }
     /// <summary>Where it goes; none for an order picked up or served.</summary>
@@ -78,15 +84,25 @@ public class GetMyOrderQueryHandler : IRequestHandler<GetMyOrderQuery, MyOrderDe
     }
 
     public async Task<MyOrderDetailDto?> Handle(GetMyOrderQuery request, CancellationToken cancellationToken)
-    {
-        if (!Guid.TryParse(_currentUser.UserId, out var userId))
-            return null;
+        => Guid.TryParse(_currentUser.UserId, out var userId)
+            ? await MyOrder.ReadAsync(_context, userId, request.Id, _clock.UtcNow, cancellationToken)
+            : null;
+}
 
-        // The account's orders are in every business: the business filter is replaced by the account filter, as in its list.
-        var order = await CustomerOrderView.FirstAsync(
-            _context,
-            _context.Orders.IgnoreQueryFilters().Where(o => o.Id == request.Id && o.CustomerUserId == userId),
-            cancellationToken);
+/// <summary>One order of the customer account, whatever business it is in, and how the account shows it.</summary>
+internal static class MyOrder
+{
+    /// <summary>
+    /// The order of the account itself, in every business: the business filter is replaced by the account filter, as in its
+    /// list.
+    /// </summary>
+    public static IQueryable<Order> Of(IApplicationDbContext context, Guid userId, Guid orderId)
+        => context.Orders.IgnoreQueryFilters().Where(o => o.Id == orderId && o.CustomerUserId == userId);
+
+    public static async Task<MyOrderDetailDto?> ReadAsync(
+        IApplicationDbContext context, Guid userId, Guid orderId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var order = await CustomerOrderView.FirstAsync(context, Of(context, userId, orderId), cancellationToken);
         if (order is null)
             return null;
 
@@ -105,7 +121,7 @@ public class GetMyOrderQueryHandler : IRequestHandler<GetMyOrderQuery, MyOrderDe
             Step = step,
             StepLabel = label,
             Steps = order.Steps(),
-            InProgress = OrderTracking.IsInProgress(order.Status, order.CreatedAt, _clock.UtcNow),
+            InProgress = OrderTracking.IsInProgress(order.Status, order.CreatedAt, now),
             CourierTrackingUrl = order.CourierTrackingUrl,
             Items = order.Items,
             DeliveryFee = order.DeliveryFee,
@@ -116,6 +132,7 @@ public class GetMyOrderQueryHandler : IRequestHandler<GetMyOrderQuery, MyOrderDe
             PaidAmount = order.PaidAmount,
             WrittenOffAmount = order.WrittenOffAmount,
             CancellationReason = order.CancellationReason,
+            CanCancel = order.CustomerMayCancel,
             TableNumber = order.TableNumber,
             Delivery = order.HasDelivery
                 ? new MyOrderDeliveryDto { PostalCode = order.PostalCode!, AddressLine = order.AddressLine!, References = order.References }

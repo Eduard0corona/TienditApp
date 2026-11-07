@@ -1,8 +1,9 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicMenuApi } from '../../api/publicMenuApi';
 import PageTitle from '../../components/common/PageTitle';
+import CancelOrderButton from '../../components/tracking/CancelOrderButton';
 import OrderItemsSummary from '../../components/tracking/OrderItemsSummary';
 import OrderTimeline, { OrderStepChip } from '../../components/tracking/OrderTimeline';
 import { OrderTrackingStep } from '../../types';
@@ -13,12 +14,15 @@ import { businessWhatsAppUrl } from '../../utils/whatsApp';
 /**
  * An online order followed with the link of its receipt (/seguimiento#link, Fase 24C), without an account. The link lives
  * in the fragment, which the browser never sends to a server; the page sends it in the body of its request. It asks again
- * every 20 seconds while the order is in progress.
+ * every 20 seconds while the order is in progress. While the business has not accepted it, the customer cancels it from
+ * here (Fase 29R).
  */
 export default function OrderTrackingPage() {
   const token = useLocation().hash.replace(/^#/, '');
+  const queryClient = useQueryClient();
+  const queryKey = ['public', 'tracking', token];
   const trackingQuery = useQuery({
-    queryKey: ['public', 'tracking', token],
+    queryKey,
     queryFn: ({ signal }) => publicMenuApi.trackOrder(token, signal),
     enabled: token.length > 0,
     retry: false,
@@ -66,6 +70,18 @@ export default function OrderTrackingPage() {
                 <OrderTimeline steps={order.steps} />
                 {order.step === OrderTrackingStep.Cancelled && order.cancellationReason && (
                   <p className="small mt-3 mb-0"><span className="text-muted">Motivo:</span> {order.cancellationReason}</p>
+                )}
+                {order.canCancel && (
+                  <CancelOrderButton
+                    orderNumber={order.orderNumber}
+                    cancel={async () => {
+                      const cancelled = await publicMenuApi.cancelOrderByLink(token);
+                      // A reading of every 20 seconds that left before the answer must not bring it back as it was.
+                      await queryClient.cancelQueries({ queryKey });
+                      queryClient.setQueryData(queryKey, cancelled);
+                    }}
+                    onRefused={() => void trackingQuery.refetch()}
+                  />
                 )}
                 {order.courierTrackingUrl && (
                   <a className="btn btn-light btn-sm mt-3" href={order.courierTrackingUrl} target="_blank" rel="noopener noreferrer">

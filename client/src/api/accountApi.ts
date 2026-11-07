@@ -31,6 +31,9 @@ export const accountApi = {
   /** One order of the account, step by step; any other is not found (404). */
   getOrder: (id: string, signal?: AbortSignal) => apiRequest('get', '/api/v1/me/orders/{id}', { path: { id }, signal }),
 
+  /** Cancels one of them while the business has not accepted it (Fase 29R); any other is not found (404). */
+  cancelOrder: (id: string) => apiRequest('post', '/api/v1/me/orders/{id}/cancel', { path: { id } }),
+
   /** The appointments the account booked online, in every business (Fase 24D): upcoming soonest first, or the ones before. */
   getAppointments: (scope: MyAppointmentsScope, pageNumber: number, pageSize: number, signal?: AbortSignal) =>
     apiRequest('get', '/api/v1/me/appointments', { query: { scope, pageNumber, pageSize }, signal }),
