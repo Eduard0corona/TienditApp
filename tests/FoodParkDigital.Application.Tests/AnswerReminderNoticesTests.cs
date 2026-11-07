@@ -2,6 +2,8 @@ using FoodParkDigital.Application.Appointments.RequestNotices;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Appointments.Events;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -111,6 +113,41 @@ public class AnswerReminderNoticesTests
         Assert.Contains("un recordatorio de las que siguen sin respuesta", sent.Body);
         Assert.DoesNotContain("5522107765", sent.Body + sent.Subject);
         Assert.DoesNotContain("largo", sent.Body);
+    }
+
+    [Fact]
+    public async Task TheReminderOfAVisit_ShouldSaySo_ByTheTimeItsCustomerAskedFor_ThoughTheBusinessMovedIt()
+    {
+        await using var fixture = Fixture();
+        var (trade, zone) = await TradeAsync(fixture, "plomeria", "Plomería Rápida");
+        var owner = await MemberAsync(fixture, trade, "dueño", TenantUserRole.Owner);
+        // Arrived 4 h 10 min ago for 5 hours after it arrived: by today at 11:50, in 50 minutes (Mexico City). The business
+        // moved it to tomorrow at 9:00; by that time its limit would be a day after it arrived, tomorrow at 6:50.
+        var arrived = Now.AddHours(-4).AddMinutes(-10);
+        var asked = arrived.AddHours(5);
+        var visit = Appointment.RequestHomeVisit(
+            trade.Id, "Valeria", "+525522107765", null, HomeVisitRules.DefaultVisitName, asked, asked.AddHours(1), "Gotea el calentador",
+            null, DeliveryAddress.ForVisit("72000", "Av. Juárez 123, Col. Centro", null), zone, HomeVisitChargePolicy.Charged, null,
+            Guid.NewGuid(), new string('v', 43));
+        visit.CreatedAt = arrived;
+        var tomorrow = new DateTimeOffset(2027, 3, 2, 9, 0, 0, TimeSpan.FromHours(-6));
+        visit.Update("Valeria", "+525522107765", HomeVisitRules.DefaultVisitName, tomorrow, tomorrow.AddHours(1), null, null);
+        fixture.Context.Appointments.Add(visit);
+        await fixture.Context.SaveChangesAsync();
+
+        fixture.TenantService.SetTenant(trade.Id);
+        Assert.Equal(1, await new AnswerReminderPlanner(fixture.Context, fixture.Clock).RemindDueAsync(CancellationToken.None));
+        await fixture.Context.SaveChangesAsync();
+        Assert.Equal([owner], (await QueueAsync(fixture, trade, visit)).Select(q => q.Event.UserId));
+        var sent = Assert.Single(await SendAsync(fixture, trade, visit, owner));
+
+        Assert.Equal("Responde a tiempo la solicitud de visita en Plomería Rápida: Visita a domicilio, martes 2 de marzo a las 9:00 a. m.", sent.Subject);
+        Assert.Contains("<h2>Una solicitud de visita sigue sin respuesta</h2>", sent.Body);
+        Assert.Contains("<p><strong>Valeria</strong> pidió una visita a domicilio a Plomer&#237;a R&#225;pida para el martes 2 de marzo a las 9:00 a. m.</p>", sent.Body);
+        Assert.Contains("<p>Respóndela antes del lunes 1 de marzo a las 11:50 a. m. para que cuente como respondida a tiempo.</p>", sent.Body);
+        Assert.DoesNotContain("Juárez", sent.Body);
+        Assert.DoesNotContain("72000", sent.Body);
+        Assert.DoesNotContain("calentador", sent.Body);
     }
 
     /// <summary>The reminders the outbox queued for <paramref name="request"/> once it was reminded.</summary>

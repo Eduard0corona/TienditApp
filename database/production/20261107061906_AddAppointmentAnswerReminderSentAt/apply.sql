@@ -11,7 +11,7 @@
 --   - [Appointments].[AnswerReminderSentAt]: columna nueva, datetimeoffset NULL, sin valor por
 --     omisión: cuándo se le recordó al negocio responder a tiempo una solicitud en línea que seguía
 --     por confirmar. No cambia datos: todas las citas quedan en NULL; una solicitud que ya espera
---     se recuerda si todavía no llega la hora de su recordatorio.
+--     se recuerda mientras no llegue su límite.
 -- El barrido de los recordatorios lee las solicitudes en línea de las últimas 24 horas con el índice
 -- que ya existe, [IX_Appointments_OnlineRequests_CreatedAt] (Fase 29J): no necesita otro.
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base

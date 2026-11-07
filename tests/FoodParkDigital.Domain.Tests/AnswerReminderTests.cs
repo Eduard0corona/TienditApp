@@ -45,6 +45,17 @@ public class AnswerReminderTests
     }
 
     [Fact]
+    public void AReminderThatMissedItsHour_ShouldStillGoOut_UntilTheLimit()
+    {
+        // The worker was stopped from an hour before its limit: it reminds it when it comes back, while there is still time.
+        var request = Request(startsAfter: TimeSpan.FromHours(5));
+        var limit = Arrived.AddHours(5);
+
+        Assert.True(request.RemindToAnswer(limit.AddMinutes(-1)));
+        Assert.Equal(limit.AddMinutes(-1), request.AnswerReminderSentAt);
+    }
+
+    [Fact]
     public void ARequestPastItsLimit_ShouldNotBeReminded_NorOneWhoseLimitCameTooSoon()
     {
         var late = Request(startsAfter: TimeSpan.FromHours(5));

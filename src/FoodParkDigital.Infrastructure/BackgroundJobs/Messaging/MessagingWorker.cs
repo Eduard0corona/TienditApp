@@ -214,7 +214,10 @@ public sealed class MessagingWorker
                     && !a.FromTeam
                     && a.AnswerReminderSentAt == null
                     && a.CreatedAt >= since
-                    && context.Tenants.Any(t => t.Id == a.TenantId && t.Status == TenantStatus.Active))
+                    && context.Tenants.Any(t => t.Id == a.TenantId && t.Status == TenantStatus.Active)
+                    // Only where someone may answer it: a business that turned its agenda off is reminded once it turns it on.
+                    && context.TenantSettings.Any(s => s.TenantId == a.TenantId
+                        && (s.Capabilities & TenantCapability.Appointments) == TenantCapability.Appointments))
                 .Select(a => a.TenantId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
