@@ -128,7 +128,7 @@ public class RequestNoticesTests
         Assert.Contains($"<a href='{AppUrl}/appointments'>Abrir la Agenda</a>", sent.Body);
         // Since the Fase 29O the same choice also brings the appointments its customers cancel.
         Assert.Contains(
-            $"Te llega porque recibes un correo con cada solicitud en línea de Est&#233;tica &lt;Luna&gt; &amp; Sol y con cada cita que sus clientes cancelan. Puedes dejar de recibirlos en <a href='{AppUrl}/profile'>Mi perfil</a>.",
+            $"Te llega porque recibes un correo con cada solicitud en línea de Est&#233;tica &lt;Luna&gt; &amp; Sol, un recordatorio de las que siguen sin respuesta y uno con cada cita que sus clientes cancelan. Puedes dejar de recibirlos en <a href='{AppUrl}/profile'>Mi perfil</a>.",
             sent.Body);
         Assert.DoesNotContain("5522107765", sent.Body + sent.Subject);
         Assert.DoesNotContain("largo", sent.Body);

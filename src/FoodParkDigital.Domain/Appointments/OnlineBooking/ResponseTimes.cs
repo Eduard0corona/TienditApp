@@ -59,6 +59,24 @@ public static class ResponseTimes
     }
 
     /// <summary>
+    /// How long before its limit (<see cref="AnswerBy"/>) a request still waiting is recalled to its business (Fase 29U, ADR
+    /// 0075).
+    /// </summary>
+    public static readonly TimeSpan ReminderLead = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// When to recall a request still waiting to its business (Fase 29U, ADR 0075): <see cref="ReminderLead"/> before its
+    /// limit. Null when its limit came less than two of those after it arrived: the email of its arrival is enough.
+    /// </summary>
+    /// <param name="arrivedAt">When the request arrived.</param>
+    /// <param name="askedFor">The time its customer asked for (<c>RequestedStartAt</c>, or its time when it has none).</param>
+    public static DateTimeOffset? RemindAt(DateTimeOffset arrivedAt, DateTimeOffset askedFor)
+    {
+        var answerBy = AnswerBy(arrivedAt, askedFor);
+        return answerBy - arrivedAt < ReminderLead * 2 ? null : answerBy - ReminderLead;
+    }
+
+    /// <summary>
     /// Within what it answers: the soonest <see cref="ResponseTime"/> that holds at least half of its requests, the slowest
     /// counted last. Null with fewer than <see cref="MinRequests"/>.
     /// </summary>

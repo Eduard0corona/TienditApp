@@ -68,7 +68,7 @@ describe('EmployeeFormModal: the notices by email of each person (Fase 29Q)', ()
     const agenda = screen.getByRole('switch', { name: 'Citas en línea' });
     const quotes = screen.getByRole('switch', { name: 'Cotizaciones' });
     expect(agenda).not.toBeChecked();
-    expect(agenda).toHaveAccessibleDescription('Cada solicitud de cita o de visita y cada cita que un cliente cancela.');
+    expect(agenda).toHaveAccessibleDescription('Cada solicitud de cita o de visita, su recordatorio si sigue sin respuesta y cada cita que un cliente cancela.');
     expect(screen.getByText(/Le llegan a recepcion@demo\.com\. También los puede cambiar en Mi perfil\./)).toBeInTheDocument();
 
     await user.click(agenda);

@@ -261,7 +261,7 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
                 {offersRequests && (
                   <NoticeSwitch
                     label="Citas en línea"
-                    description="Cada solicitud de cita o de visita y cada cita que un cliente cancela."
+                    description="Cada solicitud de cita o de visita, su recordatorio si sigue sin respuesta y cada cita que un cliente cancela."
                     checked={requestEmails}
                     onChange={setRequestEmails}
                     missing={missingPermission('ManageAppointments')}
