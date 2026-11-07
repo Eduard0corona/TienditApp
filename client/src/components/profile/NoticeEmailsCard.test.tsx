@@ -54,7 +54,7 @@ describe('NoticeEmailsCard (Fases 29N and 29O)', () => {
     const quotes = await screen.findByRole('switch', { name: 'Cotizaciones' });
     await waitFor(() => expect(quotes).toBeChecked());
     expect(agenda).toBeChecked();
-    expect(agenda).toHaveAccessibleDescription('Cada solicitud de cita o de visita de Estética Luna y cada cita que un cliente cancela.');
+    expect(agenda).toHaveAccessibleDescription('Cada solicitud de cita o de visita de Estética Luna, su recordatorio si sigue sin respuesta y cada cita que un cliente cancela.');
     expect(quotes).toHaveAccessibleDescription('Cada vez que un cliente acepta o rechaza desde su enlace una cotización de Estética Luna.');
     expect(screen.getByText('ana@demo.com')).toBeInTheDocument();
     expect(screen.queryByText(/no está confirmado/)).not.toBeInTheDocument();
