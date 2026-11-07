@@ -2200,12 +2200,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `ExploreResponseTimeTests`: la lista completa sigue el mismo orden que una categoría.
   - **WebApi:**
     - `TenantFilterBypassAllowlistTests`: `PublicDirectoryFeature.cs` pasa de 5 a 7 lecturas entre negocios (las visitas y sus cotizaciones, unidas dentro del mismo negocio).
+    - `ClientEnumContractTests` (+1): la copia del cliente de `QuoteTime` es igual al enum del dominio.
     - `CrossTenantDirectoryQuoteTimeSqlServerTests` (2, nuevo, SQL Server): los mismos tres clientes piden visita a dos oficios; uno cotiza las tres y su tarjeta y su página de visita dicen «menos de un día», el otro cotiza una y no dice nada; las esperas de 23 horas, un día exacto, 3 días exactos y más de una semana dan «menos de 3 días».
   - **Cliente:**
     - `responseTime.test.ts` (+2): el texto de cada tramo de cotizar hasta una semana, y las notas del dueño (dónde lo leen sus clientes, que una semana o más no se dice, o que todavía no se cuenta).
     - `DirectoryBusinessCard.test.tsx` (+1) y `PublicHomeVisitPage.test.tsx` (+1): el tiempo de cotizar en la tarjeta de un oficio y en su página de visita, nunca en un negocio sin visitas.
     - `DirectoryCard.test.tsx` (+1): «Cómo te ven» dice el tramo, que tarda una semana o más, o que todavía no se cuenta, y nada de cotizar si Explorar no cuenta sus cotizaciones.
-  - **Cliente en total:** 204 archivos y 1,555 pruebas.
+  - **.NET en total:** 4,767 pruebas en verde con SQL Server (Domain 1,403; Application 2,157; WebApi 499; Infrastructure 708). **Cliente en total:** 204 archivos y 1,555 pruebas.
   - **Primera visita:** 182,011 B (`master` en `07c926b`: 181,988 B, +23 B): el enum `QuoteTime` va en la entrada con los demás enums generados; la etiqueta se carga con Explorar y las notas del dueño con Configuración. La entrada lleva los nombres con hash de los chunks que carga aparte, y su gzip cambia unos 20 B entre builds con el mismo código en la primera visita (`585c4ed`: 181,989 B; `bc84467`: 182,011 B). El presupuesto sube de 182,000 a 182,100 B. El CSS global, 63,077 B de 63,200 B.
   - **Revisión independiente**, sin bloqueantes, con estos arreglos:
     - contaba visitas que no pasaron (canceladas, no asistidas o por venir) con una cotización mandada: ahora solo las que ya terminaron;
