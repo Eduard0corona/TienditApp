@@ -20,9 +20,11 @@ internal static class PublicResponseTime
     public static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(10);
 
     /// <summary>
-    /// The entry of the business in the snapshot, or null: Explorar does not list it, the snapshot could not read how soon
-    /// its businesses answer, or another request is rebuilding it (<see cref="PublicDirectoryCache.GetWithoutWaitingAsync"/>).
-    /// A snapshot that cannot be read never takes the page with it, and the page never waits in line for it.
+    /// The entry of the business in the snapshot, or null: Explorar does not list it, or another request is rebuilding it
+    /// (<see cref="PublicDirectoryCache.GetWithoutWaitingAsync"/>). Each time it holds says whether the snapshot could read it
+    /// (<see cref="PublicDirectorySnapshot.Entry.ResponseTimeRead"/> and the others): one that failed is null there, and never
+    /// hides another (Fase 29T). A snapshot that cannot be built never takes the page with it, and the page never waits in
+    /// line for it.
     /// </summary>
     public static Task<PublicDirectorySnapshot.Entry?> EntryAsync(
         PublicDirectoryCache cache,
@@ -52,9 +54,7 @@ internal static class PublicResponseTime
         try
         {
             var snapshot = await cache.GetWithoutWaitingAsync(utcNow, build, maxAge, cancellationToken);
-            return snapshot is { ResponseTimesRead: true }
-                ? snapshot.Entries.FirstOrDefault(entry => entry.TenantId == tenantId)
-                : null;
+            return snapshot?.Entries.FirstOrDefault(entry => entry.TenantId == tenantId);
         }
         // A customer who leaves cancels the page; the rebuild's own time limit, or any failure, only leaves it without it.
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)

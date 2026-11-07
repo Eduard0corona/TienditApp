@@ -172,6 +172,8 @@ function publicMenu(data: DemoData, slug: string, table: string | null) {
       paysOnline: !!data.menuPaysOnline,
       // Its rating (Fase 24H), from the reviews a scene gives it.
       rating: ratingOf((data.reviews ?? []).filter((review: { slug: string }) => review.slug === slug)),
+      // How soon it confirms its online orders (Fase 29T), when a scene says it; never at a table, as the API does.
+      orderConfirmTime: table ? null : data.menuOrderConfirmTime ?? null,
     },
   };
 }

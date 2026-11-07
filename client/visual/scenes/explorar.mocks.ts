@@ -1,17 +1,26 @@
 import { asOption, type DemoData } from '../fixtures';
 import { demoDirectory } from '../mocks/routes-p9.mjs';
 
-// OnlineMenuMode as the contract numbers it.
+// OnlineMenuMode, BusinessCategory and OrderConfirmTime as the contract numbers them.
 const ORDERS = 2;
+const FOOD = 0;
+const CONFIRMS_WITHIN_FIVE_MINUTES = 0;
 
 /** No business published its menu yet. */
 function emptyDirectory(data: DemoData) {
   data.directory = [];
 }
 
-/** The demo business takes orders online, so Explorar lists it. */
+/**
+ * The demo business takes orders online, so Explorar lists it; it confirms them within five minutes (Fase 29T, ADR 0074),
+ * which its owner reads under the preview of its card.
+ */
 function menuWithOrders(data: DemoData) {
   data.tenant.onlineMenuMode = ORDERS;
+  data.directoryProfile = {
+    category: FOOD, suggestedCategory: FOOD, description: 'Café de especialidad, pan dulce y chilaquiles desde 2021.', listed: true,
+    countsOrders: true, orderConfirmTime: CONFIRMS_WITHIN_FIVE_MINUTES,
+  };
 }
 
 export const SIN_NEGOCIOS = asOption(emptyDirectory);

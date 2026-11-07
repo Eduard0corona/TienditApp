@@ -45,6 +45,8 @@ export function demoDirectory() {
       logoUrl: '/visual-img/logo.svg', coverImageUrl: '/visual-img/portada.svg',
       description: 'Café de especialidad, pan dulce y chilaquiles desde 2021.',
       acceptsOrders: true, deliveryAvailable: true, statusLabel: 'Abierto', statusDetail: 'cierra a las 15:00',
+      // It confirms its online orders within five minutes (Fase 29T, OrderConfirmTime.WithinFiveMinutes).
+      orderConfirmTime: 0,
     }),
     card('Taquería El Güero', 'taqueria-el-guero', FOOD, {
       description: 'Tacos al pastor y de suadero. Gringas y quesadillas.', theme: TALAVERA, acceptsOrders: true,

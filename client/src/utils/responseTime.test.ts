@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { QuoteTime, ResponseTime } from '../api/generated/enums';
+import { OrderConfirmTime, QuoteTime, ResponseTime } from '../api/generated/enums';
 import { setBusinessTimeZone } from './dates';
-import { ownQuoteTimeNote, ownResponseTimeNote } from './ownResponseTime';
-import { answerInTimeLabel, quoteTimeLabel, responseTimeLabel } from './responseTime';
+import { ownOrderConfirmTimeNote, ownQuoteTimeNote, ownResponseTimeNote } from './ownResponseTime';
+import { answerInTimeLabel, orderConfirmTimeLabel, quoteTimeLabel, responseTimeLabel } from './responseTime';
 
 describe('responseTimeLabel (Fase 29J)', () => {
   it('says within what the business answers, up to a day', () => {
@@ -88,5 +88,22 @@ describe('quoteTimeLabel and ownQuoteTimeNote (Fase 29S)', () => {
     expect(ownQuoteTimeNote(QuoteTime.WithinADay)).toMatch(/Tus clientes lo leen en tu tarjeta y donde te piden la visita\.$/);
     expect(ownQuoteTimeNote(QuoteTime.Slower)).toMatch(/^Sueles tardar una semana o más/);
     expect(ownQuoteTimeNote(null)).toMatch(/^Todavía no contamos visitas en línea de 3 clientes/);
+  });
+});
+
+describe('orderConfirmTimeLabel and ownOrderConfirmTimeNote (Fase 29T)', () => {
+  it('says within what the business confirms its online orders, up to half an hour', () => {
+    expect(orderConfirmTimeLabel(OrderConfirmTime.WithinFiveMinutes)).toBe('Suele confirmar los pedidos en menos de 5 minutos');
+    expect(orderConfirmTimeLabel(OrderConfirmTime.WithinFifteenMinutes)).toBe('Suele confirmar los pedidos en menos de 15 minutos');
+    expect(orderConfirmTimeLabel(OrderConfirmTime.WithinHalfAnHour)).toBe('Suele confirmar los pedidos en menos de media hora');
+    expect(orderConfirmTimeLabel(OrderConfirmTime.Slower)).toBeNull();
+    expect(orderConfirmTimeLabel(null)).toBeNull();
+    expect(orderConfirmTimeLabel(undefined)).toBeNull();
+  });
+
+  it('tells its owner where customers read it, that half an hour or more is not said, or that it is not counted yet', () => {
+    expect(ownOrderConfirmTimeNote(OrderConfirmTime.WithinFiveMinutes)).toMatch(/Tus clientes lo leen en tu tarjeta y en tu menú\.$/);
+    expect(ownOrderConfirmTimeNote(OrderConfirmTime.Slower)).toMatch(/^Sueles tardar media hora o más/);
+    expect(ownOrderConfirmTimeNote(null)).toMatch(/^Todavía no contamos pedidos en línea de 3 clientes/);
   });
 });

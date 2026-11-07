@@ -25,7 +25,10 @@ test.describe('Explorar', () => {
 
       test(`explorar ${look.suffix}`, async ({ page }) => {
         await open(page, '/explorar');
-        await expect(page.getByRole('link', { name: /^Café La Esquina/ })).toBeVisible();
+        const cafe = page.getByRole('link', { name: /^Café La Esquina/ });
+        await expect(cafe).toBeVisible();
+        // Fase 29T: it confirms its online orders within five minutes.
+        await expect(cafe.getByText('Suele confirmar los pedidos en menos de 5 minutos')).toBeVisible();
         await snap(page, `explorar-${look.suffix}`);
       });
     });
@@ -159,6 +162,9 @@ test.describe('Cómo te ven en TienditApp', () => {
     await open(page, '/settings/business');
     const card = page.getByRole('region', { name: 'Cómo te ven en TienditApp' });
     await expect(card.getByText(/Apareces en Explorar/)).toBeVisible();
+    // Fase 29T: its card says how soon it confirms its orders, and its owner reads where customers read it.
+    await expect(card.getByText('Suele confirmar los pedidos en menos de 5 minutos')).toBeVisible();
+    await expect(card.getByText(/Tus clientes lo leen en tu tarjeta y en tu menú/)).toBeVisible();
     await snapElement(card, 'negocio-como-te-ven');
   });
 });

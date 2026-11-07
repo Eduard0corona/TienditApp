@@ -25,6 +25,7 @@ using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Dining.Entities;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
@@ -183,6 +184,11 @@ public class PublicMenuDto
     /// or receives visits, Explorar lists it and it answers within a day. Null otherwise, and at a table.
     /// </summary>
     public ResponseTime? ResponseTime { get; set; }
+    /// <summary>
+    /// How soon it confirms its online orders (Fase 29T, ADR 0074), as its card in Explorar says it: while it takes online
+    /// orders, Explorar lists it and it confirms within half an hour. Null otherwise, and at a table.
+    /// </summary>
+    public OrderConfirmTime? OrderConfirmTime { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
 }
 
@@ -444,6 +450,13 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             && await OnlineBookingCalendar.OfferedServices(_context).AnyAsync(cancellationToken);
 
         var homeVisits = await PublicHomeVisits.ReadAsync(_context, tenant, settings, cancellationToken);
+        // How soon it answers its requests (Fase 29K) and confirms its orders (Fase 29T), as its card in Explorar says it:
+        // one read of its entry, while it takes either now. Not at a table, where only the order is requested and whoever
+        // serves it is there.
+        var takesRequests = booksOnline || homeVisits is not null;
+        var entry = settings.ListedInDirectory && string.IsNullOrWhiteSpace(request.Table) && (takesRequests || ordersOn)
+            ? await PublicResponseTime.EntryAsync(_directory, _context, utcNow, tenant.Id, _logger, cancellationToken)
+            : null;
         var cover = LogoImageUrlsDto.FromBaseUrl(tenant.CoverImageUrl);
         return new PublicMenuDto
         {
@@ -471,11 +484,8 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             BooksOnline = booksOnline,
             HomeVisits = homeVisits,
             Rating = await ReviewRules.SummaryAsync(_context, cancellationToken),
-            // Not at a table, where only the order is requested.
-            ResponseTime = await PublicResponseTime.ShownAsync(
-                _directory, _context, utcNow, tenant.Id,
-                settings.ListedInDirectory && string.IsNullOrWhiteSpace(request.Table) && (booksOnline || homeVisits is not null),
-                _logger, cancellationToken),
+            ResponseTime = takesRequests ? entry?.Business.ResponseTime : null,
+            OrderConfirmTime = ordersOn ? entry?.Business.OrderConfirmTime : null,
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto

@@ -26,7 +26,7 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
 3. **Fuera de esta fase:**
    - Contar como lenta una visita que nunca se cotizó.
    - Ordenar por el tiempo de cotizar.
-   - Los pedidos en línea de los restaurantes (punto 8, Fase 29T).
+   - Los pedidos en línea de los restaurantes: llegó en la Fase 29T ([ADR 0074](0074-order-confirm-time.md)).
 
 ## Consecuencias
 

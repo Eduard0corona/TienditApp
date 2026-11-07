@@ -57,6 +57,8 @@ test.describe('La tienda', () => {
         await open(page, '/m/cafe-la-esquina');
         await expect(page.getByRole('heading', { name: 'Café La Esquina' })).toBeVisible();
         await expect(page.getByRole('region', { name: 'Destacados' })).toBeVisible();
+        // Fase 29T: it confirms its online orders within five minutes, as its card in Explorar says.
+        await expect(page.getByText('Suele confirmar los pedidos en menos de 5 minutos')).toBeVisible();
         await snap(page, `tienda-${look.suffix}`);
       });
     });

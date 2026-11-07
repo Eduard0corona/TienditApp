@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { BusinessCategory, HomeVisitChargePolicy, QuoteTime, ResponseTime } from '../../api/generated/enums';
+import { BusinessCategory, HomeVisitChargePolicy, OrderConfirmTime, QuoteTime, ResponseTime } from '../../api/generated/enums';
 import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
 import DirectoryBusinessCard from './DirectoryBusinessCard';
 
@@ -55,6 +55,23 @@ describe('DirectoryBusinessCard', () => {
     const [trade, salon] = screen.getAllByRole('link');
     expect(trade).toHaveTextContent('Suele mandar la cotización en menos de 3 días');
     expect(salon).not.toHaveTextContent('cotización');
+  });
+
+  it('says how soon a business that takes online orders confirms them, paused too, and never for one without orders (Fase 29T)', () => {
+    renderCard(business({ name: 'Tacos El Güero', acceptsOrders: true, orderConfirmTime: OrderConfirmTime.WithinFiveMinutes }));
+    renderCard(business({ name: 'Pizzería Napoli', acceptsOrders: false, ordersPaused: true, orderConfirmTime: OrderConfirmTime.WithinHalfAnHour }));
+    renderCard(business({ name: 'Café Luna', acceptsOrders: false, ordersPaused: false, orderConfirmTime: OrderConfirmTime.WithinFiveMinutes }));
+    // A trade whose orders are paused speaks of its visits only.
+    renderCard(business({
+      name: 'Plomería Hernández', receivesVisits: true, acceptsOrders: false, ordersPaused: true,
+      orderConfirmTime: OrderConfirmTime.WithinFiveMinutes,
+    }));
+
+    const [taking, paused, menuOnly, trade] = screen.getAllByRole('link');
+    expect(taking).toHaveTextContent('Suele confirmar los pedidos en menos de 5 minutos');
+    expect(paused).toHaveTextContent('Suele confirmar los pedidos en menos de media hora');
+    expect(menuOnly).not.toHaveTextContent('Suele confirmar');
+    expect(trade).not.toHaveTextContent('Suele confirmar');
   });
 
   it('says nothing of how soon it answers when the server sends none (Fase 29J)', () => {

@@ -253,7 +253,7 @@ public class ResponseTimeOutsideExploreTests
 
         var snapshot = await PublicDirectorySnapshot.BuildAsync(fixture.Context, Now, CancellationToken.None);
 
-        Assert.False(snapshot.ResponseTimesRead);
+        Assert.False(Assert.Single(snapshot.Entries).ResponseTimeRead);
         Assert.Null(Assert.Single(snapshot.Entries).Business.ResponseTime);
         Assert.Equal((false, (ResponseTime?)null), await ProfileAsync(fixture, salon));
         Assert.Null((await StoreAsync(fixture, "rapida"))!.ResponseTime);
@@ -318,7 +318,8 @@ public class ResponseTimeOutsideExploreTests
         var read = await PublicDirectorySnapshot.BuildAsync(fixture.Context, Now, CancellationToken.None);
         var unread = new PublicDirectoryCache();
         await unread.GetAsync(
-            Now, (now, _) => Task.FromResult(new PublicDirectorySnapshot(now, read.Entries, responseTimesRead: false)), CancellationToken.None);
+            Now, (now, _) => Task.FromResult(new PublicDirectorySnapshot(now, read.Entries.Select(entry => entry with { ResponseTimeRead = false }).ToList())),
+            CancellationToken.None);
         Assert.Equal((false, (ResponseTime?)null), await ProfileAsync(fixture, slow, unread));
 
         // Saving its card answers with it too.

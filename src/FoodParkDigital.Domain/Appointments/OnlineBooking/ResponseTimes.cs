@@ -1,3 +1,5 @@
+using FoodParkDigital.Domain.Common;
+
 namespace FoodParkDigital.Domain.Appointments.OnlineBooking;
 
 /// <summary>How soon a business answers the requests its customers make online, as Explorar says it (Fase 29J, ADR 0064).</summary>
@@ -63,28 +65,7 @@ public static class ResponseTimes
     /// <param name="counts">How many requests within each <see cref="ResponseTime"/>, in its order; the last one counts the
     /// slowest.</param>
     public static ResponseTime? Typical(IReadOnlyList<int> counts)
-    {
-        if (counts.Count != LimitHours.Count + 1)
-            throw new ArgumentException("One count for each response time.", nameof(counts));
-        if (counts.Any(count => count < 0))
-            throw new ArgumentOutOfRangeException(nameof(counts), "A count is never negative.");
-
-        var total = counts.Sum();
-        if (total < MinRequests)
-            return null;
-
-        // At least half: the request in the middle, the faster one of the two in the middle when they are even.
-        var half = (total + 1) / 2;
-        var sofar = 0;
-        for (var i = 0; i < LimitHours.Count; i++)
-        {
-            sofar += counts[i];
-            if (sofar >= half)
-                return (ResponseTime)i;
-        }
-
-        return ResponseTime.Slower;
-    }
+        => TypicalWait.Bucket(counts, LimitHours.Count, MinRequests) is { } bucket ? (ResponseTime)bucket : null;
 
     /// <summary>What Explorar says of it: its <see cref="Typical"/> within a day, never <see cref="ResponseTime.Slower"/>.</summary>
     public static ResponseTime? Shown(ResponseTime? typical)

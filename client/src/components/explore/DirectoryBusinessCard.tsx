@@ -4,7 +4,7 @@ import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
 import { categoryInfo, deliveryToPostalCode, orderStatus, visitToPostalCode } from '../../utils/businessCategories';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import { formatDistance } from '../../utils/geo';
-import { quoteTimeLabel, responseTimeLabel } from '../../utils/responseTime';
+import { orderConfirmTimeLabel, quoteTimeLabel, responseTimeLabel } from '../../utils/responseTime';
 import { formatAverage, ratingDescription } from '../../utils/reviews';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 import './DirectoryBusinessCard.css';
@@ -23,7 +23,8 @@ interface DirectoryBusinessCardProps {
  * (Fase 24B) it says whether it delivers there and what it costs, and a business that books appointments online says so
  * (Fase 24D), with the customer's position how far it is (Fase 24G), and its rating from three reviews (Fase 24H). One
  * that receives visits to quote (Fase 29A) says so instead of speaking of orders, with what the visit costs and, with the
- * postal code, whether it goes there. It says how soon it answers the requests made online (Fase 29J). The whole card opens
+ * postal code, whether it goes there. It says how soon it answers the requests made online (Fase 29J), sends its quotes (Fase
+ * 29S) and confirms its online orders (Fase 29T). The whole card opens
  * its menu; an action (the heart) sits over its corner, outside the link.
  */
 export default function DirectoryBusinessCard({ business, preview = false, action }: DirectoryBusinessCardProps) {
@@ -41,6 +42,10 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
   const answers = responseTimeLabel(business.responseTime);
   // Fase 29S: a trade also says how soon it sends the quote after the visit.
   const quotes = business.receivesVisits ? quoteTimeLabel(business.quoteTime) : null;
+  // Fase 29T: one that takes online orders, now or paused, says how soon it confirms them; a trade whose orders are paused
+  // never speaks of them (its card speaks of visits, as orderStatus does).
+  const takesOrders = business.acceptsOrders || (business.ordersPaused && !business.receivesVisits);
+  const confirms = takesOrders ? orderConfirmTimeLabel(business.orderConfirmTime) : null;
   const place = [
     categoryInfo(business.category)?.label,
     business.deliveryOnly ? 'Solo a domicilio' : business.city,
@@ -92,6 +97,11 @@ export default function DirectoryBusinessCard({ business, preview = false, actio
             {delivery && (
               <span className={`dc-badge ${delivery.reaches ? 'dc-badge-info' : 'dc-badge-menu'}`}>
                 <i className={delivery.reaches ? 'ri-e-bike-2-line' : 'ri-map-pin-line'} aria-hidden="true"></i>{delivery.text}
+              </span>
+            )}
+            {confirms && (
+              <span className="dc-badge dc-badge-menu">
+                <i className="ri-check-double-line" aria-hidden="true"></i>{confirms}
               </span>
             )}
             {answers && (

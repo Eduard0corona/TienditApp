@@ -20,6 +20,9 @@ using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Orders;
+using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Reviews.Enums;
 using FoodParkDigital.Domain.Tenants;
@@ -137,6 +140,13 @@ public class PublicDirectoryBusinessDto
     /// longer receives visits: the card says nothing.
     /// </summary>
     public QuoteTime? QuoteTime { get; set; }
+
+    /// <summary>
+    /// How soon it confirms the orders its customers place on its online menu (Fase 29T, ADR 0074): within what it accepted or
+    /// declined at least half of those of the last 90 days. Null with fewer than three, when it takes half an hour or more, or
+    /// when it no longer takes online orders: the card says nothing.
+    /// </summary>
+    public OrderConfirmTime? OrderConfirmTime { get; set; }
 
     /// <summary>
     /// It receives visits to quote now (Fase 29A, ADR 0053): its card speaks of visits, never of orders or the drawer,
@@ -489,11 +499,10 @@ public sealed class PublicDirectorySnapshot
 
     private static readonly StringComparer Names = StringComparer.Create(CultureInfo.GetCultureInfo("es-MX"), ignoreCase: true);
 
-    internal PublicDirectorySnapshot(DateTimeOffset builtAt, IReadOnlyList<Entry> entries, bool responseTimesRead = true)
+    internal PublicDirectorySnapshot(DateTimeOffset builtAt, IReadOnlyList<Entry> entries)
     {
         BuiltAt = builtAt;
         Entries = entries;
-        ResponseTimesRead = responseTimesRead;
         Categories = Enum.GetValues<BusinessCategory>()
             .Select(category => new PublicDirectoryCategoryDto
             {
@@ -506,12 +515,6 @@ public sealed class PublicDirectorySnapshot
     public DateTimeOffset BuiltAt { get; }
 
     internal IReadOnlyList<Entry> Entries { get; }
-
-    /// <summary>
-    /// It read how soon its businesses answer (Fase 29J). When that read failed, none says it, and a page that reads one
-    /// of them (Fase 29K) says nothing either rather than «not enough requests».
-    /// </summary>
-    internal bool ResponseTimesRead { get; }
 
     internal IReadOnlyList<PublicDirectoryCategoryDto> Categories { get; }
 
@@ -535,6 +538,11 @@ public sealed class PublicDirectorySnapshot
     /// How soon it answers its requests online (Fase 29J), slower ones included, while it books online or receives visits:
     /// its place in Explorar within its group (Fase 29S). The card says it only within a day.
     /// </param>
+    /// <param name="ResponseTimeRead">
+    /// The snapshot could read how soon its businesses answer: when it could not, none says it, and its owner is not told
+    /// that its requests are not counted yet (Fase 29K). Each time is told by its own read (Fase 29T): one that fails never
+    /// hides another.
+    /// </param>
     /// <param name="QuoteTime">
     /// How soon it sends the quote after a visit (Fase 29S), slower ones included, while it receives visits. The card says it
     /// only within a week; its owner reads it whole.
@@ -542,6 +550,14 @@ public sealed class PublicDirectorySnapshot
     /// <param name="QuoteTimeRead">
     /// The snapshot could read how soon its trades quote: when it could not, its owner is not told that its visits are not
     /// counted yet.
+    /// </param>
+    /// <param name="OrderConfirmTime">
+    /// How soon it confirms its online orders (Fase 29T), slower ones included, while it takes them. The card says it only
+    /// within half an hour; its owner reads it whole.
+    /// </param>
+    /// <param name="OrderConfirmTimeRead">
+    /// The snapshot could read how soon its businesses confirm their orders: when it could not, its owner is not told that its
+    /// orders are not counted yet.
     /// </param>
     internal sealed record Entry(
         Guid TenantId,
@@ -551,8 +567,11 @@ public sealed class PublicDirectorySnapshot
         GeoPoint? Location = null,
         decimal? VisitServicePrice = null,
         ResponseTime? ResponseTime = null,
+        bool ResponseTimeRead = true,
         QuoteTime? QuoteTime = null,
-        bool QuoteTimeRead = true);
+        bool QuoteTimeRead = true,
+        OrderConfirmTime? OrderConfirmTime = null,
+        bool OrderConfirmTimeRead = true);
 
     /// <summary>
     /// Reads every business Explorar lists: a public request has no business, so these reads span all of them, each
@@ -676,17 +695,37 @@ public sealed class PublicDirectorySnapshot
             quotesRead = false;
         }
 
+        // How soon each one confirms its online orders (Fase 29T) never takes Explorar with it either.
+        Dictionary<Guid, OrderConfirmTime?> confirms;
+        var confirmsRead = true;
+        try
+        {
+            confirms = await OrderConfirmTimesAsync(context, listed, utcNow, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Explorar could not read how soon its businesses confirm their orders: it says nothing of it until the next snapshot.");
+            confirms = [];
+            confirmsRead = false;
+        }
+
         var entries = rows
             .Select(row => ToEntry(row, specialDays[row.Id], utcNow))
             .Where(entry => entry is not null)
             .Select(entry => entry!)
             // Only one that takes requests now: one that stopped booking online says nothing of them, and one that stopped
             // receiving visits says nothing of its quotes.
-            .Select(entry => entry.Business.BooksOnline || entry.Business.ReceivesVisits
-                ? entry with { ResponseTime = responses.GetValueOrDefault(entry.TenantId) }
-                : entry)
+            .Select(entry => entry with
+            {
+                ResponseTime = entry.Business.BooksOnline || entry.Business.ReceivesVisits ? responses.GetValueOrDefault(entry.TenantId) : null,
+                ResponseTimeRead = responsesRead
+            })
             .Select(entry => entry.Business.ReceivesVisits
                 ? entry with { QuoteTime = quotes.GetValueOrDefault(entry.TenantId), QuoteTimeRead = quotesRead }
+                : entry)
+            // And only one that takes online orders now, open or paused, says how soon it confirms them.
+            .Select(entry => entry.Business.AcceptsOrders || entry.Business.OrdersPaused
+                ? entry with { OrderConfirmTime = confirms.GetValueOrDefault(entry.TenantId), OrderConfirmTimeRead = confirmsRead }
                 : entry)
             // The order of Explorar (Fase 29S, ADR 0073): by group, those that answer their requests sooner first within it
             // (one without enough in the middle, as one that takes none), then by name. Every list of Explorar keeps it: the
@@ -700,8 +739,9 @@ public sealed class PublicDirectorySnapshot
             entry.Business.Rating = ratings.GetValueOrDefault(entry.TenantId);
             entry.Business.ResponseTime = ResponseTimes.Shown(entry.ResponseTime);
             entry.Business.QuoteTime = QuoteTimes.Shown(entry.QuoteTime);
+            entry.Business.OrderConfirmTime = OrderConfirmTimes.Shown(entry.OrderConfirmTime);
         }
-        return new PublicDirectorySnapshot(utcNow, entries, responsesRead);
+        return new PublicDirectorySnapshot(utcNow, entries);
     }
 
     /// <summary>
@@ -854,6 +894,87 @@ public sealed class PublicDirectorySnapshot
                 row.WithinThreeDays - row.WithinADay,
                 row.WithinAWeek - row.WithinThreeDays,
                 row.Visits - row.WithinAWeek
+            ]));
+    }
+
+    /// <summary>
+    /// How soon each business listed confirms the orders its customers place on its online menu (Fase 29T, ADR 0074): one row
+    /// per business, its orders since <see cref="OrderConfirmTimes.Since"/> counted by how long they waited until the business
+    /// first took them out of «Por confirmar» (accepted, declined, or accepted automatically as they arrived). The slowest are
+    /// those answered after half an hour, and those that waited half an hour without an answer, still waiting or cancelled by
+    /// their customer then; one that has waited less, or that its customer cancelled sooner, does not count, nor does one of a
+    /// table. As for the requests (Fase 29M, ADR 0067), a customer counts once: of the orders of one phone, the one that arrived
+    /// last. The history says only when and whether its customer did it; the phone and who answered are only compared in the
+    /// database, never read.
+    /// </summary>
+    internal static async Task<Dictionary<Guid, OrderConfirmTime?>> OrderConfirmTimesAsync(
+        IApplicationDbContext context, IQueryable<Tenant> listed, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        var since = OrderConfirmTimes.Since(utcNow);
+        int five = OrderConfirmTimes.LimitMinutes[0], fifteen = OrderConfirmTimes.LimitMinutes[1];
+        int halfAnHour = OrderConfirmTimes.LimitMinutes[2];
+        var history = context.OrderStatusHistories.IgnoreQueryFilters().AsNoTracking();
+        // An order its customer placed on the online menu, not with the QR of a table: whoever serves the table handles it.
+        // Every one has its customer's phone; saying so keeps the comparison of phones below one equality.
+        var placed = context.Orders
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(o => o.Channel == OrderChannel.Online && !o.CreatedByBusiness && o.TableNumber == null && o.OpenTableId == null
+                && o.CustomerPhone != null && o.CreatedAt >= since && listed.Any(t => t.Id == o.TenantId))
+            .Select(o => new
+            {
+                o.TenantId,
+                o.CustomerPhone,
+                o.CreatedAt,
+                o.Status,
+                // When it first left «Por confirmar» by the business, in its own history (its first row, as it was created, stays
+                // in it): its customer cancelling it is no answer.
+                AnsweredAt = history
+                    .Where(h => h.TenantId == o.TenantId && h.OrderId == o.Id
+                        && h.PreviousStatus == OrderStatus.Pending && h.NewStatus != OrderStatus.Pending
+                        && (h.ChangedBy == null || h.ChangedBy != Order.CustomerPerformedBy))
+                    .Min(h => (DateTimeOffset?)h.ChangedAt),
+                CancelledByCustomerAt = history
+                    .Where(h => h.TenantId == o.TenantId && h.OrderId == o.Id
+                        && h.PreviousStatus == OrderStatus.Pending && h.NewStatus == OrderStatus.Cancelled
+                        && h.ChangedBy == Order.CustomerPerformedBy)
+                    .Min(h => (DateTimeOffset?)h.ChangedAt),
+                Limit = o.CreatedAt.AddMinutes(halfAnHour)
+            })
+            // Answered within half an hour, or past it: answered late, still waiting, or cancelled by its customer after it.
+            .Where(o => o.AnsweredAt < o.Limit
+                || (o.Limit <= utcNow
+                    && (o.AnsweredAt >= o.Limit
+                        || (o.AnsweredAt == null && o.Status == OrderStatus.Pending)
+                        || (o.AnsweredAt == null && o.CancelledByCustomerAt >= o.Limit))));
+        // One per customer of each business: of those of the same phone, the one that arrived last (a later one still
+        // undecided does not take its place). The last of each customer is found once, grouped, not once for each order.
+        var lastOfEachCustomer = placed
+            .GroupBy(o => new { o.TenantId, o.CustomerPhone })
+            .Select(g => new { g.Key.TenantId, g.Key.CustomerPhone, CreatedAt = g.Max(o => o.CreatedAt) });
+        var counted = await (
+                from o in placed
+                join last in lastOfEachCustomer
+                    on new { o.TenantId, o.CustomerPhone, o.CreatedAt } equals new { last.TenantId, last.CustomerPhone, last.CreatedAt }
+                select o)
+            .GroupBy(o => o.TenantId)
+            .Select(g => new
+            {
+                TenantId = g.Key,
+                Orders = g.Count(),
+                WithinFiveMinutes = g.Count(o => o.AnsweredAt < o.CreatedAt.AddMinutes(five)),
+                WithinFifteenMinutes = g.Count(o => o.AnsweredAt < o.CreatedAt.AddMinutes(fifteen)),
+                WithinHalfAnHour = g.Count(o => o.AnsweredAt < o.Limit)
+            })
+            .ToListAsync(cancellationToken);
+        return counted.ToDictionary(
+            row => row.TenantId,
+            row => OrderConfirmTimes.Typical(
+            [
+                row.WithinFiveMinutes,
+                row.WithinFifteenMinutes - row.WithinFiveMinutes,
+                row.WithinHalfAnHour - row.WithinFifteenMinutes,
+                row.Orders - row.WithinHalfAnHour
             ]));
     }
 
