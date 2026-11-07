@@ -22,6 +22,7 @@ import { APPOINTMENT_REQUESTS_CHANGED } from '../../hooks/useAppointmentRequests
 vi.mock('../../api/appointmentsApi', () => ({
   appointmentsApi: {
     getAll: vi.fn(), create: vi.fn(), update: vi.fn(), updateStatus: vi.fn(), accept: vi.fn(), decline: vi.fn(),
+    markFake: vi.fn(), unmarkFake: vi.fn(),
   },
 }));
 vi.mock('../../api/employeesApi', () => ({ employeesApi: { getAll: vi.fn() } }));
@@ -383,6 +384,53 @@ describe('AppointmentsList', () => {
     await user.click(dialog.getByRole('button', { name: 'Rechazar' }));
     await waitFor(() => expect(appointmentsApi.decline).toHaveBeenCalledWith('r1'));
     expect(toast.success).toHaveBeenCalledWith('Solicitud rechazada: el cliente recibe el aviso.');
+  });
+
+  it('marks a request of a customer as fake after saying what happens, never one of the team (Fase 29V)', async () => {
+    const user = userEvent.setup();
+    const request = appointment({ id: 'r1', customerName: 'Valeria', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online });
+    vi.mocked(appointmentsApi.markFake).mockResolvedValue({ ...request, status: AppointmentStatus.Cancelled, markedFake: true } as never);
+    renderAgenda([
+      request,
+      appointment({ id: 'r2', customerName: 'Mario', status: AppointmentStatus.Requested, channel: AppointmentChannel.Online, fromTeam: true }),
+    ]);
+
+    const row = (await screen.findByText('Valeria')).closest('tr')!;
+    // One of its own team does not count anyway: it is only declined.
+    expect(within(screen.getByText('Mario').closest('tr')!).queryByRole('button', { name: /Es falsa/ })).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole('button', { name: 'Es falsa la solicitud de Valeria' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Marcar la solicitud como falsa' }));
+    expect(dialog.getByText(/sin avisarle a nadie/)).toBeInTheDocument();
+    expect(dialog.getByText(/no puede pedirte otra cita ni visita en 90 días/)).toBeInTheDocument();
+    expect(appointmentsApi.markFake).not.toHaveBeenCalled();
+    await user.click(dialog.getByRole('button', { name: 'Es falsa' }));
+    await waitFor(() => expect(appointmentsApi.markFake).toHaveBeenCalledWith('r1'));
+    expect(toast.success).toHaveBeenCalledWith('Solicitud marcada como falsa: no cuenta en Explorar.');
+    expect(appointmentsApi.decline).not.toHaveBeenCalled();
+  });
+
+  it('says a request was marked as fake, and takes the mark back (Fase 29V)', async () => {
+    const user = userEvent.setup();
+    const marked = appointment({
+      id: 'f1', customerName: 'Valeria', status: AppointmentStatus.Cancelled, channel: AppointmentChannel.Online, markedFake: true,
+    });
+    vi.mocked(appointmentsApi.unmarkFake).mockResolvedValue({ ...marked, markedFake: false } as never);
+    renderAgenda([
+      marked,
+      appointment({ id: 'c1', customerName: 'Rocío', status: AppointmentStatus.Cancelled, channel: AppointmentChannel.Online }),
+    ]);
+
+    const row = (await screen.findByText('Valeria')).closest('tr')!;
+    expect(within(row).getByText('Marcada como falsa: no cuenta en Explorar')).toBeInTheDocument();
+    // Another one declined is only closed.
+    const declined = screen.getByText('Rocío').closest('tr')!;
+    expect(within(declined).queryByText(/falsa/)).not.toBeInTheDocument();
+    expect(within(declined).queryByRole('button', { name: /No era falsa/ })).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole('button', { name: 'No era falsa la solicitud de Valeria' }));
+    await waitFor(() => expect(appointmentsApi.unmarkFake).toHaveBeenCalledWith('f1'));
+    expect(toast.success).toHaveBeenCalledWith('Ya no está marcada como falsa: cuenta como rechazada, y ese teléfono puede volver a pedirte.');
   });
 
   it('says by when each request is answered in time, or that its limit passed (Fase 29L)', async () => {

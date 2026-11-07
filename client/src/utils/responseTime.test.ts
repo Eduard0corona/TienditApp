@@ -27,7 +27,7 @@ describe('responseTimeLabel (Fase 29J)', () => {
 describe('ownResponseTimeNote (Fase 29K)', () => {
   it('tells its owner where customers read it, or why nobody reads it yet', () => {
     expect(ownResponseTimeNote(ResponseTime.WithinThreeHours)).toBe(
-      'Lo calculamos con tus solicitudes en línea de los últimos 90 días, la última de cada cliente y sin las de tu equipo. Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas.',
+      'Lo calculamos con tus solicitudes en línea de los últimos 90 días, la última de cada cliente, sin las de tu equipo ni las que marcaste como falsas. Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas.',
     );
     expect(ownResponseTimeNote(ResponseTime.Slower)).toBe(
       'Sueles tardar un día o más en responder tus solicitudes en línea, así que tus clientes no lo leen.',

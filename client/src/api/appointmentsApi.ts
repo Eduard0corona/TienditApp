@@ -46,6 +46,15 @@ export const appointmentsApi = {
   /** A request booked online is declined: its time is free again, and its customer is told. */
   decline: (id: string) => apiRequest('post', '/api/v1/appointments/{id}/decline', { path: { id } }),
 
+  /**
+   * A request of a customer is declined as fake (Fase 29V): its time is free and nobody is told; it does not count in
+   * Explorar, and its phone may not request again for 90 days.
+   */
+  markFake: (id: string) => apiRequest('post', '/api/v1/appointments/{id}/mark-fake', { path: { id } }),
+
+  /** The mark of a request declined as fake is taken back: it stays declined and counts again; its phone may request again. */
+  unmarkFake: (id: string) => apiRequest('post', '/api/v1/appointments/{id}/unmark-fake', { path: { id } }),
+
   /** Whether customers book from the online menu, how many appointments at once, and what is missing for it. */
   getOnlineBooking: (signal?: AbortSignal) => apiRequest('get', '/api/v1/appointments/online-booking', { signal }),
 
