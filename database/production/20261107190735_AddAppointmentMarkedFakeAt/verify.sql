@@ -26,8 +26,8 @@ ORDER BY c.[name];
 --    siguen por confirmar ([Status] = 5) y cuántas se cancelaron ([Status] = 99). Ya aplicada: cuántas
 --    se marcaron como falsas en esos días (justo después, ninguna). rollback.sql borra la columna.
 SELECT COUNT(*) AS [EnLinea90Dias],
-    SUM(CASE WHEN [Status] = 5 THEN 1 ELSE 0 END) AS [PorConfirmar],
-    SUM(CASE WHEN [Status] = 99 THEN 1 ELSE 0 END) AS [Canceladas]
+    ISNULL(SUM(CASE WHEN [Status] = 5 THEN 1 ELSE 0 END), 0) AS [PorConfirmar],
+    ISNULL(SUM(CASE WHEN [Status] = 99 THEN 1 ELSE 0 END), 0) AS [Canceladas]
 FROM [Appointments]
 WHERE [Channel] = 1 AND [CreatedAt] >= DATEADD(day, -90, SYSDATETIMEOFFSET());
 
