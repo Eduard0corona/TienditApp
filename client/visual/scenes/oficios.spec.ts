@@ -58,6 +58,8 @@ test.describe('Oficios que responden pronto', () => {
       await open(page, '/explorar/hogar-y-reparaciones');
       await expect(page.getByRole('link', { name: /^Plomería Hernández/ })).toContainText('Suele responder en menos de una hora');
       await expect(page.getByRole('link', { name: /^Carpintería Don José/ })).toContainText('Suele responder en menos de 12 horas');
+      await expect(page.getByRole('link', { name: /^Plomería Hernández/ })).toContainText('Suele mandar la cotización en menos de un día');
+      await expect(page.getByRole('link', { name: /^Carpintería Don José/ })).toContainText('Suele mandar la cotización en menos de una semana');
       await expect(page.getByRole('link', { name: /^Cerrajería Pérez/ })).not.toContainText('Suele responder');
       await snap(page, `oficios-explorar-respuesta-${look.suffix}`);
     });
@@ -86,6 +88,7 @@ test.describe('Solicitar una visita a un oficio que responde pronto', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/m/plomeria-hernandez/visita');
     await expect(page.getByText('Suele responder en menos de una hora')).toBeVisible();
+    await expect(page.getByText('Suele mandar la cotización en menos de un día')).toBeVisible();
     await expect(page.getByText('Visita y diagnóstico')).toBeVisible();
     await snap(page, 'oficios-solicitar-visita-respuesta-telefono');
   });
@@ -99,6 +102,8 @@ test.describe('Cuánto tardas en Configuración', () => {
     const card = page.getByRole('region', { name: 'Cómo te ven en TienditApp' });
     await expect(card.getByText('Suele responder en menos de una hora')).toBeVisible();
     await expect(card.getByText(/Tus clientes lo leen en tu tarjeta, en tu tienda/)).toBeVisible();
+    await expect(card.getByText('Suele mandar la cotización en menos de 3 días')).toBeVisible();
+    await expect(card.getByText(/hasta que mandas su cotización/)).toBeVisible();
     await card.scrollIntoViewIfNeeded();
     await snapElement(card, 'oficios-como-te-ven-respuesta');
   });

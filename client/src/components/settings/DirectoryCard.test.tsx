@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicDirectoryApi, type DirectoryProfile } from '../../api/publicDirectoryApi';
-import { BusinessCategory, DirectoryVisibility, ResponseTime } from '../../api/generated/enums';
+import { BusinessCategory, DirectoryVisibility, QuoteTime, ResponseTime } from '../../api/generated/enums';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OnlineMenuMode, type TenantProfileDto } from '../../types';
@@ -14,6 +14,9 @@ vi.mock('../../api/publicDirectoryApi', () => ({
   publicDirectoryApi: { getDirectory: vi.fn(), getProfile: vi.fn(), updateProfile: vi.fn(), dismissHomeVisitAddressNotice: vi.fn() },
 }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
+// Whether it receives visits to quote (Fase 29A): none unless a test says so.
+const visits = vi.hoisted(() => ({ data: undefined as { receivesVisits: boolean } | undefined }));
+vi.mock('../../api/homeVisitRequests', () => ({ useHomeVisitRequests: () => ({ data: visits.data }) }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
 
 const api = vi.mocked(publicDirectoryApi);
@@ -113,6 +116,29 @@ describe('DirectoryCard', () => {
     renderCard();
     expect(await screen.findByText(/Apareces en Explorar/)).toBeInTheDocument();
     expect(screen.queryByText(/solicitudes en línea|Suele responder/)).not.toBeInTheDocument();
+  });
+
+  it('shows a trade how soon it quotes after the visit, and why it says nothing (Fase 29S)', async () => {
+    visits.data = { receivesVisits: true };
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true, quoteTime: QuoteTime.WithinThreeDays }));
+    const { unmount } = renderCard();
+
+    expect(await screen.findByText('Suele mandar la cotización en menos de 3 días')).toBeInTheDocument();
+    expect(screen.getByText(/hasta que mandas su cotización/)).toBeInTheDocument();
+    unmount();
+
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true, quoteTime: QuoteTime.Slower }));
+    const slow = renderCard();
+    expect(await screen.findByText(/Sueles tardar una semana o más/)).toBeInTheDocument();
+    expect(screen.queryByText(/Suele mandar la cotización/)).not.toBeInTheDocument();
+    slow.unmount();
+
+    // A business without visits says nothing of quotes.
+    visits.data = undefined;
+    api.getProfile.mockResolvedValue(profile({ countsRequests: true, quoteTime: QuoteTime.WithinADay }));
+    renderCard();
+    expect(await screen.findByText(/Todavía no contamos solicitudes en línea/)).toBeInTheDocument();
+    expect(screen.queryByText(/cotización|cotizar/)).not.toBeInTheDocument();
   });
 
   it('tells a business that goes to homes that its store shows its address, until its owner checks it (Fase 29A)', async () => {

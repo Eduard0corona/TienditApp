@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { BusinessCategory, HomeVisitChargePolicy, ResponseTime } from '../../api/generated/enums';
+import { BusinessCategory, HomeVisitChargePolicy, QuoteTime, ResponseTime } from '../../api/generated/enums';
 import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
 import DirectoryBusinessCard from './DirectoryBusinessCard';
 
@@ -46,6 +46,15 @@ describe('DirectoryBusinessCard', () => {
   it('says how soon it answers the requests made online, and nothing without it (Fase 29J)', () => {
     renderCard(business({ name: 'Plomería Hernández', receivesVisits: true, responseTime: ResponseTime.WithinThreeHours }));
     expect(screen.getByRole('link')).toHaveTextContent('Suele responder en menos de 3 horas');
+  });
+
+  it('says how soon a trade sends the quote after the visit, and never for a business without visits (Fase 29S)', () => {
+    renderCard(business({ name: 'Plomería Hernández', receivesVisits: true, quoteTime: QuoteTime.WithinThreeDays }));
+    renderCard(business({ name: 'Estética Luna', booksOnline: true, receivesVisits: false, quoteTime: QuoteTime.WithinADay }));
+
+    const [trade, salon] = screen.getAllByRole('link');
+    expect(trade).toHaveTextContent('Suele mandar la cotización en menos de 3 días');
+    expect(salon).not.toHaveTextContent('cotización');
   });
 
   it('says nothing of how soon it answers when the server sends none (Fase 29J)', () => {

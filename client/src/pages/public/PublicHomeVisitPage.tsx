@@ -23,7 +23,7 @@ import { visitPolicyNote, visitPriceText } from '../../utils/businessCategories'
 import { ADDRESS_LINE_MAX_LENGTH, REFERENCES_MAX_LENGTH, normalizePostalCode } from '../../utils/homeDelivery';
 import { describeDuration, shortDayLabel, upperFirst } from '../../utils/onlineBooking';
 import { readPostalCode } from '../../utils/postalCodePreference';
-import { responseTimeLabel } from '../../utils/responseTime';
+import { quoteTimeLabel, responseTimeLabel } from '../../utils/responseTime';
 import { isPostalCode } from '../../utils/postalCodes';
 import { localPhone } from '../../utils/phones';
 import { previewBusinessTheme } from '../../utils/theme';
@@ -344,6 +344,7 @@ export default function PublicHomeVisitPage() {
     : '';
 
   const answers = responseTimeLabel(data.responseTime);
+  const quotes = quoteTimeLabel(data.quoteTime);
 
   return (
     <div className="pm-page">
@@ -359,6 +360,10 @@ export default function PublicHomeVisitPage() {
           {/* How soon it answers, as its card in Explorar says it (Fase 29K). */}
           {answers && (
             <div className="small text-muted"><i className="ri-chat-check-line me-1" aria-hidden="true"></i>{answers}</div>
+          )}
+          {/* And how soon it sends the quote after the visit (Fase 29S). */}
+          {quotes && (
+            <div className="small text-muted"><i className="ri-file-list-3-line me-1" aria-hidden="true"></i>{quotes}</div>
           )}
         </div>
       </header>

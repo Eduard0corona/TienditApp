@@ -17827,6 +17827,7 @@ export interface components {
             homeVisitAddressNotice: boolean;
             countsRequests: boolean;
             responseTime?: components["schemas"]["ResponseTime"];
+            quoteTime?: components["schemas"]["QuoteTime"];
         };
         /**
          * Format: int32
@@ -20634,6 +20635,7 @@ export interface components {
             distanceKm?: number | null;
             rating?: components["schemas"]["RatingSummaryDto"];
             responseTime?: components["schemas"]["ResponseTime"];
+            quoteTime?: components["schemas"]["QuoteTime"];
             receivesVisits: boolean;
             visitChargePolicy?: components["schemas"]["HomeVisitChargePolicy"];
             visitPrice?: components["schemas"]["HomeVisitPriceDto"];
@@ -20724,6 +20726,7 @@ export interface components {
             price: components["schemas"]["HomeVisitPriceDto"];
             staff: components["schemas"]["PublicBookingStaffDto"][];
             responseTime?: components["schemas"]["ResponseTime"];
+            quoteTime?: components["schemas"]["QuoteTime"];
         };
         PublicHomeVisitServiceDto: {
             name: string;
@@ -21204,6 +21207,11 @@ export interface components {
             /** Format: double */
             taxAmount: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        QuoteTime: 0 | 1 | 2 | 3;
         QuoteVersionDto: {
             /** Format: uuid */
             id: string;

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountApi } from '../../api/accountApi';
-import { HomeVisitChargePolicy, ResponseTime } from '../../api/generated/enums';
+import { HomeVisitChargePolicy, QuoteTime, ResponseTime } from '../../api/generated/enums';
 import { publicMenuApi, type PublicBookingSlots, type PublicHomeVisit } from '../../api/publicMenuApi';
 import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import { resetLinkUploads } from '../../hooks/useProblemPhotoUploads';
@@ -143,6 +143,14 @@ describe('PublicHomeVisitPage', () => {
 
     expect(await screen.findByText('Visita y diagnóstico')).toBeInTheDocument();
     expect(screen.queryByText(/Suele responder/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Suele mandar la cotización/)).not.toBeInTheDocument();
+  });
+
+  it('says how soon the business sends the quote after the visit, as its card does (Fase 29S)', async () => {
+    api.getHomeVisit.mockResolvedValue(visit({ quoteTime: QuoteTime.WithinADay }) as never);
+    renderPage();
+
+    expect(await screen.findByText('Suele mandar la cotización en menos de un día')).toBeInTheDocument();
   });
 
   it('asks for a visit at a free time as a guest, where the business goes, and gives its link', async () => {

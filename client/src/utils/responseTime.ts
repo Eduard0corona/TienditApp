@@ -1,4 +1,4 @@
-import { ResponseTime } from '../api/generated/enums';
+import { QuoteTime, ResponseTime } from '../api/generated/enums';
 import { addCalendarDays, formatInBusinessZone, getBusinessToday, toBusinessDateTimeInput } from './dates';
 
 /** The times the card says: every one but the slowest, which it never says. */
@@ -30,6 +30,32 @@ export function ownResponseTimeNote(responseTime: ResponseTime | null | undefine
   if (responseTime === ResponseTime.Slower)
     return 'Sueles tardar un día o más en responder tus solicitudes en línea, así que tus clientes no lo leen.';
   return 'Lo calculamos con tus solicitudes en línea de los últimos 90 días, la última de cada cliente y sin las de tu equipo. Tus clientes lo leen en tu tarjeta, en tu tienda y donde te piden citas o visitas.';
+}
+
+/** The quote times the card says: every one but the slowest, which it never says. */
+type ShownQuoteTime = Exclude<QuoteTime, typeof QuoteTime.Slower>;
+
+const QUOTE_LABELS: Record<ShownQuoteTime, string> = {
+  [QuoteTime.WithinADay]: 'Suele mandar la cotización en menos de un día',
+  [QuoteTime.WithinThreeDays]: 'Suele mandar la cotización en menos de 3 días',
+  [QuoteTime.WithinAWeek]: 'Suele mandar la cotización en menos de una semana',
+};
+
+/**
+ * What the card of a trade says of how soon it sends the quote after the visit (Fase 29S, ADR 0073): within what it sent at
+ * least half of them, as the server sums it up. Nothing without enough visits quoted or past a week.
+ */
+export function quoteTimeLabel(quoteTime: QuoteTime | null | undefined): string | null {
+  return quoteTime == null || quoteTime === QuoteTime.Slower ? null : QUOTE_LABELS[quoteTime];
+}
+
+/** What its owner reads of how soon it quotes, while Explorar counts its requests and it receives visits (Fase 29S). */
+export function ownQuoteTimeNote(quoteTime: QuoteTime | null | undefined): string {
+  if (quoteTime == null)
+    return 'Todavía no contamos visitas en línea de 3 clientes con su cotización mandada para saber en cuánto sueles cotizar.';
+  if (quoteTime === QuoteTime.Slower)
+    return 'Sueles tardar una semana o más en mandar la cotización después de la visita, así que tus clientes no lo leen.';
+  return 'Lo contamos desde que termina cada visita en línea hasta que mandas su cotización, en los últimos 90 días, la última de cada cliente. Tus clientes lo leen en tu tarjeta y donde te piden la visita.';
 }
 
 /**

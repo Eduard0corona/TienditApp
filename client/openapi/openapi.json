@@ -25633,6 +25633,9 @@
           },
           "responseTime": {
             "$ref": "#/components/schemas/ResponseTime"
+          },
+          "quoteTime": {
+            "$ref": "#/components/schemas/QuoteTime"
           }
         },
         "additionalProperties": false
@@ -35042,6 +35045,9 @@
           "responseTime": {
             "$ref": "#/components/schemas/ResponseTime"
           },
+          "quoteTime": {
+            "$ref": "#/components/schemas/QuoteTime"
+          },
           "receivesVisits": {
             "type": "boolean"
           },
@@ -35363,6 +35369,9 @@
           },
           "responseTime": {
             "$ref": "#/components/schemas/ResponseTime"
+          },
+          "quoteTime": {
+            "$ref": "#/components/schemas/QuoteTime"
           }
         },
         "additionalProperties": false
@@ -37014,6 +37023,22 @@
           }
         },
         "additionalProperties": false
+      },
+      "QuoteTime": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "WithinADay",
+          "WithinThreeDays",
+          "WithinAWeek",
+          "Slower"
+        ]
       },
       "QuoteVersionDto": {
         "required": [
