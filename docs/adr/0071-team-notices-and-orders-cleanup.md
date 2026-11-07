@@ -37,7 +37,7 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
    - Un canal pausado sigue, para que sus pedidos se encuentren.
    - Pedidos muestra el filtro Canal solo con más de un canal, y ofrece los que dice la API.
 3. **Inicio deja de recibir `ordersByStatus`.** Sale de `DashboardMetricsDto`. Las tarjetas de Inicio salen del mismo conteo por estado, que se queda.
-4. **El nombre largo del negocio usa dos líneas** en teléfonos de hasta 575 px, en vez de recortarse. Uno corto se ve igual que antes.
+4. **El nombre largo del negocio usa dos líneas** en teléfonos de hasta 575 px, en vez de recortarse: en 360 px, «Taquería Los Compadres» se lee completo. Uno corto se ve igual que antes.
 5. **Fuera de esta fase:**
    - Avisar a la persona cuando alguien más cambia sus avisos, o decir quién lo hizo.
    - Elegir por el equipo otros avisos (WhatsApp o del navegador).
@@ -53,6 +53,7 @@ El dueño del producto pidió avanzar estos puntos, entre otros, sin esperar su 
   - **La persona no se entera** de que alguien cambió sus avisos hasta que ve Mi perfil o le llega un correo; el pie del correo dice dónde dejar de recibirlos.
   - **Un administrador puede apagarle los avisos a otro administrador.** Es el mismo alcance que ya tiene sobre sus permisos.
   - **Un canal que el negocio dejó de usar** (quitó el número de WhatsApp o el menú ya no toma pedidos) sale del filtro. Sus pedidos siguen en la lista, con su etiqueta, y se encuentran por fecha o búsqueda. Saberlo por los pedidos de cada canal pediría un índice nuevo.
+  - **Un nombre que no cabe en dos líneas** (en 360 px, unos 25 caracteres) termina en «…»; se lee completo al abrir el selector.
   - **Contrato:** quitar `ordersByStatus` cambia la respuesta de `/dashboard/metrics`. El cliente de la versión anterior no lo leía.
 - **Decisión por omisión** (sin preferencia expresa del dueño):
   - que también los administradores elijan, y que nadie elija los del dueño desde Equipo;

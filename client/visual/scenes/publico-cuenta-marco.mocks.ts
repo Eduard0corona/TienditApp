@@ -225,8 +225,8 @@ const suspendedBusiness: PrepareData = (data) => {
 
 /** A business with a long name (Fase 29Q): on a small phone the switcher reads it whole, in two lines. */
 const longBusinessName: PrepareData = (data) => {
-  data.tenant.name = 'Taquería y Antojitos Los Compadres';
-  data.myTenants[0].name = 'Taquería y Antojitos Los Compadres';
+  data.tenant.name = 'Taquería Los Compadres';
+  data.myTenants[0].name = 'Taquería Los Compadres';
 };
 
 /** Inicio cannot load its figures: the API fails with a 500. */

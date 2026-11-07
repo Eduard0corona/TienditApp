@@ -561,7 +561,7 @@ test.describe('Marco con un nombre largo de negocio', () => {
   test('marco nombre largo teléfono chico', async ({ page }) => {
     await page.setViewportSize(SIZES.smallPhone);
     await open(page, '/dashboard');
-    await expect(page.getByRole('button', { name: /^Negocio actual: Taquería y Antojitos Los Compadres/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Negocio actual: Taquería Los Compadres/ })).toBeVisible();
     await snapScreen(page, 'marco-nombre-largo-telefono-chico');
   });
 });
