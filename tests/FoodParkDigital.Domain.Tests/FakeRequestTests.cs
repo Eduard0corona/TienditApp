@@ -7,7 +7,7 @@ namespace FoodParkDigital.Domain.Tests;
 
 /// <summary>
 /// Declining a request online as fake (Fase 29V, ADR 0076): only one of a customer still waiting, declined as any other and
-/// marked; the mark can be taken back, and the request stays declined as it was.
+/// marked; the mark can be taken back once, and the request stays declined, from then.
 /// </summary>
 public class FakeRequestTests
 {
@@ -23,7 +23,7 @@ public class FakeRequestTests
 
         request.MarkFake(marked);
 
-        Assert.Equal((AppointmentStatus.Cancelled, (DateTimeOffset?)marked), (request.Status, request.MarkedFakeAt));
+        Assert.Equal((AppointmentStatus.Cancelled, (DateTimeOffset?)marked, true), (request.Status, request.MarkedFakeAt, request.IsMarkedFake));
         // Nobody waited for an answer: it keeps none, so it does not count in how soon the business answers.
         Assert.Null(request.RespondedAt);
         Assert.Null(request.CancelledByCustomerAt);
@@ -60,21 +60,28 @@ public class FakeRequestTests
     }
 
     [Fact]
-    public void TheMark_ShouldBeTakenBack_LeavingTheRequestDeclinedAsWhenItWasMarked()
+    public void TheMark_ShouldBeTakenBack_LeavingTheRequestDeclinedNow_AndItsMarkKept()
     {
         var request = Request();
-        var marked = Arrived.AddMinutes(30);
+        var marked = Arrived.AddMinutes(5);
         request.MarkFake(marked);
+        var unmarked = Arrived.AddDays(2);
 
-        request.UnmarkFake();
+        request.UnmarkFake(unmarked);
 
-        Assert.Null(request.MarkedFakeAt);
-        Assert.Equal((AppointmentStatus.Cancelled, (DateTimeOffset?)marked), (request.Status, request.RespondedAt));
+        Assert.False(request.IsMarkedFake);
+        // When it was marked stays kept; it counts as declined when the mark was taken back, never as the quick answer its
+        // customer did not get.
+        Assert.Equal(((DateTimeOffset?)marked, (DateTimeOffset?)unmarked), (request.MarkedFakeAt, request.UnmarkedFakeAt));
+        Assert.Equal((AppointmentStatus.Cancelled, (DateTimeOffset?)unmarked), (request.Status, request.RespondedAt));
+        // Taken back once: neither taken back again nor marked again.
+        Assert.Equal(OnlineBookingRules.NotMarkedFakeMessage, Assert.Throws<DomainException>(() => request.UnmarkFake(unmarked)).Message);
+        Assert.Equal(OnlineBookingRules.NotRequestedMessage, Assert.Throws<DomainException>(() => request.MarkFake(unmarked)).Message);
         // Only a mark is taken back.
-        Assert.Equal(OnlineBookingRules.NotMarkedFakeMessage, Assert.Throws<DomainException>(request.UnmarkFake).Message);
         var declined = Request();
         declined.Decline(marked);
-        Assert.Equal(OnlineBookingRules.NotMarkedFakeMessage, Assert.Throws<DomainException>(declined.UnmarkFake).Message);
+        Assert.Equal(OnlineBookingRules.NotMarkedFakeMessage, Assert.Throws<DomainException>(() => declined.UnmarkFake(unmarked)).Message);
+        Assert.Null(declined.UnmarkedFakeAt);
     }
 
     private static Appointment Request(bool fromTeam = false)

@@ -246,6 +246,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(43)");
 
+                    b.Property<DateTimeOffset?>("UnmarkedFakeAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("datetimeoffset");
 

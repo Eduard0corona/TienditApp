@@ -8,15 +8,16 @@
 -- ya tiene 20261107061906_AddAppointmentAnswerReminderSentAt (lo que exige master hoy, con la
 -- Fase 29U) solo ejecuta 20261107190735_AddAppointmentMarkedFakeAt, marcar una solicitud como
 -- falsa (ADR 0076):
---   - [Appointments].[MarkedFakeAt]: columna nueva, datetimeoffset NULL, sin valor por omisión:
---     cuándo el negocio rechazó como falsa una solicitud en línea de un cliente. No cambia datos:
---     todas las citas quedan en NULL; ninguna solicitud que existe está marcada como falsa.
+--   - [Appointments].[MarkedFakeAt] y [Appointments].[UnmarkedFakeAt]: columnas nuevas,
+--     datetimeoffset NULL, sin valor por omisión: cuándo el negocio rechazó como falsa una
+--     solicitud en línea de un cliente, y cuándo quitó esa marca. No cambia datos: todas las citas
+--     quedan en NULL; ninguna solicitud que existe está marcada como falsa.
 -- No agrega índices: el teléfono que ya no puede pedir en un negocio se busca con el índice que ya
--- existe, [IX_Appointments_OnlineRequests_Customer] (Fase 29M), y Explorar no lee la columna.
+-- existe, [IX_Appointments_OnlineRequests_Customer] (Fase 29M), y Explorar no lee las columnas.
 -- Si a la base le faltan migraciones recientes, también las aplica (no sirve para crear una base
 -- vacía): revisa antes el verify.sql de database/production/20261107061906_AddAppointmentAnswerReminderSentAt.
 --
--- Compatible con la versión desplegada (master con la Fase 29U): no conoce la columna, y las citas
+-- Compatible con la versión desplegada (master con la Fase 29U): no conoce las columnas, y las citas
 -- que guarda quedan en NULL. /health/schema sigue sano. Volver a ella (redespliegue, o swap si el
 -- slot de staging está activo) funciona sin rollback.sql: deja de ofrecer la marca, y las
 -- solicitudes ya marcadas se quedan rechazadas.
@@ -10007,6 +10008,14 @@ IF NOT EXISTS (
 )
 BEGIN
     ALTER TABLE [Appointments] ADD [MarkedFakeAt] datetimeoffset NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261107190735_AddAppointmentMarkedFakeAt'
+)
+BEGIN
+    ALTER TABLE [Appointments] ADD [UnmarkedFakeAt] datetimeoffset NULL;
 END;
 
 IF NOT EXISTS (

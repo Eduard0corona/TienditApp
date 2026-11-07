@@ -429,8 +429,13 @@ describe('AppointmentsList', () => {
     expect(within(declined).queryByRole('button', { name: /No era falsa/ })).not.toBeInTheDocument();
 
     await user.click(within(row).getByRole('button', { name: 'No era falsa la solicitud de Valeria' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Quitar la marca de falsa' }));
+    expect(dialog.getByText(/el cliente recibe el aviso/)).toBeInTheDocument();
+    expect(dialog.getByText(/No podrás marcarla como falsa otra vez/)).toBeInTheDocument();
+    expect(appointmentsApi.unmarkFake).not.toHaveBeenCalled();
+    await user.click(dialog.getByRole('button', { name: 'No era falsa' }));
     await waitFor(() => expect(appointmentsApi.unmarkFake).toHaveBeenCalledWith('f1'));
-    expect(toast.success).toHaveBeenCalledWith('Ya no está marcada como falsa: cuenta como rechazada, y ese teléfono puede volver a pedirte.');
+    expect(toast.success).toHaveBeenCalledWith('Ya no está marcada como falsa: el cliente recibe el aviso, y ese teléfono puede volver a pedirte.');
   });
 
   it('says by when each request is answered in time, or that its limit passed (Fase 29L)', async () => {

@@ -1096,13 +1096,13 @@ La Fase 29U trae una migración, [`database/production/20261107061906_AddAppoint
 
 La Fase 29V trae una migración, [`database/production/20261107190735_AddAppointmentMarkedFakeAt`](../../database/production/20261107190735_AddAppointmentMarkedFakeAt). Su `apply.sql` va antes del merge ([ADR 0076](../adr/0076-mark-a-request-as-fake.md)).
 
-- **La migración:** agrega a `Appointments` la columna `MarkedFakeAt` (`datetimeoffset NULL`, sin valor por omisión): cuándo el negocio rechazó como falsa una solicitud en línea de un cliente. No cambia datos ni agrega índices: ninguna solicitud que existe queda marcada, y el teléfono marcado se busca con `IX_Appointments_OnlineRequests_Customer` (Fase 29M).
-- **Mientras se publica:** la versión de `master` (la 29U) no conoce la columna y sigue funcionando; no ofrece la marca, y una solicitud ya marcada se ve como cancelada, sin respuesta.
-- **Sin eventos nuevos:** marcar o quitar la marca no manda avisos (ni WhatsApp ni correo) ni pasa por el outbox.
-- **Sin `apply.sql`:** la versión nueva lee `MarkedFakeAt` con cada cita, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
+- **La migración:** agrega a `Appointments` las columnas `MarkedFakeAt` y `UnmarkedFakeAt` (`datetimeoffset NULL`, sin valor por omisión): cuándo el negocio rechazó como falsa una solicitud en línea de un cliente, y cuándo quitó esa marca. No cambia datos ni agrega índices: ninguna solicitud que existe queda marcada, y el teléfono marcado se busca con `IX_Appointments_OnlineRequests_Customer` (Fase 29M).
+- **Mientras se publica:** la versión de `master` (la 29U) no conoce las columnas y sigue funcionando; no ofrece la marca, y una solicitud ya marcada se ve como cancelada, sin respuesta.
+- **Sin eventos nuevos:** marcar no manda avisos. Quitar la marca manda el aviso de rechazo por WhatsApp, el mismo de cuando se rechaza una solicitud. Nada pasa por el outbox.
+- **Sin `apply.sql`:** la versión nueva lee `MarkedFakeAt` y `UnmarkedFakeAt` con cada cita, así que `GET /health/schema` responde 503 y la prueba de humo del despliegue lo pide.
 - **Sin configuración nueva:** los endpoints `POST /api/v1/appointments/{id}/mark-fake` y `/unmark-fake` piden lo mismo que aceptar o rechazar (el permiso de la Agenda y el módulo de citas).
 - **Volver a la versión anterior:** funciona sin tocar la base; deja de ofrecer la marca, y los teléfonos marcados vuelven a poder pedir. Las solicitudes marcadas se quedan canceladas y sin respuesta: tampoco cuentan en Explorar.
-- **Dejar también la base como estaba:** el `rollback.sql` quita la columna; se pierde qué solicitudes se marcaron como falsas, sin cambiar ninguna cita ni su estado.
+- **Dejar también la base como estaba:** el `rollback.sql` quita las columnas; se pierde qué solicitudes se marcaron como falsas y a cuáles se les quitó la marca, sin cambiar ninguna cita ni su estado.
 
 ## Slot de staging con swap y aprobación
 

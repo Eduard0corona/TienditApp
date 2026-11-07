@@ -52,7 +52,10 @@ export const appointmentsApi = {
    */
   markFake: (id: string) => apiRequest('post', '/api/v1/appointments/{id}/mark-fake', { path: { id } }),
 
-  /** The mark of a request declined as fake is taken back: it stays declined and counts again; its phone may request again. */
+  /**
+   * The mark of a request declined as fake is taken back: it stays declined, now, and its customer is told; it counts again,
+   * and its phone may request again. It cannot be marked again.
+   */
   unmarkFake: (id: string) => apiRequest('post', '/api/v1/appointments/{id}/unmark-fake', { path: { id } }),
 
   /** Whether customers book from the online menu, how many appointments at once, and what is missing for it. */

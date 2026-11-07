@@ -1194,8 +1194,8 @@ export interface AppointmentDto {
   /** A request online from the business's own team (Fase 29M): Explorar does not count how soon it is answered. */
   fromTeam?: boolean;
   /**
-   * A request online its business declined as fake (Fase 29V): it does not count in Explorar, and its phone may not request
-   * again in the business for 90 days, until the mark is taken back.
+   * A request online its business declined as fake (Fase 29V), and the mark was not taken back: it does not count in Explorar,
+   * and its phone may not request again in the business for 90 days.
    */
   markedFake?: boolean;
 }

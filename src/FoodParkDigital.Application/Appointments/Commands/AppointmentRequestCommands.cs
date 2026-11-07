@@ -33,8 +33,8 @@ public record DeclineAppointmentRequestCommand(Guid AppointmentId) : IRequest<Re
 public record MarkAppointmentRequestFakeCommand(Guid AppointmentId) : IRequest<Result<AppointmentDto>>;
 
 /// <summary>
-/// The business takes back the mark of a request it declined as fake (Fase 29V): it stays declined, as when it was marked, and
-/// counts again; its phone may request again. Nobody is told.
+/// The business takes back the mark of a request it declined as fake (Fase 29V): it was a customer's after all. It stays
+/// declined, now, and counts again; its customer hears it was declined, as when declined, and its phone may request again.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageAppointments)]
 [RequiresCapability(TenantCapability.Appointments)]
@@ -123,8 +123,9 @@ public class AppointmentRequestCommandHandler :
     public async Task<Result<AppointmentDto>> Handle(UnmarkAppointmentRequestFakeCommand request, CancellationToken cancellationToken)
     {
         var appointment = await FindAsync(request.AppointmentId, cancellationToken);
-        appointment.UnmarkFake();
-        return await SaveAsync(appointment, noticeQueued: false, cancellationToken);
+        appointment.UnmarkFake(_clock.UtcNow);
+        // A customer's after all: told it was declined, as if declined now.
+        return await SaveAsync(appointment, await _notices.QueueDeclinedAsync(appointment, cancellationToken), cancellationToken);
     }
 
     // Appointments are filtered by business: one of another business is not found.

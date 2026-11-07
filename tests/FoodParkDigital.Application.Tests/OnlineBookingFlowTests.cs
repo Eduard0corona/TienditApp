@@ -343,13 +343,14 @@ public class OnlineBookingFlowTests
     }
 
     [Fact]
-    public async Task MarkingARequestFake_ShouldFreeItsTime_TellNobody_AndKeepItsPhoneFromAsking_UntilTheMarkIsTakenBack()
+    public async Task MarkingARequestFake_ShouldFreeItsTime_TellNobody_AndKeepItsPhoneFromAsking_UntilTheMarkIsTakenBack_AndItIsDeclined()
     {
         await using var fixture = SalesTestFixture.Create();
         var tenant = await BusinessAsync(fixture);
         await ConnectWhatsAppAsync(fixture, tenant.Id);
         var haircut = await ServiceAsync(fixture, tenant, "Corte de cabello", 60);
-        await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
+        var key = Guid.NewGuid();
+        await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), key: key);
         var request = await fixture.Context.Appointments.SingleAsync();
         var messages = await fixture.Context.OutgoingMessages.CountAsync();
 
@@ -358,6 +359,10 @@ public class OnlineBookingFlowTests
         Assert.Equal((AppointmentStatus.Cancelled, true), (marked.Value!.Status, marked.Value.MarkedFake));
         // Nobody is told: its phone may not be of whoever sent it.
         Assert.Equal(messages, await fixture.Context.OutgoingMessages.CountAsync());
+        // The same request sent again, with its key, is the one already cancelled, as one declined.
+        Assert.Equal(
+            RequestPublicAppointmentCommandHandler.AlreadyCancelledMessage,
+            (await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"), key: key)).Error);
         // Its time is offered again, but its phone may not ask, also written with the 1 WhatsApp adds; another phone may.
         Assert.Contains(Local(Monday, "10:00"), (await SlotsAsync(fixture, haircut.Id))!.Days[1].Slots.Select(s => s.StartAt));
         Assert.Equal(
@@ -368,13 +373,16 @@ public class OnlineBookingFlowTests
         var another = await RequestAsync(fixture, haircut.Id, Local(Monday, "11:00"), phone: "5511112222");
         Assert.True(another.IsSuccess, another.Error);
 
-        // Taken back, its phone may ask again; still nobody was told it was declined.
-        var unmarked = await RequestHandler(fixture).Handle(new UnmarkAppointmentRequestFakeCommand(request.Id), CancellationToken.None);
-        Assert.Equal((AppointmentStatus.Cancelled, false), (unmarked.Value!.Status, unmarked.Value.MarkedFake));
-        var again = await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
-        Assert.True(again.IsSuccess, again.Error);
+        // Taken back, a customer's after all: told it was declined, and its phone may ask again.
         Assert.DoesNotContain(
             await fixture.Context.OutgoingMessages.Select(m => m.Body).ToListAsync(), body => body.Contains("no pudimos confirmar"));
+        var unmarked = await RequestHandler(fixture).Handle(new UnmarkAppointmentRequestFakeCommand(request.Id), CancellationToken.None);
+        Assert.Equal((AppointmentStatus.Cancelled, false), (unmarked.Value!.Status, unmarked.Value.MarkedFake));
+        Assert.Contains(
+            await fixture.Context.OutgoingMessages.Where(m => m.Purpose == MessagePurpose.AppointmentNotice).Select(m => m.Body).ToListAsync(),
+            body => body.Contains("no pudimos confirmar tu cita de Corte de cabello del lunes 5 de octubre a las 10:00 a. m."));
+        var again = await RequestAsync(fixture, haircut.Id, Local(Monday, "10:00"));
+        Assert.True(again.IsSuccess, again.Error);
     }
 
     [Fact]

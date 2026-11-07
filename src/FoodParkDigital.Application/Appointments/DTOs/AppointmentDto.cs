@@ -55,8 +55,8 @@ public class AppointmentDto
     /// </summary>
     public bool FromTeam { get; set; }
     /// <summary>
-    /// A request online its business declined as fake (Fase 29V, ADR 0076): it does not count in Explorar, and its phone may
-    /// not request again in the business for 90 days, until the mark is taken back.
+    /// A request online its business declined as fake (Fase 29V, ADR 0076), and the mark was not taken back: it does not count
+    /// in Explorar, and its phone may not request again in the business for 90 days.
     /// </summary>
     public bool MarkedFake { get; set; }
 
@@ -91,7 +91,7 @@ public class AppointmentDto
             ? ResponseTimes.AnswerBy(appointment.CreatedAt, appointment.RequestedStartAt ?? appointment.StartAt)
             : null,
         FromTeam = appointment.FromTeam,
-        MarkedFake = appointment.MarkedFakeAt != null
+        MarkedFake = appointment.IsMarkedFake
     };
 
     /// <summary><see cref="From"/> written for SQL, for the lists.</summary>
@@ -129,7 +129,8 @@ public class AppointmentDto
                 : x.CreatedAt.AddHours(AnswerByHours))
             : null,
         FromTeam = x.FromTeam,
-        MarkedFake = x.MarkedFakeAt != null
+        // Appointment.IsMarkedFake, written for SQL.
+        MarkedFake = x.MarkedFakeAt != null && x.UnmarkedFakeAt == null
     };
 
     /// <summary>A day: the longest a request waits and is still answered in time (<see cref="ResponseTimes.AnswerBy"/>).</summary>

@@ -25,16 +25,19 @@ El dueño del producto pidió avanzar este punto (el 12), entre otros, sin esper
    - la cita guarda cuándo se marcó (`Appointment.MarkedFakeAt`) y no guarda una respuesta (`RespondedAt`), porque nadie la esperó;
    - Explorar no la cuenta en el tiempo de respuesta, ni deja que tome el lugar de la última solicitud de su cliente: vuelve a contar la anterior de ese teléfono, si la hay ([ADR 0067](0067-requests-that-count.md)). La consulta de Explorar no cambia: una solicitud cancelada sin respuesta y sin que la cancelara su cliente ya no contaba;
    - ese teléfono no puede pedirle otra cita ni visita a ese negocio durante 90 días desde que se marcó, los mismos días que cuenta Explorar. El cliente lee «Este negocio no está recibiendo solicitudes de este teléfono. Comunícate con él directamente.». A otros negocios sí puede pedirles.
-4. **Quitar la marca** (`Appointment.UnmarkFake`, «No era falsa»):
-   - la solicitud sigue cancelada y cuenta como rechazada en el momento en que se marcó;
-   - el teléfono puede volver a pedir;
-   - tampoco se le avisa a nadie.
+4. **Quitar la marca** (`Appointment.UnmarkFake`, «No era falsa»): era de un cliente.
+   - La Agenda pide confirmarlo y dice qué pasa.
+   - La solicitud sigue cancelada, ahora como rechazada: cuenta en el tiempo de respuesta como respondida cuando se quitó la marca, nunca como una respuesta rápida que su cliente no recibió.
+   - El cliente recibe el aviso de que no se pudo confirmar, el mismo de cuando se rechaza.
+   - El teléfono puede volver a pedir.
+   - La cita guarda también cuándo se quitó la marca (`Appointment.UnmarkedFakeAt`): la de cuándo se marcó no se borra.
+   - Ya no se puede marcar otra vez: ya no sigue por confirmar.
 5. **La Agenda:**
    - en una solicitud de un cliente, junto a «Aceptar», «Rechazar» y «Editar», está «Es falsa». Antes de marcarla dice qué pasa;
    - la marcada dice «Marcada como falsa: no cuenta en Explorar» y ofrece «No era falsa»;
    - la API manda `markedFake` en `AppointmentDto`, y los endpoints son `POST /api/v1/appointments/{id}/mark-fake` y `/unmark-fake`.
 6. **Lo que lee el dueño** en «Cómo te ven en TienditApp» ([ADR 0065](0065-response-time-outside-explore.md)): «Lo calculamos con tus solicitudes en línea de los últimos 90 días, la última de cada cliente, sin las de tu equipo ni las que marcaste como falsas. …».
-7. **La migración** `20261107190735_AddAppointmentMarkedFakeAt` agrega una columna que admite `NULL`, sin valor por omisión y sin índice, y no cambia datos. La versión anterior sigue funcionando con ella. El teléfono marcado se busca con el índice de cada cliente que ya existe (`IX_Appointments_OnlineRequests_Customer`, Fase 29M). Su `apply.sql`, `rollback.sql` y `verify.sql` están en `database/production/`.
+7. **La migración** `20261107190735_AddAppointmentMarkedFakeAt` agrega dos columnas que admiten `NULL` (`MarkedFakeAt` y `UnmarkedFakeAt`), sin valor por omisión y sin índice, y no cambia datos. La versión anterior sigue funcionando con ellas. El teléfono marcado se busca con el índice de cada cliente que ya existe (`IX_Appointments_OnlineRequests_Customer`, Fase 29M). Su `apply.sql`, `rollback.sql` y `verify.sql` están en `database/production/`.
 8. **Fuera de esta fase:**
    - un tope de cuántas solicitudes puede marcar un negocio, o que alguien revise las que marca;
    - pedir que el cliente confirme su teléfono antes de pedir (las mismas razones de la [ADR 0067](0067-requests-that-count.md));
@@ -49,16 +52,18 @@ El dueño del producto pidió avanzar este punto (el 12), entre otros, sin esper
   - Nadie recibe el aviso de un rechazo que no pidió.
 - **Lo que limita:**
   - **Se puede abusar:** un negocio puede marcar como falsas las solicitudes reales que dejó pasar, y así mejorar su tiempo. El costo es real: esos clientes no reciben respuesta y no pueden volver a pedirle en 90 días. No hay un tope ni una revisión (punto 8).
-  - **Un cliente real marcado por error** no se entera: su seguimiento dice que se canceló, y si vuelve a pedir lee que el negocio no recibe solicitudes de su teléfono. «No era falsa» lo deshace, sin avisarle.
+  - **Un cliente real marcado por error** no se entera mientras siga marcada: su seguimiento dice que se canceló, y si vuelve a pedir lee que el negocio no recibe solicitudes de su teléfono. «No era falsa» le manda el aviso de rechazo, quizá cuando su hora ya pasó.
+  - **Marcar y quitar la marca** no mejora el tiempo: al quitarla, la solicitud cuenta desde ese momento, así que pasada su hora límite cuenta entre las más lentas.
+  - **El teléfono marcado se busca por la clave con que llegó la solicitud** ([ADR 0067](0067-requests-that-count.md)). Las que guardó la versión anterior a la Fase 29M mientras se publicaba no tienen clave: marcarlas no detiene a ningún teléfono.
   - **Quien escribe un teléfono ajeno** en la página de un negocio puede enterarse de que ese negocio lo marcó.
   - **Un competidor con muchos teléfonos** todavía puede mandar solicitudes, una por teléfono. Ahora el negocio las saca de la cuenta una por una.
   - **La marca vale por negocio:** el mismo teléfono puede pedirle a otros negocios.
   - **Mientras se publica,** la versión anterior no conoce la columna: no ofrece la marca, y una solicitud ya marcada se ve como cancelada, sin respuesta.
 - **Decisión por omisión** (sin preferencia expresa del dueño):
-  - no avisarle a nadie al marcar ni al quitar la marca;
+  - no avisarle a nadie al marcar, y mandar el aviso de rechazo al quitar la marca;
   - 90 días sin que ese teléfono pueda pedir;
-  - poder quitar la marca, sin límite de tiempo;
+  - poder quitar la marca una vez, sin límite de tiempo, y no volver a marcarla;
   - el texto de la Agenda, del aviso al cliente y de la nota del dueño.
 - **Reversibilidad:**
   - volver al código anterior funciona sin `rollback.sql`: deja de ofrecer la marca, y los teléfonos marcados vuelven a poder pedir;
-  - `rollback.sql` borra la columna, y con ella qué solicitudes se marcaron. Esas solicitudes se quedan canceladas y sin respuesta, así que tampoco cuentan en Explorar.
+  - `rollback.sql` borra las columnas, y con ellas qué solicitudes se marcaron y a cuáles se les quitó la marca. Las marcadas se quedan canceladas y sin respuesta, así que tampoco cuentan en Explorar.

@@ -506,11 +506,21 @@ export default function AppointmentsList() {
     }
   };
 
+  // A customer's after all: declined now, and told so; it cannot be marked again.
   const unmarkFake = async (item: AppointmentDto) => {
+    const accepted = await confirm({
+      title: 'Quitar la marca de falsa',
+      message: `La solicitud de ${item.customerName} (${item.serviceName}, ${formatSlot(item)}) sigue cancelada, ahora como rechazada: `
+        + 'el cliente recibe el aviso, cuenta en tu tiempo de respuesta desde hoy y ese teléfono puede volver a pedirte. '
+        + 'No podrás marcarla como falsa otra vez.',
+      confirmLabel: 'No era falsa',
+      cancelLabel: 'Volver',
+    });
+    if (!accepted) return;
     setError('');
     try {
       await appointmentsApi.unmarkFake(item.id);
-      toast.success('Ya no está marcada como falsa: cuenta como rechazada, y ese teléfono puede volver a pedirte.');
+      toast.success('Ya no está marcada como falsa: el cliente recibe el aviso, y ese teléfono puede volver a pedirte.');
       await loadData();
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo quitar la marca.'));

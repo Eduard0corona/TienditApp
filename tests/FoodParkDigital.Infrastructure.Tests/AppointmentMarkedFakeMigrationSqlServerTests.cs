@@ -11,9 +11,9 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// AddAppointmentMarkedFakeAt (Fase 29V, ADR 0076): when the business declined a request online as fake. The requests that
-/// exist are not marked, the version before it keeps saving requests that are not either, and rolling back drops only the
-/// column: a request marked stays cancelled, without an answer.
+/// AddAppointmentMarkedFakeAt (Fase 29V, ADR 0076): when the business declined a request online as fake, and when it took the
+/// mark back. The requests that exist are not marked, the version before it keeps saving requests that are not either, and
+/// rolling back drops only the columns: a request marked stays cancelled, without an answer.
 /// </summary>
 public class AppointmentMarkedFakeMigrationSqlServerTests
 {
@@ -39,7 +39,8 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
 
         await using var context = database.CreateContext(tenant.Id);
         Assert.Null((await context.Appointments.AsNoTracking().SingleAsync()).MarkedFakeAt);
-        Assert.Equal("datetimeoffset|1|", await ColumnAsync(context));
+        Assert.Equal("datetimeoffset|1|", await ColumnAsync(context, "MarkedFakeAt"));
+        Assert.Equal("datetimeoffset|1|", await ColumnAsync(context, "UnmarkedFakeAt"));
 
         var marked = Arrived.AddHours(2);
         var tracked = await context.Appointments.SingleAsync();
@@ -53,12 +54,15 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
                 (stored.Status, stored.MarkedFakeAt, stored.RespondedAt));
         }
 
-        // Taken back: declined as when it was marked.
-        tracked.UnmarkFake();
+        // Taken back: declined then, and when it was marked stays kept.
+        var takenBack = Arrived.AddDays(1);
+        tracked.UnmarkFake(takenBack);
         await context.SaveChangesAsync();
         await using var after = database.CreateContext(tenant.Id);
         var unmarked = await after.Appointments.AsNoTracking().SingleAsync();
-        Assert.Equal(((DateTimeOffset?)null, (DateTimeOffset?)marked), (unmarked.MarkedFakeAt, unmarked.RespondedAt));
+        Assert.Equal(
+            ((DateTimeOffset?)marked, (DateTimeOffset?)takenBack, (DateTimeOffset?)takenBack),
+            (unmarked.MarkedFakeAt, unmarked.UnmarkedFakeAt, unmarked.RespondedAt));
     }
 
     [SqlServerFact]
@@ -98,6 +102,7 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
         {
             Assert.Equal(BeforeMigration, await LatestMigrationAsync(context));
             Assert.Null(await context.Database.SqlQuery<int?>($"SELECT COL_LENGTH(N'dbo.Appointments', N'MarkedFakeAt') AS [Value]").SingleAsync());
+            Assert.Null(await context.Database.SqlQuery<int?>($"SELECT COL_LENGTH(N'dbo.Appointments', N'UnmarkedFakeAt') AS [Value]").SingleAsync());
             // The request stays as it was: cancelled, without an answer, so it does not count in Explorar either.
             var request = await context.Appointments.AsNoTracking().SingleAsync();
             Assert.Equal((AppointmentStatus.Cancelled, (DateTimeOffset?)null), (request.Status, request.RespondedAt));
@@ -131,11 +136,11 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
     }
 
     /// <summary>The column's type, whether it takes NULL (1) and its default ('' for none).</summary>
-    private static Task<string> ColumnAsync(ApplicationDbContext context)
+    private static Task<string> ColumnAsync(ApplicationDbContext context, string column)
         => context.Database.SqlQuery<string>($"""
             SELECT CONCAT(TYPE_NAME(c.[user_type_id]), N'|', c.[is_nullable], N'|', OBJECT_DEFINITION(c.[default_object_id])) AS [Value]
             FROM sys.columns c
-            WHERE c.[object_id] = OBJECT_ID(N'dbo.Appointments') AND c.[name] = N'MarkedFakeAt'
+            WHERE c.[object_id] = OBJECT_ID(N'dbo.Appointments') AND c.[name] = {column}
             """).SingleAsync();
 
     private static async Task MigrateAsync(SqlServerTestDatabase database, string target)

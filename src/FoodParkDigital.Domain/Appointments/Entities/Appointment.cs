@@ -113,11 +113,15 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     public DateTimeOffset? AnswerReminderSentAt { get; private set; }
     /// <summary>
     /// When its business declined it as fake (Fase 29V, ADR 0076): a request online of a customer that nobody meant to book.
-    /// It does not count in how soon the business answers (<see cref="ResponseTimes"/>), and its phone may not request again
-    /// in that business for <see cref="ResponseTimes.WindowDays"/> days. Null for every other appointment, and once the
-    /// business takes the mark back.
+    /// While marked (<see cref="IsMarkedFake"/>) it does not count in how soon the business answers (<see cref="ResponseTimes"/>),
+    /// and its phone may not request again in that business for <see cref="ResponseTimes.WindowDays"/> days. Null for every
+    /// other appointment. Kept once the mark is taken back (<see cref="UnmarkedFakeAt"/>).
     /// </summary>
     public DateTimeOffset? MarkedFakeAt { get; private set; }
+    /// <summary>When its business took back the mark of fake (Fase 29V, ADR 0076); null while marked, or never marked.</summary>
+    public DateTimeOffset? UnmarkedFakeAt { get; private set; }
+    /// <summary>Declined as fake, and the mark was not taken back (Fase 29V).</summary>
+    public bool IsMarkedFake => MarkedFakeAt is not null && UnmarkedFakeAt is null;
     /// <summary>
     /// Where the customer gets the quote of a visit they requested online (Fase 29B, ADR 0053 point 11), when they gave it:
     /// one plain address (<see cref="InvoiceEmailAddress"/>). Null otherwise. Theirs: it never goes in the activity or a log.
@@ -429,15 +433,16 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     }
 
     /// <summary>
-    /// The business takes back the mark of a request it declined as fake (Fase 29V, ADR 0076): it stays declined, as if it
-    /// had been declined when it was marked, so it counts again; its phone may request again.
+    /// The business takes back the mark of a request it declined as fake (Fase 29V, ADR 0076): it was a customer's after all.
+    /// It stays declined, now: it counts again as answered when the mark is taken back, never as a quick answer its customer
+    /// did not get, and its phone may request again. When it was marked stays kept. Once taken back it is not marked again.
     /// </summary>
-    public void UnmarkFake()
+    public void UnmarkFake(DateTimeOffset now)
     {
-        if (MarkedFakeAt is not { } markedAt)
+        if (!IsMarkedFake)
             throw new DomainException(OnlineBookingRules.NotMarkedFakeMessage);
-        RespondedAt = markedAt;
-        MarkedFakeAt = null;
+        UnmarkedFakeAt = now;
+        RespondedAt = now;
     }
 
     /// <summary>

@@ -7,8 +7,9 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 /// <summary>
-/// The model without what Fase 29V added (when the business declined a request online as fake): the app as deployed before
-/// it, and what a test needs on a database migrated to an earlier migration, where the column does not exist yet.
+/// The model without what Fase 29V added (when the business declined a request online as fake, and when it took the mark
+/// back): the app as deployed before it, and what a test needs on a database migrated to an earlier migration, where the
+/// columns do not exist yet.
 /// </summary>
 internal static class BeforeAppointmentMarkedFake
 {
@@ -16,7 +17,8 @@ internal static class BeforeAppointmentMarkedFake
         => database.CreateContext(tenantId, (options, tenant, mediator) => new Context(options, tenant, mediator));
 
     /// <summary>For the context of an earlier version, which does not know it either.</summary>
-    public static void Ignore(ModelBuilder modelBuilder) => modelBuilder.Entity<Appointment>().Ignore(a => a.MarkedFakeAt);
+    public static void Ignore(ModelBuilder modelBuilder)
+        => modelBuilder.Entity<Appointment>().Ignore(a => a.MarkedFakeAt).Ignore(a => a.UnmarkedFakeAt);
 
     private sealed class Context(
         DbContextOptions<ApplicationDbContext> options,

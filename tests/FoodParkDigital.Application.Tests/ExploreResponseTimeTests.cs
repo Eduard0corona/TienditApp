@@ -303,15 +303,17 @@ public class ExploreResponseTimeTests
         // One of five within an hour: nothing to say.
         Assert.Null((await CardsAsync(fixture))["falsas"].ResponseTime);
 
-        // Declined as fake, they do not count, and the customer's quick answer before counts again: two of four.
-        later.MarkFake(Now);
-        stranger.MarkFake(Now);
+        // Declined as fake ten minutes after they arrived, they do not count, and the customer's quick answer before counts
+        // again: two of four.
+        later.MarkFake(later.CreatedAt.AddMinutes(10));
+        stranger.MarkFake(stranger.CreatedAt.AddMinutes(10));
         await fixture.Context.SaveChangesAsync();
         Assert.Equal(ResponseTime.WithinAnHour, (await CardsAsync(fixture))["falsas"].ResponseTime);
 
-        // Taken back, they count again, declined now: past their limit, among the slowest.
-        later.UnmarkFake();
-        stranger.UnmarkFake();
+        // Taken back, they count again, declined now, past their limit: among the slowest, never quick answers their customers
+        // did not get.
+        later.UnmarkFake(Now);
+        stranger.UnmarkFake(Now);
         await fixture.Context.SaveChangesAsync();
         Assert.Null((await CardsAsync(fixture))["falsas"].ResponseTime);
     }

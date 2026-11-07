@@ -187,8 +187,8 @@ public class AppointmentsController : ControllerBase
     }
 
     /// <summary>
-    /// Takes back the mark of a request declined as fake (Fase 29V): it stays declined and counts again; its phone may request
-    /// again.
+    /// Takes back the mark of a request declined as fake (Fase 29V): it stays declined, now, its customer hears it, it counts
+    /// again and its phone may request again. It cannot be marked again.
     /// </summary>
     [HttpPost("{id:guid}/unmark-fake")]
     public async Task<ActionResult<AppointmentDto>> UnmarkFake(Guid id, CancellationToken cancellationToken)

@@ -568,7 +568,7 @@ internal static class PublicAppointmentReceipts
     /// The phone is compared as a number (<see cref="MessagingPhone.ToKey"/>), as the requests keep it when they arrive, and
     /// one message says it for both, so a stranger who types a phone does not learn whether its customer cancelled. Since the
     /// Fase 29V (ADR 0076), a phone whose request the business declined as fake may not request again for
-    /// <see cref="ResponseTimes.WindowDays"/> days from then, the days Explorar counts.
+    /// <see cref="ResponseTimes.WindowDays"/> days from then, the days Explorar counts, unless the mark was taken back.
     /// </summary>
     public static async Task<string?> RefusalForPhoneAsync(
         IApplicationDbContext context, string phone, DateTimeOffset now, CancellationToken cancellationToken)
@@ -576,7 +576,8 @@ internal static class PublicAppointmentReceipts
         var key = MessagingPhone.ToKey(phone);
         var fakeSince = ResponseTimes.Since(now);
         if (await context.Appointments.AnyAsync(
-                a => a.Channel == AppointmentChannel.Online && a.RequestPhone == key && a.MarkedFakeAt >= fakeSince, cancellationToken))
+                a => a.Channel == AppointmentChannel.Online && a.RequestPhone == key && a.MarkedFakeAt >= fakeSince && a.UnmarkedFakeAt == null,
+                cancellationToken))
             return RequestPublicAppointmentCommandHandler.MarkedFakeMessage;
 
         var since = now - OnlineBookingRules.CancelledCountFor;

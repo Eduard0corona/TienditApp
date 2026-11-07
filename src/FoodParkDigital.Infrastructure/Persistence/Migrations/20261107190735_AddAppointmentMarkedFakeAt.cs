@@ -16,6 +16,12 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                 table: "Appointments",
                 type: "datetimeoffset",
                 nullable: true);
+
+            migrationBuilder.AddColumn<DateTimeOffset>(
+                name: "UnmarkedFakeAt",
+                table: "Appointments",
+                type: "datetimeoffset",
+                nullable: true);
         }
 
         /// <inheritdoc />
@@ -23,6 +29,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.DropColumn(
                 name: "MarkedFakeAt",
+                table: "Appointments");
+
+            migrationBuilder.DropColumn(
+                name: "UnmarkedFakeAt",
                 table: "Appointments");
         }
     }
