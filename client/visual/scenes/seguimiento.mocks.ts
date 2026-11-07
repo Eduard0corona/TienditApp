@@ -60,6 +60,25 @@ function myOrder(data: DemoData, id: string) {
       delivery: { postalCode: '06700', addressLine: 'Colima 145, depto. 3, Roma Norte', references: 'Portón negro, tocar el 3' },
     };
   }
+  if (id === 'my-5') {
+    // Fase 29R: the molletes she ordered a moment ago, still waiting for the business: she may cancel them.
+    return {
+      ...business, id, orderNumber: 'ORD-000418', status: 0, createdAt: ago(2), step: RECEIVED, stepLabel: 'Recibido',
+      steps: [
+        step(RECEIVED, 'Recibido', CURRENT, ago(2)),
+        step(CONFIRMED, 'Confirmado', UPCOMING),
+        step(PREPARING, 'En preparación', UPCOMING),
+        step(READY, 'Listo', UPCOMING),
+        step(DELIVERED, 'Entregado', UPCOMING),
+      ],
+      inProgress: true,
+      courierTrackingUrl: null,
+      items: [line('Molletes', 1, 85)],
+      deliveryFee: null, tax: 11.72, total: 85, paidAmount: 0, cancellationReason: null,
+      delivery: null,
+      canCancel: true,
+    };
+  }
   if (id === 'my-4') {
     return {
       ...business, id, orderNumber: 'ORD-000405', status: 99, createdAt: ago(26 * 60), step: CANCELLED, stepLabel: 'Cancelado',
@@ -83,6 +102,36 @@ function myOrder(data: DemoData, id: string) {
  * The guest's order followed with the link of its receipt (PublicOrderTrackingDto): the two conchas and the americano of
  * Café La Esquina, accepted and in preparation, to an address it does not show. Any other link is not found.
  */
+/** The link of a guest's order the business has not accepted yet (Fase 29R): the guest may cancel it. */
+export const WAITING_TRACKING_LINK = 'PorConfirmarPorConfirmarPorConfirmar-_01234';
+
+/**
+ * The guest's order the business has not accepted (Fase 29R): the same conchas and americano, received a moment ago. Once
+ * cancelled, it says the customer cancelled it.
+ */
+function waitingGuestOrder(data: DemoData, cancelled: boolean) {
+  const order = guestOrder(data);
+  return {
+    ...order,
+    orderNumber: 'ORD-000361', createdAt: ago(1),
+    step: cancelled ? CANCELLED : RECEIVED,
+    stepLabel: cancelled ? 'Cancelado' : 'Recibido',
+    steps: cancelled
+      ? [step(RECEIVED, 'Recibido', DONE, ago(1)), step(CANCELLED, 'Cancelado', CURRENT, NOW_ISO)]
+      : [
+        step(RECEIVED, 'Recibido', CURRENT, ago(1)),
+        step(CONFIRMED, 'Confirmado', UPCOMING),
+        step(PREPARING, 'En preparación', UPCOMING),
+        step(READY, 'Listo', UPCOMING),
+        step(ON_THE_WAY, 'En camino', UPCOMING),
+        step(DELIVERED, 'Entregado', UPCOMING),
+      ],
+    inProgress: !cancelled,
+    cancellationReason: cancelled ? 'Lo canceló el cliente.' : null,
+    canCancel: !cancelled,
+  };
+}
+
 function guestOrder(data: DemoData) {
   return {
     orderNumber: 'ORD-000360', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', businessContactPhone: '5512345678',
@@ -109,8 +158,13 @@ const trackingRoutes: ExtraRoutes = (data, helpers) => [
     const order = myOrder(data, decodeURIComponent(match[1]));
     return order ? helpers.ok(order) : problem(404, 'No encontramos ese pedido en tu cuenta.');
   }],
-  ['POST', /^\/public\/orders\/tracking$/, (_match, _query, body: { token?: string }) => (body?.token === TRACKING_LINK
-    ? helpers.ok(guestOrder(data))
+  ['POST', /^\/public\/orders\/tracking$/, (_match, _query, body: { token?: string }) => {
+    if (body?.token === TRACKING_LINK) return helpers.ok(guestOrder(data));
+    if (body?.token === WAITING_TRACKING_LINK) return helpers.ok(waitingGuestOrder(data, false));
+    return problem(404, 'No encontramos ese pedido. El enlace pudo haber vencido.');
+  }],
+  ['POST', /^\/public\/orders\/tracking\/cancel$/, (_match, _query, body: { token?: string }) => (body?.token === WAITING_TRACKING_LINK
+    ? helpers.ok(waitingGuestOrder(data, true))
     : problem(404, 'No encontramos ese pedido. El enlace pudo haber vencido.'))],
   ...publicRoutes(data, helpers),
 ];
