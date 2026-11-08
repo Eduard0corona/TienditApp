@@ -46,7 +46,7 @@ Actualizada el 2026-10-29 con las Fases 28J y 28K, el 2026-10-28 con la 28I, el 
   - Las categorías son fijas y una por negocio. Agregar una necesita migración (la CHECK), enum, cliente y la lista del registro.
   - El perfil de un cliente (`/profile`) sigue en el marco del equipo, con «Mis pedidos» en el menú. Explorar y Mis pedidos ya tienen el suyo.
   - «Ver más» pide cada página por separado sobre una foto que puede rehacerse entre una y otra: un negocio que cambia de grupo puede repetirse u omitirse entre páginas.
-  - La 24A suma 330 B a la primera visita (de 176,806 a 177,136 B, contra `master` en `c3c1a00`) y sube el presupuesto a 177,200 B. Una parte son los enums del contrato, que viven en el primer chunk aunque solo los usen pantallas que bajan aparte.
+  - La 24A suma 330 B a la primera visita (de 176,806 a 177,136 B, contra `master` en `c3c1a00`) y sube el presupuesto a 177,200 B. Una parte son los enums del contrato, que viven en el primer chunk aunque solo los usen pantallas que bajan aparte. Resuelto en la Fase 30C: cada enum generado es su propio módulo, la entrada lleva solo los nueve que usa y la primera visita bajó 2,009 B (de 182,241 a 180,232 B, contra `master` en `3b8157c`), con el presupuesto en 180,300 B.
 - Comprar con tu cuenta (Fase 24B, [ADR 0022](../adr/0022-shopping-with-an-account.md)):
   - El carrito guardado y el código postal de Explorar viven en el dispositivo (`localStorage`): no siguen a la cuenta a otro teléfono ni a otra computadora, y un navegador que bloquea el almacenamiento los pierde al recargar.
   - Las direcciones de la cuenta (hasta 10) no se validan contra un mapa: el código postal decide la zona, como en la 22B. No hay una dirección predeterminada: la tienda ofrece primero la última usada.

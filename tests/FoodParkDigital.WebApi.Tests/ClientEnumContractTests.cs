@@ -9,8 +9,9 @@ namespace FoodParkDigital.WebApi.Tests;
 /// <c>export const X = { ... } as const</c> object. A copy that drifts makes the screens send and show the wrong
 /// values: the inventory movement copies started at 0 while the domain starts at 1, so "Salida" was saved as Entry
 /// and added stock. Since the Fase 7 they are generated from the contract (client/src/api/generated/enums.ts, from
-/// the names EnumNamesSchemaFilter writes); every exported const named like a domain enum, generated or still
-/// written in client/src/types/index.ts, is compared with it, and one defined in both places fails.
+/// the names EnumNamesSchemaFilter writes; one module each since the Fase 30C); every exported const named like a
+/// domain enum, generated or still written in client/src/types/index.ts, is compared with it, and one defined in both
+/// places fails.
 /// </summary>
 public class ClientEnumContractTests
 {
@@ -104,7 +105,10 @@ public class ClientEnumContractTests
             .GroupBy(type => type.Name)
             .ToDictionary(group => group.Key, group => group.Single());
 
-    /// <summary>The generated enums and the hand-written types, as one source (a name in both is two declarations).</summary>
+    /// <summary>
+    /// The generated enums and the hand-written types, as one source (a name in both is two declarations). Since the
+    /// Fase 30C each generated enum is its own module (client/src/api/generated/enums/), and enums.ts re-exports them.
+    /// </summary>
     private static string ReadClientTypes()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
@@ -112,7 +116,11 @@ public class ClientEnumContractTests
             if (File.Exists(Path.Combine(directory.FullName, "FoodParkDigital.sln")))
             {
                 var source = Path.Combine(directory.FullName, "client", "src");
-                return File.ReadAllText(Path.Combine(source, "api", "generated", "enums.ts"))
+                var generated = Path.Combine(source, "api", "generated");
+                var modules = Directory.GetFiles(Path.Combine(generated, "enums"), "*.ts").Order(StringComparer.Ordinal);
+                return string.Join("\n", modules.Select(File.ReadAllText))
+                    + "\n"
+                    + File.ReadAllText(Path.Combine(generated, "enums.ts"))
                     + "\n"
                     + File.ReadAllText(Path.Combine(source, "types", "index.ts"));
             }

@@ -380,11 +380,14 @@ jobs:
         run: npm ci
 
       # The generated types and enums must be the ones openapi/openapi.json produces (the backend job checks that
-      # document).
+      # document). Since the Fase 30C each enum is its own module in src/api/generated/enums/, so a module missing,
+      # changed or left over counts too: git status sees the untracked ones git diff does not.
       - name: Check the generated API types
         run: |
           npm run api:types
-          if ! git diff --exit-code -- src/api/generated/schema.ts src/api/generated/enums.ts; then
+          if [ -n "$(git status --porcelain -- src/api/generated)" ]; then
+            git status --short -- src/api/generated
+            git diff -- src/api/generated
             echo "::error::src/api/generated does not match openapi/openapi.json: run npm run api:types."
             exit 1
           fi
