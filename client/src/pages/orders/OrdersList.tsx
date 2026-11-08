@@ -3,6 +3,7 @@ import { Modal } from 'react-bootstrap';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
+import ChimeSettingsButton from '../../components/common/ChimeSettingsButton';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import ChannelBadge from '../../components/common/ChannelBadge';
 import StatusChip from '../../components/common/StatusChip';
@@ -690,16 +691,19 @@ export default function OrdersList() {
                   </>
                 )}
                 toolbarEnd={(
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${chime.enabled ? 'btn-primary' : 'btn-light'}`}
-                    onClick={chime.toggle}
-                    aria-pressed={chime.enabled}
-                    title="Suena cuando llega un pedido en línea por confirmar"
-                  >
-                    <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
-                    {chime.enabled ? 'Sonido activado' : 'Sonido para pedidos en línea'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${chime.enabled ? 'btn-primary' : 'btn-light'}`}
+                      onClick={chime.toggle}
+                      aria-pressed={chime.enabled}
+                      title="Suena cuando llega un pedido en línea por confirmar"
+                    >
+                      <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
+                      {chime.enabled ? 'Sonido activado' : 'Sonido para pedidos en línea'}
+                    </button>
+                    <ChimeSettingsButton />
+                  </>
                 )}
                 serverSide={{
                   totalCount: data.totalCount,

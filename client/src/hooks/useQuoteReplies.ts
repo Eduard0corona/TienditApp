@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../api/queries';
 import { quoteFolio } from '../utils/quotes';
+import { useArrivalChime } from './useArrivalChime';
 import { useToast } from './useToast';
 
 /** A customer answered a quote from its link (Fase 29R): which one and how, never what they wrote. */
@@ -11,6 +12,12 @@ export interface QuoteAnsweredPayload {
   revision: number;
   accepted: boolean;
 }
+
+/**
+ * Fase 29Z: the device's choice of a sound with each answer to a quote. Cotizaciones turns it on or off; the top bar plays
+ * it on any screen.
+ */
+export const QUOTES_SOUND_KEY = 'tienditapp:quotes-sound';
 
 /** "Te aceptaron la cotización COT-000007 · versión 2.", and what follows. */
 export function describeAnswer(payload: QuoteAnsweredPayload): { title: string; message: string } {
@@ -23,7 +30,8 @@ export function describeAnswer(payload: QuoteAnsweredPayload): { title: string; 
 /**
  * The live answers to the quotes of the business, for whoever works them (the top bar mounts it, Fase 29R): the bell reads
  * them at once, the list and the quote open on screen reload, and a notice tells each one. Answers sent while the connection
- * was down are lost: every (re)connection reads again, and the bell still reads every minute.
+ * was down are lost: every (re)connection reads again, and the bell still reads every minute. Since the Fase 29Z each one
+ * rings when the device has the sound on: an accepted one as something that arrives, a rejected one as one that leaves.
  */
 export function useQuoteRepliesLive(enabled: boolean, tenantId?: string) {
   const queryClient = useQueryClient();
@@ -32,6 +40,11 @@ export function useQuoteRepliesLive(enabled: boolean, tenantId?: string) {
   useEffect(() => {
     toastRef.current = toast;
   }, [toast]);
+  const chime = useArrivalChime(QUOTES_SOUND_KEY);
+  const playRef = useRef(chime.play);
+  useEffect(() => {
+    playRef.current = chime.play;
+  }, [chime.play]);
 
   useEffect(() => {
     // Switching business reloads the page; the business is a key all the same, so a connection never outlives its own.
@@ -55,6 +68,7 @@ export function useQuoteRepliesLive(enabled: boolean, tenantId?: string) {
         const { title, message } = describeAnswer(payload);
         if (payload.accepted) toastRef.current.success(message, { title, durationMs: 10_000 });
         else toastRef.current.warning(message, { title, durationMs: 10_000 });
+        playRef.current(payload.accepted ? 'arrival' : 'leaving');
       });
       stop = keepHubConnected(connection, 'QuoteHub', () => isDisposed, changed);
     }).catch(() => {

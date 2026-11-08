@@ -23,6 +23,14 @@ vi.mock('../api/signalr', () => ({
   },
 }));
 
+const chime = vi.hoisted(() => ({ play: vi.fn(), key: '' }));
+vi.mock('./useArrivalChime', () => ({
+  useArrivalChime: (key: string) => {
+    chime.key = key;
+    return { enabled: true, toggle: vi.fn(), play: chime.play, needsTouch: false };
+  },
+}));
+
 const answer = (overrides: Partial<QuoteAnsweredPayload> = {}): QuoteAnsweredPayload => ({
   quoteId: 'q1',
   number: 'COT-000007',
@@ -44,6 +52,7 @@ describe('the answers to quotes, live (Fase 29R)', () => {
     hub.onConnected = undefined;
     hub.urls = [];
     hub.stop.mockReset();
+    chime.play.mockReset();
     queryClient = new QueryClient();
   });
 
@@ -102,6 +111,20 @@ describe('the answers to quotes, live (Fase 29R)', () => {
     ).toBeInTheDocument();
     // The bell and the quotes, once with the answer and once when it came back.
     expect(invalidate).toHaveBeenCalledTimes(4);
+  });
+
+  it('rings with the sound of the quotes of this device: up for an accepted one, down for a rejected one (Fase 29Z)', async () => {
+    renderLive();
+    await connected();
+    expect(chime.play).not.toHaveBeenCalled();
+
+    act(() => hub.handlers.get('QuoteAnswered')?.(answer()));
+    act(() => hub.handlers.get('QuoteAnswered')?.(answer({ accepted: false, revision: 2 })));
+    // Coming back reads again without ringing: nothing new arrived.
+    act(() => hub.onConnected?.());
+
+    expect(chime.key).toBe('tienditapp:quotes-sound');
+    expect(chime.play.mock.calls).toEqual([['arrival'], ['leaving']]);
   });
 
   it('does not connect for whoever does not work them, nor without a business, and stops when it goes', async () => {
