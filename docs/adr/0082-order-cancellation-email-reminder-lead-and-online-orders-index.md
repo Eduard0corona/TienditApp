@@ -36,6 +36,7 @@ El dueño del producto pidió avanzar estos puntos (el 9, el 10 y el 13), entre 
      - la del tiempo de confirmar sube de 0.4 a 2.2 s con 25,000, y de 1.8 a 28 s con 100,000. Con el índice, SQL Server cambia el plan de sus dos subconsultas del historial, y con 100,000 pedidos la foto llega a los 30 segundos de la petición.
      - Las dos lecturas buscan los mismos pedidos, así que las dos usan el índice: no se puede dar solo a la de los pedidos listos.
    - Mejorar la del tiempo de confirmar pide otra forma de la consulta (como la de los pedidos listos, que une el historial en vez de buscarlo por pedido) y medirla otra vez; queda para otra fase.
+     - *Hecho en la Fase 30E:* la lectura une el historial una vez y dice, por cliente, cuándo llegó el último pedido de cada tramo. Sin índice tarda unos 85 a 90 ms con 25,000 pedidos y 200 a 450 ms con 100,000 (antes 370 ms y 0.8 s en la misma máquina). Con el índice filtrado ya no empeora: 35 a 50 ms y 170 a 200 ms, en tres corridas. Agregarlo sigue pidiendo migración.
    - **Se queda** `IX_Appointments_OnlineRequests_CreatedAt` de la 29J: desde la 29M Explorar ya no lo usa, pero el recordatorio de la 29U busca con él las solicitudes que esperan ([ADR 0075](0075-answer-reminder.md)).
    - El detalle de la medición está en [la estrategia de pruebas](../development/testing-strategy.md).
 4. **Fuera de esta fase:**

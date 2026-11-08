@@ -89,6 +89,26 @@ public class OrderConfirmTimeInExploreTests
     }
 
     [Fact]
+    public async Task ACustomer_ShouldCountByTheirLastOrder_ThoughAnEarlierOneWasAsQuick()
+    {
+        await using var fixture = Fixture();
+        var tacos = await KitchenAsync(fixture, "tacos", "Tacos El Güero");
+        // A customer confirmed at once, then after 40 minutes, then at once again: the last one is quick. Since the Fase 30E
+        // each tramo says when its last order arrived, and the one of the latest is the one that counts (not the tramo
+        // whose first order arrived last, which would be the slow one).
+        var phone = NewCustomerPhone();
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(1), phone: phone, arrivedDaysAgo: 10);
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(40), phone: phone, arrivedDaysAgo: 5);
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(1), phone: phone, arrivedDaysAgo: 1);
+        // Two more customers: one confirmed at once, one after 40 minutes.
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(1));
+        await OrderAsync(fixture, tacos, answeredAfter: TimeSpan.FromMinutes(40));
+
+        // Two of three within five minutes.
+        Assert.Equal(OrderConfirmTime.WithinFiveMinutes, Entry(await SnapshotAsync(fixture), tacos).OrderConfirmTime);
+    }
+
+    [Fact]
     public async Task EachBusiness_ShouldCountItsOwnCustomers_ThoughTheyOrderAtAnotherOneLater()
     {
         await using var fixture = Fixture();
