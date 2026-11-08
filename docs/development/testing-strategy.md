@@ -2347,13 +2347,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Application:**
     - `ExploreOrderTests` (2, nuevo): cómo se juntan los tiempos (el oficio por el más lento de sus pasos, solicitudes y pedidos por el más rápido, un tiempo que falta no cuenta, sin ninguno en medio); y la lista completa con cocinas, oficios y salones en ese orden.
     - `QuoteTimeInExploreTests` (+2):
-      - cuentan, a la semana de terminar, la visita con la cotización empezada, la que no dejó nada, la cobrada solo por la visita, la del trabajo cobrado con una cotización empezada, la del trabajo cobrado en una venta cancelada y la que empezó otra cotización después de descartar la primera; no cuentan la del trabajo cobrado, la de cotización descartada, la de seis días, la de más de 90 días ni la solicitud que nadie aceptó. Cada oficio está armado para que una visita de más o de menos cambie lo que dice;
+      - cuentan, a la semana de terminar, la visita con la cotización empezada, la que no dejó nada, la cobrada solo por la visita, la del trabajo cobrado con una cotización empezada, la del trabajo cobrado en una venta cancelada, la que empezó otra cotización después de descartar la primera y la que terminó hace 95 días, cuya semana se cumplió dentro de los 90; no cuentan la del trabajo cobrado, la de cotización descartada, la de seis días, la de más de 90 días ni la solicitud que nadie aceptó. Cada oficio está armado para que una visita de más o de menos cambie lo que dice;
       - un cliente cuenta por la visita que se decidió al último, sea la cotizada o la de la semana cumplida.
   - **WebApi:**
     - `CrossTenantDirectoryQuoteTimeSqlServerTests` (+1, SQL Server): lo mismo a través de la API, con el trabajo cobrado en una venta de mostrador; un oficio dice otra cosa si sobra o falta cualquiera de sus visitas.
     - `TenantFilterBypassAllowlistTests`: Explorar suma dos lecturas entre negocios, las cotizaciones y la venta de cada visita, dentro de su negocio.
   - **Cliente:** `responseTime.test.ts` (+1): la nota del dueño dice que cuenta la visita sin cotización a la semana, también cuando tarda una semana o más y cuando todavía no se cuenta.
-  - **Mutaciones** que hacen fallar al menos una prueba (12): quitar la visita sin cotizar, contar la que nadie aceptó, contar el borrador como mandado, ignorar si hay alguna cotización, ignorar la venta, su cancelación o su servicio, quitar la ventana de 90 días o la semana, contar cada visita en lugar de cada cliente, tomar la decisión más vieja y volver al orden por tiempo de responder.
+  - **Mutaciones** que hacen fallar al menos una prueba (13): quitar la visita sin cotizar, contar la que nadie aceptó, contar el borrador como mandado, ignorar si hay alguna cotización, ignorar la venta, su cancelación o su servicio, quitar la ventana de 90 días o la semana, contar desde los 90 días en lugar de los 97, contar cada visita en lugar de cada cliente, tomar la decisión más vieja y volver al orden por tiempo de responder.
   - **Carga** (una prueba temporal, sin commit, sobre SQL Server local con un oficio y 3,000 teléfonos, la mitad de las visitas cotizadas):
     - la versión final: unos 230 ms con 20,000 visitas, 400 ms con 40,000 y entre 650 y 850 ms con 80,000;
     - la consulta anterior, que solo leía las cotizadas: unos 190 ms con 20,000 y entre 400 y 550 ms con 80,000;
@@ -2366,6 +2366,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - la ADR y las reglas decían «por su última visita»: ahora dicen «la que se decidió al último»;
     - la nota del dueño dice la regla también cuando tarda una semana o más;
     - y pruebas del cobro, de la cotización vuelta a empezar y de un cliente con dos visitas.
+  - **Revisión automática:** sin bloqueantes; un menor, la visita del borde de la ventana, ya probada.
   - **Escenas:** contra la línea base de `master` en `4df7b26` (810 escenas):
     - **809 iguales.**
     - **1 cambia**, como se esperaba: «Cómo te ven» de un oficio con su tiempo, con la nota nueva. Dio la misma imagen en dos corridas seguidas.
