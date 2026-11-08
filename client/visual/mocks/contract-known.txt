@@ -1,7 +1,7 @@
 # Las respuestas del servidor simulado de las escenas que ya no coincidían con openapi.json cuando empezó a revisarlas
 # contract.mjs (Fase 30D), como las escribe normalize(): sin el índice de cada elemento ni el valor encontrado.
 # Una respuesta nueva que no coincide hace fallar su escena; esta lista solo baja. Al corregir un dato en mocks/, borra
-# su línea. Para rehacerla: VISUAL_CONTRACT_REPORT=<archivo> en una corrida completa, y sort -u.
+# su línea. Para rehacerla: VISUAL_CONTRACT_REPORT=<archivo> en una corrida completa, y sort -u (más la sección de abajo).
 
 GET /api/v1/appointments/home-visit-requests: $.service.id debía ser un uuid
 GET /api/v1/appointments/home-visit-requests: $.serviceId debía ser un uuid
@@ -21,7 +21,6 @@ GET /api/v1/appointments: $.items[].fromTeam falta
 GET /api/v1/appointments: $.items[].markedFake falta
 GET /api/v1/appointments: $.items[].problemPhotos falta
 GET /api/v1/appointments: $.items[].saleCancelled falta
-GET /api/v1/auth/confirm-email: la API no devuelve cuerpo con 200
 GET /api/v1/auth/my-tenant/directory: $.countsOrders falta
 GET /api/v1/auth/my-tenant/directory: $.countsQuotes falta
 GET /api/v1/auth/my-tenant/directory: $.countsReady falta
@@ -36,6 +35,7 @@ GET /api/v1/courier-settlements/pending-orders: $.onTheWay[].orderId debía ser 
 GET /api/v1/courier-settlements/pending-orders: $.owed[].orderId debía ser un uuid
 GET /api/v1/courier-settlements/{id}: $.orders[].orderId debía ser un uuid
 GET /api/v1/courier-settlements/{id}: $.settlement.id debía ser un uuid
+GET /api/v1/courier-settlements/{id}: el parámetro {id} de la ruta debía ser un uuid y la API contesta 404
 GET /api/v1/courier-settlements: $.items[].id debía ser un uuid
 GET /api/v1/customers/account: $.orders[].orderId debía ser un uuid
 GET /api/v1/customers/account: $.recentBalanceEntries[].id debía ser un uuid
@@ -57,6 +57,7 @@ GET /api/v1/delivery-zones: $[].id debía ser un uuid
 GET /api/v1/employees: $.items[].noticeEmails falta
 GET /api/v1/employees: $.items[].tenantUserId debía ser un uuid
 GET /api/v1/employees: $.items[].userId debía ser un uuid
+GET /api/v1/invoicing/orders/{orderId}/self-invoice: el parámetro {orderId} de la ruta debía ser un uuid y la API contesta 404
 GET /api/v1/invoicing/settings: $.available falta
 GET /api/v1/invoicing/settings: $.creditNoteSerie falta
 GET /api/v1/invoicing/settings: $.missingData falta
@@ -95,6 +96,7 @@ GET /api/v1/me/orders/{id}: $.canCancel falta
 GET /api/v1/me/orders/{id}: $.id debía ser un uuid
 GET /api/v1/me/orders/{id}: $.items[].productId debía ser un uuid
 GET /api/v1/me/orders/{id}: $.writtenOffAmount falta
+GET /api/v1/me/orders/{id}: el parámetro {id} de la ruta debía ser un uuid y la API contesta 404
 GET /api/v1/me/orders: $.items[].id debía ser un uuid
 GET /api/v1/me/orders: $.items[].items[].optionIds[] debía ser un uuid
 GET /api/v1/me/orders: $.items[].items[].productId debía ser un uuid
@@ -137,6 +139,7 @@ GET /api/v1/orders/{id}: $.tipTotal falta
 GET /api/v1/orders/{id}: $.workAppointments falta
 GET /api/v1/orders/{id}: $.writeOffs falta
 GET /api/v1/orders/{id}: $.writtenOffAmount falta
+GET /api/v1/orders/{id}: el parámetro {id} de la ruta debía ser un uuid y la API contesta 404
 GET /api/v1/orders: $.items[].createdByBusiness falta
 GET /api/v1/orders: $.items[].diningTableId debía ser un uuid
 GET /api/v1/orders: $.items[].id debía ser un uuid
@@ -209,11 +212,11 @@ GET /api/v1/tables: $.tables[].id debía ser un uuid
 GET /api/v1/tables: $.tables[].openTab.orderId debía ser un uuid
 GET /api/v1/tables: $.tabsWithoutTable[].orderId debía ser un uuid
 GET /api/v1/whatsapp/chat/{id}/messages: $.items[].id debía ser un uuid
-POST /api/v1/auth/forgot-password: la API no devuelve cuerpo con 200
 POST /api/v1/customers/account/balance/deposits: $.orders[].orderId debía ser un uuid
 POST /api/v1/customers/account/balance/deposits: $.recentBalanceEntries[].id debía ser un uuid
 POST /api/v1/customers/account/write-offs/{id}/reversal: $.orders[].orderId debía ser un uuid
 POST /api/v1/customers/account/write-offs/{id}/reversal: $.recentWriteOffs[].id debía ser un uuid
+POST /api/v1/customers/account/write-offs/{id}/reversal: el parámetro {id} de la ruta debía ser un uuid y la API contesta 404
 POST /api/v1/customers/account/write-offs: $.recentWriteOffs[].id debía ser un uuid
 POST /api/v1/orders: $.id debía ser un uuid
 POST /api/v1/orders: $.items[].id debía ser un uuid
@@ -230,4 +233,37 @@ POST /api/v1/public/menu/{slug}/orders: $.linkedToAccount falta
 POST /api/v1/public/orders/tracking/cancel: $.writtenOffAmount falta
 POST /api/v1/public/orders/tracking: $.canCancel falta
 POST /api/v1/public/orders/tracking: $.writtenOffAmount falta
-PUT /api/v1/whatsapp/chat/{id}/read: la API no devuelve cuerpo con 200
+PUT /api/v1/orders/{id}/delivery/dispatch: el parámetro {id} de la ruta debía ser un uuid y la API contesta 404
+PUT /api/v1/orders/{id}/delivery/shipment: el parámetro {id} de la ruta debía ser un uuid y la API contesta 404
+
+# Las que ninguna escena hace todavía, para que no falle la primera que las haga: registrar un pago devuelve el mismo
+# pedido simulado que GET /api/v1/orders/{id}, con sus mismas diferencias. Una corrida completa no las escribe.
+POST /api/v1/orders/{id}/payments: $.createdByBusiness falta
+POST /api/v1/orders/{id}/payments: $.diningTableId debía ser un uuid
+POST /api/v1/orders/{id}/payments: $.id debía ser un uuid
+POST /api/v1/orders/{id}/payments: $.isOpenTab falta
+POST /api/v1/orders/{id}/payments: $.isTab falta
+POST /api/v1/orders/{id}/payments: $.itemCancellations falta
+POST /api/v1/orders/{id}/payments: $.items[].cancelledQuantity falta
+POST /api/v1/orders/{id}/payments: $.items[].chargedPrice falta
+POST /api/v1/orders/{id}/payments: $.items[].id debía ser un uuid
+POST /api/v1/orders/{id}/payments: $.items[].options falta
+POST /api/v1/orders/{id}/payments: $.items[].options[].optionId debía ser un uuid
+POST /api/v1/orders/{id}/payments: $.items[].productId debía ser un uuid
+POST /api/v1/orders/{id}/payments: $.items[].returnedQuantity falta
+POST /api/v1/orders/{id}/payments: $.items[].round falta
+POST /api/v1/orders/{id}/payments: $.items[].satProductCode falta
+POST /api/v1/orders/{id}/payments: $.items[].satUnitCode falta
+POST /api/v1/orders/{id}/payments: $.items[].taxObject falta
+POST /api/v1/orders/{id}/payments: $.items[].unit falta
+POST /api/v1/orders/{id}/payments: $.kitchenTickets falta
+POST /api/v1/orders/{id}/payments: $.kitchenTickets[].id debía ser un uuid
+POST /api/v1/orders/{id}/payments: $.netPaidAmount falta
+POST /api/v1/orders/{id}/payments: $.refundedAmount falta
+POST /api/v1/orders/{id}/payments: $.refunds falta
+POST /api/v1/orders/{id}/payments: $.soldOnCredit falta
+POST /api/v1/orders/{id}/payments: $.stockWarnings falta
+POST /api/v1/orders/{id}/payments: $.workAppointments falta
+POST /api/v1/orders/{id}/payments: $.writeOffs falta
+POST /api/v1/orders/{id}/payments: $.writtenOffAmount falta
+POST /api/v1/orders/{id}/payments: el parámetro {id} de la ruta debía ser un uuid y la API contesta 404
