@@ -149,6 +149,14 @@ public class PublicDirectoryBusinessDto
     public OrderConfirmTime? OrderConfirmTime { get; set; }
 
     /// <summary>
+    /// How soon it has ready the orders its customers place on its online menu (Fase 29Y, ADR 0079): within what at least
+    /// half of those of the last 90 days that it marked «Listo» were ready, from when they arrived. Null with fewer than
+    /// three, when it takes an hour or more, when it no longer takes online orders, or when it never marks them ready (a
+    /// store): the card says nothing.
+    /// </summary>
+    public ReadyTime? ReadyTime { get; set; }
+
+    /// <summary>
     /// It receives visits to quote now (Fase 29A, ADR 0053): its card speaks of visits, never of orders or the drawer,
     /// and it goes with those taking orders whatever its drawer or its hours (the customer picks a free time).
     /// </summary>
@@ -559,6 +567,14 @@ public sealed class PublicDirectorySnapshot
     /// The snapshot could read how soon its businesses confirm their orders: when it could not, its owner is not told that its
     /// orders are not counted yet.
     /// </param>
+    /// <param name="ReadyTime">
+    /// How soon it has its online orders ready (Fase 29Y), slower ones included, while it takes them. The card says it only
+    /// within an hour; its owner reads it whole.
+    /// </param>
+    /// <param name="ReadyTimeRead">
+    /// The snapshot could read how soon its kitchens have their orders ready: when it could not, its owner is not told that
+    /// its orders are not counted yet.
+    /// </param>
     internal sealed record Entry(
         Guid TenantId,
         PublicDirectoryBusinessDto Business,
@@ -571,7 +587,9 @@ public sealed class PublicDirectorySnapshot
         QuoteTime? QuoteTime = null,
         bool QuoteTimeRead = true,
         OrderConfirmTime? OrderConfirmTime = null,
-        bool OrderConfirmTimeRead = true);
+        bool OrderConfirmTimeRead = true,
+        ReadyTime? ReadyTime = null,
+        bool ReadyTimeRead = true);
 
     /// <summary>
     /// Reads every business Explorar lists: a public request has no business, so these reads span all of them, each
@@ -709,6 +727,20 @@ public sealed class PublicDirectorySnapshot
             confirmsRead = false;
         }
 
+        // How soon each kitchen has its online orders ready (Fase 29Y) never takes Explorar with it either.
+        Dictionary<Guid, ReadyTime?> readies;
+        var readiesRead = true;
+        try
+        {
+            readies = await ReadyTimesAsync(context, listed, utcNow, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Explorar could not read how soon its kitchens have their orders ready: it says nothing of it until the next snapshot.");
+            readies = [];
+            readiesRead = false;
+        }
+
         var entries = rows
             .Select(row => ToEntry(row, specialDays[row.Id], utcNow))
             .Where(entry => entry is not null)
@@ -723,9 +755,16 @@ public sealed class PublicDirectorySnapshot
             .Select(entry => entry.Business.ReceivesVisits
                 ? entry with { QuoteTime = quotes.GetValueOrDefault(entry.TenantId), QuoteTimeRead = quotesRead }
                 : entry)
-            // And only one that takes online orders now, open or paused, says how soon it confirms them.
+            // And only one that takes online orders now, open or paused, says how soon it confirms them, and how soon it has
+            // them ready (Fase 29Y).
             .Select(entry => entry.Business.AcceptsOrders || entry.Business.OrdersPaused
-                ? entry with { OrderConfirmTime = confirms.GetValueOrDefault(entry.TenantId), OrderConfirmTimeRead = confirmsRead }
+                ? entry with
+                {
+                    OrderConfirmTime = confirms.GetValueOrDefault(entry.TenantId),
+                    OrderConfirmTimeRead = confirmsRead,
+                    ReadyTime = readies.GetValueOrDefault(entry.TenantId),
+                    ReadyTimeRead = readiesRead
+                }
                 : entry)
             // The order of Explorar (Fase 29S, ADR 0073): by group, the quicker first within it (one that says nothing yet in
             // the middle), then by name. Since the Fase 29W (ADR 0077) it counts every time: answering its requests, sending
@@ -741,6 +780,7 @@ public sealed class PublicDirectorySnapshot
             entry.Business.ResponseTime = ResponseTimes.Shown(entry.ResponseTime);
             entry.Business.QuoteTime = QuoteTimes.Shown(entry.QuoteTime);
             entry.Business.OrderConfirmTime = OrderConfirmTimes.Shown(entry.OrderConfirmTime);
+            entry.Business.ReadyTime = OrderReadyTimes.Shown(entry.ReadyTime);
         }
         return new PublicDirectorySnapshot(utcNow, entries);
     }
@@ -937,7 +977,7 @@ public sealed class PublicDirectorySnapshot
     }
 
     /// <summary>The tramo decided last, of when the last visit in each was decided; the slower one of two at once.</summary>
-    private static int LastTramo(IReadOnlyList<DateTimeOffset?> lastInEach)
+    internal static int LastTramo(IReadOnlyList<DateTimeOffset?> lastInEach)
     {
         var last = 0;
         for (var tramo = 1; tramo < lastInEach.Count; tramo++)
@@ -1025,6 +1065,62 @@ public sealed class PublicDirectorySnapshot
                 row.WithinHalfAnHour - row.WithinFifteenMinutes,
                 row.Orders - row.WithinHalfAnHour
             ]));
+    }
+
+    /// <summary>
+    /// How soon each business listed has ready the orders its customers place on its online menu (Fase 29Y, ADR 0079): one
+    /// row per customer, of its orders since <see cref="OrderReadyTimes.Since"/> that its history says were marked «Listo»,
+    /// counted by how long after arriving they were first. One never marked ready does not count, nor does one of a table. As
+    /// for the confirming (Fase 29T, ADR 0074), a customer counts once: of the orders of one phone, the one that arrived last,
+    /// found in one reading that says, for each tramo, when the last order in it arrived (Fase 29W). Only the business and
+    /// those times come back, never the phone nor who marked it.
+    /// </summary>
+    internal static async Task<Dictionary<Guid, ReadyTime?>> ReadyTimesAsync(
+        IApplicationDbContext context, IQueryable<Tenant> listed, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        var since = OrderReadyTimes.Since(utcNow);
+        int quarter = OrderReadyTimes.LimitMinutes[0], halfAnHour = OrderReadyTimes.LimitMinutes[1], anHour = OrderReadyTimes.LimitMinutes[2];
+        var history = context.OrderStatusHistories.IgnoreQueryFilters().AsNoTracking();
+        // An order its customer placed on the online menu, not with the QR of a table, with when it was first ready.
+        var ready = context.Orders
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(o => o.Channel == OrderChannel.Online && !o.CreatedByBusiness && o.TableNumber == null && o.OpenTableId == null
+                && o.CustomerPhone != null && o.CreatedAt >= since && listed.Any(t => t.Id == o.TenantId))
+            .Select(o => new
+            {
+                o.TenantId,
+                o.CustomerPhone,
+                o.CreatedAt,
+                ReadyAt = history
+                    .Where(h => h.TenantId == o.TenantId && h.OrderId == o.Id && h.NewStatus == OrderStatus.Ready)
+                    .Min(h => (DateTimeOffset?)h.ChangedAt)
+            })
+            .Where(o => o.ReadyAt != null);
+        var customers = await ready
+            .GroupBy(o => new { o.TenantId, o.CustomerPhone })
+            .Select(customer => new
+            {
+                customer.Key.TenantId,
+                WithinAQuarter = customer.Max(o => o.ReadyAt < o.CreatedAt.AddMinutes(quarter) ? o.CreatedAt : (DateTimeOffset?)null),
+                WithinHalfAnHour = customer.Max(o => o.ReadyAt >= o.CreatedAt.AddMinutes(quarter) && o.ReadyAt < o.CreatedAt.AddMinutes(halfAnHour)
+                    ? o.CreatedAt : (DateTimeOffset?)null),
+                WithinAnHour = customer.Max(o => o.ReadyAt >= o.CreatedAt.AddMinutes(halfAnHour) && o.ReadyAt < o.CreatedAt.AddMinutes(anHour)
+                    ? o.CreatedAt : (DateTimeOffset?)null),
+                Slower = customer.Max(o => o.ReadyAt >= o.CreatedAt.AddMinutes(anHour) ? o.CreatedAt : (DateTimeOffset?)null)
+            })
+            .ToListAsync(cancellationToken);
+        return customers
+            .GroupBy(customer => customer.TenantId)
+            .ToDictionary(
+                business => business.Key,
+                business =>
+                {
+                    var counts = new int[OrderReadyTimes.LimitMinutes.Count + 1];
+                    foreach (var customer in business)
+                        counts[LastTramo([customer.WithinAQuarter, customer.WithinHalfAnHour, customer.WithinAnHour, customer.Slower])]++;
+                    return OrderReadyTimes.Typical(counts);
+                });
     }
 
     /// <summary>

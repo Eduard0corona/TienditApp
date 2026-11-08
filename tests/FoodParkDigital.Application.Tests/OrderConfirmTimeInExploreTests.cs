@@ -326,7 +326,7 @@ public class OrderConfirmTimeInExploreTests
     }
 
     /// <summary>Whether a query reads the entity of <paramref name="type"/>.</summary>
-    private sealed class Reads(Type type) : ExpressionVisitor
+    internal sealed class Reads(Type type) : ExpressionVisitor
     {
         private bool _found;
 
