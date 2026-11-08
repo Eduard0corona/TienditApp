@@ -1,7 +1,8 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { Link, MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ordersApi } from '../../api/ordersApi';
 import { apiRequest } from '../../api/typedClient';
@@ -80,7 +81,7 @@ const order = (overrides: Partial<OrderDto>): OrderDto => ({
   ...overrides,
 } as unknown as OrderDto);
 
-function renderOrders(capabilities: number, orders: OrderDto[] = [order({})]) {
+function renderOrders(capabilities: number, orders: OrderDto[] = [order({})], entry = '/orders', extra?: ReactNode) {
   vi.mocked(useTenant).mockReturnValue({ tenant: { name: 'La Esquina' }, capabilities } as unknown as ReturnType<typeof useTenant>);
   vi.mocked(ordersApi.getAll).mockResolvedValue({
     data: { items: orders, pageNumber: 1, totalPages: 1, totalCount: orders.length, hasPreviousPage: false, hasNextPage: false },
@@ -88,7 +89,8 @@ function renderOrders(capabilities: number, orders: OrderDto[] = [order({})]) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/orders']}>
+      <MemoryRouter initialEntries={[entry]}>
+        {extra}
         <OrdersList />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -118,6 +120,53 @@ describe('OrdersList', () => {
     await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
     await waitFor(() => expect(lastParams()).not.toHaveProperty('channel'));
     expect(screen.getByRole('combobox', { name: 'Canal' })).toHaveValue('');
+  });
+
+  it('opens the online orders still to confirm, of any day, from the bell (Fase 29X)', async () => {
+    renderOrders(TenantCapability.Food, [order({})], '/orders?estado=por-confirmar');
+    await screen.findByText('ORD-000001');
+
+    await waitFor(() => expect(lastParams()).toMatchObject({ status: 0, pageNumber: 1 }));
+    expect(lastParams()).not.toHaveProperty('fromDate');
+    expect(lastParams()).not.toHaveProperty('toDate');
+    expect(screen.getByRole('combobox', { name: 'Estado' })).toHaveValue('0');
+  });
+
+  it('follows the bell again with Pedidos open, and drops its link when a filter is set by hand (Fase 29X)', async () => {
+    const user = userEvent.setup();
+    function Where() {
+      return <output data-testid="where">{useLocation().search}</output>;
+    }
+    renderOrders(TenantCapability.Food, [order({})], '/orders', <><Link to="/orders?estado=por-confirmar">La campana</Link><Where /></>);
+    await screen.findByText('ORD-000001');
+    expect(lastParams()).toHaveProperty('fromDate');
+
+    await user.click(screen.getByRole('link', { name: 'La campana' }));
+    await waitFor(() => expect(lastParams()).toMatchObject({ status: 0, pageNumber: 1 }));
+    expect(lastParams()).not.toHaveProperty('fromDate');
+    expect(screen.getByRole('combobox', { name: 'Estado' })).toHaveValue('0');
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(/^$/));
+    expect(screen.getByRole('combobox', { name: 'Estado' })).toHaveValue('');
+    // Followed again, it sets its filter again.
+    await user.click(screen.getByRole('link', { name: 'La campana' }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Estado' })).toHaveValue('0'));
+  });
+
+  it('says by when an online order still waiting is confirmed in time, and when the half hour passed (Fase 29X)', async () => {
+    const soon = new Date(Date.now() + 10 * 60_000).toISOString();
+    const past = new Date(Date.now() - 60_000).toISOString();
+    renderOrders(TenantCapability.Food, [
+      order({ id: 'a', orderNumber: 'ORD-000001', channel: OrderChannel.Online, createdByBusiness: false, confirmBy: soon }),
+      order({ id: 'b', orderNumber: 'ORD-000002', channel: OrderChannel.Online, createdByBusiness: false, confirmBy: past }),
+      order({ id: 'c', orderNumber: 'ORD-000003', channel: OrderChannel.Online, createdByBusiness: false, confirmBy: null }),
+    ]);
+
+    const row = async (number: string) => (await screen.findByText(number)).closest('tr') as HTMLElement;
+    expect(within(await row('ORD-000001')).getByText(/^Confírmalo antes de las? .+ para que no cuente entre los más lentos$/)).toHaveClass('text-muted');
+    expect(within(await row('ORD-000002')).getByText('Ya pasó la media hora: cuenta entre los más lentos en tu tiempo para confirmar')).toHaveClass('text-danger');
+    expect(within(await row('ORD-000003')).queryByText(/Confírmalo|media hora/)).not.toBeInTheDocument();
   });
 
   it('says where an order came from instead of who created it', async () => {

@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 
@@ -72,6 +73,10 @@ public static class OrderMappings
         WrittenOffAmount = order.WrittenOffAmount,
         CancellationReason = order.CancellationReason,
         CreatedAt = order.CreatedAt,
+        ConfirmBy = order.Channel == OrderChannel.Online && !order.CreatedByBusiness && order.TableNumber == null
+            && order.OpenTableId == null && order.Status == OrderStatus.Pending
+                ? OrderConfirmTimes.ConfirmBy(order.CreatedAt)
+                : null,
         UpdatedAt = order.UpdatedAt,
         Items = order.Items.Select(ToDto).ToList(),
         StatusHistory = order.StatusHistory.Select(ToDto).ToList(),
@@ -310,6 +315,10 @@ public static class OrderMappings
         WrittenOffAmount = order.WrittenOffAmount,
         CancellationReason = order.CancellationReason,
         CreatedAt = order.CreatedAt,
+        ConfirmBy = order.Channel == OrderChannel.Online && !order.CreatedByBusiness && order.TableNumber == null
+            && order.OpenTableId == null && order.Status == OrderStatus.Pending
+                ? order.CreatedAt.AddMinutes(OrderConfirmTimes.SlowAfterMinutes)
+                : null,
         UpdatedAt = order.UpdatedAt,
         Items = order.Items.Select(item => new OrderItemDto
         {

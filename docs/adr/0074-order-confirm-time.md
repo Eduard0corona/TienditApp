@@ -36,7 +36,7 @@ El dueño del producto pidió avanzar este punto (el 8), entre otros, sin espera
    - La regla de la mitad es la misma para responder, cotizar y confirmar (`TypicalWait`).
 5. **Fuera de esta fase:**
    - Ordenar Explorar por el tiempo de confirmar. Un restaurante sigue en medio de su grupo, como antes ([ADR 0073](0073-quote-time-and-explore-order.md)). Llegó en la Fase 29W ([ADR 0077](0077-explore-order-with-every-time.md)).
-   - Avisarle al negocio cuando un pedido lleva tiempo sin confirmar.
+   - Avisarle al negocio cuando un pedido lleva tiempo sin confirmar: llegó en la Fase 29X ([ADR 0078](0078-online-order-waiting-notice.md)).
    - Medir cuánto tarda en preparar o entregar el pedido.
 
 ## Consecuencias

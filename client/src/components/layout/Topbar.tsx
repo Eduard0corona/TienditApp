@@ -66,6 +66,8 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   const live = isBusinessMember && !!tenant?.id && tenant.status === 0;
   const hearsRequests = live && access.appointments;
   const hearsQuoteReplies = live && access.quotes;
+  // Fase 29X: whoever confirms the orders hears the online ones waiting 15 minutes, on any screen.
+  const hearsWaitingOrders = live && access.orders;
 
   const selectedTenantId = useMemo(
     () => tenant?.id ?? user?.tenantId ?? '',
@@ -227,9 +229,9 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
             </li>
           )}
 
-          {(hearsRequests || hearsQuoteReplies) && (
+          {(hearsRequests || hearsQuoteReplies || hearsWaitingOrders) && (
             <Suspense fallback={null}>
-              <LiveNotices tenantId={tenant.id} requests={hearsRequests} quotes={hearsQuoteReplies} />
+              <LiveNotices tenantId={tenant.id} requests={hearsRequests} quotes={hearsQuoteReplies} orders={hearsWaitingOrders} />
             </Suspense>
           )}
 

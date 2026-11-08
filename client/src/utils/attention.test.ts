@@ -6,10 +6,19 @@ describe('attention', () => {
   it('says what waits and where to handle it', () => {
     expect(describeAttention({ key: 'onlineOrdersToConfirm', count: 1, urgentCount: 0 })).toMatchObject({
       text: '1 pedido en línea por confirmar',
-      path: '/orders',
+      path: '/orders?estado=por-confirmar',
       tone: 'warning',
     });
     expect(describeAttention({ key: 'drawersOpenSinceYesterday', count: 2, urgentCount: 0 })?.text).toBe('2 cajas abiertas desde otro día');
+  });
+
+  it('says how many online orders have waited 15 minutes, and turns the bell urgent (Fase 29X)', () => {
+    expect(describeAttention({ key: 'onlineOrdersToConfirm', count: 3, urgentCount: 1 })).toMatchObject({
+      text: '3 pedidos en línea por confirmar (1 lleva 15 minutos o más)',
+      tone: 'danger',
+    });
+    expect(describeAttention({ key: 'onlineOrdersToConfirm', count: 3, urgentCount: 2 })?.text)
+      .toBe('3 pedidos en línea por confirmar (2 llevan 15 minutos o más)');
   });
 
   it('leads the requests booked online to the agenda, filtered on them', () => {

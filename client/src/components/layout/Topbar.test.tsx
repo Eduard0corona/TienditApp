@@ -17,10 +17,11 @@ vi.mock('./CashStatusChip', () => ({ default: () => null }));
 vi.mock('./ThemeToggle', () => ({ default: () => null }));
 vi.mock('../business/CreateBusinessModal', () => ({ default: () => null }));
 vi.mock('./LiveNotices', () => ({
-  default: ({ tenantId, requests, quotes }: { tenantId: string; requests: boolean; quotes: boolean }) => (
+  default: ({ tenantId, requests, quotes, orders }: { tenantId: string; requests: boolean; quotes: boolean; orders: boolean }) => (
     <>
       {requests && <span>Escucha las solicitudes de {tenantId}</span>}
       {quotes && <span>Escucha las cotizaciones de {tenantId}</span>}
+      {orders && <span>Escucha los pedidos que esperan de {tenantId}</span>}
     </>
   ),
 }));
@@ -96,6 +97,34 @@ describe('Topbar: the live answers to quotes (Fase 29R)', () => {
         await new Promise((resolve) => setTimeout(resolve, 30));
       });
       expect(screen.queryByText(/Escucha las cotizaciones/)).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+});
+
+describe('Topbar: the online orders waiting (Fase 29X)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('tells whoever confirms the orders of an active business that sells', async () => {
+    renderAs('STAFF', ['ManageOrders'], { id: 't1', status: 0 }, TenantCapability.Food);
+
+    expect(await screen.findByText('Escucha los pedidos que esperan de t1')).toBeInTheDocument();
+  });
+
+  it('does not tell in a suspended business, without the orders, in a business that does not sell, nor the platform admin', async () => {
+    const cases = [
+      () => renderAs('TENANT_ADMIN', [], { id: 'suspendido', status: 1 }, TenantCapability.Food),
+      () => renderAs('STAFF', ['ManageAppointments'], { id: 'sin-pedidos', status: 0 }, TenantCapability.Food | TenantCapability.Appointments),
+      () => renderAs('TENANT_ADMIN', [], { id: 'sin-venta', status: 0 }, APPOINTMENTS & ~TenantCapability.Service),
+      () => renderAs('SUPER_ADMIN', [], { id: 'plataforma', status: 0 }, TenantCapability.Food),
+    ];
+    for (const render of cases) {
+      const { unmount } = render();
+      // Long enough for the lazy component to arrive, had it been asked for.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      });
+      expect(screen.queryByText(/Escucha los pedidos que esperan/)).not.toBeInTheDocument();
       unmount();
     }
   });

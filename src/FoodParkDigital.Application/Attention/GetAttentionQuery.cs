@@ -10,6 +10,7 @@ using FoodParkDigital.Domain.Quotes;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Fiscal.Enums;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -113,9 +114,16 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
 
         if (commerce && Can(TenantPermission.ManageOrders))
         {
-            // Placed by customers from the online menu: they wait until someone confirms or cancels them.
-            Add(AttentionKeys.OnlineOrdersToConfirm, await _context.Orders.AsNoTracking()
-                .CountAsync(o => o.Channel == OrderChannel.Online && o.Status == OrderStatus.Pending, cancellationToken));
+            // Placed by customers from the online menu: they wait until someone confirms or cancels them. Urgent are those of
+            // the online menu (not of a table nor taken by the team) that have waited 15 minutes, halfway to counting among the
+            // slowest in Explorar (Fase 29X, ADR 0078).
+            var toConfirm = _context.Orders.AsNoTracking()
+                .Where(o => o.Channel == OrderChannel.Online && o.Status == OrderStatus.Pending);
+            var waitingSince = now.AddMinutes(-OrderConfirmTimes.WarnAfterMinutes);
+            Add(AttentionKeys.OnlineOrdersToConfirm, await toConfirm.CountAsync(cancellationToken),
+                await toConfirm.CountAsync(
+                    o => !o.CreatedByBusiness && o.TableNumber == null && o.OpenTableId == null && o.CreatedAt <= waitingSince,
+                    cancellationToken));
         }
 
         if (Can(TenantPermission.ManageInventory) && Has(TenantCapability.Inventory))

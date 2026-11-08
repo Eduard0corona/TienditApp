@@ -17,6 +17,7 @@ using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -88,6 +89,40 @@ public class DtoProjectionSqlServerTests
         Assert.Equal(2, page.Items.Count);
         Assert.All(page.Items, o => Assert.NotEmpty(o.Items));
         Assert.All(page.Items, o => Assert.NotEmpty(o.TaxBreakdown));
+    }
+
+    [SqlServerFact]
+    public async Task OrderList_ShouldSayByWhenAnOrderOfTheOnlineMenuIsAnsweredInTime_OnlyWhileItWaits()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var arrived = Now.AddMinutes(-20);
+        Guid tenantId;
+        await using (var seed = database.CreateContext())
+        {
+            var tenant = new Tenant("Café", "cafe-" + Guid.NewGuid().ToString("N")[..8], BusinessType.Food, $"{Guid.NewGuid():N}@demo.com");
+            seed.Tenants.Add(tenant);
+            seed.TenantSettings.Add(new TenantSettings(tenant.Id, TenantCapability.Food));
+            var customer = new TemporaryCustomer(tenant.Id, "+525512345678", "Ana");
+            seed.TemporaryCustomers.Add(customer);
+            Order Online(string number, string? table = null, bool byTeam = false) => new(
+                tenant.Id, null, byTeam ? null : customer.Id, byTeam, number, BusinessType.Food, OrderType.Retail, "Ana",
+                "+525512345678", null, table, channel: OrderChannel.Online) { CreatedAt = arrived };
+            // Waiting, of a table, taken by the team online, answered already, and a counter sale (Fase 29X).
+            var answered = Online("ORD-000004");
+            answered.TransitionTo(OrderStatus.Confirmed, new FoodOrderStateMachine(), "cajero@demo.com");
+            seed.Orders.AddRange(Online("ORD-000001"), Online("ORD-000002", table: "Mesa 4"), Online("ORD-000003", byTeam: true),
+                answered, NewOrder(tenant.Id, "ORD-000005", OrderType.Retail));
+            await seed.SaveChangesAsync();
+            tenantId = tenant.Id;
+        }
+
+        await using var context = database.CreateContext(tenantId);
+        var listed = await context.Orders.AsNoTracking().OrderBy(o => o.OrderNumber).Select(OrderMappings.AsDto).ToListAsync();
+        var loaded = (await context.Orders.AsNoTracking().OrderBy(o => o.OrderNumber).ToListAsync()).Select(o => o.ToDto()).ToList();
+
+        DateTimeOffset?[] expected = [arrived.AddMinutes(30), null, null, null, null];
+        Assert.Equal(expected, listed.Select(o => o.ConfirmBy));
+        Assert.Equal(expected, loaded.Select(o => o.ConfirmBy));
     }
 
     [SqlServerFact]

@@ -12,6 +12,7 @@ using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
@@ -47,6 +48,30 @@ public class DtoMappingTests
         // An order that does not go to an address (Fase 22C).
         EntityFiller.Set(order, nameof(Order.Delivery), null);
         Same(order.ToDto(), Project(order, OrderMappings.AsDto));
+    }
+
+    [Fact]
+    public void AnOrderOfTheOnlineMenuWaiting_ShouldSayByWhenItIsConfirmedInTime_InMemoryAndForSql()
+    {
+        // Fase 29X: half an hour after it arrived, only while it waits; a table's, the team's or one answered say nothing.
+        var arrived = new DateTimeOffset(2026, 11, 8, 13, 0, 0, TimeSpan.FromHours(-6));
+        Order Online(string? table = null, bool byTeam = false) => new(
+            Guid.NewGuid(), null, byTeam ? null : Guid.NewGuid(), byTeam, "ORD-000001", BusinessType.Food, OrderType.Retail, "Ana",
+            "+525512345678", null, table, channel: OrderChannel.Online) { CreatedAt = arrived };
+        var answered = Online();
+        answered.TransitionTo(OrderStatus.Confirmed, new FoodOrderStateMachine(), "cajero@demo.com");
+
+        foreach (var (order, confirmBy) in new[]
+                 {
+                     (Online(), arrived.AddMinutes(30)),
+                     (Online(table: "Mesa 4"), (DateTimeOffset?)null),
+                     (Online(byTeam: true), null),
+                     (answered, null)
+                 })
+        {
+            Assert.Equal(confirmBy, order.ToDto().ConfirmBy);
+            Same(order.ToDto(), Project(order, OrderMappings.AsDto));
+        }
     }
 
     [Theory, MemberData(nameof(Seeds))]

@@ -33,6 +33,21 @@ public static class OrderConfirmTimes
     /// </summary>
     public static readonly IReadOnlyList<int> LimitMinutes = [5, 15, 30];
 
+    /// <summary>
+    /// How long an order of the online menu waits for its answer before it counts among the slowest (Fase 29X, ADR 0078): the
+    /// last limit, half an hour.
+    /// </summary>
+    public static int SlowAfterMinutes => LimitMinutes[^1];
+
+    /// <summary>
+    /// How long it waits before the business is warned that it is still waiting (Fase 29X): the middle limit, 15 minutes,
+    /// halfway to counting among the slowest.
+    /// </summary>
+    public static int WarnAfterMinutes => LimitMinutes[1];
+
+    /// <summary>When an order that arrived at <paramref name="arrivedAt"/> is answered in time not to count among the slowest.</summary>
+    public static DateTimeOffset ConfirmBy(DateTimeOffset arrivedAt) => arrivedAt.AddMinutes(SlowAfterMinutes);
+
     /// <summary>Since when the orders count at <paramref name="now"/>: those that arrived in the last <see cref="WindowDays"/> days.</summary>
     public static DateTimeOffset Since(DateTimeOffset now) => now.AddDays(-WindowDays);
 

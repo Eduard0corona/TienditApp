@@ -7,6 +7,7 @@ using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,28 @@ public class AttentionQueryTests
         Assert.Equal(1, lowStock.UrgentCount);
         Assert.Equal(1, Count(attention, AttentionKeys.DrawersOpenSinceYesterday));
         Assert.Equal(1, Count(attention, AttentionKeys.FailedMessages));
+    }
+
+    [Fact]
+    public async Task AnOrderOfTheOnlineMenu_WaitingFifteenMinutes_ShouldBeUrgent_NotOneOfATable_OrOfTheTeam()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, Restaurant);
+        // Waiting 15 and 40 minutes: urgent (Fase 29X). Fourteen minutes, of a table or taken by the team online: not yet, or
+        // never; still to confirm, though.
+        AddOrder(fixture, tenant, "ORD-1", OrderChannel.Online, arrivedMinutesAgo: 15);
+        AddOrder(fixture, tenant, "ORD-2", OrderChannel.Online, arrivedMinutesAgo: 40);
+        AddOrder(fixture, tenant, "ORD-3", OrderChannel.Online, arrivedMinutesAgo: 14);
+        AddOrder(fixture, tenant, "ORD-4", OrderChannel.Online, arrivedMinutesAgo: 40, table: "Mesa 4");
+        AddOrder(fixture, tenant, "ORD-5", OrderChannel.Online, arrivedMinutesAgo: 40, byTeam: true);
+        // Answered already: not to confirm.
+        AddOrder(fixture, tenant, "ORD-6", OrderChannel.Online, arrivedMinutesAgo: 40)
+            .TransitionTo(OrderStatus.Confirmed, new FoodOrderStateMachine(), "cajero@demo.com");
+        await fixture.Context.SaveChangesAsync();
+
+        var toConfirm = Assert.Single((await HandleAsync(fixture)).Items, i => i.Key == AttentionKeys.OnlineOrdersToConfirm);
+
+        Assert.Equal((5, 2), (toConfirm.Count, toConfirm.UrgentCount));
     }
 
     [Fact]
@@ -92,13 +115,20 @@ public class AttentionQueryTests
 
     private static int Count(AttentionDto attention, string key) => Assert.Single(attention.Items, i => i.Key == key).Count;
 
-    private static void AddOrder(SalesTestFixture fixture, Tenant tenant, string number, OrderChannel channel)
+    private static Order AddOrder(
+        SalesTestFixture fixture, Tenant tenant, string number, OrderChannel channel, int arrivedMinutesAgo = 1,
+        string? table = null, bool byTeam = false)
     {
         // A customer's own order belongs to a (temporary) customer; a counter sale is the business's.
-        var byCustomer = channel == OrderChannel.Online;
-        fixture.Context.Orders.Add(new Order(
+        var byCustomer = channel == OrderChannel.Online && !byTeam;
+        var order = new Order(
             tenant.Id, null, byCustomer ? Guid.NewGuid() : null, createdByBusiness: !byCustomer, number, BusinessType.Food,
-            OrderType.Retail, "Ana", "+525512345678", null, null, channel: channel));
+            OrderType.Retail, "Ana", "+525512345678", null, table, channel: channel)
+        {
+            CreatedAt = SalesTestFixture.Now.AddMinutes(-arrivedMinutesAgo)
+        };
+        fixture.Context.Orders.Add(order);
+        return order;
     }
 
     private static async Task AddStockAsync(SalesTestFixture fixture, Tenant tenant, string name, decimal onHand, decimal reorderPoint)
