@@ -286,6 +286,31 @@ public class OnlineBookingTests
     }
 
     [Theory]
+    [InlineData(0, true)]
+    [InlineData(30, true)]
+    [InlineData(180, true)]
+    [InlineData(45, false)]
+    [InlineData(240, false)]
+    [InlineData(-30, false)]
+    public void SetAnswerReminder_ShouldTakeOneOfTheChoices_OrNone_AnHourUntilItPicks(int minutes, bool valid)
+    {
+        var settings = new TenantSettings(Business, TenantCapability.Appointments);
+        Assert.Equal(60, settings.AnswerReminderMinutes);
+
+        if (valid)
+        {
+            settings.SetAnswerReminder(minutes);
+            Assert.Equal(minutes, settings.AnswerReminderMinutes);
+        }
+        else
+        {
+            Assert.Equal(ResponseTimes.ReminderChoiceMessage,
+                Assert.Throws<DomainException>(() => settings.SetAnswerReminder(minutes)).Message);
+            Assert.Equal(60, settings.AnswerReminderMinutes);
+        }
+    }
+
+    [Theory]
     [InlineData(null, 60)]
     [InlineData(4, 60)]
     [InlineData(5, 5)]

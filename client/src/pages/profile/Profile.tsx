@@ -28,6 +28,8 @@ export default function Profile() {
   const onTheTeam = !!tenant && !access.platform;
   const answersRequests = onTheTeam && access.appointments;
   const worksQuotes = onTheTeam && access.quotes;
+  // Fase 30B: whoever confirms the orders, the online orders their customers cancel.
+  const confirmsOrders = onTheTeam && access.orders;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const signOutTimeoutRef = useRef<number | undefined>(undefined);
 
@@ -327,11 +329,12 @@ export default function Profile() {
 
           <PhoneChangeCard />
 
-          {(answersRequests || worksQuotes) && (
+          {(answersRequests || worksQuotes || confirmsOrders) && (
             <NoticeEmailsCard
               businessName={tenant?.name}
               agenda={answersRequests}
               quotes={worksQuotes}
+              orders={confirmsOrders}
               ownsBusiness={isOwnerRole(user?.tenantRole)}
             />
           )}

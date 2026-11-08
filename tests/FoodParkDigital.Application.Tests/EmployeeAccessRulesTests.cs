@@ -205,6 +205,34 @@ public class EmployeeAccessRulesTests
     }
 
     [Fact]
+    public async Task WhoeverRunsTheTeam_ShouldChooseTheOrdersTheirCustomersCancel_TellingThePerson_ButNeverTheOwners()
+    {
+        // Fase 30B (ADR 0082).
+        await using var fixture = await Fixture.CreateAsync();
+        var owner = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Owner);
+        var admin = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Admin);
+        var cashier = await fixture.AddMemberAsync(TenantA, UserRole.Staff, TenantUserRole.Staff);
+
+        var turnedOn = await fixture.UpdateAsync(admin, cashier, UserRole.Staff, TenantUserRole.Staff, orderCancellationEmails: true);
+        // The owner's: refused when it changes, saved as it is when it does not (the owner gets them until they choose).
+        var refused = await fixture.UpdateAsync(admin, owner, UserRole.TenantAdmin, TenantUserRole.Owner, orderCancellationEmails: false);
+        var asTheyAre = await fixture.UpdateAsync(admin, owner, UserRole.TenantAdmin, TenantUserRole.Owner, orderCancellationEmails: true);
+
+        Assert.True(turnedOn.IsSuccess, turnedOn.Error);
+        Assert.Equal((true, false, false), (turnedOn.Value!.NoticeEmails.OrderCancellations, turnedOn.Value.NoticeEmails.Requests,
+            turnedOn.Value.NoticeEmails.QuoteReplies));
+        Assert.True((await fixture.MembershipAsync(cashier)).OrderCancellationEmails);
+        Assert.Equal(EmployeeNoticeEmails.OwnerChoosesMessage, refused.Error);
+        Assert.True(asTheyAre.IsSuccess, asTheyAre.Error);
+        Assert.Null((await fixture.MembershipAsync(owner)).OrderCancellationEmails);
+        Assert.True((await fixture.DetailAsync(owner)).NoticeEmails.OrderCancellations);
+        Assert.False((await fixture.DetailAsync(admin)).NoticeEmails.OrderCancellations);
+        Assert.Equal(
+            [(new TenantUserNoticeEmailsChangedEvent(cashier.TenantUserId, admin.UserId, null, null, true) { EventId = Guid.Empty, OccurredOn = default }, (Guid?)TenantA)],
+            fixture.Outbox.Added.Select(m => (m.Event with { EventId = Guid.Empty, OccurredOn = default }, m.TenantId)));
+    }
+
+    [Fact]
     public async Task TheOwnersNotices_ShouldOnlyChangeFromTheirProfile_NeverFromTheTeam()
     {
         await using var fixture = await Fixture.CreateAsync();
@@ -321,7 +349,7 @@ public class EmployeeAccessRulesTests
 
         public Task<Result<EmployeeDto>> UpdateAsync(
             Member actor, Member employee, UserRole appRole, TenantUserRole tenantRole, string firstName = "Persona",
-            bool? requestEmails = null, bool? quoteReplyEmails = null)
+            bool? requestEmails = null, bool? quoteReplyEmails = null, bool? orderCancellationEmails = null)
         {
             _tenantService.SetTenant(employee.TenantId);
             var handler = new UpdateEmployeeCommandHandler(
@@ -334,7 +362,8 @@ public class EmployeeAccessRulesTests
                 AppRole = appRole,
                 TenantRole = tenantRole,
                 RequestEmails = requestEmails,
-                QuoteReplyEmails = quoteReplyEmails
+                QuoteReplyEmails = quoteReplyEmails,
+                OrderCancellationEmails = orderCancellationEmails
             }, CancellationToken.None);
         }
 

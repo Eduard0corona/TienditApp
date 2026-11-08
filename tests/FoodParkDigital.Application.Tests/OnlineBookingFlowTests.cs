@@ -675,6 +675,38 @@ public class OnlineBookingFlowTests
     }
 
     [Fact]
+    public async Task OwnerSettings_ShouldPickHowLongBeforeTheLimitToBeReminded_OrNone_KeepingItWhenNotSent()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessAsync(fixture);
+        var handler = new OnlineBookingSettingsHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser);
+
+        var before = await handler.Handle(new GetOnlineBookingSettingsQuery(), CancellationToken.None);
+        Assert.Equal(60, before.AnswerReminderMinutes);
+        Assert.Equal([30, 60, 120, 180], before.AnswerReminderChoices);
+
+        var picked = await handler.Handle(new UpdateOnlineBookingSettingsCommand(true, 2, 120), CancellationToken.None);
+        Assert.Equal(120, picked.Value!.AnswerReminderMinutes);
+        var audit = await fixture.Context.AuditLogs.SingleAsync(a => a.Action == "OnlineBookingUpdated");
+        Assert.Contains("\"AnswerReminderMinutes\":60", audit.Metadata!);
+        Assert.Contains("\"AnswerReminderMinutes\":120", audit.Metadata!);
+
+        // A client of before sends no reminder: it stays as it was.
+        var kept = await handler.Handle(new UpdateOnlineBookingSettingsCommand(true, 3), CancellationToken.None);
+        Assert.Equal(120, kept.Value!.AnswerReminderMinutes);
+        var none = await handler.Handle(new UpdateOnlineBookingSettingsCommand(true, 3, 0), CancellationToken.None);
+        Assert.Equal(0, none.Value!.AnswerReminderMinutes);
+        Assert.Equal(0, (await fixture.Context.TenantSettings.AsNoTracking().SingleAsync()).AnswerReminderMinutes);
+
+        var validator = new UpdateOnlineBookingSettingsCommandValidator();
+        Assert.False(validator.Validate(new UpdateOnlineBookingSettingsCommand(true, 3, 45)).IsValid);
+        Assert.Equal(
+            ResponseTimes.ReminderChoiceMessage,
+            Assert.Single(validator.Validate(new UpdateOnlineBookingSettingsCommand(true, 3, 240)).Errors).ErrorMessage);
+        Assert.True(validator.Validate(new UpdateOnlineBookingSettingsCommand(true, 3, null)).IsValid);
+    }
+
+    [Fact]
     public async Task Attention_ShouldCountTheRequestsAhead_TodaysAsUrgent()
     {
         await using var fixture = SalesTestFixture.Create();

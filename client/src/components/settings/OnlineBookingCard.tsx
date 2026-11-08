@@ -32,6 +32,14 @@ function BookingNotice({ settings }: { settings: OnlineBookingSettings }) {
   return <div className="alert alert-secondary py-2 small">Las citas en línea están apagadas: tu menú no muestra «Agenda tu cita».</div>;
 }
 
+/** How long before its limit a request still waiting is recalled, as the owner reads it (Fase 30B). */
+function reminderLabel(minutes: number): string {
+  if (minutes === 0) return 'No recordarme';
+  if (minutes === 30) return 'Media hora antes del límite';
+  if (minutes === 60) return 'Una hora antes del límite';
+  return minutes % 60 === 0 ? `${minutes / 60} horas antes del límite` : `${minutes} minutos antes del límite`;
+}
+
 function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
   const { tenant } = useTenant();
   const toast = useToast();
@@ -39,16 +47,19 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
   const ids = useId();
   const [enabled, setEnabled] = useState(settings.enabled);
   const [capacity, setCapacity] = useState(String(settings.capacity));
+  const [reminder, setReminder] = useState(settings.answerReminderMinutes);
   const [saving, setSaving] = useState(false);
   const parsed = Number(capacity);
   const capacityValid = Number.isInteger(parsed) && parsed >= 1 && parsed <= settings.maxCapacity;
-  const dirty = enabled !== settings.enabled || parsed !== settings.capacity;
+  const dirty = enabled !== settings.enabled || parsed !== settings.capacity || reminder !== settings.answerReminderMinutes;
+  // Its own choice stays listed even if this version no longer offers it.
+  const reminderChoices = [...new Set([...settings.answerReminderChoices, settings.answerReminderMinutes, 0])];
 
   const save = async () => {
     if (!capacityValid) return;
     setSaving(true);
     try {
-      const saved = await appointmentsApi.updateOnlineBooking(enabled, parsed);
+      const saved = await appointmentsApi.updateOnlineBooking(enabled, parsed, reminder);
       queryClient.setQueryData(onlineBookingSettingsKey(tenant), saved);
       toast.success(saved.booksOnline ? 'Guardado: tus clientes ya pueden agendar en línea.' : 'Guardado.');
     } catch (err: unknown) {
@@ -105,6 +116,27 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
       </div>
       )}
 
+      <div className="mb-3">
+        <label className="form-label" htmlFor={`${ids}-reminder`}>Recordatorio de solicitudes sin responder</label>
+        <select
+          id={`${ids}-reminder`}
+          className="form-select"
+          style={{ maxWidth: '20rem' }}
+          value={reminder}
+          onChange={(event) => setReminder(Number(event.target.value))}
+          aria-describedby={`${ids}-reminder-help`}
+        >
+          {reminderChoices.map((minutes) => (
+            <option key={minutes} value={minutes}>{reminderLabel(minutes)}</option>
+          ))}
+        </select>
+        <div id={`${ids}-reminder-help`} className="form-text">
+          {reminder === 0
+            ? 'Solo te llega el correo de cada solicitud cuando llega.'
+            : 'Un correo a quienes reciben los avisos de citas en línea, si una solicitud sigue sin respuesta, para que la respondas a tiempo.'}
+        </div>
+      </div>
+
       <div className="d-flex gap-2">
         <button type="button" className="btn btn-primary" disabled={!dirty || !capacityValid || saving} onClick={() => void save()}>
           {saving ? 'Guardando…' : 'Guardar'}
@@ -117,6 +149,7 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
             onClick={() => {
               setEnabled(settings.enabled);
               setCapacity(String(settings.capacity));
+              setReminder(settings.answerReminderMinutes);
             }}
           >
             Descartar
@@ -129,7 +162,8 @@ function OnlineBookingForm({ settings }: { settings: OnlineBookingSettings }) {
 
 /**
  * «Citas en línea» (Fase 24D, ADR 0025): whether customers book appointments from the online menu, how many the business
- * attends at once, and what is missing for it (owners and admins of a business with the agenda). The free times come from
+ * attends at once, how long before its limit a request still waiting is recalled by email or not at all (Fase 30B, ADR 0082),
+ * and what is missing for it (owners and admins of a business with the agenda). The free times come from
  * the business's hours and the duration of each service; the business accepts or declines each request in the Agenda.
  */
 export default function OnlineBookingCard() {
@@ -152,7 +186,7 @@ export default function OnlineBookingCard() {
         )}
         {settings.data && (
           <OnlineBookingForm
-            key={`${settings.data.enabled}|${settings.data.capacity}|${settings.data.booksOnline}|${settings.data.staffCount}|${settings.data.missing.join('|')}`}
+            key={`${settings.data.enabled}|${settings.data.capacity}|${settings.data.answerReminderMinutes}|${settings.data.booksOnline}|${settings.data.staffCount}|${settings.data.missing.join('|')}`}
             settings={settings.data}
           />
         )}

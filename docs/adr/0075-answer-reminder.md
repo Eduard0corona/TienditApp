@@ -37,7 +37,7 @@ El dueño del producto pidió avanzar este punto (el 1), entre otros, sin espera
 7. **Fuera de esta fase:**
    - un aviso en pantalla con el recordatorio: la campana ya marca las que vencen hoy;
    - por WhatsApp o con notificaciones del navegador (las mismas razones de la [ADR 0068](0068-tell-the-business-of-each-request.md));
-   - que cada negocio elija cuánto antes o que no quiera el recordatorio aparte de los correos de las solicitudes.
+   - que cada negocio elija cuánto antes o que no quiera el recordatorio aparte de los correos de las solicitudes: llegó en la Fase 30B ([ADR 0082](0082-order-cancellation-email-reminder-lead-and-online-orders-index.md)).
 
 ## Consecuencias
 

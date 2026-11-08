@@ -61,8 +61,8 @@ export const appointmentsApi = {
   /** Whether customers book from the online menu, how many appointments at once, and what is missing for it. */
   getOnlineBooking: (signal?: AbortSignal) => apiRequest('get', '/api/v1/appointments/online-booking', { signal }),
 
-  updateOnlineBooking: (enabled: boolean, capacity: number) =>
-    apiRequest('put', '/api/v1/appointments/online-booking', { body: { enabled, capacity } }),
+  updateOnlineBooking: (enabled: boolean, capacity: number, answerReminderMinutes?: number) =>
+    apiRequest('put', '/api/v1/appointments/online-booking', { body: { enabled, capacity, answerReminderMinutes } }),
 
   /** The active team, with who customers book online, their services and hours (Fase 24J, owners and admins). */
   getOnlineBookingStaff: (signal?: AbortSignal) => apiRequest('get', '/api/v1/appointments/online-booking/staff', { signal }),

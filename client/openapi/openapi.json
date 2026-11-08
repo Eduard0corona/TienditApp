@@ -11532,6 +11532,81 @@
         }
       }
     },
+    "/api/v1/orders/cancellation-emails": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCancellationEmailsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCancellationEmailsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCancellationEmailsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Orders"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrderCancellationEmailsCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrderCancellationEmailsCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrderCancellationEmailsCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCancellationEmailsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCancellationEmailsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCancellationEmailsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/orders": {
       "get": {
         "tags": [
@@ -22874,6 +22949,10 @@
           "quoteReplyEmails": {
             "type": "boolean",
             "nullable": true
+          },
+          "orderCancellationEmails": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -25965,6 +26044,7 @@
       "EmployeeNoticeEmailsDto": {
         "required": [
           "emailConfirmed",
+          "orderCancellations",
           "quoteReplies",
           "requests"
         ],
@@ -25974,6 +26054,9 @@
             "type": "boolean"
           },
           "quoteReplies": {
+            "type": "boolean"
+          },
+          "orderCancellations": {
             "type": "boolean"
           },
           "emailConfirmed": {
@@ -30206,6 +30289,8 @@
       },
       "OnlineBookingSettingsDto": {
         "required": [
+          "answerReminderChoices",
+          "answerReminderMinutes",
           "booksOnline",
           "capacity",
           "enabled",
@@ -30242,6 +30327,17 @@
           "staffCount": {
             "type": "integer",
             "format": "int32"
+          },
+          "answerReminderMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "answerReminderChoices": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
           }
         },
         "additionalProperties": false
@@ -30852,6 +30948,26 @@
             "items": {
               "$ref": "#/components/schemas/CreditNoteDto"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrderCancellationEmailsDto": {
+        "required": [
+          "emailConfirmed",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "emailConfirmed": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -41277,6 +41393,10 @@
           "quoteReplyEmails": {
             "type": "boolean",
             "nullable": true
+          },
+          "orderCancellationEmails": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -41502,6 +41622,11 @@
           "capacity": {
             "type": "integer",
             "format": "int32"
+          },
+          "answerReminderMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -41562,6 +41687,18 @@
               "$ref": "#/components/schemas/OpeningIntervalDto"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateOrderCancellationEmailsCommand": {
+        "required": [
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

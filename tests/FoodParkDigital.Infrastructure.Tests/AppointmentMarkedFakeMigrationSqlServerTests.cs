@@ -37,7 +37,7 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
 
         await MigrateAsync(database, Migration);
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id);
         Assert.Null((await context.Appointments.AsNoTracking().SingleAsync()).MarkedFakeAt);
         Assert.Equal("datetimeoffset|1|", await ColumnAsync(context, "MarkedFakeAt"));
         Assert.Equal("datetimeoffset|1|", await ColumnAsync(context, "UnmarkedFakeAt"));
@@ -46,7 +46,7 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
         var tracked = await context.Appointments.SingleAsync();
         tracked.MarkFake(marked);
         await context.SaveChangesAsync();
-        await using (var check = database.CreateContext(tenant.Id))
+        await using (var check = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id))
         {
             var stored = await check.Appointments.AsNoTracking().SingleAsync();
             Assert.Equal(
@@ -58,7 +58,7 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
         var takenBack = Arrived.AddDays(1);
         tracked.UnmarkFake(takenBack);
         await context.SaveChangesAsync();
-        await using var after = database.CreateContext(tenant.Id);
+        await using var after = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id);
         var unmarked = await after.Appointments.AsNoTracking().SingleAsync();
         Assert.Equal(
             ((DateTimeOffset?)marked, (DateTimeOffset?)takenBack, (DateTimeOffset?)takenBack),
@@ -79,7 +79,7 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
             await before.SaveChangesAsync();
         }
 
-        await using var context = database.CreateContext(tenant.Id);
+        await using var context = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id);
         Assert.Null((await context.Appointments.AsNoTracking().SingleAsync()).MarkedFakeAt);
     }
 
@@ -89,7 +89,7 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var tenant = await SeedTenantAsync(database);
-        await using (var seed = database.CreateContext(tenant.Id))
+        await using (var seed = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id))
         {
             var request = Request(tenant.Id);
             request.MarkFake(Arrived.AddHours(2));
@@ -111,7 +111,7 @@ public class AppointmentMarkedFakeMigrationSqlServerTests
         // Rolling back again does nothing; forward again, no request is marked.
         await MigrateAsync(database, BeforeMigration);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeOrderCancellationEmails.CreateContext(database, tenant.Id);
         Assert.Null((await forward.Appointments.AsNoTracking().SingleAsync()).MarkedFakeAt);
     }
 

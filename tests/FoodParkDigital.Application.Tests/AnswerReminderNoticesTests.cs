@@ -58,6 +58,37 @@ public class AnswerReminderNoticesTests
     }
 
     [Fact]
+    public async Task ThePlanner_ShouldRemindAsLongBeforeAsItsBusinessPicked_AndNothingWhenItPickedNone()
+    {
+        await using var fixture = Fixture();
+        // Another business wants none (Fase 30B, ADR 0082): each pass reads its own business's choice.
+        var other = await SalonAsync(fixture, "ninguno", "Estética Ninguno");
+        await ReminderAsync(fixture, other, 0);
+        var salon = await SalonAsync(fixture, "anticipa", "Estética Anticipa");
+        await ReminderAsync(fixture, salon, 120);
+        // For two days from now: its limit is a day after it arrived. Two hours before it: arrived 22 h 10 min ago.
+        var due = await RequestAsync(fixture, salon, Now.AddHours(-22).AddMinutes(-10));
+        var notYet = await RequestAsync(fixture, salon, Now.AddHours(-21).AddMinutes(-50));
+        await fixture.Context.SaveChangesAsync();
+
+        fixture.TenantService.SetTenant(salon.Id);
+        var planner = new AnswerReminderPlanner(fixture.Context, fixture.Clock);
+        Assert.Equal(1, await planner.RemindDueAsync(CancellationToken.None));
+        await fixture.Context.SaveChangesAsync();
+        Assert.Equal([due.Id], await RemindedAsync(fixture));
+
+        Assert.DoesNotContain(notYet.Id, await RemindedAsync(fixture));
+
+        // It picks none: one due by the hour of before, or by any lead, is not reminded.
+        await ReminderAsync(fixture, salon, 0);
+        await RequestAsync(fixture, salon, Now.AddHours(-23).AddMinutes(-10));
+        await fixture.Context.SaveChangesAsync();
+        Assert.Equal(0, await planner.RemindDueAsync(CancellationToken.None));
+        await fixture.Context.SaveChangesAsync();
+        Assert.Equal([due.Id], await RemindedAsync(fixture));
+    }
+
+    [Fact]
     public async Task TheReminders_ShouldGoToEachMemberWhoGetsTheEmailsOfRequests_WhileTheRequestStillWaits()
     {
         await using var fixture = Fixture();
@@ -171,4 +202,15 @@ public class AnswerReminderNoticesTests
             .HandleAsync(new AppointmentAnswerReminderEmailEvent(request.Id, userId), Context(tenant), CancellationToken.None);
         return emails.Sent;
     }
+
+    private static async Task ReminderAsync(SalesTestFixture fixture, Tenant tenant, int minutes)
+    {
+        var settings = await fixture.Context.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == tenant.Id);
+        settings.SetAnswerReminder(minutes);
+        await fixture.Context.SaveChangesAsync();
+    }
+
+    private static Task<List<Guid>> RemindedAsync(SalesTestFixture fixture)
+        => fixture.Context.Appointments.IgnoreQueryFilters().AsNoTracking()
+            .Where(a => a.AnswerReminderSentAt != null).Select(a => a.Id).ToListAsync();
 }
